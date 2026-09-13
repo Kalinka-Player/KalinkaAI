@@ -8,6 +8,43 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.10.0
+
+Requires Kalinka server 5.0.0 or newer: the app has retired the merged search endpoint the old server offered, and asks each source on its own instead.
+
+### Added
+- Your own collections, kept by the server. The Discover root leads with YOUR COLLECTIONS — the first few as rows, with VIEW ALL into the rest — and offers to make the first one when there are none. A collection unrolls in place like an album, and plays or enqueues as a whole.
+- Save the queue as it stands into a collection, from the queue's own overflow. A multi-select can go to one too, as can an album or a single track.
+- Adding to a collection asks the question outright: APPEND or REPLACE, with a Keep duplicates switch, and a replace onto a collection that holds something confirms by name first.
+- Edit collections in place. Drag rows by the handle to reorder, mark rows to go, and nothing is written until Done — which names what it would remove before removing it. Rename and delete live behind each row's overflow.
+- Search results are laid out per source. Every source is asked for its name matches and its recommendations separately and each answer appears as it lands, so a slow source no longer holds up the page and a failed one says so and can be retried on its own.
+- Matches from every source merge into one MATCHES BY NAME list, ranked by the server, with a row of source pills to read them one source at a time.
+- A refine card narrows what search loaded — by result kind, type, source, genre and A-Z — and its search field starts a new search.
+- Catalogs can be narrowed. The title bar's filter button unfolds into a card of the facets that source actually declared, with removable chips above the rows so a filtered list never reads as unfiltered.
+- A catalog made of shelves shows one row per kind, each arriving on its own, with VIEW ALL opening that kind in full.
+- The playing track is marked with three bars beside its duration — moving while it plays, still while it is paused. Reduced motion stops them.
+- A renderer's settings page now shows its host and version, and greys out values that cannot be edited.
+- When the server declines to play a track it now says why — "Music folder /mnt/nas is not available", rather than the generic warning.
+- The indexer status card shows the audio-analysis stage on its own.
+
+### Changed
+- Your own library is named and lettered like every other source, instead of being the unmarked default under three different hardcoded names.
+- The Inspired block reads in its own voice: the name in the display face over a quiet eyebrow, a neutral wash behind the heading, and a tally on each source so three rows read as a preview of twenty.
+- A shelf that cannot honour an active filter is left off the page rather than shown unfiltered beneath a filter chip.
+- Search asks a source only for what it can answer, so a source with no recommendations of its own no longer holds an empty block open.
+- Every list of rows now draws dividers, and the hairline starts where the row's words start so the artwork reads as one column.
+- Placeholders take the shape of the rows they stand in for, so a list no longer shifts when its rows land.
+- Every clickable control now shows the hand cursor on desktop and web, and sheet rows answer the pointer with a lift.
+- Counts read "1 album" rather than "1 albums", and an unrolled container counts the whole collection rather than the page on screen.
+
+### Fixed
+- A multi-select no longer outlives the listing it was gathered from and acts on rows that are no longer on screen.
+- Selecting a track no longer nudges its artwork sideways.
+- An artist's subtitle trails off at the end of the row instead of running past it on a narrow screen.
+- The crimson bloom behind Discover no longer ends in a visible line.
+- A collection saved from the queue shows its tracks immediately instead of staying empty until the page is reopened, and its cover appears once the server has composed it.
+- The collections invitation stays one row down to phone widths instead of growing tall enough to push the catalogs off screen.
+
 ## 0.7.0
 
 ### Changed
