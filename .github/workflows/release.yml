@@ -2,7 +2,7 @@ name: Release
 
 # Cut a release by pushing a semver tag that matches pubspec.yaml:
 #   1. bump `version:` in pubspec.yaml, commit, push to main
-#   2. git tag -a vX.Y.Z -m "Kalinka X.Y.Z" && git push origin vX.Y.Z
+#   2. git tag -a vX.Y.Z -m "Kalinka AI app X.Y.Z" && git push origin vX.Y.Z
 # The tag push runs this pipeline: it checks the tag matches pubspec's version
 # (ignoring the +build suffix), builds the signed universal APK, Linux desktop
 # tarball, and Windows zip + installer, and publishes them to a GitHub Release.
@@ -253,7 +253,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
-          name: Kalinka ${{ env.V }}
+          name: Kalinka AI app ${{ env.V }}
           tag_name: ${{ github.ref_name }}
           body_path: release-notes.md
           fail_on_unmatched_files: true
