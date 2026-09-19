@@ -1,6 +1,7 @@
-import '../data_model/presentation_schema.dart' show OptionSpec;
+import '../data_model/presentation_schema.dart' show ConfigIssue, OptionSpec;
 
-/// Live option lists for enum fields, looked up by field path.
+/// Live option lists for fields the backend has values to offer for, looked
+/// up by field path.
 ///
 /// Split out from [SettingsBinding] because the control dispatcher needs only
 /// this much: it reads options, it never stages or reads values.
@@ -29,4 +30,9 @@ abstract interface class SettingsBinding implements EnumOptionSource {
 
   /// Record an edit. Staging, not saving — the page's apply action commits.
   void stage(String path, dynamic value);
+
+  /// What the backend says is wrong with the value staged at [path], empty
+  /// when it has nothing to say. Recomputed as the user types, so a row
+  /// stops complaining as soon as it is fixed.
+  List<ConfigIssue> issuesFor(String path);
 }

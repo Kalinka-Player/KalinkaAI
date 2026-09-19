@@ -25,6 +25,11 @@ class PendingChangesBanner extends StatelessWidget {
   /// While true the actions are inert and the button reads APPLYING.
   final bool busy;
 
+  /// While true applying is out of reach and the banner says why. A batch
+  /// is refused whole, so sending it would spend a restart to be told what
+  /// the rows already say.
+  final bool blocked;
+
   const PendingChangesBanner({
     super.key,
     required this.pendingCount,
@@ -32,7 +37,13 @@ class PendingChangesBanner extends StatelessWidget {
     required this.onApply,
     this.consequence,
     this.busy = false,
+    this.blocked = false,
   });
+
+  String _trailingClause() {
+    if (blocked) return ' · fix what is marked below';
+    return consequence == null ? '' : ' · $consequence';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,9 +77,11 @@ class PendingChangesBanner extends StatelessWidget {
                   Expanded(
                     child: Text(
                       '$pendingCount change${pendingCount == 1 ? '' : 's'} staged'
-                      '${consequence == null ? '' : ' · $consequence'}',
+                      '${_trailingClause()}',
                       style: KalinkaTextStyles.bannerText.copyWith(
-                        color: KalinkaColors.statusPendingLight,
+                        color: blocked
+                            ? KalinkaColors.actionDeleteLight
+                            : KalinkaColors.statusPendingLight,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -84,7 +97,7 @@ class PendingChangesBanner extends StatelessWidget {
                   ),
                   const SizedBox(width: 15),
                   GestureDetector(
-                    onTap: busy ? null : onApply,
+                    onTap: busy || blocked ? null : onApply,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -92,19 +105,21 @@ class PendingChangesBanner extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: KalinkaColors.statusPending.withValues(
-                          alpha: 0.1,
+                          alpha: blocked ? 0.04 : 0.1,
                         ),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: KalinkaColors.statusPending.withValues(
-                            alpha: 0.4,
+                            alpha: blocked ? 0.15 : 0.4,
                           ),
                         ),
                       ),
                       child: Text(
                         busy ? 'APPLYING…' : 'APPLY',
                         style: KalinkaTextStyles.bannerText.copyWith(
-                          color: KalinkaColors.statusPendingLight,
+                          color: KalinkaColors.statusPendingLight.withValues(
+                            alpha: blocked ? 0.4 : 1,
+                          ),
                           fontWeight: FontWeight.w600,
                           letterSpacing: 1.0,
                         ),

@@ -202,7 +202,8 @@ class OnboardingFieldRow extends ConsumerWidget {
       control: buildFieldControl(
         field: field,
         value: value,
-        options: state,
+        options: ServerSettingsBinding(state, notifier),
+        issues: state.issuesFor(path),
         onChanged: (v) => notifier.stageChange(path, v),
       ),
     );

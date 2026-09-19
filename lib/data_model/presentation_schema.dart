@@ -121,6 +121,48 @@ class OptionSpec {
   );
 }
 
+/// How much a [ConfigIssue] stands in the way.
+///
+/// An error blocks Apply: the value cannot be used as written and only the
+/// user can fix it. A warning is shown beside the field and saved anyway —
+/// a share that is switched off is still worth configuring.
+enum IssueSeverity {
+  error,
+  warning;
+
+  static IssueSeverity fromName(String? raw) =>
+      raw == 'warning' ? IssueSeverity.warning : IssueSeverity.error;
+}
+
+/// Something the backend found wrong with a value the user has staged.
+///
+/// [path] is the field it belongs under, in the same dotted form everything
+/// else in the settings page is keyed by. [index] names one item of a list
+/// field, so the message lands on the folder it is about rather than on the
+/// list as a whole.
+class ConfigIssue {
+  final String path;
+  final String message;
+  final IssueSeverity severity;
+  final int? index;
+
+  const ConfigIssue({
+    required this.path,
+    required this.message,
+    this.severity = IssueSeverity.error,
+    this.index,
+  });
+
+  bool get isBlocking => severity == IssueSeverity.error;
+
+  factory ConfigIssue.fromJson(Map<String, dynamic> j) => ConfigIssue(
+    path: j['path'] as String? ?? '',
+    message: j['message'] as String? ?? '',
+    severity: IssueSeverity.fromName(j['severity'] as String?),
+    index: j['index'] as int?,
+  );
+}
+
 class BannerSpec {
   final String text;
   final Severity severity;
@@ -183,6 +225,12 @@ class FieldSpec {
   // (e.g. sub-feature status views). Implies readonly. Distinct so the
   // UI can choose to poll for changes vs. assume stability.
   final bool dynamic_;
+  // True when the backend may have values to suggest for this field. An
+  // enum needs no such flag — options in the envelope speak for themselves
+  // — but an open text field does: without it, a resolver that comes back
+  // empty would be indistinguishable from a field that never offers
+  // anything, and the browse control would come and go.
+  final bool dynamicOptions;
   final Importance importance;
   final Setup setup;
   final List<String>? enumValues;
@@ -197,6 +245,7 @@ class FieldSpec {
     this.defaultValue,
     this.readonly = false,
     this.dynamic_ = false,
+    this.dynamicOptions = false,
     this.importance = Importance.simple,
     this.setup = Setup.hidden,
     this.enumValues,
@@ -212,6 +261,7 @@ class FieldSpec {
     defaultValue: j['default'],
     readonly: j['readonly'] as bool? ?? false,
     dynamic_: j['dynamic'] as bool? ?? false,
+    dynamicOptions: j['dynamic_options'] as bool? ?? false,
     importance: Importance.fromName(j['importance'] as String?),
     setup: Setup.fromName(j['setup'] as String?),
     enumValues: (j['enum_values'] as List?)?.map((e) => e.toString()).toList(),
