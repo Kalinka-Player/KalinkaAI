@@ -43,6 +43,10 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _tabIndex = 0;
   bool _restartOverlayOpen = false;
+  // The check before the restart is a round trip, and the banner stays on
+  // screen for it. Without this the user could start a second restart in
+  // the gap.
+  bool _applying = false;
 
   @override
   void initState() {
@@ -56,9 +60,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
   }
 
-  void _onApply() {
-    setState(() => _restartOverlayOpen = true);
-    ref.read(restartProvider.notifier).executeRestart();
+  Future<void> _onApply() async {
+    if (_applying) return;
+    setState(() => _applying = true);
+    try {
+      // The last word before a restart is spent: a debounced check may
+      // still be pending, and the server may have changed its mind about a
+      // folder since the last one answered.
+      await ref.read(settingsProvider.notifier).validateStaged();
+      if (!mounted || ref.read(settingsProvider).hasBlockingIssues) return;
+      setState(() => _restartOverlayOpen = true);
+      ref.read(restartProvider.notifier).executeRestart();
+    } finally {
+      if (mounted) setState(() => _applying = false);
+    }
   }
 
   @override
@@ -124,6 +139,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 PendingChangesBanner(
                   pendingCount: settingsState.pendingCount,
                   consequence: 'restart required',
+                  blocked: settingsState.hasBlockingIssues,
+                  busy: _applying,
                   onDiscard: () =>
                       ref.read(settingsProvider.notifier).discardAll(),
                   onApply: _onApply,

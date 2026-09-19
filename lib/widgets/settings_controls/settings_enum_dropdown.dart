@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../data_model/presentation_schema.dart' show OptionSpec;
 import '../../theme/app_theme.dart';
-import '../../utils/click_cursor.dart';
 import '../../utils/haptics.dart';
 import '../kalinka_bottom_sheet.dart';
-import '../tap_highlight.dart';
-import 'inline_markdown.dart';
+import 'option_picker.dart';
 
 /// Dropdown control for enum-like settings whose option set is too
 /// long or too variable for a chip group.
@@ -93,101 +91,8 @@ class SettingsEnumDropdown extends StatelessWidget {
     final picked = await showKalinkaBottomSheet<String>(
       context: context,
       contentBuilder: (_) =>
-          _OptionPicker(options: options, selectedValue: selectedValue),
+          OptionPicker(options: options, selectedValue: selectedValue),
     );
     if (picked != null && picked != selectedValue) onChanged(picked);
-  }
-}
-
-class _OptionPicker extends StatelessWidget {
-  final List<OptionSpec> options;
-  final String selectedValue;
-
-  const _OptionPicker({required this.options, required this.selectedValue});
-
-  @override
-  Widget build(BuildContext context) {
-    // Cap height to about 70% of the screen so the sheet doesn't
-    // dominate when there are many options (HDMI heavy systems can
-    // produce 10+ entries). Built-in scrolling handles the overflow.
-    final maxHeight = MediaQuery.of(context).size.height * 0.7;
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: maxHeight),
-      child: ListView.builder(
-        shrinkWrap: true,
-        padding: const EdgeInsets.only(top: 8, bottom: 12),
-        itemCount: options.length,
-        itemBuilder: (ctx, i) {
-          final o = options[i];
-          final selected = o.value == selectedValue;
-          final hasDescription =
-              o.description != null && o.description!.isNotEmpty;
-          return Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                KalinkaHaptics.selectionClick();
-                Navigator.of(ctx).pop(o.value);
-              },
-              mouseCursor: clickCursor(interactive: true),
-              overlayColor: kalinkaOverlay,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            o.label,
-                            style: KalinkaTextStyles.trayRowLabel.copyWith(
-                              color: selected
-                                  ? KalinkaColors.accent
-                                  : KalinkaColors.textPrimary,
-                              fontSize: KalinkaTypography.baseSize + 3,
-                              fontWeight: selected
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                            ),
-                          ),
-                          if (hasDescription)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: InlineMarkdown(
-                                text: o.description!,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: KalinkaTextStyles.trayRowLabel.copyWith(
-                                  color: KalinkaColors.textSecondary,
-                                  fontSize: KalinkaTypography.baseSize - 1,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (selected) ...[
-                      const SizedBox(width: 8),
-                      const Icon(
-                        Icons.check,
-                        size: 18,
-                        color: KalinkaColors.accent,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
   }
 }

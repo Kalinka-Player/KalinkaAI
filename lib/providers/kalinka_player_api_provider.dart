@@ -23,7 +23,8 @@ import '../data_model/data_model.dart'
         SeekStatusMessage,
         StatusMessage,
         TrackList;
-import '../data_model/presentation_schema.dart' show PresentationSchema;
+import '../data_model/presentation_schema.dart'
+    show ConfigIssue, PresentationSchema;
 import '../data_model/renderer_config.dart'
     show RendererConfigResult, RendererConfigSnapshot;
 import '../utils/renderer_fault_text.dart' show rendererSwitchRefusal;
@@ -185,6 +186,10 @@ abstract class KalinkaPlayerProxy {
     required String schemaVersion,
     required Map<String, dynamic> changes,
   });
+  Future<List<ConfigIssue>> validateSettings({
+    required String schemaVersion,
+    required Map<String, dynamic> changes,
+  });
   Future<void> restartServer();
 
   /// Play a short test tone on one channel (`left` / `right`).
@@ -284,6 +289,19 @@ class RendererUpgradeException implements Exception {
 
 /// A renderer's settings could not be read or written. [message] is already
 /// phrased for the user.
+/// The server refused a save because one of the staged values cannot be
+/// used. Carries its verdict per field, so the page can point at the row
+/// that has to change rather than showing one sentence at the top.
+class SettingsValidationException implements Exception {
+  final List<ConfigIssue> issues;
+  final String detail;
+
+  const SettingsValidationException(this.issues, this.detail);
+
+  @override
+  String toString() => detail;
+}
+
 class RendererConfigException implements Exception {
   final String message;
   const RendererConfigException(this.message);
@@ -959,17 +977,55 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
       'schema_version': schemaVersion,
       'changes': changes,
     });
-    final response = await client.put(
-      '/server/config',
-      options: Options(contentType: Headers.jsonContentType),
-      data: body,
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to save settings, status: ${response.statusCode}, body: ${response.data}',
+    try {
+      final response = await client.put(
+        '/server/config',
+        options: Options(contentType: Headers.jsonContentType),
+        data: body,
       );
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Failed to save settings, status: ${response.statusCode}, body: ${response.data}',
+        );
+      }
+    } on DioException catch (e) {
+      final refusal = _refusalFrom(e.response?.data);
+      if (refusal != null) throw refusal;
+      rethrow;
     }
+  }
+
+  /// A refusal the server spelled out per field, or null when the failure
+  /// was not one of those. Nothing was saved either way.
+  SettingsValidationException? _refusalFrom(dynamic body) {
+    if (body is! Map) return null;
+    final raw = body['issues'];
+    if (raw is! List) return null;
+    return SettingsValidationException(
+      raw
+          .whereType<Map>()
+          .map((e) => ConfigIssue.fromJson(e.cast<String, dynamic>()))
+          .toList(),
+      body['detail'] as String? ?? 'The server refused the change',
+    );
+  }
+
+  @override
+  Future<List<ConfigIssue>> validateSettings({
+    required String schemaVersion,
+    required Map<String, dynamic> changes,
+  }) async {
+    final response = await client.post(
+      '/server/config/validate',
+      options: Options(contentType: Headers.jsonContentType),
+      data: jsonEncode({'schema_version': schemaVersion, 'changes': changes}),
+    );
+    final raw = (response.data as Map?)?['issues'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => ConfigIssue.fromJson(e.cast<String, dynamic>()))
+        .toList();
   }
 
   @override

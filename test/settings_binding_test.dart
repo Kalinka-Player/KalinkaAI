@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/widgets/settings_controls/settings_binding.dart';
+import 'package:kalinka/widgets/settings_controls/settings_combo_input.dart';
+import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
 import 'package:kalinka/widgets/settings_renderer.dart';
 
 /// One page with a field per widget kind the shared renderer dispatches, so a
@@ -28,6 +30,14 @@ const _page = PageSpec(
           label: 'Port',
           widget: WidgetKind.numberInput,
           type: 'integer',
+        ),
+        // An open field the backend may have values to suggest for.
+        FieldSpec(
+          path: 'base_config.library.root',
+          label: 'Library root',
+          widget: WidgetKind.path,
+          type: 'string',
+          dynamicOptions: true,
         ),
         FieldSpec(
           path: 'base_config.server.discoverable',
@@ -54,6 +64,7 @@ class _RecordingBinding implements SettingsBinding {
   final Map<String, dynamic> values;
   final Map<String, List<OptionSpec>> options;
   final Map<String, dynamic> staged = {};
+  final Map<String, List<ConfigIssue>> issues = {};
 
   @override
   dynamic effectiveValue(String path) =>
@@ -64,6 +75,9 @@ class _RecordingBinding implements SettingsBinding {
 
   @override
   List<OptionSpec>? optionsFor(String path) => options[path];
+
+  @override
+  List<ConfigIssue> issuesFor(String path) => issues[path] ?? const [];
 
   @override
   void stage(String path, dynamic value) => staged[path] = value;
@@ -167,5 +181,39 @@ void main() {
     expect(find.text('Server name'), findsOneWidget);
     // Staged rows carry the amber "Staged" pill.
     expect(find.text('Staged'), findsOneWidget);
+  });
+
+  testWidgets('a field that says suggestions exist is drawn as a combo', (
+    tester,
+  ) async {
+    final binding = _RecordingBinding(
+      {'base_config.library.root': '/music'},
+      {
+        'base_config.library.root': [
+          OptionSpec(value: '/media/usb0', label: '/media/usb0'),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(_wrap(binding));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SettingsComboInput), findsOneWidget);
+    // The plain text field beside it stays plain.
+    expect(find.byType(SettingsTextInput), findsNWidgets(2));
+  });
+
+  testWidgets('what the binding says is wrong is shown under the field', (
+    tester,
+  ) async {
+    final binding = _RecordingBinding({'base_config.library.root': '/gone'});
+    binding.issues['base_config.library.root'] = const [
+      ConfigIssue(path: 'base_config.library.root', message: 'no such folder'),
+    ];
+
+    await tester.pumpWidget(_wrap(binding));
+    await tester.pumpAndSettle();
+
+    expect(find.text('no such folder'), findsOneWidget);
   });
 }

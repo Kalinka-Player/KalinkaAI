@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/presentation_schema.dart'
-    show FieldSpec, OptionSpec, SectionSpec;
+    show ConfigIssue, FieldSpec, OptionSpec, SectionSpec;
 import '../data_model/renderer_config.dart';
 import '../data_model/renderer_config_adapter.dart';
 import 'kalinka_player_api_provider.dart';
@@ -223,6 +223,11 @@ class RendererSettingsBinding implements SettingsBinding {
 
   @override
   List<OptionSpec>? optionsFor(String path) => state.options[path];
+
+  /// A renderer answers a write per field and the page shows the refusals
+  /// together; there is no dry run to ask before one.
+  @override
+  List<ConfigIssue> issuesFor(String path) => const [];
 
   @override
   void stage(String path, dynamic value) => notifier.stage(path, value);

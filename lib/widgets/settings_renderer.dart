@@ -8,9 +8,11 @@ import '../providers/server_info_provider.dart';
 import '../theme/app_theme.dart';
 import 'server_update_banner.dart';
 import 'settings_controls/footer_note.dart';
+import 'settings_controls/issue_notes.dart';
 import 'settings_controls/settings_binding.dart';
 import 'settings_controls/module_header_row.dart';
 import 'settings_controls/settings_card.dart';
+import 'settings_controls/settings_combo_input.dart';
 import 'settings_controls/settings_enum_dropdown.dart';
 import 'settings_controls/settings_enum_pills.dart';
 import 'settings_controls/settings_list_editor.dart';
@@ -155,15 +157,24 @@ class SchemaFieldRenderer extends StatelessWidget {
         field.widget == WidgetKind.path ||
         field.widget == WidgetKind.url;
 
+    // A list field carries its issues into the control, which puts each
+    // one under the row it is about; everything else shows them beneath.
+    final issues = binding.issuesFor(field.path);
+    final isList =
+        field.widget == WidgetKind.listEditor ||
+        field.widget == WidgetKind.folderList;
+
     return SettingsRow(
       label: field.label,
       sublabel: field.help,
       isStaged: isStaged,
       isVertical: vertical,
+      issues: isList ? const [] : issues,
       control: buildFieldControl(
         field: field,
         value: value,
         options: binding,
+        issues: issues,
         onChanged: (v) => binding.stage(field.path, v),
       ),
     );
@@ -223,6 +234,7 @@ Widget buildFieldControl({
   required dynamic value,
   required EnumOptionSource options,
   required ValueChanged<dynamic> onChanged,
+  List<ConfigIssue> issues = const [],
   bool compact = true,
 }) {
   switch (field.widget) {
@@ -285,9 +297,13 @@ Widget buildFieldControl({
           (value as List?)?.map((e) => e.toString()).toList() ?? const [];
       return SettingsListEditor(
         items: items,
-        addHint: field.widget == WidgetKind.folderList
-            ? 'Add folder...'
-            : 'Add item...',
+        addLabel: field.widget == WidgetKind.folderList
+            ? 'Add folder'
+            : 'Add item',
+        suggestions: field.dynamicOptions
+            ? (options.optionsFor(field.path) ?? const [])
+            : null,
+        issues: issues,
         onChanged: onChanged,
       );
     case WidgetKind.password:
@@ -298,8 +314,17 @@ Widget buildFieldControl({
     case WidgetKind.text:
     case WidgetKind.path:
     case WidgetKind.url:
+      if (field.dynamicOptions) {
+        return SettingsComboInput(
+          value: (value ?? '').toString(),
+          options: options.optionsFor(field.path) ?? const [],
+          borderColor: issueBorderColor(issues),
+          onChanged: onChanged,
+        );
+      }
       return SettingsTextInput(
         value: (value ?? '').toString(),
+        borderColor: issueBorderColor(issues),
         onChanged: onChanged,
       );
     case WidgetKind.richText:

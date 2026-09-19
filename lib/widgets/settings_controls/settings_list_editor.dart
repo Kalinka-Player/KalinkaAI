@@ -1,20 +1,35 @@
 import 'package:flutter/material.dart';
+import '../../data_model/presentation_schema.dart' show ConfigIssue, OptionSpec;
 import '../../theme/app_theme.dart';
+import '../../utils/click_cursor.dart';
+import 'issue_notes.dart';
+import 'settings_combo_input.dart';
+import 'settings_text_input.dart';
 
-/// List editor control for array-type settings (e.g. music folder paths).
+/// List editor for array settings, one row per item.
 ///
-/// Items are shown as editable text fields. "Add item" appends a blank entry
-/// and focuses it. Remove buttons delete individual entries.
+/// Rows commit the way every other settings input does — on blur, on submit,
+/// and on dispose — rather than on each keystroke, so a half-typed path does
+/// not stage itself, get judged, and be reported wrong while it is still
+/// being written.
+///
+/// [suggestions] turns the rows into combos: values the backend found for
+/// this field, offered beside what the user types. [issues] are its verdicts
+/// on the items, each landing under the row it is about.
 class SettingsListEditor extends StatefulWidget {
   final List<String> items;
   final ValueChanged<List<String>> onChanged;
-  final String addHint;
+  final String addLabel;
+  final List<OptionSpec>? suggestions;
+  final List<ConfigIssue> issues;
 
   const SettingsListEditor({
     super.key,
     required this.items,
     required this.onChanged,
-    this.addHint = 'Add item...',
+    this.addLabel = 'Add item',
+    this.suggestions,
+    this.issues = const [],
   });
 
   @override
@@ -22,164 +37,177 @@ class SettingsListEditor extends StatefulWidget {
 }
 
 class _SettingsListEditorState extends State<SettingsListEditor> {
-  final List<TextEditingController> _controllers = [];
-  final List<FocusNode> _focusNodes = [];
-  bool _focusNext = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _buildControllers(widget.items);
-  }
-
-  @override
-  void didUpdateWidget(SettingsListEditor oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final newLen = widget.items.length;
-    final curLen = _controllers.length;
-
-    if (newLen != curLen) {
-      // Length changed (add/remove): rebuild all controllers from the new list.
-      _disposeControllers();
-      _buildControllers(widget.items);
-      if (_focusNext && _controllers.isNotEmpty) {
-        _focusNext = false;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _focusNodes.last.requestFocus();
-        });
-      }
-    } else {
-      // Same length: sync text only for fields that are NOT currently focused.
-      // This lets an in-progress edit survive a provider rebuild while still
-      // resetting values when an external change occurs (e.g. Discard).
-      for (int i = 0; i < newLen; i++) {
-        if (!_focusNodes[i].hasFocus &&
-            _controllers[i].text != widget.items[i]) {
-          _controllers[i].text = widget.items[i];
-        }
-      }
-    }
-  }
-
-  void _buildControllers(List<String> items) {
-    for (final item in items) {
-      _controllers.add(TextEditingController(text: item));
-      _focusNodes.add(FocusNode());
-    }
-  }
-
-  void _disposeControllers() {
-    for (final c in _controllers) {
-      c.dispose();
-    }
-    for (final f in _focusNodes) {
-      f.dispose();
-    }
-    _controllers.clear();
-    _focusNodes.clear();
-  }
-
-  @override
-  void dispose() {
-    _disposeControllers();
-    super.dispose();
-  }
+  // The row added last, focused once it is built so the user can type into
+  // it straight away.
+  int _focusOnBuild = -1;
 
   void _removeItem(int index) {
-    final newItems = List<String>.from(widget.items)..removeAt(index);
-    widget.onChanged(newItems);
+    widget.onChanged(List<String>.from(widget.items)..removeAt(index));
   }
 
   void _addItem() {
-    _focusNext = true;
+    setState(() => _focusOnBuild = widget.items.length);
     widget.onChanged(List<String>.from(widget.items)..add(''));
   }
+
+  void _setItem(int index, String value) {
+    if (index >= widget.items.length || widget.items[index] == value) return;
+    final updated = List<String>.from(widget.items);
+    updated[index] = value;
+    widget.onChanged(updated);
+  }
+
+  List<ConfigIssue> _issuesFor(int index) =>
+      widget.issues.where((issue) => issue.index == index).toList();
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ...List.generate(_controllers.length, (i) {
+        ...List.generate(widget.items.length, (i) {
+          final issues = _issuesFor(i);
           return Padding(
             padding: EdgeInsets.only(
-              bottom: i < _controllers.length - 1 ? 6 : 0,
+              bottom: i < widget.items.length - 1 ? 6 : 0,
             ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: KalinkaColors.surfaceElevated,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: KalinkaColors.borderDefault),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _controllers[i],
-                      focusNode: _focusNodes[i],
-                      style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                        fontSize: KalinkaTypography.baseSize + 3,
-                      ),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      onChanged: (_) {
-                        widget.onChanged(
-                          _controllers.map((c) => c.text).toList(),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 7),
-                  GestureDetector(
-                    onTap: () => _removeItem(i),
-                    child: Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        color: KalinkaColors.statusOffline.withValues(
-                          alpha: 0.1,
-                        ),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: const Icon(
-                        Icons.close,
-                        size: 10,
-                        color: KalinkaColors.statusOffline,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            child: _Row(
+              // Keyed by position: the controllers behind these rows hold
+              // in-progress text, and without a key removing row 1 would
+              // leave its text behind on what used to be row 2.
+              key: ValueKey('item-$i-${widget.items.length}'),
+              value: widget.items[i],
+              suggestions: widget.suggestions,
+              issues: issues,
+              autofocus: i == _focusOnBuild,
+              onChanged: (value) => _setItem(i, value),
+              onRemove: () => _removeItem(i),
             ),
           );
         }),
-        if (_controllers.isNotEmpty) const SizedBox(height: 6),
-        GestureDetector(
-          onTap: _addItem,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.add, size: 13, color: KalinkaColors.accent),
-                const SizedBox(width: 4),
-                Text(
-                  'Add item',
-                  style: KalinkaTextStyles.trayRowLabel.copyWith(
-                    fontSize: KalinkaTypography.baseSize + 2,
-                    color: KalinkaColors.accent,
-                    letterSpacing: 0.03,
-                  ),
-                ),
-              ],
+        if (widget.items.isNotEmpty) const SizedBox(height: 6),
+        _AddRow(label: widget.addLabel, onTap: _addItem),
+      ],
+    );
+  }
+}
+
+class _Row extends StatelessWidget {
+  final String value;
+  final List<OptionSpec>? suggestions;
+  final List<ConfigIssue> issues;
+  final bool autofocus;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onRemove;
+
+  const _Row({
+    super.key,
+    required this.value,
+    required this.suggestions,
+    required this.issues,
+    required this.autofocus,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = issueBorderColor(issues);
+    final input = suggestions == null
+        ? SettingsTextInput(
+            value: value,
+            autofocus: autofocus,
+            borderColor: borderColor,
+            onChanged: onChanged,
+          )
+        : SettingsComboInput(
+            value: value,
+            options: suggestions!,
+            autofocus: autofocus,
+            borderColor: borderColor,
+            onChanged: onChanged,
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: input),
+            const SizedBox(width: 7),
+            _RemoveButton(onTap: onRemove),
+          ],
+        ),
+        IssueNotes(issues: issues),
+      ],
+    );
+  }
+}
+
+class _RemoveButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _RemoveButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Remove',
+      child: GestureDetector(
+        onTap: onTap,
+        child: MouseRegion(
+          cursor: clickCursor(interactive: true),
+          child: Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: KalinkaColors.statusOffline.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: const Icon(
+              Icons.close,
+              size: 10,
+              color: KalinkaColors.statusOffline,
             ),
           ),
         ),
-      ],
+      ),
+    );
+  }
+}
+
+class _AddRow extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _AddRow({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: clickCursor(interactive: true),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.add, size: 13, color: KalinkaColors.accent),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: KalinkaTextStyles.trayRowLabel.copyWith(
+                  fontSize: KalinkaTypography.baseSize + 2,
+                  color: KalinkaColors.accent,
+                  letterSpacing: 0.03,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

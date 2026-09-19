@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../data_model/presentation_schema.dart' show ConfigIssue;
 import '../../theme/app_theme.dart';
 import 'inline_markdown.dart';
+import 'issue_notes.dart';
 
 /// A single setting row with label, optional sublabel, staged/non-default pills,
 /// and a control widget on the right.
@@ -14,6 +16,12 @@ class SettingsRow extends StatelessWidget {
   final Widget control;
   final bool isVertical;
 
+  /// What the backend said is wrong with this field's staged value, shown
+  /// under the control. A control that can place them more precisely — a
+  /// list editor, which puts each one under its own item — takes them
+  /// itself and leaves this empty.
+  final List<ConfigIssue> issues;
+
   const SettingsRow({
     super.key,
     required this.label,
@@ -22,6 +30,7 @@ class SettingsRow extends StatelessWidget {
     this.differsFromDefault = false,
     required this.control,
     this.isVertical = false,
+    this.issues = const [],
   });
 
   @override
@@ -59,13 +68,22 @@ class SettingsRow extends StatelessWidget {
                         _buildInfoBlock(showAmber, pillText),
                         const SizedBox(height: 10),
                         SizedBox(width: double.infinity, child: control),
+                        IssueNotes(issues: issues),
                       ],
                     )
-                  : Row(
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(child: _buildInfoBlock(showAmber, pillText)),
-                        const SizedBox(width: 12),
-                        control,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildInfoBlock(showAmber, pillText),
+                            ),
+                            const SizedBox(width: 12),
+                            control,
+                          ],
+                        ),
+                        IssueNotes(issues: issues),
                       ],
                     ),
             ),

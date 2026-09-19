@@ -18,6 +18,16 @@ class SettingsTextInput extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final double? width;
   final bool obscureText;
+  final bool autofocus;
+
+  /// Drawn inside the field, after the text. Built with a callback that
+  /// replaces what the user has typed and commits it, which is how a
+  /// suggestion picked from a list gets in without a second commit path.
+  final Widget Function(BuildContext, ValueChanged<String>)? trailingBuilder;
+
+  /// Tinted when the value has something wrong with it, so a refused row is
+  /// visible without reading the message under it.
+  final Color? borderColor;
 
   const SettingsTextInput({
     super.key,
@@ -26,6 +36,9 @@ class SettingsTextInput extends StatefulWidget {
     required this.onChanged,
     this.width,
     this.obscureText = false,
+    this.autofocus = false,
+    this.trailingBuilder,
+    this.borderColor,
   });
 
   @override
@@ -81,42 +94,60 @@ class _SettingsTextInputState extends State<SettingsTextInput> {
     }
   }
 
+  void _replaceWith(String value) {
+    _controller.text = value;
+    _controller.selection = TextSelection.collapsed(offset: value.length);
+    _commitIfChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final field = TextField(
+      controller: _controller,
+      focusNode: _focusNode,
+      autofocus: widget.autofocus,
+      obscureText: widget.obscureText,
+      style: KalinkaTextStyles.textFieldInput,
+      textInputAction: TextInputAction.done,
+      decoration: InputDecoration(
+        hintText: widget.hintText,
+        hintStyle: KalinkaTextStyles.searchPlaceholder.copyWith(
+          fontSize: KalinkaTypography.baseSize + 2,
+          color: KalinkaColors.textSecondary,
+        ),
+        border: InputBorder.none,
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(7),
+          borderSide: const BorderSide(color: Color(0x55FFFFFF)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        isDense: true,
+      ),
+      onSubmitted: (_) => _commitIfChanged(),
+      onEditingComplete: _commitIfChanged,
+    );
+    final trailing = widget.trailingBuilder?.call(context, _replaceWith);
+
     return SizedBox(
       width: widget.width,
       child: Container(
         decoration: BoxDecoration(
           color: KalinkaColors.surfaceElevated,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: KalinkaColors.borderDefault),
-        ),
-        child: TextField(
-          controller: _controller,
-          focusNode: _focusNode,
-          obscureText: widget.obscureText,
-          style: KalinkaTextStyles.textFieldInput,
-          textInputAction: TextInputAction.done,
-          decoration: InputDecoration(
-            hintText: widget.hintText,
-            hintStyle: KalinkaTextStyles.searchPlaceholder.copyWith(
-              fontSize: KalinkaTypography.baseSize + 2,
-              color: KalinkaColors.textSecondary,
-            ),
-            border: InputBorder.none,
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(7),
-              borderSide: const BorderSide(color: Color(0x55FFFFFF)),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 10,
-              vertical: 7,
-            ),
-            isDense: true,
+          border: Border.all(
+            color: widget.borderColor ?? KalinkaColors.borderDefault,
           ),
-          onSubmitted: (_) => _commitIfChanged(),
-          onEditingComplete: _commitIfChanged,
         ),
+        child: trailing == null
+            ? field
+            : Row(
+                children: [
+                  Expanded(child: field),
+                  const SizedBox(width: 4),
+                  trailing,
+                  const SizedBox(width: 6),
+                ],
+              ),
       ),
     );
   }
