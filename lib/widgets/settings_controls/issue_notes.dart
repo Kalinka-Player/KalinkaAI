@@ -3,8 +3,8 @@ import '../../data_model/presentation_schema.dart' show ConfigIssue;
 import '../../theme/app_theme.dart';
 import 'inline_markdown.dart';
 
-/// The colour a control takes on while something is wrong with its value,
-/// or null when nothing is. Red refuses the save, amber does not.
+/// The border a control takes on while something is wrong with its value:
+/// red refuses the save, amber does not. Null when nothing is wrong.
 Color? issueBorderColor(List<ConfigIssue> issues) {
   if (issues.isEmpty) return null;
   return issues.any((issue) => issue.isBlocking)
@@ -12,8 +12,7 @@ Color? issueBorderColor(List<ConfigIssue> issues) {
       : KalinkaColors.statusPending;
 }
 
-/// What the backend said about a value, one line each, under the control it
-/// belongs to.
+/// What the backend said about a value, one line each, under its control.
 class IssueNotes extends StatelessWidget {
   final List<ConfigIssue> issues;
   final EdgeInsets padding;

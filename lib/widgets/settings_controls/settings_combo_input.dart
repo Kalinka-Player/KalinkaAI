@@ -7,19 +7,14 @@ import '../kalinka_bottom_sheet.dart';
 import 'option_picker.dart';
 import 'settings_text_input.dart';
 
-/// A text field with a list of values the backend found, beside it rather
-/// than instead of it.
+/// A text field with the values the backend found offered beside it, for
+/// settings it can often guess but never bound — a music folder is a drive
+/// it can see, a share that answered a broadcast, or a path only the user
+/// knows. Picking fills the field in; typing over it is always allowed.
 ///
-/// For settings whose answer the backend can often guess but never bound —
-/// a music folder is a drive it can see or a share that answered a
-/// broadcast, and just as legitimately something the user knows about and
-/// it does not. Picking from the list fills the field in; typing over it is
-/// always allowed, and an empty list costs nothing but a sentence.
-///
-/// The browse control is shown whenever the field says suggestions exist
-/// for it, not only when some have arrived: a list found on the network
-/// starts empty, and a button that appears once a NAS answers is a button
-/// nobody knows to wait for.
+/// Browse is shown whenever the field says suggestions exist, not only once
+/// some have arrived: a button that appears when a NAS finally answers is a
+/// button nobody knows to wait for.
 class SettingsComboInput extends StatelessWidget {
   final String value;
   final List<OptionSpec> options;

@@ -157,8 +157,8 @@ class SchemaFieldRenderer extends StatelessWidget {
         field.widget == WidgetKind.path ||
         field.widget == WidgetKind.url;
 
-    // A list field carries its issues into the control, which puts each
-    // one under the row it is about; everything else shows them beneath.
+    // A list field places issues per item itself; everything else shows
+    // them under the control.
     final issues = binding.issuesFor(field.path);
     final isList =
         field.widget == WidgetKind.listEditor ||

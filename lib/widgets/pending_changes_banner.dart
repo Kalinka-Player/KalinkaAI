@@ -25,9 +25,7 @@ class PendingChangesBanner extends StatelessWidget {
   /// While true the actions are inert and the button reads APPLYING.
   final bool busy;
 
-  /// While true applying is out of reach and the banner says why. A batch
-  /// is refused whole, so sending it would spend a restart to be told what
-  /// the rows already say.
+  /// While true applying is out of reach and the banner says why.
   final bool blocked;
 
   const PendingChangesBanner({
@@ -76,8 +74,8 @@ class PendingChangesBanner extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '$pendingCount change${pendingCount == 1 ? '' : 's'} staged'
-                      '${_trailingClause()}',
+                      '$pendingCount change${pendingCount == 1 ? '' : 's'} '
+                      'staged${_trailingClause()}',
                       style: KalinkaTextStyles.bannerText.copyWith(
                         color: blocked
                             ? KalinkaColors.actionDeleteLight

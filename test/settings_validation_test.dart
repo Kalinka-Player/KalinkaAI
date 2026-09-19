@@ -1,7 +1,6 @@
-// What the settings page does with the server's opinion of what has been
-// typed. The page asks while the user types rather than only when they
-// apply, because applying restarts the server — spending a restart to be
-// told a folder is misspelled is the failure this replaces.
+// What the settings page does with the server's verdict on what has been
+// typed. It asks while the user types rather than only on apply, because
+// applying restarts the server.
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -182,9 +181,8 @@ void main() {
     test(
       'a server that cannot be reached does not mark the page wrong',
       () async {
-        // The save refuses on its own if the value really is unusable; a page
-        // that has lost the server has bigger news to show than an
-        // unanswered question about a folder.
+        // The save refuses on its own if the value really is unusable, and a
+        // page that has lost the server has bigger news to show.
         final api = _FakeApi(
           issues: const [
             ConfigIssue(path: _folders, message: 'name the share'),

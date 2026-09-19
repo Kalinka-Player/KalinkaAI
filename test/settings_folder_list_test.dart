@@ -1,10 +1,6 @@
-// Editing the list of music folders: the control the backend's suggestions
-// and its verdicts both land on.
-//
-// The rows commit the way every other settings input does — on blur, on
-// submit — rather than on each keystroke. A half-typed path that staged
-// itself would be sent away to be judged and come back marked wrong while
-// it was still being written.
+// Editing the list of music folders — the control the backend's suggestions
+// and verdicts both land on. Rows commit on blur and submit, not per
+// keystroke, so a half-typed path is not staged and judged mid-word.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -113,8 +109,8 @@ void main() {
     });
 
     testWidgets('removing a row takes its text with it', (tester) async {
-      // Without a key per position the controllers would shift up and the
-      // removed row's text would reappear on the row below it.
+      // Without a key per position the controllers shift up and the removed
+      // row's text reappears below it.
       var items = <String>['/first', '/second'];
       await tester.pumpWidget(
         _wrap(
@@ -232,8 +228,8 @@ void main() {
     testWidgets('the browse control is there before anything has answered', (
       tester,
     ) async {
-      // A NAS answers a broadcast when it feels like it. A button that
-      // appears only once one has is a button nobody knows to wait for.
+      // A NAS answers when it feels like it, and a button that appears only
+      // once it has is one nobody knows to wait for.
       await _pumpEditor(
         tester,
         items: const [''],

@@ -21,12 +21,11 @@ class SettingsTextInput extends StatefulWidget {
   final bool autofocus;
 
   /// Drawn inside the field, after the text. Built with a callback that
-  /// replaces what the user has typed and commits it, which is how a
-  /// suggestion picked from a list gets in without a second commit path.
+  /// replaces the text and commits it, so a picked suggestion needs no
+  /// second commit path.
   final Widget Function(BuildContext, ValueChanged<String>)? trailingBuilder;
 
-  /// Tinted when the value has something wrong with it, so a refused row is
-  /// visible without reading the message under it.
+  /// Tinted when the value has something wrong with it.
   final Color? borderColor;
 
   const SettingsTextInput({

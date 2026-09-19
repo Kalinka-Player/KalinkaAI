@@ -8,14 +8,12 @@ import 'settings_text_input.dart';
 
 /// List editor for array settings, one row per item.
 ///
-/// Rows commit the way every other settings input does — on blur, on submit,
-/// and on dispose — rather than on each keystroke, so a half-typed path does
-/// not stage itself, get judged, and be reported wrong while it is still
-/// being written.
+/// Rows commit like every other settings input — on blur, submit and dispose,
+/// not per keystroke — so a half-typed path is not staged and judged while it
+/// is still being written.
 ///
-/// [suggestions] turns the rows into combos: values the backend found for
-/// this field, offered beside what the user types. [issues] are its verdicts
-/// on the items, each landing under the row it is about.
+/// [suggestions] turns the rows into combos; [issues] are the backend's
+/// verdicts, each landing under the item it is about.
 class SettingsListEditor extends StatefulWidget {
   final List<String> items;
   final ValueChanged<List<String>> onChanged;
@@ -37,8 +35,7 @@ class SettingsListEditor extends StatefulWidget {
 }
 
 class _SettingsListEditorState extends State<SettingsListEditor> {
-  // The row added last, focused once it is built so the user can type into
-  // it straight away.
+  // The row added last, focused once built so it can be typed into.
   int _focusOnBuild = -1;
 
   void _removeItem(int index) {
@@ -72,9 +69,8 @@ class _SettingsListEditorState extends State<SettingsListEditor> {
               bottom: i < widget.items.length - 1 ? 6 : 0,
             ),
             child: _Row(
-              // Keyed by position: the controllers behind these rows hold
-              // in-progress text, and without a key removing row 1 would
-              // leave its text behind on what used to be row 2.
+              // Keyed by position: the rows hold in-progress text, and
+              // without a key removing one leaves its text on the next.
               key: ValueKey('item-$i-${widget.items.length}'),
               value: widget.items[i],
               suggestions: widget.suggestions,

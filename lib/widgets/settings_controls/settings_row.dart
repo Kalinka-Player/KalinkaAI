@@ -17,9 +17,7 @@ class SettingsRow extends StatelessWidget {
   final bool isVertical;
 
   /// What the backend said is wrong with this field's staged value, shown
-  /// under the control. A control that can place them more precisely — a
-  /// list editor, which puts each one under its own item — takes them
-  /// itself and leaves this empty.
+  /// under the control. Left empty by controls that place them per item.
   final List<ConfigIssue> issues;
 
   const SettingsRow({

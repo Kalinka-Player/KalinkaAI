@@ -121,11 +121,7 @@ class OptionSpec {
   );
 }
 
-/// How much a [ConfigIssue] stands in the way.
-///
-/// An error blocks Apply: the value cannot be used as written and only the
-/// user can fix it. A warning is shown beside the field and saved anyway —
-/// a share that is switched off is still worth configuring.
+/// An error blocks Apply; a warning is shown beside the field and saved anyway.
 enum IssueSeverity {
   error,
   warning;
@@ -134,12 +130,8 @@ enum IssueSeverity {
       raw == 'warning' ? IssueSeverity.warning : IssueSeverity.error;
 }
 
-/// Something the backend found wrong with a value the user has staged.
-///
-/// [path] is the field it belongs under, in the same dotted form everything
-/// else in the settings page is keyed by. [index] names one item of a list
-/// field, so the message lands on the folder it is about rather than on the
-/// list as a whole.
+/// Something the backend found wrong with a staged value. [path] is the
+/// dotted field path; [index] narrows it to one item of a list field.
 class ConfigIssue {
   final String path;
   final String message;
@@ -225,11 +217,9 @@ class FieldSpec {
   // (e.g. sub-feature status views). Implies readonly. Distinct so the
   // UI can choose to poll for changes vs. assume stability.
   final bool dynamic_;
-  // True when the backend may have values to suggest for this field. An
-  // enum needs no such flag — options in the envelope speak for themselves
-  // — but an open text field does: without it, a resolver that comes back
-  // empty would be indistinguishable from a field that never offers
-  // anything, and the browse control would come and go.
+  // The backend may have values to suggest for this open field. Flagged
+  // rather than inferred from the resolved options: an empty result must
+  // still show the browse control, or it would come and go.
   final bool dynamicOptions;
   final Importance importance;
   final Setup setup;
