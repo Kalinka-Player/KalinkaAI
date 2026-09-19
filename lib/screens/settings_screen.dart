@@ -43,9 +43,8 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _tabIndex = 0;
   bool _restartOverlayOpen = false;
-  // The check before the restart is a round trip, and the banner stays on
-  // screen for it. Without this the user could start a second restart in
-  // the gap.
+  // The check before the restart is a round trip, and the banner stays up
+  // for it; without this a second restart could start in the gap.
   bool _applying = false;
 
   @override
@@ -64,9 +63,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (_applying) return;
     setState(() => _applying = true);
     try {
-      // The last word before a restart is spent: a debounced check may
-      // still be pending, and the server may have changed its mind about a
-      // folder since the last one answered.
+      // Last word before a restart is spent: a debounced check may still be
+      // pending, and the server may have changed its mind since the last one.
       await ref.read(settingsProvider.notifier).validateStaged();
       if (!mounted || ref.read(settingsProvider).hasBlockingIssues) return;
       setState(() => _restartOverlayOpen = true);

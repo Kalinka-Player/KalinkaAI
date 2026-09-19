@@ -224,8 +224,7 @@ class RendererSettingsBinding implements SettingsBinding {
   @override
   List<OptionSpec>? optionsFor(String path) => state.options[path];
 
-  /// A renderer answers a write per field and the page shows the refusals
-  /// together; there is no dry run to ask before one.
+  /// A renderer answers per write; there is no dry run to ask beforehand.
   @override
   List<ConfigIssue> issuesFor(String path) => const [];
 

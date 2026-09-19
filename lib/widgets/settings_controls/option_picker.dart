@@ -6,16 +6,12 @@ import '../../utils/haptics.dart';
 import '../tap_highlight.dart';
 import 'inline_markdown.dart';
 
-/// The list of choices a settings control opens in a bottom sheet.
+/// The list of choices a settings control opens in a bottom sheet: draws the
+/// rows, pops the one that was tapped. Shared by the dropdown, whose options
+/// are the only values allowed, and the combo, whose options are suggestions.
 ///
-/// Shared by the dropdown, whose options are the only values the field may
-/// hold, and by the combo, whose options are suggestions beside what the
-/// user can type. The difference between those two is the caller's: this
-/// draws rows and returns the one that was tapped.
-///
-/// [emptyMessage] is what stands in for the rows when there are none, which
-/// only a suggestion list reaches — a list found on the network starts empty
-/// and may stay that way.
+/// [emptyMessage] stands in when there are no rows, which only a suggestion
+/// list reaches — one found on the network starts empty and may stay that way.
 class OptionPicker extends StatelessWidget {
   final List<OptionSpec> options;
   final String? selectedValue;

@@ -6,10 +6,7 @@ import '../data_model/presentation_schema.dart';
 import 'kalinka_player_api_provider.dart';
 import 'settings_binding.dart';
 
-/// How long the page waits after a keystroke before asking the server what
-/// it thinks. Long enough that typing a path does not put a request on the
-/// wire per character, short enough that the verdict feels like part of
-/// typing rather than part of saving.
+/// How long an edit settles before the server is asked what it thinks of it.
 const _validationDelay = Duration(milliseconds: 300);
 
 final _logger = Logger();
@@ -29,8 +26,7 @@ class SettingsState {
   final Map<String, List<OptionSpec>> enumOptions;
   final Map<String, dynamic> stagedChanges;
   // What the server says is wrong with the staged values, by field path.
-  // Replaced wholesale on every check, so a fixed row simply stops
-  // appearing rather than needing to be cleared.
+  // Replaced wholesale on every check — a fixed row just stops appearing.
   final Map<String, List<ConfigIssue>> issues;
   final bool isLoading;
   final String? error;
@@ -64,9 +60,9 @@ class SettingsState {
 
   List<ConfigIssue> issuesFor(String path) => issues[path] ?? const [];
 
-  /// True while something staged cannot be saved as written. Apply stays
-  /// out of reach until it is fixed — a batch is refused whole, so letting
-  /// it be sent would only spend a restart to say the same thing.
+  /// True while something staged cannot be saved as written. Apply stays out
+  /// of reach until it is fixed: a batch is refused whole, so sending it
+  /// would spend a restart to be told the same thing.
   bool get hasBlockingIssues =>
       issues.values.any((forPath) => forPath.any((i) => i.isBlocking));
 
@@ -135,8 +131,7 @@ final expertModeProvider = NotifierProvider<ExpertModeNotifier, bool>(
 
 class SettingsNotifier extends Notifier<SettingsState> {
   Timer? _validationTimer;
-  // Bumped on every check so a slow answer about an older set of edits
-  // cannot land on top of a newer one.
+  // Bumped on every check so a slow answer cannot land on top of a newer one.
   int _validationGeneration = 0;
 
   @override
@@ -235,17 +230,14 @@ class SettingsNotifier extends Notifier<SettingsState> {
       state = state.copyWith(issues: {});
       return;
     }
-    // Without a schema there is nothing to check against — the server has
-    // not been read yet — so the check would return at its first line.
+    // Nothing to check against until the schema has been read.
     if (state.schemaVersion == null) return;
     _validationTimer = Timer(_validationDelay, validateStaged);
   }
 
   /// Ask the server what it makes of everything staged, and show its answer.
-  ///
-  /// The whole staged set goes every time, not the field that just changed:
-  /// a value can be fine beside one edit and wrong beside another, and only
-  /// the backend knows which.
+  /// The whole set goes every time, not just the field that changed: a value
+  /// can be fine beside one edit and wrong beside another.
   Future<void> validateStaged() async {
     _validationTimer?.cancel();
     final version = state.schemaVersion;
@@ -261,9 +253,8 @@ class SettingsNotifier extends Notifier<SettingsState> {
       if (generation != _validationGeneration) return;
       state = state.copyWith(issues: _byPath(issues));
     } catch (e) {
-      // A page that cannot reach the server has bigger news to show than
-      // an unanswered question about a folder; the save refuses on its own
-      // if the value really is unusable.
+      // Not worth reporting: a page that cannot reach the server has bigger
+      // news to show, and the save refuses on its own if the value is bad.
       _logger.d('Validating staged settings failed: $e');
       if (generation == _validationGeneration) {
         state = state.copyWith(issues: {});
@@ -320,8 +311,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       _validationGeneration++;
       state = state.copyWith(values: newValues, stagedChanges: {}, issues: {});
     } on SettingsValidationException catch (e) {
-      // Nothing was saved. Show the server's verdict on the rows it is
-      // about, so the banner's count still matches what is staged.
+      // Nothing was saved, so the staged set stands; mark the rows it is about.
       _validationGeneration++;
       state = state.copyWith(issues: _byPath(e.issues), error: e.detail);
       rethrow;

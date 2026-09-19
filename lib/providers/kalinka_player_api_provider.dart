@@ -287,11 +287,8 @@ class RendererUpgradeException implements Exception {
   String toString() => message;
 }
 
-/// A renderer's settings could not be read or written. [message] is already
-/// phrased for the user.
-/// The server refused a save because one of the staged values cannot be
-/// used. Carries its verdict per field, so the page can point at the row
-/// that has to change rather than showing one sentence at the top.
+/// A save the server refused, with its verdict per field so the page can
+/// mark the rows that have to change.
 class SettingsValidationException implements Exception {
   final List<ConfigIssue> issues;
   final String detail;
@@ -302,6 +299,8 @@ class SettingsValidationException implements Exception {
   String toString() => detail;
 }
 
+/// A renderer's settings could not be read or written. [message] is already
+/// phrased for the user.
 class RendererConfigException implements Exception {
   final String message;
   const RendererConfigException(this.message);
@@ -995,20 +994,21 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
     }
   }
 
-  /// A refusal the server spelled out per field, or null when the failure
-  /// was not one of those. Nothing was saved either way.
+  /// The per-field refusal in an error body, or null if it isn't one.
   SettingsValidationException? _refusalFrom(dynamic body) {
-    if (body is! Map) return null;
-    final raw = body['issues'];
-    if (raw is! List) return null;
+    if (body is! Map || body['issues'] is! List) return null;
     return SettingsValidationException(
-      raw
-          .whereType<Map>()
-          .map((e) => ConfigIssue.fromJson(e.cast<String, dynamic>()))
-          .toList(),
+      _issuesFrom(body['issues']),
       body['detail'] as String? ?? 'The server refused the change',
     );
   }
+
+  static List<ConfigIssue> _issuesFrom(dynamic raw) => raw is! List
+      ? const []
+      : raw
+            .whereType<Map>()
+            .map((e) => ConfigIssue.fromJson(e.cast<String, dynamic>()))
+            .toList();
 
   @override
   Future<List<ConfigIssue>> validateSettings({
@@ -1020,12 +1020,7 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
       options: Options(contentType: Headers.jsonContentType),
       data: jsonEncode({'schema_version': schemaVersion, 'changes': changes}),
     );
-    final raw = (response.data as Map?)?['issues'];
-    if (raw is! List) return const [];
-    return raw
-        .whereType<Map>()
-        .map((e) => ConfigIssue.fromJson(e.cast<String, dynamic>()))
-        .toList();
+    return _issuesFrom((response.data as Map?)?['issues']);
   }
 
   @override
