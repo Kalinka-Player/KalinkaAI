@@ -18,6 +18,9 @@ class SettingsState {
   final PresentationSchema? schema;
   final String? schemaVersion;
   final Map<String, dynamic> values; // Path → server value
+  // Credentials the server holds a value for. It never sends the value, so
+  // these paths are absent from [values].
+  final Set<String> secretsSet;
   // Per-path option lists for enum widgets whose choices are resolved
   // live by the backend (ALSA devices today). When an entry exists for
   // a field's path, the renderer uses it in preference to the schema's
@@ -35,6 +38,7 @@ class SettingsState {
     this.schema,
     this.schemaVersion,
     this.values = const {},
+    this.secretsSet = const {},
     this.enumOptions = const {},
     this.stagedChanges = const {},
     this.issues = const {},
@@ -53,6 +57,9 @@ class SettingsState {
 
   bool isStaged(String path) => stagedChanges.containsKey(path);
 
+  bool hasHiddenSecret(String path) =>
+      !stagedChanges.containsKey(path) && secretsSet.contains(path);
+
   /// Live option list for [path] if the backend resolved one this
   /// refresh, else null (caller should fall back to the schema's
   /// static enum_values).
@@ -70,6 +77,7 @@ class SettingsState {
     PresentationSchema? schema,
     String? schemaVersion,
     Map<String, dynamic>? values,
+    Set<String>? secretsSet,
     Map<String, List<OptionSpec>>? enumOptions,
     Map<String, dynamic>? stagedChanges,
     Map<String, List<ConfigIssue>>? issues,
@@ -80,6 +88,7 @@ class SettingsState {
       schema: schema ?? this.schema,
       schemaVersion: schemaVersion ?? this.schemaVersion,
       values: values ?? this.values,
+      secretsSet: secretsSet ?? this.secretsSet,
       enumOptions: enumOptions ?? this.enumOptions,
       stagedChanges: stagedChanges ?? this.stagedChanges,
       issues: issues ?? this.issues,
@@ -106,6 +115,9 @@ class ServerSettingsBinding implements SettingsBinding {
 
   @override
   bool isStaged(String path) => state.isStaged(path);
+
+  @override
+  bool hasHiddenSecret(String path) => state.hasHiddenSecret(path);
 
   @override
   List<OptionSpec>? optionsFor(String path) => state.optionsFor(path);
@@ -152,6 +164,9 @@ class SettingsNotifier extends Notifier<SettingsState> {
       final schema = results[0] as PresentationSchema;
       final envelope = (results[1] as Map).cast<String, dynamic>();
       final values = (envelope['values'] as Map? ?? {}).cast<String, dynamic>();
+      final secretsSet = (envelope['secrets_set'] as List? ?? const [])
+          .cast<String>()
+          .toSet();
       // Dynamic options: `{path: [{value, label}, …]}`. Present only for
       // fields the server resolves live (shares it found, drives plugged
       // in); absent fields fall back to the schema's static enum_values.
@@ -164,6 +179,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
         // version wins — UI rendering is driven by it.
         schemaVersion: schema.schemaVersion,
         values: values,
+        secretsSet: secretsSet,
         enumOptions: enumOptions,
         stagedChanges: {},
         issues: {},
@@ -198,7 +214,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
   /// down. Without this, manually reverting an edit would leave a
   /// no-op change in the staging area and dirty the apply button.
   void stageChange(String path, dynamic value) {
-    if (_valuesEqual(value, state.values[path])) {
+    if (_valuesEqual(value, _stored(path))) {
       if (state.stagedChanges.containsKey(path)) unstageChange(path);
       return;
     }
@@ -209,6 +225,18 @@ class SettingsNotifier extends Notifier<SettingsState> {
     state = state.copyWith(stagedChanges: newStaged);
     _scheduleValidation();
   }
+
+  /// The server's value at [path] for telling a revert from an edit. An unset
+  /// credential is empty; a held one is unknown and matches nothing.
+  dynamic _stored(String path) {
+    if (state.values.containsKey(path) || state.secretsSet.contains(path)) {
+      return state.values[path];
+    }
+    return _isSecret(path) ? '' : null;
+  }
+
+  bool _isSecret(String path) =>
+      state.schema?.field(path)?.widget == WidgetKind.password;
 
   void unstageChange(String path) {
     final newStaged = Map<String, dynamic>.from(state.stagedChanges);
@@ -299,17 +327,41 @@ class SettingsNotifier extends Notifier<SettingsState> {
   Future<void> applyChanges() async {
     final version = state.schemaVersion;
     if (version == null || state.stagedChanges.isEmpty) return;
+    // Only what is sent here is saved; an edit staged during the round trip
+    // stays pending.
+    final changes = Map<String, dynamic>.from(state.stagedChanges);
     try {
       final api = ref.read(kalinkaProxyProvider);
-      await api.saveSettings(
-        schemaVersion: version,
-        changes: Map<String, dynamic>.from(state.stagedChanges),
-      );
-      // Fold staged → values on success.
+      await api.saveSettings(schemaVersion: version, changes: changes);
+      // Fold staged → values on success; a credential is kept only as set.
       final newValues = Map<String, dynamic>.from(state.values);
-      newValues.addAll(state.stagedChanges);
+      final newSecrets = Set<String>.from(state.secretsSet);
+      changes.forEach((path, value) {
+        if (!_isSecret(path)) {
+          newValues[path] = value;
+          return;
+        }
+        newValues.remove(path);
+        if (value is String && value.isNotEmpty) {
+          newSecrets.add(path);
+        } else {
+          newSecrets.remove(path);
+        }
+      });
+      final unsent = {
+        for (final e in state.stagedChanges.entries)
+          if (!changes.containsKey(e.key) ||
+              !_valuesEqual(changes[e.key], e.value))
+            e.key: e.value,
+      };
       _validationGeneration++;
-      state = state.copyWith(values: newValues, stagedChanges: {}, issues: {});
+      state = state.copyWith(
+        values: newValues,
+        secretsSet: newSecrets,
+        stagedChanges: unsent,
+        issues: {},
+      );
+      if (unsent.isNotEmpty) _scheduleValidation();
     } on SettingsValidationException catch (e) {
       // Nothing was saved, so the staged set stands; mark the rows it is about.
       _validationGeneration++;

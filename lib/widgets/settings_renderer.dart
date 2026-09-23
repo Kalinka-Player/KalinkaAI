@@ -175,6 +175,7 @@ class SchemaFieldRenderer extends StatelessWidget {
         value: value,
         options: binding,
         issues: issues,
+        secretHidden: binding.hasHiddenSecret(field.path),
         onChanged: (v) => binding.stage(field.path, v),
       ),
     );
@@ -229,6 +230,9 @@ Widget buildSliderControl({
 /// the 80px numeric input look stranded in that space, so we let
 /// them stretch. The simple page passes [compact]=true to keep the
 /// established right-aligned layout next to a label.
+///
+/// [secretHidden] is [SettingsBinding.hasHiddenSecret] for the field: the
+/// store holds a credential there that [value] cannot carry.
 Widget buildFieldControl({
   required FieldSpec field,
   required dynamic value,
@@ -236,6 +240,7 @@ Widget buildFieldControl({
   required ValueChanged<dynamic> onChanged,
   List<ConfigIssue> issues = const [],
   bool compact = true,
+  bool secretHidden = false,
 }) {
   switch (field.widget) {
     case WidgetKind.toggle:
@@ -309,6 +314,7 @@ Widget buildFieldControl({
     case WidgetKind.password:
       return SettingsPasswordInput(
         value: (value ?? '').toString(),
+        hidden: secretHidden,
         onChanged: onChanged,
       );
     case WidgetKind.text:

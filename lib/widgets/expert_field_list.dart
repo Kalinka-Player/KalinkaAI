@@ -317,6 +317,7 @@ class _ExpertRow extends StatelessWidget {
             field: field,
             value: value,
             options: binding,
+            secretHidden: binding.hasHiddenSecret(field.path),
             onChanged: (v) => binding.stage(field.path, v),
             // Expert rows allocate the full row width to each
             // control — let narrow widgets like the numeric input

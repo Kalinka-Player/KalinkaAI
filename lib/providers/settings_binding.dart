@@ -27,6 +27,11 @@ abstract interface class SettingsBinding implements EnumOptionSource {
   /// True while [path] holds an edit that has not been saved.
   bool isStaged(String path);
 
+  /// True when the store holds a credential at [path] that it never sends,
+  /// and no edit replaces it: the field can show that one is set, never
+  /// what it is.
+  bool hasHiddenSecret(String path);
+
   /// Record an edit. Staging, not saving — the page's apply action commits.
   void stage(String path, dynamic value);
 

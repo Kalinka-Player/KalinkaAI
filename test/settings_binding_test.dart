@@ -74,6 +74,9 @@ class _RecordingBinding implements SettingsBinding {
   bool isStaged(String path) => staged.containsKey(path);
 
   @override
+  bool hasHiddenSecret(String path) => false;
+
+  @override
   List<OptionSpec>? optionsFor(String path) => options[path];
 
   @override

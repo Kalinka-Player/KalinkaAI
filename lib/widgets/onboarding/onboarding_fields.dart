@@ -5,17 +5,6 @@ import '../../providers/settings_provider.dart';
 import '../settings_controls/settings_row.dart';
 import '../settings_renderer.dart' show buildFieldControl;
 
-/// Look up a [FieldSpec] by exact dotted path. The expert list carries every
-/// settable field across the whole config tree (both tiers), so it's the
-/// simplest complete index.
-FieldSpec? findSchemaField(PresentationSchema? schema, String path) {
-  if (schema == null) return null;
-  for (final f in schema.expertFields) {
-    if (f.path == path) return f;
-  }
-  return null;
-}
-
 /// All modules of [kind] (`input_module` / `device`) across every page.
 List<ModuleSpec> schemaModulesOfKind(PresentationSchema? schema, String kind) {
   if (schema == null) return const [];
@@ -127,10 +116,12 @@ List<FieldSpec> setupModuleFields(PresentationSchema? schema, ModuleSpec m) {
 // whole wizard step for renaming a server that already named itself read as
 // setup work the user had to do. They live in Settings.
 
-/// A required answer exists: a non-blank string, or a list with at least
-/// one non-blank entry. The server guarantees a required field defaults to
-/// its type's empty value, so "still empty" is "not answered yet".
+/// A required answer exists: a credential the server holds, a non-blank
+/// string, or a list with at least one non-blank entry. The server
+/// guarantees a required field defaults to its type's empty value, so
+/// "still empty" is "not answered yet".
 bool _answered(SettingsState state, FieldSpec f) {
+  if (state.hasHiddenSecret(f.path)) return true;
   final value = state.getEffective(f.path);
   if (value == null) return false;
   if (value is String) return value.trim().isNotEmpty;
@@ -178,7 +169,7 @@ class OnboardingFieldRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
-    final field = findSchemaField(state.schema, path);
+    final field = state.schema?.field(path);
     if (field == null || field.readonly) return const SizedBox.shrink();
 
     final value = state.getEffective(path) ?? field.defaultValue;
@@ -204,6 +195,7 @@ class OnboardingFieldRow extends ConsumerWidget {
         value: value,
         options: ServerSettingsBinding(state, notifier),
         issues: state.issuesFor(path),
+        secretHidden: state.hasHiddenSecret(path),
         onChanged: (v) => notifier.stageChange(path, v),
       ),
     );

@@ -221,6 +221,10 @@ class RendererSettingsBinding implements SettingsBinding {
   @override
   bool isStaged(String path) => state.staged.containsKey(path);
 
+  /// A renderer's settings carry no credentials.
+  @override
+  bool hasHiddenSecret(String path) => false;
+
   @override
   List<OptionSpec>? optionsFor(String path) => state.options[path];
 

@@ -395,6 +395,14 @@ class PresentationSchema {
     this.expertFields = const [],
   });
 
+  /// The settable field at [path], or null when this schema has none.
+  FieldSpec? field(String path) {
+    for (final f in expertFields) {
+      if (f.path == path) return f;
+    }
+    return null;
+  }
+
   factory PresentationSchema.fromJson(Map<String, dynamic> j) =>
       PresentationSchema(
         schemaVersion: j['schema_version'] as String,
