@@ -783,7 +783,12 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
 
 class SchemaPageRenderer extends ConsumerWidget {
   final PageSpec page;
-  const SchemaPageRenderer({super.key, required this.page});
+
+  /// Drawn after the page's own sections — what the app adds to a page the
+  /// server describes.
+  final Widget? footer;
+
+  const SchemaPageRenderer({super.key, required this.page, this.footer});
 
   /// True for the output-devices page. Page ids mirror the config paths
   /// (`devices.*`), so a `device` substring identifies it.
@@ -829,6 +834,7 @@ class SchemaPageRenderer extends ConsumerWidget {
               ),
             ),
         ],
+        ?footer,
       ],
     );
   }

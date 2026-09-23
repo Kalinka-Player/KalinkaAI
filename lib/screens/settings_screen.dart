@@ -19,6 +19,8 @@ import '../widgets/expert_mode_toggle.dart';
 import '../widgets/expert_settings_screen.dart';
 import '../widgets/settings_controls/settings_binding.dart';
 import '../widgets/slide_in_panel.dart';
+import '../widgets/support_section.dart';
+import 'log_export_screen.dart';
 import '../widgets/settings_renderer.dart';
 
 /// Full-screen settings overlay with tabbed content (General / Modules / Devices).
@@ -43,6 +45,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _tabIndex = 0;
   bool _restartOverlayOpen = false;
+  bool _logExportOpen = false;
   // The check before the restart is a round trip, and the banner stays up
   // for it; without this a second restart could start in the gap.
   bool _applying = false;
@@ -96,7 +99,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return SlideInPanel(
       onClose: widget.onClose,
       onCoverageChanged: widget.onCoverageChanged,
+      handlesBack: !_logExportOpen,
       overlays: [
+        if (_logExportOpen)
+          LogExportScreen(
+            onClose: () => setState(() => _logExportOpen = false),
+          ),
         // Restart overlay
         if (_restartOverlayOpen)
           RestartOverlay(
@@ -209,10 +217,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 settingsState.schema!.pages.length - 1,
                               ),
                               children: [
-                                for (final page in settingsState.schema!.pages)
+                                for (final (i, page)
+                                    in settingsState.schema!.pages.indexed)
                                   SchemaPageRenderer(
                                     key: ValueKey('page_${page.id}'),
                                     page: page,
+                                    footer: i == 0
+                                        ? SupportSection(
+                                            onDownloadLogs: () => setState(
+                                              () => _logExportOpen = true,
+                                            ),
+                                          )
+                                        : null,
                                   ),
                               ],
                             ),

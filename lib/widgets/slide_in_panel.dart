@@ -25,12 +25,17 @@ class SlideInPanel extends StatefulWidget {
   /// stop painting the occluded content without flashing mid-animation.
   final ValueChanged<bool>? onCoverageChanged;
 
+  /// False while a panel opened over this one owns the system back: every
+  /// PopScope on a route hears it, so both would close.
+  final bool handlesBack;
+
   const SlideInPanel({
     super.key,
     required this.child,
     this.overlays = const [],
     this.onClose,
     this.onCoverageChanged,
+    this.handlesBack = true,
   });
 
   /// Dismiss the nearest enclosing panel, playing the slide-out first.
@@ -103,7 +108,7 @@ class _SlideInPanelState extends State<SlideInPanel>
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _close();
+        if (!didPop && widget.handlesBack) _close();
       },
       child: content,
     );
