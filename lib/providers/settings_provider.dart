@@ -365,7 +365,10 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final changes = Map<String, dynamic>.from(state.stagedChanges);
     try {
       final api = ref.read(kalinkaProxyProvider);
-      await api.saveSettings(schemaVersion: version, changes: changes);
+      final saved = await api.saveSettings(
+        schemaVersion: version,
+        changes: changes,
+      );
       // Fold staged → values on success; a credential is kept only as set.
       final newValues = Map<String, dynamic>.from(state.values);
       final newSecrets = Set<String>.from(state.secretsSet);
@@ -395,7 +398,9 @@ class SettingsNotifier extends Notifier<SettingsState> {
       _validationGeneration++;
       state = state.copyWith(
         values: newValues,
-        secretsSet: newSecrets,
+        // The server's word where it gives one: only it knows whether a
+        // saved credential outlived the change.
+        secretsSet: saved ?? newSecrets,
         stagedChanges: unsent,
         issues: {},
       );

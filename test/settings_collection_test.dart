@@ -709,16 +709,42 @@ void main() {
         );
       },
     );
+
+    test('takes what the server says is saved over its own guess', () async {
+      const saved = '$_path.rec_nas.authentication.password';
+      final api = _Api(secretsSet: [saved], secretsAfterSave: {});
+      final container = ProviderContainer(
+        overrides: [kalinkaProxyProvider.overrideWithValue(api)],
+      );
+      addTearDown(container.dispose);
+      final notifier = container.read(settingsProvider.notifier);
+      await notifier.loadConfig();
+      expect(container.read(settingsProvider).secretsSet, contains(saved));
+
+      // The entry goes; left to itself the app would keep its password marked.
+      notifier.stageChange(_path, <Map<String, dynamic>>[]);
+      await notifier.applyChanges();
+
+      expect(container.read(settingsProvider).secretsSet, isEmpty);
+    });
   });
 }
 
 class _Api implements KalinkaPlayerProxy {
+  /// What the server holds a credential for, as it reads and as a save
+  /// leaves it; null after a save is a server that does not say.
+  final List<String> secretsSet;
+  final Set<String>? secretsAfterSave;
+
+  _Api({this.secretsSet = const [], this.secretsAfterSave});
+
   @override
   Future<Map<String, dynamic>> getSettings() async => {
     'schema_version': 'v1',
     'values': {
       _path: [_share()],
     },
+    'secrets_set': secretsSet,
   };
 
   @override
@@ -741,10 +767,10 @@ class _Api implements KalinkaPlayerProxy {
   );
 
   @override
-  Future<void> saveSettings({
+  Future<Set<String>?> saveSettings({
     required String schemaVersion,
     required Map<String, dynamic> changes,
-  }) async {}
+  }) async => secretsAfterSave;
 
   @override
   Future<List<ConfigIssue>> validateSettings({
