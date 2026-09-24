@@ -551,11 +551,18 @@ class _EntryForm extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        IssueNotes(issues: issues),
+        IssueNotes(
+          issues: issues,
+          padding: const EdgeInsets.fromLTRB(kSheetGutter, 10, kSheetGutter, 0),
+        ),
         ...shown,
-        if (advanced.isNotEmpty)
+        if (advanced.isNotEmpty) ...[
+          // Nothing above it but the sheet's own rule otherwise.
+          if (shown.isNotEmpty) const SheetDivider(),
           SettingsSection(
             title: 'Advanced',
+            showTopBorder: false,
+            gutter: kSheetGutter,
             // Opened on what the card complained about.
             initiallyExpanded: advanced.any(
               (field) => binding.issuesFor(field.path).isNotEmpty,
@@ -565,6 +572,7 @@ class _EntryForm extends StatelessWidget {
               children: [for (final field in advanced) _field(field)],
             ),
           ),
+        ],
       ],
     );
   }
@@ -573,6 +581,7 @@ class _EntryForm extends StatelessWidget {
     key: ValueKey(field.path),
     field: field,
     listSuggestions: true,
+    gutter: kSheetGutter,
   );
 
   void _addFields(
@@ -599,7 +608,7 @@ class _EntryForm extends StatelessWidget {
     if (chosen != null) {
       rows.add(
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          padding: const EdgeInsets.fromLTRB(kSheetGutter, 8, kSheetGutter, 4),
           child: SettingsEnumPills(
             options: [for (final v in group.variants) v.label],
             selected: chosen.label,
@@ -623,7 +632,7 @@ class _EntryForm extends StatelessWidget {
     if (rows.isEmpty) return;
     shown.add(
       Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+        padding: const EdgeInsets.fromLTRB(kSheetGutter, 14, kSheetGutter, 0),
         child: Text(
           group.title.toUpperCase(),
           style: KalinkaTextStyles.sectionHeaderMuted,
