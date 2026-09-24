@@ -18,8 +18,8 @@ bool sourceBadgeVisible(WidgetRef ref, String entityId) {
   return info != null && !info.builtin;
 }
 
-/// Displays a source attribution badge: a pill containing the first letter
-/// of the source name, uppercase, in the source colour.
+/// Displays a source attribution badge: a pill holding the source's icon, or
+/// the first letter of its name where it declares none, in the source colour.
 ///
 /// Automatically hides when only one source is configured — with nothing to
 /// tell apart, a badge is noise.
@@ -48,7 +48,6 @@ class SourceBadge extends ConsumerWidget {
     final info = ref.watch(sourceDisplayInfoProvider)[source]!;
 
     final color = info.color;
-    final letter = info.abbreviation; // already first letter, uppercased
 
     final double fs = size == SourceBadgeSize.small ? 10.0 : 11.0;
     final double px = size == SourceBadgeSize.small ? 4.0 : 5.0;
@@ -66,28 +65,30 @@ class SourceBadge extends ConsumerWidget {
           border: Border.all(color: color.withValues(alpha: 0.30), width: 1),
           borderRadius: radius,
         ),
-        child: Text(
-          letter,
-          style: KalinkaTextStyles.sourceBadgeLetter.copyWith(
-            fontSize: fs,
-            color: color,
-          ),
+        // The icon takes the letter's height, so a row of badges lines up.
+        child: _SourceMark(
+          icon: info.icon,
+          letter: info.abbreviation,
+          letterSize: fs,
+          iconSize: fs,
+          color: color,
         ),
       ),
     );
   }
 }
 
-/// The letter tile that stands for a source where a results group, a filter
-/// pill or a collection drawn from several names the sources it holds.
-class SourceLetter extends ConsumerWidget {
+/// The tile that stands for a source where a results group, a filter pill or
+/// a collection drawn from several names the sources it holds: its icon, or
+/// its letter where it declares none.
+class SourceTile extends ConsumerWidget {
   final String source;
 
   /// Side of the tile. Smaller where the letters sit on a row's second line
   /// rather than beside a heading.
   final double size;
 
-  const SourceLetter({super.key, required this.source, this.size = 22});
+  const SourceTile({super.key, required this.source, this.size = 22});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -107,13 +108,42 @@ class SourceLetter extends ConsumerWidget {
           border: Border.all(color: color.withValues(alpha: 0.30), width: 1),
           borderRadius: BorderRadius.circular(5),
         ),
-        child: Text(
-          letter,
-          style: KalinkaTextStyles.sourceBadgeLetter.copyWith(
-            fontSize: size / 2,
-            color: color,
-          ),
+        child: _SourceMark(
+          icon: info?.icon,
+          letter: letter,
+          letterSize: size / 2,
+          iconSize: size * 0.6,
+          color: color,
         ),
+      ),
+    );
+  }
+}
+
+class _SourceMark extends StatelessWidget {
+  final IconData? icon;
+  final String letter;
+  final double letterSize;
+  final double iconSize;
+  final Color color;
+
+  const _SourceMark({
+    required this.icon,
+    required this.letter,
+    required this.letterSize,
+    required this.iconSize,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = this.icon;
+    if (icon != null) return Icon(icon, size: iconSize, color: color);
+    return Text(
+      letter,
+      style: KalinkaTextStyles.sourceBadgeLetter.copyWith(
+        fontSize: letterSize,
+        color: color,
       ),
     );
   }

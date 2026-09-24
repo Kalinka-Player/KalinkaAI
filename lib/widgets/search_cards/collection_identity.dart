@@ -113,7 +113,7 @@ class CollectionIdentity extends ConsumerWidget {
               Row(
                 children: [
                   for (final source in sources) ...[
-                    SourceLetter(source: source, size: 18),
+                    SourceTile(source: source, size: 18),
                     const SizedBox(width: 5),
                   ],
                   Expanded(

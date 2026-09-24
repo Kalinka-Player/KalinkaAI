@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart' show Color;
+import 'package:flutter/material.dart' show Color, IconData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
+import '../utils/schema_icons.dart';
 import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
 
@@ -9,6 +10,10 @@ class SourceDisplayInfo {
   final String name;
   final String title;
   final String abbreviation;
+
+  /// Drawn in place of [abbreviation] where the source declares an icon this
+  /// app has.
+  final IconData? icon;
   final Color color;
 
   /// The server's own source, which wears no badge: it is the app itself
@@ -19,6 +24,7 @@ class SourceDisplayInfo {
     required this.name,
     required this.title,
     required this.abbreviation,
+    this.icon,
     required this.color,
     this.builtin = false,
   });
@@ -104,6 +110,7 @@ final sourceDisplayInfoProvider = Provider<Map<String, SourceDisplayInfo>>((
       name: m.name,
       title: m.title,
       abbreviation: m.title.isNotEmpty ? m.title[0].toUpperCase() : '?',
+      icon: iconNamed(m.icon),
       color: colorForSourceName(m.name),
       builtin: m.builtin,
     );

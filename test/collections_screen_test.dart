@@ -494,7 +494,7 @@ void main() {
     // unmarked: what a collection is made of is the point of the line.
     expect(
       tester
-          .widgetList<SourceLetter>(find.byType(SourceLetter))
+          .widgetList<SourceTile>(find.byType(SourceTile))
           .map((letter) => letter.source),
       ['localfiles', 'localfiles'],
     );

@@ -6,6 +6,7 @@ import '../providers/connection_settings_provider.dart';
 import '../providers/modules_state_provider.dart';
 import '../providers/server_info_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/schema_icons.dart';
 import 'server_update_banner.dart';
 import 'settings_controls/footer_note.dart';
 import 'settings_controls/issue_notes.dart';
@@ -32,23 +33,10 @@ import 'modules_empty_state.dart';
 // Icons
 // ---------------------------------------------------------------------------
 
-/// Map a backend material icon name to a Flutter IconData. Only icons the
-/// backend actually emits need entries here.
-IconData _iconFromName(String? name) {
-  switch (name) {
-    case 'folder_outlined':
-      return Icons.folder_outlined;
-    case 'music_note_outlined':
-      return Icons.music_note_outlined;
-    case 'speaker_outlined':
-      return Icons.speaker_outlined;
-    case 'waves_outlined':
-      return Icons.waves_outlined;
-    case 'extension_outlined':
-    default:
-      return Icons.extension_outlined;
-  }
-}
+/// The icon for a backend material icon name, a plugin piece where this app
+/// has none by that name.
+IconData schemaIcon(String? name) =>
+    iconNamed(name) ?? Icons.extension_outlined;
 
 Color _colorFromHex(String? hex, Color fallback) {
   if (hex == null || !hex.startsWith('#')) return fallback;
@@ -623,7 +611,7 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
 
     // Preview subtitle from backend-declared preview_fields.
     final subtitle = _subtitleFor(m, binding);
-    final icon = _iconFromName(m.icon);
+    final icon = schemaIcon(m.icon);
     final color = _colorFromHex(m.iconColor, KalinkaColors.textSecondary);
 
     // Hoist a module-level `.enabled` field into the header switch, mirroring
