@@ -97,6 +97,51 @@ Future<T?> showKalinkaBottomSheet<T>({
 /// three read as one edge, so they are one number.
 const double kSheetGutter = 20;
 
+/// A sheet's title, what it is about under it, and the × that closes it.
+class SheetHeader extends StatelessWidget {
+  final String title;
+  final String summary;
+
+  const SheetHeader({super.key, required this.title, this.summary = ''});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(kSheetGutter, 16, 12, 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: KalinkaTextStyles.sectionLabel),
+                if (summary.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(summary, style: KalinkaTextStyles.trackRowSubtitle),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          TapHighlight(
+            onTap: () => Navigator.of(context).pop(),
+            borderRadius: BorderRadius.circular(8),
+            child: const Padding(
+              padding: EdgeInsets.all(8),
+              child: Icon(
+                Icons.close_rounded,
+                size: 22,
+                color: KalinkaColors.textMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// The hairline between two rows of a sheet. Every sheet's sections are ruled
 /// the same way.
 class SheetDivider extends StatelessWidget {
