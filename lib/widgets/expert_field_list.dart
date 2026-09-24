@@ -357,34 +357,7 @@ class _ExpertRow extends StatelessWidget {
           ],
           const SizedBox(height: 12),
           control,
-          if (isStaged) ...[
-            const SizedBox(height: 10),
-            Align(alignment: Alignment.centerLeft, child: _StagedPill()),
-          ],
         ],
-      ),
-    );
-  }
-}
-
-class _StagedPill extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        color: KalinkaColors.statusPending.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: KalinkaColors.statusPending.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Text(
-        'Staged',
-        style: KalinkaTextStyles.tagPill.copyWith(
-          color: KalinkaColors.statusPending,
-          letterSpacing: 0.8,
-        ),
       ),
     );
   }

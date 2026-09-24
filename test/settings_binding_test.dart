@@ -6,6 +6,7 @@ import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/widgets/settings_controls/settings_binding.dart';
 import 'package:kalinka/widgets/settings_controls/settings_combo_input.dart';
+import 'package:kalinka/widgets/settings_controls/settings_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
 import 'package:kalinka/widgets/settings_renderer.dart';
 
@@ -185,8 +186,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Server name'), findsOneWidget);
-    // Staged rows carry the amber "Staged" pill.
-    expect(find.text('Staged'), findsOneWidget);
+    final row = tester.widget<SettingsRow>(
+      find.ancestor(
+        of: find.text('Server name'),
+        matching: find.byType(SettingsRow),
+      ),
+    );
+    expect(row.isStaged, isTrue);
   });
 
   testWidgets('a field that says suggestions exist is drawn as a combo', (
