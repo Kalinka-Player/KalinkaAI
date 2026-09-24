@@ -30,11 +30,15 @@ class SettingsComboList extends StatelessWidget {
       hintText: hintText,
       borderColor: borderColor,
       onChanged: onChanged,
-      belowBuilder: (context, typed, replace) => _Suggestions(
-        matching: _matching(typed),
-        anyFound: options.isNotEmpty,
-        typed: typed.trim(),
-        onPick: replace,
+      // Part of the field for a click: one that unfocused it would commit the
+      // text first, and the list would change under the pointer.
+      belowBuilder: (context, typed, replace) => TextFieldTapRegion(
+        child: _Suggestions(
+          matching: _matching(typed),
+          anyFound: options.isNotEmpty,
+          typed: typed.trim(),
+          onPick: replace,
+        ),
       ),
     );
   }

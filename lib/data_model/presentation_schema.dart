@@ -119,6 +119,16 @@ class OptionSpec {
     label: j['label'] as String,
     description: j['description'] as String?,
   );
+
+  @override
+  bool operator ==(Object other) =>
+      other is OptionSpec &&
+      other.value == value &&
+      other.label == label &&
+      other.description == description;
+
+  @override
+  int get hashCode => Object.hash(value, label, description);
 }
 
 /// An error blocks Apply; a warning is shown beside the field and saved anyway.

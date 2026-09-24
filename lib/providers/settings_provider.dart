@@ -196,11 +196,20 @@ class SettingsNotifier extends Notifier<SettingsState> {
   }
 
   /// Reads the suggestions again, and nothing else: what the user has staged
-  /// and what the server said about it stay as they are.
-  Future<void> refreshOptions() async {
+  /// and what the server said about it stay as they are. A read still out is
+  /// joined rather than raced.
+  Future<void> refreshOptions() => _refreshingOptions ??= _readOptions()
+      .whenComplete(() => _refreshingOptions = null);
+
+  Future<void>? _refreshingOptions;
+
+  Future<void> _readOptions() async {
     try {
       final envelope = await ref.read(kalinkaProxyProvider).getSettings();
-      state = state.copyWith(enumOptions: _optionsFromEnvelope(envelope));
+      final options = _optionsFromEnvelope(envelope);
+      // Unchanged is the usual answer; it should not rebuild the page.
+      if (jsonEquals(options, state.enumOptions)) return;
+      state = state.copyWith(enumOptions: options);
     } catch (_) {
       // Suggestions are a convenience; the ones already shown still stand.
     }
