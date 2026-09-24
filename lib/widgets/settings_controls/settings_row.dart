@@ -4,6 +4,9 @@ import '../../theme/app_theme.dart';
 import 'inline_markdown.dart';
 import 'issue_notes.dart';
 
+/// Space either side of a settings card's rows.
+const double kSettingsGutter = 16;
+
 /// A single setting row with label, optional sublabel, and a control widget on
 /// the right. A staged row is tinted amber, without changing its layout.
 ///
@@ -22,6 +25,10 @@ class SettingsRow extends StatelessWidget {
   /// A button beside the label of a vertical row, acting on the whole of it.
   final Widget? action;
 
+  /// Space either side of the content: [kSettingsGutter] in a settings card,
+  /// a sheet's own gutter in a sheet.
+  final double gutter;
+
   const SettingsRow({
     super.key,
     required this.label,
@@ -31,24 +38,25 @@ class SettingsRow extends StatelessWidget {
     this.isVertical = false,
     this.issues = const [],
     this.action,
+    this.gutter = kSettingsGutter,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      // The amber bar is always there, clear when unstaged, so staging a row
-      // never shifts its content.
-      decoration: BoxDecoration(
-        color: isStaged
-            ? KalinkaColors.statusPending.withValues(alpha: 0.04)
-            : null,
-        border: Border(
-          left: BorderSide(
-            color: isStaged ? KalinkaColors.statusPending : Colors.transparent,
-          ),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: isStaged
+          ? KalinkaColors.statusPending.withValues(alpha: 0.04)
+          : null,
+      // Painted over the row rather than laid out with it, so staging never
+      // shifts the content off its gutter.
+      foregroundDecoration: isStaged
+          ? const BoxDecoration(
+              border: Border(
+                left: BorderSide(color: KalinkaColors.statusPending),
+              ),
+            )
+          : null,
+      padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 12),
       child: isVertical
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,

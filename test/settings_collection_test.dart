@@ -24,11 +24,14 @@ import 'package:kalinka/providers/collection_entry_binding.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/modules_state_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
-import 'package:kalinka/widgets/kalinka_bottom_sheet.dart' show SheetHeader;
+import 'package:kalinka/widgets/kalinka_bottom_sheet.dart'
+    show SheetHeader, kSheetGutter;
 import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/settings_collection.dart';
 import 'package:kalinka/widgets/settings_controls/settings_binding.dart';
+import 'package:kalinka/widgets/settings_controls/settings_enum_pills.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
+import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
 import 'package:kalinka/widgets/settings_renderer.dart' show SchemaModuleCard;
 
 const _path = 'input_modules.localfiles.music_sources';
@@ -633,6 +636,50 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 8));
       expect(store.refreshes, 2);
+    });
+  });
+
+  group('the sheet', () {
+    // Every other sheet keeps its content, rules and controls kSheetGutter
+    // in from its edges; the form inside this one must line up with them.
+    testWidgets('keeps one gutter down both sides', (tester) async {
+      final store = _Store({
+        _path: [
+          _share(authentication: {'mode': 'guest'}),
+        ],
+      });
+      store.options['$_path.location.host'] = const [
+        OptionSpec(value: '192.168.1.20', label: 'NAS'),
+      ];
+      await _pump(tester, store);
+      await _tap(tester, 'nas.local · Music');
+
+      final sheet = tester.getRect(find.byType(SheetHeader));
+      final left = sheet.left + kSheetGutter;
+      final right = sheet.right - kSheetGutter;
+      double leftOf(Finder f) => tester.getRect(f.first).left;
+      double rightOf(Finder f) => tester.getRect(f.first).right;
+      final serverField = find.descendant(
+        of: find.widgetWithText(SettingsRow, 'Server'),
+        matching: find.byType(SettingsTextInput),
+      );
+
+      expect(leftOf(find.text('MUSIC SOURCES')), left);
+      expect(leftOf(find.text('LOCATION')), left);
+      expect(leftOf(find.text('Server')), left);
+      expect(leftOf(serverField), left);
+      expect(rightOf(serverField), right);
+      expect(leftOf(find.text('FOUND · 1')), left);
+      expect(leftOf(find.text('NAS')), left);
+      expect(leftOf(find.text('SIGN IN')), left);
+      expect(leftOf(find.byType(SettingsEnumPills)), left);
+      expect(rightOf(find.byType(SettingsEnumPills)), right);
+      expect(leftOf(find.byIcon(Icons.keyboard_arrow_down)), left);
+      expect(leftOf(find.widgetWithText(KalinkaButton, 'REMOVE')), left);
+      expect(
+        rightOf(find.widgetWithText(KalinkaButton, 'KEEP CHANGES')),
+        right,
+      );
     });
   });
 

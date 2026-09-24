@@ -101,7 +101,8 @@ class _Suggestions extends StatelessWidget {
               option: option,
               selected: option.value == typed,
               onTap: () => onPick(option.value),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              // Level with the label and the field above it.
+              padding: const EdgeInsets.symmetric(vertical: 8),
             ),
         ],
       ),

@@ -109,10 +109,14 @@ class SchemaFieldRenderer extends StatelessWidget {
   /// Browse button, where the form has the room for it.
   final bool listSuggestions;
 
+  /// As [SettingsRow.gutter].
+  final double gutter;
+
   const SchemaFieldRenderer({
     super.key,
     required this.field,
     this.listSuggestions = false,
+    this.gutter = kSettingsGutter,
   });
 
   @override
@@ -129,6 +133,7 @@ class SchemaFieldRenderer extends StatelessWidget {
         label: field.label,
         sublabel: field.help,
         isVertical: true,
+        gutter: gutter,
         control: SettingsReadonlyCard(text: (value ?? '').toString()),
       );
     }
@@ -169,6 +174,7 @@ class SchemaFieldRenderer extends StatelessWidget {
       sublabel: field.help,
       isStaged: isStaged,
       isVertical: vertical,
+      gutter: gutter,
       issues: isList ? const [] : issues,
       control: buildFieldControl(
         field: field,

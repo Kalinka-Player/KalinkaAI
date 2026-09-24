@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import 'settings_row.dart' show kSettingsGutter;
 
 /// Collapsible section with chevron and animated content.
 ///
@@ -12,12 +13,16 @@ class SettingsSection extends StatefulWidget {
   final bool initiallyExpanded;
   final bool showTopBorder;
 
+  /// Space either side of the header, as [SettingsRow.gutter].
+  final double gutter;
+
   const SettingsSection({
     super.key,
     required this.title,
     required this.child,
     this.initiallyExpanded = false,
     this.showTopBorder = true,
+    this.gutter = kSettingsGutter,
   });
 
   @override
@@ -79,7 +84,10 @@ class _SettingsSectionState extends State<SettingsSection>
           onTap: _toggle,
           behavior: HitTestBehavior.opaque,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: EdgeInsets.symmetric(
+              horizontal: widget.gutter,
+              vertical: 10,
+            ),
             decoration: widget.showTopBorder
                 ? const BoxDecoration(
                     border: Border(
