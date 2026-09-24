@@ -263,13 +263,10 @@ class FieldSpec {
   );
 }
 
-List<FieldSpec> _fieldsFromJson(Object? raw) => ((raw as List?) ?? [])
-    .map((e) => FieldSpec.fromJson((e as Map).cast<String, dynamic>()))
-    .toList();
-
-List<CollectionSpec> _collectionsFromJson(Object? raw) => ((raw as List?) ?? [])
-    .map((e) => CollectionSpec.fromJson((e as Map).cast<String, dynamic>()))
-    .toList();
+/// A JSON list of objects, each read by [fromJson]; empty where [raw] is null.
+List<T> _listOf<T>(Object? raw, T Function(Map<String, dynamic>) fromJson) => [
+  for (final e in (raw as List?) ?? const []) fromJson((e as Map).cast()),
+];
 
 /// One shape an entry of a collection, or a part of one, can take.
 ///
@@ -310,10 +307,8 @@ class VariantSpec {
     icon: j['icon'] as String?,
     description: j['description'] as String?,
     summary: ((j['summary'] as List?) ?? []).map((e) => e.toString()).toList(),
-    fields: _fieldsFromJson(j['fields']),
-    groups: ((j['groups'] as List?) ?? [])
-        .map((e) => GroupSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
+    fields: _listOf(j['fields'], FieldSpec.fromJson),
+    groups: _listOf(j['groups'], GroupSpec.fromJson),
   );
 }
 
@@ -353,15 +348,11 @@ class GroupSpec {
   factory GroupSpec.fromJson(Map<String, dynamic> j) => GroupSpec(
     path: j['path'] as String,
     title: j['title'] as String? ?? '',
-    fields: _fieldsFromJson(j['fields']),
-    groups: ((j['groups'] as List?) ?? [])
-        .map((e) => GroupSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
+    fields: _listOf(j['fields'], FieldSpec.fromJson),
+    groups: _listOf(j['groups'], GroupSpec.fromJson),
     discriminator: j['discriminator'] as String?,
     defaultVariant: j['default'] as String?,
-    variants: ((j['variants'] as List?) ?? [])
-        .map((e) => VariantSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
+    variants: _listOf(j['variants'], VariantSpec.fromJson),
   );
 }
 
@@ -401,9 +392,7 @@ class CollectionSpec {
     title: j['title'] as String? ?? '',
     help: j['help'] as String?,
     discriminator: j['discriminator'] as String?,
-    variants: ((j['variants'] as List?) ?? [])
-        .map((e) => VariantSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
+    variants: _listOf(j['variants'], VariantSpec.fromJson),
     after: j['after'] as String?,
     replaces: ((j['replaces'] as List?) ?? [])
         .map((e) => e.toString())
@@ -437,14 +426,10 @@ class SectionSpec {
     title: j['title'] as String,
     icon: j['icon'] as String?,
     importance: Importance.fromName(j['importance'] as String?),
-    banners: ((j['banners'] as List?) ?? [])
-        .map((e) => BannerSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
-    fields: _fieldsFromJson(j['fields']),
-    collections: _collectionsFromJson(j['collections']),
-    sections: ((j['sections'] as List?) ?? [])
-        .map((e) => SectionSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
+    banners: _listOf(j['banners'], BannerSpec.fromJson),
+    fields: _listOf(j['fields'], FieldSpec.fromJson),
+    collections: _listOf(j['collections'], CollectionSpec.fromJson),
+    sections: _listOf(j['sections'], SectionSpec.fromJson),
   );
 }
 
@@ -485,14 +470,10 @@ class ModuleSpec {
     previewFields: ((j['preview_fields'] as List?) ?? [])
         .map((e) => e.toString())
         .toList(),
-    banners: ((j['banners'] as List?) ?? [])
-        .map((e) => BannerSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
-    fields: _fieldsFromJson(j['fields']),
-    collections: _collectionsFromJson(j['collections']),
-    sections: ((j['sections'] as List?) ?? [])
-        .map((e) => SectionSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
+    banners: _listOf(j['banners'], BannerSpec.fromJson),
+    fields: _listOf(j['fields'], FieldSpec.fromJson),
+    collections: _listOf(j['collections'], CollectionSpec.fromJson),
+    sections: _listOf(j['sections'], SectionSpec.fromJson),
   );
 }
 
@@ -517,15 +498,9 @@ class PageSpec {
     id: j['id'] as String,
     title: j['title'] as String,
     icon: j['icon'] as String?,
-    banners: ((j['banners'] as List?) ?? [])
-        .map((e) => BannerSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
-    sections: ((j['sections'] as List?) ?? [])
-        .map((e) => SectionSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
-    modules: ((j['modules'] as List?) ?? [])
-        .map((e) => ModuleSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
+    banners: _listOf(j['banners'], BannerSpec.fromJson),
+    sections: _listOf(j['sections'], SectionSpec.fromJson),
+    modules: _listOf(j['modules'], ModuleSpec.fromJson),
   );
 }
 
@@ -562,27 +537,23 @@ class PresentationSchema {
       }
     }
 
-    for (final page in pages) {
-      final found = [
-        ...within(page.sections),
-        for (final module in page.modules) ...[
-          ...module.collections,
-          ...within(module.sections),
-        ],
-      ].where((c) => c.path == path);
-      if (found.isNotEmpty) return found.first;
+    Iterable<CollectionSpec> all() sync* {
+      for (final page in pages) {
+        yield* within(page.sections);
+        for (final module in page.modules) {
+          yield* module.collections;
+          yield* within(module.sections);
+        }
+      }
     }
-    return null;
+
+    return all().where((c) => c.path == path).firstOrNull;
   }
 
   factory PresentationSchema.fromJson(Map<String, dynamic> j) =>
       PresentationSchema(
         schemaVersion: j['schema_version'] as String,
-        pages: ((j['pages'] as List?) ?? [])
-            .map((e) => PageSpec.fromJson((e as Map).cast<String, dynamic>()))
-            .toList(),
-        expertFields: ((j['expert_fields'] as List?) ?? [])
-            .map((e) => FieldSpec.fromJson((e as Map).cast<String, dynamic>()))
-            .toList(),
+        pages: _listOf(j['pages'], PageSpec.fromJson),
+        expertFields: _listOf(j['expert_fields'], FieldSpec.fromJson),
       );
 }

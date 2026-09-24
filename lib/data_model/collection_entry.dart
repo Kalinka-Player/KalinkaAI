@@ -21,14 +21,18 @@ dynamic readEntryPath(Map<String, dynamic> entry, String path) {
   return current;
 }
 
+/// The group holding the last part of dotted [path], and that part's key.
+(dynamic, String) _parentOf(Map<String, dynamic> entry, String path) {
+  final at = path.lastIndexOf('.');
+  if (at < 0) return (entry, path);
+  return (readEntryPath(entry, path.substring(0, at)), path.substring(at + 1));
+}
+
 /// Whether [entry] holds anything at [path] — a credential left out means
 /// "keep the saved one", which an explicit empty value does not.
 bool entryHasPath(Map<String, dynamic> entry, String path) {
-  final parts = path.split('.');
-  final parent = parts.length == 1
-      ? entry
-      : readEntryPath(entry, parts.sublist(0, parts.length - 1).join('.'));
-  return parent is Map && parent.containsKey(parts.last);
+  final (parent, key) = _parentOf(entry, path);
+  return parent is Map && parent.containsKey(key);
 }
 
 /// Writes [value] at [path] inside [entry], creating the groups on the way.
@@ -51,11 +55,8 @@ void writeEntryPath(Map<String, dynamic> entry, String path, dynamic value) {
 }
 
 void removeEntryPath(Map<String, dynamic> entry, String path) {
-  final parts = path.split('.');
-  final parent = parts.length == 1
-      ? entry
-      : readEntryPath(entry, parts.sublist(0, parts.length - 1).join('.'));
-  if (parent is Map) parent.remove(parts.last);
+  final (parent, key) = _parentOf(entry, path);
+  if (parent is Map) parent.remove(key);
 }
 
 /// A copy of [entry] no later edit can reach through, nested groups included.

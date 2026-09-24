@@ -274,7 +274,6 @@ class _EmptyState extends StatelessWidget {
 ///     ┃ Audio device                           ← human label
 ///     ┃ Hardware output…                       ← optional help
 ///     ┃ [ control — full width ]               ← editable input
-///     ┃ Staged                                 ← pill when pending
 ///
 /// The path always occupies the full row width — keeps long dotted
 /// paths from being squashed against an inline control, and means the
@@ -282,8 +281,7 @@ class _EmptyState extends StatelessWidget {
 /// uses (no inline-vs-stacked branching). Each row sits on a
 /// surfaceRaised slab with a small gap to its neighbours, supplying
 /// the visual separation without inheriting the simple-page card
-/// chrome. The amber left-edge appears when staged, matching the
-/// simple-row convention so the pending-state cue is consistent.
+/// chrome. A staged row takes an amber tint and outline.
 class _ExpertRow extends StatelessWidget {
   final FieldSpec field;
   final SettingsBinding binding;
