@@ -1044,12 +1044,12 @@ class _IndexerProgressCard extends ConsumerWidget {
     final pct = status.progressPct;
     final progress = pct != null ? (pct / 100).clamp(0.0, 1.0) : null;
 
-    // Name the stage but always make clear it's the local library being built.
+    // Name the stage but always make clear it's My Library being built.
     final String action = switch (stage) {
-      IndexerDisplayStage.indexing => 'Indexing local library',
-      IndexerDisplayStage.analyzingAudio => 'Analyzing local library audio',
-      IndexerDisplayStage.enrichment => 'Enriching local library',
-      IndexerDisplayStage.preparingAi => 'Preparing local library for AI',
+      IndexerDisplayStage.indexing => 'Indexing My Library',
+      IndexerDisplayStage.analyzingAudio => 'Analyzing audio in My Library',
+      IndexerDisplayStage.enrichment => 'Enriching My Library',
+      IndexerDisplayStage.preparingAi => 'Preparing My Library for AI',
     };
     final label = pct != null
         ? '$action · ${pct.toStringAsFixed(0)}%'
