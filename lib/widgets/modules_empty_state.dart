@@ -22,7 +22,7 @@ class ModulesEmptyState extends StatelessWidget {
               'playback hardware — power it on and off, adjust volume, and pause '
               'playback when it turns off.'
         : 'Install an input module plugin on your server to stream music from '
-              'sources like Qobuz, Jamendo, or your local library.';
+              'sources like Qobuz, Jamendo, or My Library.';
     final icon = isDevice ? Icons.speaker_outlined : Icons.extension_outlined;
 
     // The icon sits above the text, so centring the whole group would push the

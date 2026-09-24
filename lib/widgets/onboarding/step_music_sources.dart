@@ -28,14 +28,14 @@ class OnboardingMusicSourcesStep extends ConsumerWidget {
           children: [for (final m in modules) _SourceRow(module: m)],
         ),
         const OnboardingNote(
-          'Local Library is the music on your server, so it is always on.',
+          'My Library is the music on your server, so it is always on.',
         ),
       ],
     );
   }
 }
 
-/// One input plugin: icon tile, title, enable switch. Local Library renders
+/// One input plugin: icon tile, title, enable switch. My Library renders
 /// on and locked — the server's library backend is built in.
 class _SourceRow extends ConsumerWidget {
   final ModuleSpec module;
