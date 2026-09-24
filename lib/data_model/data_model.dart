@@ -1553,6 +1553,10 @@ abstract final class ModuleCapability {
 class ModuleInfo {
   final String name;
   final String title;
+
+  /// The material icon name the module's config declares for it, drawn on
+  /// its badge in place of its letter; null where it declares none.
+  final String? icon;
   final bool enabled;
   final ModuleState state;
 
@@ -1580,6 +1584,7 @@ class ModuleInfo {
   ModuleInfo({
     required this.name,
     required this.title,
+    this.icon,
     required this.enabled,
     required this.state,
     this.message,
@@ -1593,6 +1598,7 @@ class ModuleInfo {
   factory ModuleInfo.fromJson(Map<String, dynamic> json) => ModuleInfo(
     name: json["name"],
     title: json["title"],
+    icon: json["icon"] as String?,
     enabled: json["enabled"],
     state: ModuleStateExtension.fromValue(json["state"]),
     message: json["error_message"] as String?,
@@ -1610,6 +1616,7 @@ class ModuleInfo {
   Map<String, dynamic> toJson() => {
     "name": name,
     "title": title,
+    if (icon != null) "icon": icon,
     "enabled": enabled,
     "state": ModuleStateExtension.toValue(state),
     if (message != null) "error_message": message,
@@ -1651,10 +1658,13 @@ class ModulesAndDevices {
     ModuleInfo clone(ModuleInfo m) => ModuleInfo(
       name: m.name,
       title: m.title,
+      icon: m.icon,
       enabled: m.enabled,
       state: m.state,
       message: m.message,
       missingPackages: List<String>.from(m.missingPackages),
+      builtin: m.builtin,
+      capabilities: List<String>.from(m.capabilities),
     );
     return ModulesAndDevices(
       inputModules: (inputModules ?? this.inputModules).map(clone).toList(),

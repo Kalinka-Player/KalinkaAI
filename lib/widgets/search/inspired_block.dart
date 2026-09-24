@@ -195,7 +195,7 @@ class _SourceGroup extends StatelessWidget {
         children: [
           Row(
             children: [
-              SourceLetter(source: group.source),
+              SourceTile(source: group.source),
               const SizedBox(width: 10),
               Expanded(
                 child: Row(

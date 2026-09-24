@@ -15,7 +15,7 @@ class ActionPillButton extends StatelessWidget {
   final IconData? icon;
 
   /// A mark ahead of the label, where a glyph will not do — a source's
-  /// letter tile. Takes the place of [icon], not a second thing beside it.
+  /// tile. Takes the place of [icon], not a second thing beside it.
   final Widget? leading;
 
   /// Crimson-highlighted rather than grey: the one a set leads with, or the

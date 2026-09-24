@@ -164,7 +164,7 @@ class _SourceChoices extends ConsumerWidget {
           ),
           for (final source in sources)
             ActionPillButton(
-              leading: SourceLetter(source: source, size: 18),
+              leading: SourceTile(source: source, size: 18),
               label: info[source]?.title ?? source,
               accent: picked == source,
               selected: picked == source,

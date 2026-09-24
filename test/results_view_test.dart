@@ -297,7 +297,7 @@ void main() {
     expect(find.text('LOCAL LIBRARY'), findsOneWidget);
     expect(find.text('QOBUZ'), findsOneWidget);
     // Every source is named and lettered, the listener's own included.
-    expect(find.byType(SourceLetter), findsNWidgets(2));
+    expect(find.byType(SourceTile), findsNWidgets(2));
     expect(find.text('Play all'), findsNWidgets(2));
     // Each source's heading counts what it suggested, as MATCHES BY NAME does.
     expect(find.text('· 5'), findsOneWidget);
@@ -511,7 +511,7 @@ void main() {
     Finder heading(String source) => find
         .ancestor(
           of: find.byWidgetPredicate(
-            (w) => w is SourceLetter && w.source == source,
+            (w) => w is SourceTile && w.source == source,
           ),
           matching: find.byType(Row),
         )

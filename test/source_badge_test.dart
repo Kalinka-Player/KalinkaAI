@@ -6,17 +6,22 @@ import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/widgets/source_badge.dart';
 
-ModuleInfo _module(String name, String title, {bool builtin = false}) =>
-    ModuleInfo(
-      name: name,
-      title: title,
-      enabled: true,
-      state: ModuleState.ready,
-      builtin: builtin,
-    );
+ModuleInfo _module(
+  String name,
+  String title, {
+  bool builtin = false,
+  String? icon,
+}) => ModuleInfo(
+  name: name,
+  title: title,
+  icon: icon,
+  enabled: true,
+  state: ModuleState.ready,
+  builtin: builtin,
+);
 
 final _twoSources = [
-  _module('localfiles', 'Local Library'),
+  _module('localfiles', 'My Library'),
   _module('jamendo', 'Jamendo'),
 ];
 
@@ -45,7 +50,7 @@ void main() {
   ) async {
     await _pump(tester, _twoSources, 'kalinka:localfiles:track:1');
 
-    expect(find.text('L'), findsOneWidget);
+    expect(find.text('M'), findsOneWidget);
   });
 
   testWidgets('a streaming source is attributed the same way', (tester) async {
@@ -76,19 +81,69 @@ void main() {
     expect(find.byType(Text), findsNothing);
   });
 
-  /// [SourceLetter] is reached directly now that no source is exempt, so it
+  /// [SourceTile] is reached directly now that no source is exempt, so it
   /// answers for every one of them.
-  testWidgets('the letter tile names the local library too', (tester) async {
+  testWidgets('the tile names the library too', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [sourceModulesProvider.overrideWith((ref) => _twoSources)],
         child: const MaterialApp(
-          home: Scaffold(body: SourceLetter(source: 'localfiles')),
+          home: Scaffold(body: SourceTile(source: 'localfiles')),
         ),
       ),
     );
     await tester.pump();
 
-    expect(find.text('L'), findsOneWidget);
+    expect(find.text('M'), findsOneWidget);
+  });
+
+  group('a source that declares an icon', () {
+    final withIcons = [
+      _module('localfiles', 'My Library', icon: 'folder_outlined'),
+      _module('jamendo', 'Jamendo'),
+    ];
+
+    testWidgets('wears it on its badge in place of its letter', (tester) async {
+      await _pump(tester, withIcons, 'kalinka:localfiles:track:1');
+
+      expect(find.byIcon(Icons.folder_outlined), findsOneWidget);
+      expect(find.byType(Text), findsNothing);
+    });
+
+    testWidgets('and on its tile', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [sourceModulesProvider.overrideWith((ref) => withIcons)],
+          child: const MaterialApp(
+            home: Scaffold(body: SourceTile(source: 'localfiles')),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byIcon(Icons.folder_outlined), findsOneWidget);
+    });
+
+    testWidgets('one this app has no drawing of keeps its letter', (
+      tester,
+    ) async {
+      await _pump(tester, [
+        _module('localfiles', 'My Library', icon: 'not_an_icon'),
+        _module('jamendo', 'Jamendo'),
+      ], 'kalinka:localfiles:track:1');
+
+      expect(find.text('M'), findsOneWidget);
+    });
+
+    test('is read off the module list', () {
+      final module = ModuleInfo.fromJson({
+        'name': 'localfiles',
+        'title': 'My Library',
+        'icon': 'folder_outlined',
+        'enabled': true,
+        'state': 'ready',
+      });
+      expect(module.icon, 'folder_outlined');
+    });
   });
 }

@@ -210,7 +210,7 @@ void main() {
     expect(
       find.descendant(
         of: find.widgetWithText(CollectionShelfRow, 'Late Night Focus'),
-        matching: find.byType(SourceLetter),
+        matching: find.byType(SourceTile),
       ),
       findsNWidgets(3),
     );

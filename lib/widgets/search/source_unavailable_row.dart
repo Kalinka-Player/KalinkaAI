@@ -25,7 +25,7 @@ class SourceUnavailableRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          SourceLetter(source: source),
+          SourceTile(source: source),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

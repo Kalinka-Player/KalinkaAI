@@ -375,7 +375,7 @@ class _SourceGroup extends StatelessWidget {
         for (final source in capabilities.sources)
           FilterPill(
             label: source.title,
-            leading: SourceLetter(source: source.name),
+            leading: SourceTile(source: source.name),
             selected: selected.contains(source.name),
             onTap: () => onChanged(
               selected.contains(source.name)
@@ -552,7 +552,7 @@ class FilterPill extends StatefulWidget {
 
   final VoidCallback? onTap;
 
-  /// A mark ahead of the label, such as a source's letter tile.
+  /// A mark ahead of the label, such as a source's tile.
   final Widget? leading;
 
   const FilterPill({
