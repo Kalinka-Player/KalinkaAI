@@ -182,7 +182,10 @@ abstract class KalinkaPlayerProxy {
   Future<ModulesAndDevices> listModules();
 
   /// PUT body: `{"schema_version": ..., "changes": {<flat dotted path>: value}}`.
-  Future<void> saveSettings({
+  ///
+  /// Returns the credential paths the server holds after the save
+  /// (`secrets_set`), or null from a server that does not say.
+  Future<Set<String>?> saveSettings({
     required String schemaVersion,
     required Map<String, dynamic> changes,
   });
@@ -968,7 +971,7 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
   }
 
   @override
-  Future<void> saveSettings({
+  Future<Set<String>?> saveSettings({
     required String schemaVersion,
     required Map<String, dynamic> changes,
   }) async {
@@ -987,6 +990,12 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
           'Failed to save settings, status: ${response.statusCode}, body: ${response.data}',
         );
       }
+      // Saved by now, so a body this cannot read must not turn into a throw.
+      final data = response.data;
+      final secrets = data is Map ? data['secrets_set'] : null;
+      return secrets is List && secrets.every((e) => e is String)
+          ? secrets.cast<String>().toSet()
+          : null;
     } on DioException catch (e) {
       final refusal = _refusalFrom(e.response?.data);
       if (refusal != null) throw refusal;

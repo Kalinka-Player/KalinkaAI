@@ -90,10 +90,10 @@ class _FakeApi implements KalinkaPlayerProxy {
   Future<PresentationSchema> getSettingsSchema() async => schema;
 
   @override
-  Future<void> saveSettings({
+  Future<Set<String>?> saveSettings({
     required String schemaVersion,
     required Map<String, dynamic> changes,
-  }) async {}
+  }) async => null;
 
   @override
   Future<List<ConfigIssue>> validateSettings({

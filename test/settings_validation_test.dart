@@ -35,12 +35,13 @@ class _FakeApi implements KalinkaPlayerProxy {
   }
 
   @override
-  Future<void> saveSettings({
+  Future<Set<String>?> saveSettings({
     required String schemaVersion,
     required Map<String, dynamic> changes,
   }) async {
     saves++;
     if (saveError != null) throw saveError!;
+    return null;
   }
 
   @override
