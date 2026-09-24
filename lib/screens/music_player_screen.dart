@@ -59,6 +59,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // One key serves both: the layouts are mutually exclusive, so only ever one
   // is mounted, and a resize re-parents the key to the other.
   final _outputSwitcherKey = GlobalKey();
+  // Same trick for the settings panel, so a resize moves it rather than
+  // remounting it (which would reload config and drop staged edits).
+  final _settingsKey = GlobalKey();
 
   // Drives the mini-player sliding down out of view while the search entry
   // overlay is up (0 = shown, 1 = hidden). The keyboard is held back until
@@ -541,9 +544,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// settings panel is ever up, and both hide the same content behind them.
   Widget _buildRendererSettings(RendererSettingsRoute route) {
     return RendererSettingsScreen(
-      // Keyed by renderer so switching targets rebuilds rather than reusing
+      // Keyed by the open route: a resize re-homes the panel like
+      // [_settingsKey], while switching targets rebuilds rather than reusing
       // the previous renderer's page and its staged edits.
-      key: ValueKey(route.rendererId),
+      key: GlobalObjectKey(route),
       rendererId: route.rendererId,
       rendererName: route.rendererName,
       onClose: () {
@@ -684,6 +688,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           if (_settingsOpen)
             Positioned.fill(
               child: SettingsScreen(
+                key: _settingsKey,
                 onClose: () => setState(() {
                   _settingsOpen = false;
                   _settingsCovering = false;
@@ -838,6 +843,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                             Positioned.fill(
                               child: ClipRect(
                                 child: SettingsScreen(
+                                  key: _settingsKey,
                                   onClose: () => setState(() {
                                     _settingsOpen = false;
                                     _settingsCovering = false;

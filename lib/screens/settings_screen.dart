@@ -53,11 +53,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    // The release check resolves once and is cached for the app session, so
-    // an answer fetched minutes before a release would stand until restart.
-    ref.invalidate(serverUpdateProvider);
-    // Load config
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // The release check resolves once and is cached for the app session, so
+      // an answer fetched minutes before a release would stand until restart.
+      // Not in initState: if the check is being watched, invalidating it
+      // rebuilds the ProviderScope mid-build.
+      ref.invalidate(serverUpdateProvider);
       ref.read(settingsProvider.notifier).loadConfig();
     });
   }
