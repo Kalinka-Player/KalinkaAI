@@ -11,9 +11,14 @@ import 'tap_highlight.dart';
 /// sheet body (rows, cards, etc.) — the chrome is added automatically.
 /// When launched from inside a [SheetAnchor] (the tablet layout's panels),
 /// the sheet slides up over that panel instead of the window centre.
+///
+/// The body is bounded by the room there is, so a part of it that scrolls
+/// can be [Flexible]. [mayFillScreen] gives it the whole screen below the
+/// status bar; otherwise a sheet caps its own height.
 Future<T?> showKalinkaBottomSheet<T>({
   required BuildContext context,
   required Widget Function(BuildContext) contentBuilder,
+  bool mayFillScreen = false,
 }) {
   final anchor = SheetAnchor.elementOf(context);
   return showModalBottomSheet<T>(
@@ -21,6 +26,7 @@ Future<T?> showKalinkaBottomSheet<T>({
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black.withValues(alpha: 0.60),
     isScrollControlled: true,
+    useSafeArea: mayFillScreen,
     // Anchored sheets span the window and get padded down to the panel —
     // the M3 640px cap would re-centre them.
     constraints: anchor != null
@@ -62,7 +68,7 @@ Future<T?> showKalinkaBottomSheet<T>({
                     ),
                   ),
                 ),
-                contentBuilder(ctx),
+                Flexible(child: contentBuilder(ctx)),
               ],
             ),
           ),

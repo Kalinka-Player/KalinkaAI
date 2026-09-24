@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../data_model/collection_entry.dart';
 import '../data_model/data_model.dart' show ModuleInfo, ModuleState;
 import '../data_model/presentation_schema.dart';
 import '../providers/connection_settings_provider.dart';
@@ -14,6 +15,7 @@ import 'settings_controls/settings_binding.dart';
 import 'settings_controls/module_header_row.dart';
 import 'settings_controls/settings_card.dart';
 import 'settings_controls/settings_combo_input.dart';
+import 'settings_controls/settings_combo_list.dart';
 import 'settings_controls/settings_enum_dropdown.dart';
 import 'settings_controls/settings_enum_pills.dart';
 import 'settings_controls/settings_list_editor.dart';
@@ -28,6 +30,7 @@ import 'settings_controls/settings_toggle.dart';
 import 'settings_controls/settings_toggleable_section.dart';
 import 'settings_controls/warning_note.dart';
 import 'modules_empty_state.dart';
+import 'settings_collection.dart';
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -101,7 +104,16 @@ class SchemaBanner extends StatelessWidget {
 
 class SchemaFieldRenderer extends StatelessWidget {
   final FieldSpec field;
-  const SchemaFieldRenderer({super.key, required this.field});
+
+  /// Lists what the backend suggests under the field instead of behind a
+  /// Browse button, where the form has the room for it.
+  final bool listSuggestions;
+
+  const SchemaFieldRenderer({
+    super.key,
+    required this.field,
+    this.listSuggestions = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -164,6 +176,7 @@ class SchemaFieldRenderer extends StatelessWidget {
         options: binding,
         issues: issues,
         secretHidden: binding.hasHiddenSecret(field.path),
+        listSuggestions: listSuggestions,
         onChanged: (v) => binding.stage(field.path, v),
       ),
     );
@@ -221,6 +234,9 @@ Widget buildSliderControl({
 ///
 /// [secretHidden] is [SettingsBinding.hasHiddenSecret] for the field: the
 /// store holds a credential there that [value] cannot carry.
+///
+/// [listSuggestions] lists a field's suggestions under it rather than behind
+/// a Browse button.
 Widget buildFieldControl({
   required FieldSpec field,
   required dynamic value,
@@ -229,6 +245,7 @@ Widget buildFieldControl({
   List<ConfigIssue> issues = const [],
   bool compact = true,
   bool secretHidden = false,
+  bool listSuggestions = false,
 }) {
   switch (field.widget) {
     case WidgetKind.toggle:
@@ -309,12 +326,20 @@ Widget buildFieldControl({
     case WidgetKind.path:
     case WidgetKind.url:
       if (field.dynamicOptions) {
-        return SettingsComboInput(
-          value: (value ?? '').toString(),
-          options: options.optionsFor(field.path) ?? const [],
-          borderColor: issueBorderColor(issues),
-          onChanged: onChanged,
-        );
+        final suggestions = options.optionsFor(field.path) ?? const [];
+        return listSuggestions
+            ? SettingsComboList(
+                value: (value ?? '').toString(),
+                options: suggestions,
+                borderColor: issueBorderColor(issues),
+                onChanged: onChanged,
+              )
+            : SettingsComboInput(
+                value: (value ?? '').toString(),
+                options: suggestions,
+                borderColor: issueBorderColor(issues),
+                onChanged: onChanged,
+              );
       }
       return SettingsTextInput(
         value: (value ?? '').toString(),
@@ -327,6 +352,49 @@ Widget buildFieldControl({
       return SettingsReadonlyCard(text: (value ?? '').toString());
   }
 }
+
+// ---------------------------------------------------------------------------
+// Rows: fields with the collections that follow them
+// ---------------------------------------------------------------------------
+
+/// Rows for the [fields] shown, each of [collections] right after the field it
+/// follows — hidden or not, so a collection keeps its place when the field
+/// before it moves into a header, or is one the collection replaces.
+List<Widget> _fieldRows(
+  List<FieldSpec> fields,
+  List<CollectionSpec> collections, {
+  Set<FieldSpec> hidden = const {},
+}) {
+  Widget collection(CollectionSpec c) =>
+      SchemaCollectionRenderer(key: ValueKey(c.path), collection: c);
+  Iterable<Widget> after(String? path) =>
+      collections.where((c) => c.after == path).map(collection);
+  final placed = {null, ...fields.map((f) => f.path)};
+  final replaced = {for (final c in collections) ...c.replaces};
+  return [
+    ...after(null),
+    for (final field in fields) ...[
+      if (!hidden.contains(field) && !replaced.contains(field.path))
+        SchemaFieldRenderer(key: ValueKey(field.path), field: field),
+      ...after(field.path),
+    ],
+    // One that follows a field the page does not have still belongs on it.
+    ...collections.where((c) => !placed.contains(c.after)).map(collection),
+  ];
+}
+
+const _rowDivider = Divider(
+  height: 1,
+  thickness: 1,
+  color: KalinkaColors.borderSubtle,
+);
+
+Widget _separated(List<Widget> rows) => Column(
+  crossAxisAlignment: CrossAxisAlignment.stretch,
+  children: [
+    for (var i = 0; i < rows.length; i++) ...[if (i > 0) _rowDivider, rows[i]],
+  ],
+);
 
 // ---------------------------------------------------------------------------
 // Section renderer
@@ -367,10 +435,15 @@ class SchemaSectionRenderer extends StatelessWidget {
         ? null
         : _firstFieldWithPathSuffix(section.fields, '.status_view');
 
-    final visibleFields = section.fields
-        .where((f) => f != enabledField && f != statusField)
-        .toList();
-    final visibleSubSections = section.sections;
+    final rows = [
+      ..._fieldRows(
+        section.fields,
+        section.collections,
+        hidden: {?enabledField, ?statusField},
+      ),
+      for (final s in section.sections)
+        SchemaSectionRenderer(key: ValueKey(s.id), section: s),
+    ];
 
     // Toggleable sub-feature section: route through the dedicated header
     // widget with the body unchanged.
@@ -379,38 +452,12 @@ class SchemaSectionRenderer extends StatelessWidget {
         SettingsScope.of(context),
         enabledField,
         statusField,
-        visibleFields,
-        visibleSubSections,
+        rows,
       );
     }
 
-    if (visibleFields.isEmpty && visibleSubSections.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final rows = <Widget>[
-      for (final f in visibleFields)
-        SchemaFieldRenderer(key: ValueKey(f.path), field: f),
-      for (final s in visibleSubSections)
-        SchemaSectionRenderer(key: ValueKey(s.id), section: s),
-    ];
-    final separated = <Widget>[];
-    for (var i = 0; i < rows.length; i++) {
-      if (i > 0) {
-        separated.add(
-          const Divider(
-            height: 1,
-            thickness: 1,
-            color: KalinkaColors.borderSubtle,
-          ),
-        );
-      }
-      separated.add(rows[i]);
-    }
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: separated,
-    );
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final body = _separated(rows);
 
     // Top-level section: label + card. (The legacy "advanced" branch
     // was dropped together with the three-tier importance model — the
@@ -459,8 +506,7 @@ class SchemaSectionRenderer extends StatelessWidget {
     SettingsBinding binding,
     FieldSpec enabledField,
     FieldSpec? statusField,
-    List<FieldSpec> bodyFields,
-    List<SectionSpec> bodySubSections,
+    List<Widget> rows,
   ) {
     final enabledValue =
         (binding.effectiveValue(enabledField.path) ??
@@ -480,39 +526,12 @@ class SchemaSectionRenderer extends StatelessWidget {
       }
     }
 
-    Widget? body;
-    if (bodyFields.isNotEmpty || bodySubSections.isNotEmpty) {
-      final rows = <Widget>[
-        for (final f in bodyFields)
-          SchemaFieldRenderer(key: ValueKey(f.path), field: f),
-        for (final s in bodySubSections)
-          SchemaSectionRenderer(key: ValueKey(s.id), section: s),
-      ];
-      final separated = <Widget>[];
-      for (var i = 0; i < rows.length; i++) {
-        if (i > 0) {
-          separated.add(
-            const Divider(
-              height: 1,
-              thickness: 1,
-              color: KalinkaColors.borderSubtle,
-            ),
-          );
-        }
-        separated.add(rows[i]);
-      }
-      body = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: separated,
-      );
-    }
-
     return SettingsToggleableSection(
       title: section.title,
       enabled: enabledValue,
       onToggle: (v) => binding.stage(enabledField.path, v),
       statusMarkdown: statusMarkdown,
-      body: body,
+      body: rows.isEmpty ? null : _separated(rows),
       // Simple-tier sub-features expand by default — anything users
       // shouldn't need to see lives behind the expert search now.
       initiallyExpanded: true,
@@ -627,17 +646,17 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
     // Backend prunes EXPERT content out of the simple page tree, so
     // the only filter here is "drop the .enabled field we already
     // hoisted into the header".
-    final visibleSections = m.sections;
-    final visibleModuleFields = m.fields
-        .where((f) => f != enabledField)
-        .toList();
+    final rows = [
+      ..._fieldRows(m.fields, m.collections, hidden: {?enabledField}),
+      for (final s in m.sections)
+        SchemaSectionRenderer(key: ValueKey(s.id), section: s),
+    ];
 
     final bodyDimmed = enabledField != null && enabledValue == false;
     final hasBody =
         (message != null && message.isNotEmpty) ||
         m.banners.isNotEmpty ||
-        visibleModuleFields.isNotEmpty ||
-        visibleSections.isNotEmpty;
+        rows.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -682,35 +701,10 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
                                 : WarningNoteSeverity.warning,
                           ),
                         for (final b in m.banners) SchemaBanner(banner: b),
-                        // Module-level scalar fields render flat, with a
-                        // divider above them so they read as continuous
-                        // content under the header rather than floating.
-                        for (
-                          var i = 0;
-                          i < visibleModuleFields.length;
-                          i++
-                        ) ...[
-                          const Divider(
-                            height: 1,
-                            thickness: 1,
-                            color: KalinkaColors.borderSubtle,
-                          ),
-                          SchemaFieldRenderer(
-                            key: ValueKey(visibleModuleFields[i].path),
-                            field: visibleModuleFields[i],
-                          ),
-                        ],
-                        for (final s in visibleSections) ...[
-                          const Divider(
-                            height: 1,
-                            thickness: 1,
-                            color: KalinkaColors.borderSubtle,
-                          ),
-                          SchemaSectionRenderer(
-                            key: ValueKey(s.id),
-                            section: s,
-                          ),
-                        ],
+                        // Module content renders flat, with a divider above
+                        // each row so it reads as continuous content under
+                        // the header rather than floating.
+                        for (final row in rows) ...[_rowDivider, row],
                       ],
                     ),
                   )
@@ -745,7 +739,18 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
         ? 'devices.${m.id}'
         : 'input_modules.${m.id}';
     for (final name in m.previewFields) {
-      final v = binding.effectiveValue('$prefix.$name');
+      final path = '$prefix.$name';
+      final collection = m.collections
+          .where((c) => c.replaces.contains(path))
+          .firstOrNull;
+      if (collection != null) {
+        final preview = collection.previewOf(
+          entriesOf(binding.effectiveValue(collection.path)),
+        );
+        if (preview.isNotEmpty) parts.add(preview);
+        continue;
+      }
+      final v = binding.effectiveValue(path);
       if (v == null) continue;
       if (v is List) {
         if (v.isNotEmpty) {

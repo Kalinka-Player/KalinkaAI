@@ -25,6 +25,11 @@ class SettingsTextInput extends StatefulWidget {
   /// second commit path.
   final Widget Function(BuildContext, ValueChanged<String>)? trailingBuilder;
 
+  /// Drawn under the field and rebuilt as the user types, with the text so
+  /// far and the same replace-and-commit callback as [trailingBuilder].
+  final Widget Function(BuildContext, String, ValueChanged<String>)?
+  belowBuilder;
+
   /// Tinted when the value has something wrong with it.
   final Color? borderColor;
 
@@ -37,6 +42,7 @@ class SettingsTextInput extends StatefulWidget {
     this.obscureText = false,
     this.autofocus = false,
     this.trailingBuilder,
+    this.belowBuilder,
     this.borderColor,
   });
 
@@ -127,7 +133,7 @@ class _SettingsTextInputState extends State<SettingsTextInput> {
     );
     final trailing = widget.trailingBuilder?.call(context, _replaceWith);
 
-    return SizedBox(
+    final input = SizedBox(
       width: widget.width,
       child: Container(
         decoration: BoxDecoration(
@@ -148,6 +154,20 @@ class _SettingsTextInputState extends State<SettingsTextInput> {
                 ],
               ),
       ),
+    );
+    final below = widget.belowBuilder;
+    if (below == null) return input;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        input,
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _controller,
+          builder: (context, typed, _) =>
+              below(context, typed.text, _replaceWith),
+        ),
+      ],
     );
   }
 }

@@ -42,9 +42,10 @@ class OptionPicker extends StatelessWidget {
                     shrinkWrap: true,
                     padding: const EdgeInsets.only(top: 8, bottom: 4),
                     itemCount: options.length,
-                    itemBuilder: (ctx, i) => _OptionRow(
+                    itemBuilder: (ctx, i) => OptionRow(
                       option: options[i],
                       selected: options[i].value == selectedValue,
+                      onTap: () => Navigator.of(ctx).pop(options[i].value),
                     ),
                   ),
           ),
@@ -55,11 +56,20 @@ class OptionPicker extends StatelessWidget {
   }
 }
 
-class _OptionRow extends StatelessWidget {
+/// One choice: its label, what it is, and a check when it is the one set.
+class OptionRow extends StatelessWidget {
   final OptionSpec option;
   final bool selected;
+  final VoidCallback onTap;
+  final EdgeInsets padding;
 
-  const _OptionRow({required this.option, required this.selected});
+  const OptionRow({
+    super.key,
+    required this.option,
+    required this.selected,
+    required this.onTap,
+    this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -70,12 +80,12 @@ class _OptionRow extends StatelessWidget {
       child: InkWell(
         onTap: () {
           KalinkaHaptics.selectionClick();
-          Navigator.of(context).pop(option.value);
+          onTap();
         },
         mouseCursor: clickCursor(interactive: true),
         overlayColor: kalinkaOverlay,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          padding: padding,
           child: Row(
             children: [
               Expanded(

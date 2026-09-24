@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart' show Logger;
+import '../data_model/collection_entry.dart';
 import '../data_model/presentation_schema.dart';
+import '../utils/json_equality.dart';
 import 'kalinka_player_api_provider.dart';
 import 'settings_binding.dart';
 
@@ -127,6 +129,9 @@ class ServerSettingsBinding implements SettingsBinding {
 
   @override
   void stage(String path, dynamic value) => notifier.stageChange(path, value);
+
+  @override
+  Future<void> refreshOptions() => notifier.refreshOptions();
 }
 
 /// Global toggle for "expert" importance fields.
@@ -190,6 +195,17 @@ class SettingsNotifier extends Notifier<SettingsState> {
     }
   }
 
+  /// Reads the suggestions again, and nothing else: what the user has staged
+  /// and what the server said about it stay as they are.
+  Future<void> refreshOptions() async {
+    try {
+      final envelope = await ref.read(kalinkaProxyProvider).getSettings();
+      state = state.copyWith(enumOptions: _optionsFromEnvelope(envelope));
+    } catch (_) {
+      // Suggestions are a convenience; the ones already shown still stand.
+    }
+  }
+
   static Map<String, List<OptionSpec>> _optionsFromEnvelope(
     Map<String, dynamic> envelope,
   ) {
@@ -214,12 +230,12 @@ class SettingsNotifier extends Notifier<SettingsState> {
   /// down. Without this, manually reverting an edit would leave a
   /// no-op change in the staging area and dirty the apply button.
   void stageChange(String path, dynamic value) {
-    if (_valuesEqual(value, _stored(path))) {
+    if (jsonEquals(value, _stored(path))) {
       if (state.stagedChanges.containsKey(path)) unstageChange(path);
       return;
     }
     final existing = state.stagedChanges[path];
-    if (_valuesEqual(value, existing)) return; // No-op write
+    if (jsonEquals(value, existing)) return; // No-op write
     final newStaged = Map<String, dynamic>.from(state.stagedChanges);
     newStaged[path] = value;
     state = state.copyWith(stagedChanges: newStaged);
@@ -298,30 +314,38 @@ class SettingsNotifier extends Notifier<SettingsState> {
     return grouped;
   }
 
-  /// Deep equality for the JSON-ish values we receive over the wire
-  /// (primitives, lists, maps). Used by [stageChange] so reverting a
-  /// folder list or any other collection back to the server value
-  /// reliably unstages, even though `List<dynamic>` identities differ.
-  static bool _valuesEqual(dynamic a, dynamic b) {
-    if (identical(a, b)) return true;
-    if (a == null || b == null) return a == b;
-    if (a is num && b is num) return a == b;
-    if (a is List && b is List) {
-      if (a.length != b.length) return false;
-      for (var i = 0; i < a.length; i++) {
-        if (!_valuesEqual(a[i], b[i])) return false;
+  /// A saved collection as the server now holds it: each credential an entry
+  /// carried is taken out and kept only as set, the way a reload reports it.
+  static List<Map<String, dynamic>> _withoutSecrets(
+    CollectionSpec collection,
+    dynamic value,
+    Set<String> secrets,
+  ) => [
+    for (final entry in entriesOf(value))
+      _entryWithoutSecrets(collection, copyEntry(entry), secrets),
+  ];
+
+  static Map<String, dynamic> _entryWithoutSecrets(
+    CollectionSpec collection,
+    Map<String, dynamic> entry,
+    Set<String> secrets,
+  ) {
+    final fields = collection.variantOf(entry)?.allFields ?? const [];
+    for (final field in fields) {
+      if (field.widget != WidgetKind.password ||
+          !entryHasPath(entry, field.path)) {
+        continue;
       }
-      return true;
-    }
-    if (a is Map && b is Map) {
-      if (a.length != b.length) return false;
-      for (final key in a.keys) {
-        if (!b.containsKey(key)) return false;
-        if (!_valuesEqual(a[key], b[key])) return false;
+      final secret = readEntryPath(entry, field.path);
+      removeEntryPath(entry, field.path);
+      final at = '${collection.entryPath(entry)}.${field.path}';
+      if (secret is String && secret.isNotEmpty) {
+        secrets.add(at);
+      } else {
+        secrets.remove(at);
       }
-      return true;
     }
-    return a == b;
+    return entry;
   }
 
   Future<void> applyChanges() async {
@@ -337,6 +361,11 @@ class SettingsNotifier extends Notifier<SettingsState> {
       final newValues = Map<String, dynamic>.from(state.values);
       final newSecrets = Set<String>.from(state.secretsSet);
       changes.forEach((path, value) {
+        final collection = state.schema?.collection(path);
+        if (collection != null) {
+          newValues[path] = _withoutSecrets(collection, value, newSecrets);
+          return;
+        }
         if (!_isSecret(path)) {
           newValues[path] = value;
           return;
@@ -351,7 +380,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       final unsent = {
         for (final e in state.stagedChanges.entries)
           if (!changes.containsKey(e.key) ||
-              !_valuesEqual(changes[e.key], e.value))
+              !jsonEquals(changes[e.key], e.value))
             e.key: e.value,
       };
       _validationGeneration++;

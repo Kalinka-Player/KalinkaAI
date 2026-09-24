@@ -84,6 +84,9 @@ class _RecordingBinding implements SettingsBinding {
 
   @override
   void stage(String path, dynamic value) => staged[path] = value;
+
+  @override
+  Future<void> refreshOptions() async {}
 }
 
 Widget _wrap(SettingsBinding binding) => ProviderScope(

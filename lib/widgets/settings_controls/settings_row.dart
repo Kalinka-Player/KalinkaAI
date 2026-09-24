@@ -20,6 +20,9 @@ class SettingsRow extends StatelessWidget {
   /// under the control. Left empty by controls that place them per item.
   final List<ConfigIssue> issues;
 
+  /// A button beside the label of a vertical row, acting on the whole of it.
+  final Widget? action;
+
   const SettingsRow({
     super.key,
     required this.label,
@@ -29,6 +32,7 @@ class SettingsRow extends StatelessWidget {
     required this.control,
     this.isVertical = false,
     this.issues = const [],
+    this.action,
   });
 
   @override
@@ -63,7 +67,18 @@ class SettingsRow extends StatelessWidget {
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildInfoBlock(showAmber, pillText),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: _buildInfoBlock(showAmber, pillText),
+                            ),
+                            if (action != null) ...[
+                              const SizedBox(width: 12),
+                              action!,
+                            ],
+                          ],
+                        ),
                         const SizedBox(height: 10),
                         SizedBox(width: double.infinity, child: control),
                         IssueNotes(issues: issues),
