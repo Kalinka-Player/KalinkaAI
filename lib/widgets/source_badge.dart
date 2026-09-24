@@ -138,7 +138,10 @@ class _SourceMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = this.icon;
-    if (icon != null) return Icon(icon, size: iconSize, color: color);
+    // Scaled with the text, or a larger text size leaves it behind the letters.
+    if (icon != null) {
+      return Icon(icon, size: iconSize, color: color, applyTextScaling: true);
+    }
     return Text(
       letter,
       style: KalinkaTextStyles.sourceBadgeLetter.copyWith(
