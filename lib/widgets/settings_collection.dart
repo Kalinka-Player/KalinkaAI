@@ -127,6 +127,8 @@ class _SchemaCollectionRendererState extends State<SchemaCollectionRenderer> {
       sublabel: _collection.help,
       isStaged: binding.isStaged(_collection.path),
       isVertical: true,
+      // About the list as a whole; an entry's own go under its card.
+      issues: binding.issuesFor(_collection.path),
       action: KalinkaButton(
         label: 'Add',
         variant: KalinkaButtonVariant.neutral,
@@ -367,12 +369,19 @@ class _EntrySheetState extends State<_EntrySheet> {
   /// when the sheet opened, it gets what it held then — a saved password is
   /// kept only while the login it belongs to is sent back as it was.
   void _switch(GroupSpec group, String key) {
+    // The pills report the shape already chosen too; that is not a switch.
+    if (group.variantOf(_entry)?.key == key) return;
     final discriminator = group.discriminator!;
     final opened = readEntryPath(_opened, group.path);
     final value = opened is Map && opened[discriminator] == key
         ? copyEntry(opened.cast<String, dynamic>())
         : <String, dynamic>{discriminator: key};
-    _stage(_entry, group.path, value);
+    // A new copy, so a field of the shape left commits into the old one as
+    // it is torn down rather than into this.
+    final next = copyEntry(_entry);
+    writeEntryPath(next, group.path, value);
+    setState(() => _entry = next);
+    _push();
   }
 
   Future<void> _done() async {
@@ -460,7 +469,12 @@ class _EntrySheetState extends State<_EntrySheet> {
                       key: ValueKey(variant?.key),
                       variant: variant,
                       entry: _entry,
-                      issues: page.issuesFor(_collection.entryPath(_entry)),
+                      // A value the server refuses outright is pinned on the
+                      // list, not on the entry being typed into.
+                      issues: [
+                        ...page.issuesFor(_collection.path),
+                        ...page.issuesFor(_collection.entryPath(_entry)),
+                      ],
                       onSwitch: _switch,
                     ),
                   ),
@@ -533,6 +547,7 @@ class _EntryForm extends StatelessWidget {
         _addGroup(group, shown, advanced);
       }
     }
+    final binding = SettingsScope.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -541,6 +556,10 @@ class _EntryForm extends StatelessWidget {
         if (advanced.isNotEmpty)
           SettingsSection(
             title: 'Advanced',
+            // Opened on what the card complained about.
+            initiallyExpanded: advanced.any(
+              (field) => binding.issuesFor(field.path).isNotEmpty,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [for (final field in advanced) _field(field)],

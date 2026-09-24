@@ -7,6 +7,8 @@ import '../../theme/app_theme.dart';
 class SettingsSection extends StatefulWidget {
   final String title;
   final Widget child;
+
+  /// Open on first build; turning true later opens it again.
   final bool initiallyExpanded;
   final bool showTopBorder;
 
@@ -36,6 +38,18 @@ class _SettingsSectionState extends State<SettingsSection>
       duration: const Duration(milliseconds: 220),
       value: _expanded ? 1.0 : 0.0,
     );
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Asked open later, e.g. over something newly wrong inside it.
+    if (widget.initiallyExpanded &&
+        !oldWidget.initiallyExpanded &&
+        !_expanded) {
+      _expanded = true;
+      _chevronController.forward();
+    }
   }
 
   @override

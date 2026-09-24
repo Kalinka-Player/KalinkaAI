@@ -12,6 +12,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,6 +24,7 @@ import 'package:kalinka/providers/collection_entry_binding.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/modules_state_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
+import 'package:kalinka/widgets/kalinka_bottom_sheet.dart' show SheetHeader;
 import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/settings_collection.dart';
 import 'package:kalinka/widgets/settings_controls/settings_binding.dart';
@@ -355,6 +357,33 @@ void main() {
       expect(find.text('nas.local refused the login'), findsOneWidget);
     });
 
+    testWidgets('puts what the server says about the whole list under it', (
+      tester,
+    ) async {
+      final store = _Store({
+        _path: [_share()],
+      });
+      store.issues[_path] = const [
+        ConfigIssue(path: _path, message: 'two sources share one place'),
+      ];
+      await _pump(tester, store);
+
+      expect(find.text('two sources share one place'), findsOneWidget);
+
+      // And in the sheet, where the edit that drew it is being made.
+      await _tap(tester, 'nas.local · Music');
+      expect(
+        find.descendant(
+          of: find.ancestor(
+            of: find.byType(SheetHeader),
+            matching: find.byType(SettingsScope),
+          ),
+          matching: find.text('two sources share one place'),
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('stages the whole list as an entry is edited', (tester) async {
       final store = _Store({
         _path: [_share(), _folder()],
@@ -440,6 +469,41 @@ void main() {
       expect(readEntryPath(store.entries.single, 'authentication'), {
         'mode': 'account',
         'username': 'music',
+      });
+    });
+
+    testWidgets('tapping the sign-in it already has keeps what was typed', (
+      tester,
+    ) async {
+      final store = _Store({
+        _path: [_share()],
+      });
+      await _pump(tester, store);
+
+      await _tap(tester, 'nas.local · Music');
+      await _type(tester, 'User name', 'jazz');
+      await _tap(tester, 'Account');
+
+      expect(
+        readEntryPath(store.entries.single, 'authentication.username'),
+        'jazz',
+      );
+    });
+
+    testWidgets('a login still being typed stays behind when it is left', (
+      tester,
+    ) async {
+      final store = _Store({
+        _path: [_share()],
+      });
+      await _pump(tester, store);
+
+      await _tap(tester, 'nas.local · Music');
+      await tester.enterText(_input('User name'), 'jazz');
+      await _tap(tester, 'Guest');
+
+      expect(readEntryPath(store.entries.single, 'authentication'), {
+        'mode': 'guest',
       });
     });
   });
@@ -529,6 +593,31 @@ void main() {
       expect(find.text('Studio'), findsOneWidget);
       expect(find.text('NAS'), findsNothing);
     });
+
+    testWidgets(
+      'a click takes the one clicked, not the one moved under it',
+      (tester) async {
+        final store = offering([nas, studio]);
+        await _pump(tester, store);
+        await _tap(tester, 'nas.local · Music');
+        await tester.enterText(_input('Server'), 'stu');
+        await tester.pump();
+
+        final click = await tester.startGesture(
+          tester.getCenter(find.text('Studio')),
+          kind: PointerDeviceKind.mouse,
+        );
+        await tester.pump();
+        await click.up();
+        await tester.pumpAndSettle();
+
+        expect(
+          readEntryPath(store.entries.single, 'location.host'),
+          '192.168.1.30',
+        );
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.linux),
+    );
 
     testWidgets('are asked for again while the sheet is open', (tester) async {
       final store = offering([]);
