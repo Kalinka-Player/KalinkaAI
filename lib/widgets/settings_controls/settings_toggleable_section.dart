@@ -97,19 +97,21 @@ class _SettingsToggleableSectionState extends State<SettingsToggleableSection>
       children: [
         // Staged amber bar on the far left when this section's enabled
         // toggle has unsaved changes — visually consistent with the
-        // amber accent SettingsRow uses for staged fields.
+        // amber accent SettingsRow uses for staged fields. Clear, not
+        // absent, when unstaged, so staging never shifts the title.
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (widget.isStaged)
-                Container(
-                  width: 1,
-                  decoration: BoxDecoration(
-                    color: KalinkaColors.statusPending,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+              Container(
+                width: 1,
+                decoration: BoxDecoration(
+                  color: widget.isStaged
+                      ? KalinkaColors.statusPending
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(2),
                 ),
+              ),
               // Title + status (chevron on the left, matching the
               // chevron-leading convention used by SettingsSection
               // everywhere else in the app). Tap-to-expand.
