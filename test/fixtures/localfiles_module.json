@@ -1,0 +1,362 @@
+{
+  "id": "localfiles",
+  "kind": "input_module",
+  "title": "My Library",
+  "description": "Music on the server or a network share, indexed into a browsable library with artwork and metadata filled in online.",
+  "icon": "folder_outlined",
+  "preview_fields": [
+    "music_folders",
+    "scan_interval_minutes"
+  ],
+  "banners": [],
+  "fields": [
+    {
+      "path": "input_modules.localfiles.enabled",
+      "label": "Module enabled",
+      "widget": "toggle",
+      "type": "bool",
+      "default": true,
+      "readonly": false,
+      "dynamic": false,
+      "dynamic_options": false,
+      "importance": "simple",
+      "setup": "hidden"
+    },
+    {
+      "path": "input_modules.localfiles.music_folders",
+      "label": "Music folders",
+      "widget": "folder_list",
+      "type": "list[str]",
+      "help": "A folder on the server, including a disk or share mounted on it. Network shares are added as music sources in an up-to-date Kalinka app.",
+      "readonly": false,
+      "dynamic": false,
+      "dynamic_options": true,
+      "importance": "simple",
+      "setup": "prompt"
+    },
+    {
+      "path": "input_modules.localfiles.scan_interval_minutes",
+      "label": "Scan interval",
+      "widget": "number_input",
+      "type": "int",
+      "default": 15,
+      "readonly": false,
+      "dynamic": false,
+      "dynamic_options": false,
+      "importance": "simple",
+      "setup": "hidden",
+      "constraints": {
+        "unit": "min"
+      }
+    },
+    {
+      "path": "input_modules.localfiles.legacy_tag_encoding",
+      "label": "Legacy tag encoding",
+      "widget": "text",
+      "type": "str",
+      "help": "Codepage that repairs tags garbled by old taggers. Leave empty to disable; UTF-8 mojibake is always repaired.",
+      "default": "",
+      "readonly": false,
+      "dynamic": false,
+      "dynamic_options": false,
+      "importance": "simple",
+      "setup": "hidden"
+    },
+    {
+      "path": "input_modules.localfiles.rebuild_library",
+      "label": "Rebuild library on next restart",
+      "widget": "toggle",
+      "type": "bool",
+      "help": "Purge the index and artwork cache and rescan everything on the next restart. Finished AI analysis is kept. Resets itself once done.",
+      "default": false,
+      "readonly": false,
+      "dynamic": false,
+      "dynamic_options": false,
+      "importance": "simple",
+      "setup": "hidden"
+    }
+  ],
+  "collections": [
+    {
+      "path": "input_modules.localfiles.music_sources",
+      "title": "Music sources",
+      "help": "Folders on the server and shares on the network",
+      "discriminator": "kind",
+      "variants": [
+        {
+          "key": "local",
+          "label": "Folder on the server",
+          "icon": "folder_outlined",
+          "description": "A disk, or a share mounted on the server",
+          "summary": [
+            "location.path"
+          ],
+          "fields": [],
+          "groups": [
+            {
+              "path": "location",
+              "title": "Location",
+              "fields": [
+                {
+                  "path": "location.path",
+                  "label": "Folder",
+                  "widget": "path",
+                  "type": "str",
+                  "help": "Use the path on the server, even when you control Kalinka from another device.",
+                  "default": "",
+                  "readonly": false,
+                  "dynamic": false,
+                  "dynamic_options": true,
+                  "importance": "simple",
+                  "setup": "hidden"
+                }
+              ],
+              "groups": [],
+              "variants": []
+            }
+          ]
+        },
+        {
+          "key": "smb",
+          "label": "Network share",
+          "icon": "lan_outlined",
+          "description": "An SMB share on a NAS or a computer, no mount needed",
+          "summary": [
+            "location.host",
+            "location.path"
+          ],
+          "fields": [],
+          "groups": [
+            {
+              "path": "location",
+              "title": "Location",
+              "fields": [
+                {
+                  "path": "location.host",
+                  "label": "Server",
+                  "widget": "text",
+                  "type": "str",
+                  "help": "A name or an address, e.g. 192.168.1.20",
+                  "default": "",
+                  "readonly": false,
+                  "dynamic": false,
+                  "dynamic_options": true,
+                  "importance": "simple",
+                  "setup": "hidden"
+                },
+                {
+                  "path": "location.port",
+                  "label": "Port",
+                  "widget": "number_input",
+                  "type": "int",
+                  "default": 445,
+                  "readonly": false,
+                  "dynamic": false,
+                  "dynamic_options": false,
+                  "importance": "expert",
+                  "setup": "hidden",
+                  "constraints": {
+                    "ge": 1.0,
+                    "le": 65535.0
+                  }
+                },
+                {
+                  "path": "location.path",
+                  "label": "Folder",
+                  "widget": "text",
+                  "type": "str",
+                  "help": "The share, then any folder inside it, e.g. Music/Jazz",
+                  "default": "",
+                  "readonly": false,
+                  "dynamic": false,
+                  "dynamic_options": false,
+                  "importance": "simple",
+                  "setup": "hidden"
+                }
+              ],
+              "groups": [],
+              "variants": []
+            },
+            {
+              "path": "authentication",
+              "title": "Sign in",
+              "fields": [],
+              "groups": [],
+              "discriminator": "mode",
+              "default": "guest",
+              "variants": [
+                {
+                  "key": "guest",
+                  "label": "Guest",
+                  "description": "The guest access most NAS boxes offer a media share.",
+                  "summary": [],
+                  "fields": [],
+                  "groups": []
+                },
+                {
+                  "key": "account",
+                  "label": "Account",
+                  "summary": [],
+                  "fields": [
+                    {
+                      "path": "authentication.username",
+                      "label": "User name",
+                      "widget": "text",
+                      "type": "str",
+                      "default": "",
+                      "readonly": false,
+                      "dynamic": false,
+                      "dynamic_options": false,
+                      "importance": "simple",
+                      "setup": "hidden"
+                    },
+                    {
+                      "path": "authentication.password",
+                      "label": "Password",
+                      "widget": "password",
+                      "type": "str",
+                      "readonly": false,
+                      "dynamic": false,
+                      "dynamic_options": false,
+                      "importance": "simple",
+                      "setup": "hidden"
+                    }
+                  ],
+                  "groups": []
+                }
+              ]
+            },
+            {
+              "path": "options",
+              "title": "Options",
+              "fields": [
+                {
+                  "path": "options.require_encryption",
+                  "label": "Require encryption",
+                  "widget": "toggle",
+                  "type": "bool",
+                  "help": "Encrypt share traffic. Needs SMB3 on the server and costs CPU on this device.",
+                  "default": false,
+                  "readonly": false,
+                  "dynamic": false,
+                  "dynamic_options": false,
+                  "importance": "expert",
+                  "setup": "hidden"
+                }
+              ],
+              "groups": [],
+              "variants": []
+            }
+          ]
+        }
+      ],
+      "after": "input_modules.localfiles.music_folders",
+      "replaces": [
+        "input_modules.localfiles.music_folders"
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "input_modules.localfiles.enricher",
+      "title": "Enricher",
+      "importance": "simple",
+      "banners": [],
+      "fields": [
+        {
+          "path": "input_modules.localfiles.enricher.enabled",
+          "label": "Enable enricher",
+          "widget": "toggle",
+          "type": "bool",
+          "default": true,
+          "readonly": false,
+          "dynamic": false,
+          "dynamic_options": false,
+          "importance": "simple",
+          "setup": "hidden"
+        }
+      ],
+      "collections": [],
+      "sections": [
+        {
+          "id": "input_modules.localfiles.enricher.plugins",
+          "title": "Enrichment plugins",
+          "importance": "simple",
+          "banners": [],
+          "fields": [],
+          "collections": [],
+          "sections": [
+            {
+              "id": "input_modules.localfiles.enricher.plugins.acoustid",
+              "title": "AcoustID",
+              "importance": "simple",
+              "banners": [],
+              "fields": [
+                {
+                  "path": "input_modules.localfiles.enricher.plugins.acoustid.api_key",
+                  "label": "AcoustID API key",
+                  "widget": "password",
+                  "type": "str",
+                  "help": "Identifies tracks by their audio fingerprint \u2014 free key at [acoustid.org](https://acoustid.org/)",
+                  "readonly": false,
+                  "dynamic": false,
+                  "dynamic_options": false,
+                  "importance": "simple",
+                  "setup": "hidden"
+                }
+              ],
+              "collections": [],
+              "sections": []
+            },
+            {
+              "id": "input_modules.localfiles.enricher.plugins.procedural_artwork",
+              "title": "Generated album art",
+              "importance": "simple",
+              "banners": [],
+              "fields": [
+                {
+                  "path": "input_modules.localfiles.enricher.plugins.procedural_artwork.enabled",
+                  "label": "Generate missing album art",
+                  "widget": "toggle",
+                  "type": "bool",
+                  "help": "Draw abstract cover art for albums left without artwork",
+                  "default": false,
+                  "readonly": false,
+                  "dynamic": false,
+                  "dynamic_options": false,
+                  "importance": "simple",
+                  "setup": "hidden"
+                }
+              ],
+              "collections": [],
+              "sections": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "input_modules.localfiles.ai_search",
+      "title": "AI search",
+      "importance": "simple",
+      "banners": [],
+      "fields": [
+        {
+          "path": "input_modules.localfiles.ai_search.enabled",
+          "label": "Enable AI search",
+          "widget": "toggle",
+          "type": "bool",
+          "help": "Search by mood, genre and how the music sounds rather than by name. Needs roughly 500 MB of memory, more while indexing, and hours of CPU to index a large library the first time.",
+          "default": false,
+          "readonly": false,
+          "dynamic": false,
+          "dynamic_options": false,
+          "importance": "simple",
+          "setup": "prompt"
+        }
+      ],
+      "collections": [],
+      "sections": []
+    }
+  ]
+}

@@ -234,4 +234,8 @@ class RendererSettingsBinding implements SettingsBinding {
 
   @override
   void stage(String path, dynamic value) => notifier.stage(path, value);
+
+  /// A renderer's options come with its settings and change with them.
+  @override
+  Future<void> refreshOptions() async {}
 }

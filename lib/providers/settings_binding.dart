@@ -38,4 +38,9 @@ abstract interface class SettingsBinding implements EnumOptionSource {
   /// What the backend says is wrong with the value staged at [path].
   /// Recomputed as the user types, so a row stops complaining once it is fixed.
   List<ConfigIssue> issuesFor(String path);
+
+  /// Asks the backend for its suggestions again — a server on the network
+  /// may answer after the page was read. What it finds arrives in a later
+  /// binding; staged edits are left alone.
+  Future<void> refreshOptions();
 }

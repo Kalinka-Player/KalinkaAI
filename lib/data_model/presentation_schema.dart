@@ -263,6 +263,154 @@ class FieldSpec {
   );
 }
 
+List<FieldSpec> _fieldsFromJson(Object? raw) => ((raw as List?) ?? [])
+    .map((e) => FieldSpec.fromJson((e as Map).cast<String, dynamic>()))
+    .toList();
+
+List<CollectionSpec> _collectionsFromJson(Object? raw) => ((raw as List?) ?? [])
+    .map((e) => CollectionSpec.fromJson((e as Map).cast<String, dynamic>()))
+    .toList();
+
+/// One shape an entry of a collection, or a part of one, can take.
+///
+/// [key] is what the discriminator holds for this shape. Field and group paths
+/// are relative to the entry.
+class VariantSpec {
+  final String key;
+  final String label;
+  final String? icon;
+  final String? description;
+
+  /// Fields whose values make up the card's second line.
+  final List<String> summary;
+  final List<FieldSpec> fields;
+  final List<GroupSpec> groups;
+
+  const VariantSpec({
+    required this.key,
+    required this.label,
+    this.icon,
+    this.description,
+    this.summary = const [],
+    this.fields = const [],
+    this.groups = const [],
+  });
+
+  /// Every field of this shape, the ones inside its groups included.
+  Iterable<FieldSpec> get allFields sync* {
+    yield* fields;
+    for (final group in groups) {
+      yield* group.allFields;
+    }
+  }
+
+  factory VariantSpec.fromJson(Map<String, dynamic> j) => VariantSpec(
+    key: j['key'] as String? ?? '',
+    label: j['label'] as String? ?? '',
+    icon: j['icon'] as String?,
+    description: j['description'] as String?,
+    summary: ((j['summary'] as List?) ?? []).map((e) => e.toString()).toList(),
+    fields: _fieldsFromJson(j['fields']),
+    groups: ((j['groups'] as List?) ?? [])
+        .map((e) => GroupSpec.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(),
+  );
+}
+
+/// A nested part of an entry: fields of its own, or — with [discriminator]
+/// set — one of [variants], picked by writing its key there.
+class GroupSpec {
+  final String path;
+  final String title;
+  final List<FieldSpec> fields;
+  final List<GroupSpec> groups;
+  final String? discriminator;
+
+  /// The variant the part takes while the entry leaves it unset.
+  final String? defaultVariant;
+  final List<VariantSpec> variants;
+
+  const GroupSpec({
+    required this.path,
+    required this.title,
+    this.fields = const [],
+    this.groups = const [],
+    this.discriminator,
+    this.defaultVariant,
+    this.variants = const [],
+  });
+
+  Iterable<FieldSpec> get allFields sync* {
+    yield* fields;
+    for (final group in groups) {
+      yield* group.allFields;
+    }
+    for (final variant in variants) {
+      yield* variant.allFields;
+    }
+  }
+
+  factory GroupSpec.fromJson(Map<String, dynamic> j) => GroupSpec(
+    path: j['path'] as String,
+    title: j['title'] as String? ?? '',
+    fields: _fieldsFromJson(j['fields']),
+    groups: ((j['groups'] as List?) ?? [])
+        .map((e) => GroupSpec.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(),
+    discriminator: j['discriminator'] as String?,
+    defaultVariant: j['default'] as String?,
+    variants: ((j['variants'] as List?) ?? [])
+        .map((e) => VariantSpec.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(),
+  );
+}
+
+/// A list of records the page shows as cards, each edited in a dialog.
+///
+/// The value at [path] is a list of objects, each with a stable `id`, written
+/// back whole. Inside an entry, suggestions are keyed `<path>.<field path>`;
+/// issues and set credentials name the entry by id, `<path>.<id>.<field path>`.
+class CollectionSpec {
+  final String path;
+  final String title;
+  final String? help;
+
+  /// Written with an entry's shape when there is more than one.
+  final String? discriminator;
+  final List<VariantSpec> variants;
+
+  /// Path of the sibling field the collection follows; null puts it first.
+  final String? after;
+
+  /// Sibling fields holding part of the same value in an older shape, for
+  /// apps that cannot show the collection. One that shows it hides them.
+  final List<String> replaces;
+
+  const CollectionSpec({
+    required this.path,
+    required this.title,
+    this.help,
+    this.discriminator,
+    this.variants = const [],
+    this.after,
+    this.replaces = const [],
+  });
+
+  factory CollectionSpec.fromJson(Map<String, dynamic> j) => CollectionSpec(
+    path: j['path'] as String,
+    title: j['title'] as String? ?? '',
+    help: j['help'] as String?,
+    discriminator: j['discriminator'] as String?,
+    variants: ((j['variants'] as List?) ?? [])
+        .map((e) => VariantSpec.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(),
+    after: j['after'] as String?,
+    replaces: ((j['replaces'] as List?) ?? [])
+        .map((e) => e.toString())
+        .toList(),
+  );
+}
+
 class SectionSpec {
   final String id;
   final String title;
@@ -270,6 +418,7 @@ class SectionSpec {
   final Importance importance;
   final List<BannerSpec> banners;
   final List<FieldSpec> fields;
+  final List<CollectionSpec> collections;
   final List<SectionSpec> sections;
 
   const SectionSpec({
@@ -279,6 +428,7 @@ class SectionSpec {
     this.importance = Importance.simple,
     this.banners = const [],
     this.fields = const [],
+    this.collections = const [],
     this.sections = const [],
   });
 
@@ -290,9 +440,8 @@ class SectionSpec {
     banners: ((j['banners'] as List?) ?? [])
         .map((e) => BannerSpec.fromJson((e as Map).cast<String, dynamic>()))
         .toList(),
-    fields: ((j['fields'] as List?) ?? [])
-        .map((e) => FieldSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
+    fields: _fieldsFromJson(j['fields']),
+    collections: _collectionsFromJson(j['collections']),
     sections: ((j['sections'] as List?) ?? [])
         .map((e) => SectionSpec.fromJson((e as Map).cast<String, dynamic>()))
         .toList(),
@@ -311,6 +460,7 @@ class ModuleSpec {
   // out of an auto-generated "General" section so the client renders
   // them flat under the module header rather than inside a foldable.
   final List<FieldSpec> fields;
+  final List<CollectionSpec> collections;
   final List<SectionSpec> sections;
 
   const ModuleSpec({
@@ -322,6 +472,7 @@ class ModuleSpec {
     this.previewFields = const [],
     this.banners = const [],
     this.fields = const [],
+    this.collections = const [],
     this.sections = const [],
   });
 
@@ -337,9 +488,8 @@ class ModuleSpec {
     banners: ((j['banners'] as List?) ?? [])
         .map((e) => BannerSpec.fromJson((e as Map).cast<String, dynamic>()))
         .toList(),
-    fields: ((j['fields'] as List?) ?? [])
-        .map((e) => FieldSpec.fromJson((e as Map).cast<String, dynamic>()))
-        .toList(),
+    fields: _fieldsFromJson(j['fields']),
+    collections: _collectionsFromJson(j['collections']),
     sections: ((j['sections'] as List?) ?? [])
         .map((e) => SectionSpec.fromJson((e as Map).cast<String, dynamic>()))
         .toList(),
@@ -399,6 +549,28 @@ class PresentationSchema {
   FieldSpec? field(String path) {
     for (final f in expertFields) {
       if (f.path == path) return f;
+    }
+    return null;
+  }
+
+  /// The collection at [path], or null when this schema has none.
+  CollectionSpec? collection(String path) {
+    Iterable<CollectionSpec> within(List<SectionSpec> sections) sync* {
+      for (final section in sections) {
+        yield* section.collections;
+        yield* within(section.sections);
+      }
+    }
+
+    for (final page in pages) {
+      final found = [
+        ...within(page.sections),
+        for (final module in page.modules) ...[
+          ...module.collections,
+          ...within(module.sections),
+        ],
+      ].where((c) => c.path == path);
+      if (found.isNotEmpty) return found.first;
     }
     return null;
   }
