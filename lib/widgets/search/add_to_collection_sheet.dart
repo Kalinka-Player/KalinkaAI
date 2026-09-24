@@ -249,9 +249,9 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(kSheetGutter, 16, 12, 14),
-              child: _Head(addition: widget.addition),
+            SheetHeader(
+              title: widget.addition.heading,
+              summary: widget.addition.summary,
             ),
             const SheetDivider(),
             SheetRow(
@@ -372,44 +372,6 @@ String collectionAddReport(
   final landed = 'Added ${_tracks(outcome.added)} to $name';
   if (outcome.alreadyThere == 0) return landed;
   return '$landed · ${outcome.alreadyThere} already there';
-}
-
-class _Head extends StatelessWidget {
-  final CollectionAddition addition;
-
-  const _Head({required this.addition});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(addition.heading, style: KalinkaTextStyles.sectionLabel),
-              const SizedBox(height: 6),
-              Text(addition.summary, style: KalinkaTextStyles.trackRowSubtitle),
-            ],
-          ),
-        ),
-        const SizedBox(width: 6),
-        TapHighlight(
-          onTap: () => Navigator.of(context).pop(),
-          borderRadius: BorderRadius.circular(8),
-          child: const Padding(
-            padding: EdgeInsets.all(8),
-            child: Icon(
-              Icons.close_rounded,
-              size: 22,
-              color: KalinkaColors.textMuted,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 /// Whether a track a collection already holds may land beside it. Drawn the
