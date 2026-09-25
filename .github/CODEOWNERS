@@ -1,0 +1,6 @@
+/.github/                   @madenvel
+/android/app/build.gradle*  @madenvel
+/packaging/                 @madenvel
+/scripts/build_release.sh   @madenvel
+/scripts/build_web_deb.sh   @madenvel
+/LICENSE*                   @madenvel
