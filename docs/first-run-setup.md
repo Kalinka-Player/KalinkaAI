@@ -38,7 +38,7 @@ Each source you enabled asks only for what it needs.
 
 - **Music sources** — where your music is. This is the important one: if it points at the wrong place, your library stays empty. A source is either:
   - a **Folder on the server** — a folder or disk on the server itself, or a share already mounted there; or
-  - a **Network share** — a shared folder on a NAS or another computer. The server connects to it by itself, with the user name and password you give it.
+  - a **Network share** — a shared folder on a NAS or another computer. The server connects to it by itself, with the user name and password of an account on it, or as a guest for a share that is open to guests.
 
   The server installer creates `/srv/kalinka/music`, and a folder source pointing at it is there by default. Copy your music there and you do not need to change anything. If your collection lives somewhere else — a NAS, a USB drive, a folder in your home directory — add it as a source instead.
 
