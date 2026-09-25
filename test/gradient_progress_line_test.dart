@@ -10,13 +10,19 @@ void main() {
         ),
       );
 
+  // The app scaffolding draws its own CustomPaint and AnimatedBuilder.
+  Finder inLine(Type type) => find.descendant(
+        of: find.byType(GradientProgressLine),
+        matching: find.byType(type),
+      );
+
   testWidgets('normal mode renders CustomPaint directly without shimmer',
       (tester) async {
     await tester.pumpWidget(buildLine(GradientProgressLineMode.normal));
     await tester.pump();
 
-    expect(find.byType(CustomPaint), findsOneWidget);
-    expect(find.byType(AnimatedBuilder), findsNothing);
+    expect(inLine(CustomPaint), findsOneWidget);
+    expect(inLine(AnimatedBuilder), findsNothing);
   });
 
   testWidgets('reconnecting mode wraps in AnimatedBuilder for shimmer',
@@ -24,8 +30,8 @@ void main() {
     await tester.pumpWidget(buildLine(GradientProgressLineMode.reconnecting));
     await tester.pump();
 
-    expect(find.byType(AnimatedBuilder), findsOneWidget);
-    expect(find.byType(CustomPaint), findsOneWidget);
+    expect(inLine(AnimatedBuilder), findsOneWidget);
+    expect(inLine(CustomPaint), findsOneWidget);
   });
 
   testWidgets('offline mode wraps in AnimatedBuilder for shimmer',
@@ -33,8 +39,8 @@ void main() {
     await tester.pumpWidget(buildLine(GradientProgressLineMode.offline));
     await tester.pump();
 
-    expect(find.byType(AnimatedBuilder), findsOneWidget);
-    expect(find.byType(CustomPaint), findsOneWidget);
+    expect(inLine(AnimatedBuilder), findsOneWidget);
+    expect(inLine(CustomPaint), findsOneWidget);
   });
 
   testWidgets('switching from reconnecting to normal removes AnimatedBuilder',
@@ -42,33 +48,33 @@ void main() {
     await tester
         .pumpWidget(buildLine(GradientProgressLineMode.reconnecting));
     await tester.pump();
-    expect(find.byType(AnimatedBuilder), findsOneWidget);
+    expect(inLine(AnimatedBuilder), findsOneWidget);
 
     await tester.pumpWidget(buildLine(GradientProgressLineMode.normal));
     await tester.pump();
-    expect(find.byType(AnimatedBuilder), findsNothing);
+    expect(inLine(AnimatedBuilder), findsNothing);
   });
 
   testWidgets('switching from normal to offline adds AnimatedBuilder',
       (tester) async {
     await tester.pumpWidget(buildLine(GradientProgressLineMode.normal));
     await tester.pump();
-    expect(find.byType(AnimatedBuilder), findsNothing);
+    expect(inLine(AnimatedBuilder), findsNothing);
 
     await tester.pumpWidget(buildLine(GradientProgressLineMode.offline));
     await tester.pump();
-    expect(find.byType(AnimatedBuilder), findsOneWidget);
+    expect(inLine(AnimatedBuilder), findsOneWidget);
   });
 
   testWidgets('switching from offline to reconnecting keeps AnimatedBuilder',
       (tester) async {
     await tester.pumpWidget(buildLine(GradientProgressLineMode.offline));
     await tester.pump();
-    expect(find.byType(AnimatedBuilder), findsOneWidget);
+    expect(inLine(AnimatedBuilder), findsOneWidget);
 
     await tester
         .pumpWidget(buildLine(GradientProgressLineMode.reconnecting));
     await tester.pump();
-    expect(find.byType(AnimatedBuilder), findsOneWidget);
+    expect(inLine(AnimatedBuilder), findsOneWidget);
   });
 }
