@@ -68,10 +68,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (_applying) return;
     setState(() => _applying = true);
     try {
-      // Last word before a restart is spent: a debounced check may still be
-      // pending, and the server may have changed its mind since the last one.
-      await ref.read(settingsProvider.notifier).validateStaged();
-      if (!mounted || ref.read(settingsProvider).hasBlockingIssues) return;
+      final ready = await ref.read(settingsProvider.notifier).readyToApply();
+      if (!mounted || !ready) return;
       setState(() => _restartOverlayOpen = true);
       ref.read(restartProvider.notifier).executeRestart();
     } finally {

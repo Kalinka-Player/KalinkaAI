@@ -171,15 +171,110 @@ List<String> moduleMissingFields(SettingsState state, ModuleSpec m) {
   return missing.toList();
 }
 
-/// A source counts once it is on and every required question is answered.
+/// Whether the server refuses something staged under [m]. The wizard saves
+/// everything at once and a refused batch is refused whole, so one such
+/// value would cost the final restart.
+bool moduleRefused(SettingsState state, ModuleSpec m) =>
+    state.issues.entries.any(
+      (e) =>
+          e.key.startsWith(moduleRoot(m)) && e.value.any((i) => i.isBlocking),
+    );
+
+/// A source counts once it is on, every required question is answered and
+/// the server takes what was entered for it.
 bool moduleConfigured(SettingsState state, ModuleSpec m) =>
-    inputModuleEnabled(state, m) && moduleMissingFields(state, m).isEmpty;
+    inputModuleEnabled(state, m) &&
+    moduleMissingFields(state, m).isEmpty &&
+    !moduleRefused(state, m);
 
 /// The source-setup gate: at least one source ready to feed the library.
 bool anySourceConfigured(SettingsState state) => schemaModulesOfKind(
   state.schema,
   'input_module',
 ).any((m) => moduleConfigured(state, m));
+
+/// Whether an enabled source holds something the server refuses. The step
+/// that sets sources up waits for it, beside [anySourceConfigured].
+bool anySourceRefused(SettingsState state) => schemaModulesOfKind(
+  state.schema,
+  'input_module',
+).any((m) => inputModuleEnabled(state, m) && moduleRefused(state, m));
+
+/// Whether the step that sets sources up may be left: a source is ready and
+/// none holds what the server refuses. Not enforced until the schema is up,
+/// so a load failure can't strand the step.
+bool setupStepReady(SettingsState state) =>
+    state.schema == null ||
+    (anySourceConfigured(state) && !anySourceRefused(state));
+
+/// Each thing the server refuses in the staged setup, named by the module it
+/// belongs to and, inside a collection, the entry.
+List<String> refusedNotes(SettingsState state) {
+  final modules = [
+    ...schemaModulesOfKind(state.schema, 'input_module'),
+    ...schemaModulesOfKind(state.schema, 'device'),
+  ];
+  final notes = <String>{};
+  for (final MapEntry(key: path, value: issues) in state.issues.entries) {
+    final owner = _ownerOf(state, modules, path);
+    for (final issue in issues) {
+      if (!issue.isBlocking) continue;
+      notes.add(owner == null ? issue.message : '$owner: ${issue.message}');
+    }
+  }
+  return notes.toList();
+}
+
+/// What [path] belongs to, for a note with no field to sit under: its
+/// module, and the entry of a collection it points into, so two entries
+/// refused alike read as two.
+String? _ownerOf(SettingsState state, List<ModuleSpec> modules, String path) {
+  final module = modules
+      .where((m) => path.startsWith(moduleRoot(m)))
+      .firstOrNull;
+  if (module == null) return null;
+  for (final c in module.allCollections) {
+    if (!path.startsWith('${c.path}.')) continue;
+    final id = path.substring(c.path.length + 1).split('.').first;
+    final entry = entriesOf(
+      state.getEffective(c.path),
+    ).where((e) => e['id'] == id).firstOrNull;
+    final summary = entry == null
+        ? ''
+        : c.variantOf(entry)?.summaryOf(entry) ?? '';
+    if (summary.isNotEmpty) return '${module.title}, $summary';
+  }
+  return module.title;
+}
+
+/// What the server refuses of [m] that the source-setup step has no field
+/// or card to show under, so a held-up Continue still says why. The step
+/// shows each question it asks, and a collection's list, entries and their
+/// fields.
+List<String> unshownRefusals(SettingsState state, ModuleSpec m) {
+  final shown = <String>{};
+  for (final f in setupModuleFields(state.schema, m)) {
+    final c = m.collectionReplacing(f.path);
+    if (c == null) {
+      shown.add(f.path);
+      continue;
+    }
+    shown.add(c.path);
+    for (final entry in entriesOf(state.getEffective(c.path))) {
+      final at = c.entryPath(entry);
+      shown.add(at);
+      for (final field in c.variantOf(entry)?.allFields ?? <FieldSpec>[]) {
+        shown.add('$at.${field.path}');
+      }
+    }
+  }
+  return {
+    for (final MapEntry(key: path, value: issues) in state.issues.entries)
+      if (path.startsWith(moduleRoot(m)) && !shown.contains(path))
+        for (final issue in issues)
+          if (issue.isBlocking) issue.message,
+  }.toList();
+}
 
 /// Renders a single backend config field inside the setup wizard, bound to
 /// the shared settings staging flow ([SettingsNotifier.stageChange]).

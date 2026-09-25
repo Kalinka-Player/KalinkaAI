@@ -83,6 +83,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   /// the flow when the connection came from outside the wizard.
   late final int _firstStep = widget.startAtSetup ? 1 : 0;
   bool _restartOverlayOpen = false;
+
+  // Start runs one last check before the restart; without this a second tap
+  // could start another in the gap.
+  bool _starting = false;
   // Set when the restart succeeded and persistence was kicked off;
   // completes once the connection and the first-run flag are written.
   Future<void>? _commitFuture;
@@ -111,11 +115,36 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     setState(() => _step = 1);
   }
 
-  void _finish() {
+  Future<void> _finish() async {
+    if (_starting) return;
+    setState(() => _starting = true);
+    try {
+      await _startListening();
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
+  }
+
+  /// Moves the wizard to [step]. A refusal is only rechecked when something
+  /// is staged, so one the server may since have dropped (a share that was
+  /// briefly down) is asked about again on the way: otherwise it would hold
+  /// the step, or Start, until the user edited something.
+  void _goTo(int step) {
+    setState(() => _step = step);
+    if (ref.read(settingsProvider).hasBlockingIssues) {
+      unawaited(ref.read(settingsProvider.notifier).validateStaged());
+    }
+  }
+
+  Future<void> _startListening() async {
+    final notifier = ref.read(settingsProvider.notifier);
     // Mark the server set up; rides along with the staged config.
-    ref
-        .read(settingsProvider.notifier)
-        .stageChange(OnboardingStatusNotifier.serverOobeFlagPath, true);
+    notifier.stageChange(OnboardingStatusNotifier.serverOobeFlagPath, true);
+
+    final ready = await notifier.readyToApply();
+    // Navigation is held while the check runs, but the review must still be
+    // what the user is looking at when it answers.
+    if (!mounted || !ready || _step != _stepCount - 1) return;
 
     // The Volume & power choice can't be applied yet — a freshly enabled
     // module only loads with the restart — so capture it here and hand the
@@ -205,8 +234,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         // for two moves.
         if (_step > _firstStep &&
             !_restartOverlayOpen &&
+            !_starting &&
             _outputSettings == null) {
-          setState(() => _step--);
+          _goTo(_step - 1);
         }
       },
       child: Scaffold(
@@ -309,18 +339,23 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         'Check your choices; starting restarts the server to apply them.',
         OnboardingReviewStep(
               soundTested: _soundTested,
-              onEdit: (step) => setState(() => _step = step),
+              // Held while Start checks with the server.
+              onEdit: _starting ? null : _goTo,
             )
             as Widget,
         'Start listening',
       ),
     };
 
-    // The source-setup gate: the wizard's one hard requirement — at least
-    // one ready source. Only enforced once the schema is up so a load
-    // failure can't strand the step.
-    final nextEnabled =
-        _step != 2 || settings.schema == null || anySourceConfigured(settings);
+    // The source-setup gate is the wizard's one hard requirement. Start
+    // waits for everything staged to be accepted; the review says what is
+    // not.
+    final nextEnabled = switch (_step) {
+      2 => setupStepReady(settings),
+      _ when _step == _stepCount - 1 =>
+        !settings.hasBlockingIssues && !_starting,
+      _ => true,
+    };
 
     return OnboardingStepScaffold(
       stepNumber: _step + 1,
@@ -328,8 +363,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       stepLabels: _stepLabels,
       title: title,
       subtitle: subtitle,
-      onBack: _step > _firstStep ? () => setState(() => _step--) : null,
-      onNext: _step == _stepCount - 1 ? _finish : () => setState(() => _step++),
+      onBack: _step > _firstStep && !_starting ? () => _goTo(_step - 1) : null,
+      onNext: _step == _stepCount - 1 ? _finish : () => _goTo(_step + 1),
       nextLabel: nextLabel,
       nextEnabled: nextEnabled,
       children: [_wrapSettingsState(body)],

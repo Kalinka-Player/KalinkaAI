@@ -63,6 +63,12 @@ class _SourceRow extends ConsumerWidget {
       onChanged: (v) {
         if (isLocalFiles || enabledField == null) return;
         notifier.stageChange(enabledField.path, v);
+        // What was entered for a source switched off goes with it: the next
+        // step no longer shows it, so a value the server refuses there would
+        // hold up the save with nowhere to fix it.
+        if (!v) {
+          notifier.unstageUnder(moduleRoot(module), keep: enabledField.path);
+        }
       },
     );
     if (isLocalFiles || enabledField == null) {
