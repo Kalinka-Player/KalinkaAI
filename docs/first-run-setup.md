@@ -4,7 +4,7 @@ The first time you open Kalinka it runs a short setup wizard. It has seven steps
 
 The wizard is the same in the **app** (Android, Linux, Windows) and in the **web player** in your browser, with one difference: the web player already knows which server it belongs to, so it skips step 1 and starts at **Music sources** (step 2 of 7).
 
-Before you start, the Kalinka server should already be installed and running on your network — see the [initial setup guide](initial-setup.md).
+Before you start, the Kalinka server should already be installed and running on your network — see [installing the server](https://github.com/Kalinka-Player/KalinkaPlayer#installation).
 
 At the end the wizard saves everything and restarts the server, which takes about half a minute. Nothing is applied before that, so you can go back and change your answers at any point.
 
@@ -23,7 +23,7 @@ The app looks for Kalinka servers on your network and lists what it finds, with 
 
 Choose what fills your library. You need at least one source.
 
-- **Local Library** — the music stored on the server itself. This is always on and cannot be turned off.
+- **My Library** — your own music, on the server or on a network share. This is always on and cannot be turned off.
 - **Jamendo** — a free streaming catalogue of independent artists. Turn it on if you want it.
 
 Other sources appear here too if their plugins are installed on the server. You can always add or remove sources later in Settings.
@@ -34,13 +34,15 @@ Other sources appear here too if their plugins are installed on the server. You 
 
 Each source you enabled asks only for what it needs.
 
-### Local Library
+### My Library
 
-- **Music folders** — the folders on the server that Kalinka scans for music. This is the important one: if it points at the wrong place, your library stays empty.
+- **Music sources** — where your music is. This is the important one: if it points at the wrong place, your library stays empty. A source is either:
+  - a **Folder on the server** — a folder or disk on the server itself, or a share already mounted there; or
+  - a **Network share** — a shared folder on a NAS or another computer. The server connects to it by itself, with the user name and password you give it.
 
-  The server installer creates `/srv/kalinka/music` and that folder is used by default. Copy your music there and you do not need to change anything. If your collection lives somewhere else — a USB drive, a NAS mount, a folder in your home directory — add that path here instead.
+  The server installer creates `/srv/kalinka/music`, and a folder source pointing at it is there by default. Copy your music there and you do not need to change anything. If your collection lives somewhere else — a NAS, a USB drive, a folder in your home directory — add it as a source instead.
 
-  One rule: the server runs as the user `kalusr`, so it must be allowed to read the folder. If the library stays empty afterwards, permissions are the usual reason — see [initial setup, step 2](initial-setup.md#2-put-your-music-where-the-server-can-see-it).
+  One rule for folders: the server runs as the user `kalusr`, so it must be allowed to read them. If the library stays empty afterwards, permissions are the usual reason — see [Put your music on it](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md#put-your-music-on-it).
 
 - **Enable AI search** — turn this **on** to search your own music by mood, genre and how it sounds, instead of only by name. This is what makes "something calm for the evening" work on your own library.
 
@@ -52,7 +54,7 @@ Each source you enabled asks only for what it needs.
 - **Mood / AI search** — turn this **on** to search Jamendo by mood or description as well. The data it needs is downloaded automatically the first time.
 - **Audio quality** — the streaming format. FLAC is only available for tracks whose artist allowed lossless download, and falls back to MP3 for the rest.
 
-> **To get smart search everywhere, turn AI search on for both Local Library and Jamendo.** The two settings are separate: switching it off for one source does not affect the other. If you leave both off, search still works, but only by matching names.
+> **To get smart search everywhere, turn AI search on for both My Library and Jamendo.** The two settings are separate: switching it off for one source does not affect the other. If you leave both off, search still works, but only by matching names.
 
 ## Step 4 — Audio output
 
@@ -111,13 +113,23 @@ Two things carry on in the background afterwards: scanning your music folders, a
 
 Nothing here is permanent.
 
-- **Server settings** — tap the server chip at the top of the screen, then **Server settings**. Music sources, music folders and AI search all live there.
+- **Server settings** — tap the server chip at the top of the screen, then **Server settings**. Music sources and AI search live under **Input modules → My Library**.
 - **Audio output** — the cast icon in the player switches outputs, and the gear next to each one opens its settings and its sound test.
+
+## Updates
+
+Kalinka keeps itself up to date; you only decide when.
+
+- **The server** checks for a new release every hour. When there is one, **Server settings → General** shows *A new version … is available*. Tap it, then **Restart & Update**. Playback stops while the server installs the update and restarts, which takes a minute or two.
+- **Automatic updates** — turn on **Auto upgrade** in the same place, and the server installs updates by itself between 3 and 6 in the morning, when nothing is playing.
+- **Outputs** are upgraded along with the server, and before it, so the two always match. An output that needs an upgrade shows an upgrade button in the output list under the cast icon.
+- **The web player** is updated together with the server.
+- **The app** — if you installed it with Obtainium, Obtainium keeps it updated. Otherwise, download the new version from the [releases page](https://github.com/Kalinka-Player/KalinkaAI/releases/latest) when you want it.
 
 ## If something goes wrong
 
 - **No servers found** — the app and the server must be on the same network, and some routers block discovery between devices. Use **Enter Address Manually** with `<server-ip>:8000`.
 - **No outputs listed** — the renderer is not running on the machine connected to your audio gear, or it cannot reach the server.
 - **No sound in the test** — the wrong device is selected. Open the output's settings from the gear and try another one.
-- **Library is empty** — the music folder path is wrong, or the files are not readable by the `kalusr` user.
+- **Library is empty** — a music source points at the wrong place, the files are not readable by the `kalusr` user, or a network share's user name or password is wrong.
 - **Smart search finds nothing yet** — indexing has not caught up. Give it time; on a large library the first pass takes hours.
