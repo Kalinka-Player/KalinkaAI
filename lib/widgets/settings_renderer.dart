@@ -366,21 +366,25 @@ Widget buildFieldControl({
 /// Rows for the [fields] shown, each of [collections] right after the field it
 /// follows — hidden or not, so a collection keeps its place when the field
 /// before it moves into a header, or is one the collection replaces.
+///
+/// [replaced] is every path a collection of the module replaces, wherever in
+/// the module that collection sits, as the setup wizard reads it too.
 List<Widget> _fieldRows(
   List<FieldSpec> fields,
   List<CollectionSpec> collections, {
   Set<FieldSpec> hidden = const {},
+  Set<String> replaced = const {},
 }) {
   Widget collection(CollectionSpec c) =>
       SchemaCollectionRenderer(key: ValueKey(c.path), collection: c);
   Iterable<Widget> after(String? path) =>
       collections.where((c) => c.after == path).map(collection);
   final placed = {null, ...fields.map((f) => f.path)};
-  final replaced = {for (final c in collections) ...c.replaces};
+  final gone = {...replaced, for (final c in collections) ...c.replaces};
   return [
     ...after(null),
     for (final field in fields) ...[
-      if (!hidden.contains(field) && !replaced.contains(field.path))
+      if (!hidden.contains(field) && !gone.contains(field.path))
         SchemaFieldRenderer(key: ValueKey(field.path), field: field),
       ...after(field.path),
     ],
@@ -414,11 +418,15 @@ class SchemaSectionRenderer extends StatelessWidget {
   /// page's host + version badge.
   final Widget? subtitle;
 
+  /// Paths a collection elsewhere in the module stands in for.
+  final Set<String> replaced;
+
   const SchemaSectionRenderer({
     super.key,
     required this.section,
     this.isTopLevel = false,
     this.subtitle,
+    this.replaced = const {},
   });
 
   @override
@@ -446,9 +454,14 @@ class SchemaSectionRenderer extends StatelessWidget {
         section.fields,
         section.collections,
         hidden: {?enabledField, ?statusField},
+        replaced: replaced,
       ),
       for (final s in section.sections)
-        SchemaSectionRenderer(key: ValueKey(s.id), section: s),
+        SchemaSectionRenderer(
+          key: ValueKey(s.id),
+          section: s,
+          replaced: replaced,
+        ),
     ];
 
     // Toggleable sub-feature section: route through the dedicated header
@@ -652,10 +665,20 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
     // Backend prunes EXPERT content out of the simple page tree, so
     // the only filter here is "drop the .enabled field we already
     // hoisted into the header".
+    final replaced = {for (final c in m.allCollections) ...c.replaces};
     final rows = [
-      ..._fieldRows(m.fields, m.collections, hidden: {?enabledField}),
+      ..._fieldRows(
+        m.fields,
+        m.collections,
+        hidden: {?enabledField},
+        replaced: replaced,
+      ),
       for (final s in m.sections)
-        SchemaSectionRenderer(key: ValueKey(s.id), section: s),
+        SchemaSectionRenderer(
+          key: ValueKey(s.id),
+          section: s,
+          replaced: replaced,
+        ),
     ];
 
     final bodyDimmed = enabledField != null && enabledValue == false;
@@ -746,9 +769,7 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
         : 'input_modules.${m.id}';
     for (final name in m.previewFields) {
       final path = '$prefix.$name';
-      final collection = m.collections
-          .where((c) => c.replaces.contains(path))
-          .firstOrNull;
+      final collection = m.collectionReplacing(path);
       if (collection != null) {
         final preview = collection.previewOf(
           entriesOf(binding.effectiveValue(collection.path)),

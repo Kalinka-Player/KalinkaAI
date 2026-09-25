@@ -704,6 +704,31 @@ void main() {
       expect(find.text('2 items · 15'), findsOneWidget);
     });
 
+    testWidgets('one in a section still stands in for the module field', (
+      tester,
+    ) async {
+      final nested = ModuleSpec.fromJson({
+        ..._moduleJson,
+        'collections': [],
+        'sections': [
+          {
+            'id': 'input_modules.localfiles.library',
+            'title': 'Library',
+            'fields': [],
+            'collections': _moduleJson['collections'],
+          },
+        ],
+      });
+      await _pump(
+        tester,
+        library(),
+        child: SchemaModuleCard(module: nested, initiallyExpanded: true),
+      );
+
+      expect(find.text('Music sources'), findsOneWidget);
+      expect(find.text('Music folders'), findsNothing);
+    });
+
     testWidgets('a server without them shows the folders as before', (
       tester,
     ) async {

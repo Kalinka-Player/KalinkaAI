@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data_model/collection_entry.dart';
 import '../../data_model/presentation_schema.dart';
 import '../../providers/settings_provider.dart';
 import '../settings_controls/settings_row.dart';
@@ -69,8 +70,16 @@ bool inputModuleEnabled(SettingsState state, ModuleSpec m) {
 /// Whether the connected server tags fields for setup at all. Older servers
 /// don't — every field parses as hidden — and the wizard falls back to its
 /// old tier-based rules rather than asking nothing.
-bool schemaHasSetupTags(PresentationSchema? schema) =>
-    schema?.expertFields.any((f) => f.setup != Setup.hidden) ?? false;
+bool schemaHasSetupTags(PresentationSchema? schema) => schema == null
+    ? false
+    : _hasSetupTags[schema] ??= schema.expertFields.any(
+        (f) => f.setup != Setup.hidden,
+      );
+
+// A schema never changes once read, and the wizard asks these of it on every
+// keystroke typed into a sheet.
+final _hasSetupTags = Expando<bool>();
+final _setupFields = Expando<Map<String, List<FieldSpec>>>();
 
 /// The dotted-path root that names a module's config subtree.
 String moduleRoot(ModuleSpec m) =>
@@ -94,6 +103,11 @@ List<FieldSpec> _setupOrdered(Iterable<FieldSpec> fields) {
 /// (older) schema, the module's top-level simple fields, as before.
 List<FieldSpec> setupModuleFields(PresentationSchema? schema, ModuleSpec m) {
   if (schema == null) return const [];
+  final cache = _setupFields[schema] ??= {};
+  return cache[moduleRoot(m)] ??= _setupFieldsOf(schema, m);
+}
+
+List<FieldSpec> _setupFieldsOf(PresentationSchema schema, ModuleSpec m) {
   if (!schemaHasSetupTags(schema)) {
     return [
       for (final f in m.fields)
@@ -129,12 +143,33 @@ bool _answered(SettingsState state, FieldSpec f) {
   return true;
 }
 
+/// Whether something was typed into [entry]: a non-blank text in one of its
+/// shape's fields. Adding it, picking a shape or a sign-in, or flipping a
+/// switch writes values too, none of them typed.
+bool _entryFilled(CollectionSpec c, Map<String, dynamic> entry) =>
+    (c.variantOf(entry)?.allFields ?? const <FieldSpec>[]).any((f) {
+      final value = readEntryPath(entry, f.path);
+      return value is String && value.trim().isNotEmpty;
+    });
+
 /// The required questions keeping an enabled module from being ready,
-/// by label. Prompt fields never gate.
-List<String> moduleMissingFields(SettingsState state, ModuleSpec m) => [
-  for (final f in setupModuleFields(state.schema, m))
-    if (f.setup == Setup.required && !_answered(state, f)) f.label,
-];
+/// by label. Prompt fields never gate. A collection asked in a required
+/// field's place is answered once an entry holds something.
+List<String> moduleMissingFields(SettingsState state, ModuleSpec m) {
+  final missing = <String>{};
+  for (final f in setupModuleFields(state.schema, m)) {
+    if (f.setup != Setup.required) continue;
+    final collection = m.collectionReplacing(f.path);
+    if (collection == null) {
+      if (!_answered(state, f)) missing.add(f.label);
+    } else if (!entriesOf(
+      state.getEffective(collection.path),
+    ).any((e) => _entryFilled(collection, e))) {
+      missing.add(collection.title);
+    }
+  }
+  return missing.toList();
+}
 
 /// A source counts once it is on and every required question is answered.
 bool moduleConfigured(SettingsState state, ModuleSpec m) =>

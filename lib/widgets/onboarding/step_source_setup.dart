@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data_model/presentation_schema.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/app_theme.dart';
+import '../settings_collection.dart';
+import '../settings_controls/settings_binding.dart';
 import '../settings_controls/settings_card.dart';
 import '../settings_controls/warning_note.dart';
 import 'onboarding_fields.dart';
@@ -11,8 +13,10 @@ import 'onboarding_step_scaffold.dart';
 /// Wizard step: each chosen source's own questions, exactly as the server
 /// tags them — `required` fields first (the module can't work without an
 /// answer), then `prompt` fields (worth a look, defaults fine). A source
-/// with nothing tagged simply doesn't appear. The step's Continue gates on
-/// at least one source being fully answered; prompts never gate.
+/// with nothing tagged simply doesn't appear. A field a collection replaces
+/// is asked as that collection, in the same cards and sheet as Settings. The
+/// step's Continue gates on at least one source being fully answered;
+/// prompts never gate.
 class OnboardingSourceSetupStep extends ConsumerWidget {
   const OnboardingSourceSetupStep({super.key});
 
@@ -43,41 +47,75 @@ class OnboardingSourceSetupStep extends ConsumerWidget {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final (module, fields) in blocks) ...[
-          _ModuleHeader(module: module),
-          SettingsCard(
-            children: [
-              for (final f in fields) OnboardingFieldRow(path: f.path),
-            ],
-          ),
-          if (moduleMissingFields(state, module) case final missing
-              when missing.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: WarningNote(
-                severity: WarningNoteSeverity.warning,
-                message:
-                    '${missing.join(' and ')} '
-                    '${missing.length == 1 ? 'is' : 'are'} required for '
-                    '${module.title} to work.',
+    // A collection edits through the page's binding, as it does in Settings.
+    return SettingsScope(
+      binding: ServerSettingsBinding(
+        state,
+        ref.read(settingsProvider.notifier),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (module, fields) in blocks) ...[
+            _ModuleHeader(module: module),
+            SettingsCard(children: _rows(module, fields)),
+            if (moduleMissingFields(state, module) case final missing
+                when missing.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: WarningNote(
+                  severity: WarningNoteSeverity.warning,
+                  message:
+                      '${missing.join(' and ')} '
+                      '${missing.length == 1 ? 'is' : 'are'} required for '
+                      '${module.title} to work.',
+                ),
               ),
-            ),
-          if (_smartSearchOn(state, fields) &&
-              _smartSearchWarnings[module.id] != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: WarningNote(
-                severity: WarningNoteSeverity.warning,
-                message: _smartSearchWarnings[module.id]!,
+            if (_smartSearchOn(state, fields) &&
+                _smartSearchWarnings[module.id] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: WarningNote(
+                  severity: WarningNoteSeverity.warning,
+                  message: _smartSearchWarnings[module.id]!,
+                ),
               ),
-            ),
+          ],
         ],
-      ],
+      ),
     );
+  }
+
+  /// A row per question, each collection standing in for the fields it
+  /// replaces. As in Settings, a collection follows the field its `after`
+  /// names where the step asks that one; otherwise it takes the place of
+  /// the first field it replaces.
+  static List<Widget> _rows(ModuleSpec module, List<FieldSpec> fields) {
+    final asked = {
+      for (final f in fields)
+        if (module.collectionReplacing(f.path) == null) f.path,
+    };
+    final standIns = {
+      for (final f in fields) ?module.collectionReplacing(f.path),
+    };
+    final rows = <Widget>[];
+    final placed = <CollectionSpec>{};
+    void place(CollectionSpec c) {
+      if (!placed.add(c)) return;
+      rows.add(SchemaCollectionRenderer(key: ValueKey(c.path), collection: c));
+    }
+
+    for (final f in fields) {
+      final standIn = module.collectionReplacing(f.path);
+      if (standIn == null) {
+        rows.add(OnboardingFieldRow(path: f.path));
+        standIns.where((c) => c.after == f.path).forEach(place);
+      } else if (!asked.contains(standIn.after)) {
+        place(standIn);
+      }
+    }
+    return rows;
   }
 
   static bool _smartSearchOn(SettingsState state, List<FieldSpec> fields) {

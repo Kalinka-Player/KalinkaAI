@@ -485,6 +485,23 @@ class ModuleSpec {
     collections: _listOf(j['collections'], CollectionSpec.fromJson),
     sections: _listOf(j['sections'], SectionSpec.fromJson),
   );
+
+  /// Every collection in the module, its sections' included.
+  Iterable<CollectionSpec> get allCollections sync* {
+    yield* collections;
+    yield* _collectionsWithin(sections);
+  }
+
+  /// The collection shown in place of the field at [path], or null.
+  CollectionSpec? collectionReplacing(String path) =>
+      allCollections.where((c) => c.replaces.contains(path)).firstOrNull;
+}
+
+Iterable<CollectionSpec> _collectionsWithin(List<SectionSpec> sections) sync* {
+  for (final section in sections) {
+    yield* section.collections;
+    yield* _collectionsWithin(section.sections);
+  }
 }
 
 class PageSpec {
@@ -540,19 +557,11 @@ class PresentationSchema {
 
   /// The collection at [path], or null when this schema has none.
   CollectionSpec? collection(String path) {
-    Iterable<CollectionSpec> within(List<SectionSpec> sections) sync* {
-      for (final section in sections) {
-        yield* section.collections;
-        yield* within(section.sections);
-      }
-    }
-
     Iterable<CollectionSpec> all() sync* {
       for (final page in pages) {
-        yield* within(page.sections);
+        yield* _collectionsWithin(page.sections);
         for (final module in page.modules) {
-          yield* module.collections;
-          yield* within(module.sections);
+          yield* module.allCollections;
         }
       }
     }
