@@ -8,6 +8,27 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.11.0
+
+Works with Kalinka server 5.0.0 or newer. Network shares, suggestions and checks while editing settings, downloading the server's logs and source icons need server 5.1.0; against an older server the app keeps the music-folders list it had before.
+
+### Added
+- Music sources as cards. My Library's settings list each source as a card, and each opens a sheet of its own: a folder on the server, or a network share on a NAS or another computer, signed in to with an account or as a guest. ADD, KEEP CHANGES and REMOVE say what happens to it, and closing the sheet leaves the source as it was.
+- While you fill a source in, the server suggests the drives attached to it and the SMB servers it can see on the network, and what it finds wrong appears under the field it is about.
+- The setup wizard asks for music sources instead of music folders. A source the server refuses reads NEEDS SETUP, and Start listening stays off until it is put right. Turning a source off takes back what was typed for it.
+- Settings the server can suggest values for get a browse button, and every change is checked as you make it: red means the server will refuse to save it, amber is a warning it will save anyway. Apply stays off while anything is refused, and checks everything once more before the server restarts.
+- A saved password shows as set without the server sending it: a mask stands in for it, typing starts a new one, and clearing it removes the saved one on save.
+- Download the server's recent logs from Settings → General → Support, to attach to a bug report: the last hour, day or week, with the renderer's logs from the same machine if you want them. The app says how big the file is, how long it stays available and what the server left out, then saves or shares it.
+- Sources draw their own icon on their badges and tiles, and it grows with the text size.
+
+### Changed
+- Your own library is called My Library throughout: in setup, on the empty modules page and on the indexing card.
+- A staged setting is marked by its amber tint alone, without a pill that pushed the row around.
+- A folder you type is committed when you leave the field or press Enter, rather than on every keystroke.
+
+### Fixed
+- Resizing the window across the phone and tablet layouts with Settings open no longer crashes, and no longer reloads the settings, which used to drop staged changes, reset the tab and close anything open.
+
 ## 0.10.0
 
 Requires Kalinka server 5.0.0 or newer: the app has retired the merged search endpoint the old server offered, and asks each source on its own instead.
