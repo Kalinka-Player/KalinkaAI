@@ -1,7 +1,7 @@
 # Kalinka app manual
 
 How to get from first launch to playing music. Server installation is
-covered separately in the [initial setup guide](initial-setup.md).
+covered separately in the [installation guide](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md).
 
 ## 1. First launch — the setup wizard
 
@@ -53,18 +53,19 @@ latency, and reach:
 The chip's dot also tells you the connection state at a glance: green —
 online, amber — connecting/reconnecting, grey — offline.
 
-## 4. Add your music folders
+## 4. Add your music
 
 The setup wizard configures this on first run — here is where to change
 it later. From the server sheet tap **Server settings**:
 
 <img src="images/manual/settings-general.png" width="260">
 
-1. Switch to the **Input Modules** tab.
-2. Open **Local Library**.
-3. Add your collection path(s) under **Music folders** — e.g.
-   `/srv/kalinka/music` (see the [initial setup
-   guide](initial-setup.md#2-put-your-music-where-the-server-can-see-it)
+1. Switch to the **Input modules** tab.
+2. Open **My Library**.
+3. Add your collection under **Music sources** — a folder on the
+   server such as `/srv/kalinka/music`, or a network share on a NAS
+   or another computer (see the [installation
+   guide](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md#put-your-music-on-it)
    for where the folder should live and the permissions it needs).
 
 The indexer picks the folder up automatically (every 15 minutes, plus a
@@ -105,5 +106,5 @@ transport controls and volume:
 
 ## Troubleshooting
 
-See the [initial setup guide](initial-setup.md#troubleshooting) — empty
+See the [installation guide](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md#troubleshooting) — empty
 library, no server found, and no-sound issues are covered there.
