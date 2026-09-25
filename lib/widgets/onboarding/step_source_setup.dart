@@ -72,6 +72,17 @@ class OnboardingSourceSetupStep extends ConsumerWidget {
                       '${module.title} to work.',
                 ),
               ),
+            if (unshownRefusals(state, module) case final refused
+                when refused.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: WarningNote(
+                  severity: WarningNoteSeverity.error,
+                  message:
+                      'The server won’t accept part of ${module.title}’s '
+                      'setup — ${refused.join('; ')}.',
+                ),
+              ),
             if (_smartSearchOn(state, fields) &&
                 _smartSearchWarnings[module.id] != null)
               Padding(

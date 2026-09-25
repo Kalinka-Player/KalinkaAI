@@ -270,6 +270,18 @@ class SettingsNotifier extends Notifier<SettingsState> {
     _scheduleValidation();
   }
 
+  /// Takes back every staged change under [root] except [keep]: what was
+  /// entered for something that has just been switched off.
+  void unstageUnder(String root, {String? keep}) {
+    final kept = {
+      for (final e in state.stagedChanges.entries)
+        if (!e.key.startsWith(root) || e.key == keep) e.key: e.value,
+    };
+    if (kept.length == state.stagedChanges.length) return;
+    state = state.copyWith(stagedChanges: kept);
+    _scheduleValidation();
+  }
+
   void discardAll() {
     _validationTimer?.cancel();
     _validationGeneration++;
@@ -291,6 +303,15 @@ class SettingsNotifier extends Notifier<SettingsState> {
   /// Ask the server what it makes of everything staged, and show its answer.
   /// The whole set goes every time, not just the field that changed: a value
   /// can be fine beside one edit and wrong beside another.
+  /// The last word before a restart is spent on what is staged: runs the
+  /// check now, as one may still be pending and the server may have changed
+  /// its mind, and says whether the server takes all of it. It refuses a
+  /// batch whole, so one refused value would cost the restart.
+  Future<bool> readyToApply() async {
+    await validateStaged();
+    return !state.hasBlockingIssues;
+  }
+
   Future<void> validateStaged() async {
     _validationTimer?.cancel();
     final version = state.schemaVersion;

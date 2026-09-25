@@ -207,6 +207,37 @@ void main() {
   });
 
   group('what stands in the way of applying', () {
+    test('the last check before a restart says whether it may go', () async {
+      final api = _FakeApi(
+        issues: const [ConfigIssue(path: _folders, message: 'name the share')],
+      );
+      final container = _container(api);
+      final notifier = await _loaded(container);
+      notifier.stageChange(_folders, ['smb://nas']);
+
+      expect(await notifier.readyToApply(), isFalse);
+      // The server changed its mind since the last check.
+      api.issues = const [];
+      expect(await notifier.readyToApply(), isTrue);
+    });
+
+    test('switching something off takes back what was typed for it', () async {
+      final container = _container(_FakeApi());
+      final notifier = await _loaded(container);
+      const enabled = 'input_modules.qobuz.enabled';
+      notifier.stageChange(enabled, false);
+      notifier.stageChange('input_modules.qobuz.app_id', 'typed');
+      notifier.stageChange(_folders, ['/music']);
+
+      notifier.unstageUnder('input_modules.qobuz.', keep: enabled);
+      await notifier.validateStaged();
+
+      expect(
+        container.read(settingsProvider).stagedChanges.keys,
+        unorderedEquals([enabled, _folders]),
+      );
+    });
+
     test('an error does', () async {
       final api = _FakeApi(
         issues: const [ConfigIssue(path: _folders, message: 'name the share')],

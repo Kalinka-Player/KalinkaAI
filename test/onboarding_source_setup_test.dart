@@ -194,4 +194,143 @@ void main() {
       expect(moduleMissingFields(state, module), isEmpty);
     });
   });
+
+  group('a source the server refuses', () {
+    const refused = ConfigIssue(
+      path: '$_sources.media.location.path',
+      message: 'no such folder',
+    );
+
+    testWidgets('is not ready, and holds the step', (tester) async {
+      final container = await _pump(tester, _schema(), refuse: [refused]);
+      expect(find.text('READY'), findsOneWidget);
+
+      final notifier = container.read(settingsProvider.notifier);
+      notifier.stageChange(_sources, [
+        {
+          'id': 'media',
+          'kind': 'local',
+          'location': {'path': '/srv/gone'},
+        },
+      ]);
+      await notifier.validateStaged();
+      await tester.pumpAndSettle();
+
+      expect(find.text('NEEDS SETUP'), findsOneWidget);
+      expect(find.text('no such folder'), findsOneWidget);
+      final state = container.read(settingsProvider);
+      expect(anySourceConfigured(state), isFalse);
+      expect(anySourceRefused(state), isTrue);
+      expect(refusedNotes(state), ['My Library, /srv/gone: no such folder']);
+    });
+
+    test('is still ready over a warning', () {
+      final schema = _schema();
+      final state = SettingsState(
+        schema: schema,
+        issues: const {
+          '$_sources.media.location.path': [
+            ConfigIssue(
+              path: '$_sources.media.location.path',
+              message: 'the share is switched off',
+              severity: IssueSeverity.warning,
+            ),
+          ],
+        },
+      );
+      expect(anySourceRefused(state), isFalse);
+      expect(refusedNotes(state), isEmpty);
+      expect(
+        moduleConfigured(state, schema.pages.single.modules.single),
+        isTrue,
+      );
+    });
+  });
+
+  group('what the server refuses', () {
+    final schema = _schema();
+    final module = schema.pages.single.modules.single;
+    List<ConfigIssue> refused(String path, String message) => [
+      ConfigIssue(path: path, message: message),
+    ];
+
+    test('is named by the entry it is about, so two read as two', () {
+      final state = SettingsState(
+        schema: schema,
+        values: const {
+          _sources: [
+            {
+              'id': 'a',
+              'kind': 'local',
+              'location': {'path': '/srv/a'},
+            },
+            {
+              'id': 'b',
+              'kind': 'local',
+              'location': {'path': '/srv/b'},
+            },
+          ],
+        },
+        issues: {
+          '$_sources.a.location.path': refused(
+            '$_sources.a.location.path',
+            'no such folder',
+          ),
+          '$_sources.b.location.path': refused(
+            '$_sources.b.location.path',
+            'no such folder',
+          ),
+        },
+      );
+      expect(refusedNotes(state), [
+        'My Library, /srv/a: no such folder',
+        'My Library, /srv/b: no such folder',
+      ]);
+    });
+
+    test('is told on the step only where nothing else shows it', () {
+      const unasked = 'input_modules.localfiles.rebuild_library';
+      final state = SettingsState(
+        schema: schema,
+        values: const {
+          _sources: [
+            {
+              'id': 'media',
+              'kind': 'local',
+              'location': {'path': '/srv/gone'},
+            },
+          ],
+        },
+        issues: {
+          '$_sources.media.location.path': refused(
+            '$_sources.media.location.path',
+            'no such folder',
+          ),
+          unasked: refused(unasked, 'cannot rebuild now'),
+        },
+      );
+      expect(unshownRefusals(state, module), ['cannot rebuild now']);
+      expect(setupStepReady(state), isFalse);
+    });
+
+    testWidgets('where nothing else shows it, the step says it', (
+      tester,
+    ) async {
+      const unasked = 'input_modules.localfiles.rebuild_library';
+      final container = await _pump(
+        tester,
+        schema,
+        refuse: const [
+          ConfigIssue(path: unasked, message: 'cannot rebuild now'),
+        ],
+      );
+      final notifier = container.read(settingsProvider.notifier);
+      notifier.stageChange(unasked, true);
+      await notifier.validateStaged();
+      await tester.pumpAndSettle();
+
+      expect(find.text('NEEDS SETUP'), findsOneWidget);
+      expect(find.textContaining('cannot rebuild now'), findsOneWidget);
+    });
+  });
 }

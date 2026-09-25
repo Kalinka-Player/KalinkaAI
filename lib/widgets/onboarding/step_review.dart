@@ -154,12 +154,21 @@ class OnboardingReviewStep extends ConsumerWidget {
                 'or open the web player in a browser.',
           ),
         for (final m in notReady)
+          if (moduleMissingFields(state, m) case final missing
+              when missing.isNotEmpty)
+            WarningNote(
+              severity: WarningNoteSeverity.warning,
+              message:
+                  '${m.title} still needs ${missing.join(' and ')} — it '
+                  'won’t work until that is set.',
+            ),
+        // Why Start is out of reach: the server would refuse the whole save.
+        if (refusedNotes(state) case final refused when refused.isNotEmpty)
           WarningNote(
-            severity: WarningNoteSeverity.warning,
+            severity: WarningNoteSeverity.error,
             message:
-                '${m.title} still needs '
-                '${moduleMissingFields(state, m).join(' and ')} — it '
-                'won’t work until that is set.',
+                'The server won’t accept this setup yet — '
+                '${refused.join('; ')}. Fix that before starting.',
           ),
         if (!soundTested && renderers.supported && activeRenderer != null)
           const WarningNote(
