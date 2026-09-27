@@ -11,6 +11,7 @@ import 'package:kalinka/providers/bit_perfect_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
+import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/mini_player.dart';
@@ -73,29 +74,26 @@ class _FakeWsApi extends KalinkaWsApi {
 _buildOverrides({
   required PlayQueueState queueState,
   ConnectionStatus connectionStatus = ConnectionStatus.connected,
-}) =>
-    [
-      playQueueStateStoreProvider
-          .overrideWith(() => _SettableQueueNotifier(queueState)),
-      connectionStateProvider
-          .overrideWith(() => _FakeConnectionNotifier(connectionStatus)),
-      searchSessionProvider.overrideWith(() => _FakeSearchSessionNotifier()),
-      playbackTimeMsProvider.overrideWith(() => _FakePlaybackTimeNotifier()),
-      rendererListProvider.overrideWith(() => _FakeRendererNotifier()),
-      urlResolverProvider.overrideWithValue(UrlResolver('')),
-    ];
+}) => [
+  playQueueStateStoreProvider.overrideWith(
+    () => _SettableQueueNotifier(queueState),
+  ),
+  connectionStateProvider.overrideWith(
+    () => _FakeConnectionNotifier(connectionStatus),
+  ),
+  searchSessionProvider.overrideWith(() => _FakeSearchSessionNotifier()),
+  playbackTimeMsProvider.overrideWith(() => _FakePlaybackTimeNotifier()),
+  rendererListProvider.overrideWith(() => _FakeRendererNotifier()),
+  urlResolverProvider.overrideWithValue(UrlResolver('')),
+];
 
-PlayQueueState _queueWithState({
-  PlayerStateType? state,
-  String? message,
-}) =>
+PlayQueueState _queueWithState({PlayerStateType? state, String? message}) =>
     PlayQueueState(
       playbackState: PlaybackState(state: state, message: message),
       trackList: const [],
       playbackMode: PlaybackMode.empty,
       seq: 0,
     );
-
 
 Future<void> pumpMiniPlayer(
   WidgetTester tester, {
@@ -147,7 +145,9 @@ void main() {
       expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
     });
 
-    testWidgets('shows CircularProgressIndicator when buffering', (tester) async {
+    testWidgets('shows CircularProgressIndicator when buffering', (
+      tester,
+    ) async {
       await pumpMiniPlayer(
         tester,
         queueState: _queueWithState(state: PlayerStateType.buffering),
@@ -163,8 +163,10 @@ void main() {
     testWidgets('shows play icon when the track failed', (tester) async {
       await pumpMiniPlayer(
         tester,
-        queueState:
-            _queueWithState(state: PlayerStateType.error, message: 'Oops'),
+        queueState: _queueWithState(
+          state: PlayerStateType.error,
+          message: 'Oops',
+        ),
       );
 
       expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
@@ -235,10 +237,7 @@ void main() {
     });
 
     testWidgets('content is dimmed when offline', (tester) async {
-      await pumpMiniPlayer(
-        tester,
-        connectionStatus: ConnectionStatus.offline,
-      );
+      await pumpMiniPlayer(tester, connectionStatus: ConnectionStatus.offline);
 
       final opacities = tester
           .widgetList<AnimatedOpacity>(find.byType(AnimatedOpacity))
@@ -262,8 +261,9 @@ void main() {
   });
 
   group('empty queue behaviour', () {
-    testWidgets('shows "No track" when queue is empty and stopped',
-        (tester) async {
+    testWidgets('shows "No track" when queue is empty and stopped', (
+      tester,
+    ) async {
       await pumpMiniPlayer(
         tester,
         queueState: PlayQueueState(
@@ -279,35 +279,36 @@ void main() {
     });
 
     testWidgets(
-        'does not show stale track when queue is cleared but playbackState.currentTrack is still set',
-        (tester) async {
-      // Simulate the server state after a queue clear: trackList is empty but
-      // PlaybackState.currentTrack still holds the old track because copyWith
-      // never clears fields to null.
-      final staleTrack = Track(
-        id: 'stale-id',
-        title: 'Stale Track',
-        duration: 180,
-        performer: Artist(id: 'a1', name: 'Stale Artist'),
-      );
-      await pumpMiniPlayer(
-        tester,
-        queueState: PlayQueueState(
-          playbackState: PlaybackState(
-            state: PlayerStateType.stopped,
-            currentTrack: staleTrack,
-            index: 0,
+      'does not show stale track when queue is cleared but playbackState.currentTrack is still set',
+      (tester) async {
+        // Simulate the server state after a queue clear: trackList is empty but
+        // PlaybackState.currentTrack still holds the old track because copyWith
+        // never clears fields to null.
+        final staleTrack = Track(
+          id: 'stale-id',
+          title: 'Stale Track',
+          duration: 180,
+          performer: Artist(id: 'a1', name: 'Stale Artist'),
+        );
+        await pumpMiniPlayer(
+          tester,
+          queueState: PlayQueueState(
+            playbackState: PlaybackState(
+              state: PlayerStateType.stopped,
+              currentTrack: staleTrack,
+              index: 0,
+            ),
+            trackList: const [],
+            playbackMode: PlaybackMode.empty,
+            seq: 1,
           ),
-          trackList: const [],
-          playbackMode: PlaybackMode.empty,
-          seq: 1,
-        ),
-      );
+        );
 
-      expect(find.text('Stale Track'), findsNothing);
-      expect(find.text('Stale Artist'), findsNothing);
-      expect(find.text('No track'), findsOneWidget);
-    });
+        expect(find.text('Stale Track'), findsNothing);
+        expect(find.text('Stale Artist'), findsNothing);
+        expect(find.text('No track'), findsOneWidget);
+      },
+    );
 
     Future<void> pumpWithVerdict(WidgetTester tester, PlayQueueState state) =>
         tester
@@ -322,8 +323,9 @@ void main() {
             )
             .then((_) => tester.pump());
 
-    testWidgets('does not claim bit-perfect playback beside "No track"',
-        (tester) async {
+    testWidgets('does not claim bit-perfect playback beside "No track"', (
+      tester,
+    ) async {
       // audioInfo survives a queue clear the same way currentTrack does, so
       // the verdict can still read true with nothing playing.
       await pumpWithVerdict(
@@ -340,8 +342,9 @@ void main() {
       expect(find.text('1:1'), findsNothing);
     });
 
-    testWidgets('shows the bit-perfect chip while a track is playing',
-        (tester) async {
+    testWidgets('shows the bit-perfect chip while a track is playing', (
+      tester,
+    ) async {
       final track = Track(id: 'tid', title: 'Playing', duration: 200);
       await pumpWithVerdict(
         tester,
@@ -360,8 +363,9 @@ void main() {
       expect(find.text('1:1'), findsOneWidget);
     });
 
-    testWidgets('shows "No track" after playing track is removed from queue',
-        (tester) async {
+    testWidgets('shows "No track" after playing track is removed from queue', (
+      tester,
+    ) async {
       final track = Track(id: 'tid', title: 'Now Playing', duration: 200);
       final container = ProviderContainer(
         overrides: _buildOverrides(
@@ -393,21 +397,147 @@ void main() {
       // stale currentTrack still present in playbackState.
       (container.read(playQueueStateStoreProvider.notifier)
               as _SettableQueueNotifier)
-          .emit(PlayQueueState(
-        playbackState: PlaybackState(
-          state: PlayerStateType.stopped,
-          currentTrack: track, // stale — never cleared by copyWith
-          index: 0,
-        ),
-        trackList: const [],
-        playbackMode: PlaybackMode.empty,
-        seq: 1,
-      ));
+          .emit(
+            PlayQueueState(
+              playbackState: PlaybackState(
+                state: PlayerStateType.stopped,
+                currentTrack: track, // stale — never cleared by copyWith
+                index: 0,
+              ),
+              trackList: const [],
+              playbackMode: PlaybackMode.empty,
+              seq: 1,
+            ),
+          );
       await tester.pump();
 
       expect(find.text('Now Playing'), findsNothing);
       expect(find.text('No track'), findsOneWidget);
     });
+  });
+
+  group('plugin playback', () {
+    const qobuz = PlaybackControl.exclusive(
+      pluginId: 'qobuz',
+      title: 'Qobuz Connect',
+    );
+    final connect = Track(
+      id: 'kalinka:qobuz:track:111',
+      title: 'Connect song',
+      duration: 240,
+      performer: Artist(id: 'p', name: 'Connect artist'),
+    );
+
+    PlayQueueState held(
+      PlayerStateType state, {
+      List<Track> queue = const [],
+    }) => PlayQueueState(
+      playbackState: PlaybackState(
+        state: state,
+        currentTrack: connect,
+        index: 0,
+      ),
+      trackList: queue,
+      playbackMode: PlaybackMode.empty,
+      seq: 1,
+      playbackControl: qobuz,
+    );
+
+    ModuleInfo module(String name, String title, {String? icon}) => ModuleInfo(
+      name: name,
+      title: title,
+      enabled: true,
+      state: ModuleState.ready,
+      icon: icon,
+    );
+
+    Future<_FakeWsApi> pumpHeld(
+      WidgetTester tester,
+      PlayQueueState state, {
+      List<ModuleInfo>? modules,
+    }) async {
+      final container = ProviderContainer(
+        overrides: [
+          ..._buildOverrides(queueState: state),
+          kalinkaWsApiProvider.overrideWith((ref) => _FakeWsApi(ref)),
+          sourceModulesProvider.overrideWith(
+            (ref) => modules ?? [module('qobuz', 'Qobuz')],
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: MiniPlayer())),
+        ),
+      );
+      await tester.pump();
+      return container.read(kalinkaWsApiProvider) as _FakeWsApi;
+    }
+
+    testWidgets('shows the plugin\'s track with an empty queue', (
+      tester,
+    ) async {
+      await pumpHeld(tester, held(PlayerStateType.playing));
+
+      expect(find.text('Connect song'), findsOneWidget);
+      expect(find.text('Connect artist'), findsOneWidget);
+      expect(find.text('No track'), findsNothing);
+    });
+
+    testWidgets(
+      'badges the track with its source\'s icon, not the plugin\'s title',
+      (tester) async {
+        await pumpHeld(
+          tester,
+          held(PlayerStateType.playing),
+          modules: [
+            module('qobuz', 'Qobuz', icon: 'waves_outlined'),
+            module('localfiles', 'My Library'),
+          ],
+        );
+
+        expect(find.byIcon(Icons.waves_outlined), findsOneWidget);
+        expect(find.text('Qobuz Connect'), findsNothing);
+      },
+    );
+
+    testWidgets('shows the plugin\'s track, not the queue\'s at that index', (
+      tester,
+    ) async {
+      final queued = Track(id: 'q', title: 'Queued song', duration: 100);
+      await pumpHeld(tester, held(PlayerStateType.playing, queue: [queued]));
+
+      expect(find.text('Connect song'), findsOneWidget);
+      expect(find.text('Queued song'), findsNothing);
+    });
+
+    testWidgets('pause and resume go to the plugin', (tester) async {
+      final playing = await pumpHeld(tester, held(PlayerStateType.playing));
+      await tester.tap(find.byIcon(Icons.pause_rounded));
+      await tester.pump();
+      expect(playing.sent, [const QueueCommand.pause(paused: true)]);
+    });
+
+    testWidgets('paused, the button resumes rather than playing the queue', (
+      tester,
+    ) async {
+      final api = await pumpHeld(tester, held(PlayerStateType.paused));
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      await tester.pump();
+      expect(api.sent, [const QueueCommand.pause(paused: false)]);
+    });
+
+    testWidgets(
+      'stopped, the button would take the output back, so it sends nothing',
+      (tester) async {
+        final api = await pumpHeld(tester, held(PlayerStateType.stopped));
+        await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+        await tester.pump();
+        expect(api.sent, isEmpty);
+      },
+    );
   });
 
   group('progress line mode', () {
@@ -436,10 +566,7 @@ void main() {
     });
 
     testWidgets('uses offline mode when offline', (tester) async {
-      await pumpMiniPlayer(
-        tester,
-        connectionStatus: ConnectionStatus.offline,
-      );
+      await pumpMiniPlayer(tester, connectionStatus: ConnectionStatus.offline);
 
       final line = tester.widget<GradientProgressLine>(
         find.byType(GradientProgressLine),

@@ -67,6 +67,11 @@ class KalinkaMediaService : Service() {
 
     private var notificationVisible = false
 
+    // True while an input plugin plays exclusively, outside the queue (a Qobuz
+    // Connect receiver). Its own app shows that playback and should get the
+    // volume keys, which only one media session can, so ours stands down.
+    private var exclusivePlayback = false
+
     // --- WebSocket connections ---
     private val okHttpClient = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
@@ -187,6 +192,7 @@ class KalinkaMediaService : Service() {
         currentPositionMs = 0
         currentIsPlaying = false
         currentPlayerState = "STOPPED"
+        exclusivePlayback = false
         currentAlbumArt = null
         albumArtJob?.cancel()
         albumArtJob = null
@@ -302,7 +308,15 @@ class KalinkaMediaService : Service() {
             val eventType = json.optString("event_type")
             Log.d(TAG, "handleQueueEvent: event_type=$eventType")
             when (eventType) {
+                "playback_control_changed" -> {
+                    exclusivePlayback = isExclusive(json.optJSONObject("control"))
+                    Log.d(TAG, "playback_control_changed: exclusive=$exclusivePlayback")
+                    // Stepping back in waits for the queue's own state, which
+                    // the server sends right after.
+                    if (exclusivePlayback) hideNotification()
+                }
                 "state_changed" -> {
+                    if (exclusivePlayback) return
                     val state = json.optJSONObject("state") ?: run {
                         Log.w(TAG, "state_changed: missing 'state' field")
                         return
@@ -315,6 +329,12 @@ class KalinkaMediaService : Service() {
                     if (stateType == "PlayQueueState") {
                         val outerState = json.optJSONObject("state") ?: run {
                             Log.w(TAG, "replay_event: missing 'state' field")
+                            return
+                        }
+                        exclusivePlayback =
+                            isExclusive(outerState.optJSONObject("playback_control"))
+                        if (exclusivePlayback) {
+                            hideNotification()
                             return
                         }
                         val playbackState = outerState.optJSONObject("playback_state") ?: run {
@@ -331,6 +351,10 @@ class KalinkaMediaService : Service() {
             Log.e(TAG, "handleQueueEvent exception: $e")
         }
     }
+
+    // Only a mode this service knows takes Kalinka's queue out of play.
+    private fun isExclusive(control: JSONObject?): Boolean =
+        control?.optString("mode") == "exclusive"
 
     private fun updateFromPlaybackState(stateJson: JSONObject, serverTimeNs: Long?) {
         val stateStr = stateJson.optString("state", "")

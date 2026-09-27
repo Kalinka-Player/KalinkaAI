@@ -8,8 +8,10 @@ import '../providers/kalinka_ws_api_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
 import 'empty_queue_state.dart';
+import 'exclusive_queue_card.dart';
 import 'queue_item_row.dart';
 import 'queue_section_header.dart';
+import 'search_cards/action_pill_button.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -18,11 +20,18 @@ import 'queue_section_header.dart';
 /// Height of the pinned section header.
 const double _kHeaderHeight = QueueSectionHeader.height;
 
+/// The saved queue while a plugin plays: set back, yet not as far as the
+/// offline queue, since it can still be edited and played from.
+const double _kNotPlayingOpacity = 0.6;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // QueueZone
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// The main queue content area, split into "Up next" and "Previously played".
+///
+/// While a plugin plays exclusively the queue is not playing: it is shown whole
+/// and in order under a card naming the plugin, with a way to play it again.
 class QueueZone extends ConsumerStatefulWidget {
   final double bottomPadding;
   final bool isTablet;
@@ -116,6 +125,7 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
     final currentIndex = playbackIndex.clamp(0, trackList.length);
     final shuffleEnabled = queueSnapshot.shuffleEnabled;
     final connectionState = ref.watch(connectionStateProvider);
+    final control = ref.watch(playbackControlProvider);
 
     final isOfflineOrNone =
         connectionState == ConnectionStatus.offline ||
@@ -123,6 +133,18 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
     final isOffline =
         connectionState == ConnectionStatus.reconnecting ||
         connectionState == ConnectionStatus.offline;
+
+    if (control.isExclusive) {
+      // The saved queue is listed from its start, so reorder indices are
+      // already absolute.
+      _currentIndex = 0;
+      return _buildExclusive(
+        control,
+        trackList,
+        isOffline: isOffline,
+        isOfflineOrNone: isOfflineOrNone,
+      );
+    }
 
     final upNextTracks = currentIndex < trackList.length
         ? trackList.sublist(currentIndex).cast<Track>()
@@ -185,6 +207,72 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
             right: 20,
             child: _buildMenuButton(),
           ),
+      ],
+    );
+  }
+
+  Widget _buildExclusive(
+    PlaybackControl control,
+    List<Track> trackList, {
+    required bool isOffline,
+    required bool isOfflineOrNone,
+  }) {
+    final Widget list;
+    if (trackList.isEmpty) {
+      list = EmptyQueueState(isOffline: isOfflineOrNone);
+    } else if (isOffline) {
+      list = IgnorePointer(
+        child: Opacity(opacity: 0.4, child: _buildSavedQueue(trackList)),
+      );
+    } else {
+      list = Opacity(
+        opacity: _kNotPlayingOpacity,
+        child: _buildSavedQueue(trackList),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ExclusiveQueueCard(control: control),
+        _SavedQueueHeader(
+          trackCount: trackList.length,
+          onPlay: trackList.isEmpty || isOffline ? null : _playQueue,
+          menuButton: isOffline ? null : _buildMenuButton(),
+        ),
+        Expanded(child: list),
+      ],
+    );
+  }
+
+  /// The queue takes the output back and plays from its current track.
+  void _playQueue() {
+    ref.read(kalinkaWsApiProvider).sendQueueCommand(const QueueCommand.play());
+  }
+
+  Widget _buildSavedQueue(List<Track> trackList) {
+    return CustomScrollView(
+      controller: _scrollController,
+      slivers: [
+        SliverReorderableList(
+          itemCount: trackList.length,
+          onReorderItem: _onReorderItem,
+          onReorderStart: (i) => setState(() => _isDragging = true),
+          onReorderEnd: (i) => setState(() => _isDragging = false),
+          proxyDecorator: _proxyDecorator,
+          itemBuilder: (context, i) {
+            final track = trackList[i];
+            return QueueItemRow(
+              key: ValueKey('saved_${track.id}'),
+              track: track,
+              index: i,
+              displayIndex: i,
+              isDragging: _isDragging,
+            );
+          },
+        ),
+        SliverPadding(
+          padding: EdgeInsets.only(bottom: widget.bottomPadding + 16),
+        ),
       ],
     );
   }
@@ -335,6 +423,73 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
           padding: EdgeInsets.only(bottom: widget.bottomPadding + 16),
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _SavedQueueHeader — heads Kalinka's queue while a plugin plays exclusively.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SavedQueueHeader extends StatelessWidget {
+  final int trackCount;
+
+  /// Plays the queue; null when there is nothing to play or no connection.
+  final VoidCallback? onPlay;
+  final Widget? menuButton;
+
+  const _SavedQueueHeader({
+    required this.trackCount,
+    required this.onPlay,
+    required this.menuButton,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final count = switch (trackCount) {
+      0 => 'No tracks',
+      1 => '1 track',
+      _ => '$trackCount tracks',
+    };
+    final onPlay = this.onPlay;
+    final menuButton = this.menuButton;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'SAVED KALINKA QUEUE',
+                  style: KalinkaTextStyles.sectionHeader,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$count · Not playing',
+                  style: KalinkaTextStyles.trackCountBadge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          if (onPlay != null) ...[
+            const SizedBox(width: 12),
+            ActionPillButton(
+              label: 'Play queue',
+              icon: Icons.play_arrow_rounded,
+              accent: true,
+              onTap: onPlay,
+            ),
+          ],
+          if (menuButton != null) ...[const SizedBox(width: 8), menuButton],
+        ],
+      ),
     );
   }
 }

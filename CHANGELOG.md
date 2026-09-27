@@ -8,6 +8,15 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.12.0
+
+Showing playback from another app needs Kalinka server 5.2.0; against an older server the app works as before.
+
+### Added
+- Playback started from another app on Kalinka's output, such as a track chosen in the Qobuz app with Qobuz Connect, shows in the mini player and on the now-playing screen: its track, artwork and position, with its source's badge. Pause, seek, next and previous go to that app, which follows along. Playing from your queue takes the output back, and switching the output takes that playback along.
+- While another app controls playback, the now-playing screen says so and leaves out shuffle and repeat, which that app keeps for itself. The queue screen says that app manages the playback queue, and lists your Kalinka queue as saved and not playing, with a Play queue button to take the output back.
+- On Android, Kalinka's media notification steps aside while another app plays on Kalinka's output, so that app's notification and the volume keys control it.
+
 ## 0.11.0
 
 Works with Kalinka server 5.0.0 or newer. Network shares, suggestions and checks while editing settings, downloading the server's logs and source icons need server 5.1.0; against an older server the app keeps the music-folders list it had before.

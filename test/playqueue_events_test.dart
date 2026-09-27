@@ -9,7 +9,188 @@ PlayQueueState _stateWith(List<Track> tracks) => PlayQueueState(
   seq: 0,
 );
 
+const _qobuz = PlaybackControl.exclusive(
+  pluginId: 'qobuz',
+  title: 'Qobuz Connect',
+);
+
+Map<String, dynamic> _replayJson({Object? control}) => {
+  'playback_state': {'state': 'PLAYING'},
+  'track_list': [],
+  'playback_mode': {
+    'shuffle': false,
+    'repeat_single': false,
+    'repeat_all': false,
+  },
+  'seq': 1,
+  if (control != null) 'playback_control': control,
+};
+
 void main() {
+  group('playback control', () {
+    test('parses playback_control_changed for either mode', () {
+      final taken = PlayQueueEvent.fromJson({
+        'event_type': 'playback_control_changed',
+        'control': {
+          'mode': 'exclusive',
+          'plugin_id': 'qobuz',
+          'title': 'Qobuz Connect',
+        },
+        'seq': 3,
+      });
+      final given = PlayQueueEvent.fromJson({
+        'event_type': 'playback_control_changed',
+        'control': {'mode': 'queue', 'plugin_id': null, 'title': null},
+        'seq': 4,
+      });
+
+      expect((taken as PlaybackControlChangedEvent).control, _qobuz);
+      expect(
+        (given as PlaybackControlChangedEvent).control,
+        const PlaybackControl.queue(),
+      );
+    });
+
+    test('a mode the app does not know reads as the queue', () {
+      expect(
+        PlaybackControl.fromJson({'mode': 'something_new', 'plugin_id': 'x'}),
+        const PlaybackControl.queue(),
+      );
+      expect(PlaybackControl.fromJson(null), const PlaybackControl.queue());
+    });
+
+    test('a plugin taking the output leaves the playback state as it was', () {
+      final queued = Track(id: 'q', title: 'Queued', duration: 10);
+      final state = _stateWith([queued]);
+
+      final held = state.apply(
+        const PlayQueueEvent.playbackControlChanged(control: _qobuz, seq: 1),
+        0,
+      );
+
+      expect(held.playbackControl, _qobuz);
+      expect(held.playbackControl.isExclusive, isTrue);
+      expect(held.trackList, [queued]);
+      expect(held.seq, 1);
+    });
+
+    test(
+      'control returning to the queue takes the plugin\'s track with it',
+      () {
+        final connect = Track(id: 'c', title: 'Connect song', duration: 240);
+        final held = PlayQueueState(
+          playbackState: PlaybackState(
+            state: PlayerStateType.playing,
+            currentTrack: connect,
+            index: null,
+          ),
+          trackList: const [],
+          playbackMode: PlaybackMode.empty,
+          seq: 1,
+          playbackControl: _qobuz,
+        );
+
+        final released = held.apply(
+          const PlayQueueEvent.playbackControlChanged(
+            control: PlaybackControl.queue(),
+            seq: 2,
+          ),
+          0,
+        );
+
+        expect(released.playbackControl.isExclusive, isFalse);
+        expect(released.playbackState.currentTrack, isNull);
+        expect(released.playbackState.state, PlayerStateType.playing);
+      },
+    );
+
+    test('the queue keeps its place under the plugin\'s playback', () {
+      final queued = [
+        Track(id: 'a', title: 'A', duration: 10),
+        Track(id: 'b', title: 'B', duration: 10),
+      ];
+      final state = PlayQueueState(
+        playbackState: PlaybackState(state: PlayerStateType.paused, index: 1),
+        trackList: queued,
+        playbackMode: PlaybackMode.empty,
+        seq: 0,
+      );
+
+      final held = state
+          .apply(
+            const PlayQueueEvent.playbackControlChanged(
+              control: _qobuz,
+              seq: 1,
+            ),
+            0,
+          )
+          .apply(
+            PlayQueueEvent.playbackStateChanged(
+              state: PlaybackState(
+                state: PlayerStateType.playing,
+                currentTrack: Track(id: 'c', title: 'Connect', duration: 240),
+                index: null,
+              ),
+              seq: 2,
+            ),
+            0,
+          );
+
+      expect(held.playbackState.index, 1);
+    });
+
+    test('other events keep the control', () {
+      final held = _stateWith(const []).apply(
+        const PlayQueueEvent.playbackControlChanged(control: _qobuz, seq: 1),
+        0,
+      );
+
+      final after = held
+          .apply(
+            PlayQueueEvent.tracksAdded(
+              tracks: [Track(id: 'a', title: 'A', duration: 10)],
+              seq: 2,
+            ),
+            0,
+          )
+          .apply(
+            const PlayQueueEvent.currentRendererChanged(
+              rendererId: 'r-1',
+              seq: 3,
+            ),
+            0,
+          )
+          .apply(
+            const PlayQueueEvent.renderersChanged(renderers: [], seq: 4),
+            0,
+          );
+
+      expect(after.playbackControl, _qobuz);
+    });
+
+    test('the replay carries the control; absent is the queue', () {
+      final replayed = PlayQueueState.fromJson(
+        _replayJson(
+          control: {
+            'mode': 'exclusive',
+            'plugin_id': 'qobuz',
+            'title': 'Qobuz Connect',
+          },
+        ),
+      );
+      final applied = _stateWith(const []).apply(
+        PlayQueueEvent.replayEvent(state: replayed, serverTimeNs: 0, seq: 5),
+        0,
+      );
+
+      expect(applied.playbackControl, _qobuz);
+      expect(
+        PlayQueueState.fromJson(_replayJson()).playbackControl,
+        const PlaybackControl.queue(),
+      );
+    });
+  });
+
   group('TrackUnavailableEvent apply', () {
     test('marks the targeted track unavailable', () {
       final state = _stateWith([

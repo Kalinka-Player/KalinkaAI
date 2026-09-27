@@ -40,6 +40,10 @@ class PlayQueueState {
   @JsonKey(includeToJson: false)
   final String? selectedRendererId;
 
+  /// Whether the queue drives the output, or a plugin plays exclusively.
+  @JsonKey(includeToJson: false, fromJson: PlaybackControl.fromJson)
+  final PlaybackControl playbackControl;
+
   const PlayQueueState({
     required this.playbackState,
     required this.trackList,
@@ -48,6 +52,7 @@ class PlayQueueState {
     this.renderers,
     this.currentRendererId,
     this.selectedRendererId,
+    this.playbackControl = const PlaybackControl.queue(),
   });
 
   static final PlayQueueState empty = PlayQueueState(
@@ -70,6 +75,7 @@ class PlayQueueState {
     renderers: renderers,
     currentRendererId: currentRendererId,
     selectedRendererId: selectedRendererId,
+    playbackControl: playbackControl,
   );
 
   /// Apply an event to produce a new state (immutable pattern).
@@ -167,6 +173,7 @@ class PlayQueueState {
           renderers: renderers,
           currentRendererId: currentRendererId,
           selectedRendererId: selectedRendererId,
+          playbackControl: playbackControl,
         );
       case CurrentRendererChangedEvent(
         :final rendererId,
@@ -182,6 +189,22 @@ class PlayQueueState {
           renderers: renderers,
           currentRendererId: rendererId,
           selectedRendererId: selectedRendererId,
+          playbackControl: playbackControl,
+        );
+      case PlaybackControlChangedEvent(:final control, :final seq):
+        // Back to the queue, the plugin's track goes with it; the queue's own
+        // state follows and brings its track back.
+        return PlayQueueState(
+          playbackState: control.isExclusive
+              ? playbackState
+              : playbackState.withoutTrack(),
+          trackList: trackList,
+          playbackMode: playbackMode,
+          seq: seq,
+          renderers: renderers,
+          currentRendererId: currentRendererId,
+          selectedRendererId: selectedRendererId,
+          playbackControl: control,
         );
       case ReplayPlayQueueEvent(:final state, :final serverTimeNs, :final seq):
         final nextPlaybackState =
@@ -199,6 +222,7 @@ class PlayQueueState {
           renderers: state.renderers,
           currentRendererId: state.currentRendererId,
           selectedRendererId: state.selectedRendererId,
+          playbackControl: state.playbackControl,
         );
     }
   }
@@ -302,7 +326,8 @@ enum PlayQueueEventType {
   playbackError,
   playbackModeChanged,
   renderersChanged,
-  currentRendererChanged;
+  currentRendererChanged,
+  playbackControlChanged;
 
   String toJson() => _$PlayQueueEventTypeEnumMap[this]!;
 
@@ -375,6 +400,14 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
     String? selectedRendererId,
     required int seq,
   }) = CurrentRendererChangedEvent;
+
+  /// Who drives the output changed: the queue, or a plugin playing
+  /// exclusively. A state change describing the new controller's playback
+  /// always follows.
+  const factory PlayQueueEvent.playbackControlChanged({
+    required PlaybackControl control,
+    required int seq,
+  }) = PlaybackControlChangedEvent;
 
   factory PlayQueueEvent.fromJson(Map<String, dynamic> json) {
     final eventTypeStr = json['event_type'] as String;
@@ -466,6 +499,11 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
         return PlayQueueEvent.currentRendererChanged(
           rendererId: json['renderer_id'] as String?,
           selectedRendererId: json['selected_renderer_id'] as String?,
+          seq: seq,
+        );
+      case 'playback_control_changed':
+        return PlayQueueEvent.playbackControlChanged(
+          control: PlaybackControl.fromJson(json['control']),
           seq: seq,
         );
       default:

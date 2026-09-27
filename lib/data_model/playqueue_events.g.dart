@@ -23,6 +23,9 @@ PlayQueueState _$PlayQueueStateFromJson(Map<String, dynamic> json) =>
           .toList(),
       currentRendererId: json['current_renderer_id'] as String?,
       selectedRendererId: json['selected_renderer_id'] as String?,
+      playbackControl: json['playback_control'] == null
+          ? const PlaybackControl.queue()
+          : PlaybackControl.fromJson(json['playback_control']),
     );
 
 Map<String, dynamic> _$PlayQueueStateToJson(PlayQueueState instance) =>
@@ -43,4 +46,5 @@ const _$PlayQueueEventTypeEnumMap = {
   PlayQueueEventType.playbackModeChanged: 'playback_mode_changed',
   PlayQueueEventType.renderersChanged: 'renderers_changed',
   PlayQueueEventType.currentRendererChanged: 'current_renderer_changed',
+  PlayQueueEventType.playbackControlChanged: 'playback_control_changed',
 };
