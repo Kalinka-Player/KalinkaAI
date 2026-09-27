@@ -207,6 +207,8 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
 
   Track? _peekIncomingTrack(bool isNext) {
     final queueState = ref.read(playQueueStateStoreProvider);
+    // A plugin's playback has no queue neighbours to preview.
+    if (queueState.playbackControl.isExclusive) return null;
     final trackList = queueState.trackList;
     final currentIndex = queueState.playbackState.index ?? 0;
 
@@ -238,17 +240,23 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
           fallbackTrackDurationSec: s.playbackState.currentTrack?.duration ?? 0,
           fallbackTrackImageSmall:
               s.playbackState.currentTrack?.album?.image?.small,
+          fallbackDurationMs: s.playbackState.audioInfo?.durationMs ?? 0,
           errorMessage: s.playbackState.message,
+          exclusive: s.playbackControl.isExclusive,
         ),
       ),
     );
     final trackList = queueSnapshot.trackList;
     final playbackIndex = queueSnapshot.playbackIndex;
+    final exclusive = queueSnapshot.exclusive;
 
+    // A plugin's playback is not in the queue: its track is the state's own,
+    // and shows even with an empty queue.
     Track? currentTrack;
-    if (playbackIndex >= 0 && playbackIndex < trackList.length) {
+    if (!exclusive && playbackIndex >= 0 && playbackIndex < trackList.length) {
       currentTrack = trackList[playbackIndex];
-    } else if (trackList.isNotEmpty && queueSnapshot.fallbackTrackId != null) {
+    } else if ((exclusive || trackList.isNotEmpty) &&
+        queueSnapshot.fallbackTrackId != null) {
       currentTrack = Track(
         id: queueSnapshot.fallbackTrackId!,
         title: queueSnapshot.fallbackTrackTitle ?? 'No track',
@@ -293,7 +301,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     // Queue peek for carousel incoming-track preview.
     final currentIndex = playbackIndex;
     final hasCurrentInQueue =
-        currentIndex >= 0 && currentIndex < trackList.length;
+        !exclusive && currentIndex >= 0 && currentIndex < trackList.length;
     final nextTrack = hasCurrentInQueue && currentIndex + 1 < trackList.length
         ? trackList[currentIndex + 1]
         : null;
@@ -315,7 +323,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
         ? GradientProgressLineMode.offline
         : GradientProgressLineMode.normal;
 
-    final durationMs = (effectiveCurrentTrack?.duration ?? 0) * 1000;
+    final durationMs = exclusive && queueSnapshot.fallbackDurationMs > 0
+        ? queueSnapshot.fallbackDurationMs
+        : (effectiveCurrentTrack?.duration ?? 0) * 1000;
 
     final imageUrl = effectiveCurrentTrack?.album?.image?.small;
     final resolvedImageUrl = imageUrl != null
@@ -344,6 +354,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
               carouselOffset: carouselOffset,
               isOffline: isOffline,
               playerState: playerState,
+              exclusive: exclusive,
             ),
           ],
         ),
@@ -377,6 +388,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     required double carouselOffset,
     required bool isOffline,
     required PlayerStateType? playerState,
+    required bool exclusive,
   }) {
     final canSwipe = _latchedCurrentTrack == null;
     return AnimatedOpacity(
@@ -440,6 +452,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                 playerState: playerState,
                 isOffline: isOffline,
                 hasTrack: currentTrack != null,
+                exclusive: exclusive,
               ),
             ],
           ),
@@ -530,8 +543,10 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     required PlayerStateType? playerState,
     required bool isOffline,
     required bool hasTrack,
+    required bool exclusive,
   }) {
-    final disabled = !hasTrack || isPlayPauseDisabled(playerState);
+    final disabled =
+        !hasTrack || isPlayPauseDisabled(playerState, exclusive: exclusive);
     return IgnorePointer(
       ignoring: isOffline,
       child: Opacity(
@@ -547,7 +562,13 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
               : (_) => playerState == PlayerStateType.playing
                     ? KalinkaHaptics.lightImpact()
                     : KalinkaHaptics.mediumImpact(),
-          onTap: disabled ? null : () => sendPlayPauseCommand(ref, playerState),
+          onTap: disabled
+              ? null
+              : () => sendPlayPauseCommand(
+                  ref,
+                  playerState,
+                  exclusive: exclusive,
+                ),
           // Fixed 26×26 glyph slot keeps visual weight stable across states
           // and prevents the spinner from appearing offset against the icon.
           child: SizedBox(

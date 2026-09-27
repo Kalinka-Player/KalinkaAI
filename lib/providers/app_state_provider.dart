@@ -170,6 +170,12 @@ final playerStateProvider = Provider(
       ref.watch(playQueueStateStoreProvider.select((s) => s.playbackState)),
 );
 
+/// Whether the queue drives the output, or a plugin plays exclusively.
+final playbackControlProvider = Provider(
+  (ref) =>
+      ref.watch(playQueueStateStoreProvider.select((s) => s.playbackControl)),
+);
+
 final playQueueProvider = Provider(
   (ref) => ref.watch(playQueueStateStoreProvider.select((s) => s.trackList)),
 );

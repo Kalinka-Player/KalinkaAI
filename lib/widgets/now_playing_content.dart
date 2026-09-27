@@ -107,14 +107,18 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         ),
       ),
     );
+    final exclusive = ref.watch(playbackControlProvider).isExclusive;
     // Read full state without watching — content is current because the
     // selectors above already gated the rebuild on a meaningful change.
     final playbackState = ref.read(playerStateProvider);
     final trackList = ref.read(playQueueStateStoreProvider).trackList;
     // Derive the current track from the queue (like MiniPlayer) so an emptied
-    // queue resolves to "no track" instead of the stale currentTrack.
+    // queue resolves to "no track" instead of the stale currentTrack. A
+    // plugin's playback is not in the queue, so its track is the state's own.
     final Track? currentTrack;
-    if (queueView.index >= 0 && queueView.index < trackList.length) {
+    if (exclusive) {
+      currentTrack = playbackState.currentTrack;
+    } else if (queueView.index >= 0 && queueView.index < trackList.length) {
       currentTrack = trackList[queueView.index];
     } else if (trackList.isNotEmpty) {
       currentTrack = playbackState.currentTrack;
@@ -123,7 +127,10 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     }
     final urlResolver = ref.read(urlResolverProvider);
 
-    final durationMs = (currentTrack?.duration ?? 0) * 1000;
+    final streamDurationMs = playbackState.audioInfo?.durationMs ?? 0;
+    final durationMs = exclusive && streamDurationMs > 0
+        ? streamDurationMs
+        : (currentTrack?.duration ?? 0) * 1000;
 
     final imageUrl = currentTrack?.album?.image?.large;
     final resolvedImageUrl = imageUrl != null
@@ -252,6 +259,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
             qualityLabel: qualityLabel,
           ),
           const _PlaybackErrorNote(),
+          const _ExclusivePlaybackNote(),
         ],
       ],
     );
@@ -431,6 +439,41 @@ class _PlaybackErrorNote extends ConsumerWidget {
   }
 }
 
+/// Inline note under the track metadata while a plugin plays exclusively, so
+/// it is plain the controls reach that playback and not Kalinka's queue.
+class _ExclusivePlaybackNote extends ConsumerWidget {
+  const _ExclusivePlaybackNote();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final control = ref.watch(playbackControlProvider);
+    if (!control.isExclusive) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.speaker_outlined,
+            size: 14,
+            color: KalinkaColors.textSecondary,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              'Playing via ${control.title}',
+              style: KalinkaTextStyles.expandedAttribution,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Transport controls row (shuffle, prev, play/pause, next, repeat).
 /// Extracted so only this widget rebuilds on playerState / playbackMode changes,
 /// leaving the rest of NowPlayingContent (album art, metadata) untouched.
@@ -448,20 +491,24 @@ class _TransportControls extends ConsumerWidget {
     final isRepeatOne = playbackMode.repeatSingle;
 
     // No track loaded → the transport buttons (prev / play-pause / next) go
-    // inactive. Shuffle and repeat are switches that apply to whatever plays
-    // next, so they stay live.
+    // inactive. Shuffle and repeat are switches that apply to whatever the
+    // queue plays next, so they stay live, but only while the queue plays.
     final queuePosition = ref.watch(
       playQueueStateStoreProvider.select(
         (s) => (length: s.trackList.length, index: s.playbackState.index ?? 0),
       ),
     );
-    final hasTrack = queuePosition.length > 0;
-    final playPauseDisabled = !hasTrack || isPlayPauseDisabled(playerState);
+    // A plugin's playback carries its own queue: its controls go to it, and
+    // only it knows where its ends are. It takes no shuffle or repeat.
+    final exclusive = ref.watch(playbackControlProvider).isExclusive;
+    final hasTrack = exclusive || queuePosition.length > 0;
+    final playPauseDisabled =
+        !hasTrack || isPlayPauseDisabled(playerState, exclusive: exclusive);
 
     // Gate prev/next at the queue ends, but only for plain sequential
     // playback: repeat-all wraps around and shuffle decouples list order from
     // play order, so in those modes either end stays meaningful.
-    final boundedNav = !isShuffle && !isRepeatAll;
+    final boundedNav = !exclusive && !isShuffle && !isRepeatAll;
     final canPrev = hasTrack && (!boundedNav || queuePosition.index > 0);
     final canNext =
         hasTrack &&
@@ -471,28 +518,29 @@ class _TransportControls extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          TransportButton(
-            hitDiameter: 44,
-            onTapDown: (_) => isShuffle
-                ? KalinkaHaptics.lightImpact()
-                : KalinkaHaptics.mediumImpact(),
-            onTap: () {
-              api.sendQueueCommand(
-                QueueCommand.setPlaybackMode(
-                  shuffle: !isShuffle,
-                  repeatAll: playbackMode.repeatAll,
-                  repeatSingle: playbackMode.repeatSingle,
-                ),
-              );
-            },
-            child: Icon(
-              Icons.shuffle,
-              size: 22,
-              color: isShuffle
-                  ? KalinkaColors.accent
-                  : KalinkaColors.textSecondary,
+          if (!exclusive)
+            TransportButton(
+              hitDiameter: 44,
+              onTapDown: (_) => isShuffle
+                  ? KalinkaHaptics.lightImpact()
+                  : KalinkaHaptics.mediumImpact(),
+              onTap: () {
+                api.sendQueueCommand(
+                  QueueCommand.setPlaybackMode(
+                    shuffle: !isShuffle,
+                    repeatAll: playbackMode.repeatAll,
+                    repeatSingle: playbackMode.repeatSingle,
+                  ),
+                );
+              },
+              child: Icon(
+                Icons.shuffle,
+                size: 22,
+                color: isShuffle
+                    ? KalinkaColors.accent
+                    : KalinkaColors.textSecondary,
+              ),
             ),
-          ),
           Opacity(
             opacity: canPrev ? 1.0 : 0.4,
             child: TransportButton(
@@ -524,7 +572,11 @@ class _TransportControls extends ConsumerWidget {
                         : KalinkaHaptics.mediumImpact(),
               onTap: playPauseDisabled
                   ? null
-                  : () => sendPlayPauseCommand(ref, playerState),
+                  : () => sendPlayPauseCommand(
+                      ref,
+                      playerState,
+                      exclusive: exclusive,
+                    ),
               child: PlayPauseGlyph(
                 playerState: playerState,
                 iconSize: 38,
@@ -548,38 +600,39 @@ class _TransportControls extends ConsumerWidget {
               ),
             ),
           ),
-          TransportButton(
-            hitDiameter: 44,
-            onTapDown: (_) => KalinkaHaptics.selectionClick(),
-            onTap: () {
-              final bool newRepeatAll;
-              final bool newRepeatSingle;
-              if (isRepeatOne) {
-                newRepeatAll = false;
-                newRepeatSingle = false;
-              } else if (isRepeatAll) {
-                newRepeatAll = false;
-                newRepeatSingle = true;
-              } else {
-                newRepeatAll = true;
-                newRepeatSingle = false;
-              }
-              api.sendQueueCommand(
-                QueueCommand.setPlaybackMode(
-                  shuffle: playbackMode.shuffle,
-                  repeatAll: newRepeatAll,
-                  repeatSingle: newRepeatSingle,
-                ),
-              );
-            },
-            child: Icon(
-              isRepeatOne ? Icons.repeat_one : Icons.repeat,
-              size: 22,
-              color: (isRepeatAll || isRepeatOne)
-                  ? KalinkaColors.accent
-                  : KalinkaColors.textSecondary,
+          if (!exclusive)
+            TransportButton(
+              hitDiameter: 44,
+              onTapDown: (_) => KalinkaHaptics.selectionClick(),
+              onTap: () {
+                final bool newRepeatAll;
+                final bool newRepeatSingle;
+                if (isRepeatOne) {
+                  newRepeatAll = false;
+                  newRepeatSingle = false;
+                } else if (isRepeatAll) {
+                  newRepeatAll = false;
+                  newRepeatSingle = true;
+                } else {
+                  newRepeatAll = true;
+                  newRepeatSingle = false;
+                }
+                api.sendQueueCommand(
+                  QueueCommand.setPlaybackMode(
+                    shuffle: playbackMode.shuffle,
+                    repeatAll: newRepeatAll,
+                    repeatSingle: newRepeatSingle,
+                  ),
+                );
+              },
+              child: Icon(
+                isRepeatOne ? Icons.repeat_one : Icons.repeat,
+                size: 22,
+                color: (isRepeatAll || isRepeatOne)
+                    ? KalinkaColors.accent
+                    : KalinkaColors.textSecondary,
+              ),
             ),
-          ),
         ],
       ),
     );

@@ -5,9 +5,16 @@ import '../data_model/kalinka_ws_api.dart';
 import '../providers/kalinka_ws_api_provider.dart';
 
 /// Sends the appropriate play/pause command based on the current player state.
-void sendPlayPauseCommand(WidgetRef ref, PlayerStateType? playerState) {
+///
+/// [exclusive] is playback a plugin drives outside the queue: pause and resume
+/// go to it, and nothing starts the queue, which would take the output back.
+void sendPlayPauseCommand(
+  WidgetRef ref,
+  PlayerStateType? playerState, {
+  bool exclusive = false,
+}) {
   final api = ref.read(kalinkaWsApiProvider);
-  if (playerState == PlayerStateType.buffering) return;
+  if (isPlayPauseDisabled(playerState, exclusive: exclusive)) return;
 
   // A failed track is stopped as far as the transport is concerned, so play
   // means "try it again" — the only retry the app offers.
@@ -41,8 +48,17 @@ IconData playPauseFilledIcon(PlayerStateType? playerState) {
   return Icons.play_circle_filled;
 }
 
-/// Whether the play/pause button should be disabled (during buffering).
-bool isPlayPauseDisabled(PlayerStateType? playerState) {
+/// Whether the play/pause button should be disabled: while buffering, and for
+/// [exclusive] playback that is not playing or paused, which only its own app
+/// starts.
+bool isPlayPauseDisabled(
+  PlayerStateType? playerState, {
+  bool exclusive = false,
+}) {
+  if (exclusive) {
+    return playerState != PlayerStateType.playing &&
+        playerState != PlayerStateType.paused;
+  }
   return playerState == PlayerStateType.buffering;
 }
 

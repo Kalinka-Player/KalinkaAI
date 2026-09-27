@@ -228,6 +228,19 @@ class PlaybackState {
     );
   }
 
+  /// This state with no current track, for when whoever drove the output
+  /// stopped: [copyWith] keeps a track the next state leaves out.
+  PlaybackState withoutTrack() => PlaybackState(
+    state: state,
+    index: index,
+    position: position,
+    message: message,
+    audioInfo: audioInfo,
+    mimeType: mimeType,
+    streamUrl: streamUrl,
+    timestampNs: timestampNs,
+  );
+
   PlaybackState copyWithFields({
     PlayerStateType? state,
     Track? currentTrack,
@@ -1765,6 +1778,57 @@ class SearchSuggestionList {
         ],
         attested: (json['attested'] ?? false) as bool,
       );
+}
+
+enum PlaybackControlMode { queue, exclusive }
+
+/// Who drives the output: Kalinka's play queue, or an input plugin playing
+/// exclusively outside it, as a Connect receiver does. While a plugin does,
+/// the queue plays nothing, the playback state describes the plugin's
+/// playback, and transport controls reach the plugin.
+class PlaybackControl {
+  final PlaybackControlMode mode;
+
+  /// The plugin holding the output; set only while exclusive.
+  final String? pluginId;
+
+  /// What its playback is called, e.g. "Qobuz Connect"; set only while
+  /// exclusive.
+  final String? title;
+
+  const PlaybackControl.queue()
+    : mode = PlaybackControlMode.queue,
+      pluginId = null,
+      title = null;
+
+  const PlaybackControl.exclusive({
+    required String this.pluginId,
+    required String this.title,
+  }) : mode = PlaybackControlMode.exclusive;
+
+  bool get isExclusive => mode == PlaybackControlMode.exclusive;
+
+  /// An absent or unknown mode reads as the queue: only a mode this app
+  /// understands takes the queue out of play.
+  factory PlaybackControl.fromJson(Object? json) {
+    if (json is! Map || json['mode'] != 'exclusive') {
+      return const PlaybackControl.queue();
+    }
+    return PlaybackControl.exclusive(
+      pluginId: (json['plugin_id'] ?? '') as String,
+      title: (json['title'] ?? '') as String,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlaybackControl &&
+      other.mode == mode &&
+      other.pluginId == pluginId &&
+      other.title == title;
+
+  @override
+  int get hashCode => Object.hash(mode, pluginId, title);
 }
 
 /// One playback endpoint known to the server, from `/renderer/list`.
