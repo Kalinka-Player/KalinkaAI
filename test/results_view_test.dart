@@ -803,6 +803,21 @@ void main() {
     expect(find.text('Reset filters'), findsNothing);
   });
 
+  testWidgets('an order alone is not what left nothing', (tester) async {
+    final container = await _pump(tester, _ScriptedApi());
+    await tester.pump(_settle);
+    container
+        .read(searchSessionProvider.notifier)
+        .setResultsFilter(
+          const BrowseFilterQuery(order: NameMatchOrder.alphabetical),
+        );
+    await tester.pump();
+
+    expect(find.text('No matches'), findsOneWidget);
+    expect(find.text('Nothing matches these filters'), findsNothing);
+    expect(find.text('Reset filters'), findsNothing);
+  });
+
   testWidgets('a filter that leaves nothing says so, and offers to drop it', (
     tester,
   ) async {

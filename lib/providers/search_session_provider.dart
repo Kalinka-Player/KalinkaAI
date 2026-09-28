@@ -523,8 +523,12 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       sources,
       suggesting: suggesting,
     );
-    final filter = _fitResultsFilter(state.resultsFilter, pending);
-    final results = pending.askingOnly(filter);
+    final results = pending.askingOnly(
+      _fitResultsFilter(state.resultsFilter, pending),
+    );
+    // Fitted again to what is actually asked: a filter that shuts out every
+    // leg settles the results here, and no leg will land to fit it later.
+    final filter = _fitResultsFilter(state.resultsFilter, results);
     state = state.copyWith(
       searchLoading: false,
       results: results,
