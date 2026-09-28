@@ -84,6 +84,7 @@ class ResultsView extends ConsumerWidget {
           onSource: notifier.setMatchSource,
           onViewAll: () => notifier.setResultsFilter(
             filter.copyWith(kind: ResultKind.nameMatches),
+            remember: false,
           ),
           onRetry: (source) => notifier.retry(ResultsLeg.matches, source),
         ),
@@ -99,6 +100,7 @@ class ResultsView extends ConsumerWidget {
               kind: ResultKind.recommendations,
               sources: results.sources.length > 1 ? [source] : null,
             ),
+            remember: false,
           ),
           onRetry: (source) => notifier.retry(ResultsLeg.inspired, source),
           gutter: _gutter,

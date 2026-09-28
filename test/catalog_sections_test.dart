@@ -169,6 +169,19 @@ Future<_Harness> _pump(
   return (api: api, container: container);
 }
 
+/// Back to the Catalogs root, and into the library again.
+void _reopen(ProviderContainer container) {
+  final session = container.read(searchSessionProvider.notifier);
+  final page = _libraryPage;
+  session.backToCatalogsRoot();
+  session.openCatalog(
+    id: page.id!,
+    title: page.title!,
+    filters: page.filters,
+    sections: page.sections,
+  );
+}
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -305,6 +318,45 @@ void main() {
       expect(find.text('ALBUMS'), findsNothing);
       expect(harness.api.calls.first.id, 'kalinka:localfiles:catalog:library');
       expect(harness.api.calls.first.filter, '{"type":{"any":["album"]}}');
+    });
+
+    testWidgets('a kind chosen as a filter is kept for the next visit', (
+      tester,
+    ) async {
+      final harness = await _pump(tester);
+      final session = harness.container.read(searchSessionProvider.notifier);
+
+      session.setCatalogFilter(const BrowseFilterQuery(type: SearchType.album));
+      _reopen(harness.container);
+
+      expect(
+        harness.container.read(searchSessionProvider).catalogFilter.type,
+        SearchType.album,
+      );
+    });
+
+    testWidgets('View all is a way in, not a filter kept for next time', (
+      tester,
+    ) async {
+      final harness = await _pump(
+        tester,
+        catalogs: {
+          'kalinka:localfiles:catalog:albums': [_album('b1', 'Moon Safari')],
+        },
+      );
+
+      await tester.tap(find.text('VIEW ALL').first);
+      await tester.pumpAndSettle();
+      expect(
+        harness.container.read(searchSessionProvider).catalogFilter.type,
+        SearchType.album,
+      );
+      _reopen(harness.container);
+
+      expect(
+        harness.container.read(searchSessionProvider).catalogFilter.type,
+        isNull,
+      );
     });
 
     testWidgets('the page filter reaches each shelf in its own terms', (

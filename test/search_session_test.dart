@@ -107,6 +107,30 @@ class _FlakyApi extends _FakeApi {
   }
 }
 
+/// Each source finds an artist and an album by name, so the results hold
+/// more than one kind to choose between.
+class _TwoKindApi extends _FakeApi {
+  @override
+  Future<BrowseItemsList> searchMatches(
+    String query, {
+    List<String>? sources,
+  }) async {
+    final list = await super.searchMatches(query, sources: sources);
+    final source = sources!.single;
+    return BrowseItemsList(0, 2, 2, [
+      ...list.items,
+      BrowseItem(
+        id: 'kalinka:$source:album:al1',
+        name: 'An Album',
+        canBrowse: true,
+        canAdd: true,
+        album: Album(id: 'al1', title: 'An Album'),
+        match: const NameMatch(tier: MatchTier.partial, score: 60),
+      ),
+    ]);
+  }
+}
+
 /// Pinned connection state — the real notifier arms a retry [Timer] that
 /// would outlive widget tests.
 class _FixedConnection extends ConnectionStateNotifier {
@@ -169,6 +193,45 @@ final _nameOnlyModules = <ModuleInfo>[
     builtin: true,
   ),
 ];
+
+/// Two sources that both suggest, so the source facet has a choice to make.
+final _twoSources = <ModuleInfo>[
+  ..._modules,
+  ModuleInfo(
+    name: 'localfiles',
+    title: 'Local Library',
+    enabled: true,
+    state: ModuleState.ready,
+    capabilities: const [ModuleCapability.aiSearch],
+  ),
+];
+
+/// Two sources searched by name alone: every result is an artist, so the kind
+/// facet has nothing to choose between and is hidden.
+final _twoNameOnlySources = <ModuleInfo>[
+  for (final (name, title) in [('qobuz', 'Qobuz'), ('localfiles', 'Local')])
+    ModuleInfo(
+      name: name,
+      title: title,
+      enabled: true,
+      state: ModuleState.ready,
+    ),
+];
+
+const _genreField = FilterSpec(
+  id: 'genre',
+  kind: FilterKind.choice,
+  label: 'Genre',
+  ops: [FilterOp.any],
+);
+const _textField = FilterSpec(
+  id: 'q',
+  kind: FilterKind.text,
+  label: 'Search albums',
+);
+
+/// Long enough for every leg to have answered past the minimum hold.
+const _settle = Duration(milliseconds: 900);
 
 void main() {
   late SharedPreferences prefs;
@@ -427,6 +490,197 @@ void main() {
       state = container.read(searchSessionProvider);
       // Newest-first history.
       expect(state.history.take(2), ['techno', 'jazz']);
+    });
+  });
+
+  group('remembered filters', () {
+    void expectChosen(BrowseFilterQuery filter) {
+      expect(filter.type, SearchType.album);
+      expect(filter.kind, ResultKind.nameMatches);
+      expect(filter.sources, ['qobuz']);
+      expect(filter.text, isEmpty, reason: 'the text is the query');
+    }
+
+    test(
+      'a results filter outlives the search, the session and a restart',
+      () async {
+        final api = _TwoKindApi();
+        final container = makeContainer(api, modules: _twoSources);
+        final notifier = container.read(searchSessionProvider.notifier);
+        BrowseFilterQuery filter() =>
+            container.read(searchSessionProvider).resultsFilter;
+        notifier.open();
+
+        notifier.setResultsFilter(
+          const BrowseFilterQuery(
+            text: 'jazz',
+            type: SearchType.album,
+            kind: ResultKind.nameMatches,
+            sources: ['qobuz'],
+          ),
+        );
+        notifier.submit('jazz');
+        expectChosen(filter());
+        await Future.delayed(_settle);
+        // These results hold albums and both sources, so all of it stands.
+        expectChosen(filter());
+
+        notifier.submit('blues');
+        expectChosen(filter());
+        await Future.delayed(_settle);
+
+        notifier.close();
+        notifier.open();
+        expectChosen(filter());
+        notifier.submit('techno');
+        await Future.delayed(_settle);
+        expectChosen(filter());
+
+        final restarted = makeContainer(api, modules: _twoSources);
+        expectChosen(restarted.read(searchSessionProvider).resultsFilter);
+      },
+    );
+
+    test('a VIEW ALL opens a block without becoming the choice', () async {
+      final api = _TwoKindApi();
+      final container = makeContainer(api, modules: _twoSources);
+      final notifier = container.read(searchSessionProvider.notifier);
+      notifier.open();
+      notifier.submit('jazz');
+      await Future.delayed(_settle);
+
+      notifier.setResultsFilter(
+        const BrowseFilterQuery(kind: ResultKind.nameMatches),
+        remember: false,
+      );
+      expect(
+        container.read(searchSessionProvider).resultsFilter.kind,
+        ResultKind.nameMatches,
+      );
+
+      notifier.submit('blues');
+      expect(
+        container.read(searchSessionProvider).resultsFilter.isEmpty,
+        isTrue,
+      );
+      await Future.delayed(_settle);
+    });
+
+    test(
+      'a remembered source that is gone, or a facet the results hide, does not narrow them',
+      () async {
+        final api = _FakeApi();
+        final container = makeContainer(api, modules: _twoNameOnlySources);
+        final notifier = container.read(searchSessionProvider.notifier);
+        notifier.open();
+        notifier.setResultsFilter(
+          const BrowseFilterQuery(
+            type: SearchType.album,
+            genreIds: ['jazz'],
+            sources: ['jamendo', 'qobuz'],
+          ),
+        );
+
+        notifier.submit('night');
+        await Future.delayed(const Duration(milliseconds: 50));
+        var state = container.read(searchSessionProvider);
+        // The sources are known as soon as they are asked…
+        expect(state.resultsFilter.sources, ['qobuz']);
+        // …but what the results hold is not, until every leg has answered.
+        expect(state.resultsFilter.type, SearchType.album);
+
+        await Future.delayed(_settle);
+        state = container.read(searchSessionProvider);
+        final capabilities = state.resultsFilterCapabilities;
+        expect(capabilities.type, FacetSupport.hidden);
+        expect(capabilities.genre, FacetSupport.hidden);
+        expect(state.resultsFilter.type, isNull);
+        expect(state.resultsFilter.genreIds, isEmpty);
+        expect(state.resultsFilter.sources, ['qobuz']);
+        expect(
+          state.results!.narrow(state.resultsFilter).matches,
+          hasLength(1),
+        );
+
+        // Cut for these results only: the next search starts from the choice.
+        notifier.submit('day');
+        expect(
+          container.read(searchSessionProvider).resultsFilter.type,
+          SearchType.album,
+        );
+        await Future.delayed(_settle);
+      },
+    );
+
+    test(
+      'a remembered filter this build cannot read is let go piece by piece',
+      () {
+        prefs.setString(
+          'Kalinka.resultsFilter',
+          '{"type":"album","kind":"someday","order":"alphabetical"}',
+        );
+        prefs.setString('Kalinka.catalogFilters', '[not json');
+        final container = makeContainer(_FakeApi());
+
+        final state = container.read(searchSessionProvider);
+        expect(state.resultsFilter.type, SearchType.album);
+        expect(state.resultsFilter.kind, isNull);
+        expect(state.resultsFilter.order, NameMatchOrder.alphabetical);
+        container
+            .read(searchSessionProvider.notifier)
+            .openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
+        expect(
+          container.read(searchSessionProvider).catalogFilter.isEmpty,
+          isTrue,
+        );
+      },
+    );
+
+    test('each catalog comes back under its own filter', () {
+      final container = makeContainer(_FakeApi());
+      final notifier = container.read(searchSessionProvider.notifier);
+      BrowseFilterQuery filter() =>
+          container.read(searchSessionProvider).catalogFilter;
+      notifier.open();
+
+      notifier.openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
+      notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+      notifier.openCatalog(id: 'b', title: 'B', filters: const [_genreField]);
+      expect(filter().isEmpty, isTrue);
+
+      notifier.openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
+      expect(filter().genreIds, ['jazz']);
+
+      // Leaving the page drops the filter it shows, not the one it keeps.
+      notifier.backToCatalogsRoot();
+      expect(filter().isEmpty, isTrue);
+      notifier.close();
+      final restarted = makeContainer(_FakeApi());
+      restarted
+          .read(searchSessionProvider.notifier)
+          .openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
+      expect(restarted.read(searchSessionProvider).catalogFilter.genreIds, [
+        'jazz',
+      ]);
+    });
+
+    test('a catalog keeps only the facets its source still declares', () {
+      final container = makeContainer(_FakeApi());
+      final notifier = container.read(searchSessionProvider.notifier);
+      notifier.openCatalog(
+        id: 'a',
+        title: 'A',
+        filters: const [_textField, _genreField],
+      );
+      notifier.setCatalogFilter(
+        const BrowseFilterQuery(text: 'blue', genreIds: ['jazz']),
+      );
+
+      notifier.openCatalog(id: 'a', title: 'A', filters: const [_textField]);
+
+      final filter = container.read(searchSessionProvider).catalogFilter;
+      expect(filter.text, 'blue');
+      expect(filter.genreIds, isEmpty);
     });
   });
 
