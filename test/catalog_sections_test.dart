@@ -369,6 +369,30 @@ void main() {
       );
     });
 
+    testWidgets('a filter changed after View all keeps the View all out', (
+      tester,
+    ) async {
+      final harness = await _pump(
+        tester,
+        catalogs: {
+          'kalinka:localfiles:catalog:albums': [_album('b1', 'Moon Safari')],
+        },
+      );
+      final session = harness.container.read(searchSessionProvider.notifier);
+      BrowseFilterQuery filter() =>
+          harness.container.read(searchSessionProvider).catalogFilter;
+
+      await tester.tap(find.text('VIEW ALL').first);
+      await tester.pumpAndSettle();
+      session.setCatalogFilter(filter().copyWith(genreIds: ['jazz']));
+      await tester.pumpAndSettle();
+      expect(filter().type, SearchType.album);
+      _reopen(harness.container);
+
+      expect(filter().type, isNull);
+      expect(filter().genreIds, ['jazz']);
+    });
+
     testWidgets('the page filter reaches each shelf in its own terms', (
       tester,
     ) async {

@@ -175,6 +175,10 @@ class BrowseFilterCapabilities {
   ];
 }
 
+/// One facet of a [BrowseFilterQuery]: the unit a choice is made, kept and
+/// dropped in.
+enum BrowseFacet { text, type, genre, kind, source, order }
+
 /// The active filter selection — one request object rather than a widening
 /// list of arguments, so the surfaces above it never learn how it travels.
 /// A catalog page sends the facets its source declared; search results apply
@@ -268,6 +272,34 @@ class BrowseFilterQuery {
       order: live(capabilities.order) ? order : NameMatchOrder.relevance,
     );
   }
+
+  /// The facets on which this query and [other] differ. Genres and sources
+  /// are compared as sets: the order they were picked in chooses nothing.
+  Set<BrowseFacet> facetsChangedFrom(BrowseFilterQuery other) {
+    bool same(List<String> a, List<String> b) =>
+        a.length == b.length && a.toSet().containsAll(b);
+    return {
+      if (text != other.text) BrowseFacet.text,
+      if (type != other.type) BrowseFacet.type,
+      if (!same(genreIds, other.genreIds)) BrowseFacet.genre,
+      if (kind != other.kind) BrowseFacet.kind,
+      if (!same(sources, other.sources)) BrowseFacet.source,
+      if (order != other.order) BrowseFacet.order,
+    };
+  }
+
+  /// This query with [facets] taken from [other], and every other facet kept.
+  BrowseFilterQuery withFacetsFrom(
+    BrowseFilterQuery other,
+    Set<BrowseFacet> facets,
+  ) => BrowseFilterQuery(
+    text: facets.contains(BrowseFacet.text) ? other.text : text,
+    type: facets.contains(BrowseFacet.type) ? other.type : type,
+    genreIds: facets.contains(BrowseFacet.genre) ? other.genreIds : genreIds,
+    kind: facets.contains(BrowseFacet.kind) ? other.kind : kind,
+    sources: facets.contains(BrowseFacet.source) ? other.sources : sources,
+    order: facets.contains(BrowseFacet.order) ? other.order : order,
+  );
 
   /// This query as it is remembered between sessions.
   Map<String, Object> toJson() => {

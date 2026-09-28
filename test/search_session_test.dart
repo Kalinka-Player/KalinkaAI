@@ -137,6 +137,29 @@ class _TwoKindApi extends _FakeApi {
   }
 }
 
+/// Qobuz, the one source with an album to its name, fails its name-match leg
+/// the first time it is asked; the others find an artist.
+class _AlbumsLateApi extends _TwoKindApi {
+  int _qobuzAsked = 0;
+
+  @override
+  Future<BrowseItemsList> searchMatches(
+    String query, {
+    List<String>? sources,
+  }) async {
+    if (sources!.single != 'qobuz') {
+      matchCalls++;
+      matchSources.add(sources.single);
+      return _matchesFor(sources.single);
+    }
+    if (++_qobuzAsked == 1) {
+      matchCalls++;
+      throw Exception('upstream down');
+    }
+    return super.searchMatches(query, sources: sources);
+  }
+}
+
 /// Pinned connection state — the real notifier arms a retry [Timer] that
 /// would outlive widget tests.
 class _FixedConnection extends ConnectionStateNotifier {
@@ -251,7 +274,11 @@ void main() {
     prefs = await SharedPreferences.getInstance();
   });
 
-  ProviderContainer makeContainer(_FakeApi api, {List<ModuleInfo>? modules}) {
+  ProviderContainer makeContainer(
+    _FakeApi api, {
+    List<ModuleInfo>? modules,
+    List<CatalogCardGroup> Function()? cardGroups,
+  }) {
     final container = ProviderContainer(
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
@@ -263,7 +290,7 @@ void main() {
         // Keep the zero-state's catalog section inert (its real fetch arms a
         // refresh timer that would outlive the test).
         catalogCardGroupsProvider.overrideWith(
-          (ref) => Future.value(const <CatalogCardGroup>[]),
+          (ref) async => cardGroups?.call() ?? const <CatalogCardGroup>[],
         ),
       ],
     );
@@ -572,6 +599,133 @@ void main() {
       await Future.delayed(_settle);
     });
 
+    test('a facet changed after a VIEW ALL leaves the VIEW ALL out', () async {
+      final api = _TwoKindApi();
+      final container = makeContainer(api, modules: _twoSources);
+      final notifier = container.read(searchSessionProvider.notifier);
+      BrowseFilterQuery filter() =>
+          container.read(searchSessionProvider).resultsFilter;
+      notifier.open();
+      notifier.submit('jazz');
+      await Future.delayed(_settle);
+
+      notifier.setResultsFilter(
+        filter().copyWith(kind: ResultKind.nameMatches),
+        remember: false,
+      );
+      // Albums picked in the card, over the filter the VIEW ALL left.
+      notifier.setResultsFilter(filter().copyWith(type: SearchType.album));
+      expect(filter().kind, ResultKind.nameMatches);
+      expect(filter().type, SearchType.album);
+
+      notifier.submit('blues');
+      expect(filter().kind, isNull);
+      expect(filter().type, SearchType.album);
+      await Future.delayed(_settle);
+      expect(api.aiSearchCalls, 4, reason: 'recommendations asked both times');
+    });
+
+    test(
+      'a kind cut for lacking is kept through other changes and a retry brings it back',
+      () async {
+        final api = _AlbumsLateApi();
+        final container = makeContainer(api, modules: _twoSources);
+        final notifier = container.read(searchSessionProvider.notifier);
+        SearchSessionState state() => container.read(searchSessionProvider);
+        notifier.open();
+        notifier.setResultsFilter(
+          const BrowseFilterQuery(type: SearchType.album),
+        );
+
+        notifier.submit('jazz');
+        await Future.delayed(_settle);
+        // The one source with an album failed, so no album is on offer.
+        expect(state().results!.matches['qobuz'], isA<LegFailed>());
+        expect(state().resultsFilter.type, isNull);
+        expect(state().resultsChoice.type, SearchType.album);
+
+        // Another facet changed meanwhile keeps the album with it.
+        notifier.setResultsFilter(
+          state().resultsFilter.copyWith(order: NameMatchOrder.alphabetical),
+        );
+        expect(state().resultsChoice.type, SearchType.album);
+        expect(state().resultsChoice.order, NameMatchOrder.alphabetical);
+
+        notifier.retry(ResultsLeg.matches, 'qobuz');
+        await Future.delayed(_settle);
+        expect(state().results!.matches['qobuz'], isA<LegReady>());
+        expect(state().resultsFilter.type, SearchType.album);
+        expect(
+          state().results!.narrow(state().resultsFilter).matches.single.name,
+          'An Album',
+        );
+
+        // Kept for the searches after this one too.
+        final restarted = makeContainer(api, modules: _twoSources);
+        final saved = restarted.read(searchSessionProvider).resultsFilter;
+        expect(saved.type, SearchType.album);
+        expect(saved.order, NameMatchOrder.alphabetical);
+      },
+    );
+
+    test('a reset drops what the results hid of the choice too', () async {
+      final api = _FakeApi();
+      final container = makeContainer(api, modules: _twoNameOnlySources);
+      final notifier = container.read(searchSessionProvider.notifier);
+      notifier.open();
+      notifier.setResultsFilter(
+        const BrowseFilterQuery(type: SearchType.album, sources: ['qobuz']),
+      );
+      notifier.submit('night');
+      await Future.delayed(_settle);
+      // Every result is an artist, so the album is hidden here.
+      expect(container.read(searchSessionProvider).resultsFilter.type, isNull);
+
+      notifier.setResultsFilter(const BrowseFilterQuery());
+
+      expect(
+        container.read(searchSessionProvider).resultsChoice.isEmpty,
+        isTrue,
+      );
+      expect(prefs.getString('Kalinka.resultsFilter'), isNull);
+    });
+
+    test(
+      'recommendations are not chosen where no source can suggest, but stay the choice',
+      () async {
+        final api = _FakeApi();
+        final container = makeContainer(api, modules: _nameOnlyModules);
+        final notifier = container.read(searchSessionProvider.notifier);
+        notifier.open();
+        notifier.setResultsFilter(
+          const BrowseFilterQuery(kind: ResultKind.recommendations),
+        );
+
+        notifier.submit('jazz');
+        await Future.delayed(_settle);
+
+        final state = container.read(searchSessionProvider);
+        expect(state.resultsFilterCapabilities.kind, FacetSupport.hidden);
+        expect(state.resultsFilter.kind, isNull);
+        expect(api.matchCalls, 1, reason: 'the name matches are asked');
+        expect(
+          state.results!.narrow(state.resultsFilter).matches,
+          hasLength(1),
+        );
+        expect(state.resultsChoice.kind, ResultKind.recommendations);
+
+        // VIEW ALL still opens the name matches in full there.
+        notifier.setResultsFilter(
+          state.resultsFilter.copyWith(kind: ResultKind.nameMatches),
+          remember: false,
+        );
+        expect(
+          container.read(searchSessionProvider).resultsFilter.kind,
+          ResultKind.nameMatches,
+        );
+      },
+    );
+
     test(
       'a remembered source that is gone, or a facet the results hide, does not narrow them',
       () async {
@@ -688,6 +842,56 @@ void main() {
       expect(filter.text, 'blue');
       expect(filter.genreIds, isEmpty);
     });
+
+    group('of catalogs no longer offered', () {
+      const kept = 'kalinka:jamendo:catalog:popular';
+      const gone = 'kalinka:jamendo:catalog:retired';
+
+      setUp(() {
+        prefs.setString(
+          'Kalinka.catalogFilters',
+          '{"$kept":{"genreIds":["jazz"]},"$gone":{"genreIds":["rock"]}}',
+        );
+      });
+
+      Future<void> openUnder(
+        List<CatalogCardGroup> Function() cardGroups,
+      ) async {
+        final container = makeContainer(_FakeApi(), cardGroups: cardGroups);
+        container.read(searchSessionProvider.notifier).open();
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+
+      test('are forgotten once the catalog list loads', () async {
+        await openUnder(
+          () => const [
+            CatalogCardGroup(
+              sourceName: 'jamendo',
+              sourceTitle: 'Jamendo',
+              cards: [
+                CatalogCardPlan(
+                  id: kept,
+                  title: 'Popular',
+                  sourceName: 'jamendo',
+                ),
+              ],
+            ),
+          ],
+        );
+
+        expect(prefs.getString('Kalinka.catalogFilters'), contains(kept));
+        expect(
+          prefs.getString('Kalinka.catalogFilters'),
+          isNot(contains(gone)),
+        );
+      });
+
+      test('are kept when the list failed to load', () async {
+        await openUnder(() => throw StateError('server unreachable'));
+
+        expect(prefs.getString('Kalinka.catalogFilters'), contains(gone));
+      });
+    });
   });
 
   group('legs the filter shuts out', () {
@@ -765,12 +969,18 @@ void main() {
       'a filter that shuts out every leg narrows by nothing hidden',
       () async {
         final api = _FakeApi();
-        final container = makeContainer(api, modules: _nameOnlyModules);
+        // Recommendations from collections alone: collections has nothing to
+        // suggest, and the source that does is filtered out.
+        final container = makeContainer(
+          api,
+          modules: [..._nameOnlyModules, ..._modules],
+        );
         final notifier = container.read(searchSessionProvider.notifier);
         notifier.open();
         notifier.setResultsFilter(
           const BrowseFilterQuery(
             kind: ResultKind.recommendations,
+            sources: ['collections'],
             type: SearchType.album,
             genreIds: ['jazz'],
           ),
