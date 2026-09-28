@@ -14,9 +14,9 @@ import '../../providers/source_modules_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../browse_filters/active_filter_chips.dart';
+import '../browse_filters/filters_match_nothing.dart';
 import '../browse_rows_shimmer.dart';
 import '../infinite_list_view.dart';
-import '../kalinka_button.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../source_badge.dart';
 import 'catalog_sections_view.dart';
@@ -209,7 +209,14 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     required ValueChanged<BrowseFilterQuery> onReset,
   }) {
     if (!query.isEmpty) {
-      return _CatalogEmpty(onReset: () => onReset(const BrowseFilterQuery()));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: FiltersMatchNothing(
+            onReset: () => onReset(const BrowseFilterQuery()),
+          ),
+        ),
+      );
     }
     if (page.canEdit) {
       return const Align(
@@ -576,17 +583,12 @@ class _CatalogError extends StatelessWidget {
   }
 }
 
-/// A catalog that resolved but holds nothing — [onReset] is there when it is
-/// filters that matched none of it rather than an empty category.
+/// A catalog that resolved but holds nothing, with no filter to blame.
 class _CatalogEmpty extends StatelessWidget {
-  /// Drops the filters that emptied the page; null when none did.
-  final VoidCallback? onReset;
-
-  const _CatalogEmpty({this.onReset});
+  const _CatalogEmpty();
 
   @override
   Widget build(BuildContext context) {
-    final filtered = onReset != null;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -594,27 +596,12 @@ class _CatalogEmpty extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              filtered
-                  ? Icons.filter_list_off_rounded
-                  : Icons.library_music_outlined,
+              Icons.library_music_outlined,
               size: 40,
               color: KalinkaColors.textSecondary.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 12),
-            Text(
-              filtered ? 'Nothing matches these filters' : 'Nothing here yet',
-              style: KalinkaTextStyles.cardTitle,
-            ),
-            if (filtered) ...[
-              const SizedBox(height: 16),
-              // Neutral: dropping filters destroys nothing.
-              KalinkaButton(
-                label: 'Reset filters',
-                variant: KalinkaButtonVariant.neutral,
-                size: KalinkaButtonSize.compact,
-                onTap: onReset,
-              ),
-            ],
+            Text('Nothing here yet', style: KalinkaTextStyles.cardTitle),
           ],
         ),
       ),
