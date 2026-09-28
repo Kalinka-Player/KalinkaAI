@@ -25,6 +25,10 @@ class _FakeApi implements KalinkaPlayerProxy {
   int matchCalls = 0;
   final List<String> queries = [];
 
+  /// The source each leg was asked of, in the order asked.
+  final List<String> aiSources = [];
+  final List<String> matchSources = [];
+
   @override
   Future<BrowseItemsList> aiSearch(
     String query, {
@@ -33,7 +37,8 @@ class _FakeApi implements KalinkaPlayerProxy {
     List<String>? sources,
   }) async {
     aiSearchCalls++;
-    return _inspiredFor(sources!.single);
+    aiSources.add(sources!.single);
+    return _inspiredFor(sources.single);
   }
 
   @override
@@ -43,7 +48,8 @@ class _FakeApi implements KalinkaPlayerProxy {
   }) async {
     matchCalls++;
     queries.add(query);
-    return _matchesFor(sources!.single);
+    matchSources.add(sources!.single);
+    return _matchesFor(sources.single);
   }
 
   @override
@@ -681,6 +687,78 @@ void main() {
       final filter = container.read(searchSessionProvider).catalogFilter;
       expect(filter.text, 'blue');
       expect(filter.genreIds, isEmpty);
+    });
+  });
+
+  group('legs the filter shuts out', () {
+    test('a source left out is not asked until it is let back in', () async {
+      final api = _FakeApi();
+      final container = makeContainer(api, modules: _twoSources);
+      final notifier = container.read(searchSessionProvider.notifier);
+      SearchSessionState state() => container.read(searchSessionProvider);
+      notifier.open();
+      notifier.setResultsFilter(const BrowseFilterQuery(sources: ['qobuz']));
+
+      notifier.submit('jazz');
+      await Future.delayed(_settle);
+
+      expect(api.matchSources, ['qobuz']);
+      expect(api.aiSources, ['qobuz']);
+      var results = state().results!;
+      expect(results.matches['localfiles'], isA<LegNotRequested>());
+      expect(results.inspired['localfiles'], isA<LegNotRequested>());
+      // Neither waiting nor unavailable, and still there to be chosen.
+      expect(results.matchesSettled, isTrue);
+      expect(results.settled, isTrue);
+      expect(results.unavailableMatchSources, isEmpty);
+      expect(results.inspiredGroups.map((g) => g.source), ['qobuz']);
+      expect(
+        state().resultsFilterCapabilities.sources.map((s) => s.name),
+        containsAll(['qobuz', 'localfiles']),
+      );
+
+      notifier.setResultsFilter(
+        const BrowseFilterQuery(sources: ['qobuz', 'localfiles']),
+      );
+      results = state().results!;
+      expect(results.matches['localfiles'], isA<LegLoading>());
+      expect(results.inspired['localfiles'], isA<LegLoading>());
+
+      await Future.delayed(_settle);
+      expect(api.matchSources, ['qobuz', 'localfiles']);
+      expect(api.aiSources, ['qobuz', 'localfiles']);
+      results = state().results!;
+      expect(results.matches['localfiles'], isA<LegReady>());
+      expect(results.rankedMatches, hasLength(2));
+    });
+
+    test('a block left out is not asked until it is let back in', () async {
+      final api = _FakeApi();
+      final container = makeContainer(api, modules: _twoSources);
+      final notifier = container.read(searchSessionProvider.notifier);
+      notifier.open();
+      notifier.setResultsFilter(
+        const BrowseFilterQuery(kind: ResultKind.nameMatches),
+      );
+
+      notifier.submit('jazz');
+      await Future.delayed(_settle);
+      expect(api.matchCalls, 2);
+      expect(api.aiSearchCalls, 0);
+
+      // A later search under the same choice asks the same way.
+      notifier.submit('blues');
+      await Future.delayed(_settle);
+      expect(api.aiSearchCalls, 0);
+
+      notifier.setResultsFilter(const BrowseFilterQuery());
+      await Future.delayed(_settle);
+      expect(api.matchCalls, 4, reason: 'what was answered is not asked again');
+      expect(api.aiSearchCalls, 2);
+      expect(
+        container.read(searchSessionProvider).results!.inspiredGroups,
+        hasLength(2),
+      );
     });
   });
 

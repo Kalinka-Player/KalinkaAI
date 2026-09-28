@@ -758,6 +758,42 @@ void main() {
     });
   });
 
+  testWidgets('a source the remembered filter left unasked hangs nothing', (
+    tester,
+  ) async {
+    await _prefs.setString('Kalinka.resultsFilter', '{"sources":["qobuz"]}');
+    final api = _ScriptedApi(
+      matches: {
+        'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
+        'localfiles': [_artist('localfiles', '1', 'L Act', MatchTier.exact)],
+      },
+      inspired: {
+        'localfiles': [_track('localfiles', 'l1', 'Home Song')],
+      },
+    );
+    final container = await _pump(tester, api);
+    await tester.pump(_settle);
+
+    expect(api.matchCalls, {'qobuz': 1});
+    expect(find.text('Q Act'), findsOneWidget);
+    expect(find.text('L Act'), findsNothing);
+    expect(find.byType(BrowseRowsShimmer), findsNothing);
+    expect(find.textContaining('Source unavailable'), findsNothing);
+    expect(find.text('LOCAL LIBRARY'), findsNothing);
+
+    // Dropping the source chip lets it back in, and it is asked now.
+    container
+        .read(searchSessionProvider.notifier)
+        .setResultsFilter(const BrowseFilterQuery());
+    await tester.pump();
+    expect(find.byType(BrowseRowsShimmer), findsWidgets);
+    await tester.pump(_settle);
+
+    expect(api.matchCalls, {'qobuz': 1, 'localfiles': 1});
+    expect(find.text('L Act'), findsOneWidget);
+    expect(find.text('Home Song'), findsOneWidget);
+  });
+
   testWidgets('nothing found says so', (tester) async {
     await _pump(tester, _ScriptedApi());
     await tester.pump(_settle);

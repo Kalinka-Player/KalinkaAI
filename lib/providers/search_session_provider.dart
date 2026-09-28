@@ -201,7 +201,8 @@ class SearchSessionState {
   final String? searchError;
 
   /// Narrows what [results] shows. Applied in hand — the results are already
-  /// here — so nothing is refetched.
+  /// here — so nothing is refetched; only a leg the search left unasked under
+  /// it is asked for, once a change lets that leg's answer through.
   ///
   /// The choice is remembered, so each search starts under the last one, cut
   /// to what its own results can be narrowed by.
@@ -467,7 +468,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// there is no search-as-you-type, and catalog taps bypass it.
   ///
   /// Every source is asked twice, separately — for its name matches and for
-  /// its recommendations — so each answer can land on its own.
+  /// its recommendations — so each answer can land on its own. What the
+  /// filter would hide anyway is not asked for.
   ///
   /// The search runs under the results filter last chosen, or under [filter]
   /// where the query was edited in the filter card alongside its facets.
@@ -516,22 +518,30 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     }
     if (_disposed || gen != _queryGen) return;
 
-    final results = SearchResults.pending(
+    final pending = SearchResults.pending(
       query,
       sources,
       suggesting: suggesting,
     );
+    final filter = _fitResultsFilter(state.resultsFilter, pending);
+    final results = pending.askingOnly(filter);
     state = state.copyWith(
       searchLoading: false,
       results: results,
-      resultsFilter: _fitResultsFilter(state.resultsFilter, results),
+      resultsFilter: filter,
     );
+    // Only the legs left waiting. A source with no audio of its own —
+    // collections — would answer recommendations empty, having held a row
+    // open while it did, so it holds no such leg; one the filter shuts out
+    // is asked once a filter lets it back in.
     for (final source in sources) {
-      _runLeg(gen, query, source.name, ResultsLeg.matches);
-      // A source with no audio of its own — collections — would answer this
-      // empty, having held a row open while it did.
-      if (suggesting.contains(source.name)) {
-        _runLeg(gen, query, source.name, ResultsLeg.inspired);
+      for (final (leg, legs) in [
+        (ResultsLeg.matches, results.matches),
+        (ResultsLeg.inspired, results.inspired),
+      ]) {
+        if (legs[source.name] is LegLoading) {
+          _runLeg(gen, query, source.name, leg);
+        }
       }
     }
   }
@@ -610,15 +620,33 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// The searches after this one start under it too, unless [remember] is
   /// false — a block's VIEW ALL, which opens that block in full without being
   /// a choice of filter.
+  ///
+  /// A leg the search left unasked under the old filter is asked now if the
+  /// new one lets its answer through.
   void setResultsFilter(BrowseFilterQuery filter, {bool remember = true}) {
     if (remember) _rememberResultsFilter(filter);
-    final fitted = _fitResultsFilter(filter.copyWith(text: ''), state.results);
+    final chosen = filter.copyWith(text: '');
+    var results = state.results;
+    final unasked =
+        results?.unaskedUnder(_fitResultsFilter(chosen, results)) ??
+        const <({ResultsLeg leg, String source})>[];
+    for (final (:leg, :source) in unasked) {
+      results = results!.withLeg(leg, source, const LegLoading());
+    }
+    final fitted = _fitResultsFilter(chosen, results);
     final picked = state.matchSource;
     final gone =
         picked != null &&
         fitted.sources.isNotEmpty &&
         !fitted.sources.contains(picked);
-    state = state.copyWith(resultsFilter: fitted, clearMatchSource: gone);
+    state = state.copyWith(
+      results: results,
+      resultsFilter: fitted,
+      clearMatchSource: gone,
+    );
+    for (final (:leg, :source) in unasked) {
+      _runLeg(_queryGen, state.searchQuery, source, leg);
+    }
   }
 
   /// [filter] cut to what [results] can be narrowed by, so a remembered facet
