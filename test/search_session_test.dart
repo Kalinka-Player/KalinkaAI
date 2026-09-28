@@ -160,6 +160,50 @@ class _AlbumsLateApi extends _TwoKindApi {
   }
 }
 
+/// Serves the collections shelf the way the server's own source lists it.
+class _CollectionsApi extends _FakeApi {
+  static const shelfId = 'kalinka:collections:catalog:collections';
+  static const _rootId = 'kalinka:collections:catalog:root';
+
+  @override
+  Future<BrowseItemsList> browse(
+    String id, {
+    int offset = 0,
+    int limit = 10,
+    String? filter,
+  }) async {
+    final items = switch (id) {
+      '' => [
+        BrowseItem(
+          id: _rootId,
+          name: 'Collections',
+          canBrowse: true,
+          canAdd: false,
+          catalog: Catalog(id: _rootId, title: 'Collections'),
+        ),
+      ],
+      _rootId => [
+        BrowseItem(
+          id: shelfId,
+          name: 'Your collections',
+          canBrowse: true,
+          canAdd: false,
+          catalog: Catalog(
+            id: shelfId,
+            title: 'Your collections',
+            previewConfig: Preview(
+              type: PreviewType.tile,
+              contentType: PreviewContentType.playlist,
+            ),
+          ),
+        ),
+      ],
+      _ => const <BrowseItem>[],
+    };
+    return BrowseItemsList(offset, limit, items.length, items);
+  }
+}
+
 /// Pinned connection state — the real notifier arms a retry [Timer] that
 /// would outlive widget tests.
 class _FixedConnection extends ConnectionStateNotifier {
@@ -277,13 +321,19 @@ void main() {
   ProviderContainer makeContainer(
     _FakeApi api, {
     List<ModuleInfo>? modules,
+    Duration? modulesAfter,
     List<CatalogCardGroup> Function()? cardGroups,
   }) {
     final container = ProviderContainer(
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
         kalinkaProxyProvider.overrideWithValue(api),
-        sourceModulesProvider.overrideWith((ref) => modules ?? _modules),
+        if (modulesAfter == null)
+          sourceModulesProvider.overrideWith((ref) => modules ?? _modules)
+        else
+          sourceModulesProvider.overrideWith(
+            (ref) => Future.delayed(modulesAfter, () => modules ?? _modules),
+          ),
         connectionStateProvider.overrideWith(_FixedConnection.new),
         // The real provider opens the wire-event WebSocket (retry timer).
         playerStateProvider.overrideWithValue(PlaybackState.empty),
@@ -652,6 +702,15 @@ void main() {
         expect(state().resultsChoice.order, NameMatchOrder.alphabetical);
 
         notifier.retry(ResultsLeg.matches, 'qobuz');
+        // Until it answers, the album stays cut: what is on screen is not
+        // narrowed away while it waits.
+        expect(state().results!.matches['qobuz'], isA<LegLoading>());
+        expect(state().resultsFilter.type, isNull);
+        expect(
+          state().results!.narrow(state().resultsFilter).matches,
+          isNotEmpty,
+        );
+
         await Future.delayed(_settle);
         expect(state().results!.matches['qobuz'], isA<LegReady>());
         expect(state().resultsFilter.type, SearchType.album);
@@ -891,6 +950,27 @@ void main() {
 
         expect(prefs.getString('Kalinka.catalogFilters'), contains(gone));
       });
+
+      test('are judged only once the sources have loaded', () async {
+        const collections = _CollectionsApi.shelfId;
+        prefs.setString(
+          'Kalinka.catalogFilters',
+          '{"$collections":{"text":"night"},"$gone":{"genreIds":["rock"]}}',
+        );
+        // The collections shelf is found among the server's own sources,
+        // which are not known until the module list lands.
+        final container = makeContainer(
+          _CollectionsApi(),
+          modules: _nameOnlyModules,
+          modulesAfter: const Duration(milliseconds: 20),
+        );
+        container.read(searchSessionProvider.notifier).open();
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        final saved = prefs.getString('Kalinka.catalogFilters');
+        expect(saved, contains(collections));
+        expect(saved, isNot(contains(gone)));
+      });
     });
   });
 
@@ -935,6 +1015,37 @@ void main() {
       expect(results.matches['localfiles'], isA<LegReady>());
       expect(results.rankedMatches, hasLength(2));
     });
+
+    test(
+      'a source let back in keeps a kind cut for lacking until it answers',
+      () async {
+        final api = _FakeApi();
+        final container = makeContainer(api, modules: _twoSources);
+        final notifier = container.read(searchSessionProvider.notifier);
+        SearchSessionState state() => container.read(searchSessionProvider);
+        notifier.open();
+        notifier.setResultsFilter(
+          const BrowseFilterQuery(type: SearchType.album, sources: ['qobuz']),
+        );
+
+        notifier.submit('jazz');
+        await Future.delayed(_settle);
+        // No album was found, so none is on offer.
+        expect(state().resultsFilter.type, isNull);
+
+        notifier.setResultsFilter(
+          state().resultsFilter.copyWith(sources: ['qobuz', 'localfiles']),
+        );
+        expect(state().results!.matches['localfiles'], isA<LegLoading>());
+        expect(state().resultsFilter.type, isNull);
+        expect(state().resultsChoice.type, SearchType.album);
+        expect(
+          state().results!.narrow(state().resultsFilter).matches,
+          isNotEmpty,
+        );
+        await Future.delayed(_settle);
+      },
+    );
 
     test('a block left out is not asked until it is let back in', () async {
       final api = _FakeApi();
