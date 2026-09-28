@@ -228,6 +228,71 @@ void main() {
     });
   });
 
+  group('legs the filter shuts out', () {
+    test('are left unasked, by source and by block', () {
+      final results = SearchResults.pending('x', _sources).askingOnly(
+        const BrowseFilterQuery(
+          kind: ResultKind.nameMatches,
+          sources: ['qobuz'],
+        ),
+      );
+
+      expect(results.matches['qobuz'], isA<LegLoading>());
+      expect(results.matches['localfiles'], isA<LegNotRequested>());
+      expect(results.inspired['qobuz'], isA<LegNotRequested>());
+      expect(results.inspired['localfiles'], isA<LegNotRequested>());
+    });
+
+    test('are neither waiting, nor unavailable, nor a group', () {
+      final results = SearchResults.pending('x', _sources)
+          .askingOnly(const BrowseFilterQuery(sources: ['qobuz']))
+          .withLeg(ResultsLeg.matches, 'qobuz', LegReady(_list([])))
+          .withLeg(
+            ResultsLeg.inspired,
+            'qobuz',
+            LegReady(_card('qobuz', [_track('qobuz', 'q1', 'One')])),
+          );
+
+      expect(results.matchesSettled, isTrue);
+      expect(results.settled, isTrue);
+      expect(results.unavailableMatchSources, isEmpty);
+      expect([for (final g in results.inspiredGroups) g.source], ['qobuz']);
+      // Still searched, so still on offer to be let back in.
+      expect(results.sourceNames, ['localfiles', 'qobuz']);
+    });
+
+    test('are the ones a wider filter asks for, and no others', () {
+      final results = SearchResults.pending('x', _sources).askingOnly(
+        const BrowseFilterQuery(
+          kind: ResultKind.nameMatches,
+          sources: ['qobuz'],
+        ),
+      );
+
+      expect(
+        results.unaskedUnder(const BrowseFilterQuery(sources: ['qobuz'])),
+        [(leg: ResultsLeg.inspired, source: 'qobuz')],
+      );
+      expect(results.unaskedUnder(const BrowseFilterQuery()), [
+        (leg: ResultsLeg.matches, source: 'localfiles'),
+        (leg: ResultsLeg.inspired, source: 'localfiles'),
+        (leg: ResultsLeg.inspired, source: 'qobuz'),
+      ]);
+    });
+
+    test('a source with nothing to suggest gains no leg by being let in', () {
+      final results = SearchResults.pending(
+        'x',
+        _sources,
+        suggesting: {'qobuz'},
+      ).askingOnly(const BrowseFilterQuery(kind: ResultKind.nameMatches));
+
+      expect(results.unaskedUnder(const BrowseFilterQuery()), [
+        (leg: ResultsLeg.inspired, source: 'qobuz'),
+      ]);
+    });
+  });
+
   group('recommendations', () {
     test('stay grouped by source in display order', () {
       final results = SearchResults.pending('x', _sources)
