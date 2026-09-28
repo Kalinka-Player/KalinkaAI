@@ -654,7 +654,11 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     if (results == null) return;
     state = state.copyWith(
       results: results,
-      resultsFilter: _fitResultsFilter(state.resultsChoice, results),
+      resultsFilter: _fitResultsFilter(
+        state.resultsChoice,
+        results,
+        holding: state.resultsFilter,
+      ),
     );
   }
 
@@ -667,7 +671,11 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     if (results == null) return;
     state = state.copyWith(
       results: results,
-      resultsFilter: _fitResultsFilter(state.resultsChoice, results),
+      resultsFilter: _fitResultsFilter(
+        state.resultsChoice,
+        results,
+        holding: state.resultsFilter,
+      ),
     );
     _runLeg(_queryGen, state.searchQuery, source, leg);
   }
@@ -708,7 +716,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     for (final (:leg, :source) in unasked) {
       results = results!.withLeg(leg, source, const LegLoading());
     }
-    final fitted = _fitResultsFilter(choice, results);
+    final fitted = _fitResultsFilter(choice, results, holding: next);
     final picked = state.matchSource;
     final gone =
         picked != null &&
@@ -732,18 +740,30 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// and genres are judged only then, and not gathered before; [judgeHeld]
   /// false leaves them unjudged even then, where only the sources and blocks
   /// matter.
+  ///
+  /// With [holding], the kinds and genres stand as [holding] has them until
+  /// the last leg answers: a leg asked again must not bring back a facet
+  /// these results were cut for lacking, and narrow away everything already
+  /// on screen while it waits.
   static BrowseFilterQuery _fitResultsFilter(
     BrowseFilterQuery choice,
     SearchResults? results, {
     bool judgeHeld = true,
+    BrowseFilterQuery? holding,
   }) {
     if (results == null) return choice;
-    final fitted = choice.fittedTo(
+    var fitted = choice.fittedTo(
       SearchSessionState._capabilitiesFor(
         results,
         gatherHeld: judgeHeld && results.settled,
       ),
     );
+    if (holding != null && !results.settled) {
+      fitted = fitted.withFacetsFrom(holding, const {
+        BrowseFacet.type,
+        BrowseFacet.genre,
+      });
+    }
     // Where nothing can suggest, the kind facet is hidden so recommendations
     // cannot empty the page. Name matches alone stays: it hides nothing
     // there, and it is how VIEW ALL opens that block in full.
@@ -947,6 +967,10 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     if (_savedCatalogFilters.isEmpty) return;
     final Set<String> offered;
     try {
+      // Which sources are the server's own is empty until the module list
+      // lands, and the collections shelf is found only among those: read
+      // before it, the shelf would be missing and its filter forgotten.
+      await ref.read(sourceModulesProvider.future);
       final (groups, collections) = await (
         ref.read(catalogCardGroupsProvider.future),
         ref.read(collectionsShelfProvider.future),

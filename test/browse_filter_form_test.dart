@@ -142,6 +142,32 @@ void main() {
       expect(query.copyWith(clearType: true).type, isNull);
       expect(query.copyWith(text: 'x').type, SearchType.album);
     });
+
+    test(
+      'genres changed are told apart as sets, whatever order or repeats',
+      () {
+        const picked = BrowseFilterQuery(genreIds: ['jazz', 'blues']);
+
+        expect(
+          picked.facetsChangedFrom(
+            const BrowseFilterQuery(genreIds: ['blues', 'jazz']),
+          ),
+          isEmpty,
+        );
+        expect(
+          picked.facetsChangedFrom(
+            const BrowseFilterQuery(genreIds: ['jazz', 'jazz']),
+          ),
+          {BrowseFacet.genre},
+        );
+        expect(
+          const BrowseFilterQuery(
+            genreIds: ['jazz', 'jazz'],
+          ).facetsChangedFrom(picked),
+          {BrowseFacet.genre},
+        );
+      },
+    );
   });
 
   group('a source that honours nothing', () {

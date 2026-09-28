@@ -276,8 +276,11 @@ class BrowseFilterQuery {
   /// The facets on which this query and [other] differ. Genres and sources
   /// are compared as sets: the order they were picked in chooses nothing.
   Set<BrowseFacet> facetsChangedFrom(BrowseFilterQuery other) {
-    bool same(List<String> a, List<String> b) =>
-        a.length == b.length && a.toSet().containsAll(b);
+    bool same(List<String> a, List<String> b) {
+      final picked = a.toSet();
+      return picked.length == b.toSet().length && picked.containsAll(b);
+    }
+
     return {
       if (text != other.text) BrowseFacet.text,
       if (type != other.type) BrowseFacet.type,
