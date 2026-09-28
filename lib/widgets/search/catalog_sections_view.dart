@@ -49,16 +49,21 @@ class CatalogSectionsView extends ConsumerWidget {
       for (final section in page.sections)
         if (_plan(section, query) case final shelf?) shelf,
     ];
-    // Watched here rather than in each shelf, because an empty shelf folds
-    // away: with every one empty the page would be a header over nothing.
-    final previews = [
+    // An empty shelf folds away, so with every one empty the page would be a
+    // header over nothing. Only that is watched here — each shelf watches its
+    // own items, and one arriving with some rebuilds that shelf alone.
+    final cameBackEmpty = [
       for (final shelf in shelves)
-        ref.watch(catalogSectionProvider(shelf.request)),
+        ref.watch(
+          catalogSectionProvider(shelf.request).select(
+            (preview) => switch (preview) {
+              AsyncData(:final value) => value.items.isEmpty,
+              _ => false,
+            },
+          ),
+        ),
     ];
-    final nothing = previews.every(
-      (preview) => preview is AsyncData && preview.requireValue.items.isEmpty,
-    );
-    if (nothing) {
+    if (cameBackEmpty.every((empty) => empty)) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -72,11 +77,7 @@ class CatalogSectionsView extends ConsumerWidget {
       itemCount: shelves.length + 1,
       itemBuilder: (context, index) {
         if (index == 0) return header;
-        return _SectionShelf(
-          shelf: shelves[index - 1],
-          preview: previews[index - 1],
-          onViewAll: onViewAll,
-        );
+        return _SectionShelf(shelf: shelves[index - 1], onViewAll: onViewAll);
       },
     );
   }
@@ -113,19 +114,15 @@ _ShelfPlan? _plan(BrowseItem section, BrowseFilterQuery query) {
   );
 }
 
-class _SectionShelf extends StatelessWidget {
+class _SectionShelf extends ConsumerWidget {
   final _ShelfPlan shelf;
-  final AsyncValue<BrowseItemsList> preview;
   final ValueChanged<SearchType> onViewAll;
 
-  const _SectionShelf({
-    required this.shelf,
-    required this.preview,
-    required this.onViewAll,
-  });
+  const _SectionShelf({required this.shelf, required this.onViewAll});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preview = ref.watch(catalogSectionProvider(shelf.request));
     final section = shelf.section;
     final catalog = shelf.catalog;
     final title = section.name ?? catalog.title;
