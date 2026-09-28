@@ -92,7 +92,10 @@ class _ScriptedBrowseApi implements KalinkaPlayerProxy {
   /// Held open by a test that wants to see the shelves while they load.
   final Completer<void>? gate;
 
-  _ScriptedBrowseApi(this.byCatalog, {this.gate});
+  /// Whether any filter at all matches nothing.
+  final bool filteredOut;
+
+  _ScriptedBrowseApi(this.byCatalog, {this.gate, this.filteredOut = false});
 
   @override
   Future<BrowseItemsList> browse(
@@ -103,7 +106,9 @@ class _ScriptedBrowseApi implements KalinkaPlayerProxy {
   }) async {
     calls.add((id: id, filter: filter, limit: limit));
     if (gate != null) await gate!.future;
-    final items = byCatalog[id] ?? const <BrowseItem>[];
+    final items = filteredOut && filter != null
+        ? const <BrowseItem>[]
+        : byCatalog[id] ?? const <BrowseItem>[];
     // A total beyond the page is what makes a shelf worth opening in full.
     return BrowseItemsList(offset, limit, items.length * 10, items);
   }
@@ -131,6 +136,7 @@ Future<_Harness> _pump(
   Map<String, List<BrowseItem>> catalogs = const {},
   Completer<void>? gate,
   List<BrowseItem>? sections,
+  bool filteredOut = false,
 }) async {
   final page = CatalogPage.category(
     id: 'kalinka:localfiles:catalog:library',
@@ -138,7 +144,11 @@ Future<_Harness> _pump(
     filters: const [_textField, _typeField, _genreField],
     sections: sections ?? _sections,
   );
-  final api = _ScriptedBrowseApi(catalogs, gate: gate);
+  final api = _ScriptedBrowseApi(
+    catalogs,
+    gate: gate,
+    filteredOut: filteredOut,
+  );
   final container = ProviderContainer(
     overrides: [
       kalinkaProxyProvider.overrideWithValue(api),
@@ -457,7 +467,42 @@ void main() {
       expect(find.text('ARTISTS'), findsNothing);
       expect(find.text('ALBUMS'), findsNothing);
       expect(find.text('Nothing matches these filters'), findsOneWidget);
+      expect(find.text('Reset filters'), findsOneWidget);
       expect(harness.api.calls, isEmpty);
     });
+  });
+
+  testWidgets('every shelf empty under the filter says so, with a reset', (
+    tester,
+  ) async {
+    final harness = await _pump(
+      tester,
+      filteredOut: true,
+      catalogs: {
+        'kalinka:localfiles:catalog:artists': [_album('a1', 'Air')],
+        'kalinka:localfiles:catalog:albums': [_album('b1', 'Moon Safari')],
+      },
+    );
+    final session = harness.container.read(searchSessionProvider.notifier);
+
+    session.setCatalogFilter(const BrowseFilterQuery(text: 'zzz'));
+    await tester.pumpAndSettle();
+
+    // Both shelves took the filter and came back with nothing: the page says
+    // so under its header rather than standing as a header alone.
+    expect(find.text('ARTISTS'), findsNothing);
+    expect(find.text('ALBUMS'), findsNothing);
+    expect(find.text('My Library'), findsOneWidget);
+    expect(find.text('Nothing matches these filters'), findsOneWidget);
+
+    await tester.tap(find.text('Reset filters'));
+    await tester.pumpAndSettle();
+
+    expect(
+      harness.container.read(searchSessionProvider).catalogFilter.isEmpty,
+      isTrue,
+    );
+    expect(find.text('Air'), findsOneWidget);
+    expect(find.text('Moon Safari'), findsOneWidget);
   });
 }

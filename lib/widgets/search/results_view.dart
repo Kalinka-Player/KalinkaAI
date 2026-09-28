@@ -6,6 +6,7 @@ import '../../data_model/search_results.dart';
 import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../browse_filters/active_filter_chips.dart';
+import '../kalinka_button.dart';
 import 'inspired_block.dart';
 import 'name_matches_block.dart';
 import 'search_loading_indicator.dart';
@@ -73,7 +74,19 @@ class ResultsView extends ConsumerWidget {
     final narrowed = results.narrow(filter);
     final matches = NameMatchesBlock.visible(results, narrowed, filter);
     final inspired = InspiredBlock.visible(results, narrowed, filter);
-    if (!matches && !inspired) return const [_NoMatches()];
+    if (!matches && !inspired) {
+      final filtered = filter.activeCount > 0 || matchSource != null;
+      return [
+        _NoMatches(
+          onReset: filtered
+              ? () {
+                  notifier.setResultsFilter(const BrowseFilterQuery());
+                  notifier.setMatchSource(null);
+                }
+              : null,
+        ),
+      ];
+    }
     return [
       if (matches)
         NameMatchesBlock(
@@ -109,27 +122,48 @@ class ResultsView extends ConsumerWidget {
   }
 }
 
+/// Nothing to show. Where a filter emptied the results — remembered from an
+/// earlier search, perhaps — that is what it says, with a way to drop it;
+/// otherwise the search itself found nothing.
 class _NoMatches extends StatelessWidget {
-  const _NoMatches();
+  /// Drops what narrowed the results to nothing; null when nothing did.
+  final VoidCallback? onReset;
+
+  const _NoMatches({this.onReset});
 
   @override
   Widget build(BuildContext context) {
+    final filtered = onReset != null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 28),
       child: Column(
         children: [
           Icon(
-            Icons.search_off_rounded,
+            filtered ? Icons.filter_list_off_rounded : Icons.search_off_rounded,
             size: 40,
             color: KalinkaColors.textSecondary.withValues(alpha: 0.5),
           ),
           const SizedBox(height: 12),
-          Text('No matches', style: KalinkaTextStyles.cardTitle),
-          const SizedBox(height: 4),
           Text(
-            'Try rephrasing your request',
-            style: KalinkaTextStyles.trackRowSubtitle,
+            filtered ? 'Nothing matches these filters' : 'No matches',
+            style: KalinkaTextStyles.cardTitle,
           ),
+          if (filtered) ...[
+            const SizedBox(height: 16),
+            // Neutral: dropping filters destroys nothing.
+            KalinkaButton(
+              label: 'Reset filters',
+              variant: KalinkaButtonVariant.neutral,
+              size: KalinkaButtonSize.compact,
+              onTap: onReset,
+            ),
+          ] else ...[
+            const SizedBox(height: 4),
+            Text(
+              'Try rephrasing your request',
+              style: KalinkaTextStyles.trackRowSubtitle,
+            ),
+          ],
         ],
       ),
     );

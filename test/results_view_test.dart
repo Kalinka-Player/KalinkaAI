@@ -763,5 +763,43 @@ void main() {
     await tester.pump(_settle);
 
     expect(find.text('No matches'), findsOneWidget);
+    expect(find.text('Try rephrasing your request'), findsOneWidget);
+    expect(find.text('Reset filters'), findsNothing);
+  });
+
+  testWidgets('a filter that leaves nothing says so, and offers to drop it', (
+    tester,
+  ) async {
+    final api = _ScriptedApi(
+      matches: {
+        'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
+        'localfiles': [_artist('localfiles', '1', 'L Act', MatchTier.exact)],
+      },
+    );
+    final container = await _pump(tester, api);
+    await tester.pump(_settle);
+    final notifier = container.read(searchSessionProvider.notifier);
+    notifier.setMatchSource('qobuz');
+    // Nobody suggested anything, so recommendations alone is nothing.
+    notifier.setResultsFilter(
+      const BrowseFilterQuery(kind: ResultKind.recommendations),
+    );
+    await tester.pump();
+
+    expect(find.text('Q Act'), findsNothing);
+    expect(find.text('Nothing matches these filters'), findsOneWidget);
+    expect(find.text('Try rephrasing your request'), findsNothing);
+
+    await tester.tap(find.text('Reset filters'));
+    await tester.pump();
+
+    final session = container.read(searchSessionProvider);
+    expect(session.resultsFilter.isEmpty, isTrue);
+    expect(session.matchSource, isNull);
+    expect(find.text('Q Act'), findsOneWidget);
+    expect(find.text('L Act'), findsOneWidget);
+    expect(find.text('Reset filters'), findsNothing);
+    // Dropped for the searches after this one too.
+    expect(_prefs.getString('Kalinka.resultsFilter'), isNull);
   });
 }

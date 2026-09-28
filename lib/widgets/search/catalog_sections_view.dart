@@ -20,14 +20,15 @@ const _defaultPreviewLimit = 5;
 /// catalog itself to a flat list, which is the same listing a shelf shows.
 /// Shelves load independently, so a slow one never holds up the rest, and a
 /// shelf that cannot honour the page's filter is not shown at all.
-class CatalogSectionsView extends StatelessWidget {
+class CatalogSectionsView extends ConsumerWidget {
   final CatalogPage page;
   final BrowseFilterQuery query;
 
   /// The page banner and its active-filter chips, scrolling with the shelves.
   final Widget header;
 
-  /// What stands under the header when the query leaves no shelf to show.
+  /// What stands under the header when the query leaves no shelf to show, or
+  /// every shelf it reaches comes back with nothing.
   final Widget empty;
 
   /// Opens one shelf in full, by narrowing the page to that kind.
@@ -43,12 +44,21 @@ class CatalogSectionsView extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final shelves = [
       for (final section in page.sections)
         if (_plan(section, query) case final shelf?) shelf,
     ];
-    if (shelves.isEmpty) {
+    // Watched here rather than in each shelf, because an empty shelf folds
+    // away: with every one empty the page would be a header over nothing.
+    final previews = [
+      for (final shelf in shelves)
+        ref.watch(catalogSectionProvider(shelf.request)),
+    ];
+    final nothing = previews.every(
+      (preview) => preview is AsyncData && preview.requireValue.items.isEmpty,
+    );
+    if (nothing) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -64,7 +74,7 @@ class CatalogSectionsView extends StatelessWidget {
         if (index == 0) return header;
         return _SectionShelf(
           shelf: shelves[index - 1],
-          query: query,
+          preview: previews[index - 1],
           onViewAll: onViewAll,
         );
       },
@@ -72,11 +82,11 @@ class CatalogSectionsView extends StatelessWidget {
   }
 }
 
-/// One shelf the page shows: its section, and what that shelf can be asked.
+/// One shelf the page shows: its section, and what that shelf is asked.
 typedef _ShelfPlan = ({
   BrowseItem section,
   Catalog catalog,
-  BrowseFilterCapabilities capabilities,
+  CatalogSectionRequest request,
 });
 
 /// Null for a section that is no catalog, and for one the query would reach
@@ -92,32 +102,32 @@ _ShelfPlan? _plan(BrowseItem section, BrowseFilterQuery query) {
     catalogId: section.id,
   );
   if (!query.isHonouredBy(capabilities)) return null;
-  return (section: section, catalog: catalog, capabilities: capabilities);
+  return (
+    section: section,
+    catalog: catalog,
+    request: (
+      id: section.id,
+      filter: query.encoded(capabilities),
+      limit: catalog.previewConfig?.itemsCount ?? _defaultPreviewLimit,
+    ),
+  );
 }
 
-class _SectionShelf extends ConsumerWidget {
+class _SectionShelf extends StatelessWidget {
   final _ShelfPlan shelf;
-  final BrowseFilterQuery query;
+  final AsyncValue<BrowseItemsList> preview;
   final ValueChanged<SearchType> onViewAll;
 
   const _SectionShelf({
     required this.shelf,
-    required this.query,
+    required this.preview,
     required this.onViewAll,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final section = shelf.section;
     final catalog = shelf.catalog;
-    final limit = catalog.previewConfig?.itemsCount ?? _defaultPreviewLimit;
-    final preview = ref.watch(
-      catalogSectionProvider((
-        id: section.id,
-        filter: query.encoded(shelf.capabilities),
-        limit: limit,
-      )),
-    );
     final title = section.name ?? catalog.title;
     final type = CatalogPage.typeOf(section);
 
