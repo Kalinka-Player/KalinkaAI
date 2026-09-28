@@ -75,7 +75,10 @@ class ResultsView extends ConsumerWidget {
     final matches = NameMatchesBlock.visible(results, narrowed, filter);
     final inspired = InspiredBlock.visible(results, narrowed, filter);
     if (!matches && !inspired) {
-      final filtered = filter.activeCount > 0 || matchSource != null;
+      // Order hides nothing, so it cannot be what emptied the results.
+      final filtered =
+          filter.copyWith(order: NameMatchOrder.relevance).activeCount > 0 ||
+          matchSource != null;
       return [
         _NoMatches(
           onReset: filtered

@@ -760,6 +760,36 @@ void main() {
         hasLength(2),
       );
     });
+
+    test(
+      'a filter that shuts out every leg narrows by nothing hidden',
+      () async {
+        final api = _FakeApi();
+        final container = makeContainer(api, modules: _nameOnlyModules);
+        final notifier = container.read(searchSessionProvider.notifier);
+        notifier.open();
+        notifier.setResultsFilter(
+          const BrowseFilterQuery(
+            kind: ResultKind.recommendations,
+            type: SearchType.album,
+            genreIds: ['jazz'],
+          ),
+        );
+
+        notifier.submit('jazz');
+        await Future.delayed(const Duration(milliseconds: 50));
+
+        final state = container.read(searchSessionProvider);
+        expect(api.matchCalls, 0);
+        expect(api.aiSearchCalls, 0);
+        expect(state.results!.settled, isTrue);
+        expect(state.resultsFilterCapabilities.type, FacetSupport.hidden);
+        expect(state.resultsFilterCapabilities.genre, FacetSupport.hidden);
+        expect(state.resultsFilter.type, isNull);
+        expect(state.resultsFilter.genreIds, isEmpty);
+        expect(state.resultsFilter.kind, ResultKind.recommendations);
+      },
+    );
   });
 
   group('SearchZeroState', () {
