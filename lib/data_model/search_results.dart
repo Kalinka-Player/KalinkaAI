@@ -94,6 +94,11 @@ class SearchResults {
   /// list can be shown without reshuffling under the reader's eye.
   bool get matchesSettled => !matches.values.any((s) => s is LegLoading);
 
+  /// Every leg asked has answered or failed: what the results hold, and so
+  /// what they can be narrowed by, is final.
+  bool get settled =>
+      matchesSettled && !inspired.values.any((s) => s is LegLoading);
+
   /// Sources whose name-match leg failed, in display order.
   List<String> get unavailableMatchSources => [
     for (final source in sourceNames)

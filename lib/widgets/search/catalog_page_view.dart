@@ -123,7 +123,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         query: query,
         header: header,
         empty: _emptyState(page, filtered: !query.isEmpty),
-        onViewAll: (type) => setQuery(query.copyWith(type: type)),
+        onViewAll: (type) => ref
+            .read(searchSessionProvider.notifier)
+            .setCatalogFilter(query.copyWith(type: type), remember: false),
       );
     }
 

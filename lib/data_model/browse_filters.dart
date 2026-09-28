@@ -235,6 +235,73 @@ class BrowseFilterQuery {
       (order == NameMatchOrder.relevance ||
           capabilities.order == FacetSupport.supported);
 
+  /// The part of this query [capabilities] can honour. A facet they do not
+  /// support is dropped, and so is a kind, source or genre they do not offer:
+  /// a remembered choice with no control on screen would narrow the surface
+  /// with nothing to show why.
+  BrowseFilterQuery fittedTo(BrowseFilterCapabilities capabilities) {
+    bool live(FacetSupport support) => support == FacetSupport.supported;
+    final offeredSources = {for (final s in capabilities.sources) s.name};
+    final offeredGenres = capabilities.genreOptions == null
+        ? null
+        : {for (final g in capabilities.genreOptions!) g.id};
+    return BrowseFilterQuery(
+      text: live(capabilities.text) ? text : '',
+      type: live(capabilities.type) && capabilities.types.contains(type)
+          ? type
+          : null,
+      // A vocabulary that is fetched on demand is not in hand to check
+      // against, so its ids stand until the source refuses them.
+      genreIds: !live(capabilities.genre)
+          ? const []
+          : [
+              for (final id in genreIds)
+                if (offeredGenres == null || offeredGenres.contains(id)) id,
+            ],
+      kind: live(capabilities.kind) ? kind : null,
+      sources: live(capabilities.source)
+          ? [
+              for (final source in sources)
+                if (offeredSources.contains(source)) source,
+            ]
+          : const [],
+      order: live(capabilities.order) ? order : NameMatchOrder.relevance,
+    );
+  }
+
+  /// This query as it is remembered between sessions.
+  Map<String, Object> toJson() => {
+    if (text.isNotEmpty) 'text': text,
+    if (type case final type?) 'type': type.name,
+    if (genreIds.isNotEmpty) 'genreIds': genreIds,
+    if (kind case final kind?) 'kind': kind.name,
+    if (sources.isNotEmpty) 'sources': sources,
+    if (order != NameMatchOrder.relevance) 'order': order.name,
+  };
+
+  /// A remembered query read back. A value this build does not know is
+  /// dropped on its own rather than taking the rest of the query with it.
+  factory BrowseFilterQuery.fromJson(Map<String, dynamic> json) {
+    List<String> strings(Object? value) => value is List
+        ? [
+            for (final item in value)
+              if (item is String) item,
+          ]
+        : const [];
+    final type = SearchType.values.asNameMap()[json['type']];
+    final text = json['text'];
+    return BrowseFilterQuery(
+      text: text is String ? text : '',
+      type: type == SearchType.invalid ? null : type,
+      genreIds: strings(json['genreIds']),
+      kind: ResultKind.values.asNameMap()[json['kind']],
+      sources: strings(json['sources']),
+      order:
+          NameMatchOrder.values.asNameMap()[json['order']] ??
+          NameMatchOrder.relevance,
+    );
+  }
+
   BrowseFilterQuery copyWith({
     String? text,
     SearchType? type,
