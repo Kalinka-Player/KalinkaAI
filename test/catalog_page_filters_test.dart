@@ -269,6 +269,36 @@ void main() {
     expect(api.filtersSeen, [null]);
     expect(find.text('Nothing here yet'), findsOneWidget);
     expect(find.text('Nothing matches these filters'), findsNothing);
+    expect(find.text('Reset filters'), findsNothing);
+  });
+
+  testWidgets('a filter that empties the list offers to drop it', (
+    tester,
+  ) async {
+    final harness = await _pumpPage(
+      tester,
+      const CatalogPage.category(
+        id: 'kalinka:localfiles:catalog:albums',
+        title: 'My Albums',
+        filters: [_textField, _genreField],
+      ),
+    );
+    harness.container
+        .read(searchSessionProvider.notifier)
+        .setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing matches these filters'), findsOneWidget);
+
+    await tester.tap(find.text('Reset filters'));
+    await tester.pumpAndSettle();
+
+    expect(
+      harness.container.read(searchSessionProvider).catalogFilter.isEmpty,
+      isTrue,
+    );
+    // The list starts over, asked plainly.
+    expect(harness.api.filtersSeen, [null, '{"genre":{"any":["jazz"]}}', null]);
+    expect(find.text('Nothing here yet'), findsOneWidget);
   });
 
   group('applying filters', () {

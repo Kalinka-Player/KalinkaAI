@@ -16,6 +16,7 @@ import '../../theme/app_theme.dart';
 import '../browse_filters/active_filter_chips.dart';
 import '../browse_rows_shimmer.dart';
 import '../infinite_list_view.dart';
+import '../kalinka_button.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../source_badge.dart';
 import 'catalog_sections_view.dart';
@@ -122,7 +123,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         page: page,
         query: query,
         header: header,
-        empty: _emptyState(page, filtered: !query.isEmpty),
+        empty: _emptyState(page, query, onReset: setQuery),
         onViewAll: (type) => ref
             .read(searchSessionProvider.notifier)
             .setCatalogFilter(query.copyWith(type: type), remember: false),
@@ -184,7 +185,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         padding: EdgeInsets.symmetric(horizontal: 16),
         child: BrowseRowsShimmer(count: 3, leadingDivider: true),
       ),
-      emptyBuilder: (context) => _emptyState(page, filtered: !query.isEmpty),
+      emptyBuilder: (context) => _emptyState(page, query, onReset: setQuery),
       // The error state replaces only the rows, never the header — a filter
       // that failed has to stay reachable to be undone.
       errorBuilder: (context, _) => Column(
@@ -198,11 +199,18 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   }
 
   /// What stands where the rows would be. A filter that matched nothing says
-  /// so; a listing the server would take writes for — the collections screen
-  /// with none made yet — shows what a collection is; anything else is plain
-  /// empty.
-  Widget _emptyState(CatalogPage page, {required bool filtered}) {
-    if (filtered) return const _CatalogEmpty(filtered: true);
+  /// so, and offers to drop it — it may have been remembered from a visit
+  /// long ago; a listing the server would take writes for — the collections
+  /// screen with none made yet — shows what a collection is; anything else is
+  /// plain empty.
+  Widget _emptyState(
+    CatalogPage page,
+    BrowseFilterQuery query, {
+    required ValueChanged<BrowseFilterQuery> onReset,
+  }) {
+    if (!query.isEmpty) {
+      return _CatalogEmpty(onReset: () => onReset(const BrowseFilterQuery()));
+    }
     if (page.canEdit) {
       return const Align(
         alignment: Alignment.topCenter,
@@ -568,15 +576,17 @@ class _CatalogError extends StatelessWidget {
   }
 }
 
-/// A catalog that resolved but holds nothing — [filtered] distinguishes an
-/// empty category from filters that matched none of it.
+/// A catalog that resolved but holds nothing — [onReset] is there when it is
+/// filters that matched none of it rather than an empty category.
 class _CatalogEmpty extends StatelessWidget {
-  final bool filtered;
+  /// Drops the filters that emptied the page; null when none did.
+  final VoidCallback? onReset;
 
-  const _CatalogEmpty({this.filtered = false});
+  const _CatalogEmpty({this.onReset});
 
   @override
   Widget build(BuildContext context) {
+    final filtered = onReset != null;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -595,6 +605,16 @@ class _CatalogEmpty extends StatelessWidget {
               filtered ? 'Nothing matches these filters' : 'Nothing here yet',
               style: KalinkaTextStyles.cardTitle,
             ),
+            if (filtered) ...[
+              const SizedBox(height: 16),
+              // Neutral: dropping filters destroys nothing.
+              KalinkaButton(
+                label: 'Reset filters',
+                variant: KalinkaButtonVariant.neutral,
+                size: KalinkaButtonSize.compact,
+                onTap: onReset,
+              ),
+            ],
           ],
         ),
       ),
