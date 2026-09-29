@@ -73,7 +73,6 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
 
   bool _awake = true;
   bool _dimmed = false;
-  bool _exitRevealed = false;
   bool _volumeVisible = false;
   Timer? _restTimer;
   Timer? _volumeTimer;
@@ -133,7 +132,6 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       if (ref.read(playerStateProvider).state == PlayerStateType.playing) {
         setState(() {
           _awake = false;
-          _exitRevealed = false;
         });
       }
     });
@@ -146,7 +144,6 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       setState(() {
         _dimmed = true;
         _awake = false;
-        _exitRevealed = false;
       });
     });
   }
@@ -170,15 +167,62 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     });
   }
 
-  /// Which way the cover flow turns: forward unless the queue went back.
+  // The way the viewer last skipped, kept for the track change it causes.
+  static const _skipHeldFor = Duration(seconds: 10);
+  int? _skipDirection;
+  DateTime? _skippedAt;
+
+  /// Skips a track (+1 next, -1 previous) from the display's own buttons,
+  /// remembering which way for the cover to turn.
+  void _skip(int direction) {
+    _skipDirection = direction;
+    _skippedAt = DateTime.now();
+    ref
+        .read(kalinkaWsApiProvider)
+        .sendQueueCommand(
+          direction > 0 ? const QueueCommand.next() : const QueueCommand.prev(),
+        );
+  }
+
+  /// Which way the cover flow turns: the way the viewer skipped, when they
+  /// did — a plugin's playback, shuffle and a wrap to the queue's start all
+  /// hide it from the queue position — otherwise forward unless the queue
+  /// went back.
   void _trackDirection(String? trackId, int index) {
     if (trackId == _shownTrackId) return;
-    _direction = index >= _shownIndex ? 1 : -1;
+    final skipped = _skippedAt;
+    if (_skipDirection != null &&
+        skipped != null &&
+        DateTime.now().difference(skipped) <= _skipHeldFor) {
+      _direction = _skipDirection!;
+    } else {
+      _direction = index >= _shownIndex ? 1 : -1;
+    }
+    _skipDirection = null;
     _shownTrackId = trackId;
     _shownIndex = index;
   }
 
-  void _exit() => ref.read(kioskActiveProvider.notifier).exit();
+  void _exit() => ref.read(kioskProvider.notifier).exit();
+
+  static const _logoTapsToLeave = 5;
+  static const _logoTapWindow = Duration(milliseconds: 1500);
+  int _logoTaps = 0;
+  DateTime? _lastLogoTap;
+
+  /// Five quick taps on the logo leave a display this device's setting holds.
+  void _onLogoTap() {
+    final now = DateTime.now();
+    final last = _lastLogoTap;
+    _logoTaps = last != null && now.difference(last) <= _logoTapWindow
+        ? _logoTaps + 1
+        : 1;
+    _lastLogoTap = now;
+    if (_logoTaps >= _logoTapsToLeave) {
+      _logoTaps = 0;
+      ref.read(kioskProvider.notifier).unlockDevice();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -212,12 +256,12 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     final backdropPath = standby
         ? null
         : (track.smallImage ?? track.largeImage);
-    final launchMode = ref.read(kioskLaunchModeProvider);
-    final canExit = launchMode != KioskMode.locked;
-    // Entered from the app, the way out is in plain sight. Launched as a
-    // display, it takes a press-and-hold to find.
-    final showExit =
-        canExit && (launchMode == KioskMode.off || _exitRevealed) && _awake;
+    // Opened from the player, the way out is in plain sight. Held by this
+    // device's setting, it is five taps on the logo; started by the launch
+    // flag, there is none.
+    final lock = ref.watch(kioskProvider.select((s) => s.lock));
+    final canExit = lock == KioskLock.none;
+    final showExit = canExit && _awake;
     final splash = ref.watch(kioskSplashPendingProvider);
 
     return PopScope(
@@ -242,83 +286,81 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
             _wake();
             _showVolume();
           },
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onLongPress: canExit && launchMode != KioskMode.off
-                ? () => setState(() => _exitRevealed = true)
-                : null,
-            child: Material(
-              color: KalinkaColors.background,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final portrait =
-                      constraints.maxWidth < constraints.maxHeight * 1.1;
-                  final scale =
-                      (portrait
-                              ? math.min(
-                                  constraints.maxWidth / 600,
-                                  constraints.maxHeight / 1024,
-                                )
-                              : math.min(
-                                  constraints.maxWidth / 1024,
-                                  constraints.maxHeight / 600,
-                                ))
-                          .clamp(0.7, 2.0);
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      KioskBackdrop(
-                        imageUrl: backdropPath == null
+          child: Material(
+            color: KalinkaColors.background,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final portrait =
+                    constraints.maxWidth < constraints.maxHeight * 1.1;
+                final scale =
+                    (portrait
+                            ? math.min(
+                                constraints.maxWidth / 600,
+                                constraints.maxHeight / 1024,
+                              )
+                            : math.min(
+                                constraints.maxWidth / 1024,
+                                constraints.maxHeight / 600,
+                              ))
+                        .clamp(0.7, 2.0);
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    KioskBackdrop(
+                      imageUrl: backdropPath == null
+                          ? null
+                          : urls.abs(backdropPath),
+                    ),
+                    SafeArea(
+                      child: _content(
+                        track: standby ? null : track,
+                        largeImage: track?.largeImage == null
                             ? null
-                            : urls.abs(backdropPath),
+                            : urls.abs(track!.largeImage!),
+                        scale: scale,
+                        portrait: portrait,
+                        showExit: showExit,
+                        onLogoTap: lock == KioskLock.device ? _onLogoTap : null,
+                        // Locked, the display shows the output; choosing
+                        // one is for the full app.
+                        canPickOutput: lock == KioskLock.none,
                       ),
-                      SafeArea(
-                        child: _content(
-                          track: standby ? null : track,
-                          largeImage: track?.largeImage == null
-                              ? null
-                              : urls.abs(track!.largeImage!),
-                          scale: scale,
-                          portrait: portrait,
-                          showExit: showExit,
-                        ),
-                      ),
-                      Positioned(
-                        right: 18 * scale,
-                        top: 0,
-                        bottom: 0,
-                        child: Center(
-                          child: SizedBox(
-                            height: math.min(
-                              constraints.maxHeight * 0.7,
-                              400 * scale,
-                            ),
-                            child: KioskVolumeControl(
-                              scale: scale,
-                              visible: _volumeVisible,
-                              onActivity: _showVolume,
-                            ),
+                    ),
+                    Positioned(
+                      right: 18 * scale,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: SizedBox(
+                          height: math.min(
+                            constraints.maxHeight * 0.7,
+                            400 * scale,
+                          ),
+                          child: KioskVolumeControl(
+                            scale: scale,
+                            visible: _volumeVisible,
+                            onActivity: _showVolume,
                           ),
                         ),
                       ),
-                      // Dimmed, not blanked: the clock still reads.
-                      IgnorePointer(
-                        child: AnimatedOpacity(
-                          opacity: _dimmed ? 1 : 0,
-                          duration: const Duration(milliseconds: 1500),
-                          child: const ColoredBox(color: Color(0xB3000000)),
-                        ),
+                    ),
+                    // Dimmed, not blanked: the clock still reads.
+                    IgnorePointer(
+                      child: AnimatedOpacity(
+                        opacity: _dimmed ? 1 : 0,
+                        duration: const Duration(milliseconds: 1500),
+                        child: const ColoredBox(color: Color(0xB3000000)),
                       ),
-                      if (splash)
-                        KioskSplash(
-                          onDone: () => ref
-                              .read(kioskSplashPendingProvider.notifier)
-                              .shown(),
-                        ),
-                    ],
-                  );
-                },
-              ),
+                    ),
+                    if (splash)
+                      KioskSplash(
+                        onDone: () => ref
+                            .read(kioskSplashPendingProvider.notifier)
+                            .shown(),
+                      ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -332,6 +374,8 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     required double scale,
     required bool portrait,
     required bool showExit,
+    required VoidCallback? onLogoTap,
+    required bool canPickOutput,
   }) {
     double s(double v) => v * scale;
     return TweenAnimationBuilder<Offset>(
@@ -347,6 +391,9 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
             KioskStatusStrip(
               scale: scale,
               interactive: _awake,
+              canPickOutput: canPickOutput,
+              onLogoTap: onLogoTap,
+              compact: portrait,
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -386,6 +433,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                         scale: scale,
                         portrait: portrait,
                         awake: _awake,
+                        onSkip: _skip,
                       ),
               ),
             ),
@@ -404,6 +452,9 @@ class _PlayingView extends ConsumerWidget {
   final bool portrait;
   final bool awake;
 
+  /// Skips a track, +1 next or -1 previous.
+  final ValueChanged<int> onSkip;
+
   const _PlayingView({
     super.key,
     required this.track,
@@ -412,6 +463,7 @@ class _PlayingView extends ConsumerWidget {
     required this.scale,
     required this.portrait,
     required this.awake,
+    required this.onSkip,
   });
 
   @override
@@ -436,7 +488,7 @@ class _PlayingView extends ConsumerWidget {
     );
     final controls = _Resting(
       awake: awake,
-      child: _KioskTransport(scale: scale),
+      child: _KioskTransport(scale: scale, onSkip: onSkip),
     );
 
     return LayoutBuilder(
@@ -819,21 +871,21 @@ class _ResumeButton extends ConsumerWidget {
 /// app: they set up listening rather than follow it.
 class _KioskTransport extends ConsumerWidget {
   final double scale;
+  final ValueChanged<int> onSkip;
 
-  const _KioskTransport({required this.scale});
+  const _KioskTransport({required this.scale, required this.onSkip});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     double s(double v) => v * scale;
     final transport = ref.watch(transportStateProvider);
-    final api = ref.read(kalinkaWsApiProvider);
 
-    Widget skip(bool enabled, IconData icon, QueueCommand command) => Opacity(
+    Widget skip(bool enabled, IconData icon, int direction) => Opacity(
       opacity: enabled ? 1.0 : 0.35,
       child: TransportButton(
         hitDiameter: s(62),
         onTapDown: null,
-        onTap: enabled ? () => api.sendQueueCommand(command) : null,
+        onTap: enabled ? () => onSkip(direction) : null,
         child: Icon(icon, size: s(50), color: KalinkaColors.textPrimary),
       ),
     );
@@ -841,11 +893,7 @@ class _KioskTransport extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        skip(
-          transport.canPrev,
-          Icons.skip_previous_rounded,
-          const QueueCommand.prev(),
-        ),
+        skip(transport.canPrev, Icons.skip_previous_rounded, -1),
         SizedBox(width: s(16)),
         Opacity(
           opacity: transport.hasTrack ? 1.0 : 0.35,
@@ -872,11 +920,7 @@ class _KioskTransport extends ConsumerWidget {
           ),
         ),
         SizedBox(width: s(16)),
-        skip(
-          transport.canNext,
-          Icons.skip_next_rounded,
-          const QueueCommand.next(),
-        ),
+        skip(transport.canNext, Icons.skip_next_rounded, 1),
       ],
     );
   }

@@ -25,7 +25,7 @@ class KioskEnterButton extends ConsumerWidget {
             // The display replaces the home screen; anything stacked above it
             // (the phone's player sheet) would stay on top.
             Navigator.of(context).popUntil((route) => route.isFirst);
-            ref.read(kioskActiveProvider.notifier).enter();
+            ref.read(kioskProvider.notifier).enter();
           },
           child: const Icon(
             Icons.fullscreen_rounded,

@@ -38,14 +38,28 @@ class KioskStatusStrip extends ConsumerWidget {
   /// the picker.
   final bool interactive;
 
+  /// False on a locked display: the output is shown, not changed from here.
+  final bool canPickOutput;
+
   /// Sits at the far end of the strip: the clock, the exit button.
   final Widget? trailing;
+
+  /// Each tap on the Kalinka mark, for the way out of a device-locked
+  /// display.
+  final VoidCallback? onLogoTap;
+
+  /// Narrow screens: the "K" mark leads the strip instead of the wordmark
+  /// taking its centre.
+  final bool compact;
 
   const KioskStatusStrip({
     super.key,
     required this.scale,
     this.interactive = true,
+    this.canPickOutput = true,
     this.trailing,
+    this.onLogoTap,
+    this.compact = false,
   });
 
   @override
@@ -57,44 +71,65 @@ class KioskStatusStrip extends ConsumerWidget {
       connectionSettingsProvider.select((s) => s.name),
     );
 
+    final Widget where = connected
+        ? IgnorePointer(
+            ignoring: !interactive,
+            child: _Output(
+              scale: scale,
+              serverName: serverName,
+              canPick: canPickOutput,
+            ),
+          )
+        : _Reconnecting(scale: scale, serverName: serverName);
+
     return SizedBox(
       height: s(44),
-      // Equal halves either side keep the mark at the true centre; a long
-      // output name ellipsises in its half rather than pushing it along.
-      child: Row(
-        children: [
-          Expanded(
-            child: connected
-                ? IgnorePointer(
-                    ignoring: !interactive,
-                    child: _Output(scale: scale, serverName: serverName),
-                  )
-                : _Reconnecting(scale: scale, serverName: serverName),
-          ),
-          SizedBox(width: s(16)),
-          SvgPicture.asset(
-            'assets/images/kalinka_logo.svg',
-            height: s(20),
-            semanticsLabel: 'Kalinka',
-          ),
-          SizedBox(width: s(16)),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: trailing ?? const SizedBox.shrink(),
-            ),
-          ),
-        ],
-      ),
+      child: Row(children: compact ? _compact(s, where) : _wide(s, where)),
     );
   }
+}
+
+extension on KioskStatusStrip {
+  Widget _mark(String asset, double height) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: onLogoTap,
+    child: SvgPicture.asset(asset, height: height, semanticsLabel: 'Kalinka'),
+  );
+
+  // Equal halves either side keep the wordmark at the true centre; a long
+  // output name ellipsises in its half rather than pushing it along.
+  List<Widget> _wide(double Function(double) s, Widget where) => [
+    Expanded(child: where),
+    SizedBox(width: s(16)),
+    _mark('assets/images/kalinka_logo.svg', s(26)),
+    SizedBox(width: s(16)),
+    Expanded(
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: trailing ?? const SizedBox.shrink(),
+      ),
+    ),
+  ];
+
+  List<Widget> _compact(double Function(double) s, Widget where) => [
+    _mark('assets/images/kalinka_icon.svg', s(26)),
+    SizedBox(width: s(14)),
+    Expanded(child: where),
+    SizedBox(width: s(16)),
+    ?trailing,
+  ];
 }
 
 class _Output extends ConsumerWidget {
   final double scale;
   final String serverName;
+  final bool canPick;
 
-  const _Output({required this.scale, required this.serverName});
+  const _Output({
+    required this.scale,
+    required this.serverName,
+    required this.canPick,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -117,11 +152,19 @@ class _Output extends ConsumerWidget {
         );
       }),
     );
-    final pickerAvailable = ref.watch(
-      rendererListProvider.select((s) => s.switcherVisible),
-    );
+    final pickerAvailable =
+        canPick &&
+        ref.watch(rendererListProvider.select((s) => s.switcherVisible));
     final control = ref.watch(playbackControlProvider);
     final name = output?.name ?? serverName;
+    // On this device the chip says all there is to say: its own name would
+    // only repeat what is standing in front of the viewer.
+    final here = output?.here ?? false;
+    final nameStyle = KalinkaFonts.mono(
+      fontSize: s(17),
+      color: KalinkaColors.textPrimary,
+    );
+    final via = control.isExclusive ? 'via ${control.title}' : null;
 
     final row = Row(
       mainAxisSize: MainAxisSize.min,
@@ -132,44 +175,43 @@ class _Output extends ConsumerWidget {
           color: KalinkaColors.textSecondary,
         ),
         SizedBox(width: s(10)),
-        Flexible(
-          child: Text.rich(
-            TextSpan(
-              text: name,
-              children: [
-                if (control.isExclusive)
-                  TextSpan(
-                    text: '  ·  via ${control.title}',
-                    style: const TextStyle(
-                      color: KalinkaColors.textSecondary,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-              ],
-            ),
-            style: KalinkaFonts.sans(
-              fontSize: s(17),
-              fontWeight: FontWeight.w500,
-              color: KalinkaColors.textPrimary,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        if (output?.here ?? false) ...[
-          SizedBox(width: s(10)),
+        if (here)
           Container(
-            padding: EdgeInsets.symmetric(horizontal: s(7), vertical: s(2)),
+            padding: EdgeInsets.symmetric(horizontal: s(10), vertical: s(4)),
             decoration: BoxDecoration(
-              border: Border.all(color: KalinkaColors.borderDefault),
-              borderRadius: BorderRadius.circular(s(4)),
-            ),
-            child: Text(
-              'This device',
-              style: KalinkaFonts.sans(
-                fontSize: s(12),
-                color: KalinkaColors.textSecondary,
+              border: Border.all(
+                color: KalinkaColors.textPrimary.withValues(alpha: 0.28),
               ),
+              borderRadius: BorderRadius.circular(s(6)),
+            ),
+            // Mono, like the clock and the stream line: it reads as a fact
+            // about the setup rather than a name.
+            child: Text(
+              'THIS DEVICE',
+              style: KalinkaFonts.mono(
+                fontSize: s(14),
+                color: KalinkaColors.textPrimary,
+                height: 1.2,
+              ),
+            ),
+          )
+        else
+          Flexible(
+            child: Text(
+              name,
+              style: nameStyle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        if (via != null) ...[
+          SizedBox(width: s(10)),
+          Flexible(
+            child: Text(
+              '·  $via',
+              style: nameStyle.copyWith(color: KalinkaColors.textSecondary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -179,7 +221,7 @@ class _Output extends ConsumerWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Semantics(
-        label: 'Output: $name',
+        label: 'Output: ${here ? 'This device' : name}',
         button: pickerAvailable,
         excludeSemantics: true,
         child: GestureDetector(
