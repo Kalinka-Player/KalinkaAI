@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+  remove|deconfigure)
+    systemctl disable --now kalinka-kiosk-sync.path kalinka-kiosk-sync.service || true
+    systemctl stop kalinka-kiosk.service || true
+    ;;
+esac

@@ -1,0 +1,19 @@
+Package: kalinka-kiosk
+Version: @VERSION@
+Section: sound
+Priority: optional
+Architecture: arm64
+Depends: python3, libdrm2, libgbm1, libegl1, libegl-mesa0, libgles2, libgl1-mesa-dri, libvulkan1, libinput10, libxkbcommon0, libudev1, libsystemd0, libatomic1, libglib2.0-0t64 | libglib2.0-0, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0
+Enhances: kalinka-server
+Maintainer: Dmitry Savin <envelsavinds@gmail.com>
+Homepage: https://kalinkaplayer.com
+Description: Kalinka now-playing display for the server's own screen
+ Shows what the Kalinka server is playing on a screen attached to it — the
+ cover, the track and a progress bar, with touch controls — drawn straight to
+ the display through flutter-pi, with no desktop, X or Wayland.
+ .
+ Turn it on in the app: Settings › EXPERT › Now-playing display on this
+ machine. It starts at boot while the setting is on and restarts if it
+ stops. Needs the KMS graphics
+ driver (dtoverlay=vc4-kms-v3d, the default on Raspberry Pi OS) and a system
+ that boots to the console.

@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch the Kalinka server's settings for the on-device display
+
+[Path]
+PathChanged=/etc/kalinka/kalinka_conf.cfg
+Unit=kalinka-kiosk-sync.service
+
+[Install]
+WantedBy=multi-user.target
