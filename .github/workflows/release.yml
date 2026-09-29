@@ -5,7 +5,8 @@ name: Release
 #   2. git tag -a vX.Y.Z -m "Kalinka AI App X.Y.Z" && git push origin vX.Y.Z
 # The tag push runs this pipeline: it checks the tag matches pubspec's version
 # (ignoring the +build suffix), builds the signed universal APK, Linux desktop
-# tarball, and Windows zip + installer, and publishes them to a GitHub Release.
+# tarball, Windows zip + installer, and the web and on-device display (kiosk)
+# .debs, and publishes them to a GitHub Release.
 
 on:
   push:
@@ -179,8 +180,7 @@ jobs:
 
   # Architecture-independent browser UI package: the Flutter web bundle,
   # installed where kalinka-server serves it (/usr/share/kalinka-web). The
-  # server repo's release workflow re-attaches this deb to server releases so
-  # its install script delivers it with the server bundle.
+  # server repo's install script fetches it from this repo's latest release.
   build-web-deb:
     needs: verify-version
     runs-on: ubuntu-latest
@@ -208,8 +208,45 @@ jobs:
           path: dist/*.deb
           if-no-files-found: error
 
+  # The now-playing display for the server's own screen: the app built for
+  # flutter-pi (direct DRM/KMS, no X), cross-built here for arm64. Fetched by
+  # the server repo's install script like kalinka-web.
+  build-kiosk-deb:
+    needs: verify-version
+    runs-on: ubuntu-latest
+    env:
+      V: ${{ needs.verify-version.outputs.version }}
+      # flutterpi_tool downloads engine and flutter-pi binaries from GitHub
+      # releases; the token lifts the anonymous API rate limit.
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # Pinned: each flutterpi_tool release supports a narrow range of
+      # Flutter versions. 0.12 is the 3.44 line.
+      - run: flutter pub global activate flutterpi_tool 0.12.0
+      - name: Build kiosk .deb
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          scripts/build_kiosk_deb.sh
+          cp "build/deb/kalinka-kiosk_${V}_arm64.deb" dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kiosk-deb
+          path: dist/*.deb
+          if-no-files-found: error
+
   publish:
-    needs: [verify-version, build-android, build-linux, build-windows, build-web-deb]
+    needs:
+      [verify-version, build-android, build-linux, build-windows, build-web-deb, build-kiosk-deb]
     runs-on: ubuntu-latest
     env:
       V: ${{ needs.verify-version.outputs.version }}
@@ -264,6 +301,7 @@ jobs:
             dist/kalinka-${{ env.V }}-windows-x64.zip
             dist/kalinka-${{ env.V }}-windows-x64-setup.exe
             dist/kalinka-web_${{ env.V }}_all.deb
+            dist/kalinka-kiosk_${{ env.V }}_arm64.deb
             dist/kalinka-android-universal.apk
             dist/kalinka-linux-x64.tar.gz
             dist/kalinka-windows-x64-setup.exe

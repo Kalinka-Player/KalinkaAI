@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ]; then
+  # Works offline too (chroot / image build).
+  systemctl enable kalinka-kiosk-sync.path kalinka-kiosk-sync.service
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+    systemctl start kalinka-kiosk-sync.path
+    # Picks up the new build if the display is on, starts it if it was
+    # switched on before this was installed.
+    systemctl try-restart kalinka-kiosk.service || true
+    systemctl start kalinka-kiosk-sync.service || true
+  fi
+fi

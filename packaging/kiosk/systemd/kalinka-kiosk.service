@@ -1,0 +1,17 @@
+[Unit]
+Description=Kalinka now-playing display
+# Started and stopped by kalinka-kiosk-sync.service, never enabled directly.
+StartLimitIntervalSec=0
+
+[Service]
+# Skips the start while the display is switched off — and a skip, unlike a
+# failure, is never restarted.
+ExecCondition=+/usr/lib/kalinka-kiosk/kalinka-kiosk-ctl prepare
+ExecStart=/usr/lib/kalinka-kiosk/kalinka-kiosk-ctl run
+Restart=always
+RestartSec=5
+DynamicUser=yes
+SupplementaryGroups=video render input
+RuntimeDirectory=kalinka-kiosk
+StateDirectory=kalinka-kiosk
+Environment=HOME=%S/kalinka-kiosk
