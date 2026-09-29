@@ -84,6 +84,11 @@ class SearchResults {
 
   List<String> get sourceNames => [for (final s in sources) s.name];
 
+  Map<String, LegState> legsOf(ResultsLeg leg) => switch (leg) {
+    ResultsLeg.matches => matches,
+    ResultsLeg.inspired => inspired,
+  };
+
   static bool reaches(
     BrowseFilterQuery filter,
     ResultsLeg leg,
@@ -112,18 +117,14 @@ class SearchResults {
     BrowseFilterQuery filter,
   ) => [
     for (final source in sourceNames)
-      for (final (leg, legs) in [
-        (ResultsLeg.matches, matches),
-        (ResultsLeg.inspired, inspired),
-      ])
-        if (legs[source] is LegNotRequested && reaches(filter, leg, source))
+      for (final leg in ResultsLeg.values)
+        if (legsOf(leg)[source] is LegNotRequested &&
+            reaches(filter, leg, source))
           (leg: leg, source: source),
   ];
 
   SearchResults withLeg(ResultsLeg leg, String source, LegState state) {
-    final next = Map<String, LegState>.from(
-      leg == ResultsLeg.matches ? matches : inspired,
-    )..[source] = state;
+    final next = Map<String, LegState>.from(legsOf(leg))..[source] = state;
     return SearchResults(
       query: query,
       sources: sources,
