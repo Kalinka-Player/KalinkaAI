@@ -7,8 +7,14 @@ import 'kalinka_player_api_provider.dart';
 /// filter document, and how many items the shelf shows.
 ///
 /// The filter is the encoded document rather than the query object so that two
-/// visits with the same constraints share one cached fetch.
-typedef CatalogSectionRequest = ({String id, String? filter, int limit});
+/// visits with the same constraints share one cached fetch. [revision] is the
+/// collections revision, so a write asks again.
+typedef CatalogSectionRequest = ({
+  String id,
+  String? filter,
+  int limit,
+  int revision,
+});
 
 /// A preview of one section, fetched only when the shelf is about to show it.
 ///
