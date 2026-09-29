@@ -10,11 +10,10 @@ import 'kalinka_player_api_provider.dart';
 /// visits with the same constraints share one cached fetch.
 typedef CatalogSectionRequest = ({String id, String? filter, int limit});
 
-/// A preview of one section.
+/// A preview of one section, fetched only when the shelf is about to show it.
 ///
 /// A sectioned catalog costs one request per shelf, which is what lets each
-/// arrive on its own rather than the page waiting on the slowest. Every shelf
-/// is fetched when the page opens, so the page can tell when all are empty.
+/// arrive on its own rather than the page waiting on the slowest.
 ///
 /// Auto-disposed: the filter is part of the key, so a page whose filters were
 /// edited a few times would otherwise hold every listing it had ever shown.
