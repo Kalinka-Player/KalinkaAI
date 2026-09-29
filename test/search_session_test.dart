@@ -735,6 +735,34 @@ void main() {
     });
 
     test(
+      'an empty filter that changes nothing keeps what the results hid',
+      () async {
+        final api = _FakeApi();
+        final container = makeContainer(api, modules: _nameOnlyModules);
+        final notifier = container.read(searchSessionProvider.notifier);
+        SearchSessionState state() => container.read(searchSessionProvider);
+        notifier.open();
+        notifier.setResultsFilter(
+          const BrowseFilterQuery(kind: ResultKind.recommendations),
+        );
+        notifier.submit('jazz');
+        await Future.delayed(_settle);
+        expect(state().resultsFilter.isEmpty, isTrue);
+
+        notifier.setResultsFilter(const BrowseFilterQuery());
+        expect(state().resultsChoice.kind, ResultKind.recommendations);
+
+        notifier.submit(
+          'blues',
+          filter: const BrowseFilterQuery(text: 'blues'),
+        );
+        await Future.delayed(_settle);
+        expect(state().resultsChoice.kind, ResultKind.recommendations);
+        expect(prefs.getString('Kalinka.resultsFilter'), isNotNull);
+      },
+    );
+
+    test(
       'recommendations are not chosen where no source can suggest, but stay the choice',
       () async {
         final api = _FakeApi();
