@@ -297,6 +297,29 @@ void main() {
       expect(find.text('Moon Safari'), findsOneWidget);
     });
 
+    testWidgets('a shelf below the fold is not fetched', (tester) async {
+      final shelves = [
+        for (var i = 0; i < 12; i++)
+          _section(
+            id: 'kalinka:localfiles:catalog:shelf$i',
+            name: 'Shelf $i',
+            contentType: PreviewContentType.album,
+          ),
+      ];
+      final harness = await _pump(
+        tester,
+        sections: shelves,
+        catalogs: {
+          for (final shelf in shelves)
+            shelf.id: [_album('${shelf.id}:1', 'One'), _album('2', 'Two')],
+        },
+      );
+
+      final asked = harness.api.calls.map((c) => c.id);
+      expect(asked, contains(shelves.first.id));
+      expect(asked, isNot(contains(shelves.last.id)));
+    });
+
     testWidgets('an empty shelf is left out entirely', (tester) async {
       await _pump(
         tester,

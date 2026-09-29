@@ -20,7 +20,7 @@ const _defaultPreviewLimit = 5;
 /// catalog itself to a flat list, which is the same listing a shelf shows.
 /// Shelves load independently, so a slow one never holds up the rest, and a
 /// shelf that cannot honour the page's filter is not shown at all.
-class CatalogSectionsView extends ConsumerWidget {
+class CatalogSectionsView extends StatefulWidget {
   final CatalogPage page;
   final BrowseFilterQuery query;
 
@@ -44,29 +44,41 @@ class CatalogSectionsView extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final shelves = [
-      for (final section in page.sections)
-        if (_plan(section, query) case final shelf?) shelf,
-    ];
-    // Only emptiness is watched, so items arriving rebuild just their shelf.
-    final cameBackEmpty = [
-      for (final shelf in shelves)
-        ref.watch(
-          catalogSectionProvider(shelf.request).select(
-            (preview) => switch (preview) {
-              AsyncData(:final value) => value.items.isEmpty,
-              _ => false,
-            },
-          ),
-        ),
-    ];
-    if (cameBackEmpty.every((empty) => empty)) {
+  State<CatalogSectionsView> createState() => _CatalogSectionsViewState();
+}
+
+class _CatalogSectionsViewState extends State<CatalogSectionsView> {
+  /// Shelves that loaded with nothing, as each reported. An empty shelf takes
+  /// no height, so the list goes on to build the next one; when all are empty
+  /// all have been built and reported.
+  final _empty = <CatalogSectionRequest>{};
+
+  List<_ShelfPlan> get _shelves => [
+    for (final section in widget.page.sections)
+      if (_plan(section, widget.query) case final shelf?) shelf,
+  ];
+
+  @override
+  void didUpdateWidget(CatalogSectionsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _empty.retainAll({for (final shelf in _shelves) shelf.request});
+  }
+
+  void _reportEmpty(CatalogSectionRequest request) {
+    if (mounted && !_empty.contains(request)) {
+      setState(() => _empty.add(request));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shelves = _shelves;
+    if (shelves.every((shelf) => _empty.contains(shelf.request))) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          header,
-          Expanded(child: empty),
+          widget.header,
+          Expanded(child: widget.empty),
         ],
       );
     }
@@ -74,8 +86,12 @@ class CatalogSectionsView extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 24),
       itemCount: shelves.length + 1,
       itemBuilder: (context, index) {
-        if (index == 0) return header;
-        return _SectionShelf(shelf: shelves[index - 1], onViewAll: onViewAll);
+        if (index == 0) return widget.header;
+        return _SectionShelf(
+          shelf: shelves[index - 1],
+          onViewAll: widget.onViewAll,
+          onEmpty: _reportEmpty,
+        );
       },
     );
   }
@@ -115,8 +131,13 @@ _ShelfPlan? _plan(BrowseItem section, BrowseFilterQuery query) {
 class _SectionShelf extends ConsumerWidget {
   final _ShelfPlan shelf;
   final ValueChanged<SearchType> onViewAll;
+  final ValueChanged<CatalogSectionRequest> onEmpty;
 
-  const _SectionShelf({required this.shelf, required this.onViewAll});
+  const _SectionShelf({
+    required this.shelf,
+    required this.onViewAll,
+    required this.onEmpty,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -141,7 +162,12 @@ class _SectionShelf extends ConsumerWidget {
         ),
       ),
       data: (list) {
-        if (list.items.isEmpty) return const SizedBox.shrink();
+        if (list.items.isEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => onEmpty(shelf.request),
+          );
+          return const SizedBox.shrink();
+        }
         final trackIds = <String>[
           for (final item in list.items)
             if (item.track != null) item.id,
