@@ -126,6 +126,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       return CatalogSectionsView(
         page: page,
         query: query,
+        revision: revision,
         header: header,
         empty: _emptyState(page, filter, onReset: setQuery),
         onViewAll: notifier.expandShelf,

@@ -24,6 +24,10 @@ class CatalogSectionsView extends StatefulWidget {
   final CatalogPage page;
   final BrowseFilterQuery query;
 
+  /// The collections revision: a write refetches every shelf, the way it
+  /// restarts a flat listing.
+  final int revision;
+
   /// The page banner and its active-filter chips, scrolling with the shelves.
   final Widget header;
 
@@ -38,6 +42,7 @@ class CatalogSectionsView extends StatefulWidget {
     super.key,
     required this.page,
     required this.query,
+    required this.revision,
     required this.header,
     required this.empty,
     required this.onViewAll,
@@ -53,14 +58,23 @@ class _CatalogSectionsViewState extends State<CatalogSectionsView> {
   /// all have been built and reported.
   final _empty = <CatalogSectionRequest>{};
 
-  List<_ShelfPlan> get _shelves => [
+  late List<_ShelfPlan> _shelves = _planShelves();
+
+  List<_ShelfPlan> _planShelves() => [
     for (final section in widget.page.sections)
-      if (_plan(section, widget.query) case final shelf?) shelf,
+      if (_plan(section, widget.query, widget.revision) case final shelf?)
+        shelf,
   ];
 
   @override
   void didUpdateWidget(CatalogSectionsView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.page == oldWidget.page &&
+        widget.revision == oldWidget.revision &&
+        widget.query.facetsChangedFrom(oldWidget.query).isEmpty) {
+      return;
+    }
+    _shelves = _planShelves();
     _empty.retainAll({for (final shelf in _shelves) shelf.request});
   }
 
@@ -107,7 +121,7 @@ typedef _ShelfPlan = ({
 /// Null for a section that is no catalog, and for one the query would reach
 /// only in part: a shelf that dropped a constraint would list unfiltered,
 /// which reads as filtered and is not, so it stays off the page instead.
-_ShelfPlan? _plan(BrowseItem section, BrowseFilterQuery query) {
+_ShelfPlan? _plan(BrowseItem section, BrowseFilterQuery query, int revision) {
   final catalog = section.catalog;
   if (catalog == null) return null;
   // Built from what this shelf declared, never the page's: a constraint the
@@ -124,6 +138,7 @@ _ShelfPlan? _plan(BrowseItem section, BrowseFilterQuery query) {
       id: section.id,
       filter: query.encoded(capabilities),
       limit: catalog.previewConfig?.itemsCount ?? _defaultPreviewLimit,
+      revision: revision,
     ),
   );
 }

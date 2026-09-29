@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/providers/collections_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
@@ -532,6 +533,23 @@ void main() {
       expect(find.text('Reset filters'), findsOneWidget);
       expect(harness.api.calls, isEmpty);
     });
+  });
+
+  testWidgets('a collections write asks every shelf again, empty ones too', (
+    tester,
+  ) async {
+    final catalogs = <String, List<BrowseItem>>{};
+    final harness = await _pump(tester, catalogs: catalogs);
+    expect(find.text('ALBUMS'), findsNothing);
+
+    catalogs['kalinka:localfiles:catalog:albums'] = [
+      _album('b1', 'Moon Safari'),
+    ];
+    harness.container.read(collectionsRevisionProvider.notifier).bump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('ALBUMS'), findsOneWidget);
+    expect(find.text('Moon Safari'), findsOneWidget);
   });
 
   testWidgets('every shelf empty under the filter says so, with a reset', (
