@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'screens/kiosk_screen.dart';
 import 'screens/music_player_screen.dart';
 import 'theme/app_theme.dart';
 import 'providers/connection_settings_provider.dart';
+import 'providers/kiosk_provider.dart';
 import 'providers/onboarding_provider.dart';
 import 'providers/renderer_host_provider.dart';
 import 'providers/web_origin.dart';
@@ -86,7 +88,22 @@ class KalinkaApp extends ConsumerWidget {
       theme: AppTheme.dark(),
       debugShowCheckedModeBanner: false,
       builder: (_, child) => KalinkaToastHost(child: child!),
-      home: const MusicPlayerScreen(),
+      home: const _Home(),
     );
+  }
+}
+
+/// The kiosk display, once there is a server to show — until then the full
+/// app, which runs the setup wizard and hands over when it finishes.
+class _Home extends ConsumerWidget {
+  const _Home();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final kiosk =
+        ref.watch(kioskActiveProvider) &&
+        ref.watch(onboardingStatusProvider.select((s) => s.oobeComplete)) &&
+        ref.watch(connectionSettingsProvider.select((s) => s.isSet));
+    return kiosk ? const KioskScreen() : const MusicPlayerScreen();
   }
 }

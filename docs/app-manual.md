@@ -104,6 +104,16 @@ transport controls and volume:
 |:---:|:---:|
 | <img src="images/manual/queue.png" width="260"> | <img src="images/manual/player.png" width="260"> |
 
+## 7. Now-playing display (kiosk)
+
+For a screen that sits next to the hi-fi — a streamer's built-in panel, a tablet on a shelf — the app can run as a full-screen now-playing display: the cover with its reflection, the track, where it plays, and a large progress bar. Queue, search and settings are not loaded at all. It is laid out for 1024×600 and scales to other sizes.
+
+Open it from the player with the full-screen button next to the output switcher; the exit button in its corner, Back on Android or Escape returns to the full app.
+
+To start the app straight into it, set `KALINKA_KIOSK=true` in its environment (the Linux app then also opens full screen, without a title bar), build it with `--dart-define=KALINKA_KIOSK=true`, or point a browser at the web UI with `?kiosk` on the address (for example `http://streamer.local:8080/?kiosk`). Started this way it opens on the Kalinka logo, and the exit button stays hidden until you press and hold anywhere on the screen. Use `locked` instead of `true` for a screen built into the streamer: it offers no way out.
+
+While music plays the controls fade after a few seconds; with nothing playing the screen shows a clock and dims after two minutes. Either way, the first touch only wakes it. A touch also brings up a tall volume bar on the right edge — drag it to change the volume; it fades a few seconds after you let go, and outputs with fixed volume don't show it. A device that has not been set up yet runs the setup wizard first, then switches to the display.
+
 ## Troubleshooting
 
 See the [installation guide](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md#troubleshooting) — empty
