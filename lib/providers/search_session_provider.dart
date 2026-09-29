@@ -570,11 +570,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       resultsFilter: _fitResultsFilter(choice, results),
     );
     for (final source in sources) {
-      for (final (leg, legs) in [
-        (ResultsLeg.matches, results.matches),
-        (ResultsLeg.inspired, results.inspired),
-      ]) {
-        if (legs[source.name] is LegLoading) {
+      for (final leg in ResultsLeg.values) {
+        if (results.legsOf(leg)[source.name] is LegLoading) {
           _runLeg(gen, query, source.name, leg);
         }
       }
