@@ -527,24 +527,37 @@ class _PlayingView extends ConsumerWidget {
           );
         }
 
+        // The cover itself is centred, so the gaps above and below it read
+        // alike; the faint reflection spills into the lower gap and may reach
+        // down to the time labels, never under them.
         final art = math.max(
           0.0,
-          math.min(body / reflection, constraints.maxWidth * 0.42),
+          math.min(
+            (body + 2 * gap) / (2 * reflection - 1),
+            constraints.maxWidth * 0.42,
+          ),
         );
         return Column(
           children: [
             Expanded(
               child: Center(
                 child: SizedBox(
-                  height: art * reflection,
+                  height: art,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      KioskCoverFlow(
-                        trackId: track.id,
-                        imageUrl: largeImage,
-                        size: art,
-                        direction: direction,
+                      SizedBox.square(
+                        dimension: art,
+                        child: OverflowBox(
+                          alignment: Alignment.topCenter,
+                          maxHeight: art * reflection,
+                          child: KioskCoverFlow(
+                            trackId: track.id,
+                            imageUrl: largeImage,
+                            size: art,
+                            direction: direction,
+                          ),
+                        ),
                       ),
                       SizedBox(width: s(44)),
                       // Text at the top, controls at the foot, both
