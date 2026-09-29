@@ -14,6 +14,7 @@ import '../../providers/source_modules_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../browse_filters/active_filter_chips.dart';
+import '../browse_filters/browse_filter_form.dart' show filterTypeLabel;
 import '../browse_filters/filters_match_nothing.dart';
 import '../browse_rows_shimmer.dart';
 import '../infinite_list_view.dart';
@@ -94,9 +95,10 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   Widget build(BuildContext context) {
     final page = widget.page;
     final capabilities = page.filterCapabilities;
-    final query = ref.watch(
-      searchSessionProvider.select((s) => s.catalogFilter),
+    final (filter, expandedShelf) = ref.watch(
+      searchSessionProvider.select((s) => (s.catalogFilter, s.expandedShelf)),
     );
+    final query = filter.copyWith(type: expandedShelf);
     // A listing the server takes writes for can change under the page, so a
     // write restarts it the way a filter does.
     final revision = ref.watch(collectionsRevisionProvider);
@@ -104,14 +106,16 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     // Recomputed per chunk, not per row (O(n²) otherwise).
     final trackIdsMemo = _TrackIdsMemo();
 
-    void setQuery(BrowseFilterQuery next) =>
-        ref.read(searchSessionProvider.notifier).setCatalogFilter(next);
+    final notifier = ref.read(searchSessionProvider.notifier);
+    void setQuery(BrowseFilterQuery next) => notifier.setCatalogFilter(next);
 
     final header = _CatalogHeader(
       page: page,
       capabilities: capabilities,
-      query: query,
+      query: filter,
       onQueryChanged: setQuery,
+      expandedShelf: expandedShelf,
+      onCollapse: () => notifier.expandShelf(null),
       hasRows: _rows > 0,
     );
 
@@ -123,10 +127,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         page: page,
         query: query,
         header: header,
-        empty: _emptyState(page, query, onReset: setQuery),
-        onViewAll: (type) => ref
-            .read(searchSessionProvider.notifier)
-            .setCatalogFilter(query.copyWith(type: type), remember: false),
+        empty: _emptyState(page, filter, onReset: setQuery),
+        onViewAll: notifier.expandShelf,
       );
     }
 
@@ -185,7 +187,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         padding: EdgeInsets.symmetric(horizontal: 16),
         child: BrowseRowsShimmer(count: 3, leadingDivider: true),
       ),
-      emptyBuilder: (context) => _emptyState(page, query, onReset: setQuery),
+      emptyBuilder: (context) => _emptyState(page, filter, onReset: setQuery),
       // The error state replaces only the rows, never the header — a filter
       // that failed has to stay reachable to be undone.
       errorBuilder: (context, _) => Column(
@@ -238,6 +240,8 @@ class _CatalogHeader extends StatelessWidget {
   final BrowseFilterCapabilities capabilities;
   final BrowseFilterQuery query;
   final ValueChanged<BrowseFilterQuery> onQueryChanged;
+  final SearchType? expandedShelf;
+  final VoidCallback onCollapse;
 
   /// Whether the listing under it has anything in it.
   final bool hasRows;
@@ -247,6 +251,8 @@ class _CatalogHeader extends StatelessWidget {
     required this.capabilities,
     required this.query,
     required this.onQueryChanged,
+    required this.expandedShelf,
+    required this.onCollapse,
     required this.hasRows,
   });
 
@@ -261,6 +267,13 @@ class _CatalogHeader extends StatelessWidget {
           capabilities: capabilities,
           query: query,
           onChanged: onQueryChanged,
+          leading: [
+            if (expandedShelf case final type?)
+              ActiveFilterChip(
+                label: filterTypeLabel(type),
+                onRemove: onCollapse,
+              ),
+          ],
         ),
       ],
     );

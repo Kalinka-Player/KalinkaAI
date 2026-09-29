@@ -6,6 +6,7 @@ import '../../data_model/search_results.dart';
 import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../browse_filters/active_filter_chips.dart';
+import '../browse_filters/browse_filter_form.dart' show resultKindLabel;
 import '../browse_filters/filters_match_nothing.dart';
 import 'inspired_block.dart';
 import 'name_matches_block.dart';
@@ -36,11 +37,24 @@ class ResultsView extends ConsumerWidget {
           padding: const EdgeInsets.only(bottom: 16),
           // The query is not a facet, but it sits where the facets do: the
           // one thing every row below answers to. Removing it removes them.
-          leading: ActiveFilterChip(
-            label: '“${session.searchQuery}”',
-            icon: Icons.auto_awesome,
-            onRemove: notifier.clearSearch,
-          ),
+          leading: [
+            ActiveFilterChip(
+              label: '“${session.searchQuery}”',
+              icon: Icons.auto_awesome,
+              onRemove: notifier.clearSearch,
+            ),
+            if (session.expandedBlock case (:final kind, :final source))
+              ActiveFilterChip(
+                label: [
+                  resultKindLabel(kind),
+                  if (source != null &&
+                      results != null &&
+                      results.sources.length > 1)
+                    results.sources.titleOf(source),
+                ].join(' · '),
+                onRemove: () => notifier.expandBlock(null),
+              ),
+          ],
         ),
         if (session.searchLoading)
           const SearchLoadingIndicator()
@@ -57,7 +71,7 @@ class ResultsView extends ConsumerWidget {
         else if (results != null)
           ..._blocks(
             results,
-            session.resultsFilter,
+            session.resultsShown,
             session.matchSource,
             notifier,
           ),
@@ -87,6 +101,7 @@ class ResultsView extends ConsumerWidget {
             onReset: () {
               notifier.setResultsFilter(const BrowseFilterQuery());
               notifier.setMatchSource(null);
+              notifier.expandBlock(null);
             },
           ),
         ),
@@ -100,10 +115,10 @@ class ResultsView extends ConsumerWidget {
           filter: filter,
           source: matchSource,
           onSource: notifier.setMatchSource,
-          onViewAll: () => notifier.setResultsFilter(
-            filter.copyWith(kind: ResultKind.nameMatches),
-            remember: false,
-          ),
+          onViewAll: () => notifier.expandBlock((
+            kind: ResultKind.nameMatches,
+            source: null,
+          )),
           onRetry: (source) => notifier.retry(ResultsLeg.matches, source),
         ),
       if (matches && inspired) const SizedBox(height: 28),
@@ -112,14 +127,10 @@ class ResultsView extends ConsumerWidget {
           results: results,
           narrowed: narrowed,
           filter: filter,
-          // The source facet only where there is a choice to narrow.
-          onViewAll: (source) => notifier.setResultsFilter(
-            filter.copyWith(
-              kind: ResultKind.recommendations,
-              sources: results.sources.length > 1 ? [source] : null,
-            ),
-            remember: false,
-          ),
+          onViewAll: (source) => notifier.expandBlock((
+            kind: ResultKind.recommendations,
+            source: source,
+          )),
           onRetry: (source) => notifier.retry(ResultsLeg.inspired, source),
           gutter: _gutter,
         ),

@@ -20,9 +20,10 @@ class ActiveFilterChips extends ConsumerWidget {
 
   final EdgeInsets padding;
 
-  /// Shown first, ahead of the facet chips — where a results page puts its
-  /// query, which is not a facet but belongs in the same row.
-  final Widget? leading;
+  /// Shown first, ahead of the facet chips: what belongs in the same row
+  /// without being a facet, such as the results query or a block opened in
+  /// full.
+  final List<Widget> leading;
 
   const ActiveFilterChips({
     super.key,
@@ -30,12 +31,12 @@ class ActiveFilterChips extends ConsumerWidget {
     required this.query,
     required this.onChanged,
     this.padding = const EdgeInsets.fromLTRB(16, 0, 16, 12),
-    this.leading,
+    this.leading = const [],
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (query.isEmpty && leading == null) return const SizedBox.shrink();
+    if (query.isEmpty && leading.isEmpty) return const SizedBox.shrink();
 
     // Only reached with genres applied, which needs the capability anyway.
     final vocabulary = capabilities.genreVocabulary;
@@ -96,7 +97,7 @@ class ActiveFilterChips extends ConsumerWidget {
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: [if (leading != null) leading!, ...chips],
+              children: [...leading, ...chips],
             ),
           ),
           // Dropping four filters one X at a time is four reloads; this is

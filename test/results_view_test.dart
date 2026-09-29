@@ -207,7 +207,7 @@ void main() {
     expect(find.text('Slow Act'), findsOneWidget);
   });
 
-  testWidgets('four lead, and VIEW ALL opens the rest as a filter', (
+  testWidgets('four lead, and VIEW ALL opens the rest until its chip goes', (
     tester,
   ) async {
     final api = _ScriptedApi(
@@ -218,7 +218,7 @@ void main() {
         ],
       },
     );
-    await _pump(tester, api);
+    final container = await _pump(tester, api);
     await tester.pump(_settle);
 
     expect(find.text('Act 4'), findsOneWidget);
@@ -231,6 +231,13 @@ void main() {
     expect(find.text('Name matches'), findsOneWidget);
     expect(find.text('Act 6'), findsOneWidget);
     expect(find.text('VIEW ALL'), findsNothing);
+    expect(container.read(searchSessionProvider).resultsFilter.isEmpty, isTrue);
+
+    await tester.tap(find.text('Name matches'));
+    await tester.pump();
+
+    expect(find.text('Act 5'), findsNothing);
+    expect(find.text('VIEW ALL'), findsOneWidget);
   });
 
   testWidgets('an exact hit wears its badge, a partial one does not', (
@@ -324,9 +331,7 @@ void main() {
     await tester.tap(find.text('VIEW ALL'));
     await tester.pump();
 
-    // One source in full: its kind and its source, each a chip of its own.
-    expect(find.text('Recommendations'), findsOneWidget);
-    expect(find.text('Qobuz'), findsOneWidget);
+    expect(find.text('Recommendations · Qobuz'), findsOneWidget);
     expect(find.text('Away Song 5'), findsOneWidget);
     expect(find.text('· 5'), findsOneWidget);
     expect(find.text('LOCAL LIBRARY'), findsNothing);
