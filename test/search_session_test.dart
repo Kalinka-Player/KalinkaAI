@@ -959,8 +959,31 @@ void main() {
         expect(prefs.getString('Kalinka.catalogFilters'), contains(gone));
       });
 
+      test('are kept while their source lists nothing', () async {
+        await openUnder(
+          () => const [
+            CatalogCardGroup(
+              sourceName: 'qobuz',
+              sourceTitle: 'Qobuz',
+              cards: [
+                CatalogCardPlan(
+                  id: 'kalinka:qobuz:catalog:new',
+                  title: 'New',
+                  sourceName: 'qobuz',
+                ),
+              ],
+            ),
+          ],
+        );
+
+        final saved = prefs.getString('Kalinka.catalogFilters');
+        expect(saved, contains(kept));
+        expect(saved, contains(gone));
+      });
+
       test('are judged only once the sources have loaded', () async {
         const collections = _CollectionsApi.shelfId;
+        const gone = 'kalinka:collections:catalog:retired';
         prefs.setString(
           'Kalinka.catalogFilters',
           '{"$collections":{"text":"night"},"$gone":{"genreIds":["rock"]}}',
@@ -1080,7 +1103,7 @@ void main() {
     });
 
     test(
-      'a filter that shuts out every leg narrows by nothing hidden',
+      'a saved kind that would ask no one is set aside for the search',
       () async {
         final api = _FakeApi();
         final container = makeContainer(
@@ -1093,23 +1116,30 @@ void main() {
           const BrowseFilterQuery(
             kind: ResultKind.recommendations,
             sources: ['collections'],
-            type: SearchType.album,
-            genreIds: ['jazz'],
           ),
         );
 
         notifier.submit('jazz');
-        await Future.delayed(const Duration(milliseconds: 50));
+        await Future.delayed(_settle);
 
         final state = container.read(searchSessionProvider);
-        expect(api.matchCalls, 0);
+        expect(api.matchSources, ['collections']);
         expect(api.aiSearchCalls, 0);
-        expect(state.results!.settled, isTrue);
-        expect(state.resultsFilterCapabilities.type, FacetSupport.hidden);
-        expect(state.resultsFilterCapabilities.genre, FacetSupport.hidden);
-        expect(state.resultsFilter.type, isNull);
-        expect(state.resultsFilter.genreIds, isEmpty);
-        expect(state.resultsFilter.kind, ResultKind.recommendations);
+        expect(state.resultsFilter.kind, isNull);
+        expect(state.resultsFilter.sources, ['collections']);
+        expect(
+          state.results!.narrow(state.resultsFilter).matches,
+          hasLength(1),
+        );
+
+        final restarted = makeContainer(
+          _FakeApi(),
+          modules: [..._nameOnlyModules, ..._modules],
+        );
+        expect(
+          restarted.read(searchSessionProvider).resultsFilter.kind,
+          ResultKind.recommendations,
+        );
       },
     );
   });
