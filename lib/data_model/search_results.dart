@@ -26,9 +26,7 @@ class LegFailed extends LegState {
   const LegFailed(this.reason);
 }
 
-/// Not asked: the filter the search ran under shuts out everything it would
-/// answer. Neither waiting nor unavailable — it is asked the moment a filter
-/// lets it back in.
+/// Skipped because the filter hides everything this leg would return.
 class LegNotRequested extends LegState {
   const LegNotRequested();
 }
@@ -51,15 +49,14 @@ class InspiredGroup {
 ///
 /// Each leg is asked of each source separately, so each can land, fail and be
 /// retried on its own — but only of a source that can answer it: one with no
-/// audio of its own to suggest is asked for names alone. A leg the filter
-/// shuts out waits unasked until it is let back in. The name matches of
+/// audio of its own to suggest is asked for names alone. The name matches of
 /// every source merge into one list by the tier and score the server put on
 /// each hit; the recommendations stay grouped by the source that made them.
 class SearchResults {
   final String query;
 
-  /// The sources searched, in display order — the listener's own library
-  /// first. One the filter left unasked is still here, so it stays on offer.
+  /// The sources asked, in display order — the listener's own library first.
+  /// Includes sources the filter skipped, so they can still be picked.
   final List<SourceOption> sources;
 
   final Map<String, LegState> matches;
@@ -87,8 +84,6 @@ class SearchResults {
 
   List<String> get sourceNames => [for (final s in sources) s.name];
 
-  /// Whether anything [leg] of [source] answers could reach the screen under
-  /// [filter] — a leg it cannot is not worth asking.
   static bool reaches(
     BrowseFilterQuery filter,
     ResultsLeg leg,
@@ -100,7 +95,6 @@ class SearchResults {
         ResultsLeg.inspired => filter.kind != ResultKind.nameMatches,
       };
 
-  /// These results with every leg [filter] shuts out left unasked.
   SearchResults askingOnly(BrowseFilterQuery filter) {
     Map<String, LegState> only(ResultsLeg leg, Map<String, LegState> legs) => {
       for (final MapEntry(key: source, value: state) in legs.entries)
@@ -114,7 +108,6 @@ class SearchResults {
     );
   }
 
-  /// The legs left unasked that [filter] now reaches, in display order.
   List<({ResultsLeg leg, String source})> unaskedUnder(
     BrowseFilterQuery filter,
   ) => [
@@ -143,8 +136,6 @@ class SearchResults {
   /// list can be shown without reshuffling under the reader's eye.
   bool get matchesSettled => !matches.values.any((s) => s is LegLoading);
 
-  /// Every leg asked has answered or failed: what the results hold, and so
-  /// what they can be narrowed by, is final.
   bool get settled =>
       matchesSettled && !inspired.values.any((s) => s is LegLoading);
 

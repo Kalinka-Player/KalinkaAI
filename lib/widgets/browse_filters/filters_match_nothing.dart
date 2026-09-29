@@ -3,11 +3,8 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../kalinka_button.dart';
 
-/// What stands where a listing's rows would be when its filters left none of
-/// them, with the way out. Filters are remembered, so the choice that emptied
-/// the listing may be one made long ago.
+/// Empty state for a listing whose filters matched nothing, with a reset.
 class FiltersMatchNothing extends StatelessWidget {
-  /// Drops the filters.
   final VoidCallback onReset;
 
   const FiltersMatchNothing({super.key, required this.onReset});
@@ -28,7 +25,6 @@ class FiltersMatchNothing extends StatelessWidget {
           style: KalinkaTextStyles.cardTitle,
         ),
         const SizedBox(height: 16),
-        // Neutral: dropping filters destroys nothing.
         KalinkaButton(
           label: 'Reset filters',
           variant: KalinkaButtonVariant.neutral,

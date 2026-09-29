@@ -781,7 +781,6 @@ void main() {
     expect(find.textContaining('Source unavailable'), findsNothing);
     expect(find.text('LOCAL LIBRARY'), findsNothing);
 
-    // Dropping the source chip lets it back in, and it is asked now.
     container
         .read(searchSessionProvider.notifier)
         .setResultsFilter(const BrowseFilterQuery());
@@ -831,7 +830,6 @@ void main() {
     await tester.pump(_settle);
     final notifier = container.read(searchSessionProvider.notifier);
     notifier.setMatchSource('qobuz');
-    // Nobody suggested anything, so recommendations alone is nothing.
     notifier.setResultsFilter(
       const BrowseFilterQuery(kind: ResultKind.recommendations),
     );
@@ -850,7 +848,6 @@ void main() {
     expect(find.text('Q Act'), findsOneWidget);
     expect(find.text('L Act'), findsOneWidget);
     expect(find.text('Reset filters'), findsNothing);
-    // Dropped for the searches after this one too.
     expect(_prefs.getString('Kalinka.resultsFilter'), isNull);
   });
 }

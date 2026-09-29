@@ -296,7 +296,6 @@ void main() {
       harness.container.read(searchSessionProvider).catalogFilter.isEmpty,
       isTrue,
     );
-    // The list starts over, asked plainly.
     expect(harness.api.filtersSeen, [null, '{"genre":{"any":["jazz"]}}', null]);
     expect(find.text('Nothing here yet'), findsOneWidget);
   });

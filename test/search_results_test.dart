@@ -257,7 +257,6 @@ void main() {
       expect(results.settled, isTrue);
       expect(results.unavailableMatchSources, isEmpty);
       expect([for (final g in results.inspiredGroups) g.source], ['qobuz']);
-      // Still searched, so still on offer to be let back in.
       expect(results.sourceNames, ['localfiles', 'qobuz']);
     });
 

@@ -18,13 +18,10 @@ const _historyKey = 'Kalinka.chatSearchHistory';
 const _maxHistoryItems = 5;
 const _minHistoryQueryLength = 2;
 
-/// The results filter last chosen, which each new search starts under. Never
-/// its text: on the results that is the query itself.
+/// Saved without its text, which on the results is the query.
 const _resultsFilterKey = 'Kalinka.resultsFilter';
 
-/// Each catalog's filter last chosen, by catalog id. Kept apart because each
-/// catalog declares its own fields, and fills its genres from its own
-/// vocabulary.
+/// Keyed by catalog id, since each catalog has its own fields and genres.
 const _catalogFiltersKey = 'Kalinka.catalogFilters';
 
 /// Minimum time the "working…" state stays up, even if results resolve
@@ -202,16 +199,12 @@ class SearchSessionState {
   final String? searchError;
 
   /// Narrows what [results] shows. Applied in hand — the results are already
-  /// here — so nothing is refetched; only a leg the search left unasked under
-  /// it is asked for, once a change lets that leg's answer through.
-  ///
-  /// It is [resultsChoice] cut to what these results can be narrowed by, and
-  /// cut again from it each time they change.
+  /// here — so nothing is refetched. It is [resultsChoice] trimmed to what
+  /// these results offer.
   final BrowseFilterQuery resultsFilter;
 
-  /// The results filter as chosen, before it is cut to the results: the last
-  /// one remembered, plus whatever a VIEW ALL opened. What the cut hides from
-  /// these results stays here, to come back with results that offer it.
+  /// The results filter as chosen. Facets these results do not offer are kept
+  /// here for later results that do.
   final BrowseFilterQuery resultsChoice;
 
   /// One source picked out of the name matches, or null for all of them.
@@ -228,8 +221,7 @@ class SearchSessionState {
 
   /// Filters applied to [catalogPage]. Lives here rather than inside the page
   /// because the control that edits it sits in the title bar, a sibling of the
-  /// page. Each category's own is remembered and comes back with it when it
-  /// is opened again.
+  /// page. Remembered per category.
   final BrowseFilterQuery catalogFilter;
 
   final List<String> history;
@@ -266,13 +258,12 @@ class SearchSessionState {
       aiSuggestions.isEmpty ? _fallbackSuggestions : aiSuggestions;
 
   /// What the results can be narrowed by: whatever they hold. A facet with
-  /// nothing to choose between is hidden — one source, one kind, or one block
-  /// where no source searched can suggest anything.
+  /// nothing to choose between is hidden — one source, one kind.
   BrowseFilterCapabilities get resultsFilterCapabilities =>
       _capabilitiesFor(results);
 
-  /// With [gatherHeld] false, the kinds and genres [results] hold are not
-  /// gathered — that ranks every match — and every kind and genre stands.
+  /// With [gatherHeld] false every type and genre is allowed, which saves
+  /// ranking every match.
   static BrowseFilterCapabilities _capabilitiesFor(
     SearchResults? results, {
     bool gatherHeld = true,
@@ -353,10 +344,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   bool _disposed = false;
 
-  /// The results filter as remembered — see [_resultsFilterKey].
   BrowseFilterQuery _savedResultsFilter = const BrowseFilterQuery();
-
-  /// Each catalog's filter as remembered — see [_catalogFiltersKey].
   Map<String, BrowseFilterQuery> _savedCatalogFilters = {};
 
   @override
@@ -385,8 +373,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   }
 
   /// Close Find Music and discard the ephemeral workspace (results + catalog
-  /// page). History is written live on each [submit], and filters on each
-  /// choice, so nothing to fold here.
+  /// page). History is written live on each [submit], so nothing to fold here.
   void close() {
     if (!state.isOpen) return;
     state = state.copyWith(
@@ -477,11 +464,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// Apply a filter selection to the open catalog page. The page reloads only
   /// when the part of it the backend honours actually changed.
   ///
-  /// The page opens under it again next time, unless [remember] is false — a
-  /// shelf's View all, which narrows the page without being a choice of
-  /// filter. What is remembered is only what changed from the page as shown,
-  /// so a View all's kind stays out of it until it is chosen itself; see
-  /// [_withChange].
+  /// [remember] is false for a shelf's View all, which is not a filter choice.
   void setCatalogFilter(BrowseFilterQuery filter, {bool remember = true}) {
     final id = state.catalogPage.id;
     if (id == null) return;
@@ -498,14 +481,9 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     state = state.copyWith(catalogFilter: filter);
   }
 
-  /// [base] with the change made from the filter [shown] to [next]: the
-  /// facets that differ are taken from [next], and the rest kept as [base]
-  /// has them — one a VIEW ALL set, one the screen hid — since nobody touched
-  /// them.
-  ///
-  /// A [next] with nothing left in it — Reset filters, RESET ALL, the card's
-  /// RESET, the last chip taken off — drops the lot, hidden facets included:
-  /// where no filter shows, none is kept.
+  /// Takes only the facets that changed from [shown] to [next] into [base], so
+  /// facets the screen hid are kept. An empty [next] is a reset and clears
+  /// those too.
   static BrowseFilterQuery _withChange(
     BrowseFilterQuery base, {
     required BrowseFilterQuery shown,
@@ -520,11 +498,10 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// there is no search-as-you-type, and catalog taps bypass it.
   ///
   /// Every source is asked twice, separately — for its name matches and for
-  /// its recommendations — so each answer can land on its own. What the
-  /// filter would hide anyway is not asked for.
+  /// its recommendations — so each answer can land on its own.
   ///
-  /// The search runs under the results filter last chosen, or under [filter]
-  /// where the query was edited in the filter card alongside its facets.
+  /// [filter] comes from the filter card, where the query was edited together
+  /// with its facets.
   void submit(String rawQuery, {BrowseFilterQuery? filter}) {
     final query = rawQuery.trim();
     if (query.isEmpty) return;
@@ -586,17 +563,12 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     );
     final choice = state.resultsChoice;
     final results = pending.askingOnly(_fitResultsFilter(choice, pending));
-    // Fitted again to what is actually asked: a filter that shuts out every
-    // leg settles the results here, and no leg will land to fit it later.
+    // Fitted again here: when every leg is skipped, none lands to do it.
     state = state.copyWith(
       searchLoading: false,
       results: results,
       resultsFilter: _fitResultsFilter(choice, results),
     );
-    // Only the legs left waiting. A source with no audio of its own —
-    // collections — would answer recommendations empty, having held a row
-    // open while it did, so it holds no such leg; one the filter shuts out
-    // is asked once a filter lets it back in.
     for (final source in sources) {
       for (final (leg, legs) in [
         (ResultsLeg.matches, results.matches),
@@ -663,9 +635,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   }
 
   /// Ask one source again for one leg — the source that was unavailable,
-  /// without disturbing what the others already answered. Its answer may hold
-  /// the kind or genre a remembered choice was cut for lacking, so the cut is
-  /// judged again once it lands.
+  /// without disturbing what the others already answered.
   void retry(ResultsLeg leg, String source) {
     final results = state.results?.withLeg(leg, source, const LegLoading());
     if (results == null) return;
@@ -691,13 +661,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// Narrow the results. The query itself is not a facet here — a changed
   /// query is a new search, which is [submit]'s job.
   ///
-  /// The searches after this one start under it too, unless [remember] is
-  /// false — a block's VIEW ALL, which opens that block in full without being
-  /// a choice of filter. Only what changed from the filter as shown is taken
-  /// into the choice; see [_withChange].
-  ///
-  /// A leg the search left unasked under the old filter is asked now if the
-  /// new one lets its answer through.
+  /// [remember] is false for a block's VIEW ALL, which is not a filter choice.
+  /// Legs skipped under the old filter that the new one shows are asked now.
   void setResultsFilter(BrowseFilterQuery filter, {bool remember = true}) {
     final next = filter.copyWith(text: '');
     final shown = state.resultsFilter;
@@ -733,18 +698,12 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     }
   }
 
-  /// [choice] cut to what [results] can be narrowed by, so a remembered facet
-  /// the filter card does not offer cannot narrow them unseen.
+  /// Types and genres are only checked once every leg has answered, since
+  /// until then the results are still growing. [judgeHeld] false skips that
+  /// check altogether.
   ///
-  /// What the results hold grows until the last leg answers, so their kinds
-  /// and genres are judged only then, and not gathered before; [judgeHeld]
-  /// false leaves them unjudged even then, where only the sources and blocks
-  /// matter.
-  ///
-  /// With [holding], the kinds and genres stand as [holding] has them until
-  /// the last leg answers: a leg asked again must not bring back a facet
-  /// these results were cut for lacking, and narrow away everything already
-  /// on screen while it waits.
+  /// While legs are pending, [holding] keeps its types and genres, so a
+  /// retried leg does not bring back a facet that would empty the screen.
   static BrowseFilterQuery _fitResultsFilter(
     BrowseFilterQuery choice,
     SearchResults? results, {
@@ -764,9 +723,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         BrowseFacet.genre,
       });
     }
-    // Where nothing can suggest, the kind facet is hidden so recommendations
-    // cannot empty the page. Name matches alone stays: it hides nothing
-    // there, and it is how VIEW ALL opens that block in full.
+    // Kept even where the kind facet is hidden: VIEW ALL opens the name
+    // matches this way.
     return choice.kind == ResultKind.nameMatches
         ? fitted.copyWith(kind: ResultKind.nameMatches)
         : fitted;
@@ -958,18 +916,13 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     }
   }
 
-  /// Forget the filters of catalogs no longer offered — a source removed, a
-  /// category its source dropped — once the lists a page can be opened from
-  /// have loaded. They load for the Catalogs root anyway, so this asks the
-  /// server for nothing more. A list that failed to load proves nothing, so
-  /// nothing is forgotten then.
+  /// Drops saved filters of catalogs the server no longer offers. Nothing is
+  /// dropped if a list fails to load.
   Future<void> _forgetUnofferedCatalogs() async {
     if (_savedCatalogFilters.isEmpty) return;
     final Set<String> offered;
     try {
-      // Which sources are the server's own is empty until the module list
-      // lands, and the collections shelf is found only among those: read
-      // before it, the shelf would be missing and its filter forgotten.
+      // The collections shelf is missing until the module list lands.
       await ref.read(sourceModulesProvider.future);
       final (groups, collections) = await (
         ref.read(catalogCardGroupsProvider.future),

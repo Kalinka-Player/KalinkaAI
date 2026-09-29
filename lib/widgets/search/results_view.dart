@@ -75,7 +75,7 @@ class ResultsView extends ConsumerWidget {
     final matches = NameMatchesBlock.visible(results, narrowed, filter);
     final inspired = InspiredBlock.visible(results, narrowed, filter);
     if (!matches && !inspired) {
-      // Order hides nothing, so it cannot be what emptied the results.
+      // Order hides nothing, so it does not count as a filter here.
       final filtered =
           filter.copyWith(order: NameMatchOrder.relevance).activeCount > 0 ||
           matchSource != null;
@@ -127,7 +127,6 @@ class ResultsView extends ConsumerWidget {
   }
 }
 
-/// Nothing to show, and no filter to blame: the search itself found nothing.
 class _NoMatches extends StatelessWidget {
   const _NoMatches();
 
