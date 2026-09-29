@@ -716,6 +716,41 @@ void main() {
       },
     );
 
+    test(
+      'a kind a leg brings back under an open card is not taken from the choice',
+      () async {
+        final api = _AlbumsLateApi();
+        final container = makeContainer(api, modules: _twoSources);
+        final notifier = container.read(searchSessionProvider.notifier);
+        SearchSessionState state() => container.read(searchSessionProvider);
+        notifier.open();
+        notifier.setResultsFilter(
+          const BrowseFilterQuery(type: SearchType.album),
+        );
+        notifier.submit('jazz');
+        await Future.delayed(_settle);
+        expect(state().resultsFilter.type, isNull);
+
+        final opened = state().resultsFilter.copyWith(text: 'jazz');
+        notifier.retry(ResultsLeg.matches, 'qobuz');
+        await Future.delayed(_settle);
+        expect(state().resultsFilter.type, SearchType.album);
+
+        notifier.setResultsFilter(
+          opened.copyWith(order: NameMatchOrder.alphabetical),
+          shown: opened,
+        );
+        expect(state().resultsChoice.type, SearchType.album);
+        expect(state().resultsFilter.type, SearchType.album);
+        expect(state().resultsFilter.order, NameMatchOrder.alphabetical);
+
+        final restarted = makeContainer(api, modules: _twoSources);
+        final saved = restarted.read(searchSessionProvider).resultsFilter;
+        expect(saved.type, SearchType.album);
+        expect(saved.order, NameMatchOrder.alphabetical);
+      },
+    );
+
     test('a reset drops what the results hid of the choice too', () async {
       final api = _FakeApi();
       final container = makeContainer(api, modules: _twoNameOnlySources);

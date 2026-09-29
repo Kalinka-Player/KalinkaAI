@@ -106,6 +106,10 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   // Whether the search-and-filters card is unfolded out of its title-bar pill.
   bool _filtersOpen = false;
 
+  // What the card opened on. Results can refit their filter while it is open,
+  // so this, not the filter in force, is what the listener edited.
+  BrowseFilterQuery _filtersOpenedOn = const BrowseFilterQuery();
+
   // Rotates the example hint: each mount of the search surface advances one
   // step through the suggestion list.
   static int _hintRotation = 0;
@@ -274,7 +278,10 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
 
   void _openFilters() {
     if (_filtersOpen) return;
-    setState(() => _filtersOpen = true);
+    setState(() {
+      _filtersOpen = true;
+      _filtersOpenedOn = _appliedFilter(ref.read(searchSessionProvider));
+    });
     _filtersCtrl.forward(from: 0);
   }
 
@@ -297,9 +304,9 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
       // one keeps the search and resets the facets.
       final query = filter.text.trim();
       if (query.isNotEmpty && query != session.searchQuery) {
-        notifier.submit(query, filter: filter);
+        notifier.submit(query, filter: filter, shown: _filtersOpenedOn);
       } else {
-        notifier.setResultsFilter(filter);
+        notifier.setResultsFilter(filter, shown: _filtersOpenedOn);
       }
     } else {
       notifier.setCatalogFilter(filter);
@@ -661,7 +668,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                       alignment: Alignment.topRight,
                       child: SearchFilterOverlay(
                         capabilities: _filterCapabilities(session),
-                        applied: _appliedFilter(session),
+                        applied: _filtersOpenedOn,
                         title: onResults
                             ? 'REFINE RESULTS'
                             : 'SEARCH & FILTERS',

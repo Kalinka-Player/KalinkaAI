@@ -237,6 +237,12 @@ class BrowseFilterQuery {
       (order == NameMatchOrder.relevance ||
           capabilities.order == FacetSupport.supported);
 
+  /// Whether results of [kind] from [source] get through. A null [source]
+  /// stands for every source at once.
+  bool shows(ResultKind kind, String? source) =>
+      (this.kind == null || this.kind == kind) &&
+      (source == null || sources.isEmpty || sources.contains(source));
+
   /// Drops whatever [capabilities] do not offer, so a remembered choice cannot
   /// narrow a surface that shows no chip for it.
   BrowseFilterQuery fittedTo(BrowseFilterCapabilities capabilities) {

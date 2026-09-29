@@ -14,6 +14,7 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/browse_filters/active_filter_chips.dart';
 import 'package:kalinka/widgets/browse_rows_shimmer.dart';
 import 'package:kalinka/widgets/search_cards/action_pill_button.dart';
 import 'package:kalinka/widgets/search/results_view.dart';
@@ -144,12 +145,18 @@ Future<ProviderContainer> _pump(
   WidgetTester tester,
   _ScriptedApi api, {
   List<ModuleInfo>? modules,
+  Duration? modulesAfter,
 }) async {
   final container = ProviderContainer(
     overrides: [
       sharedPrefsProvider.overrideWithValue(_prefs),
       kalinkaProxyProvider.overrideWithValue(api),
-      sourceModulesProvider.overrideWith((ref) => modules ?? _modules),
+      if (modulesAfter == null)
+        sourceModulesProvider.overrideWith((ref) => modules ?? _modules)
+      else
+        sourceModulesProvider.overrideWith(
+          (ref) => Future.delayed(modulesAfter, () => modules ?? _modules),
+        ),
       connectionStateProvider.overrideWith(_FixedConnection.new),
       playerStateProvider.overrideWithValue(PlaybackState.empty),
     ],
@@ -798,6 +805,30 @@ void main() {
     expect(find.text('Home Song'), findsOneWidget);
   });
 
+  testWidgets(
+    'a remembered filter shows no chips until the sources are known',
+    (tester) async {
+      await _prefs.setString('Kalinka.resultsFilter', '{"sources":["qobuz"]}');
+      final api = _ScriptedApi(
+        matches: {
+          'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
+        },
+      );
+      final container = await _pump(
+        tester,
+        api,
+        modulesAfter: const Duration(milliseconds: 100),
+      );
+
+      expect(container.read(searchSessionProvider).searchLoading, isTrue);
+      expect(find.byType(ActiveFilterChip), findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(_settle);
+      expect(find.widgetWithText(ActiveFilterChip, 'Qobuz'), findsOneWidget);
+    },
+  );
+
   testWidgets('nothing found says so', (tester) async {
     await _pump(tester, _ScriptedApi());
     await tester.pump(_settle);
@@ -835,6 +866,7 @@ void main() {
     await tester.pump(_settle);
     final notifier = container.read(searchSessionProvider.notifier);
     notifier.setMatchSource('qobuz');
+    notifier.expandBlock((kind: ResultKind.recommendations, source: 'qobuz'));
     notifier.setResultsFilter(
       const BrowseFilterQuery(kind: ResultKind.recommendations),
     );
@@ -850,6 +882,7 @@ void main() {
     final session = container.read(searchSessionProvider);
     expect(session.resultsFilter.isEmpty, isTrue);
     expect(session.matchSource, isNull);
+    expect(session.expandedBlock, isNull);
     expect(find.text('Q Act'), findsOneWidget);
     expect(find.text('L Act'), findsOneWidget);
     expect(find.text('Reset filters'), findsNothing);
