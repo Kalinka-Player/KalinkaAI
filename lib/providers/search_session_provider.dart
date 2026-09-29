@@ -561,12 +561,18 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       sources,
       suggesting: suggesting,
     );
-    final choice = state.resultsChoice;
-    final results = pending.askingOnly(_fitResultsFilter(choice, pending));
-    // Fitted again here: when every leg is skipped, none lands to do it.
+    var choice = state.resultsChoice;
+    var results = pending.askingOnly(_fitResultsFilter(choice, pending));
+    if (results.settled && choice.kind != null) {
+      // Recommendations from sources that cannot suggest would ask no one, so
+      // this search goes without the kind. The saved filter keeps it.
+      choice = choice.copyWith(clearKind: true);
+      results = pending.askingOnly(_fitResultsFilter(choice, pending));
+    }
     state = state.copyWith(
       searchLoading: false,
       results: results,
+      resultsChoice: choice,
       resultsFilter: _fitResultsFilter(choice, results),
     );
     for (final source in sources) {
@@ -913,10 +919,12 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     }
   }
 
-  /// Drops saved filters of catalogs the server no longer offers. Nothing is
-  /// dropped if a list fails to load.
+  /// Drops saved filters of catalogs their source no longer lists. A source
+  /// that lists nothing, such as one logged out or offline, keeps its filters:
+  /// the app cannot tell it from one removed for good.
   Future<void> _forgetUnofferedCatalogs() async {
     if (_savedCatalogFilters.isEmpty) return;
+    final Set<String> listing;
     final Set<String> offered;
     try {
       // The collections shelf is missing until the module list lands.
@@ -925,6 +933,10 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         ref.read(catalogCardGroupsProvider.future),
         ref.read(collectionsShelfProvider.future),
       ).wait;
+      listing = {
+        for (final group in groups) group.sourceName,
+        if (collections != null) collections.plan.sourceName,
+      };
       offered = {
         for (final group in groups)
           for (final card in group.cards) card.id,
@@ -935,7 +947,9 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     }
     if (_disposed) return;
     final before = _savedCatalogFilters.length;
-    _savedCatalogFilters.removeWhere((id, _) => !offered.contains(id));
+    _savedCatalogFilters.removeWhere(
+      (id, _) => listing.contains(sourceOfId(id)) && !offered.contains(id),
+    );
     if (_savedCatalogFilters.length != before) _saveCatalogFilters();
   }
 }
