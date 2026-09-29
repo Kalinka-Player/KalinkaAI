@@ -4,12 +4,16 @@ import '../data_model/data_model.dart';
 import '../data_model/kalinka_ws_api.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/kalinka_ws_api_provider.dart';
+import '../providers/now_playing_provider.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
+import '../utils/click_cursor.dart';
 import '../utils/haptics.dart';
 import '../utils/playback_utils.dart';
 import '../providers/source_modules_provider.dart';
 import 'bit_perfect_badge.dart';
+import 'kalinka_dialog.dart';
+import 'kiosk/kiosk_enter_button.dart';
 import 'play_pause_glyph.dart';
 import 'playback_progress_slider.dart';
 import 'renderer_switcher.dart';
@@ -48,37 +52,6 @@ class NowPlayingContent extends ConsumerStatefulWidget {
 }
 
 class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
-  String _formatLabel(String? mimeType) {
-    if (mimeType == null) return '';
-    if (mimeType.contains('flac')) return 'FLAC';
-    if (mimeType.contains('wav')) return 'WAV';
-    if (mimeType.contains('mp3') || mimeType.contains('mpeg')) return 'MP3';
-    if (mimeType.contains('aac')) return 'AAC';
-    if (mimeType.contains('ogg')) return 'OGG';
-    if (mimeType.contains('opus')) return 'OPUS';
-    return mimeType.split('/').last.toUpperCase();
-  }
-
-  String _formatAudioQuality(AudioInfo? audioInfo) {
-    if (audioInfo == null) return '';
-
-    final bitsPerSample = audioInfo.bitsPerSample;
-    final sampleRate = audioInfo.sampleRate;
-    final parts = <String>[];
-    if (bitsPerSample > 0) {
-      parts.add('$bitsPerSample-bit');
-    }
-    if (sampleRate > 0) {
-      final khz = sampleRate / 1000;
-      final khzLabel = sampleRate % 1000 == 0
-          ? khz.toStringAsFixed(0)
-          : khz.toStringAsFixed(1);
-      parts.add('$khzLabel kHz');
-    }
-
-    return parts.join(' • ');
-  }
-
   @override
   Widget build(BuildContext context) {
     // Use only primitive-typed selectors so Riverpod's == comparison works by
@@ -98,7 +71,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     );
     // Rebuild on any queue change: index/length covers Clear All (currentTrack
     // is sticky), seq covers same-index in-place changes.
-    final queueView = ref.watch(
+    ref.watch(
       playQueueStateStoreProvider.select(
         (s) => (
           length: s.trackList.length,
@@ -107,38 +80,21 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         ),
       ),
     );
-    final exclusive = ref.watch(playbackControlProvider).isExclusive;
+    ref.watch(playbackControlProvider.select((c) => c.isExclusive));
     // Read full state without watching — content is current because the
     // selectors above already gated the rebuild on a meaningful change.
     final playbackState = ref.read(playerStateProvider);
-    final trackList = ref.read(playQueueStateStoreProvider).trackList;
-    // Derive the current track from the queue (like MiniPlayer) so an emptied
-    // queue resolves to "no track" instead of the stale currentTrack. A
-    // plugin's playback is not in the queue, so its track is the state's own.
-    final Track? currentTrack;
-    if (exclusive) {
-      currentTrack = playbackState.currentTrack;
-    } else if (queueView.index >= 0 && queueView.index < trackList.length) {
-      currentTrack = trackList[queueView.index];
-    } else if (trackList.isNotEmpty) {
-      currentTrack = playbackState.currentTrack;
-    } else {
-      currentTrack = null;
-    }
+    final currentTrack = ref.read(nowPlayingTrackProvider);
+    final durationMs = ref.read(nowPlayingDurationMsProvider);
     final urlResolver = ref.read(urlResolverProvider);
-
-    final streamDurationMs = playbackState.audioInfo?.durationMs ?? 0;
-    final durationMs = exclusive && streamDurationMs > 0
-        ? streamDurationMs
-        : (currentTrack?.duration ?? 0) * 1000;
 
     final imageUrl = currentTrack?.album?.image?.large;
     final resolvedImageUrl = imageUrl != null
         ? urlResolver.abs(imageUrl)
         : null;
 
-    final mimeLabel = _formatLabel(playbackState.mimeType);
-    final qualityLabel = _formatAudioQuality(playbackState.audioInfo);
+    final mimeLabel = mimeTypeLabel(playbackState.mimeType);
+    final qualityLabel = audioQualityLabel(playbackState.audioInfo);
 
     // Source display info for the attribution line.
     final sourceMap = ref.watch(sourceDisplayInfoProvider);
@@ -282,24 +238,46 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     final attributionText = parts.join(' · ');
     final showBadge = sourceBadgeVisible(ref, currentTrack.id);
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        if (showBadge) SourceBadge(entityId: currentTrack.id),
-        if (attributionText.isNotEmpty) ...[
-          if (showBadge) const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              attributionText,
-              style: KalinkaTextStyles.expandedAttribution,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+    // The line that names the stream is also the way into its details.
+    return Semantics(
+      label: 'Stream info',
+      button: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          mouseCursor: clickCursor(interactive: true),
+          onTap: () {
+            KalinkaHaptics.selectionClick();
+            showKalinkaDialog<void>(
+              context: context,
+              builder: (_) => const StreamInfoDialog(),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (showBadge) SourceBadge(entityId: currentTrack.id),
+                if (attributionText.isNotEmpty) ...[
+                  if (showBadge) const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      attributionText,
+                      style: KalinkaTextStyles.expandedAttribution,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+                const BitPerfectBadge(),
+              ],
             ),
           ),
-        ],
-        const BitPerfectBadge(),
-      ],
+        ),
+      ),
     );
   }
 
@@ -347,7 +325,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      StreamInfoButton(),
+                      KioskEnterButton(),
                       RendererSwitcherButton(hitDiameter: 36, iconSize: 20),
                     ],
                   ),
@@ -371,7 +349,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                 style: KalinkaTextStyles.nowPlayingLabel,
               ),
             ),
-            const StreamInfoButton(),
+            const KioskEnterButton(),
             RendererSwitcherDropdown(key: widget.outputSwitcherKey),
           ],
         ),
@@ -389,7 +367,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
             alignment: Alignment.centerRight,
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: [StreamInfoButton(), RendererSwitcherDropdown()],
+              children: [KioskEnterButton(), RendererSwitcherDropdown()],
             ),
           ),
         ],
@@ -482,7 +460,8 @@ class _TransportControls extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final playerState = ref.watch(playerStateProvider.select((s) => s.state));
+    final transport = ref.watch(transportStateProvider);
+    final playerState = transport.playerState;
     final playbackMode = ref.watch(playbackModeProvider);
     final api = ref.read(kalinkaWsApiProvider);
 
@@ -492,27 +471,13 @@ class _TransportControls extends ConsumerWidget {
 
     // No track loaded → the transport buttons (prev / play-pause / next) go
     // inactive. Shuffle and repeat are switches that apply to whatever the
-    // queue plays next, so they stay live, but only while the queue plays.
-    final queuePosition = ref.watch(
-      playQueueStateStoreProvider.select(
-        (s) => (length: s.trackList.length, index: s.playbackState.index ?? 0),
-      ),
-    );
-    // A plugin's playback carries its own queue: its controls go to it, and
-    // only it knows where its ends are. It takes no shuffle or repeat.
-    final exclusive = ref.watch(playbackControlProvider).isExclusive;
-    final hasTrack = exclusive || queuePosition.length > 0;
-    final playPauseDisabled =
-        !hasTrack || isPlayPauseDisabled(playerState, exclusive: exclusive);
-
-    // Gate prev/next at the queue ends, but only for plain sequential
-    // playback: repeat-all wraps around and shuffle decouples list order from
-    // play order, so in those modes either end stays meaningful.
-    final boundedNav = !exclusive && !isShuffle && !isRepeatAll;
-    final canPrev = hasTrack && (!boundedNav || queuePosition.index > 0);
-    final canNext =
-        hasTrack &&
-        (!boundedNav || queuePosition.index < queuePosition.length - 1);
+    // queue plays next, so they stay live, but only while the queue plays —
+    // a plugin's playback takes neither.
+    final exclusive = transport.exclusive;
+    final hasTrack = transport.hasTrack;
+    final playPauseDisabled = transport.playPauseDisabled;
+    final canPrev = transport.canPrev;
+    final canNext = transport.canNext;
 
     return RepaintBoundary(
       child: Row(

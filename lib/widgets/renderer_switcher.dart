@@ -92,7 +92,7 @@ class RendererSwitcherButton extends ConsumerWidget {
         child: TransportButton(
           hitDiameter: hitDiameter,
           onTapDown: (_) => KalinkaHaptics.selectionClick(),
-          onTap: () => _openPicker(context, ref),
+          onTap: () => showRendererPicker(context, ref),
           child: _CastGlyph(size: iconSize, live: outputLive),
         ),
       ),
@@ -177,7 +177,7 @@ class RendererSwitcherDropdown extends ConsumerWidget {
           child: InkWell(
             onTap: () {
               KalinkaHaptics.selectionClick();
-              _openPicker(context, ref);
+              showRendererPicker(context, ref);
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
@@ -214,7 +214,14 @@ class RendererSwitcherDropdown extends ConsumerWidget {
   }
 }
 
-Future<void> _openPicker(BuildContext context, WidgetRef ref) async {
+/// Opens the output picker and acts on the choice. [configurable] false
+/// drops the per-output settings gear, for screens that do not host that
+/// panel.
+Future<void> showRendererPicker(
+  BuildContext context,
+  WidgetRef ref, {
+  bool configurable = true,
+}) async {
   final notifier = ref.read(rendererListProvider.notifier);
   final route = ref.read(rendererSettingsRouteProvider.notifier);
   final proxy = ref.read(kalinkaProxyProvider);
@@ -232,7 +239,7 @@ Future<void> _openPicker(BuildContext context, WidgetRef ref) async {
   notifier.refresh();
   final choice = await showKalinkaBottomSheet<RendererPickerChoice>(
     context: context,
-    contentBuilder: (_) => const RendererPickerContent(),
+    contentBuilder: (_) => RendererPickerContent(configurable: configurable),
   );
   if (choice == null) return;
 
@@ -279,7 +286,9 @@ Future<void> _openPicker(BuildContext context, WidgetRef ref) async {
 
 /// Body of the renderer picker sheet. Pops a [RendererPickerChoice].
 class RendererPickerContent extends ConsumerWidget {
-  const RendererPickerContent({super.key});
+  final bool configurable;
+
+  const RendererPickerContent({super.key, this.configurable = true});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -308,6 +317,7 @@ class RendererPickerContent extends ConsumerWidget {
               itemBuilder: (ctx, i) => _RendererRow(
                 renderer: renderers[i],
                 isSelf: renderers[i].rendererId == ownId,
+                configurable: configurable,
                 onIntent: (intent) => Navigator.pop(
                   ctx,
                   RendererPickerChoice(
@@ -421,11 +431,13 @@ class _RendererRow extends StatelessWidget {
 
   /// The renderer this app itself hosts (web build); its row says so.
   final bool isSelf;
+  final bool configurable;
   final ValueChanged<RendererPickerIntent> onIntent;
 
   const _RendererRow({
     required this.renderer,
     required this.isSelf,
+    required this.configurable,
     required this.onIntent,
   });
 
@@ -447,7 +459,9 @@ class _RendererRow extends StatelessWidget {
     // never on one the server cannot talk to, whose settings are unreachable
     // until it is upgraded, and never beside an upgrade button: two targets
     // where only one works is a trap.
-    final showGear = canConfigure || (renderer.compatible && !offerUpgrade);
+    final showGear =
+        configurable &&
+        (canConfigure || (renderer.compatible && !offerUpgrade));
     final name = rendererDisplayName(renderer, isSelf: isSelf);
     final detail = rendererDetail(renderer, isSelf: isSelf);
 

@@ -23,12 +23,16 @@ class PlayPauseGlyph extends StatelessWidget {
   /// Stroke width of the buffering spinner.
   final double spinnerStrokeWidth;
 
+  /// Glyph and spinner colour — dark, for the white discs.
+  final Color color;
+
   const PlayPauseGlyph({
     super.key,
     required this.playerState,
     required this.iconSize,
     required this.spinnerSize,
     this.spinnerStrokeWidth = 2.5,
+    this.color = KalinkaColors.background,
   });
 
   @override
@@ -39,9 +43,7 @@ class PlayPauseGlyph extends StatelessWidget {
         height: spinnerSize,
         child: CircularProgressIndicator(
           strokeWidth: spinnerStrokeWidth,
-          valueColor: const AlwaysStoppedAnimation<Color>(
-            KalinkaColors.background,
-          ),
+          valueColor: AlwaysStoppedAnimation<Color>(color),
         ),
       );
     }
@@ -50,7 +52,7 @@ class PlayPauseGlyph extends StatelessWidget {
           ? Icons.pause_rounded
           : Icons.play_arrow_rounded,
       size: iconSize,
-      color: KalinkaColors.background,
+      color: color,
     );
   }
 }

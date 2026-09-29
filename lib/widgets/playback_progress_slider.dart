@@ -28,22 +28,35 @@ class PlaybackProgressSlider extends ConsumerStatefulWidget {
       _PlaybackProgressSliderState();
 }
 
-class _PlaybackProgressSliderState
-    extends ConsumerState<PlaybackProgressSlider> {
+/// Drag-to-seek state shared by the progress bars. The thumb follows the
+/// finger, then holds the target until the server's next event confirms the
+/// seek, so it never snaps back to the old position first.
+mixin OptimisticSeek<T extends ConsumerStatefulWidget> on ConsumerState<T> {
   bool _isSeeking = false;
   double _seekProgress = 0.0;
-  int _seekPositionMs = 0;
   int? _seekBeforeSeq;
   double _lastHapticSeekPosition = -1.0;
-  ProviderSubscription? _playQueueStateStoreProviderSubscription;
+  ProviderSubscription? _seqSubscription;
+
+  int get seekDurationMs;
+
+  bool get isSeeking => _isSeeking;
+
+  /// Where the bar stands, 0–1: the drag target while seeking, playback
+  /// otherwise.
+  double seekAwareProgress(int playbackTimeMs) {
+    if (_isSeeking) return _seekProgress;
+    final durationMs = seekDurationMs;
+    return durationMs > 0 ? (playbackTimeMs / durationMs).clamp(0.0, 1.0) : 0.0;
+  }
+
+  int seekAwarePositionMs(int playbackTimeMs) =>
+      _isSeeking ? (_seekProgress * seekDurationMs).toInt() : playbackTimeMs;
 
   @override
   void initState() {
     super.initState();
-    // Clear the local seek position once the server acknowledges the seek
-    // with a new event (seq changes). This prevents the thumb from jumping
-    // back to the old position before the server reply arrives.
-    _playQueueStateStoreProviderSubscription = ref.listenManual<int>(
+    _seqSubscription = ref.listenManual<int>(
       playQueueStateStoreProvider.select((s) => s.seq),
       (prev, next) {
         if (_isSeeking && next != _seekBeforeSeq) {
@@ -58,19 +71,48 @@ class _PlaybackProgressSliderState
 
   @override
   void dispose() {
-    _playQueueStateStoreProviderSubscription?.close();
+    _seqSubscription?.close();
     super.dispose();
   }
+
+  void seekTo(double progress) {
+    if (!_isSeeking) {
+      KalinkaHaptics.mediumImpact();
+      _lastHapticSeekPosition = progress;
+    } else if ((progress - _lastHapticSeekPosition).abs() >= 0.05) {
+      KalinkaHaptics.selectionClick();
+      _lastHapticSeekPosition = progress;
+    }
+    setState(() {
+      _isSeeking = true;
+      _seekProgress = progress;
+    });
+  }
+
+  void commitSeek(double progress) {
+    KalinkaHaptics.lightImpact();
+    setState(() {
+      _seekProgress = progress;
+      _seekBeforeSeq = ref.read(playQueueStateStoreProvider).seq;
+    });
+    ref
+        .read(kalinkaWsApiProvider)
+        .sendQueueCommand(
+          QueueCommand.seek(positionMs: (progress * seekDurationMs).toInt()),
+        );
+  }
+}
+
+class _PlaybackProgressSliderState extends ConsumerState<PlaybackProgressSlider>
+    with OptimisticSeek {
+  @override
+  int get seekDurationMs => widget.durationMs;
 
   @override
   Widget build(BuildContext context) {
     final playbackTimeMs = ref.watch(playbackTimeMsProvider);
-    final positionMs = _isSeeking ? _seekPositionMs : playbackTimeMs;
-    final progress = _isSeeking
-        ? _seekProgress
-        : (widget.durationMs > 0
-              ? (positionMs / widget.durationMs).clamp(0.0, 1.0)
-              : 0.0);
+    final positionMs = seekAwarePositionMs(playbackTimeMs);
+    final progress = seekAwareProgress(playbackTimeMs);
 
     return RepaintBoundary(
       child: Opacity(
@@ -99,35 +141,10 @@ class _PlaybackProgressSliderState
                 child: Slider(
                   value: progress,
                   onChanged: (value) {
-                    if (!widget.enabled) return;
-                    if (!_isSeeking) {
-                      KalinkaHaptics.mediumImpact();
-                      _lastHapticSeekPosition = value;
-                    } else if ((value - _lastHapticSeekPosition).abs() >=
-                        0.05) {
-                      KalinkaHaptics.selectionClick();
-                      _lastHapticSeekPosition = value;
-                    }
-                    setState(() {
-                      _isSeeking = true;
-                      _seekProgress = value;
-                      _seekPositionMs = (value * widget.durationMs).toInt();
-                    });
+                    if (widget.enabled) seekTo(value);
                   },
                   onChangeEnd: (value) {
-                    if (!widget.enabled) return;
-                    KalinkaHaptics.lightImpact();
-                    final newPositionMs = (value * widget.durationMs).toInt();
-                    setState(() {
-                      _seekBeforeSeq = ref
-                          .read(playQueueStateStoreProvider)
-                          .seq;
-                    });
-                    ref
-                        .read(kalinkaWsApiProvider)
-                        .sendQueueCommand(
-                          QueueCommand.seek(positionMs: newPositionMs),
-                        );
+                    if (widget.enabled) commitSeek(value);
                   },
                 ),
               ),
