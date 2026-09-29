@@ -3,7 +3,14 @@ import 'data_model.dart';
 
 /// The two requests a search makes of each source: its hits by name, and
 /// what it suggests for the query.
-enum ResultsLeg { matches, inspired }
+enum ResultsLeg {
+  matches(ResultKind.nameMatches),
+  inspired(ResultKind.recommendations);
+
+  const ResultsLeg(this.kind);
+
+  final ResultKind kind;
+}
 
 /// One request's standing for one source.
 sealed class LegState {
@@ -93,12 +100,7 @@ class SearchResults {
     BrowseFilterQuery filter,
     ResultsLeg leg,
     String source,
-  ) =>
-      (filter.sources.isEmpty || filter.sources.contains(source)) &&
-      switch (leg) {
-        ResultsLeg.matches => filter.kind != ResultKind.recommendations,
-        ResultsLeg.inspired => filter.kind != ResultKind.nameMatches,
-      };
+  ) => filter.shows(leg.kind, source);
 
   SearchResults askingOnly(BrowseFilterQuery filter) {
     Map<String, LegState> only(ResultsLeg leg, Map<String, LegState> legs) => {

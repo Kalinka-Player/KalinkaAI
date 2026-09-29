@@ -32,7 +32,11 @@ class ResultsView extends ConsumerWidget {
       children: [
         ActiveFilterChips(
           capabilities: session.resultsFilterCapabilities,
-          query: session.resultsFilter,
+          // Until the sources are known the saved filter is not yet fitted to
+          // them, and its chips could change or vanish once it is.
+          query: results == null
+              ? const BrowseFilterQuery()
+              : session.resultsFilter,
           onChanged: notifier.setResultsFilter,
           padding: const EdgeInsets.only(bottom: 16),
           // The query is not a facet, but it sits where the facets do: the
@@ -97,13 +101,7 @@ class ResultsView extends ConsumerWidget {
       return [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 28),
-          child: FiltersMatchNothing(
-            onReset: () {
-              notifier.setResultsFilter(const BrowseFilterQuery());
-              notifier.setMatchSource(null);
-              notifier.expandBlock(null);
-            },
-          ),
+          child: FiltersMatchNothing(onReset: notifier.resetResults),
         ),
       ];
     }

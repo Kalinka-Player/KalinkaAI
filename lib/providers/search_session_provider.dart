@@ -547,15 +547,19 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// its recommendations — so each answer can land on its own.
   ///
   /// [filter] comes from the filter card, where the query was edited together
-  /// with its facets.
-  void submit(String rawQuery, {BrowseFilterQuery? filter}) {
+  /// with its facets, starting from [shown] as for [setResultsFilter].
+  void submit(
+    String rawQuery, {
+    BrowseFilterQuery? filter,
+    BrowseFilterQuery? shown,
+  }) {
     final query = rawQuery.trim();
     if (query.isEmpty) return;
     if (filter != null) {
       _rememberResultsFilter(
         _withChange(
           _savedResultsFilter,
-          shown: state.resultsFilter,
+          shown: (shown ?? state.resultsFilter).copyWith(text: ''),
           next: filter.copyWith(text: ''),
         ),
       );
@@ -713,9 +717,30 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   ///
   /// Legs skipped under the old filter that the new one shows are asked now.
   /// An open block stays open while the new filter still shows it.
-  void setResultsFilter(BrowseFilterQuery filter) {
+  ///
+  /// [shown] is what [filter] was edited from, when that is not the filter in
+  /// force: legs that land under an open card refit the filter, and a facet
+  /// they bring back is not the listener's change.
+  void setResultsFilter(BrowseFilterQuery filter, {BrowseFilterQuery? shown}) =>
+      _narrowResults(
+        filter,
+        shown: (shown ?? state.resultsFilter).copyWith(text: ''),
+      );
+
+  /// Undo every narrowing at once: the facets, the source picked in the name
+  /// matches, and a block opened in full.
+  void resetResults() => _narrowResults(
+    const BrowseFilterQuery(),
+    shown: state.resultsFilter,
+    reset: true,
+  );
+
+  void _narrowResults(
+    BrowseFilterQuery filter, {
+    required BrowseFilterQuery shown,
+    bool reset = false,
+  }) {
     final next = filter.copyWith(text: '');
-    final shown = state.resultsFilter;
     _rememberResultsFilter(
       _withChange(_savedResultsFilter, shown: shown, next: next),
     );
@@ -740,19 +765,14 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       results: results,
       resultsChoice: choice,
       resultsFilter: fitted,
-      clearMatchSource: gone,
-      clearExpandedBlock: block != null && !_shows(fitted, block),
+      clearMatchSource: reset || gone,
+      clearExpandedBlock:
+          reset || (block != null && !fitted.shows(block.kind, block.source)),
     );
     for (final (:leg, :source) in unasked) {
       _runLeg(_queryGen, state.searchQuery, source, leg);
     }
   }
-
-  static bool _shows(BrowseFilterQuery filter, ExpandedBlock block) =>
-      (filter.kind == null || filter.kind == block.kind) &&
-      (block.source == null ||
-          filter.sources.isEmpty ||
-          filter.sources.contains(block.source));
 
   /// Open one block in full, or go back to both with null.
   void expandBlock(ExpandedBlock? block) {
