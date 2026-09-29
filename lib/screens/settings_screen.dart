@@ -20,6 +20,7 @@ import '../widgets/expert_settings_screen.dart';
 import '../widgets/settings_controls/settings_binding.dart';
 import '../widgets/slide_in_panel.dart';
 import '../widgets/support_section.dart';
+import '../widgets/this_device_section.dart';
 import 'log_export_screen.dart';
 import '../widgets/settings_renderer.dart';
 
@@ -223,10 +224,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     key: ValueKey('page_${page.id}'),
                                     page: page,
                                     footer: i == 0
-                                        ? SupportSection(
-                                            onDownloadLogs: () => setState(
-                                              () => _logExportOpen = true,
-                                            ),
+                                        ? Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              const ThisDeviceSection(),
+                                              SupportSection(
+                                                onDownloadLogs: () => setState(
+                                                  () => _logExportOpen = true,
+                                                ),
+                                              ),
+                                            ],
                                           )
                                         : null,
                                   ),

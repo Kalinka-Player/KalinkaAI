@@ -21,8 +21,10 @@ class KioskSplash extends StatefulWidget {
   State<KioskSplash> createState() => _KioskSplashState();
 }
 
-/// Where the glow ends up: the canvas warmed a little towards the berry.
-final _glow = Color.lerp(KalinkaColors.background, KalinkaColors.accent, 0.14)!;
+/// Where the glow ends up: the canvas warmed well towards the berry at the
+/// centre, a softer ring around it.
+final _glow = Color.lerp(KalinkaColors.background, KalinkaColors.accent, 0.3)!;
+final _halo = Color.lerp(KalinkaColors.background, KalinkaColors.accent, 0.1)!;
 
 class _KioskSplashState extends State<KioskSplash>
     with SingleTickerProviderStateMixin {
@@ -67,8 +69,8 @@ class _KioskSplashState extends State<KioskSplash>
       builder: (context, constraints) => Center(
         child: SvgPicture.asset(
           'assets/images/kalinka_logo.svg',
-          width: constraints.maxWidth * 0.62,
-          height: constraints.maxHeight * 0.62,
+          width: constraints.maxWidth * 0.31,
+          height: constraints.maxHeight * 0.31,
           fit: BoxFit.contain,
         ),
       ),
@@ -83,11 +85,13 @@ class _KioskSplashState extends State<KioskSplash>
           child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                radius: 0.9,
+                radius: 1.1,
                 colors: [
                   Color.lerp(KalinkaColors.background, _glow, _rise.value)!,
+                  Color.lerp(KalinkaColors.background, _halo, _rise.value)!,
                   KalinkaColors.background,
                 ],
+                stops: const [0, 0.45, 1],
               ),
             ),
             child: logo,

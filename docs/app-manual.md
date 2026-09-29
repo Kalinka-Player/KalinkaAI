@@ -110,7 +110,9 @@ For a screen that sits next to the hi-fi — a streamer's built-in panel, a tabl
 
 Open it from the player with the full-screen button next to the output switcher; the exit button in its corner, Back on Android or Escape returns to the full app.
 
-To start the app straight into it, set `KALINKA_KIOSK=true` in its environment (the Linux app then also opens full screen, without a title bar), build it with `--dart-define=KALINKA_KIOSK=true`, or point a browser at the web UI with `?kiosk` on the address (for example `http://streamer.local:8080/?kiosk`). Started this way it opens on the Kalinka logo, and the exit button stays hidden until you press and hold anywhere on the screen. Use `locked` instead of `true` for a screen built into the streamer: it offers no way out.
+To keep a device on the display — a tablet that should always show what is playing — turn on **Settings › General › This device › Now-playing display**. The app switches to the display straight away and opens on it every time it starts. To leave it, tap the Kalinka logo at the top of the screen five times; that also turns the setting off.
+
+For a screen built into the streamer, start the app with `KALINKA_KIOSK=true` in its environment (the Linux app then also opens full screen, without a title bar), build it with `--dart-define=KALINKA_KIOSK=true`, or point a browser at the web UI with `?kiosk` on the address (for example `http://streamer.local:8080/?kiosk`). Started this way it has no way out, whatever the setting says. Kept on the display either way, the app opens on the Kalinka logo.
 
 While music plays the controls fade after a few seconds; with nothing playing the screen shows a clock and dims after two minutes. Either way, the first touch only wakes it. A touch also brings up a tall volume bar on the right edge — drag it to change the volume; it fades a few seconds after you let go, and outputs with fixed volume don't show it. A device that has not been set up yet runs the setup wizard first, then switches to the display.
 
