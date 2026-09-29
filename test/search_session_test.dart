@@ -616,54 +616,57 @@ void main() {
       },
     );
 
-    test('a VIEW ALL opens a block without becoming the choice', () async {
+    test('a VIEW ALL opens a block without touching the filter', () async {
       final api = _TwoKindApi();
       final container = makeContainer(api, modules: _twoSources);
       final notifier = container.read(searchSessionProvider.notifier);
+      SearchSessionState state() => container.read(searchSessionProvider);
       notifier.open();
       notifier.submit('jazz');
       await Future.delayed(_settle);
 
-      notifier.setResultsFilter(
-        const BrowseFilterQuery(kind: ResultKind.nameMatches),
-        remember: false,
-      );
-      expect(
-        container.read(searchSessionProvider).resultsFilter.kind,
-        ResultKind.nameMatches,
-      );
+      notifier.expandBlock((kind: ResultKind.nameMatches, source: null));
+      expect(state().resultsShown.kind, ResultKind.nameMatches);
+      expect(state().resultsFilter.isEmpty, isTrue);
+      expect(prefs.getString('Kalinka.resultsFilter'), isNull);
 
       notifier.submit('blues');
-      expect(
-        container.read(searchSessionProvider).resultsFilter.isEmpty,
-        isTrue,
-      );
-      await Future.delayed(_settle);
-    });
-
-    test('a facet changed after a VIEW ALL leaves the VIEW ALL out', () async {
-      final api = _TwoKindApi();
-      final container = makeContainer(api, modules: _twoSources);
-      final notifier = container.read(searchSessionProvider.notifier);
-      BrowseFilterQuery filter() =>
-          container.read(searchSessionProvider).resultsFilter;
-      notifier.open();
-      notifier.submit('jazz');
-      await Future.delayed(_settle);
-
-      notifier.setResultsFilter(
-        filter().copyWith(kind: ResultKind.nameMatches),
-        remember: false,
-      );
-      notifier.setResultsFilter(filter().copyWith(type: SearchType.album));
-      expect(filter().kind, ResultKind.nameMatches);
-      expect(filter().type, SearchType.album);
-
-      notifier.submit('blues');
-      expect(filter().kind, isNull);
-      expect(filter().type, SearchType.album);
+      expect(state().expandedBlock, isNull);
+      expect(state().resultsShown.isEmpty, isTrue);
       await Future.delayed(_settle);
       expect(api.aiSearchCalls, 4, reason: 'recommendations asked both times');
+    });
+
+    test('an open block stays open while the filter still shows it', () async {
+      final api = _TwoKindApi();
+      final container = makeContainer(api, modules: _twoSources);
+      final notifier = container.read(searchSessionProvider.notifier);
+      SearchSessionState state() => container.read(searchSessionProvider);
+      notifier.open();
+      notifier.submit('jazz');
+      await Future.delayed(_settle);
+
+      notifier.expandBlock((kind: ResultKind.recommendations, source: 'qobuz'));
+      notifier.setResultsFilter(
+        const BrowseFilterQuery(type: SearchType.album),
+      );
+      expect(state().resultsShown.kind, ResultKind.recommendations);
+      expect(state().resultsShown.sources, ['qobuz']);
+      expect(state().resultsShown.type, SearchType.album);
+
+      notifier.setResultsFilter(
+        const BrowseFilterQuery(
+          type: SearchType.album,
+          sources: ['localfiles'],
+        ),
+      );
+      expect(state().expandedBlock, isNull);
+
+      notifier.expandBlock((kind: ResultKind.nameMatches, source: null));
+      notifier.setResultsFilter(
+        state().resultsFilter.copyWith(kind: ResultKind.recommendations),
+      );
+      expect(state().expandedBlock, isNull);
     });
 
     test(
@@ -786,12 +789,9 @@ void main() {
         );
         expect(state.resultsChoice.kind, ResultKind.recommendations);
 
-        notifier.setResultsFilter(
-          state.resultsFilter.copyWith(kind: ResultKind.nameMatches),
-          remember: false,
-        );
+        notifier.expandBlock((kind: ResultKind.nameMatches, source: null));
         expect(
-          container.read(searchSessionProvider).resultsFilter.kind,
+          container.read(searchSessionProvider).resultsShown.kind,
           ResultKind.nameMatches,
         );
       },

@@ -350,6 +350,11 @@ void main() {
       expect(find.text('ALBUMS'), findsNothing);
       expect(harness.api.calls.first.id, 'kalinka:localfiles:catalog:library');
       expect(harness.api.calls.first.filter, '{"type":{"any":["album"]}}');
+
+      await tester.tap(find.text('Albums'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ALBUMS'), findsOneWidget);
     });
 
     testWidgets('a kind chosen as a filter is kept for the next visit', (
@@ -377,21 +382,20 @@ void main() {
         },
       );
 
+      SearchSessionState state() =>
+          harness.container.read(searchSessionProvider);
+
       await tester.tap(find.text('VIEW ALL').first);
       await tester.pumpAndSettle();
-      expect(
-        harness.container.read(searchSessionProvider).catalogFilter.type,
-        SearchType.album,
-      );
+      expect(state().expandedShelf, SearchType.album);
+      expect(state().catalogFilter.type, isNull);
       _reopen(harness.container);
 
-      expect(
-        harness.container.read(searchSessionProvider).catalogFilter.type,
-        isNull,
-      );
+      expect(state().expandedShelf, isNull);
+      expect(state().catalogFilter.type, isNull);
     });
 
-    testWidgets('a filter changed after View all keeps the View all out', (
+    testWidgets('a filter changed after View all keeps the shelf open', (
       tester,
     ) async {
       final harness = await _pump(
@@ -401,18 +405,30 @@ void main() {
         },
       );
       final session = harness.container.read(searchSessionProvider.notifier);
-      BrowseFilterQuery filter() =>
-          harness.container.read(searchSessionProvider).catalogFilter;
+      SearchSessionState state() =>
+          harness.container.read(searchSessionProvider);
 
       await tester.tap(find.text('VIEW ALL').first);
       await tester.pumpAndSettle();
-      session.setCatalogFilter(filter().copyWith(genreIds: ['jazz']));
+      harness.api.calls.clear();
+      session.setCatalogFilter(
+        state().catalogFilter.copyWith(genreIds: ['jazz']),
+      );
       await tester.pumpAndSettle();
-      expect(filter().type, SearchType.album);
-      _reopen(harness.container);
+      expect(state().expandedShelf, SearchType.album);
+      expect(
+        harness.api.calls.first.filter,
+        '{"type":{"any":["album"]},"genre":{"any":["jazz"]}}',
+      );
 
-      expect(filter().type, isNull);
-      expect(filter().genreIds, ['jazz']);
+      session.setCatalogFilter(
+        state().catalogFilter.copyWith(type: SearchType.artist),
+      );
+      expect(state().expandedShelf, isNull);
+
+      _reopen(harness.container);
+      expect(state().catalogFilter.type, SearchType.artist);
+      expect(state().catalogFilter.genreIds, ['jazz']);
     });
 
     testWidgets('the page filter reaches each shelf in its own terms', (

@@ -52,6 +52,10 @@ const _fallbackSuggestions = <SearchSuggestion>[
 /// above Catalogs (there are no tabs).
 enum FindMusicView { catalogs, results }
 
+/// A results block opened in full by its VIEW ALL: the name matches, or one
+/// source's recommendations.
+typedef ExpandedBlock = ({ResultKind kind, String? source});
+
 /// The Catalogs view is either at its root (search invitation + catalog cards)
 /// or on one selected catalog page. Navigation is exactly one level deep — a
 /// page never opens another page; albums/artists/playlists unroll inline.
@@ -215,6 +219,10 @@ class SearchSessionState {
   /// a block per source, so there is nothing there to pick apart.
   final String? matchSource;
 
+  /// Kept apart from [resultsFilter] so that opening a block is never saved
+  /// as a filter choice.
+  final ExpandedBlock? expandedBlock;
+
   /// Root screen, or the one open catalog page. Its item data is fetched by the
   /// page view via `browseDetailProvider(id)` (cached across view switches).
   final CatalogPage catalogPage;
@@ -223,6 +231,10 @@ class SearchSessionState {
   /// because the control that edits it sits in the title bar, a sibling of the
   /// page. Remembered per category.
   final BrowseFilterQuery catalogFilter;
+
+  /// The kind whose shelf was opened in full by its View all. Kept apart from
+  /// [catalogFilter] so that it is never saved as a filter choice.
+  final SearchType? expandedShelf;
 
   final List<String> history;
   final List<BrowseItem> recentFavourites;
@@ -244,8 +256,10 @@ class SearchSessionState {
     this.resultsFilter = const BrowseFilterQuery(),
     this.resultsChoice = const BrowseFilterQuery(),
     this.matchSource,
+    this.expandedBlock,
     this.catalogPage = const CatalogPage.root(),
     this.catalogFilter = const BrowseFilterQuery(),
+    this.expandedShelf,
     this.history = const [],
     this.recentFavourites = const [],
     this.zeroStateLoading = false,
@@ -261,6 +275,15 @@ class SearchSessionState {
   /// nothing to choose between is hidden — one source, one kind.
   BrowseFilterCapabilities get resultsFilterCapabilities =>
       _capabilitiesFor(results);
+
+  /// What the results show: [resultsFilter], narrowed to [expandedBlock].
+  BrowseFilterQuery get resultsShown => switch (expandedBlock) {
+    null => resultsFilter,
+    (:final kind, :final source) => resultsFilter.copyWith(
+      kind: kind,
+      sources: source == null ? null : [source],
+    ),
+  };
 
   /// With [gatherHeld] false every type and genre is allowed, which saves
   /// ranking every match.
@@ -307,8 +330,12 @@ class SearchSessionState {
     BrowseFilterQuery? resultsChoice,
     String? matchSource,
     bool clearMatchSource = false,
+    ExpandedBlock? expandedBlock,
+    bool clearExpandedBlock = false,
     CatalogPage? catalogPage,
     BrowseFilterQuery? catalogFilter,
+    SearchType? expandedShelf,
+    bool clearExpandedShelf = false,
     List<String>? history,
     List<BrowseItem>? recentFavourites,
     bool? zeroStateLoading,
@@ -325,8 +352,14 @@ class SearchSessionState {
       resultsFilter: resultsFilter ?? this.resultsFilter,
       resultsChoice: resultsChoice ?? this.resultsChoice,
       matchSource: clearMatchSource ? null : (matchSource ?? this.matchSource),
+      expandedBlock: clearExpandedBlock
+          ? null
+          : (expandedBlock ?? this.expandedBlock),
       catalogPage: catalogPage ?? this.catalogPage,
       catalogFilter: catalogFilter ?? this.catalogFilter,
+      expandedShelf: clearExpandedShelf
+          ? null
+          : (expandedShelf ?? this.expandedShelf),
       history: history ?? this.history,
       recentFavourites: recentFavourites ?? this.recentFavourites,
       zeroStateLoading: zeroStateLoading ?? this.zeroStateLoading,
@@ -387,8 +420,10 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       resultsFilter: _savedResultsFilter,
       resultsChoice: _savedResultsFilter,
       clearMatchSource: true,
+      clearExpandedBlock: true,
       catalogPage: const CatalogPage.root(),
       catalogFilter: const BrowseFilterQuery(),
+      clearExpandedShelf: true,
       history: _loadHistory(),
     );
   }
@@ -403,6 +438,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       state = state.copyWith(
         catalogPage: const CatalogPage.root(),
         catalogFilter: const BrowseFilterQuery(),
+        clearExpandedShelf: true,
       );
       return;
     }
@@ -441,6 +477,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       catalogFilter:
           _savedCatalogFilters[id]?.fittedTo(page.filterCapabilities) ??
           const BrowseFilterQuery(),
+      clearExpandedShelf: true,
     );
   }
 
@@ -458,27 +495,36 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     state = state.copyWith(
       catalogPage: const CatalogPage.root(),
       catalogFilter: const BrowseFilterQuery(),
+      clearExpandedShelf: true,
     );
   }
 
   /// Apply a filter selection to the open catalog page. The page reloads only
-  /// when the part of it the backend honours actually changed.
-  ///
-  /// [remember] is false for a shelf's View all, which is not a filter choice.
-  void setCatalogFilter(BrowseFilterQuery filter, {bool remember = true}) {
+  /// when the part of it the backend honours actually changed. A kind chosen
+  /// here replaces the shelf a View all opened.
+  void setCatalogFilter(BrowseFilterQuery filter) {
     final id = state.catalogPage.id;
     if (id == null) return;
-    if (remember) {
-      _rememberCatalogFilter(
-        id,
-        _withChange(
-          _savedCatalogFilters[id] ?? const BrowseFilterQuery(),
-          shown: state.catalogFilter,
-          next: filter,
-        ),
-      );
-    }
-    state = state.copyWith(catalogFilter: filter);
+    _rememberCatalogFilter(
+      id,
+      _withChange(
+        _savedCatalogFilters[id] ?? const BrowseFilterQuery(),
+        shown: state.catalogFilter,
+        next: filter,
+      ),
+    );
+    state = state.copyWith(
+      catalogFilter: filter,
+      clearExpandedShelf: filter.type != null,
+    );
+  }
+
+  /// Open one shelf of the page in full, or go back to the shelves with null.
+  void expandShelf(SearchType? type) {
+    state = state.copyWith(
+      expandedShelf: type,
+      clearExpandedShelf: type == null,
+    );
   }
 
   /// Takes only the facets that changed from [shown] to [next] into [base], so
@@ -529,6 +575,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       resultsFilter: _savedResultsFilter,
       resultsChoice: _savedResultsFilter,
       clearMatchSource: true,
+      clearExpandedBlock: true,
       history: _loadHistory(),
     );
     _runQuery(query, gen);
@@ -664,16 +711,14 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// Narrow the results. The query itself is not a facet here — a changed
   /// query is a new search, which is [submit]'s job.
   ///
-  /// [remember] is false for a block's VIEW ALL, which is not a filter choice.
   /// Legs skipped under the old filter that the new one shows are asked now.
-  void setResultsFilter(BrowseFilterQuery filter, {bool remember = true}) {
+  /// An open block stays open while the new filter still shows it.
+  void setResultsFilter(BrowseFilterQuery filter) {
     final next = filter.copyWith(text: '');
     final shown = state.resultsFilter;
-    if (remember) {
-      _rememberResultsFilter(
-        _withChange(_savedResultsFilter, shown: shown, next: next),
-      );
-    }
+    _rememberResultsFilter(
+      _withChange(_savedResultsFilter, shown: shown, next: next),
+    );
     final choice = _withChange(state.resultsChoice, shown: shown, next: next);
     var results = state.results;
     final unasked =
@@ -690,15 +735,31 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         picked != null &&
         fitted.sources.isNotEmpty &&
         !fitted.sources.contains(picked);
+    final block = state.expandedBlock;
     state = state.copyWith(
       results: results,
       resultsChoice: choice,
       resultsFilter: fitted,
       clearMatchSource: gone,
+      clearExpandedBlock: block != null && !_shows(fitted, block),
     );
     for (final (:leg, :source) in unasked) {
       _runLeg(_queryGen, state.searchQuery, source, leg);
     }
+  }
+
+  static bool _shows(BrowseFilterQuery filter, ExpandedBlock block) =>
+      (filter.kind == null || filter.kind == block.kind) &&
+      (block.source == null ||
+          filter.sources.isEmpty ||
+          filter.sources.contains(block.source));
+
+  /// Open one block in full, or go back to both with null.
+  void expandBlock(ExpandedBlock? block) {
+    state = state.copyWith(
+      expandedBlock: block,
+      clearExpandedBlock: block == null,
+    );
   }
 
   /// Types and genres are only checked once every leg has answered, since
@@ -726,11 +787,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         BrowseFacet.genre,
       });
     }
-    // Kept even where the kind facet is hidden: VIEW ALL opens the name
-    // matches this way.
-    return choice.kind == ResultKind.nameMatches
-        ? fitted.copyWith(kind: ResultKind.nameMatches)
-        : fitted;
+    return fitted;
   }
 
   /// Read one source's name matches, or all of them again with null.
@@ -754,6 +811,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       resultsFilter: _savedResultsFilter,
       resultsChoice: _savedResultsFilter,
       clearMatchSource: true,
+      clearExpandedBlock: true,
     );
   }
 
