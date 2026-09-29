@@ -482,14 +482,14 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   }
 
   /// Takes only the facets that changed from [shown] to [next] into [base], so
-  /// facets the screen hid are kept. An empty [next] is a reset and clears
-  /// those too.
+  /// facets the screen hid are kept. Emptying what was shown is a reset and
+  /// clears those too.
   static BrowseFilterQuery _withChange(
     BrowseFilterQuery base, {
     required BrowseFilterQuery shown,
     required BrowseFilterQuery next,
   }) {
-    if (next.isEmpty) return const BrowseFilterQuery();
+    if (next.isEmpty && !shown.isEmpty) return const BrowseFilterQuery();
     return base.withFacetsFrom(next, next.facetsChangedFrom(shown));
   }
 
