@@ -28,7 +28,7 @@ class CatalogSectionsView extends ConsumerWidget {
   final Widget header;
 
   /// What stands under the header when the query leaves no shelf to show, or
-  /// every shelf it reaches comes back with nothing.
+  /// every shelf comes back empty.
   final Widget empty;
 
   /// Opens one shelf in full, by narrowing the page to that kind.
@@ -49,9 +49,7 @@ class CatalogSectionsView extends ConsumerWidget {
       for (final section in page.sections)
         if (_plan(section, query) case final shelf?) shelf,
     ];
-    // An empty shelf folds away, so with every one empty the page would be a
-    // header over nothing. Only that is watched here — each shelf watches its
-    // own items, and one arriving with some rebuilds that shelf alone.
+    // Only emptiness is watched, so items arriving rebuild just their shelf.
     final cameBackEmpty = [
       for (final shelf in shelves)
         ref.watch(
@@ -83,7 +81,7 @@ class CatalogSectionsView extends ConsumerWidget {
   }
 }
 
-/// One shelf the page shows: its section, and what that shelf is asked.
+/// One shelf the page shows: its section and its request.
 typedef _ShelfPlan = ({
   BrowseItem section,
   Catalog catalog,

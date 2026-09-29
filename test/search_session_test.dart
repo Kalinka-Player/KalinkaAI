@@ -24,8 +24,6 @@ class _FakeApi implements KalinkaPlayerProxy {
   int aiSearchCalls = 0;
   int matchCalls = 0;
   final List<String> queries = [];
-
-  /// The source each leg was asked of, in the order asked.
   final List<String> aiSources = [];
   final List<String> matchSources = [];
 
@@ -113,8 +111,7 @@ class _FlakyApi extends _FakeApi {
   }
 }
 
-/// Each source finds an artist and an album by name, so the results hold
-/// more than one kind to choose between.
+/// Every source finds an artist and an album.
 class _TwoKindApi extends _FakeApi {
   @override
   Future<BrowseItemsList> searchMatches(
@@ -137,8 +134,7 @@ class _TwoKindApi extends _FakeApi {
   }
 }
 
-/// Qobuz, the one source with an album to its name, fails its name-match leg
-/// the first time it is asked; the others find an artist.
+/// Only qobuz finds an album, and its name-match leg fails the first time.
 class _AlbumsLateApi extends _TwoKindApi {
   int _qobuzAsked = 0;
 
@@ -160,7 +156,6 @@ class _AlbumsLateApi extends _TwoKindApi {
   }
 }
 
-/// Serves the collections shelf the way the server's own source lists it.
 class _CollectionsApi extends _FakeApi {
   static const shelfId = 'kalinka:collections:catalog:collections';
   static const _rootId = 'kalinka:collections:catalog:root';
@@ -267,7 +262,6 @@ final _nameOnlyModules = <ModuleInfo>[
   ),
 ];
 
-/// Two sources that both suggest, so the source facet has a choice to make.
 final _twoSources = <ModuleInfo>[
   ..._modules,
   ModuleInfo(
@@ -279,8 +273,7 @@ final _twoSources = <ModuleInfo>[
   ),
 ];
 
-/// Two sources searched by name alone: every result is an artist, so the kind
-/// facet has nothing to choose between and is hidden.
+/// Neither source suggests, so the kind facet is hidden.
 final _twoNameOnlySources = <ModuleInfo>[
   for (final (name, title) in [('qobuz', 'Qobuz'), ('localfiles', 'Local')])
     ModuleInfo(
@@ -303,7 +296,7 @@ const _textField = FilterSpec(
   label: 'Search albums',
 );
 
-/// Long enough for every leg to have answered past the minimum hold.
+/// Longer than the minimum loading hold.
 const _settle = Duration(milliseconds: 900);
 
 void main() {
@@ -605,7 +598,6 @@ void main() {
         notifier.submit('jazz');
         expectChosen(filter());
         await Future.delayed(_settle);
-        // These results hold albums and both sources, so all of it stands.
         expectChosen(filter());
 
         notifier.submit('blues');
@@ -663,7 +655,6 @@ void main() {
         filter().copyWith(kind: ResultKind.nameMatches),
         remember: false,
       );
-      // Albums picked in the card, over the filter the VIEW ALL left.
       notifier.setResultsFilter(filter().copyWith(type: SearchType.album));
       expect(filter().kind, ResultKind.nameMatches);
       expect(filter().type, SearchType.album);
@@ -689,12 +680,10 @@ void main() {
 
         notifier.submit('jazz');
         await Future.delayed(_settle);
-        // The one source with an album failed, so no album is on offer.
         expect(state().results!.matches['qobuz'], isA<LegFailed>());
         expect(state().resultsFilter.type, isNull);
         expect(state().resultsChoice.type, SearchType.album);
 
-        // Another facet changed meanwhile keeps the album with it.
         notifier.setResultsFilter(
           state().resultsFilter.copyWith(order: NameMatchOrder.alphabetical),
         );
@@ -702,8 +691,6 @@ void main() {
         expect(state().resultsChoice.order, NameMatchOrder.alphabetical);
 
         notifier.retry(ResultsLeg.matches, 'qobuz');
-        // Until it answers, the album stays cut: what is on screen is not
-        // narrowed away while it waits.
         expect(state().results!.matches['qobuz'], isA<LegLoading>());
         expect(state().resultsFilter.type, isNull);
         expect(
@@ -719,7 +706,6 @@ void main() {
           'An Album',
         );
 
-        // Kept for the searches after this one too.
         final restarted = makeContainer(api, modules: _twoSources);
         final saved = restarted.read(searchSessionProvider).resultsFilter;
         expect(saved.type, SearchType.album);
@@ -737,7 +723,6 @@ void main() {
       );
       notifier.submit('night');
       await Future.delayed(_settle);
-      // Every result is an artist, so the album is hidden here.
       expect(container.read(searchSessionProvider).resultsFilter.type, isNull);
 
       notifier.setResultsFilter(const BrowseFilterQuery());
@@ -773,7 +758,6 @@ void main() {
         );
         expect(state.resultsChoice.kind, ResultKind.recommendations);
 
-        // VIEW ALL still opens the name matches in full there.
         notifier.setResultsFilter(
           state.resultsFilter.copyWith(kind: ResultKind.nameMatches),
           remember: false,
@@ -803,9 +787,7 @@ void main() {
         notifier.submit('night');
         await Future.delayed(const Duration(milliseconds: 50));
         var state = container.read(searchSessionProvider);
-        // The sources are known as soon as they are asked…
         expect(state.resultsFilter.sources, ['qobuz']);
-        // …but what the results hold is not, until every leg has answered.
         expect(state.resultsFilter.type, SearchType.album);
 
         await Future.delayed(_settle);
@@ -821,7 +803,6 @@ void main() {
           hasLength(1),
         );
 
-        // Cut for these results only: the next search starts from the choice.
         notifier.submit('day');
         expect(
           container.read(searchSessionProvider).resultsFilter.type,
@@ -870,7 +851,6 @@ void main() {
       notifier.openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
       expect(filter().genreIds, ['jazz']);
 
-      // Leaving the page drops the filter it shows, not the one it keeps.
       notifier.backToCatalogsRoot();
       expect(filter().isEmpty, isTrue);
       notifier.close();
@@ -957,8 +937,6 @@ void main() {
           'Kalinka.catalogFilters',
           '{"$collections":{"text":"night"},"$gone":{"genreIds":["rock"]}}',
         );
-        // The collections shelf is found among the server's own sources,
-        // which are not known until the module list lands.
         final container = makeContainer(
           _CollectionsApi(),
           modules: _nameOnlyModules,
@@ -991,7 +969,6 @@ void main() {
       var results = state().results!;
       expect(results.matches['localfiles'], isA<LegNotRequested>());
       expect(results.inspired['localfiles'], isA<LegNotRequested>());
-      // Neither waiting nor unavailable, and still there to be chosen.
       expect(results.matchesSettled, isTrue);
       expect(results.settled, isTrue);
       expect(results.unavailableMatchSources, isEmpty);
@@ -1030,7 +1007,6 @@ void main() {
 
         notifier.submit('jazz');
         await Future.delayed(_settle);
-        // No album was found, so none is on offer.
         expect(state().resultsFilter.type, isNull);
 
         notifier.setResultsFilter(
@@ -1061,7 +1037,6 @@ void main() {
       expect(api.matchCalls, 2);
       expect(api.aiSearchCalls, 0);
 
-      // A later search under the same choice asks the same way.
       notifier.submit('blues');
       await Future.delayed(_settle);
       expect(api.aiSearchCalls, 0);
@@ -1080,8 +1055,6 @@ void main() {
       'a filter that shuts out every leg narrows by nothing hidden',
       () async {
         final api = _FakeApi();
-        // Recommendations from collections alone: collections has nothing to
-        // suggest, and the source that does is filtered out.
         final container = makeContainer(
           api,
           modules: [..._nameOnlyModules, ..._modules],

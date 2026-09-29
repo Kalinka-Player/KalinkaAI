@@ -175,8 +175,6 @@ class BrowseFilterCapabilities {
   ];
 }
 
-/// One facet of a [BrowseFilterQuery]: the unit a choice is made, kept and
-/// dropped in.
 enum BrowseFacet { text, type, genre, kind, source, order }
 
 /// The active filter selection — one request object rather than a widening
@@ -239,10 +237,8 @@ class BrowseFilterQuery {
       (order == NameMatchOrder.relevance ||
           capabilities.order == FacetSupport.supported);
 
-  /// The part of this query [capabilities] can honour. A facet they do not
-  /// support is dropped, and so is a kind, source or genre they do not offer:
-  /// a remembered choice with no control on screen would narrow the surface
-  /// with nothing to show why.
+  /// Drops whatever [capabilities] do not offer, so a remembered choice cannot
+  /// narrow a surface that shows no chip for it.
   BrowseFilterQuery fittedTo(BrowseFilterCapabilities capabilities) {
     bool live(FacetSupport support) => support == FacetSupport.supported;
     final offeredSources = {for (final s in capabilities.sources) s.name};
@@ -254,8 +250,7 @@ class BrowseFilterQuery {
       type: live(capabilities.type) && capabilities.types.contains(type)
           ? type
           : null,
-      // A vocabulary that is fetched on demand is not in hand to check
-      // against, so its ids stand until the source refuses them.
+      // Genres fetched on demand are not known here, so they are kept.
       genreIds: !live(capabilities.genre)
           ? const []
           : [
@@ -273,8 +268,6 @@ class BrowseFilterQuery {
     );
   }
 
-  /// The facets on which this query and [other] differ. Genres and sources
-  /// are compared as sets: the order they were picked in chooses nothing.
   Set<BrowseFacet> facetsChangedFrom(BrowseFilterQuery other) {
     bool same(List<String> a, List<String> b) {
       final picked = a.toSet();
@@ -291,7 +284,6 @@ class BrowseFilterQuery {
     };
   }
 
-  /// This query with [facets] taken from [other], and every other facet kept.
   BrowseFilterQuery withFacetsFrom(
     BrowseFilterQuery other,
     Set<BrowseFacet> facets,
@@ -304,7 +296,6 @@ class BrowseFilterQuery {
     order: facets.contains(BrowseFacet.order) ? other.order : order,
   );
 
-  /// This query as it is remembered between sessions.
   Map<String, Object> toJson() => {
     if (text.isNotEmpty) 'text': text,
     if (type case final type?) 'type': type.name,
@@ -314,8 +305,7 @@ class BrowseFilterQuery {
     if (order != NameMatchOrder.relevance) 'order': order.name,
   };
 
-  /// A remembered query read back. A value this build does not know is
-  /// dropped on its own rather than taking the rest of the query with it.
+  /// An unknown value is dropped alone, so the rest of the query survives.
   factory BrowseFilterQuery.fromJson(Map<String, dynamic> json) {
     List<String> strings(Object? value) => value is List
         ? [

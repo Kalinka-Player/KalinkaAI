@@ -199,10 +199,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   }
 
   /// What stands where the rows would be. A filter that matched nothing says
-  /// so, and offers to drop it — it may have been remembered from a visit
-  /// long ago; a listing the server would take writes for — the collections
-  /// screen with none made yet — shows what a collection is; anything else is
-  /// plain empty.
+  /// so; a listing the server would take writes for — the collections screen
+  /// with none made yet — shows what a collection is; anything else is plain
+  /// empty.
   Widget _emptyState(
     CatalogPage page,
     BrowseFilterQuery query, {
@@ -583,7 +582,7 @@ class _CatalogError extends StatelessWidget {
   }
 }
 
-/// A catalog that resolved but holds nothing, with no filter to blame.
+/// A catalog that resolved but holds nothing.
 class _CatalogEmpty extends StatelessWidget {
   const _CatalogEmpty();
 

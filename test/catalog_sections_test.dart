@@ -92,7 +92,7 @@ class _ScriptedBrowseApi implements KalinkaPlayerProxy {
   /// Held open by a test that wants to see the shelves while they load.
   final Completer<void>? gate;
 
-  /// Whether any filter at all matches nothing.
+  /// Every filtered browse comes back empty.
   final bool filteredOut;
 
   _ScriptedBrowseApi(this.byCatalog, {this.gate, this.filteredOut = false});
@@ -179,7 +179,6 @@ Future<_Harness> _pump(
   return (api: api, container: container);
 }
 
-/// Back to the Catalogs root, and into the library again.
 void _reopen(ProviderContainer container) {
   final session = container.read(searchSessionProvider.notifier);
   final page = _libraryPage;
@@ -512,8 +511,6 @@ void main() {
     session.setCatalogFilter(const BrowseFilterQuery(text: 'zzz'));
     await tester.pumpAndSettle();
 
-    // Both shelves took the filter and came back with nothing: the page says
-    // so under its header rather than standing as a header alone.
     expect(find.text('ARTISTS'), findsNothing);
     expect(find.text('ALBUMS'), findsNothing);
     expect(find.text('My Library'), findsOneWidget);

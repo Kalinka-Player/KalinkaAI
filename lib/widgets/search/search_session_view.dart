@@ -293,9 +293,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     final notifier = ref.read(searchSessionProvider.notifier);
     final session = ref.read(searchSessionProvider);
     if (session.activeView == FindMusicView.results) {
-      // The field holds the query: a changed one is a new search, run under
-      // the facets chosen with it; an emptied one keeps the search and
-      // resets the facets.
+      // The field holds the query: a changed one is a new search, an emptied
+      // one keeps the search and resets the facets.
       final query = filter.text.trim();
       if (query.isNotEmpty && query != session.searchQuery) {
         notifier.submit(query, filter: filter);
