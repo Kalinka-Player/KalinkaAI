@@ -58,7 +58,6 @@ final _playbackTimingSnapshotProvider = Provider<_PlaybackTimingSnapshot>((
 
 class PlaybackTimeMsNotifier extends Notifier<int> {
   Timer? _tick;
-  bool _disposeRegistered = false;
   int _tickGeneration = 0;
 
   int _computeTimeMs(_PlaybackTimingSnapshot snapshot) {
@@ -124,10 +123,9 @@ class PlaybackTimeMsNotifier extends Notifier<int> {
     final snapshot = ref.watch(_playbackTimingSnapshotProvider);
     final lifecycle = ref.watch(appLifecycleProvider);
 
-    if (!_disposeRegistered) {
-      _disposeRegistered = true;
-      ref.onDispose(_cancelTick);
-    }
+    // Riverpod disposes the previous build's callbacks when these watched
+    // values change. Register cleanup for every newly created ticker.
+    ref.onDispose(_cancelTick);
 
     _restartTicking(lifecycle: lifecycle, snapshot: snapshot);
     return _computeTimeMs(snapshot);
