@@ -1,0 +1,93 @@
+# Android output switcher
+
+Kalinka's existing `KalinkaMediaService` owns the sole `MediaSessionCompat` (`KaiMediaSession`) and notification (ID 1001). `KalinkaMediaPlugin` enables/disables that service from Flutter and reports foreground volume-key activity back to the UI. There is no `audio_service`, `just_audio`, second media session, or local audio playback in this integration. Metadata, artwork, position, and queue transport callbacks remain in that service.
+
+## Routing and volume ownership
+
+`KalinkaRouting` registers a service-lifetime AndroidX callback and associates the existing session using `MediaRouter.setMediaSessionCompat`. **MediaRouter alone configures the session's volume provider.** On Android 11+ its MediaRouter2 bridge supplies the routing controller's ID as the volume control ID. A renderer UUID is only a provider route ID; it is never a volume control ID.
+
+The provider is a manifest-declared `KalinkaRouteProviderService` with both `android.media.MediaRouteProviderService` and `android.media.MediaRoute2ProviderService` intent actions. AndroidX handles the platform bridge. The provider is not registered using `addProvider` in production. It shares the media service's process, publishes no routes without that service, and does not start Flutter, networking, or a foreground service itself.
+
+The manifest's non-exported `MediaTransferReceiver`, enabled transfer parameter, and `org.kalinka.kalinka.RENDERER` selector opt into system routing. Provider routes include that category and `CATEGORY_REMOTE_PLAYBACK`, without advertising generic URL playback actions. Selection is restricted to Kalinka; API 34+ routes also use package-restricted visibility. Transfer to phone/Bluetooth is disabled because this Android app has no audio renderer. API 30–33 omits unavailable rows, since the platform bridge cannot present them as disabled. API 34+ listing preferences rank the current renderer first and explain offline/incompatible entries.
+
+AndroidX 1.8.1 is the stable dependency. The project's Flutter-provided minimum SDK remains unchanged (24 with the current SDK). Android 24–29 uses static route controllers; Android 30+ uses a dynamic routing session containing exactly one renderer. It advertises transfers, never grouping or removing individual members. This allows confirmed renderer changes to update an existing routing session. On a new Android routing controller, the same media session is re-associated: 1.8.1 otherwise reuses a volume provider when two outputs have equal volume ranges, potentially retaining the old controller ID.
+
+## Controller synchronization
+
+The native service consumes `renderers_changed`, `current_renderer_changed`, and the renderer fields in the existing `/queue/ws` replay. This is the same server-discovered inventory used by Flutter's `rendererListProvider`; there is no new mDNS or renderer discovery. `/renderer/list` seeds state and confirms transfers. For servers predating topology events it also refreshes every 15 seconds while the service is enabled. Generation/revision checks reject stale HTTP snapshots.
+
+System selection issues one `PUT /renderer/active` with `renderer_id`, matching Flutter's existing operation. It does not clear, restart, or reconstruct the queue. Actual `current_renderer_id`/`active` state confirms a transfer, not a successful response to the pin request. Duplicate callbacks and member-controller creation cannot send duplicate selections. Failures clear connecting state and retain/reconcile the last confirmed destination. Another client's choice follows the same event path, without sending an echo command.
+
+`/device/ws` and `/device/get_volume` provide `supported`, `current_volume`, and `max_volume` for the current output. Absolute and relative Android requests use the existing `PUT /device/set_volume?volume=...` API. Values are clamped, slider/key bursts are coalesced, and writes are serialized. Server volume updates are never discarded during a timed suppression window. A new renderer invalidates the old volume and triggers a fresh read, because device events have no renderer ID. Queued volume requests cannot carry over to a different renderer.
+
+AndroidX creates a dynamic session's individual volume controllers with empty `RouteControllerOptions`: the client package is the empty string, not null. The provider accepts these bridge calls while rejecting explicitly foreign packages. Rejecting the empty string previously left the system picker with a slider but no controller (`MR2ProviderService: onSetRouteVolume: Couldn't find a controller`). Both member and session volume callbacks use the same command path.
+
+While Kalinka's Activity is resumed and has focus, volume-up/down key presses and hold repeats go directly to that same remote-volume path. Matching key-up events are consumed as well, so Android's local volume panel does not appear. Fixed or temporarily unknown remote volume does not adjust the phone's volume. Without a connected renderer, and while backgrounded, normal Android key dispatch applies; background remote volume remains assigned by Android.
+
+The foreground UI shows the existing semi-transparent kiosk volume control at 72% scale, 196 logical pixels high, on the right edge. It follows controller volume events, can be dragged, and fades after three seconds of inactivity. Key presses show it even at the volume limits. Background events do not show it on resume, and kiosk mode keeps its existing larger indicator. Notification initialization lives at the app root so launching directly into kiosk also enables native remote controls.
+
+The controller list does not expose every inactive renderer's volume state. Inactive/unknown outputs therefore expose fixed volume with range zero until selected and queried; Kalinka does not invent a range or show a stale volume from another output. A reported `supported: false` always remains fixed.
+
+## Release and lifecycle
+
+Releasing a route controller never sends stop, pause, or `renderer_id: null`. Android's **Stop casting** detaches this phone's routing/media presentation and removes its notification; shared controller playback and its renderer pin continue. A subsequent renderer change or controller reconnection restores the presentation. The existing notification transport **Stop** command still stops the queue explicitly. Transfer releases and renderer disappearance are handled separately from an intentional client detach.
+
+The router callback and native sockets live in the service while the Activity is backgrounded. Socket failure clears obsolete routes and retries the existing connections after two seconds while enabled. Disabling, changing servers, task removal, and destruction cancel requests and clear routes. Existing exclusive playback behavior continues to release Kalinka's media session.
+
+The notification is published only once there is a confirmed, associated remote output and a current track. Servers without renderer inventory cannot supply a truthful destination and do not produce a routed media notification. No privileged `setRemotePlaybackInfo`, fabricated notification extras, or hidden Android APIs are used.
+
+## Automated checks
+
+```sh
+flutter build apk --debug
+cd android
+./gradlew :app:testDebugUnitTest :app:lintDebug
+cd ..
+flutter test test/renderer_switcher_test.dart test/now_playing_exclusive_test.dart test/queue_zone_exclusive_test.dart
+flutter test test/foreground_volume_overlay_test.dart test/volume_control_slider_test.dart test/kiosk_test.dart test/widget_test.dart
+```
+
+Native tests cover descriptor identity/capabilities, manifest registration, callback translation, asynchronous HTTP success/refusal, duplicate selections, controller-driven selection, fixed/clamped volume, coalescing, disappearance, reconnection, and non-destructive release. Robolectric checks do not verify SystemUI, the platform MediaRouter2 binder bridge, or hardware-key assignment. Regression tests also cover empty bridge options before/after a transfer, real HTTP volume writes from member and hardware-key callbacks, key holds/releases, fixed-volume outputs, limit feedback, and foreground overlay lifecycle/timeout.
+
+## Device verification
+
+Use two connected renderers with distinct names, one fixed-volume renderer, and a second Kalinka client. Include the reported Pixel Android 17 build, an Android 11–13 device, and a pre-30 device for compatibility (the native system output picker itself starts at Android 11).
+
+Install and connect normally, then start a known queue:
+
+```sh
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+adb shell dumpsys media_session > media-session-before.txt
+adb shell dumpsys media_router > media-router-before.txt
+adb shell dumpsys notification --noredact > notifications-before.txt
+adb logcat -s KalinkaMedia KalinkaRouting MediaRouter MR2ProviderService
+```
+
+1. Check there is one active `KaiMediaSession`, one Kalinka media notification, correct artwork/track/position, and a chip naming the **renderer**, even when the controller is on a differently named machine.
+2. In `media_router`, find `KalinkaRouteProviderService`, both renderer route IDs, and a routing session for `org.kalinka.kalinka`. Its selected route must match the renderer. In `media_session`, check remote playback, current/max volume, and (where printed by that Android build) that the volume control ID matches the routing session/controller ID, not the renderer UUID.
+3. Open the native picker. Check names, availability, selected row, speaker icon, and volume. Select the other renderer. Verify playback follows existing controller transfer semantics, the queue is preserved, and transport commands still work. Compare dumps before/after: media-session identity should persist through an ordinary output switch.
+4. Switch from Flutter, then from the second client. Check Android follows each confirmed output without an extra `/renderer/active` request. Controller HTTP logs can establish exact command counts. Pre-topology-event servers can take up to the 15-second inventory refresh interval.
+5. Drag the picker volume and press volume keys while Android has assigned them to Kalinka. Check the renderer, Flutter slider, and Android values agree. Change volume from the second client immediately afterward. Test at both limits and switch to the fixed-volume renderer; its slider must not issue commands. Bring Kalinka to the foreground and press/hold both volume buttons: only the compact in-app indicator should appear, including at a volume limit. Drag it, wait for its fade, then check kiosk mode shows only its larger indicator. In the background, verify SystemUI volume still reaches the selected renderer and no missing-controller warning appears in logcat.
+6. Repeat with Kalinka backgrounded and the screen locked. Disconnect/reconnect Wi-Fi, take the selected renderer offline, and restore it. Force a refused transfer (for example an output owned by another Core). Check connecting state clears, the confirmed destination wins, and old volume requests do not reach the new output.
+7. Use Stop casting. The phone detaches while shared playback continues. Change renderer from another client to reattach. Swipe Kalinka from recents and check its session, notification, and routes are removed without stopping the server.
+
+Capture the same two dumps after each case:
+
+```sh
+adb shell dumpsys media_session > media-session-after.txt
+adb shell dumpsys media_router > media-router-after.txt
+```
+
+The renderer chip, SystemUI ordering, volume-key assignment, and Android 17 behavior must be checked on physical devices; a successful build is not evidence of those.
+
+## Official references reviewed
+
+- [Android media routing and output switcher](https://developer.android.com/media/routing)
+- [MediaRouteProvider overview](https://developer.android.com/media/routing/mediarouteprovider)
+- [MediaRouter session association and listing preferences](https://developer.android.com/reference/androidx/mediarouter/media/MediaRouter)
+- [MediaTransferReceiver configuration and background callbacks](https://developer.android.com/reference/androidx/mediarouter/media/MediaTransferReceiver)
+- [MediaRouterParams.Builder](https://developer.android.com/reference/androidx/mediarouter/media/MediaRouterParams.Builder)
+- [AndroidX MediaRouter releases](https://developer.android.com/jetpack/androidx/releases/mediarouter)
+- [AndroidX routing demo manifest (both provider service actions)](https://github.com/androidx/androidx/blob/androidx-main/samples/MediaRoutingDemo/src/main/AndroidManifest.xml)
+- [AndroidX 1.8.1 source archive](https://dl.google.com/dl/android/maven2/androidx/mediarouter/mediarouter/1.8.1/mediarouter-1.8.1-sources.jar)
+- [Activity key dispatch](https://developer.android.com/reference/android/app/Activity#dispatchKeyEvent(android.view.KeyEvent))

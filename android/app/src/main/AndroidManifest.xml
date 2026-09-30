@@ -34,7 +34,25 @@
         <service
             android:name=".KalinkaMediaService"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback"/>
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON"/>
+            </intent-filter>
+        </service>
+        <!-- Both interfaces are required: AndroidX bridges the provider to
+             MediaRouter2 on API 30+, and uses the compat interface below 30.
+             Keep this in the media service's process: it shares live state. -->
+        <service
+            android:name=".KalinkaRouteProviderService"
+            android:label="Kalinka outputs"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.MediaRouteProviderService"/>
+                <action android:name="android.media.MediaRoute2ProviderService"/>
+            </intent-filter>
+        </service>
+        <receiver android:name="androidx.mediarouter.media.MediaTransferReceiver"
+                  android:exported="false"/>
         <receiver android:name="androidx.media.session.MediaButtonReceiver"
                   android:exported="true">
             <intent-filter>

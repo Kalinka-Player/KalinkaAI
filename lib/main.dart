@@ -10,8 +10,10 @@ import 'providers/connection_settings_provider.dart';
 import 'providers/kiosk_provider.dart';
 import 'providers/onboarding_provider.dart';
 import 'providers/renderer_host_provider.dart';
+import 'providers/media_notification_provider.dart';
 import 'providers/pinned_server.dart';
 import 'widgets/kalinka_toast_overlay.dart';
+import 'widgets/foreground_volume_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,11 +60,13 @@ class KalinkaApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(rendererHostProvider);
+    ref.watch(mediaNotificationProvider);
     return MaterialApp(
       title: 'Kalinka',
       theme: AppTheme.dark(),
       debugShowCheckedModeBanner: false,
-      builder: (_, child) => KalinkaToastHost(child: child!),
+      builder: (_, child) =>
+          ForegroundVolumeOverlay(child: KalinkaToastHost(child: child!)),
       home: const _Home(),
     );
   }
