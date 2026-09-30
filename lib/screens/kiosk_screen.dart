@@ -15,6 +15,7 @@ import '../providers/kiosk_provider.dart';
 import '../providers/now_playing_provider.dart';
 import '../providers/source_modules_provider.dart';
 import '../providers/url_resolver.dart';
+import '../providers/volume_activity_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/playback_utils.dart';
 import '../widgets/kiosk/kiosk_backdrop.dart';
@@ -87,6 +88,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   @override
   void initState() {
     super.initState();
+    ref.listenManual(volumeActivityProvider, (_, _) => _showVolume());
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     ref.listenManual(playerStateProvider.select((s) => s.state), (_, next) {
       switch (next) {

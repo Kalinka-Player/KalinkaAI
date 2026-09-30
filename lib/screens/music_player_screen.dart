@@ -41,7 +41,6 @@ import 'renderer_settings_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/kalinka_toast_overlay.dart';
 import '../widgets/sheet_anchor.dart';
-import '../providers/media_notification_provider.dart';
 
 class MusicPlayerScreen extends ConsumerStatefulWidget {
   const MusicPlayerScreen({super.key});
@@ -449,7 +448,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
   @override
   Widget build(BuildContext context) {
-    ref.read(mediaNotificationProvider);
     // Arm the failure recorder from app start. Left to the queue rows that
     // read it, it would miss an error that lands while the queue isn't built
     // — during a search session, say.

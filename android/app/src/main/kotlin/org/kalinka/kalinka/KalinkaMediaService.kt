@@ -18,7 +18,6 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
-import androidx.media.VolumeProviderCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import android.util.Log
 import androidx.media.session.MediaButtonReceiver
@@ -26,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -47,7 +47,6 @@ class KalinkaMediaService : Service() {
         const val ACTION_NEXT = "org.kalinka.kalinka.ACTION_NEXT"
         const val ACTION_PREV = "org.kalinka.kalinka.ACTION_PREV"
 
-        private const val VOLUME_ECHO_SUPPRESS_MS = 1_500L
     }
 
     inner class LocalBinder : Binder() {
@@ -56,7 +55,9 @@ class KalinkaMediaService : Service() {
 
     private val binder = LocalBinder()
     private var mediaSession: MediaSessionCompat? = null
-    private var volumeProvider: VolumeProviderCompat? = null
+    private lateinit var routing: KalinkaRouting
+    private var outputReady = false
+    private var hasCurrentTrack = false
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -90,26 +91,13 @@ class KalinkaMediaService : Service() {
     private var currentPositionMs: Long = 0
     private var currentIsPlaying: Boolean = false
     private var currentPlayerState: String = "STOPPED"  // PLAYING, PAUSED, BUFFERING, STOPPED, ERROR
-    // Sentinel zeros until the device WS replays the real values. We must
-    // not advertise a fabricated 50/100 to Android — it would briefly show
-    // the wrong level on the volume HUD the first time the user presses a
-    // hardware key, before the device replay catches up.
-    private var currentVolume: Int = 0
-    private var maxVolume: Int = 0
     private var currentAlbumArt: Bitmap? = null
     private var albumArtJob: Job? = null
-
-    // --- Volume echo suppression ---
-    private var volumeChangeModeActive = false
-    private var volumeKnown = false  // true after first applyVolume; guards against stale-default commands
-    private val clearVolumeModeRunnable = Runnable { volumeChangeModeActive = false }
-
-    // --- Volume send debounce ---
-    private var pendingVolumeToSend: Int? = null
-    private val sendVolumeRunnable = Runnable {
-        pendingVolumeToSend?.let { vol ->
-            pendingVolumeToSend = null
-            sendDeviceCommand("""{"command":"set_volume","volume":$vol}""")
+    private val reconnectRunnable = Runnable {
+        if (isEnabled) {
+            routing.start(host, port)
+            connectQueueWs()
+            connectDeviceWs()
         }
     }
 
@@ -121,6 +109,17 @@ class KalinkaMediaService : Service() {
         super.onCreate()
         Log.d(TAG, "onCreate")
         createNotificationChannel()
+        routing = KalinkaRouting(this) { ready ->
+            outputReady = ready
+            if (ready && hasCurrentTrack && !exclusivePlayback) {
+                ensureMediaSession()
+                updateMediaSessionMetadata()
+                updatePlaybackState()
+                postNotification()
+            } else if (!ready) {
+                hideNotification()
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -154,6 +153,7 @@ class KalinkaMediaService : Service() {
         Log.d(TAG, "onDestroy")
         disable()
         albumArtJob?.cancel()
+        serviceScope.cancel()
         super.onDestroy()
     }
 
@@ -163,6 +163,7 @@ class KalinkaMediaService : Service() {
 
     fun enable(newHost: String, newPort: Int) {
         Log.d(TAG, "enable: host=$newHost port=$newPort")
+        if (isEnabled && newHost == host && newPort == port && queueWs != null && deviceWs != null) return
         // If switching servers, fully tear down first so we don't mix state.
         if (isEnabled && (newHost != host || newPort != port)) {
             disable()
@@ -172,6 +173,8 @@ class KalinkaMediaService : Service() {
         isEnabled = true
         // Reset playback state — fresh session, fresh state.
         resetPlaybackState()
+        mainHandler.removeCallbacks(reconnectRunnable)
+        routing.start(host, port)
         connectQueueWs()
         connectDeviceWs()
     }
@@ -179,6 +182,8 @@ class KalinkaMediaService : Service() {
     fun disable() {
         Log.d(TAG, "disable")
         isEnabled = false
+        mainHandler.removeCallbacks(reconnectRunnable)
+        routing.stop()
         closeConnections()
         hideNotification()
         resetPlaybackState()
@@ -196,13 +201,8 @@ class KalinkaMediaService : Service() {
         currentAlbumArt = null
         albumArtJob?.cancel()
         albumArtJob = null
-        volumeKnown = false
-        currentVolume = 0
-        maxVolume = 0
-        volumeChangeModeActive = false
-        pendingVolumeToSend = null
-        mainHandler.removeCallbacks(sendVolumeRunnable)
-        mainHandler.removeCallbacks(clearVolumeModeRunnable)
+        hasCurrentTrack = false
+        outputReady = false
     }
 
     // -------------------------------------------------------------------------
@@ -235,12 +235,12 @@ class KalinkaMediaService : Service() {
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "queueWs onFailure: ${t.message} response=${response?.code}")
-                mainHandler.post { if (webSocket === queueWs && isEnabled) disable() }
+                mainHandler.post { if (webSocket === queueWs && isEnabled) reconnect() }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "queueWs onClosed: code=$code reason=$reason")
-                mainHandler.post { if (webSocket === queueWs && isEnabled) disable() }
+                mainHandler.post { if (webSocket === queueWs && isEnabled) reconnect() }
             }
         })
         queueWs = ws
@@ -264,12 +264,12 @@ class KalinkaMediaService : Service() {
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "deviceWs onFailure: ${t.message} response=${response?.code}")
-                mainHandler.post { if (webSocket === deviceWs && isEnabled) disable() }
+                mainHandler.post { if (webSocket === deviceWs && isEnabled) reconnect() }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "deviceWs onClosed: code=$code reason=$reason")
-                mainHandler.post { if (webSocket === deviceWs && isEnabled) disable() }
+                mainHandler.post { if (webSocket === deviceWs && isEnabled) reconnect() }
             }
         })
         deviceWs = ws
@@ -286,8 +286,15 @@ class KalinkaMediaService : Service() {
         if (ws != null) ws.send(json) else pendingQueueCommand = json
     }
 
-    private fun sendDeviceCommand(json: String) {
-        deviceWs?.send(json)
+    private fun reconnect() {
+        // Native reconnection also runs with Flutter backgrounded. No socket or
+        // route from the previous connection may drive the next controller.
+        closeConnections()
+        routing.stop()
+        hideNotification()
+        resetPlaybackState()
+        mainHandler.removeCallbacks(reconnectRunnable)
+        mainHandler.postDelayed(reconnectRunnable, 2_000)
     }
 
     private fun sendResumeOrPlay() {
@@ -305,6 +312,7 @@ class KalinkaMediaService : Service() {
     private fun handleQueueEvent(text: String) {
         try {
             val json = JSONObject(text)
+            routing.queueEvent(json)
             val eventType = json.optString("event_type")
             Log.d(TAG, "handleQueueEvent: event_type=$eventType")
             when (eventType) {
@@ -365,6 +373,7 @@ class KalinkaMediaService : Service() {
 
         // No current track → notification (and session) must not be present.
         // This covers playqueue cleared, fresh server with no playback, etc.
+        hasCurrentTrack = trackJson != null
         if (trackJson == null) {
             hideNotification()
             return
@@ -439,27 +448,8 @@ class KalinkaMediaService : Service() {
                 else -> null
             } ?: return
 
-            if (volumeChangeModeActive) return
-            applyVolume(volume.optInt("current_volume", currentVolume), volume.optInt("max_volume", maxVolume))
+            routing.deviceVolume(volume)
         } catch (_: Exception) {}
-    }
-
-    private fun applyVolume(newCurrent: Int, newMax: Int) {
-        val wasKnown = volumeKnown
-        currentVolume = newCurrent
-        volumeKnown = true
-        if (newMax != maxVolume) {
-            maxVolume = newMax
-            // Rebuild the provider so it advertises the new max range.
-            volumeProvider = null
-            ensureVolumeProvider()
-        } else if (!wasKnown) {
-            // First time we have real values: provider may have been skipped
-            // earlier in ensureMediaSession because volumeKnown was false.
-            ensureVolumeProvider()
-        } else {
-            volumeProvider?.currentVolume = newCurrent
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -484,7 +474,7 @@ class KalinkaMediaService : Service() {
      * stop routing to us when there's no active playback to control.
      */
     private fun ensureMediaSession() {
-        if (mediaSession != null) return
+        if (mediaSession != null || !outputReady || exclusivePlayback) return
         Log.d(TAG, "ensureMediaSession: creating")
         val mediaButtonReceiver = ComponentName(this, MediaButtonReceiver::class.java)
         mediaSession = MediaSessionCompat(this, "KaiMediaSession", mediaButtonReceiver, null).apply {
@@ -500,65 +490,16 @@ class KalinkaMediaService : Service() {
             })
             isActive = true
         }
-        ensureVolumeProvider()
-    }
-
-    private fun ensureVolumeProvider() {
-        val session = mediaSession ?: return
-        if (volumeProvider != null) return
-        // Don't attach a remote VolumeProvider until the device replay
-        // confirms the real current/max levels. Without this guard we would
-        // advertise the Kotlin-default 50/100 and cause the volume HUD to
-        // jump to 50% the first time the user touches a hardware key.
-        // applyVolume() retries this once the real values arrive.
-        if (!volumeKnown) {
-            Log.d(TAG, "ensureVolumeProvider: skipping — volume not yet known")
-            return
-        }
-        Log.d(TAG, "ensureVolumeProvider: creating max=$maxVolume current=$currentVolume")
-        volumeProvider = object : VolumeProviderCompat(
-            VOLUME_CONTROL_ABSOLUTE, maxVolume, currentVolume.coerceIn(0, maxVolume)
-        ) {
-            override fun onAdjustVolume(direction: Int) {
-                if (direction != 1 && direction != -1) return
-                if (!this@KalinkaMediaService.volumeKnown) return
-                val newVol = (currentVolume + direction).coerceIn(0, maxVolume)
-                currentVolume = newVol
-                this.currentVolume = newVol
-                enterVolumeSuppressMode()
-                scheduleVolumeCommand(newVol)
-            }
-            override fun onSetVolumeTo(volume: Int) {
-                if (!this@KalinkaMediaService.volumeKnown) return
-                val newVol = volume.coerceIn(0, maxVolume)
-                currentVolume = newVol
-                this.currentVolume = newVol
-                enterVolumeSuppressMode()
-                scheduleVolumeCommand(newVol)
-            }
-        }
-        session.setPlaybackToRemote(volumeProvider!!)
+        routing.setSession(mediaSession)
     }
 
     private fun releaseMediaSession() {
         val session = mediaSession ?: return
         Log.d(TAG, "releaseMediaSession")
+        routing.setSession(null)
         session.isActive = false
         session.release()
         mediaSession = null
-        volumeProvider = null
-    }
-
-    private fun scheduleVolumeCommand(volume: Int) {
-        pendingVolumeToSend = volume
-        mainHandler.removeCallbacks(sendVolumeRunnable)
-        mainHandler.postDelayed(sendVolumeRunnable, 50L)
-    }
-
-    private fun enterVolumeSuppressMode() {
-        volumeChangeModeActive = true
-        mainHandler.removeCallbacks(clearVolumeModeRunnable)
-        mainHandler.postDelayed(clearVolumeModeRunnable, VOLUME_ECHO_SUPPRESS_MS)
     }
 
     private fun updateMediaSessionMetadata() {
