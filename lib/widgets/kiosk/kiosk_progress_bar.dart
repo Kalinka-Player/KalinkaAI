@@ -95,18 +95,19 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
                 behavior: HitTestBehavior.opaque,
                 onTapUp: (d) {
                   final f = _fractionAt(d.localPosition, width);
-                  seekTo(f);
+                  beginSeek(f);
                   commitSeek(f);
                 },
                 onHorizontalDragStart: (d) {
                   _dragFraction = _fractionAt(d.localPosition, width);
-                  seekTo(_dragFraction);
+                  beginSeek(_dragFraction);
                 },
                 onHorizontalDragUpdate: (d) {
                   _dragFraction = _fractionAt(d.localPosition, width);
                   seekTo(_dragFraction);
                 },
                 onHorizontalDragEnd: (_) => commitSeek(_dragFraction),
+                onHorizontalDragCancel: cancelSeek,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
