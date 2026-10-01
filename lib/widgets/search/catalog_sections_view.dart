@@ -24,15 +24,13 @@ class CatalogSectionsView extends StatefulWidget {
   final CatalogPage page;
   final BrowseFilterQuery query;
 
-  /// The collections revision: a write refetches every shelf, the way it
-  /// restarts a flat listing.
+  /// Refetches shelves after a collection changes.
   final int revision;
 
   /// The page banner and its active-filter chips, scrolling with the shelves.
   final Widget header;
 
-  /// What stands under the header when the query leaves no shelf to show, or
-  /// every shelf comes back empty.
+  /// Shown when all eligible shelves are empty.
   final Widget empty;
 
   /// Opens one shelf in full, by narrowing the page to that kind.
@@ -53,9 +51,8 @@ class CatalogSectionsView extends StatefulWidget {
 }
 
 class _CatalogSectionsViewState extends State<CatalogSectionsView> {
-  /// Shelves that loaded with nothing, as each reported. An empty shelf takes
-  /// no height, so the list goes on to build the next one; when all are empty
-  /// all have been built and reported.
+  // Empty shelves take no height, so later shelves load until one has rows
+  // or all have reported empty.
   final _empty = <CatalogSectionRequest>{};
 
   late List<_ShelfPlan> _shelves = _planShelves();
@@ -111,7 +108,6 @@ class _CatalogSectionsViewState extends State<CatalogSectionsView> {
   }
 }
 
-/// One shelf the page shows: its section and its request.
 typedef _ShelfPlan = ({
   BrowseItem section,
   Catalog catalog,

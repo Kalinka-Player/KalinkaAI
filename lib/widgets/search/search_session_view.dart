@@ -106,8 +106,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   // Whether the search-and-filters card is unfolded out of its title-bar pill.
   bool _filtersOpen = false;
 
-  // What the card opened on. Results can refit their filter while it is open,
-  // so this, not the filter in force, is what the listener edited.
+  // Compare edits with the selection shown when the card opened.
   BrowseFilterQuery _filtersOpenedOn = const BrowseFilterQuery();
 
   // Rotates the example hint: each mount of the search surface advances one
@@ -296,7 +295,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// Commit the staged selection and fold the card away. A catalog page
   /// reloads only if the part of the filter the backend honours actually
   /// changed; results narrow in hand.
-  void _applyFilters(BrowseFilterQuery filter) {
+  void _applyFilters(BrowseFilterQuery filter, {required bool reset}) {
     final notifier = ref.read(searchSessionProvider.notifier);
     final session = ref.read(searchSessionProvider);
     if (session.activeView == FindMusicView.results) {
@@ -304,12 +303,21 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
       // one keeps the search and resets the facets.
       final query = filter.text.trim();
       if (query.isNotEmpty && query != session.searchQuery) {
-        notifier.submit(query, filter: filter, shown: _filtersOpenedOn);
+        notifier.submit(
+          query,
+          filter: filter,
+          shown: _filtersOpenedOn,
+          reset: reset,
+        );
       } else {
-        notifier.setResultsFilter(filter, shown: _filtersOpenedOn);
+        notifier.setResultsFilter(
+          filter,
+          shown: _filtersOpenedOn,
+          reset: reset,
+        );
       }
     } else {
-      notifier.setCatalogFilter(filter);
+      notifier.setCatalogFilter(filter, reset: reset);
     }
     _closeFilters();
   }

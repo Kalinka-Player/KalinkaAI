@@ -3,12 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import 'kalinka_player_api_provider.dart';
 
-/// One shelf of a sectioned catalog: which catalog to browse, under which
-/// filter document, and how many items the shelf shows.
-///
-/// The filter is the encoded document rather than the query object so that two
-/// visits with the same constraints share one cached fetch. [revision] is the
-/// collections revision, so a write asks again.
+/// Equal catalog requests share a cached preview. The collections revision
+/// invalidates previews after a write.
 typedef CatalogSectionRequest = ({
   String id,
   String? filter,

@@ -20,9 +20,7 @@ class ActiveFilterChips extends ConsumerWidget {
 
   final EdgeInsets padding;
 
-  /// Shown first, ahead of the facet chips: what belongs in the same row
-  /// without being a facet, such as the results query or a block opened in
-  /// full.
+  /// Query and navigation chips shown before the filter chips.
   final List<Widget> leading;
 
   const ActiveFilterChips({

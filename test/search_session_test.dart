@@ -127,7 +127,11 @@ class _TwoKindApi extends _FakeApi {
         name: 'An Album',
         canBrowse: true,
         canAdd: true,
-        album: Album(id: 'al1', title: 'An Album'),
+        album: Album(
+          id: 'al1',
+          title: 'An Album',
+          genres: [Genre(id: '42', name: 'Jazz')],
+        ),
         match: const NameMatch(tier: MatchTier.partial, score: 60),
       ),
     ]);
@@ -570,6 +574,118 @@ void main() {
   });
 
   group('remembered filters', () {
+    test('saved facets stay editable while the next search loads', () async {
+      final container = makeContainer(_TwoKindApi(), modules: _twoSources);
+      final notifier = container.read(searchSessionProvider.notifier);
+      notifier.submit('jazz');
+      await Future.delayed(_settle);
+      notifier.setResultsFilter(
+        const BrowseFilterQuery(type: SearchType.album, genreIds: ['jazz']),
+      );
+
+      for (final session in [
+        container,
+        makeContainer(_TwoKindApi(), modules: _twoSources),
+      ]) {
+        session.read(searchSessionProvider.notifier).submit('night');
+        await Future.delayed(Duration.zero);
+        final state = session.read(searchSessionProvider);
+        expect(state.results!.settled, isFalse);
+        expect(state.resultsFilter.type, SearchType.album);
+        final capabilities = state.resultsFilterCapabilities;
+        expect(capabilities.type, FacetSupport.supported);
+        expect(capabilities.types, contains(SearchType.album));
+        expect(capabilities.presentTypes, contains(SearchType.album));
+        expect(capabilities.genre, FacetSupport.supported);
+        expect(capabilities.genreOptions!.single.id, 'jazz');
+        expect(capabilities.genreOptions!.single.name, 'Jazz');
+        await Future.delayed(_settle);
+      }
+    });
+
+    test(
+      'reset clears saved facets even when all of them are hidden',
+      () async {
+        final container = makeContainer(_FakeApi());
+        final notifier = container.read(searchSessionProvider.notifier);
+        notifier.setResultsFilter(
+          const BrowseFilterQuery(type: SearchType.album),
+        );
+        notifier.submit('jazz');
+        await Future.delayed(_settle);
+        expect(
+          container.read(searchSessionProvider).resultsFilter.isEmpty,
+          isTrue,
+        );
+
+        notifier.resetResults();
+
+        expect(
+          container.read(searchSessionProvider).resultsChoice.isEmpty,
+          isTrue,
+        );
+        expect(prefs.getString('Kalinka.resultsFilter'), isNull);
+        final restarted = makeContainer(_FakeApi());
+        expect(
+          restarted.read(searchSessionProvider).resultsFilter.isEmpty,
+          isTrue,
+        );
+      },
+    );
+
+    for (final newQuery in [false, true]) {
+      test(
+        'card reset clears hidden facets with new query: $newQuery',
+        () async {
+          final container = makeContainer(_FakeApi());
+          final notifier = container.read(searchSessionProvider.notifier);
+          notifier.setResultsFilter(
+            const BrowseFilterQuery(type: SearchType.album),
+          );
+          notifier.submit('jazz');
+          await Future.delayed(_settle);
+          final shown = container.read(searchSessionProvider).resultsFilter;
+          expect(shown.isEmpty, isTrue);
+
+          const filter = BrowseFilterQuery(order: NameMatchOrder.alphabetical);
+          if (newQuery) {
+            notifier.submit('night', filter: filter, shown: shown, reset: true);
+            await Future.delayed(_settle);
+          } else {
+            notifier.setResultsFilter(filter, shown: shown, reset: true);
+          }
+
+          final choice = container.read(searchSessionProvider).resultsChoice;
+          expect(choice.type, isNull);
+          expect(choice.order, NameMatchOrder.alphabetical);
+          final saved = makeContainer(_FakeApi()).read(searchSessionProvider);
+          expect(saved.resultsChoice.type, isNull);
+          expect(saved.resultsChoice.order, NameMatchOrder.alphabetical);
+        },
+      );
+    }
+
+    test('catalog reset clears hidden facets before applying new edits', () {
+      final container = makeContainer(_FakeApi());
+      final notifier = container.read(searchSessionProvider.notifier);
+      notifier.openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
+      notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+      notifier.openCatalog(id: 'a', title: 'A', filters: const [_textField]);
+      notifier.setCatalogFilter(
+        const BrowseFilterQuery(text: 'blue'),
+        reset: true,
+      );
+      notifier.openCatalog(
+        id: 'a',
+        title: 'A',
+        filters: const [_textField, _genreField],
+      );
+
+      final filter = container.read(searchSessionProvider).catalogFilter;
+      expect(filter.genreIds, isEmpty);
+      expect(filter.text, 'blue');
+    });
+
     void expectChosen(BrowseFilterQuery filter) {
       expect(filter.type, SearchType.album);
       expect(filter.kind, ResultKind.nameMatches);
