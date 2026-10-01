@@ -8,6 +8,11 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.15.2
+
+### Fixed
+- Android's media notification and output chip now go away when the connection to the server drops, instead of staying up with controls that no longer work. They do not come back on their own when the connection returns; reopen the app or retry the connection to bring them back.
+
 ## 0.15.1
 
 ### Fixed

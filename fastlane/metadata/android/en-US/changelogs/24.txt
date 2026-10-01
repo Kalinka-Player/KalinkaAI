@@ -1,0 +1,1 @@
+- The media notification and output chip go away when the server connection drops, and return when you reopen the app or retry
