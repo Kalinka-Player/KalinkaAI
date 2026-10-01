@@ -8,6 +8,11 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.15.1
+
+### Fixed
+- Android's output chip no longer shows "This phone" when the app starts, reconnects or stops playing through a renderer; the media session reaches Android only once it is attached to the renderer.
+
 ## 0.15.0
 
 Android's output switcher and the volume keys now drive Kalinka's renderers, and search and catalog filters are remembered. This release needs no server update.
