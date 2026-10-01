@@ -36,6 +36,8 @@ The router callback and native sockets live in the service while the Activity is
 
 The notification is published only once there is a confirmed, associated remote output and a current track. Servers without renderer inventory cannot supply a truthful destination and do not produce a routed media notification. No privileged `setRemotePlaybackInfo`, fabricated notification extras, or hidden Android APIs are used.
 
+The remote output is attached before the media session becomes active. On notification removal, disable, or reconnect, the session is deactivated before routing is detached: AndroidX resets a detached session to local playback. This ordering avoids advertising an active phone output during startup and teardown.
+
 ## Automated checks
 
 ```sh
@@ -48,6 +50,8 @@ flutter test test/foreground_volume_overlay_test.dart test/volume_control_slider
 ```
 
 Native tests cover descriptor identity/capabilities, manifest registration, callback translation, asynchronous HTTP success/refusal, duplicate selections, controller-driven selection, fixed/clamped volume, coalescing, disappearance, reconnection, and non-destructive release. Robolectric checks do not verify SystemUI, the platform MediaRouter2 binder bridge, or hardware-key assignment. Regression tests also cover empty bridge options before/after a transfer, real HTTP volume writes from member and hardware-key callbacks, key holds/releases, fixed-volume outputs, limit feedback, and foreground overlay lifecycle/timeout.
+
+Single-renderer tests cover initial session association and reselection without a server write. Provider bridge tests on API 30 and 34 verify the named routing session with no transfer targets, late volume updates, and adding/removing a second renderer. Media service tests record the framework calls to check that activation and teardown do not advertise active local playback.
 
 ## Device verification
 
@@ -64,6 +68,7 @@ adb logcat -s KalinkaMedia KalinkaRouting MediaRouter MR2ProviderService
 ```
 
 1. Check there is one active `KaiMediaSession`, one Kalinka media notification, correct artwork/track/position, and a chip naming the **renderer**, even when the controller is on a differently named machine.
+   Repeat with only one renderer available, including a cold app start and selecting that same renderer in the picker. Check both debug and release APKs. If the chip shows **This phone**, capture the dumps before switching outputs or restarting; include `adb shell dumpsys activity service com.android.systemui/.SystemUIService` to compare SystemUI's cached device with the media session and router.
 2. In `media_router`, find `KalinkaRouteProviderService`, both renderer route IDs, and a routing session for `org.kalinka.kalinka`. Its selected route must match the renderer. In `media_session`, check remote playback, current/max volume, and (where printed by that Android build) that the volume control ID matches the routing session/controller ID, not the renderer UUID.
 3. Open the native picker. Check names, availability, selected row, speaker icon, and volume. Select the other renderer. Verify playback follows existing controller transfer semantics, the queue is preserved, and transport commands still work. Compare dumps before/after: media-session identity should persist through an ordinary output switch.
 4. Switch from Flutter, then from the second client. Check Android follows each confirmed output without an extra `/renderer/active` request. Controller HTTP logs can establish exact command counts. Pre-topology-event servers can take up to the 15-second inventory refresh interval.

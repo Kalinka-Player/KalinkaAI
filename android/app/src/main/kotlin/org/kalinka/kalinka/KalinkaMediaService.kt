@@ -183,9 +183,9 @@ class KalinkaMediaService : Service() {
         Log.d(TAG, "disable")
         isEnabled = false
         mainHandler.removeCallbacks(reconnectRunnable)
+        hideNotification()
         routing.stop()
         closeConnections()
-        hideNotification()
         resetPlaybackState()
     }
 
@@ -290,8 +290,8 @@ class KalinkaMediaService : Service() {
         // Native reconnection also runs with Flutter backgrounded. No socket or
         // route from the previous connection may drive the next controller.
         closeConnections()
-        routing.stop()
         hideNotification()
+        routing.stop()
         resetPlaybackState()
         mainHandler.removeCallbacks(reconnectRunnable)
         mainHandler.postDelayed(reconnectRunnable, 2_000)
@@ -316,6 +316,8 @@ class KalinkaMediaService : Service() {
             val eventType = json.optString("event_type")
             Log.d(TAG, "handleQueueEvent: event_type=$eventType")
             when (eventType) {
+                // Already applied by routing.queueEvent above.
+                "renderers_changed", "current_renderer_changed" -> Unit
                 "playback_control_changed" -> {
                     exclusivePlayback = isExclusive(json.optJSONObject("control"))
                     Log.d(TAG, "playback_control_changed: exclusive=$exclusivePlayback")
@@ -488,16 +490,20 @@ class KalinkaMediaService : Service() {
                     sendQueueCommand("""{"command":"seek","position_ms":$pos}""")
                 }
             })
-            isActive = true
         }
+        // Android observes active sessions independently of the notification.
+        // Attach the remote output before exposing this session to SystemUI.
         routing.setSession(mediaSession)
+        mediaSession?.isActive = true
     }
 
     private fun releaseMediaSession() {
         val session = mediaSession ?: return
         Log.d(TAG, "releaseMediaSession")
-        routing.setSession(null)
+        // Detaching from MediaRouter resets playback to local. Deactivate first
+        // so the active session never advertises the phone as its output.
         session.isActive = false
+        routing.setSession(null)
         session.release()
         mediaSession = null
     }

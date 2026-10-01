@@ -35,6 +35,7 @@ class KalinkaRoutingTest {
     private lateinit var router: MediaRouter
     private val writes = CopyOnWriteArrayList<RecordedRequest>()
     @Volatile private var active = "kitchen"
+    @Volatile private var singleRenderer = false
     @Volatile private var volume = 25
     @Volatile private var transferFails = false
     @Volatile private var delayTransfer = false
@@ -49,7 +50,9 @@ class KalinkaRoutingTest {
                 val path = request.requestUrl!!.encodedPath
                 if (request.method == "PUT") writes.add(request)
                 return when (path) {
-                    "/renderer/list" -> MockResponse().setBody("""{"renderers":[
+                    "/renderer/list" -> MockResponse().setBody(if (singleRenderer) """{"renderers":[
+                        {"renderer_id":"kitchen","friendly_name":"Kitchen","status":"connected","active":true}
+                    ]}""" else """{"renderers":[
                         {"renderer_id":"kitchen","friendly_name":"Kitchen","status":"connected","active":${active == "kitchen"}},
                         {"renderer_id":"study","friendly_name":"Study","status":"connected","active":${active == "study"}}
                     ]}""")
@@ -140,6 +143,46 @@ class KalinkaRoutingTest {
         assertEquals(0, writes.count { it.requestUrl!!.encodedPath.startsWith("/queue") })
         routing.setSession(null)
         session.release()
+    }
+
+    @Test fun singleRendererAssociatesAnEarlySessionAndReselectingItKeepsRemotePlayback() {
+        routing.stop()
+        singleRenderer = true
+        ready = false
+        var remoteVolume: VolumeProviderCompat? = null
+        val session = object : MediaSessionCompat(RuntimeEnvironment.getApplication(), "single-output-test") {
+            override fun setPlaybackToRemote(provider: VolumeProviderCompat) {
+                remoteVolume = provider
+                super.setPlaybackToRemote(provider)
+            }
+            override fun setPlaybackToLocal(stream: Int) {
+                remoteVolume = null
+                super.setPlaybackToLocal(stream)
+            }
+        }
+        try {
+            routing.start(server.hostName, server.port)
+            routing.setSession(session)
+            routing.queueEvent(JSONObject("""{"event_type":"state_changed","state":{"state":"PLAYING"}}"""))
+            await { ready && remoteVolume?.maxVolume == 70 }
+            assertEquals("Kitchen", router.selectedRoute.name)
+            assertEquals(1, provider.descriptor!!.routes.size)
+            val token = router.mediaSessionToken
+            assertEquals(session.sessionToken, token)
+
+            repeat(3) {
+                router.selectRoute(router.selectedRoute)
+                routing.queueEvent(JSONObject("""{"event_type":"current_renderer_changed","renderer_id":"kitchen"}"""))
+                shadowOf(Looper.getMainLooper()).idle()
+                assertTrue(ready)
+                assertNotNull(remoteVolume)
+                assertEquals(token, router.mediaSessionToken)
+            }
+            assertTrue(writes.isEmpty())
+        } finally {
+            routing.setSession(null)
+            session.release()
+        }
     }
 
     @Test fun anotherClientAndFlutterEventsMoveAndroidWithoutAnyWrite() {
