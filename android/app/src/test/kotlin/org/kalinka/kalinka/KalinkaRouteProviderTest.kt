@@ -38,6 +38,7 @@ class KalinkaRouteProviderTest {
         ))
         state.confirm("speaker-1")
         state.applyVolume(KalinkaVolume(25, 70, true))
+        state.updatePlayback("PLAYING")
         KalinkaRoutes.commands = object : KalinkaRoutes.Commands {
             override fun selectRenderer(id: String) {
                 if (state.requestSelection(id)) selections.add(id)
@@ -124,6 +125,15 @@ class KalinkaRouteProviderTest {
         state.applyVolume(KalinkaVolume(50, 50, false))
         KalinkaRoutes.changed()
         assertEquals(MediaRouter.RouteInfo.PLAYBACK_VOLUME_FIXED, provider.descriptor!!.routes[1].volumeHandling)
+    }
+
+    @Test fun volumeIsFixedWhilePlaybackDoesNotHoldTheRenderer() {
+        KalinkaRoutes.changed()
+        assertEquals(MediaRouter.RouteInfo.PLAYBACK_VOLUME_VARIABLE, provider.descriptor!!.routes[0].volumeHandling)
+        assertEquals(MediaRouter.RouteInfo.PLAYBACK_VOLUME_FIXED, provider.descriptor!!.routes[1].volumeHandling)
+        state.updatePlayback("STOPPED")
+        KalinkaRoutes.changed()
+        assertEquals(MediaRouter.RouteInfo.PLAYBACK_VOLUME_FIXED, provider.descriptor!!.routes[0].volumeHandling)
     }
 
     @Test fun failedTransferAndDisappearanceClearPublishedConnectingState() {

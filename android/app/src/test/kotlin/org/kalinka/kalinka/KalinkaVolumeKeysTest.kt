@@ -15,7 +15,8 @@ class KalinkaVolumeKeysTest {
     private val state get() = KalinkaRoutes.state
     private val requests = mutableListOf<Int>()
     private var indicators = 0
-    private val keys = KalinkaVolumeKeys { indicators++ }
+    private val shown = mutableListOf<Pair<Int, Int>>()
+    private val keys = KalinkaVolumeKeys { level, max -> indicators++; shown.add(level to max) }
     private fun down(code: Int = KeyEvent.KEYCODE_VOLUME_UP, repeat: Int = 0) =
         KeyEvent(0, 0, KeyEvent.ACTION_DOWN, code, repeat)
     private fun up(code: Int = KeyEvent.KEYCODE_VOLUME_UP) = KeyEvent(KeyEvent.ACTION_UP, code)
@@ -25,6 +26,7 @@ class KalinkaVolumeKeysTest {
         state.updateRenderers(listOf(KalinkaRenderer("speaker", "Speaker", true)))
         state.confirm("speaker")
         state.applyVolume(KalinkaVolume(25, 70, true))
+        state.updatePlayback("PLAYING")
         KalinkaRoutes.commands = object : KalinkaRoutes.Commands {
             override fun selectRenderer(id: String) = Unit
             override fun setVolume(id: String, absolute: Int?, delta: Int) {
@@ -47,6 +49,21 @@ class KalinkaVolumeKeysTest {
         assertTrue(keys.dispatch(up(KeyEvent.KEYCODE_VOLUME_DOWN), true))
         assertEquals(listOf(26, 27, 26), requests)
         assertEquals(3, indicators)
+        assertEquals(listOf(26 to 70, 27 to 70, 26 to 70), shown)
+    }
+
+    @Test fun withoutPlaybackKeysRemainWithAndroid() {
+        state.updatePlayback("STOPPED")
+        assertFalse(keys.dispatch(down(), true))
+        assertFalse(keys.dispatch(up(), true))
+        assertEquals(0, indicators)
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test fun releaseIsConsumedWhenPlaybackStopsMidHold() {
+        assertTrue(keys.dispatch(down(), true))
+        state.updatePlayback("STOPPED")
+        assertTrue(keys.dispatch(up(), true))
     }
 
     @Test fun limitStillShowsIndicatorWithoutWritingAndFixedOutputDoesNotChangePhoneVolume() {
@@ -54,6 +71,7 @@ class KalinkaVolumeKeysTest {
         assertTrue(keys.dispatch(down(), true))
         assertTrue(keys.dispatch(up(), true))
         assertEquals(1, indicators)
+        assertEquals(listOf(70 to 70), shown)
         assertTrue(requests.isEmpty())
         state.applyVolume(KalinkaVolume(70, 70, false))
         assertTrue(keys.dispatch(down(), true))

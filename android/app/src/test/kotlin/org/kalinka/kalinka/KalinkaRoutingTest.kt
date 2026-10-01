@@ -38,6 +38,7 @@ class KalinkaRoutingTest {
     @Volatile private var volume = 25
     @Volatile private var transferFails = false
     @Volatile private var delayTransfer = false
+    @Volatile private var readDelayMs = 0L
     private var ready = false
 
     @Before fun setup() {
@@ -59,7 +60,12 @@ class KalinkaRoutingTest {
                             MockResponse().setBody("{}")
                         }
                     }
-                    "/device/get_volume" -> MockResponse().setBody("""{"current_volume":$volume,"max_volume":70,"supported":true}""")
+                    "/device/get_volume" -> {
+                        // Reads now, answers late: a slow network's stale reply.
+                        val level = volume
+                        Thread.sleep(readDelayMs)
+                        MockResponse().setBody("""{"current_volume":$level,"max_volume":70,"supported":true}""")
+                    }
                     "/device/set_volume" -> {
                         volume = request.requestUrl!!.queryParameter("volume")!!.toInt()
                         MockResponse().setBody("{}")
@@ -74,7 +80,17 @@ class KalinkaRoutingTest {
         router.addProvider(provider) // test-only; production discovers the service
         routing = KalinkaRouting(context) { ready = it }
         routing.start(server.hostName, server.port)
+        routing.queueEvent(JSONObject("""{"event_type":"state_changed","state":{"state":"PLAYING"}}"""))
         await { ready && KalinkaRoutes.state.volume?.current == 25 }
+    }
+
+    @Test fun onlyAPlayerStateChangesTheHoldAndAReplayCarriesIt() {
+        assertTrue(KalinkaRoutes.state.playbackActive)
+        routing.queueEvent(JSONObject("""{"event_type":"state_changed","state":{"position":1000}}"""))
+        assertTrue(KalinkaRoutes.state.playbackActive)
+        routing.queueEvent(JSONObject("""{"event_type":"replay_event","state_type":"PlayQueueState",
+            "state":{"playback_state":{"state":"STOPPED"}}}"""))
+        assertFalse(KalinkaRoutes.state.playbackActive)
     }
 
     @After fun teardown() {
@@ -84,6 +100,14 @@ class KalinkaRoutingTest {
         shadowOf(Looper.getMainLooper()).idle()
         MediaRouterTestHelper.resetMediaRouter()
         server.shutdown()
+    }
+
+    private fun pause(ms: Long) {
+        val deadline = System.nanoTime() + ms * 1_000_000
+        while (System.nanoTime() < deadline) {
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(10))
+            Thread.sleep(10)
+        }
     }
 
     private fun await(condition: () -> Boolean) {
@@ -145,6 +169,20 @@ class KalinkaRoutingTest {
         assertEquals(1, writes.size)
     }
 
+    @Test fun aKeyHoldNeverStepsBackWhileReadsAnswerLate() {
+        readDelayMs = 150
+        val keys = KalinkaVolumeKeys { _, _ -> }
+        repeat(12) { i ->
+            assertTrue(keys.dispatch(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP, i), true))
+            pause(60)
+        }
+        assertTrue(keys.dispatch(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_VOLUME_UP), true))
+        await { KalinkaRoutes.state.volume?.current == 37 }
+        val sent = writes.map { it.requestUrl!!.queryParameter("volume")!!.toInt() }
+        assertEquals(sent.sorted().distinct(), sent)
+        assertEquals(37, sent.last())
+    }
+
     @Test fun sliderAndHardwareRequestsCoalesceAndUseRealRange() {
         val options = MediaRouteProvider.RouteControllerOptions.Builder().build()
         val member = provider.onCreateRouteController("kitchen", options)!!
@@ -152,13 +190,14 @@ class KalinkaRoutingTest {
         member.onSetVolume(30)
         member.onUpdateVolume(1)
         var indicators = 0
-        val keys = KalinkaVolumeKeys { indicators++ }
+        val keys = KalinkaVolumeKeys { _, _ -> indicators++ }
         assertTrue(keys.dispatch(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP), true))
         assertTrue(keys.dispatch(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_VOLUME_UP), true))
         await { writes.size == 1 && KalinkaRoutes.state.volume?.current == 32 }
         assertEquals(1, indicators)
         assertEquals("32", writes.single().requestUrl!!.queryParameter("volume"))
         assertEquals("/device/set_volume", writes.single().requestUrl!!.encodedPath)
+        pause(200) // let the burst end with its read; mid-burst events are skipped
         routing.deviceVolume(JSONObject("""{"current_volume":12,"max_volume":70,"supported":true}"""))
         await { router.selectedRoute.volume == 12 }
         assertEquals(1, writes.size)

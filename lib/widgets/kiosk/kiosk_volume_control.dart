@@ -15,11 +15,20 @@ class KioskVolumeControl extends ConsumerStatefulWidget {
   /// The bar was used, or the volume moved: keep it up a while longer.
   final VoidCallback onActivity;
 
+  /// A solid panel, for use over busy app screens rather than the kiosk's
+  /// dimmed artwork.
+  final bool opaque;
+
+  /// Come up when the volume moves from elsewhere, not only when touched.
+  final bool revealOnChange;
+
   const KioskVolumeControl({
     super.key,
     required this.scale,
     required this.visible,
     required this.onActivity,
+    this.opaque = false,
+    this.revealOnChange = true,
   });
 
   @override
@@ -34,7 +43,9 @@ class _KioskVolumeControlState extends ConsumerState<KioskVolumeControl>
   void onVolumeChanged(DeviceVolume previous, DeviceVolume next) {
     // The first reading after (re)connecting replaces the placeholder — no
     // one turned anything.
-    if (previous.supported && previous.currentVolume != next.currentVolume) {
+    if (widget.revealOnChange &&
+        previous.supported &&
+        previous.currentVolume != next.currentVolume) {
       widget.onActivity();
     }
   }
@@ -50,7 +61,7 @@ class _KioskVolumeControlState extends ConsumerState<KioskVolumeControl>
 
   @override
   Widget build(BuildContext context) {
-    if (!volume.supported) return const SizedBox.shrink();
+    if (!volumeAvailable) return const SizedBox.shrink();
     double s(double v) => v * widget.scale;
     final level = volumeProgress;
 
@@ -67,10 +78,23 @@ class _KioskVolumeControlState extends ConsumerState<KioskVolumeControl>
           child: Container(
             width: s(76),
             padding: EdgeInsets.symmetric(vertical: s(18)),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(s(38)),
-            ),
+            decoration: widget.opaque
+                ? BoxDecoration(
+                    color: KalinkaColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(s(38)),
+                    border: Border.all(color: KalinkaColors.borderDefault),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x80000000),
+                        offset: Offset(0, 4),
+                        blurRadius: 24,
+                      ),
+                    ],
+                  )
+                : BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(s(38)),
+                  ),
             child: Column(
               children: [
                 Icon(

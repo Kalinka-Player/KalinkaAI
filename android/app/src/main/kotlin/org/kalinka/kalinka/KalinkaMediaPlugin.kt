@@ -33,8 +33,8 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
     }
 
     private lateinit var methodChannel: MethodChannel
-    private val volumeKeys = KalinkaVolumeKeys {
-        methodChannel.invokeMethod("volumeActivity", null)
+    private val volumeKeys = KalinkaVolumeKeys { level, max ->
+        methodChannel.invokeMethod("volumeActivity", mapOf("level" to level, "max" to max))
     }
 
     fun dispatchVolumeKey(event: KeyEvent, foreground: Boolean): Boolean =

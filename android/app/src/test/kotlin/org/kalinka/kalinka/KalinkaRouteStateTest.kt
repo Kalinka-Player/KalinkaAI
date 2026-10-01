@@ -14,6 +14,18 @@ class KalinkaRouteStateTest {
         state.updateRenderers(listOf(kitchen, study))
         state.confirm(kitchen.id)
         state.applyVolume(KalinkaVolume(30, 80, true))
+        state.updatePlayback("PLAYING")
+    }
+
+    @Test fun volumeFollowsWhetherPlaybackHoldsTheRenderer() {
+        assertFalse(state.updatePlayback("BUFFERING"))
+        assertTrue(state.updatePlayback("STOPPED"))
+        assertFalse(state.volumeControllable)
+        assertNull(state.requestVolume(kitchen.id, absolute = 40))
+        assertTrue(state.updatePlayback("PAUSED"))
+        assertEquals(40, state.requestVolume(kitchen.id, absolute = 40))
+        state.updatePlayback("ERROR")
+        assertFalse(state.volumeControllable)
     }
 
     @Test fun confirmedSelectionAndRepeatedCallbacksDoNotIssueTransfers() {
@@ -69,6 +81,28 @@ class KalinkaRouteStateTest {
         assertEquals(80, state.requestVolume(kitchen.id, delta = Int.MAX_VALUE))
         assertNull(state.requestVolume(kitchen.id, delta = 1))
         assertEquals(0, state.requestVolume(kitchen.id, absolute = -100))
+    }
+
+    @Test fun anAcceptedRequestIsTheBaseBeforeAnyReadReturns() {
+        assertEquals(29, state.requestVolume(kitchen.id, delta = -1))
+        state.volumeRequestFinished(29, accepted = true)
+        assertEquals(29, state.volume?.current)
+        assertEquals(28, state.requestVolume(kitchen.id, delta = -1))
+    }
+
+    @Test fun aRefusedRequestFallsBackToTheLastReportedLevel() {
+        assertEquals(31, state.requestVolume(kitchen.id, delta = 1))
+        state.volumeRequestFinished(31, accepted = false)
+        assertEquals(30, state.volume?.current)
+        assertEquals(31, state.requestVolume(kitchen.id, delta = 1))
+    }
+
+    @Test fun onlyARequestThatChangesTheLevelCounts() {
+        val before = state.volumeRequests
+        state.requestVolume(kitchen.id, absolute = 30)
+        assertEquals(before, state.volumeRequests)
+        state.requestVolume(kitchen.id, absolute = 40)
+        assertEquals(before + 1, state.volumeRequests)
     }
 
     @Test fun lateEchoDoesNotSendCommandsOrLosePendingVolumeIntent() {

@@ -24,9 +24,26 @@ internal class KalinkaRouteState {
     var volume: KalinkaVolume? = null
         private set
     private var requestedVolume: Int? = null
+    /** Counts volume requests, so a read can tell whether one overtook it. */
+    var volumeRequests = 0L
+        private set
+    /** The newest requested level, else the reported one. */
+    val shownVolume get() = volume?.let { requestedVolume ?: it.current }
     var revision = 0L
         private set
+    /** Only playback holds the renderer; its volume means nothing otherwise. */
+    var playbackActive = false
+        private set
     val current get() = renderers.firstOrNull { it.id == currentId && it.available }
+    val volumeControllable get() = volume?.variable == true && playbackActive
+
+    /** @return whether the renderer's hold changed. */
+    fun updatePlayback(playerState: String): Boolean {
+        val active = playerState in ACTIVE_STATES
+        if (active == playbackActive) return false
+        playbackActive = active
+        return true
+    }
 
     fun updateRenderers(rows: List<KalinkaRenderer>) {
         revision++
@@ -63,17 +80,21 @@ internal class KalinkaRouteState {
         if (requestedVolume == volume?.current) requestedVolume = null
     }
 
-    fun volumeRequestFinished(value: Int) {
+    /** @param accepted the server took the level, so it now reports it; the
+     *  next relative change counts from there, not from an older read. */
+    fun volumeRequestFinished(value: Int, accepted: Boolean) {
+        if (accepted) volume = volume?.let { it.copy(current = value.coerceIn(0, it.max)) }
         if (requestedVolume == value) requestedVolume = null
     }
 
     fun requestVolume(id: String, absolute: Int? = null, delta: Int = 0): Int? {
         val v = volume ?: return null
-        if (id != current?.id || pendingId != null || !v.variable) return null
+        if (id != current?.id || pendingId != null || !volumeControllable) return null
         val base = requestedVolume ?: v.current
         val target = (absolute?.toLong() ?: (base.toLong() + delta)).coerceIn(0, v.max.toLong()).toInt()
         if (target == base) return null
         requestedVolume = target
+        volumeRequests++
         return target
     }
 
@@ -86,8 +107,13 @@ internal class KalinkaRouteState {
         renderers = emptyList()
         currentId = null
         pendingId = null
+        playbackActive = false
         clearVolume()
         revision++
+    }
+
+    private companion object {
+        val ACTIVE_STATES = setOf("PLAYING", "BUFFERING", "PAUSED")
     }
 }
 

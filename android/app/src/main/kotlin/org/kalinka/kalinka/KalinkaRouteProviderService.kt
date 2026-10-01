@@ -65,7 +65,7 @@ internal class KalinkaRouteProvider(context: Context) : MediaRouteProvider(conte
                 state.current?.id -> MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTED
                 else -> MediaRouter.RouteInfo.CONNECTION_STATE_DISCONNECTED
             })
-            .setVolumeHandling(if (volume?.variable == true) MediaRouter.RouteInfo.PLAYBACK_VOLUME_VARIABLE else MediaRouter.RouteInfo.PLAYBACK_VOLUME_FIXED)
+            .setVolumeHandling(if (volume?.variable == true && state.playbackActive) MediaRouter.RouteInfo.PLAYBACK_VOLUME_VARIABLE else MediaRouter.RouteInfo.PLAYBACK_VOLUME_FIXED)
             .setVolumeMax(volume?.max ?: 0)
             .setVolume(volume?.current ?: 0)
             .setCanDisconnect(true)
