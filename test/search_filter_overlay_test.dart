@@ -47,7 +47,9 @@ const _liveCaps = BrowseFilterCapabilities(
 Future<void> _pumpOverlay(
   WidgetTester tester, {
   BrowseFilterQuery applied = const BrowseFilterQuery(),
+  BrowseFilterCapabilities capabilities = _liveCaps,
   required void Function(BrowseFilterQuery) onApply,
+  ValueChanged<bool>? onResetApplied,
   required VoidCallback onCancel,
   List<Genre> genres = const [],
 }) async {
@@ -59,9 +61,12 @@ Future<void> _pumpOverlay(
       child: MaterialApp(
         home: Scaffold(
           body: SearchFilterOverlay(
-            capabilities: _liveCaps,
+            capabilities: capabilities,
             applied: applied,
-            onApply: onApply,
+            onApply: (filter, {required reset}) {
+              onResetApplied?.call(reset);
+              onApply(filter);
+            },
             onCancel: onCancel,
             maxHeight: 560,
           ),
@@ -131,6 +136,58 @@ void main() {
     // Reset empties the staging area but stays on the card.
     expect(find.text('RESET'), findsNothing);
     expect(find.text('SEARCH & FILTERS'), findsOneWidget);
+  });
+
+  testWidgets('Reset is staged and applies to edits made after it', (
+    tester,
+  ) async {
+    final applied = <BrowseFilterQuery>[];
+    final resets = <bool>[];
+    await _pumpOverlay(
+      tester,
+      applied: const BrowseFilterQuery(text: 'jazz'),
+      onApply: applied.add,
+      onResetApplied: resets.add,
+      onCancel: () {},
+    );
+
+    await tester.tap(find.text('RESET'));
+    await tester.pump();
+    await tester.tap(find.text('Albums'));
+    await tester.pump();
+    expect(applied, isEmpty);
+    expect(resets, isEmpty);
+
+    await tester.tap(find.text('Show results'));
+    expect(applied.single.type, SearchType.album);
+    expect(resets, [true]);
+  });
+
+  testWidgets('options stay available when results change under an open card', (
+    tester,
+  ) async {
+    final applied = <BrowseFilterQuery>[];
+    const selected = BrowseFilterQuery(type: SearchType.album);
+    await _pumpOverlay(
+      tester,
+      applied: selected,
+      onApply: applied.add,
+      onCancel: () {},
+    );
+    await _pumpOverlay(
+      tester,
+      capabilities: const BrowseFilterCapabilities(
+        text: FacetSupport.supported,
+      ),
+      onApply: applied.add,
+      onCancel: () {},
+    );
+
+    expect(find.text('Albums'), findsOneWidget);
+    await tester.tap(find.text('All'));
+    await tester.pump();
+    await tester.tap(find.text('Show results'));
+    expect(applied.single.type, isNull);
   });
 
   testWidgets('the folded button badges the number of active answers', (

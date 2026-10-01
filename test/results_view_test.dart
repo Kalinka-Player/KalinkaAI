@@ -185,6 +185,27 @@ void main() {
     _prefs = await SharedPreferences.getInstance();
   });
 
+  testWidgets('saved genres keep their labels while results are loading', (
+    tester,
+  ) async {
+    await _prefs.setString(
+      'Kalinka.resultsFilter',
+      '{"type":"album","genreIds":["jazz"],"genreNames":{"jazz":"Jazz"}}',
+    );
+    final gate = Completer<void>();
+    await _pump(tester, _ScriptedApi(gates: {'qobuz': gate}));
+    await tester.pump(_settle);
+
+    expect(find.text('Jazz'), findsOneWidget);
+    expect(find.text('Albums'), findsOneWidget);
+    expect(find.text('jazz'), findsNothing);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Jazz'), findsNothing);
+    expect(find.text('Albums'), findsNothing);
+  });
+
   testWidgets('the name block shimmers until every source has answered', (
     tester,
   ) async {

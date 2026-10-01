@@ -237,14 +237,13 @@ class BrowseFilterQuery {
       (order == NameMatchOrder.relevance ||
           capabilities.order == FacetSupport.supported);
 
-  /// Whether results of [kind] from [source] get through. A null [source]
-  /// stands for every source at once.
+  /// Whether the filter includes this result kind and source.
+  /// A null source matches any source.
   bool shows(ResultKind kind, String? source) =>
       (this.kind == null || this.kind == kind) &&
       (source == null || sources.isEmpty || sources.contains(source));
 
-  /// Drops whatever [capabilities] do not offer, so a remembered choice cannot
-  /// narrow a surface that shows no chip for it.
+  /// Removes selections this screen cannot display or apply.
   BrowseFilterQuery fittedTo(BrowseFilterCapabilities capabilities) {
     bool live(FacetSupport support) => support == FacetSupport.supported;
     final offeredSources = {for (final s in capabilities.sources) s.name};
@@ -311,7 +310,7 @@ class BrowseFilterQuery {
     if (order != NameMatchOrder.relevance) 'order': order.name,
   };
 
-  /// An unknown value is dropped alone, so the rest of the query survives.
+  /// Ignores unknown values from older saved filters.
   factory BrowseFilterQuery.fromJson(Map<String, dynamic> json) {
     List<String> strings(Object? value) => value is List
         ? [

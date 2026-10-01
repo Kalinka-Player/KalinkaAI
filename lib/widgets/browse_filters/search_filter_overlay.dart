@@ -23,7 +23,7 @@ class SearchFilterOverlay extends StatefulWidget {
 
   final String searchHint;
 
-  final ValueChanged<BrowseFilterQuery> onApply;
+  final void Function(BrowseFilterQuery filter, {required bool reset}) onApply;
   final VoidCallback onCancel;
 
   /// Vertical space the card may occupy before its body starts scrolling.
@@ -53,7 +53,10 @@ class SearchFilterOverlay extends StatefulWidget {
 }
 
 class _SearchFilterOverlayState extends State<SearchFilterOverlay> {
+  // Keep the options and selection from the same snapshot while editing.
+  late final BrowseFilterCapabilities _capabilities = widget.capabilities;
   late BrowseFilterQuery _staged = widget.applied;
+  bool _reset = false;
 
   @override
   Widget build(BuildContext context) {
@@ -70,15 +73,17 @@ class _SearchFilterOverlayState extends State<SearchFilterOverlay> {
                 ? null
                 : OverlayTextAction(
                     label: 'RESET',
-                    onTap: () =>
-                        setState(() => _staged = const BrowseFilterQuery()),
+                    onTap: () => setState(() {
+                      _staged = const BrowseFilterQuery();
+                      _reset = true;
+                    }),
                   ),
           ),
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
               child: BrowseFilterForm(
-                capabilities: widget.capabilities,
+                capabilities: _capabilities,
                 query: _staged,
                 searchHint: widget.searchHint,
                 searchCaption: widget.searchCaption,
@@ -118,7 +123,7 @@ class _SearchFilterOverlayState extends State<SearchFilterOverlay> {
               // until the selection is applied.
               label: 'Show results',
               size: KalinkaButtonSize.compact,
-              onTap: () => widget.onApply(_staged),
+              onTap: () => widget.onApply(_staged, reset: _reset),
             ),
           ],
         ),

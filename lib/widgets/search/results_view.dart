@@ -32,8 +32,7 @@ class ResultsView extends ConsumerWidget {
       children: [
         ActiveFilterChips(
           capabilities: session.resultsFilterCapabilities,
-          // Until the sources are known the saved filter is not yet fitted to
-          // them, and its chips could change or vanish once it is.
+          // Wait for the source list before showing saved filters.
           query: results == null
               ? const BrowseFilterQuery()
               : session.resultsFilter,
@@ -93,7 +92,7 @@ class ResultsView extends ConsumerWidget {
     final matches = NameMatchesBlock.visible(results, narrowed, filter);
     final inspired = InspiredBlock.visible(results, narrowed, filter);
     if (!matches && !inspired) {
-      // Order hides nothing, so it does not count as a filter here.
+      // Sorting alone cannot cause an empty result.
       final filtered =
           filter.copyWith(order: NameMatchOrder.relevance).activeCount > 0 ||
           matchSource != null;
