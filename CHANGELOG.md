@@ -8,6 +8,21 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.15.0
+
+Android's output switcher and the volume keys now drive Kalinka's renderers, and search and catalog filters are remembered. This release needs no server update.
+
+### Added
+- Kalinka's renderers appear in Android's output switcher: the media notification's output chip names the renderer that is playing, switches between renderers, and sets its volume.
+- With the app open, the phone's volume keys set the renderer's volume and show a compact volume bar. Volume is offered only while something is playing, buffering or paused on the renderer; otherwise the keys go back to Android.
+- Filters are remembered. The results filter (kind, type, genres, sources and order) carries over to the next search, and each catalog page reopens under its own filter.
+- When filters leave a listing empty, it says so and offers Reset filters.
+
+### Fixed
+- The volume slider follows your finger as you drag, and no longer jumps back to an in-between level after you let go.
+- The seek bar stays where you dropped it until the renderer reaches the new position, instead of snapping back on the next update.
+- A saved filter for a source that is logged out or offline is kept until the source returns, and a search no longer comes up empty because a saved filter asks for something none of the chosen sources can provide.
+
 ## 0.14.0
 
 The now-playing display can run on a screen attached to the server itself, such as a Raspberry Pi's touchscreen; switching it on needs Kalinka server 5.4.0. Everything else works against any server.
