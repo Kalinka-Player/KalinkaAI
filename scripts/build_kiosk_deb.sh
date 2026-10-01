@@ -24,8 +24,12 @@ BUNDLE=build/flutter-pi/aarch64-generic
 if [ "${1:-}" != "--no-build" ]; then
   echo "Building flutter-pi bundle, version: $GIT_DESCRIBE"
   FLUTTERPI_TOOL=$(command -v flutterpi_tool || echo "$HOME/.pub-cache/bin/flutterpi_tool")
+  # flutterpi_tool 0.12 reads GITHUB_TOKEN only on its --github-artifacts-*
+  # path; naming the default repo puts its API calls on the token.
+  GH_ARGS=()
+  [ -n "${GITHUB_TOKEN:-}" ] && GH_ARGS=(--github-artifacts-repo=ardera/flutter-ci)
   # Generic arm64 engine: one package for the Pi 3, 4 and 5.
-  "$FLUTTERPI_TOOL" build --arch=arm64 --release \
+  "$FLUTTERPI_TOOL" "${GH_ARGS[@]}" build --arch=arm64 --release \
     --dart-define=GIT_DESCRIBE="$GIT_DESCRIBE"
 fi
 [ -x "$BUNDLE/flutter-pi" ] || { echo "$BUNDLE missing — run without --no-build first" >&2; exit 1; }

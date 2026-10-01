@@ -67,5 +67,3 @@ GitHub Releases — nothing is built locally.
   .deb, md5.txt, plus version-less aliases. No per-ABI APKs (dropped after
   0.5.0 — offset versionCodes blocked cross-variant upgrades; IzzyOnDroid
   rejected the app so its 30 MB budget no longer matters).
-- After the release publishes, consider the kalinka-site version bump
-  (index.html checklist in the site repo).
