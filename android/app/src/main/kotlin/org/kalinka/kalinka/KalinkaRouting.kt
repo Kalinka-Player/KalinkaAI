@@ -226,23 +226,36 @@ internal class KalinkaRouting(
                 state.updateRenderers(parseRenderers(json.optJSONArray("renderers")))
             }
             "current_renderer_changed" -> state.confirm(json.stringOrNull("renderer_id"))
+            "state_changed" -> {
+                // Most of these are position updates, not a change of hold.
+                if (!updatePlayback(json.optJSONObject("state"))) return
+            }
             "replay_event" -> {
                 if (json.optString("state_type") != "PlayQueueState") return
                 val replay = json.optJSONObject("state") ?: return
-                if (!replay.has("renderers") || replay.isNull("renderers")) return
-                pushedTopology = true
-                state.updateRenderers(parseRenderers(replay.optJSONArray("renderers")))
-                state.confirm(replay.stringOrNull("current_renderer_id"))
+                updatePlayback(replay.optJSONObject("playback_state"))
+                if (replay.has("renderers") && !replay.isNull("renderers")) {
+                    pushedTopology = true
+                    state.updateRenderers(parseRenderers(replay.optJSONArray("renderers")))
+                    state.confirm(replay.stringOrNull("current_renderer_id"))
+                }
             }
             else -> return
         }
         KalinkaRoutes.changed()
     }
 
+    // A partial state leaves the player's state out; it has not changed.
+    private fun updatePlayback(playback: JSONObject?): Boolean =
+        playback != null && playback.has("state") && state.updatePlayback(playback.optString("state"))
+
     fun deviceVolume(volume: JSONObject) {
         // These events have no renderer id. A fresh GET after a route change
         // establishes which output their values belong to across the two WSs.
         if (state.current == null) return
+        // Mid-burst, an event may predate our newest request; the read that
+        // ends the burst sees whatever this one carried.
+        if (volumeJob?.isActive == true) return
         if (volumeSyncJob?.isActive == true) {
             volumeSyncDirty = true
             return
@@ -294,15 +307,17 @@ internal class KalinkaRouting(
                 val (rendererId, value) = pendingVolume ?: break
                 pendingVolume = null
                 if (state.current?.id != rendererId || state.pendingId != null) break
+                var accepted = false
                 try {
                     request("device/set_volume", "", mapOf("volume" to value.toString()))
+                    accepted = true
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     Log.w("KalinkaRouting", "Volume request failed: ${e.message}")
                 } finally {
                     if (currentGeneration == generation && state.current?.id == rendererId) {
-                        state.volumeRequestFinished(value)
+                        state.volumeRequestFinished(value, accepted)
                     }
                 }
             }
@@ -314,11 +329,14 @@ internal class KalinkaRouting(
         volumeSyncJob?.cancel()
         val id = state.current?.id ?: return
         val currentGeneration = generation
+        val requests = state.volumeRequests
         volumeSyncDirty = false
         volumeSyncJob = scope?.launch {
             try {
                 val json = request("device/get_volume")
-                if (currentGeneration == generation && state.current?.id == id) {
+                // A newer request may have landed after the server answered;
+                // the burst it starts ends with its own read.
+                if (currentGeneration == generation && state.current?.id == id && state.volumeRequests == requests) {
                     state.applyVolume(parseVolume(json))
                     KalinkaRoutes.changed()
                 }

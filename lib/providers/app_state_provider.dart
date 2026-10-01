@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart'
         NotifierProvider,
         Provider,
         ProviderListenableSelect;
+import '../data_model/data_model.dart' show PlayerStateType;
 import '../data_model/ext_device_events.dart';
 import '../data_model/playqueue_events.dart'
     show PlayQueueState, PlayQueueEvent, TrackMovedEvent;
@@ -183,6 +184,16 @@ final playQueueProvider = Provider(
 final volumeStateProvider = Provider(
   (ref) => ref.watch(extDeviceStateStoreProvider.select((s) => s.volume)),
 );
+
+/// Volume belongs to the renderer, and only playback holds one.
+final volumeAvailableProvider = Provider<bool>((ref) {
+  final supported = ref.watch(volumeStateProvider.select((v) => v.supported));
+  final state = ref.watch(playerStateProvider.select((s) => s.state));
+  return supported &&
+      (state == PlayerStateType.playing ||
+          state == PlayerStateType.buffering ||
+          state == PlayerStateType.paused);
+});
 
 final playbackModeProvider = Provider(
   (ref) => ref.watch(playQueueStateStoreProvider.select((s) => s.playbackMode)),

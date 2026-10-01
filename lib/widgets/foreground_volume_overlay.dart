@@ -8,7 +8,8 @@ import '../providers/kiosk_provider.dart';
 import '../providers/volume_activity_provider.dart';
 import 'kiosk/kiosk_volume_control.dart';
 
-/// Compact version of the kiosk indicator, above every Android app screen.
+/// The kiosk volume bar on a solid panel, above every Android app screen,
+/// while the phone's volume keys or a touch on it keep it in use.
 class ForegroundVolumeOverlay extends ConsumerStatefulWidget {
   final Widget child;
 
@@ -47,7 +48,7 @@ class _ForegroundVolumeOverlayState
     if (!_foreground || ref.read(kioskActiveProvider)) return;
     _timer?.cancel();
     setState(() => _visible = true);
-    _timer = Timer(const Duration(seconds: 3), () {
+    _timer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _visible = false);
     });
   }
@@ -79,11 +80,14 @@ class _ForegroundVolumeOverlayState
                 child: Material(
                   type: MaterialType.transparency,
                   child: SizedBox(
-                    height: 196,
+                    height: 280,
                     child: KioskVolumeControl(
-                      scale: 0.72,
+                      scale: 1,
                       visible: _visible,
                       onActivity: _show,
+                      opaque: true,
+                      // Only the phone's keys and touches bring it up.
+                      revealOnChange: false,
                     ),
                   ),
                 ),

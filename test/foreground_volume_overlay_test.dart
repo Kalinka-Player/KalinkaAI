@@ -45,10 +45,12 @@ Future<ProviderContainer> _pump(
   WidgetTester tester, {
   bool kiosk = false,
   bool supported = true,
+  PlayerStateType player = PlayerStateType.playing,
 }) async {
   final container = ProviderContainer(
     overrides: [
       kioskActiveProvider.overrideWithValue(kiosk),
+      playerStateProvider.overrideWithValue(PlaybackState(state: player)),
       extDeviceStateStoreProvider.overrideWith(
         () => _Device(_state(30, supported: supported)),
       ),
@@ -69,13 +71,16 @@ Future<ProviderContainer> _pump(
   return container;
 }
 
-Future<void> _nativeKey(WidgetTester tester) async {
+Future<void> _nativeKey(WidgetTester tester, {int? level}) async {
   final done = Completer<void>();
   // Simulate the native plugin's message, including its method-channel codec.
   tester.binding.defaultBinaryMessenger.handlePlatformMessage(
     'org.kalinka.kalinka/media_session',
     const StandardMethodCodec().encodeMethodCall(
-      const MethodCall('volumeActivity'),
+      MethodCall(
+        'volumeActivity',
+        level == null ? null : {'level': level, 'max': 100},
+      ),
     ),
     (_) => done.complete(),
   );
@@ -94,7 +99,7 @@ double _opacity(WidgetTester tester) => tester
 
 void main() {
   testWidgets(
-    'native keys show compact indicator, extend timeout, send no duplicate command',
+    'native keys show the indicator, each press keeps it 2 s, no duplicate command',
     (tester) async {
       final container = await _pump(tester);
       expect(_opacity(tester), 0);
@@ -102,30 +107,32 @@ void main() {
       expect(_opacity(tester), 1);
       expect(
         tester.getSize(find.byType(KioskVolumeControl)).width,
-        closeTo(54.72, 0.01),
+        closeTo(76, 0.01),
       );
-      expect(tester.getSize(find.byType(KioskVolumeControl)).height, 196);
-      await tester.pump(const Duration(seconds: 2));
+      expect(tester.getSize(find.byType(KioskVolumeControl)).height, 280);
+      await tester.pump(const Duration(milliseconds: 1500));
       await _nativeKey(tester);
-      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(milliseconds: 1500));
       expect(_opacity(tester), 1);
-      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 500));
       expect(_opacity(tester), 0);
       expect((container.read(kalinkaWsApiProvider) as _Api).commands, isEmpty);
     },
   );
 
   testWidgets(
-    'controller changes update indicator; background changes stay hidden',
+    'volume changes from elsewhere do not bring it up; only keys do',
     (tester) async {
       final container = await _pump(tester);
       final device =
           container.read(extDeviceStateStoreProvider.notifier) as _Device;
       device.emit(45);
       await tester.pump();
+      expect(_opacity(tester), 0);
+      await _nativeKey(tester);
       expect(_opacity(tester), 1);
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(find.bySemanticsLabel('Volume'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      expect(_opacity(tester), 0);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       device.emit(55);
@@ -154,6 +161,47 @@ void main() {
     final commands = (container.read(kalinkaWsApiProvider) as _Api).commands;
     expect(commands.last, isA<SetVolumeCommand>());
     expect((commands.last as SetVolumeCommand).volume, greaterThan(30));
+  });
+
+  testWidgets('a key press shows its level before the server echoes it', (
+    tester,
+  ) async {
+    final container = await _pump(tester);
+    final device =
+        container.read(extDeviceStateStoreProvider.notifier) as _Device;
+    String? shown() => tester
+        .widget<Semantics>(
+          find.descendant(
+            of: find.byType(KioskVolumeControl),
+            matching: find.byWidgetPredicate(
+              (w) => w is Semantics && w.properties.label == 'Volume',
+            ),
+          ),
+        )
+        .properties
+        .value;
+
+    await _nativeKey(tester, level: 31);
+    await _nativeKey(tester, level: 32);
+    expect(shown(), '32%');
+    // The first press's echo arrives late; the bar stays on the newest level.
+    device.emit(29);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(shown(), '32%');
+    device.emit(32);
+    await tester.pump(const Duration(milliseconds: 350));
+    device.emit(40);
+    await tester.pump();
+    expect(shown(), '40%');
+  });
+
+  testWidgets('without playback there is no volume to show', (tester) async {
+    for (final player in [PlayerStateType.stopped, PlayerStateType.error]) {
+      await tester.pumpWidget(const SizedBox());
+      await _pump(tester, player: player);
+      await _nativeKey(tester, level: 40);
+      expect(find.byType(AnimatedOpacity), findsNothing);
+    }
   });
 
   testWidgets('fixed volume stays hidden', (tester) async {

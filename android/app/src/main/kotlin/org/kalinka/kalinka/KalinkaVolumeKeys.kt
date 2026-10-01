@@ -3,7 +3,7 @@ package org.kalinka.kalinka
 import android.view.KeyEvent
 
 /** Foreground keys go to the same remote-volume command path as SystemUI. */
-internal class KalinkaVolumeKeys(private val onActivity: () -> Unit) {
+internal class KalinkaVolumeKeys(private val onActivity: (level: Int, max: Int) -> Unit) {
     private val pressed = mutableSetOf<Int>()
 
     fun dispatch(event: KeyEvent, foreground: Boolean): Boolean {
@@ -18,12 +18,16 @@ internal class KalinkaVolumeKeys(private val onActivity: () -> Unit) {
         if (event.action != KeyEvent.ACTION_DOWN || !foreground) return false
         val state = KalinkaRoutes.state
         val id = state.current?.id ?: return false
+        if (!state.playbackActive) return false
         val commands = KalinkaRoutes.commands ?: return false
         pressed.add(event.keyCode)
-        if (state.volume?.variable == true && state.pendingId == null && !event.isCanceled) {
+        if (state.volumeControllable && state.pendingId == null && !event.isCanceled) {
             commands.setVolume(id, delta = delta)
-            // Also show feedback at the limits, where no server event follows.
-            onActivity()
+            // The UI shows the requested level at once, not after the server's
+            // echo; and also at the limits, where no echo follows.
+            val volume = state.volume
+            val level = state.shownVolume
+            if (volume != null && level != null) onActivity(level, volume.max)
         }
         // Fixed/unknown remote outputs must not change the phone's volume.
         return true
