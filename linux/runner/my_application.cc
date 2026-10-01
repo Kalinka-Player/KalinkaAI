@@ -40,6 +40,22 @@ static void set_window_icon(GtkWindow *window) {
   gtk_window_set_default_icon(icon);
 }
 
+// KALINKA_KIOSK set to anything but an "off" word starts the app as a
+// full-screen display (lib/providers/kiosk_provider.dart reads it too).
+static gboolean kiosk_requested() {
+  const gchar *value = g_getenv("KALINKA_KIOSK");
+  if (value == nullptr || *value == '\0') {
+    return FALSE;
+  }
+  const gchar *off[] = {"false", "0", "off", "no"};
+  for (const gchar *word : off) {
+    if (g_ascii_strcasecmp(value, word) == 0) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication *application) {
   MyApplication *self = MY_APPLICATION(application);
@@ -76,6 +92,9 @@ static void my_application_activate(GApplication *application) {
   set_window_icon(window);
 
   gtk_window_set_default_size(window, 1280, 720);
+  if (kiosk_requested()) {
+    gtk_window_fullscreen(window);
+  }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(

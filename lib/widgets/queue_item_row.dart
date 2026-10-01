@@ -89,7 +89,10 @@ class QueueItemRow extends ConsumerWidget {
       playbackFailuresProvider.select((ids) => ids.contains(track.id)),
     );
 
-    final imageUrl = track.album?.image?.small;
+    final imageUrl =
+        track.album?.image?.small ??
+        track.album?.image?.thumbnail ??
+        track.album?.image?.large;
     final resolvedImageUrl = imageUrl != null
         ? urlResolver.abs(imageUrl)
         : null;

@@ -8,11 +8,9 @@ import '../providers/bit_perfect_provider.dart';
 import '../providers/playback_time_provider.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
-import '../utils/haptics.dart';
 import '../utils/playback_utils.dart';
 import 'kalinka_button.dart';
 import 'kalinka_dialog.dart';
-import 'transport_button.dart';
 
 /// One labelled line of the stream-info read-out.
 typedef StreamInfoField = ({String label, String value});
@@ -88,39 +86,6 @@ String _stream(int bitsPerSample, int sampleRate, int channels) {
     if (sampleRate > 0) '$khz kHz',
     if (channels > 0) '$channels ch',
   ].join(' · ');
-}
-
-/// Opens the stream-info dialog. Sits with the output switcher in the Now
-/// Playing header: both answer where the sound is coming from.
-class StreamInfoButton extends StatelessWidget {
-  const StreamInfoButton({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Stream info',
-      button: true,
-      child: Tooltip(
-        message: 'Stream info',
-        excludeFromSemantics: true,
-        child: TransportButton(
-          // Sized for the header it shares with the output switcher, the only
-          // place it appears.
-          hitDiameter: 36,
-          onTapDown: (_) => KalinkaHaptics.selectionClick(),
-          onTap: () => showKalinkaDialog(
-            context: context,
-            builder: (_) => const StreamInfoDialog(),
-          ),
-          child: const Icon(
-            Icons.info_outline,
-            size: 20,
-            color: KalinkaColors.textSecondary,
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Technical read-out of the stream now playing, for when what comes out of

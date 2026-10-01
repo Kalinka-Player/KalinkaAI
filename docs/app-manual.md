@@ -104,6 +104,20 @@ transport controls and volume:
 |:---:|:---:|
 | <img src="images/manual/queue.png" width="260"> | <img src="images/manual/player.png" width="260"> |
 
+## 7. Now-playing display (kiosk)
+
+For a screen that sits next to the hi-fi — a streamer's built-in panel, a tablet on a shelf — the app can run as a full-screen now-playing display: the cover with its reflection, the track, where it plays, and a large progress bar. Queue, search and settings are not loaded at all. It is laid out for 1024×600 and scales to other sizes.
+
+Open it from the player with the full-screen button next to the output switcher; the exit button in its corner, Back on Android or Escape returns to the full app.
+
+To keep a device on the display — a tablet that should always show what is playing — turn on **Settings › General › This device › Now-playing display**. The app switches to the display straight away and opens on it every time it starts. To leave it, tap the Kalinka logo at the top of the screen five times; that also turns the setting off.
+
+For a screen built into the streamer, start the app with `KALINKA_KIOSK=true` in its environment (the Linux app then also opens full screen, without a title bar), build it with `--dart-define=KALINKA_KIOSK=true`, or point a browser at the web UI with `?kiosk` on the address (for example `http://streamer.local:8080/?kiosk`). Started this way it has no way out, whatever the setting says. Kept on the display either way, the app opens on the Kalinka logo.
+
+For a screen on the server itself — a Raspberry Pi with a touch panel or HDMI screen — install the `kalinka-kiosk` package (arm64; the server installer adds it with `KALINKA_DISPLAY=1`) and turn on **Settings › EXPERT › Now-playing display on this machine**. It draws straight to the screen, with no desktop, starts at boot while the setting is on, is restarted if it ever stops, and goes away when you turn the setting off. **Screen rotation** next to it turns it for a panel mounted on its side. The Pi has to boot to the console (Raspberry Pi OS Lite, or no desktop running) with the KMS graphics driver (`dtoverlay=vc4-kms-v3d`, the default).
+
+While music plays the controls fade after a few seconds; with nothing playing the screen shows a clock and dims after two minutes. Either way, the first touch only wakes it. A touch also brings up a tall volume bar on the right edge — drag it to change the volume; it fades a few seconds after you let go, and outputs with fixed volume don't show it. A device that has not been set up yet runs the setup wizard first, then switches to the display.
+
 ## Troubleshooting
 
 See the [installation guide](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md#troubleshooting) — empty

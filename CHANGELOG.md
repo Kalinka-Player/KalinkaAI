@@ -8,6 +8,17 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.14.0
+
+The now-playing display can run on a screen attached to the server itself, such as a Raspberry Pi's touchscreen; switching it on needs Kalinka server 5.4.0. Everything else works against any server.
+
+### Added
+- A now-playing display for a screen attached to a Raspberry Pi server (arm64): the same cover, track and progress bar with touch controls, drawn straight to the screen with no desktop. Install it with `curl -fsSL https://kalinkaplayer.com/install.sh | sudo KALINKA_DISPLAY=1 bash`, then turn it on in Settings › EXPERT › Now-playing display on this machine, where you can also rotate it for a screen mounted on its side or upside down. It starts at boot while the setting is on and comes back if it ever stops. The Pi needs to boot to the console rather than a desktop.
+
+### Fixed
+- Spotify tracks show their cover art in the mini player and the queue instead of a placeholder.
+- On the now-playing display, the gaps above and below the cover now match.
+
 ## 0.12.0
 
 Showing playback from another app needs Kalinka server 5.2.0; against an older server the app works as before.

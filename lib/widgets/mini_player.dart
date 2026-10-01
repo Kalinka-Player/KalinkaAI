@@ -239,7 +239,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
           fallbackTrackArtist: s.playbackState.currentTrack?.performer?.name,
           fallbackTrackDurationSec: s.playbackState.currentTrack?.duration ?? 0,
           fallbackTrackImageSmall:
-              s.playbackState.currentTrack?.album?.image?.small,
+              s.playbackState.currentTrack?.album?.image?.small ??
+              s.playbackState.currentTrack?.album?.image?.thumbnail ??
+              s.playbackState.currentTrack?.album?.image?.large,
           fallbackDurationMs: s.playbackState.audioInfo?.durationMs ?? 0,
           errorMessage: s.playbackState.message,
           exclusive: s.playbackControl.isExclusive,
@@ -327,7 +329,10 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
         ? queueSnapshot.fallbackDurationMs
         : (effectiveCurrentTrack?.duration ?? 0) * 1000;
 
-    final imageUrl = effectiveCurrentTrack?.album?.image?.small;
+    final imageUrl =
+        effectiveCurrentTrack?.album?.image?.small ??
+        effectiveCurrentTrack?.album?.image?.thumbnail ??
+        effectiveCurrentTrack?.album?.image?.large;
     final resolvedImageUrl = imageUrl != null
         ? urlResolver.abs(imageUrl)
         : null;

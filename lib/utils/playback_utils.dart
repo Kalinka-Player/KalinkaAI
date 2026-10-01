@@ -68,3 +68,32 @@ String formatClock(Duration position) {
   final seconds = position.isNegative ? 0 : position.inSeconds;
   return '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 }
+
+/// Short codec name for a stream's MIME type — `FLAC`, `MP3` — or empty.
+String mimeTypeLabel(String? mimeType) {
+  if (mimeType == null) return '';
+  if (mimeType.contains('flac')) return 'FLAC';
+  if (mimeType.contains('wav')) return 'WAV';
+  if (mimeType.contains('mp3') || mimeType.contains('mpeg')) return 'MP3';
+  if (mimeType.contains('aac')) return 'AAC';
+  if (mimeType.contains('ogg')) return 'OGG';
+  if (mimeType.contains('opus')) return 'OPUS';
+  return mimeType.split('/').last.toUpperCase();
+}
+
+/// Resolution of a stream — `24-bit • 96 kHz` — or empty when unknown.
+String audioQualityLabel(AudioInfo? audioInfo, {String separator = ' • '}) {
+  if (audioInfo == null) return '';
+  final parts = <String>[];
+  if (audioInfo.bitsPerSample > 0) {
+    parts.add('${audioInfo.bitsPerSample}-bit');
+  }
+  final sampleRate = audioInfo.sampleRate;
+  if (sampleRate > 0) {
+    final khz = sampleRate / 1000;
+    parts.add(
+      '${sampleRate % 1000 == 0 ? khz.toStringAsFixed(0) : khz.toStringAsFixed(1)} kHz',
+    );
+  }
+  return parts.join(separator);
+}

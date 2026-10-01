@@ -455,11 +455,15 @@ class AlbumImage {
 
   AlbumImage({this.small, this.thumbnail, this.large});
 
+  // Plugins built on the SDK send "" for a size they do not have.
   factory AlbumImage.fromJson(Map<String, dynamic> json) => AlbumImage(
-    small: json["small"],
-    thumbnail: json["thumbnail"],
-    large: json["large"],
+    small: _presentUrl(json["small"]),
+    thumbnail: _presentUrl(json["thumbnail"]),
+    large: _presentUrl(json["large"]),
   );
+
+  static String? _presentUrl(Object? value) =>
+      value is String && value.isNotEmpty ? value : null;
 
   Map<String, dynamic> toJson() => {
     "small": small,

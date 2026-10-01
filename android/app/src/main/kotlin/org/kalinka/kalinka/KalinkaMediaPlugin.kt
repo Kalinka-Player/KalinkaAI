@@ -16,6 +16,7 @@ import android.os.VibrationEffect.Composition.PRIMITIVE_TICK
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import android.view.KeyEvent
 import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -32,6 +33,12 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
     }
 
     private lateinit var methodChannel: MethodChannel
+    private val volumeKeys = KalinkaVolumeKeys { level, max ->
+        methodChannel.invokeMethod("volumeActivity", mapOf("level" to level, "max" to max))
+    }
+
+    fun dispatchVolumeKey(event: KeyEvent, foreground: Boolean): Boolean =
+        volumeKeys.dispatch(event, foreground)
 
     private var context: Context? = null
     private var activityBinding: ActivityPluginBinding? = null

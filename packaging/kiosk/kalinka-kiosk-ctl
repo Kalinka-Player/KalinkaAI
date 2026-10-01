@@ -1,0 +1,109 @@
+#!/usr/bin/python3
+"""Starts, stops and launches the now-playing display on the server's screen.
+
+The server's expert settings `base_config.display.*` decide whether it runs:
+
+  kalinka-kiosk-ctl sync      (root) start, restart or stop the display to match
+  kalinka-kiosk-ctl prepare   (root) resolve the launch settings for `run`;
+                              exits 1 while the display is off
+  kalinka-kiosk-ctl run       exec flutter-pi with them, as the service user
+"""
+
+import fcntl
+import json
+import os
+import socket
+import struct
+import subprocess
+import sys
+
+CONFIG = os.environ.get("KALINKA_CONFIG", "/etc/kalinka/kalinka_conf.cfg")
+RUN_DIR = os.environ.get("RUNTIME_DIRECTORY", "/run/kalinka-kiosk")
+BUNDLE = "/usr/lib/kalinka-kiosk/bundle"
+UNIT = "kalinka-kiosk.service"
+
+
+def _overrides():
+    try:
+        with open(CONFIG) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+
+def _interface_address(interface):
+    # Mirrors the server's bind: "all" listens on loopback too, a named
+    # interface only on its own address.
+    if interface == "all":
+        return "127.0.0.1"
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        packed = struct.pack("256s", interface.encode())
+        return socket.inet_ntoa(fcntl.ioctl(sock.fileno(), 0x8915, packed)[20:24])
+
+
+def desired():
+    """The launch settings, or None while the display is switched off."""
+    o = _overrides()
+    if o.get("base_config.display.enabled") is not True:
+        return None
+    rotation = str(o.get("base_config.display.rotation", "0"))
+    host = _interface_address(o.get("base_config.server.interface", "all"))
+    port = int(o.get("base_config.server.port", 8000))
+    return {
+        "server": f"{host}:{port}",
+        "rotation": rotation if rotation in ("0", "90", "180", "270") else "0",
+    }
+
+
+def _launch_file():
+    return os.path.join(RUN_DIR, "launch.json")
+
+
+def _applied():
+    try:
+        with open(_launch_file()) as f:
+            return json.load(f)
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def sync():
+    want = desired()
+    if want is None:
+        action = "stop"
+    elif want != _applied():
+        action = "restart"
+    else:
+        action = "start"
+    subprocess.run(["systemctl", action, UNIT], check=True)
+
+
+def prepare():
+    try:
+        want = desired()
+        if want is not None:
+            os.makedirs(RUN_DIR, exist_ok=True)
+            with open(_launch_file(), "w") as f:
+                json.dump(want, f)
+    except (OSError, ValueError) as e:
+        # Not 1, which would read as "switched off" and never be retried.
+        print(e, file=sys.stderr)
+        sys.exit(255)
+    if want is None:
+        sys.exit(1)
+
+
+def run():
+    with open(_launch_file()) as f:
+        launch = json.load(f)
+    env = dict(os.environ, KALINKA_KIOSK="true", KALINKA_SERVER=launch["server"])
+    flutter_pi = os.path.join(BUNDLE, "flutter-pi")
+    args = [flutter_pi, "--release", "--rotation", launch["rotation"], BUNDLE]
+    os.execve(flutter_pi, args, env)
+
+
+if __name__ == "__main__":
+    commands = {"sync": sync, "prepare": prepare, "run": run}
+    if len(sys.argv) != 2 or sys.argv[1] not in commands:
+        sys.exit(f"usage: {sys.argv[0]} {'|'.join(commands)}")
+    commands[sys.argv[1]]()

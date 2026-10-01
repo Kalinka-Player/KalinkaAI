@@ -205,4 +205,15 @@ void main() {
 
     expect(api.sent, isEmpty);
   });
+
+  testWidgets('the format line opens the stream info; no separate button', (
+    tester,
+  ) async {
+    await _pump(tester, _held(PlayerStateType.playing));
+
+    expect(find.byIcon(Icons.info_outline), findsNothing);
+    await tester.tap(find.textContaining('96 kHz'));
+    await tester.pumpAndSettle();
+    expect(find.text('Stream info'), findsOneWidget);
+  });
 }

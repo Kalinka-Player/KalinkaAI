@@ -67,6 +67,10 @@ android {
             }
         }
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 // Kotlin 2.4 removed the kotlinOptions DSL; this is its replacement, and it
@@ -83,5 +87,10 @@ flutter {
 
 dependencies {
     implementation("androidx.media:media:1.7.0")
+    implementation("androidx.mediarouter:mediarouter:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("androidx.mediarouter:mediarouter-testing:1.8.1")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
