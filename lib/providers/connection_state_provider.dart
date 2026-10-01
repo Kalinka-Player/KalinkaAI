@@ -23,6 +23,11 @@ final connectionStateProvider =
 final retryEpochProvider =
     NotifierProvider<_RetryEpochNotifier, int>(_RetryEpochNotifier.new);
 
+/// Explicit retries are also user intent to restore Android media controls.
+/// Automatic reachability probes must not carry that intent.
+final manualReconnectEpochProvider =
+    NotifierProvider<_RetryEpochNotifier, int>(_RetryEpochNotifier.new);
+
 class _RetryEpochNotifier extends Notifier<int> {
   @override
   int build() => 0;
@@ -148,6 +153,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
 
   /// Manually trigger a single reconnect attempt (e.g. from Retry button).
   void retryNow() {
+    ref.read(manualReconnectEpochProvider.notifier).increment();
     if (state == ConnectionStatus.offline) {
       _retryCount = 0;
       _reconnectStartedAt = DateTime.now();

@@ -33,6 +33,8 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
+import java.io.FileDescriptor
+import java.io.PrintWriter
 import java.net.URL
 import java.util.concurrent.TimeUnit
 
@@ -63,6 +65,7 @@ class KalinkaMediaService : Service() {
 
     // --- Connection config ---
     private var host: String = ""
+    private var enableOwner: Any? = null
     private var port: Int = 0
     private var isEnabled = false
 
@@ -93,13 +96,6 @@ class KalinkaMediaService : Service() {
     private var currentPlayerState: String = "STOPPED"  // PLAYING, PAUSED, BUFFERING, STOPPED, ERROR
     private var currentAlbumArt: Bitmap? = null
     private var albumArtJob: Job? = null
-    private val reconnectRunnable = Runnable {
-        if (isEnabled) {
-            routing.start(host, port)
-            connectQueueWs()
-            connectDeviceWs()
-        }
-    }
 
     // -------------------------------------------------------------------------
     // Lifecycle
@@ -111,7 +107,7 @@ class KalinkaMediaService : Service() {
         createNotificationChannel()
         routing = KalinkaRouting(this) { ready ->
             outputReady = ready
-            if (ready && hasCurrentTrack && !exclusivePlayback) {
+            if (isEnabled && ready && hasCurrentTrack && !exclusivePlayback) {
                 ensureMediaSession()
                 updateMediaSessionMetadata()
                 updatePlaybackState()
@@ -123,6 +119,13 @@ class KalinkaMediaService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
+
+    override fun dump(fd: FileDescriptor, writer: PrintWriter, args: Array<out String>?) {
+        writer.println("enabled=$isEnabled queueSocket=${queueWs != null} deviceSocket=${deviceWs != null}")
+        writer.println("playback=$currentPlayerState hasTrack=$hasCurrentTrack exclusive=$exclusivePlayback outputReady=$outputReady")
+        writer.println("session=${mediaSession != null} notification=$notificationVisible")
+        routing.dump(writer)
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "onStartCommand action=${intent?.action}")
@@ -161,28 +164,35 @@ class KalinkaMediaService : Service() {
     // Public API (called from KalinkaMediaPlugin)
     // -------------------------------------------------------------------------
 
-    fun enable(newHost: String, newPort: Int) {
+    fun enable(newHost: String, newPort: Int, owner: Any? = null) {
         Log.d(TAG, "enable: host=$newHost port=$newPort")
-        if (isEnabled && newHost == host && newPort == port && queueWs != null && deviceWs != null) return
+        if (isEnabled && newHost == host && newPort == port && queueWs != null && deviceWs != null) {
+            enableOwner = owner
+            return
+        }
         // If switching servers, fully tear down first so we don't mix state.
         if (isEnabled && (newHost != host || newPort != port)) {
             disable()
         }
         host = newHost
         port = newPort
+        enableOwner = owner
         isEnabled = true
         // Reset playback state — fresh session, fresh state.
         resetPlaybackState()
-        mainHandler.removeCallbacks(reconnectRunnable)
         routing.start(host, port)
         connectQueueWs()
         connectDeviceWs()
     }
 
-    fun disable() {
+    fun disable(owner: Any? = null) {
+        // During Activity/engine replacement the new plugin can bind before
+        // the old one detaches. Only the current owner may disable via Flutter.
+        // Native connection loss and service teardown always disable.
+        if (owner != null && enableOwner !== owner) return
+        enableOwner = null
         Log.d(TAG, "disable")
         isEnabled = false
-        mainHandler.removeCallbacks(reconnectRunnable)
         hideNotification()
         routing.stop()
         closeConnections()
@@ -235,12 +245,17 @@ class KalinkaMediaService : Service() {
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "queueWs onFailure: ${t.message} response=${response?.code}")
-                mainHandler.post { if (webSocket === queueWs && isEnabled) reconnect() }
+                connectionLost(webSocket)
+            }
+
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                webSocket.close(code, reason)
+                connectionLost(webSocket)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "queueWs onClosed: code=$code reason=$reason")
-                mainHandler.post { if (webSocket === queueWs && isEnabled) reconnect() }
+                connectionLost(webSocket)
             }
         })
         queueWs = ws
@@ -264,12 +279,17 @@ class KalinkaMediaService : Service() {
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "deviceWs onFailure: ${t.message} response=${response?.code}")
-                mainHandler.post { if (webSocket === deviceWs && isEnabled) reconnect() }
+                connectionLost(webSocket)
+            }
+
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                webSocket.close(code, reason)
+                connectionLost(webSocket)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "deviceWs onClosed: code=$code reason=$reason")
-                mainHandler.post { if (webSocket === deviceWs && isEnabled) reconnect() }
+                connectionLost(webSocket)
             }
         })
         deviceWs = ws
@@ -282,19 +302,18 @@ class KalinkaMediaService : Service() {
     }
 
     private fun sendQueueCommand(json: String) {
+        if (!isEnabled) return
         val ws = queueWs
         if (ws != null) ws.send(json) else pendingQueueCommand = json
     }
 
-    private fun reconnect() {
-        // Native reconnection also runs with Flutter backgrounded. No socket or
-        // route from the previous connection may drive the next controller.
-        closeConnections()
-        hideNotification()
-        routing.stop()
-        resetPlaybackState()
-        mainHandler.removeCallbacks(reconnectRunnable)
-        mainHandler.postDelayed(reconnectRunnable, 2_000)
+    private fun connectionLost(webSocket: WebSocket) {
+        mainHandler.post {
+            // A callback from a socket we replaced must not disable the new
+            // connection. A real loss ends this notification's lifetime; only
+            // a new enable from the app may start it again.
+            if (isEnabled && (webSocket === queueWs || webSocket === deviceWs)) disable()
+        }
     }
 
     private fun sendResumeOrPlay() {
@@ -476,7 +495,7 @@ class KalinkaMediaService : Service() {
      * stop routing to us when there's no active playback to control.
      */
     private fun ensureMediaSession() {
-        if (mediaSession != null || !outputReady || exclusivePlayback) return
+        if (!isEnabled || mediaSession != null || !outputReady || exclusivePlayback) return
         Log.d(TAG, "ensureMediaSession: creating")
         val mediaButtonReceiver = ComponentName(this, MediaButtonReceiver::class.java)
         mediaSession = MediaSessionCompat(this, "KaiMediaSession", mediaButtonReceiver, null).apply {

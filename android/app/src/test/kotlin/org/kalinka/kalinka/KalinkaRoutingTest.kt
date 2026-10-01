@@ -21,6 +21,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.util.ReflectionHelpers
 import java.util.concurrent.CopyOnWriteArrayList
 import java.time.Duration
 
@@ -273,6 +274,37 @@ class KalinkaRoutingTest {
         active = "study"
         routing.start(server.hostName, server.port)
         await { ready && router.selectedRoute.name == "Study" }
+        assertTrue(writes.isEmpty())
+    }
+
+    @Test fun stoppingReleasesTheSelectedRouteBeforeAnotherConnectionCanUseIt() {
+        assertTrue(router.selectedRoute.supportsControlCategory(KalinkaRouteProvider.CATEGORY))
+        routing.stop()
+        // Descriptor removal is asynchronous. A new connection must not see
+        // the old selection in the meantime and treat it as a ready output.
+        assertFalse(router.selectedRoute.supportsControlCategory(KalinkaRouteProvider.CATEGORY))
+        assertNull(router.mediaSessionToken)
+        assertTrue(writes.isEmpty())
+        routing.start(server.hostName, server.port)
+        await { ready && router.selectedRoute.name == "Kitchen" }
+        assertTrue(writes.isEmpty())
+    }
+
+    @Test fun passiveObserverSurvivesStopsWithoutKeepingDiscoveryOrRoutesAlive() {
+        val context = RuntimeEnvironment.getApplication()
+        repeat(3) {
+            KalinkaRouteObserver.ensureRegistered(context)
+            routing.stop()
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(1, ReflectionHelpers.callStaticMethod<Int>(
+                MediaRouter::class.java, "getGlobalCallbackCount"))
+            assertNull(provider.discoveryRequest)
+            assertTrue(provider.descriptor!!.routes.isEmpty())
+            assertNull(KalinkaRoutes.commands)
+            assertNull(router.mediaSessionToken)
+            routing.start(server.hostName, server.port)
+            await { ready && router.selectedRoute.name == "Kitchen" }
+        }
         assertTrue(writes.isEmpty())
     }
 }

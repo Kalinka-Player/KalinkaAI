@@ -44,6 +44,7 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
     private var activityBinding: ActivityPluginBinding? = null
     private var mediaService: KalinkaMediaService? = null
     private var serviceBound = false
+    private var bindingRegistered = false
 
     // Pending enable call that arrived before the service finished binding.
     private var pendingEnable: Pair<String, Int>? = null
@@ -51,6 +52,7 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             Log.d(TAG, "onServiceConnected")
+            if (!bindingRegistered) return
             val localBinder = binder as? KalinkaMediaService.LocalBinder ?: run {
                 Log.e(TAG, "onServiceConnected: binder is not LocalBinder ($binder)")
                 return
@@ -60,7 +62,7 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
             pendingEnable?.let { (host, port) ->
                 Log.d(TAG, "onServiceConnected: flushing pendingEnable host=$host port=$port")
                 pendingEnable = null
-                mediaService?.enable(host, port)
+                mediaService?.enable(host, port, this@KalinkaMediaPlugin)
             }
         }
 
@@ -105,7 +107,7 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
                         pendingEnable = Pair(host, port)
                         startAndBindService()
                     } else {
-                        mediaService?.enable(host, port)
+                        mediaService?.enable(host, port, this)
                     }
                 } else {
                     Log.w(TAG, "enableNotification: skipped (host='$host' port=$port)")
@@ -114,7 +116,6 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
             }
             "disableNotification" -> {
                 Log.d(TAG, "disableNotification: serviceBound=$serviceBound")
-                mediaService?.disable()
                 unbindAndStop()
                 result.success(null)
             }
@@ -222,6 +223,7 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
 
     private fun startAndBindService() {
         val ctx = context ?: run { Log.e(TAG, "startAndBindService: context is null"); return }
+        if (bindingRegistered) return
         Log.d(TAG, "startAndBindService")
         requestNotificationPermissionIfNeeded()
         // BindService only — the service stays alive while bound, lifts itself
@@ -230,16 +232,20 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
         // startForegroundService avoids the 5-second startForeground deadline
         // and the placeholder notification it forces.
         val intent = Intent(ctx, KalinkaMediaService::class.java)
-        ctx.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        bindingRegistered = ctx.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
 
     private fun unbindAndStop() {
+        // Disconnect can arrive before onServiceConnected. Cancel both the
+        // binding and its queued enable so a late callback cannot resurrect it.
+        pendingEnable = null
+        mediaService?.disable(this)
+        mediaService = null
+        serviceBound = false
         val ctx = context ?: return
-        if (serviceBound) {
-            mediaService?.hideNotification()
+        if (bindingRegistered) {
+            bindingRegistered = false
             ctx.unbindService(serviceConnection)
-            serviceBound = false
-            mediaService = null
         }
     }
 

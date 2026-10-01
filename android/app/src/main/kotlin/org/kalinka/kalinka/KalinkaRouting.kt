@@ -30,6 +30,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import java.io.IOException
+import java.io.PrintWriter
 import kotlin.coroutines.resumeWithException
 
 /** Lives with KalinkaMediaService, never with the Activity. No new media session,
@@ -38,7 +39,8 @@ internal class KalinkaRouting(
     context: Context,
     private val outputChanged: (Boolean) -> Unit,
 ) : KalinkaRoutes.Commands {
-    private val router = MediaRouter.getInstance(context)
+    private val routerContext = context.applicationContext
+    private val router = MediaRouter.getInstance(routerContext)
     private val state get() = KalinkaRoutes.state
     private val client = OkHttpClient.Builder().callTimeout(15, TimeUnit.SECONDS).build()
     private var scope: CoroutineScope? = null
@@ -93,6 +95,7 @@ internal class KalinkaRouting(
     }
 
     fun start(host: String, port: Int) {
+        if (Build.VERSION.SDK_INT >= 30) KalinkaRouteObserver.ensureRegistered(context = routerContext)
         stop()
         baseUrl = HttpUrl.Builder().scheme("http").host(host).port(port).build()
         scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
@@ -131,13 +134,19 @@ internal class KalinkaRouting(
         volumeSyncJob = null
         baseUrl = null
         KalinkaRoutes.removeListener(listener)
+        router.removeCallback(callback)
+        router.setMediaSessionCompat(null)
+        // Descriptor removal crosses the platform bridge asynchronously. Drop
+        // the selected controller now, before a new connection can mistake its
+        // old route (and volume-control ID) for an associated remote output.
+        if (router.selectedRoute.supportsControlCategory(KalinkaRouteProvider.CATEGORY)) {
+            router.unselect(MediaRouter.UNSELECT_REASON_DISCONNECTED)
+        }
         if (KalinkaRoutes.commands === this) {
             KalinkaRoutes.commands = null
             state.clear()
             KalinkaRoutes.changed()
         }
-        router.removeCallback(callback)
-        router.setMediaSessionCompat(null)
         router.setRouteListingPreference(null)
         session = null
         sessionRouteId = null
@@ -154,6 +163,12 @@ internal class KalinkaRouting(
         sessionRouteId = null
         router.setMediaSessionCompat(null)
         reconcile()
+    }
+
+    fun dump(writer: PrintWriter) {
+        writer.println("routing: running=${scope != null} ready=$ready detached=$detached hadRemote=$hadRemoteRoute lostOutput=$lostOutput")
+        writer.println("routing: current=${state.current?.id} pending=${state.pendingId} selecting=$selectingId")
+        writer.println("routing: selected=${router.selectedRoute.id} sessionRoute=$sessionRouteId")
     }
 
     private fun reconcile() {
