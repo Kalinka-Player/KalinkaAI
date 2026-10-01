@@ -1,5 +1,6 @@
 package org.kalinka.kalinka
 
+import android.app.NotificationManager
 import android.media.AudioAttributes
 import android.media.VolumeProvider
 import android.media.session.MediaSession
@@ -38,6 +39,7 @@ class KalinkaMediaServiceTest {
     private lateinit var router: MediaRouter
     private lateinit var provider: KalinkaRouteProvider
     @Volatile private var queueSocket: WebSocket? = null
+    @Volatile private var deviceSocket: WebSocket? = null
     private val rendererListRequests = AtomicInteger()
 
     @Before fun setup() {
@@ -59,6 +61,8 @@ class KalinkaMediaServiceTest {
                             webSocket.send("""{"event_type":"state_changed","state":{
                                 "state":"PLAYING","current_track":{"title":"Test track","duration":60}
                             }}""")
+                        } else {
+                            deviceSocket = webSocket
                         }
                     }
                     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -127,6 +131,53 @@ class KalinkaMediaServiceTest {
         assertTrue(RecordingMediaSession.activeOutputs.isNotEmpty())
         assertTrue("An active session advertised phone playback: ${RecordingMediaSession.activeOutputs}",
             RecordingMediaSession.activeOutputs.all { it == "remote" })
+    }
+
+    private fun assertDisconnectedWithoutRetry() {
+        await { KalinkaRoutes.commands == null }
+        assertNull(router.mediaSessionToken)
+        assertTrue(service.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
+        assertFalse(router.selectedRoute.supportsControlCategory(KalinkaRouteProvider.CATEGORY))
+        while (server.takeRequest(0, TimeUnit.MILLISECONDS) != null) { }
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+        assertNull("The notification must not reconnect itself", server.takeRequest(1, TimeUnit.SECONDS))
+        assertNull(router.mediaSessionToken)
+    }
+
+    @Test fun serverClosingQueueRemovesNotificationAndDoesNotReconnect() {
+        queueSocket!!.close(1001, "Server shutting down")
+        assertDisconnectedWithoutRetry()
+    }
+
+    @Test fun serverClosingDeviceRemovesNotificationAndDoesNotReconnect() {
+        await { deviceSocket != null }
+        deviceSocket!!.close(1001, "Server shutting down")
+        assertDisconnectedWithoutRetry()
+    }
+
+    @Test fun socketFailureRemovesNotificationUntilExplicitlyEnabledAgain() {
+        server.shutdown()
+        assertDisconnectedWithoutRetry()
+        val dispatcher = server.dispatcher
+        server = MockWebServer().also { it.dispatcher = dispatcher; it.start() }
+        service.enable(server.hostName, server.port)
+        await { router.mediaSessionToken != null }
+        assertEquals("Kitchen", router.selectedRoute.name)
+        assertEquals(1, service.getSystemService(NotificationManager::class.java).activeNotifications.size)
+    }
+
+    @Test fun oldEngineDetachingCannotDisableTheNewEnginesNotification() {
+        val oldOwner = Any()
+        val newOwner = Any()
+        service.enable(server.hostName, server.port, oldOwner)
+        val token = router.mediaSessionToken
+        service.enable(server.hostName, server.port, newOwner)
+        service.disable(oldOwner)
+        assertEquals(token, router.mediaSessionToken)
+        assertEquals(1, service.getSystemService(NotificationManager::class.java).activeNotifications.size)
+        service.disable(newOwner)
+        assertNull(router.mediaSessionToken)
+        assertTrue(service.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
     }
 
     @Test fun disablingNotificationDeactivatesSessionBeforeDetachingRemoteOutput() {

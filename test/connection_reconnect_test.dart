@@ -76,11 +76,14 @@ void main() {
 
       final notifier = container.read(connectionStateProvider.notifier);
       final epochBefore = container.read(retryEpochProvider);
+      final manualEpochBefore = container.read(manualReconnectEpochProvider);
 
       notifier.startReconnecting();
       expect(container.read(connectionStateProvider), ConnectionStatus.reconnecting);
+      expect(container.read(manualReconnectEpochProvider), manualEpochBefore);
 
       notifier.retryNow();
+      expect(container.read(manualReconnectEpochProvider), manualEpochBefore + 1);
       await pumpEventQueue();
 
       // The probe reached the server (so the socket rebuild is triggered)...

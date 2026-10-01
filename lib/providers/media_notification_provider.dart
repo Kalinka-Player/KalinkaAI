@@ -1,40 +1,80 @@
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
+import '../providers/playback_time_provider.dart' show appLifecycleProvider;
 
 class MediaNotificationNotifier extends Notifier<void> {
   static const _methodChannel = MethodChannel(
     'org.kalinka.kalinka/media_session',
   );
 
+  bool _enableWhenConnected = true;
+  bool _wasBackgrounded = false;
+
   @override
   void build() {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
 
-    // Enable immediately if already connected.
-    final currentStatus = ref.read(connectionStateProvider);
-    if (currentStatus == ConnectionStatus.connected) {
-      final settings = ref.read(connectionSettingsProvider);
-      if (settings.isSet) _enable(settings.host, settings.port);
-    }
+    final lifecycle = ref.read(appLifecycleProvider);
+    _enableWhenConnected = lifecycle == AppLifecycleState.resumed;
+    _wasBackgrounded =
+        lifecycle == AppLifecycleState.paused ||
+        lifecycle == AppLifecycleState.hidden;
+    _enableIfRequested();
 
-    // Re-enable on every successful (re)connection. The native service
-    // self-disables when its own WS drops, so each `connected` transition is
-    // the signal to spin a fresh session up. Transient states
-    // (connecting, reconnecting) are ignored.
-    ref.listen(connectionStateProvider, (_, status) {
+    // Connection loss dismisses media controls immediately. A replay after an
+    // automatic reconnect must not resurrect the dismissed notification.
+    ref.listen(connectionStateProvider, (previous, status) {
       if (status == ConnectionStatus.connected) {
-        final settings = ref.read(connectionSettingsProvider);
-        if (settings.isSet) _enable(settings.host, settings.port);
-      } else if (status == ConnectionStatus.none ||
-          status == ConnectionStatus.offline) {
+        _enableIfRequested();
+      } else {
+        if (previous == ConnectionStatus.connected) {
+          _enableWhenConnected = false;
+        }
+        if (status == ConnectionStatus.none ||
+            status == ConnectionStatus.connecting) {
+          // Initial connection or an explicitly selected server.
+          _enableWhenConnected = true;
+        }
         _disable();
       }
     });
+
+    // Returning to the app or explicitly retrying starts a new lifetime for
+    // media controls, once the queue connection is healthy.
+    ref.listen(appLifecycleProvider, (_, next) {
+      if (next == AppLifecycleState.paused ||
+          next == AppLifecycleState.hidden) {
+        _wasBackgrounded = true;
+      } else if (next == AppLifecycleState.resumed && _wasBackgrounded) {
+        // Merely closing the notification shade (inactive -> resumed) is not
+        // a request to bring dismissed media controls back.
+        _wasBackgrounded = false;
+        _enableWhenConnected = true;
+        _enableIfRequested();
+      }
+    });
+    ref.listen(manualReconnectEpochProvider, (_, _) {
+      _enableWhenConnected = true;
+      _enableIfRequested();
+    });
+    ref.onDispose(_disable);
+  }
+
+  void _enableIfRequested() {
+    if (!_enableWhenConnected ||
+        ref.read(connectionStateProvider) != ConnectionStatus.connected) {
+      return;
+    }
+    final settings = ref.read(connectionSettingsProvider);
+    if (!settings.isSet) return;
+    _enableWhenConnected = false;
+    _enable(settings.host, settings.port);
   }
 
   void _enable(String host, int port) {
