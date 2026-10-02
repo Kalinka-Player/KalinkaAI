@@ -1,0 +1,452 @@
+{
+  "catalog_id": "kalinka",
+  "plugins": [
+    {
+      "categories": [
+        "development"
+      ],
+      "creator": {
+        "name": "Dmitry Savin",
+        "url": "https://github.com/madenvel"
+      },
+      "delivery": "bundle",
+      "description": "A simulated output device for plugin development and testing.",
+      "device_support": {
+        "families": [
+          "Kalinka simulated devices"
+        ],
+        "models": [],
+        "notes": [
+          "Development and testing only. This plugin simulates an output device and does not control a physical amplifier or AVR."
+        ]
+      },
+      "distribution": "kalinka-plugin-dummydevice",
+      "entry_point": "kalinka_plugin_dummydevice",
+      "id": "dummydevice",
+      "license": "GPL-3.0-or-later",
+      "maintainers": [
+        {
+          "name": "Kalinka Player",
+          "url": "https://github.com/Kalinka-Player"
+        }
+      ],
+      "maturity": "experimental",
+      "name": "Dummy Device",
+      "releases": [],
+      "schema_version": 1,
+      "source": {
+        "repository": "https://github.com/Kalinka-Player/KalinkaPlayer",
+        "subdirectory": "packages/kalinka-plugin-dummydevice"
+      },
+      "tier": "unofficial",
+      "type": "output_device"
+    },
+    {
+      "categories": [
+        "streaming"
+      ],
+      "creator": {
+        "name": "Dmitry Savin",
+        "url": "https://github.com/madenvel"
+      },
+      "delivery": "bundle",
+      "description": "Browse and play music from Jamendo, with optional mood and semantic search over its catalog.",
+      "distribution": "kalinka-plugin-jamendo",
+      "entry_point": "kalinka_plugin_jamendo",
+      "id": "jamendo",
+      "license": "GPL-3.0-or-later",
+      "maintainers": [
+        {
+          "name": "Kalinka Player",
+          "url": "https://github.com/Kalinka-Player"
+        }
+      ],
+      "maturity": "stable",
+      "name": "Jamendo",
+      "releases": [],
+      "schema_version": 1,
+      "source": {
+        "repository": "https://github.com/Kalinka-Player/KalinkaPlayer",
+        "subdirectory": "packages/kalinka-plugin-jamendo"
+      },
+      "tier": "official",
+      "type": "input_module"
+    },
+    {
+      "categories": [
+        "library"
+      ],
+      "creator": {
+        "name": "Dmitry Savin",
+        "url": "https://github.com/madenvel"
+      },
+      "delivery": "bundle",
+      "description": "Index a local or network music library, enrich its metadata, and optionally enable semantic music search.",
+      "distribution": "kalinka-plugin-localfiles",
+      "entry_point": "kalinka_plugin_localfiles",
+      "id": "localfiles",
+      "license": "GPL-3.0-or-later",
+      "maintainers": [
+        {
+          "name": "Kalinka Player",
+          "url": "https://github.com/Kalinka-Player"
+        }
+      ],
+      "maturity": "stable",
+      "name": "Local Files",
+      "releases": [],
+      "schema_version": 1,
+      "source": {
+        "repository": "https://github.com/Kalinka-Player/KalinkaPlayer",
+        "subdirectory": "packages/kalinka-plugin-localfiles"
+      },
+      "tier": "official",
+      "type": "input_module"
+    },
+    {
+      "categories": [
+        "yamaha",
+        "network-control"
+      ],
+      "creator": {
+        "name": "Dmitry Savin",
+        "url": "https://github.com/madenvel"
+      },
+      "delivery": "bundle",
+      "description": "Control volume, power, and input selection on Yamaha MusicCast devices.",
+      "device_support": {
+        "families": [
+          "Yamaha MusicCast / Yamaha Extended Control"
+        ],
+        "models": [],
+        "notes": [
+          "Requires a Yamaha MusicCast device exposing the Yamaha Extended Control API on the local network.",
+          "Family-level coverage only; this catalog does not yet contain a verified exact-model list. Check the device's protocol support and configured zone and input.",
+          "Provides volume read/set, power on/standby, and readiness for Kalinka's configured input. Input switching targets that configured input; mute is not exposed."
+        ]
+      },
+      "distribution": "kalinka-plugin-musiccast",
+      "entry_point": "kalinka_plugin_musiccast",
+      "id": "musiccast",
+      "license": "GPL-3.0-or-later",
+      "maintainers": [
+        {
+          "name": "Kalinka Player",
+          "url": "https://github.com/Kalinka-Player"
+        }
+      ],
+      "maturity": "stable",
+      "name": "MusicCast",
+      "releases": [],
+      "schema_version": 1,
+      "source": {
+        "repository": "https://github.com/Kalinka-Player/KalinkaPlayer",
+        "subdirectory": "packages/kalinka-plugin-musiccast"
+      },
+      "tier": "unofficial",
+      "type": "output_device"
+    },
+    {
+      "categories": [
+        "qobuz",
+        "streaming",
+        "connect"
+      ],
+      "creator": {
+        "name": "Dmitry Savin",
+        "url": "https://github.com/madenvel"
+      },
+      "delivery": "independent",
+      "description": "Unofficial Qobuz browsing, playback, and Qobuz Connect input for Kalinka. Requires an active Qobuz subscription. Not affiliated with or endorsed by Qobuz.",
+      "distribution": "kalinka-plugin-qobuz",
+      "entry_point": "kalinka_plugin_qobuz",
+      "id": "qobuz",
+      "license": "Apache-2.0",
+      "maintainers": [
+        {
+          "name": "Kalinka Player",
+          "url": "https://github.com/Kalinka-Player"
+        }
+      ],
+      "maturity": "experimental",
+      "name": "Qobuz",
+      "releases": [
+        {
+          "artifacts": [
+            {
+              "architectures": [
+                "all"
+              ],
+              "filename": "kalinka-plugin-qobuz_5.0.1_all.deb",
+              "format": "deb",
+              "package": {
+                "architecture": "all",
+                "name": "kalinka-plugin-qobuz",
+                "version": "5.0.1"
+              },
+              "platform": "linux",
+              "sha256": "3055fe2dddabed103708eb534b0d6733c94191581e52099d0ebf80a4ad7b4916",
+              "size_bytes": 94622,
+              "targets": [
+                {
+                  "id": "debian",
+                  "versions": [
+                    "13"
+                  ]
+                },
+                {
+                  "id": "ubuntu",
+                  "versions": [
+                    "24.04"
+                  ]
+                }
+              ],
+              "url": "https://github.com/Kalinka-Player/kalinka-plugin-qobuz/releases/download/kalinka-plugin-qobuz-v5.0.1/kalinka-plugin-qobuz_5.0.1_all.deb"
+            }
+          ],
+          "channel": "stable",
+          "data_rollback": "manual",
+          "published_at": "2026-09-28T12:11:51Z",
+          "release_notes": "https://github.com/Kalinka-Player/kalinka-plugin-qobuz/releases/tag/kalinka-plugin-qobuz-v5.0.1",
+          "requires": {
+            "architectures": [
+              "all"
+            ],
+            "capabilities": [],
+            "notes": [
+              "An active Qobuz subscription is required. This experimental integration is not endorsed by Qobuz.",
+              "The package is architecture-independent but requires a compatible Debian-packaged Kalinka server and resolvable Python dependencies. It is not a macOS, Windows or RPM package.",
+              "Initial distro allowlist is Debian 13 and Ubuntu 24.04. Upstream describes broader Debian-family support; expand the curated list only after review.",
+              "Qobuz Connect pairing requires local-network mDNS (UDP 5353) and TCP 8183 by default; playback handoffs also need an outbound WebSocket connection."
+            ],
+            "platforms": [
+              "linux"
+            ],
+            "python": ">=3.10",
+            "sdk": ">=3.4,<4",
+            "server": ">=5.2,<6"
+          },
+          "source_commit": "c8fe6ec795c784598f4e9dafd4ee47ca47d060a2",
+          "source_tag": "kalinka-plugin-qobuz-v5.0.1",
+          "version": "5.0.1",
+          "withdrawn": false
+        }
+      ],
+      "schema_version": 1,
+      "source": {
+        "repository": "https://github.com/Kalinka-Player/kalinka-plugin-qobuz",
+        "subdirectory": ""
+      },
+      "tier": "unofficial",
+      "type": "input_module"
+    },
+    {
+      "categories": [
+        "spotify",
+        "streaming",
+        "connect"
+      ],
+      "creator": {
+        "name": "Dmitry Savin",
+        "url": "https://github.com/madenvel"
+      },
+      "delivery": "independent",
+      "description": "Unofficial Spotify Connect input for Kalinka. Requires Linux, Spotify Premium, the Kalinka-patched librespot bridge, and compatible server and renderer components.",
+      "distribution": "kalinka-plugin-spotify",
+      "entry_point": "kalinka_plugin_spotify",
+      "id": "spotify",
+      "license": "MIT",
+      "maintainers": [
+        {
+          "name": "Kalinka Player",
+          "url": "https://github.com/Kalinka-Player"
+        }
+      ],
+      "maturity": "experimental",
+      "name": "Spotify Connect",
+      "releases": [
+        {
+          "artifacts": [
+            {
+              "architectures": [
+                "aarch64"
+              ],
+              "filename": "kalinka-plugin-spotify-0.2.0-1.fc44.aarch64.rpm",
+              "format": "rpm",
+              "package": {
+                "architecture": "aarch64",
+                "name": "kalinka-plugin-spotify",
+                "version": "0:0.2.0-1.fc44"
+              },
+              "platform": "linux",
+              "sha256": "795a70ad5bb0ef10b98ebf4fe8623b45a3729b563ba39498842aac53dffec37b",
+              "size_bytes": 4233886,
+              "targets": [
+                {
+                  "id": "fedora",
+                  "versions": [
+                    "44"
+                  ]
+                }
+              ],
+              "url": "https://github.com/Kalinka-Player/kalinka-plugin-spotify/releases/download/kalinka-plugin-spotify-v0.2.0/kalinka-plugin-spotify-0.2.0-1.fc44.aarch64.rpm"
+            },
+            {
+              "architectures": [
+                "x86_64"
+              ],
+              "filename": "kalinka-plugin-spotify-0.2.0-1.fc44.x86_64.rpm",
+              "format": "rpm",
+              "package": {
+                "architecture": "x86_64",
+                "name": "kalinka-plugin-spotify",
+                "version": "0:0.2.0-1.fc44"
+              },
+              "platform": "linux",
+              "sha256": "8c1d7d2b32724b5e9609909755e36980b23e4bc1008f6d5976d485fb8add18ca",
+              "size_bytes": 4450040,
+              "targets": [
+                {
+                  "id": "fedora",
+                  "versions": [
+                    "44"
+                  ]
+                }
+              ],
+              "url": "https://github.com/Kalinka-Player/kalinka-plugin-spotify/releases/download/kalinka-plugin-spotify-v0.2.0/kalinka-plugin-spotify-0.2.0-1.fc44.x86_64.rpm"
+            },
+            {
+              "architectures": [
+                "x86_64"
+              ],
+              "filename": "kalinka-plugin-spotify_0.2.0_amd64.deb",
+              "format": "deb",
+              "package": {
+                "architecture": "amd64",
+                "name": "kalinka-plugin-spotify",
+                "version": "0.2.0"
+              },
+              "platform": "linux",
+              "sha256": "122116363e0c5794f2c0db94de36f5138c5550a7d1ca5638f04e6253b137f548",
+              "size_bytes": 4077896,
+              "targets": [
+                {
+                  "id": "debian",
+                  "versions": [
+                    "13"
+                  ]
+                },
+                {
+                  "id": "ubuntu",
+                  "versions": [
+                    "24.04"
+                  ]
+                }
+              ],
+              "url": "https://github.com/Kalinka-Player/kalinka-plugin-spotify/releases/download/kalinka-plugin-spotify-v0.2.0/kalinka-plugin-spotify_0.2.0_amd64.deb"
+            },
+            {
+              "architectures": [
+                "aarch64"
+              ],
+              "filename": "kalinka-plugin-spotify_0.2.0_arm64.deb",
+              "format": "deb",
+              "package": {
+                "architecture": "arm64",
+                "name": "kalinka-plugin-spotify",
+                "version": "0.2.0"
+              },
+              "platform": "linux",
+              "sha256": "403014e0ebfc6804def051ff685d8625531b4bf5da06c6cb05c11504d4f0a4f6",
+              "size_bytes": 3658732,
+              "targets": [
+                {
+                  "id": "debian",
+                  "versions": [
+                    "13"
+                  ]
+                },
+                {
+                  "id": "ubuntu",
+                  "versions": [
+                    "24.04"
+                  ]
+                }
+              ],
+              "url": "https://github.com/Kalinka-Player/kalinka-plugin-spotify/releases/download/kalinka-plugin-spotify-v0.2.0/kalinka-plugin-spotify_0.2.0_arm64.deb"
+            }
+          ],
+          "channel": "stable",
+          "data_rollback": "manual",
+          "published_at": "2026-09-29T18:37:14Z",
+          "release_notes": "https://github.com/Kalinka-Player/kalinka-plugin-spotify/releases/tag/kalinka-plugin-spotify-v0.2.0",
+          "requires": {
+            "architectures": [
+              "x86_64",
+              "aarch64"
+            ],
+            "capabilities": [],
+            "notes": [
+              "Spotify Premium is required. The packages include Kalinka's patched librespot executable.",
+              "Requires Kalinka server 5.3.0 or newer (below 6.0.0) and renderer 0.5.0 or newer (below 1.0.0). Updating only the SDK is insufficient.",
+              "Initial distro allowlist is conservative: Debian 13, Ubuntu 24.04 and Fedora 44. Derivatives must match an explicitly listed OS identity; a 64-bit CPU with a 32-bit userspace does not qualify."
+            ],
+            "platforms": [
+              "linux"
+            ],
+            "python": ">=3.11",
+            "renderer": ">=0.5,<1",
+            "sdk": ">=3.5,<4",
+            "server": ">=5.3,<6"
+          },
+          "source_commit": "348cd564cb0a4f82dce00f492691eee23033a0b4",
+          "source_tag": "kalinka-plugin-spotify-v0.2.0",
+          "version": "0.2.0",
+          "withdrawn": false
+        }
+      ],
+      "schema_version": 1,
+      "source": {
+        "repository": "https://github.com/Kalinka-Player/kalinka-plugin-spotify",
+        "subdirectory": ""
+      },
+      "tier": "unofficial",
+      "type": "input_module"
+    },
+    {
+      "categories": [
+        "network-audio"
+      ],
+      "creator": {
+        "name": "Dmitry Savin",
+        "url": "https://github.com/madenvel"
+      },
+      "delivery": "bundle",
+      "description": "Expose Kalinka as a UPnP MediaRenderer so network control apps can play through the selected Kalinka output.",
+      "distribution": "kalinka-plugin-upnp",
+      "entry_point": "kalinka_plugin_upnp",
+      "id": "upnp",
+      "license": "GPL-3.0-or-later",
+      "maintainers": [
+        {
+          "name": "Kalinka Player",
+          "url": "https://github.com/Kalinka-Player"
+        }
+      ],
+      "maturity": "stable",
+      "name": "UPnP",
+      "releases": [],
+      "schema_version": 1,
+      "source": {
+        "repository": "https://github.com/Kalinka-Player/KalinkaPlayer",
+        "subdirectory": "packages/kalinka-plugin-upnp"
+      },
+      "tier": "unofficial",
+      "type": "input_module"
+    }
+  ],
+  "revision": "3f2cca15ff0427b8afa90eb264446afb988a8928",
+  "schema_version": 1,
+  "status": "available",
+  "last_successful_check": "2026-10-01T12:00:00Z"
+}

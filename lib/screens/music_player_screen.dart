@@ -15,6 +15,7 @@ import '../providers/renderer_settings_route_provider.dart';
 import '../providers/search_session_provider.dart';
 import '../providers/server_connect.dart';
 import '../providers/settings_provider.dart';
+import '../providers/server_info_provider.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/renderer_fault_text.dart';
@@ -41,6 +42,7 @@ import '../widgets/server_sheet.dart';
 import 'onboarding_screen.dart';
 import 'renderer_settings_screen.dart';
 import 'settings_screen.dart';
+import 'plugin_catalog_screen.dart';
 import '../widgets/kalinka_toast_overlay.dart';
 import '../widgets/sheet_anchor.dart';
 
@@ -63,6 +65,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // Same trick for the settings panel, so a resize moves it rather than
   // remounting it (which would reload config and drop staged edits).
   final _settingsKey = GlobalKey();
+  final _pluginsKey = GlobalKey();
 
   // Drives the mini-player sliding down out of view while the search entry
   // overlay is up (0 = shown, 1 = hidden). The keyboard is held back until
@@ -75,6 +78,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // the server sheet overlay is tablet-only (phone uses a modal sheet).
   bool _serverSheetOpen = false;
   bool _settingsOpen = false;
+  bool _pluginsOpen = false;
   // True once the settings panel fully covers the content behind it (after its
   // slide-in). Used to Offstage the occluded content so it isn't painted while
   // hidden — but only after the animation, so the slide-in still shows it.
@@ -226,13 +230,42 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     if (!mounted) return;
     switch (result) {
       case ServerSheetAction.openSettings:
-        setState(() => _settingsOpen = true);
+        _openSettings();
       case ServerSheetAction.openDiscovery:
         setState(() => _discoveryOpen = true);
+      case ServerSheetAction.openPlugins:
+        _openPlugins();
       case null:
         break;
     }
   }
+
+  void _openSettings() => setState(() {
+    _pluginsOpen = false;
+    _settingsCovering = false;
+    _settingsOpen = true;
+  });
+
+  void _openPlugins() {
+    if (!ref.read(pluginCatalogEnabledProvider)) return;
+    ref.read(rendererSettingsRouteProvider.notifier).close();
+    setState(() {
+      _settingsOpen = false;
+      _settingsCovering = false;
+      _pluginsOpen = true;
+    });
+  }
+
+  Widget _buildPlugins({required bool handlesBack}) => PluginCatalogScreen(
+    key: _pluginsKey,
+    handlesBack: handlesBack,
+    onClose: () => setState(() {
+      _pluginsOpen = false;
+      _settingsCovering = false;
+    }),
+    onCoverageChanged: (covering) =>
+        setState(() => _settingsCovering = covering),
+  );
 
   Future<void> _showQueueManagementTray() async {
     final result = await showKalinkaBottomSheet<TrayAction>(
@@ -595,14 +628,18 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
 
     return PopScope(
-      canPop: !searchOpen && !_settingsOpen && rendererSettings == null,
+      canPop:
+          !searchOpen &&
+          !_settingsOpen &&
+          !_pluginsOpen &&
+          rendererSettings == null,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // Settings is a full-screen overlay here; it owns its own back via an
         // internal PopScope (animated close), so leave it alone — as does the
         // renderer settings panel. Search owns its own layered back too
         // (SearchSessionView's PopScope).
-        if (_settingsOpen || rendererSettings != null) return;
+        if (_settingsOpen || _pluginsOpen || rendererSettings != null) return;
       },
       child: Stack(
         children: [
@@ -721,6 +758,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                     setState(() => _settingsCovering = covering),
               ),
             ),
+          if (_pluginsOpen)
+            Positioned.fill(
+              child: _buildPlugins(handlesBack: rendererSettings == null),
+            ),
           // A renderer's own settings, hosted exactly like the server's.
           if (rendererSettings != null)
             Positioned.fill(child: _buildRendererSettings(rendererSettings)),
@@ -816,13 +857,14 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       canPop:
           !searchOpen &&
           !_settingsOpen &&
+          !_pluginsOpen &&
           !_serverSheetOpen &&
           rendererSettings == null,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // Settings, renderer settings and search own their back via internal
         // PopScopes.
-        if (_settingsOpen || rendererSettings != null) return;
+        if (_settingsOpen || _pluginsOpen || rendererSettings != null) return;
         if (_serverSheetOpen) {
           setState(() => _serverSheetOpen = false);
           return;
@@ -875,6 +917,14 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                                   onCoverageChanged: (covering) => setState(
                                     () => _settingsCovering = covering,
                                   ),
+                                ),
+                              ),
+                            ),
+                          if (_pluginsOpen)
+                            Positioned.fill(
+                              child: ClipRect(
+                                child: _buildPlugins(
+                                  handlesBack: rendererSettings == null,
                                 ),
                               ),
                             ),
@@ -1031,8 +1081,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                                     ),
                                     onOpenDiscovery: () =>
                                         setState(() => _discoveryOpen = true),
-                                    onOpenSettings: () =>
-                                        setState(() => _settingsOpen = true),
+                                    onOpenSettings: _openSettings,
+                                    onOpenPlugins: _openPlugins,
                                   ),
                                 ),
                               // Queue management tray — same panel-level overlay
