@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data_model/plugin_catalog.dart';
+import '../data_model/plugin_compatibility.dart';
 import '../theme/app_theme.dart';
 
 // Share settings typography; the catalog owns layout, not a separate type scale.
@@ -36,18 +37,15 @@ class PluginCatalogEntry extends StatelessWidget {
   final CatalogPlugin plugin;
   final bool expanded;
   final VoidCallback onToggle;
-  final GlobalKey headerKey;
   const PluginCatalogEntry({
     super.key,
     required this.plugin,
     required this.expanded,
     required this.onToggle,
-    required this.headerKey,
   });
   @override
   Widget build(BuildContext context) {
     final header = _PluginHeader(
-      key: headerKey,
       plugin: plugin,
       expanded: expanded,
       onToggle: onToggle,
@@ -82,7 +80,6 @@ class _PluginHeader extends StatelessWidget {
   final bool expanded;
   final VoidCallback onToggle;
   const _PluginHeader({
-    super.key,
     required this.plugin,
     required this.expanded,
     required this.onToggle,
@@ -90,7 +87,7 @@ class _PluginHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = [
-      if (plugin.delivery == 'bundle') 'Included with Kalinka',
+      if (plugin.delivery == 'bundle') 'Included with Kalinka Player',
       if (plugin.maturity != 'stable')
         '${plugin.tierLabel} · ${plugin.maturityLabel}',
       if (plugin.isDevice) 'Check your model',
@@ -247,17 +244,12 @@ class _PluginDetails extends StatelessWidget {
             (
               'Delivery',
               plugin.delivery == 'bundle'
-                  ? 'Included with Kalinka'
+                  ? 'Included with Kalinka Player'
                   : 'Independent package',
             ),
           ],
         ),
-        if (plugin.releases.isEmpty)
-          _RequirementsNotice(
-            text: plugin.delivery == 'bundle'
-                ? 'Requirements follow the server bundle. Compatibility with this server has not been checked.'
-                : 'No catalog release has been published. Compatibility with this server has not been checked.',
-          ),
+        _CompatibilityNotice(plugin: plugin),
         for (final release in plugin.releases) ...[
           _Facts(
             facts: [
@@ -282,18 +274,27 @@ class _PluginDetails extends StatelessWidget {
             ],
           ),
           _RequirementsNotice(
+            warning:
+                plugin.compatibility
+                    ?.release(release.version, release.channel)
+                    ?.status !=
+                'metadata_compatible',
             text: [
-              for (final version in release.versions.entries)
-                '${switch (version.key) {
-                  'sdk' => 'SDK',
-                  'server' => 'Server',
-                  'python' => 'Python',
-                  _ => 'Renderer',
-                }} ${version.value}',
-              if (release.capabilities.isNotEmpty)
-                'Required capabilities: ${release.capabilities.join(', ')}',
-              'Compatibility with this server has not been checked.',
-            ].join(' · '),
+              [
+                for (final version in release.versions.entries)
+                  '${switch (version.key) {
+                    'sdk' => 'SDK',
+                    'server' => 'Server',
+                    'python' => 'Python',
+                    _ => 'Renderer',
+                  }} ${version.value}',
+                if (release.capabilities.isNotEmpty)
+                  'Required capabilities: ${release.capabilities.join(', ')}',
+              ].join(' · '),
+              _releaseCheck(
+                plugin.compatibility?.release(release.version, release.channel),
+              ),
+            ].where((text) => text.isNotEmpty).join('\n\n'),
           ),
           if (release.withdrawn)
             Padding(
@@ -345,12 +346,79 @@ class _PluginDetails extends StatelessWidget {
             ),
           ),
         Text(
-          'Read-only preview · Installation and updates are not available. Catalog signatures are not verified.',
+          'Read-only preview · Installation and updates are not available. Catalog signatures are not verified. Package dependencies and actual device support have not been checked.',
           style: KalinkaTextStyles.trayRowSublabel,
         ),
       ],
     ),
   );
+}
+
+String _releaseCheck(PluginReleaseCompatibility? result) => [
+  switch (result?.status) {
+    'metadata_compatible' => 'Server check: declared requirements match.',
+    'blocked' => 'Server check: requirements not met.',
+    _ => 'Server check: result unavailable.',
+  },
+  if (result != null)
+    ...result.explanations.map((explanation) => '• $explanation'),
+].join('\n');
+
+class _CompatibilityNotice extends StatelessWidget {
+  final CatalogPlugin plugin;
+  const _CompatibilityNotice({required this.plugin});
+
+  @override
+  Widget build(BuildContext context) {
+    final result = plugin.compatibility;
+    // Bundled delivery describes how requirements are managed, not a locally
+    // inferred compatibility or installed-plugin identity check.
+    final status =
+        result?.status ??
+        (plugin.delivery == 'bundle'
+            ? 'bundle_managed'
+            : plugin.releases.isEmpty
+            ? 'no_releases'
+            : 'unknown');
+    final (title, text) = switch (status) {
+      'bundle_managed' => (
+        'Managed with Kalinka Player',
+        'Requirements and updates follow the server bundle. This plugin is not checked as a separate package.',
+      ),
+      'no_releases' => (
+        'No release available',
+        'No independent catalog release has been published to check.',
+      ),
+      'metadata_compatible' => (
+        'Declared requirements match',
+        result?.latestCompatibleVersion != null
+            ? 'The server reports a requirements match for version ${result!.latestCompatibleVersion} (${result.channel} channel).'
+            : 'The server reports a match for the declared requirements.',
+      ),
+      'blocked' => (
+        'Requirements not met',
+        'No release in the ${result!.channel} channel matches all declared requirements. See the release checks below.',
+      ),
+      _ => (
+        'Compatibility unavailable',
+        'This server has not supplied a compatibility result the app can display.',
+      ),
+    };
+    return _RequirementsNotice(
+      title: title,
+      warning: !const [
+        'bundle_managed',
+        'no_releases',
+        'metadata_compatible',
+      ].contains(status),
+      text: [
+        text,
+        if (status == 'metadata_compatible' &&
+            result?.newerBlockedRelease != null)
+          'Newer version ${result!.newerBlockedRelease!.version} does not meet the requirements. See its release check below.',
+      ].join('\n\n'),
+    );
+  }
 }
 
 class _Facts extends StatelessWidget {
@@ -398,25 +466,36 @@ class _Facts extends StatelessWidget {
 }
 
 class _RequirementsNotice extends StatelessWidget {
-  final String text;
-  const _RequirementsNotice({required this.text});
+  final String title, text;
+  final bool warning;
+  const _RequirementsNotice({
+    this.title = 'Declared requirements',
+    required this.text,
+    this.warning = true,
+  });
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: KalinkaColors.statusPending.withValues(alpha: .03),
+      color: warning
+          ? KalinkaColors.statusPendingSurface
+          : KalinkaColors.surfaceBase,
       border: Border.all(
-        color: KalinkaColors.statusPending.withValues(alpha: .2),
+        color: warning
+            ? KalinkaColors.statusPending.withValues(alpha: .2)
+            : KalinkaColors.borderDefault,
       ),
       borderRadius: BorderRadius.circular(9),
     ),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(
+        Icon(
           Icons.info_outline,
           size: 18,
-          color: KalinkaColors.statusPendingLight,
+          color: warning
+              ? KalinkaColors.statusPendingLight
+              : KalinkaColors.textSecondary,
         ),
         const SizedBox(width: 9),
         Expanded(
@@ -424,9 +503,11 @@ class _RequirementsNotice extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Declared requirements',
+                title,
                 style: KalinkaTextStyles.trayRowLabel.copyWith(
-                  color: KalinkaColors.statusPendingLight,
+                  color: warning
+                      ? KalinkaColors.statusPendingLight
+                      : KalinkaColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 2),

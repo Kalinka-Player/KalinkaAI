@@ -9,7 +9,7 @@ import 'package:kalinka/screens/renderer_settings_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // The renderer settings panel sits in the phone layout's Stack and in the
-// tablet layout's left panel. A resize across the breakpoint has to move it,
+// tablet layout's right panel. A resize across the breakpoint has to move it,
 // not remount it: a remount reloads the page and drops staged edits.
 
 Future<void> _resize(WidgetTester tester, Size size) async {

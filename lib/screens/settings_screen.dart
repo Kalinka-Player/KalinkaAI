@@ -28,7 +28,7 @@ import '../widgets/settings_renderer.dart';
 ///
 /// Slides in from the right, loads server config on init.
 class SettingsScreen extends ConsumerStatefulWidget {
-  /// Optional close callback for overlay mode (phone full-screen / tablet left
+  /// Optional close callback for overlay mode (phone full-screen / tablet right
   /// panel). When null, [Navigator.pop] is used instead.
   final VoidCallback? onClose;
 
@@ -37,7 +37,15 @@ class SettingsScreen extends ConsumerStatefulWidget {
   /// painting the occluded content without flashing during the animation.
   final ValueChanged<bool>? onCoverageChanged;
 
-  const SettingsScreen({super.key, this.onClose, this.onCoverageChanged});
+  /// A renderer settings overlay above this one owns Back while it is open.
+  final bool handlesBack;
+
+  const SettingsScreen({
+    super.key,
+    this.onClose,
+    this.onCoverageChanged,
+    this.handlesBack = true,
+  });
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
@@ -100,11 +108,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return SlideInPanel(
       onClose: widget.onClose,
       onCoverageChanged: widget.onCoverageChanged,
-      handlesBack: !_logExportOpen,
+      handlesBack: widget.handlesBack && !_logExportOpen,
       overlays: [
         if (_logExportOpen)
           LogExportScreen(
             onClose: () => setState(() => _logExportOpen = false),
+            handlesBack: widget.handlesBack,
           ),
         // Restart overlay
         if (_restartOverlayOpen)

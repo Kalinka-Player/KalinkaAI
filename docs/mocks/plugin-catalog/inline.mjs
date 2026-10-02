@@ -23,7 +23,7 @@ export function createInlineCatalog({
     if (p.planned) return "Proposed · no release available";
     if (p.manual) return "Unregistered · manual updates";
     if (p.bundled)
-      return p.device ? "Included · check your model" : "Included with Kalinka";
+      return p.device ? "Included · check your model" : "Included with Kalinka Player";
     if (p.installed === p.version) return `Installed · ${p.version}`;
     if (p.installed) return `Update available · ${p.installed} → ${p.version}`;
     return "";
@@ -35,7 +35,7 @@ export function createInlineCatalog({
     const compatibility = p.blocked
       ? "Needs server ≥ 6.0 and SDK ≥ 4.0, < 5. This server: 5.4.1 / SDK 3.6."
       : p.bundled
-        ? "Updated with your Kalinka server, not separately."
+        ? "Updated with your Kalinka Player server, not separately."
         : p.manual
           ? "Not in the catalog. New releases must be installed manually."
           : "Server ≥ 5.0 · SDK ≥ 3.6, < 4. Your server: 5.4.1 / SDK 3.6 ✓";
@@ -44,7 +44,7 @@ export function createInlineCatalog({
       : p.manual
         ? "Manual updates only"
         : p.bundled
-          ? "Managed by Kalinka"
+          ? "Managed by Kalinka Player"
           : "Compatible with this server";
     let action = p.planned
       ? btn("blocked", "Not released", "secondary", "disabled")
@@ -79,7 +79,7 @@ export function createInlineCatalog({
       <dl class="inline-facts">
         <div><dt>Created by</dt><dd>${p.creator}</dd></div>
         <div><dt>${p.bundled ? "Bundle" : "Release"}</dt><dd>${p.version}${p.size ? ` · ${p.size}` : ""}</dd></div>
-        <div><dt>Server platforms</dt><dd>${p.planned ? "Not verified" : p.platform || "Supported Kalinka servers"}</dd></div>
+        <div><dt>Server platforms</dt><dd>${p.planned ? "Not verified" : p.platform || "Supported Kalinka Player servers"}</dd></div>
         <div><dt>Publisher and maturity</dt><dd>${p.tier} · ${p.experimental ? "Experimental" : p.manual ? "Not verified" : "Stable"}</dd></div>
       </dl>
       ${p.planned ? "" : `<div class="inline-compatibility ${p.blocked ? "warning" : ""}">${icon(p.blocked ? "alert" : p.manual || p.bundled ? "info" : "check-circle")}<div><strong>${title}</strong><p>${compatibility}</p></div></div>`}
@@ -154,7 +154,7 @@ export function createInlineCatalog({
                 "Independent plugins",
                 pool.filter((p) => !p.bundled && !p.manual),
               ],
-              ["Included with Kalinka", pool.filter((p) => p.bundled)],
+              ["Included with Kalinka Player", pool.filter((p) => p.bundled)],
               ["Installed manually", pool.filter((p) => p.manual)],
             ]
           : [
@@ -188,7 +188,7 @@ export function createInlineCatalog({
         ? "Installation complete"
         : failed
           ? "Update failed · previous version restored"
-          : "Restarting · reconnecting to Kalinka";
+          : "Restarting · reconnecting to Kalinka Player";
     const description = waiting
       ? "Package checked. Your music keeps playing."
       : done
@@ -202,7 +202,7 @@ export function createInlineCatalog({
   function updateContent() {
     const available = updates();
     const selected = available.filter((p) => state.selection.has(p.id));
-    return `<div class="scroll-area" data-view="updates"><div class="updates-intro"><p>${available.length ? `${available.length} updates for this server` : "Your plugins are up to date"}</p><button class="text-button" data-action="policy">${icon("settings")}Auto updates</button></div><div class="plugin-list">${available.map((p) => row(p, true)).join("")}</div><div class="notice">${icon("info")}<span>Included plugins update with Kalinka. Unregistered plugins stay manual.</span></div><div class="update-footer">${state.automatic ? "Official stable releases update while idle, 03:00–06:00." : "Automatic updates are off. You choose when to install."}</div></div><div class="sticky-action"><div class="action-info">${selected.length} plugins selected<small>One restart for all selected updates</small></div>${btn("plan-updates", "Update selected", "primary", selected.length && !busy() && !state.catalogOffline ? "" : "disabled")}</div>`;
+    return `<div class="scroll-area" data-view="updates"><div class="updates-intro"><p>${available.length ? `${available.length} updates for this server` : "Your plugins are up to date"}</p><button class="text-button" data-action="policy">${icon("settings")}Auto updates</button></div><div class="plugin-list">${available.map((p) => row(p, true)).join("")}</div><div class="notice">${icon("info")}<span>Included plugins update with Kalinka Player. Unregistered plugins stay manual.</span></div><div class="update-footer">${state.automatic ? "Official stable releases update while idle, 03:00–06:00." : "Automatic updates are off. You choose when to install."}</div></div><div class="sticky-action"><div class="action-info">${selected.length} plugins selected<small>One restart for all selected updates</small></div>${btn("plan-updates", "Update selected", "primary", selected.length && !busy() && !state.catalogOffline ? "" : "disabled")}</div>`;
   }
 
   function screen() {

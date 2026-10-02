@@ -30,6 +30,7 @@ const _periods = {
 /// server keeps preparing, and the screen picks it up again when reopened.
 class LogExportScreen extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
+  final bool handlesBack;
 
   /// Chooses where a ready archive goes; the platform's own by default.
   final LogExportSaver Function() saver;
@@ -37,6 +38,7 @@ class LogExportScreen extends ConsumerStatefulWidget {
   const LogExportScreen({
     super.key,
     this.onClose,
+    this.handlesBack = true,
     this.saver = platformLogExportSaver,
   });
 
@@ -64,13 +66,15 @@ class _LogExportScreenState extends ConsumerState<LogExportScreen> {
       SaveOutcome.started => 'Download started',
       _ => null,
     };
-    if (message != null) toasts.show(message, inPanel: true);
+    // Settings is hosted over the queue on tablet, with window-scoped toasts.
+    if (message != null) toasts.show(message);
   }
 
   @override
   Widget build(BuildContext context) {
     final view = ref.watch(logExportProvider);
     return SlideInPanel(
+      handlesBack: widget.handlesBack,
       onClose: widget.onClose,
       child: Material(
         color: KalinkaColors.background,
