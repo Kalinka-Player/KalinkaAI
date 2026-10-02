@@ -82,7 +82,7 @@ const plugins = [
     long: "Bring live radio into your library. Browse stations from around the world or add a stream you already love.",
     icon: "radio",
     tier: "Official",
-    creator: "Kalinka team",
+    creator: "Kalinka Player team",
     version: "1.2.0",
     size: "1.8 MB",
     platform: "All server platforms",
@@ -96,18 +96,18 @@ const plugins = [
   {
     id: "qobuz",
     name: "Qobuz Connect",
-    description: "Play from the Qobuz app through Kalinka.",
-    long: "Choose Kalinka as an output in the Qobuz app and listen through your connected renderer.",
+    description: "Play from the Qobuz app through Kalinka Player.",
+    long: "Choose Kalinka Player as an output in the Qobuz app and listen through your connected renderer.",
     icon: "headphones",
     tier: "Official",
-    creator: "Kalinka team",
+    creator: "Kalinka Player team",
     version: "1.5.0",
     installed: "1.4.0",
     size: "4.2 MB",
     platform: "Linux · arm64, amd64",
     features: [
       "Control playback from the Qobuz app",
-      "Play through your selected Kalinka output",
+      "Play through your selected Kalinka Player output",
       "Keep track information in sync",
     ],
     notes:
@@ -117,7 +117,7 @@ const plugins = [
     id: "lastfm",
     name: "Last.fm Scrobbler",
     description: "Keep your listening history in sync.",
-    long: "Send the music you play in Kalinka to your Last.fm profile. Connect your account once and keep your listening history up to date.",
+    long: "Send the music you play in Kalinka Player to your Last.fm profile. Connect your account once and keep your listening history up to date.",
     icon: "wave",
     tier: "Unofficial",
     creator: "Community maintainer",
@@ -137,7 +137,7 @@ const plugins = [
     id: "listenbrainz",
     name: "ListenBrainz",
     description: "Share your listens with an open music community.",
-    long: "Connect your ListenBrainz account to build a personal listening history from the music you play in Kalinka.",
+    long: "Connect your ListenBrainz account to build a personal listening history from the music you play in Kalinka Player.",
     icon: "heart",
     tier: "Unofficial",
     creator: "Community maintainer",
@@ -145,7 +145,7 @@ const plugins = [
     size: "520 KB",
     platform: "All server platforms",
     features: [
-      "Submit listens from Kalinka",
+      "Submit listens from Kalinka Player",
       "Connect with your personal token",
       "Pause sharing at any time",
     ],
@@ -155,7 +155,7 @@ const plugins = [
     id: "room",
     name: "Room Correction",
     description: "Explore room-aware playback adjustments.",
-    long: "An early experiment in applying room correction profiles to a compatible Kalinka renderer.",
+    long: "An early experiment in applying room correction profiles to a compatible Kalinka Player renderer.",
     icon: "wave",
     tier: "Unofficial",
     experimental: true,
@@ -170,7 +170,7 @@ const plugins = [
       "Switch back to unprocessed playback",
     ],
     notes:
-      "Experimental preview. Needs a newer Kalinka server and a compatible renderer.",
+      "Experimental preview. Needs a newer Kalinka Player server and a compatible renderer.",
   },
   {
     id: "localfiles",
@@ -232,7 +232,7 @@ const plugins = [
     id: "studio",
     name: "Studio Bridge",
     description: "A custom connection to your studio system.",
-    long: "A plugin installed directly from its author’s repository. Kalinka can show its status and settings, but the plugin is not registered in the catalog.",
+    long: "A plugin installed directly from its author’s repository. Kalinka Player can show its status and settings, but the plugin is not registered in the catalog.",
     icon: "puzzle",
     tier: "Unregistered",
     creator: "Plugin author",
@@ -266,7 +266,7 @@ function getMusicCastMetadata() {
       "Configured input switching",
     ],
     limits:
-      "Mute is not exposed. Input switching selects Kalinka’s configured input, not an arbitrary input. Power readiness also depends on that input being selected.",
+      "Mute is not exposed. Input switching selects Kalinka Player’s configured input, not an arbitrary input. Power readiness also depends on that input being selected.",
     models:
       "Yamaha MusicCast / Extended Control family. Exact model coverage is not yet verified in this catalog.",
   };
@@ -298,7 +298,7 @@ plugins.push({
   id: "networkradio",
   name: "Network Radio Preview",
   description: "Try an early network radio integration.",
-  long: "An illustrative preview for a newer Kalinka server. This example demonstrates a blocked installation without adding a details screen.",
+  long: "An illustrative preview for a newer Kalinka Player server. This example demonstrates a blocked installation without adding a details screen.",
   icon: "radio",
   type: "input_module",
   tier: "Unofficial",
@@ -447,7 +447,7 @@ function listContent() {
     state.tab === "installed"
       ? [
           ["Independent plugins", pool.filter((p) => !p.bundled && !p.manual)],
-          ["Included with Kalinka", pool.filter((p) => p.bundled)],
+          ["Included with Kalinka Player", pool.filter((p) => p.bundled)],
           ["Installed manually", pool.filter((p) => p.manual)],
         ]
       : [
@@ -481,16 +481,16 @@ function catalogScreen() {
   if (inlineMode) return inlineCatalog.screen();
   const offline = state.scene === "offline";
   const operation = state.operation === "waiting";
-  return `<div class="screen">${topbar()}<div class="page-heading"><p class="eyebrow">ON THIS SERVER</p><div class="heading-row"><h1>Plugins</h1><button class="text-button" data-action="manual">${icon("link")}Install from URL</button></div><p class="heading-description">More ways to listen. Make Kalinka yours.</p></div>${tabs()}${state.tab === "updates" ? updateContent() : `<div class="scroll-area">${offline ? `<div class="notice offline">${icon("wifi")}<span>Catalog unavailable · showing yesterday’s list.</span><button data-action="check">Retry</button></div>` : ""}${operation ? `<div class="notice">${icon("clock")}<span>Install ready. Waiting for playback to stop.</span><button data-action="operation">View</button></div>` : ""}<div class="search-wrap"><label class="search-box">${icon("search")}<input id="plugin-search" type="search" value="${escapeHTML(state.query)}" placeholder="${state.tab === "installed" ? "Search installed plugins" : "Search plugins"}" aria-label="Search plugins" autocomplete="off"></label></div><div class="plugin-list">${listContent()}</div></div><div class="catalog-foot"><span>${offline ? "Last checked yesterday" : "Catalog checked just now"}</span><button class="text-button" data-action="check">${icon("refresh")}Check again</button></div>`}${miniPlayer()}</div>`;
+  return `<div class="screen">${topbar()}<div class="page-heading"><p class="eyebrow">ON THIS SERVER</p><div class="heading-row"><h1>Plugins</h1><button class="text-button" data-action="manual">${icon("link")}Install from URL</button></div><p class="heading-description">More ways to listen. Make Kalinka Player yours.</p></div>${tabs()}${state.tab === "updates" ? updateContent() : `<div class="scroll-area">${offline ? `<div class="notice offline">${icon("wifi")}<span>Catalog unavailable · showing yesterday’s list.</span><button data-action="check">Retry</button></div>` : ""}${operation ? `<div class="notice">${icon("clock")}<span>Install ready. Waiting for playback to stop.</span><button data-action="operation">View</button></div>` : ""}<div class="search-wrap"><label class="search-box">${icon("search")}<input id="plugin-search" type="search" value="${escapeHTML(state.query)}" placeholder="${state.tab === "installed" ? "Search installed plugins" : "Search plugins"}" aria-label="Search plugins" autocomplete="off"></label></div><div class="plugin-list">${listContent()}</div></div><div class="catalog-foot"><span>${offline ? "Last checked yesterday" : "Catalog checked just now"}</span><button class="text-button" data-action="check">${icon("refresh")}Check again</button></div>`}${miniPlayer()}</div>`;
 }
 
 function compatibility(p) {
   if (p.blocked)
-    return `<div class="compatibility warning">${icon("info")}<div><strong>A newer server is needed</strong><p>Requires Kalinka 6.0 or later. This server is on 5.4.1.</p></div></div>`;
+    return `<div class="compatibility warning">${icon("info")}<div><strong>A newer server is needed</strong><p>Requires Kalinka Player 6.0 or later. This server is on 5.4.1.</p></div></div>`;
   if (p.manual)
     return `<div class="compatibility neutral">${icon("link")}<div><strong>Updates managed manually</strong><p>This plugin isn’t in the catalog. Install new releases from its source.</p></div></div>`;
   if (p.bundled)
-    return `<div class="compatibility neutral">${icon("puzzle")}<div><strong>Included with your server</strong><p>This plugin updates together with Kalinka.</p></div></div>`;
+    return `<div class="compatibility neutral">${icon("puzzle")}<div><strong>Included with your server</strong><p>This plugin updates together with Kalinka Player.</p></div></div>`;
   return `<div class="compatibility">${icon("check-circle")}<div><strong>Compatible with this server</strong><p>Dependencies will be checked before installation.</p></div></div>`;
 }
 
@@ -526,7 +526,7 @@ function detailScreen() {
         : p.installed
           ? `v${p.installed} → ${p.version}`
           : `v${p.version} · ${p.size}`;
-  return `<div class="screen">${topbar("Plugins", "back")}<div class="scroll-area"><div class="detail-body"><div class="detail-identity">${tile(p)}<div><h1>${p.name}</h1><div class="badge-line">${badge(p.tier)}${p.experimental ? badge("Experimental", "pending") : badge(p.bundled ? "Included" : "Stable")}</div></div></div><p class="detail-lede">${p.long || p.description}</p>${compatibility(p)}<dl class="facts"><div><dt>Created by</dt><dd>${p.creator}</dd></div><div><dt>Platforms</dt><dd>${p.platform || "Supported Kalinka servers"}</dd></div><div><dt>${p.bundled ? "Bundle version" : p.manual ? "Selected release" : "Latest release"}</dt><dd>${p.version}</dd></div><div><dt>License</dt><dd>GPL-3.0-or-later</dd></div></dl>${p.bundled ? "" : `<section class="detail-section"><h2>What it adds</h2>${(p.features || []).map((f, i) => `<div class="feature-line">${icon(["music", "heart", "settings"][i % 3])}<span>${f}</span></div>`).join("")}</section><section class="detail-section"><h2>${p.manual ? "Keeping it up to date" : `What’s new in ${p.version}`}</h2><p>${p.notes}</p></section>`}<details ${p.blocked ? "open" : ""}><summary>Server requirements</summary><table class="requirements"><tbody><tr><td>Kalinka server</td><td>${p.blocked ? "≥ 6.0" : "≥ 5.0"}</td><td class="${p.blocked ? "fail" : ""}">${p.blocked ? "5.4.1 installed" : "5.4.1 ✓"}</td></tr><tr><td>Plugin SDK</td><td>${p.blocked ? "≥ 4.0, < 5" : "≥ 3.6, < 4"}</td><td class="${p.blocked ? "fail" : ""}">${p.blocked ? "3.6 installed" : "3.6 ✓"}</td></tr><tr><td>Platform</td><td>${p.platform || "Linux"}</td><td>Linux arm64 ✓</td></tr></tbody></table></details><section class="detail-section"><button class="text-button" data-action="source">${icon("external")}Source & publisher</button></section></div></div><div class="sticky-action"><div class="action-info">${info}<small>${p.blocked ? "See requirements above" : p.bundled ? "Managed by the server bundle" : p.installed === p.version ? "Ready to configure" : "One server restart to finish"}</small></div>${action}</div>${miniPlayer()}</div>`;
+  return `<div class="screen">${topbar("Plugins", "back")}<div class="scroll-area"><div class="detail-body"><div class="detail-identity">${tile(p)}<div><h1>${p.name}</h1><div class="badge-line">${badge(p.tier)}${p.experimental ? badge("Experimental", "pending") : badge(p.bundled ? "Included" : "Stable")}</div></div></div><p class="detail-lede">${p.long || p.description}</p>${compatibility(p)}<dl class="facts"><div><dt>Created by</dt><dd>${p.creator}</dd></div><div><dt>Platforms</dt><dd>${p.platform || "Supported Kalinka Player servers"}</dd></div><div><dt>${p.bundled ? "Bundle version" : p.manual ? "Selected release" : "Latest release"}</dt><dd>${p.version}</dd></div><div><dt>License</dt><dd>GPL-3.0-or-later</dd></div></dl>${p.bundled ? "" : `<section class="detail-section"><h2>What it adds</h2>${(p.features || []).map((f, i) => `<div class="feature-line">${icon(["music", "heart", "settings"][i % 3])}<span>${f}</span></div>`).join("")}</section><section class="detail-section"><h2>${p.manual ? "Keeping it up to date" : `What’s new in ${p.version}`}</h2><p>${p.notes}</p></section>`}<details ${p.blocked ? "open" : ""}><summary>Server requirements</summary><table class="requirements"><tbody><tr><td>Kalinka Player server</td><td>${p.blocked ? "≥ 6.0" : "≥ 5.0"}</td><td class="${p.blocked ? "fail" : ""}">${p.blocked ? "5.4.1 installed" : "5.4.1 ✓"}</td></tr><tr><td>Plugin SDK</td><td>${p.blocked ? "≥ 4.0, < 5" : "≥ 3.6, < 4"}</td><td class="${p.blocked ? "fail" : ""}">${p.blocked ? "3.6 installed" : "3.6 ✓"}</td></tr><tr><td>Platform</td><td>${p.platform || "Linux"}</td><td>Linux arm64 ✓</td></tr></tbody></table></details><section class="detail-section"><button class="text-button" data-action="source">${icon("external")}Source & publisher</button></section></div></div><div class="sticky-action"><div class="action-info">${info}<small>${p.blocked ? "See requirements above" : p.bundled ? "Managed by the server bundle" : p.installed === p.version ? "Ready to configure" : "One server restart to finish"}</small></div>${action}</div>${miniPlayer()}</div>`;
 }
 
 function updateContent() {
@@ -540,7 +540,7 @@ function playerScreen() {
 }
 
 function serverMenu() {
-  return `<div class="sheet-scrim" data-backdrop="menu"><section class="server-sheet" role="dialog" aria-modal="true" aria-label="Server menu" tabindex="-1"><div class="handle"></div><p class="eyebrow">SERVER</p><div class="server-card"><span class="online-dot"></span><div><strong>My Kalinka Service</strong><small>kalinka.local:8000 · v5.4.1 · 12 ms</small></div>${badge("Online", "status")}</div><button class="sheet-row" data-action="settings"><span class="tile">${icon("settings")}</span><span class="sheet-row-copy"><strong>Server settings</strong><small>Modules, audio, enrichment</small></span>${icon("chevron-right")}</button><button class="sheet-row featured" data-action="plugins"><span class="tile">${icon("puzzle")}</span><span class="sheet-row-copy"><strong>Plugins</strong><small>Browse, install & update</small></span><span class="count updates">${updates().length}</span>${icon("chevron-right")}</button><div class="sheet-row"><span class="tile">${icon("globe")}</span><span class="sheet-row-copy"><strong>Connect to different server</strong><small>Scan network for other instances</small></span>${icon("chevron-right")}</div><div class="sheet-row"><span class="tile">${icon("logout")}</span><span class="sheet-row-copy"><strong>Disconnect</strong></span></div><div class="sheet-footer">Kalinka 0.15.1</div></section></div>`;
+  return `<div class="sheet-scrim" data-backdrop="menu"><section class="server-sheet" role="dialog" aria-modal="true" aria-label="Server menu" tabindex="-1"><div class="handle"></div><p class="eyebrow">SERVER</p><div class="server-card"><span class="online-dot"></span><div><strong>My Kalinka Service</strong><small>kalinka.local:8000 · v5.4.1 · 12 ms</small></div>${badge("Online", "status")}</div><button class="sheet-row" data-action="settings"><span class="tile">${icon("settings")}</span><span class="sheet-row-copy"><strong>Server settings</strong><small>Modules, audio, enrichment</small></span>${icon("chevron-right")}</button><button class="sheet-row featured" data-action="plugins"><span class="tile">${icon("puzzle")}</span><span class="sheet-row-copy"><strong>Plugins</strong><small>Browse, install & update</small></span><span class="count updates">${updates().length}</span>${icon("chevron-right")}</button><div class="sheet-row"><span class="tile">${icon("globe")}</span><span class="sheet-row-copy"><strong>Connect to different server</strong><small>Scan network for other instances</small></span>${icon("chevron-right")}</div><div class="sheet-row"><span class="tile">${icon("logout")}</span><span class="sheet-row-copy"><strong>Disconnect</strong></span></div><div class="sheet-footer">Kalinka Player 0.15.1</div></section></div>`;
 }
 
 function operationScreen() {
@@ -557,13 +557,13 @@ function operationScreen() {
       ? "Your previous version is back"
       : waiting
         ? "Ready when you are"
-        : "Reconnecting to Kalinka";
+        : "Reconnecting to Kalinka Player";
   const message = done
     ? batch
-      ? "All selected updates are installed. Your settings are preserved, and Kalinka is ready to play."
+      ? "All selected updates are installed. Your settings are preserved, and Kalinka Player is ready to play."
       : "Everything is ready. Configure the plugin to start using it."
     : failed
-      ? "Qobuz Connect couldn’t start after its update. Kalinka restored version 1.4.0 and your settings."
+      ? "Qobuz Connect couldn’t start after its update. Kalinka Player restored version 1.4.0 and your settings."
       : waiting
         ? "The plugin is prepared. Installation will finish when playback stops, with one server restart."
         : "The server is restarting to finish the installation. This usually takes less than a minute.";
@@ -586,22 +586,22 @@ function operationScreen() {
 function dialogContent() {
   const p = getPlugin(state.selected);
   if (state.modal === "restart-confirm")
-    return `<p class="eyebrow">INSTALLATION PREPARED</p><h2>Restart Kalinka now?</h2><p>Playback will stop briefly while the server finishes installing. Your queued installation can also keep waiting for playback to stop.</p><div class="dialog-actions">${btn("dismiss", "Keep waiting")}${btn("restart-now", "Restart now", "primary")}</div>`;
+    return `<p class="eyebrow">INSTALLATION PREPARED</p><h2>Restart Kalinka Player now?</h2><p>Playback will stop briefly while the server finishes installing. Your queued installation can also keep waiting for playback to stop.</p><div class="dialog-actions">${btn("dismiss", "Keep waiting")}${btn("restart-now", "Restart now", "primary")}</div>`;
   if (state.modal === "manual")
-    return `<p class="eyebrow">INSTALL FROM A SOURCE</p><h2>Add your own plugin</h2><p>Paste the link to a plugin’s release manifest. Kalinka will check the package and show you what will be installed.</p><label class="input-label" for="source-url">Release manifest URL</label><input id="source-url" class="url-input" type="url" placeholder="https://…/kalinka-plugin.json" value="${escapeHTML(state.source)}"><div id="source-error" class="input-error" role="alert"></div><button class="text-button" data-action="example-url">Use example link</button><div class="compatibility neutral">${icon("info")}<div><strong>Automatic updates won’t be available</strong><p>Only install plugins from a creator you trust.</p></div></div><div class="dialog-actions">${btn("dismiss", "Cancel")}${btn("inspect-source", "Review plugin", "primary")}</div>`;
+    return `<p class="eyebrow">INSTALL FROM A SOURCE</p><h2>Add your own plugin</h2><p>Paste the link to a plugin’s release manifest. Kalinka Player will check the package and show you what will be installed.</p><label class="input-label" for="source-url">Release manifest URL</label><input id="source-url" class="url-input" type="url" placeholder="https://…/kalinka-plugin.json" value="${escapeHTML(state.source)}"><div id="source-error" class="input-error" role="alert"></div><button class="text-button" data-action="example-url">Use example link</button><div class="compatibility neutral">${icon("info")}<div><strong>Automatic updates won’t be available</strong><p>Only install plugins from a creator you trust.</p></div></div><div class="dialog-actions">${btn("dismiss", "Cancel")}${btn("inspect-source", "Review plugin", "primary")}</div>`;
   if (state.modal === "policy")
     return `<p class="eyebrow">THIS SERVER</p><h2>Automatic updates</h2><p>Checks run in the background. Choose how registered plugins are updated.</p><label class="radio-choice"><input type="radio" name="policy" value="notify" ${!state.automatic ? "checked" : ""}><span><strong>Notify me</strong><small>Review each update and choose when to restart.</small></span></label><label class="radio-choice"><input type="radio" name="policy" value="automatic" ${state.automatic ? "checked" : ""}><span><strong>Update official, stable plugins</strong><small>Between 03:00 and 06:00, only while nothing is playing.</small></span></label><p>Unofficial and experimental plugins keep their own opt-in. Unregistered plugins are never updated automatically.</p><div class="dialog-actions">${btn("dismiss", "Cancel")}${btn("save-policy", "Save preference", "primary")}</div>`;
   if (state.modal === "source" && p.planned)
     return `<p class="eyebrow">PROPOSED INTEGRATION</p><h2>${p.name}</h2><p>No publisher, repository, license or released package has been verified for this proposal. These details must be reviewed before a real catalog entry can offer installation.</p><div class="dialog-actions">${btn("dismiss", "Done", "primary")}</div>`;
   if (state.modal === "source")
-    return `<p class="eyebrow">PUBLISHER</p><h2>${p.name}</h2><p>Created by ${p.creator}. ${p.tier === "Official" ? "Maintained by the Kalinka project." : p.manual ? "Installed from a source outside the catalog." : "Maintained independently of the Kalinka project."}</p><div class="plan-summary"><div><span>Catalog status</span><strong>${p.tier}</strong></div><div><span>Source</span><strong>GitHub repository</strong></div><div><span>License</span><strong>GPL-3.0-or-later</strong></div></div><p>Check the source repository for the code, issues and release history.</p><div class="dialog-actions">${btn("dismiss", "Done", "primary")}</div>`;
+    return `<p class="eyebrow">PUBLISHER</p><h2>${p.name}</h2><p>Created by ${p.creator}. ${p.tier === "Official" ? "Maintained by the Kalinka Player project." : p.manual ? "Installed from a source outside the catalog." : "Maintained independently of the Kalinka Player project."}</p><div class="plan-summary"><div><span>Catalog status</span><strong>${p.tier}</strong></div><div><span>Source</span><strong>GitHub repository</strong></div><div><span>License</span><strong>GPL-3.0-or-later</strong></div></div><p>Check the source repository for the code, issues and release history.</p><div class="dialog-actions">${btn("dismiss", "Done", "primary")}</div>`;
   if (state.modal === "configure")
-    return `<p class="eyebrow">SERVER SETTINGS</p><h2>${p.name}</h2><p>${p.id === "radio" ? "Internet Radio is ready. Enable it to add stations to your music sources." : "Enable this plugin on My Kalinka Service. Its connection settings are available in Server settings."}</p><label class="radio-choice"><input type="checkbox" id="enable-plugin" checked><span><strong>Enable ${p.name}</strong><small>${p.kind === "device" ? "Use controls for your configured device." : "Show this source in Kalinka."}</small></span></label><div class="dialog-actions">${btn("dismiss", "Back")}${btn("configured", "Save", "primary")}</div>`;
+    return `<p class="eyebrow">SERVER SETTINGS</p><h2>${p.name}</h2><p>${p.id === "radio" ? "Internet Radio is ready. Enable it to add stations to your music sources." : "Enable this plugin on My Kalinka Service. Its connection settings are available in Server settings."}</p><label class="radio-choice"><input type="checkbox" id="enable-plugin" checked><span><strong>Enable ${p.name}</strong><small>${p.kind === "device" ? "Use controls for your configured device." : "Show this source in Kalinka Player."}</small></span></label><div class="dialog-actions">${btn("dismiss", "Back")}${btn("configured", "Save", "primary")}</div>`;
   const batch = state.modal === "confirm-updates";
   const selected = batch
     ? updates().filter((p) => state.selection.has(p.id))
     : [p];
-  return `${tile(p)}<p class="eyebrow">READY TO ${batch || p.installed ? "UPDATE" : "INSTALL"}</p><h2>${batch ? `Update ${selected.length} plugins?` : `${p.installed ? "Update" : "Install"} ${p.name}?`}</h2><p>Kalinka needs to restart to finish. Choose when to briefly stop playback.</p><div class="plan-summary">${selected.map((p) => `<div><span>${p.name}</span><strong>${p.installed ? `${p.installed} → ` : ""}${p.version}</strong></div>`).join("")}<div><span>Compatibility</span><strong>Requirements checked ${icon("check")}</strong></div><div><span>Server restarts</span><strong>One</strong></div></div><label class="radio-choice"><input type="radio" name="restart" value="idle" ${state.restart === "idle" ? "checked" : ""}><span><strong>When playback stops</strong><small>Keep listening. Finish the installation once idle.</small></span></label><label class="radio-choice"><input type="radio" name="restart" value="now" ${state.restart === "now" ? "checked" : ""}><span><strong>Restart now</strong><small>Playback will stop during the restart.</small></span></label>${p.manual ? "<p>This source is not registered. Future updates stay manual.</p>" : ""}<div class="dialog-actions">${btn("dismiss", "Cancel")}${btn("execute", state.restart === "idle" ? "Install when idle" : "Install & restart", "primary")}</div>`;
+  return `${tile(p)}<p class="eyebrow">READY TO ${batch || p.installed ? "UPDATE" : "INSTALL"}</p><h2>${batch ? `Update ${selected.length} plugins?` : `${p.installed ? "Update" : "Install"} ${p.name}?`}</h2><p>Kalinka Player needs to restart to finish. Choose when to briefly stop playback.</p><div class="plan-summary">${selected.map((p) => `<div><span>${p.name}</span><strong>${p.installed ? `${p.installed} → ` : ""}${p.version}</strong></div>`).join("")}<div><span>Compatibility</span><strong>Requirements checked ${icon("check")}</strong></div><div><span>Server restarts</span><strong>One</strong></div></div><label class="radio-choice"><input type="radio" name="restart" value="idle" ${state.restart === "idle" ? "checked" : ""}><span><strong>When playback stops</strong><small>Keep listening. Finish the installation once idle.</small></span></label><label class="radio-choice"><input type="radio" name="restart" value="now" ${state.restart === "now" ? "checked" : ""}><span><strong>Restart now</strong><small>Playback will stop during the restart.</small></span></label>${p.manual ? "<p>This source is not registered. Future updates stay manual.</p>" : ""}<div class="dialog-actions">${btn("dismiss", "Cancel")}${btn("execute", state.restart === "idle" ? "Install when idle" : "Install & restart", "primary")}</div>`;
 }
 
 function settingsScreen() {

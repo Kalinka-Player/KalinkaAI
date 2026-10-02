@@ -38,6 +38,7 @@ void main() {
 
   for (final scene in [
     'compact-catalog',
+    'compact-collapsing',
     'compact-expanded',
     'phone-expanded',
     'tablet-device',
@@ -109,7 +110,13 @@ void main() {
         await tester.tap(find.widgetWithText(ChoiceChip, 'Device control'));
         await tester.pumpAndSettle();
       }
-      if (scene != 'compact-catalog') {
+      if (scene == 'compact-collapsing') {
+        final delegate = tester
+            .widget<SliverPersistentHeader>(find.byType(SliverPersistentHeader))
+            .delegate;
+        scroll.jumpTo((delegate.maxExtent - delegate.minExtent) / 4);
+        await tester.pumpAndSettle();
+      } else if (scene != 'compact-catalog') {
         final id = scene == 'tablet-device' ? 'musiccast' : 'jamendo';
         final row = find.byKey(ValueKey('plugin-$id'));
         await tester.ensureVisible(row);

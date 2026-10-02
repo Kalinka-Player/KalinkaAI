@@ -1,3 +1,5 @@
+import 'plugin_compatibility.dart';
+
 /// Display metadata only. No identity, compatibility or install decisions are
 /// inferred from names, version strings or a plugin's official/unofficial tier.
 class PluginCatalog {
@@ -42,6 +44,7 @@ class CatalogPlugin {
   final Uri? source;
   final List<String> models, families, deviceNotes;
   final List<CatalogPluginRelease> releases;
+  final PluginCompatibility? compatibility;
 
   const CatalogPlugin({
     required this.id,
@@ -59,6 +62,7 @@ class CatalogPlugin {
     this.families = const [],
     this.deviceNotes = const [],
     this.releases = const [],
+    this.compatibility,
   });
 
   factory CatalogPlugin.fromJson(Map<String, dynamic> json) {
@@ -81,6 +85,9 @@ class CatalogPlugin {
       releases: List.unmodifiable(
         _maps(json['releases']).map(CatalogPluginRelease.fromJson),
       ),
+      compatibility: json['compatibility'] is Map
+          ? PluginCompatibility.fromJson(_map(json['compatibility']))
+          : null,
     );
   }
 

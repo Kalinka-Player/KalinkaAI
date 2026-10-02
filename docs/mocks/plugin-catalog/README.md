@@ -1,6 +1,6 @@
 # Plugin catalog interaction mocks
 
-Reviewable tablet and phone mocks for discovering, installing and updating Kalinka server plugins. The primary entry point is **server chip → Plugins**, directly below **Server settings** in the existing server sheet. On tablet, Plugins replaces the left player pane, following the app’s current settings layout; the queue remains on the right. On phone it opens a full-width screen with the mini-player retained.
+Reviewable tablet and phone mocks for discovering, installing and updating Kalinka Player server plugins. The primary entry point is **server chip → Plugins**, directly below **Server settings** in the existing server sheet. As revised on 2026-10-02, the tablet app places Plugins and Settings over the right-hand queue, leaving Now Playing usable on the left. The original mock images and prototype retain the earlier left-pane placement for reference; they have not been removed. On phone the app uses a full-width overlay.
 
 **Chosen design: Expand in place.** Plugin details, hardware lookup and operation progress stay inside the Plugins destination. This is the implementation target and the default mock. The separate detail-page flow is superseded and accessible only as an archived comparison.
 
@@ -14,7 +14,7 @@ From the KalinkaAI-1 repository root:
 python3 -m http.server 8767 --bind 127.0.0.1
 ```
 
-Open [the interactive prototype](http://127.0.0.1:8767/docs/mocks/plugin-catalog/#entry). Serve the repository root so the mock can load Kalinka’s bundled fonts and logo. Opening the HTML directly with a `file:` URL may prevent its JavaScript module from loading.
+Open [the interactive prototype](http://127.0.0.1:8767/docs/mocks/plugin-catalog/#entry). Serve the repository root so the mock can load Kalinka Player’s bundled fonts and logo. Opening the HTML directly with a `file:` URL may prevent its JavaScript module from loading.
 
 Use the review toolbar above the mock to jump between screens; **More states** exposes confirmations, restart, completion, rollback, incompatibility, manual installation and offline browsing. These controls are outside the proposed app UI. Each scenario starts with its own demo state. App controls preserve state while you walk through an interaction.
 
@@ -22,7 +22,7 @@ Use the review toolbar above the mock to jump between screens; **More states** e
 
 **Expand in place** keeps plugin details, model lookup and operation progress within the Plugins destination. Open [the chosen prototype](http://127.0.0.1:8767/docs/mocks/plugin-catalog/#catalog). [Design rationale and Material references](inline-design.md) explain the navigation constraint, archived alternatives and hardware-support contract.
 
-Browse and Installed distinguish **Input sources** from **Device control** with filter chips. The catalog's required `type` mirrors the SDK: `input_module` or `output_device`. After installation Kalinka's detected type is authoritative. Output-device metadata must name supported models, families, or both, with readable requirements and limitations. These fields enable search without loading plugin code.
+Browse and Installed distinguish **Input sources** from **Device control** with filter chips. The catalog's required `type` mirrors the SDK: `input_module` or `output_device`. After installation Kalinka Player's detected type is authoritative. Output-device metadata must name supported models, families, or both, with readable requirements and limitations. These fields enable search without loading plugin code.
 
 MusicCast shows its current control capabilities and a model-coverage lookup; Marantz is a proposed, non-installable entry with unverified capabilities. No actual model compatibility or network connection is claimed. The chosen mock omits the original synthetic utilities instead of treating them as one of the two plugin families.
 
@@ -41,7 +41,15 @@ MusicCast shows its current control capabilities and a model-coverage lookup; Ma
 
 The chosen mock was checked in Chromium at 1440 × 1040, 1024 × 768 and 390 × 844. Checks covered unchanged route/history on expansion, single-open behavior, keyboard collapse, dialog focus return, inline install/restart/completion, independent update selection, type filtering, model search, simulated connection checks, blocked/proposed releases, manual installation and offline behavior. New expansion/filter targets met the 48 px height check, no horizontal overflow was found, and the archived detail-page flow still passed its browser checks. These are prototype checks, not hardware or screen-reader certification.
 
-The historical sections below are **not implementation guidance**. The chosen design replaces their detail/progress navigation and promotes plugin type without changing the server-menu entry point. Both variants are mock-only; the GitHub catalog remains unpublished.
+The historical sections below are **not implementation guidance**. The chosen design replaces their detail/progress navigation and promotes plugin type without changing the server-menu entry point. Both HTML variants are mock-only; the separate [plugin hub](https://github.com/Kalinka-Player/kalinka-plugins) now publishes the public browsing feed.
+
+## Current Flutter preview
+
+The app implements read-only browsing behind **Server settings → General → Plugin catalog preview**, an expert setting that defaults to false. Plugins appears in the server menu only after the connected server reports that the saved setting is enabled. The app reads the server's cache, not GitHub directly. Installation, update checks and server restart are not exposed.
+
+The implemented layout uses the right-hand queue pane on tablet and a full-screen panel on phone. It keeps one expanded plugin at a time, model/family search, a clear-search button, and the settings typography and colors. The large Plugins heading shrinks and supporting text fades with scrolling; Back, connection status and Browse/Reload remain visible. Each expanded plugin header pins below them only within its own entry. Reload rereads cached data and capabilities, not an immediate upstream refresh. Server-reported metadata compatibility is displayed with blocking reasons, without claiming package, signature or device verification.
+
+Current Flutter visual snapshots live in [`test/goldens/plugin-catalog`](../../../test/goldens/plugin-catalog), including expanded, partially collapsed and compact-header states. Original design previews above are retained unchanged. Widget tests cover phone/tablet resizing, large text, reduced-motion settings, keyboard collapse, server switching and opt-in revocation. Run `flutter analyze` and `flutter test` before merging. Physical-device acceptance should check scrolling, the keyboard and clear-search control, server-menu opt-in, connection loss, and Now Playing controls while a tablet management panel is open; automated coverage does not replace that check.
 
 ## Archived detail page design
 
@@ -72,7 +80,7 @@ The server chip is already the entrance to server management, so Plugins belongs
 
 Rows show a name, one-line description and relevant state. Details show the creator, platform coverage, version, license, release notes and requirements. A disabled action explains incompatible server versions. SDK details stay under **Server requirements**, where they explain a blocked installation rather than adding noise to every catalog row. A package that passes the initial checks still has its dependencies checked before the confirmation step.
 
-**Installed** distinguishes independently managed plugins, plugins included with the server, and manually installed unregistered plugins. Included plugins have a Configure action and update with Kalinka. Unregistered plugins retain configuration access and direct-install options, with an explicit manual-update label.
+**Installed** distinguishes independently managed plugins, plugins included with the server, and manually installed unregistered plugins. Included plugins have a Configure action and update with Kalinka Player. Unregistered plugins retain configuration access and direct-install options, with an explicit manual-update label.
 
 The Updates view lets users review and select releases together, with one restart for the batch. Automatic update policy is separate from checking for updates. The default is notification; official stable releases can be updated during quiet hours, while unofficial and experimental plugins retain individual opt-in. Unregistered plugins never inherit automatic updates.
 
@@ -96,7 +104,7 @@ These are proposed implementation changes, not edits made by this mock:
 | Existing file | Proposed integration |
 | --- | --- |
 | `lib/widgets/server_sheet.dart` | Add `openPlugins` to `ServerSheetAction`, a callback for tablet mode, and the Plugins row to both sheet variants. |
-| `lib/screens/music_player_screen.dart` | Handle the phone action as navigation. Add a Plugins overlay to the tablet’s left pane using the same ownership, clipping and slide behavior as Settings. Close the server sheet before opening it. |
+| `lib/screens/music_player_screen.dart` | Host Plugins as a full-width overlay on phone and over the tablet’s right-hand queue, using the same ownership, clipping and slide behavior as Settings. Close the server sheet before opening it. |
 | `lib/screens/settings_screen.dart` | Optional secondary link from General; complex Configure tasks replace Plugins with peer Server settings, preserving the return location, rather than pushing a third level. |
 | `lib/theme/app_theme.dart` | Reuse existing colors, fonts, 52 px top bar, 900 px breakpoint and panel conventions. |
 | New plugin providers and Plugins view | Read catalog, inventory and updates from the connected server. Use one expanded plugin ID, type filters, inline model lookup and persistent operation status; no details/progress route. Keep operation IDs scoped to that server, and resume polling after reconnect. |

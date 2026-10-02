@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/plugin_catalog.dart';
+import 'package:kalinka/data_model/plugin_compatibility.dart';
 import 'package:kalinka/providers/plugin_catalog_provider.dart';
 
 Map<String, dynamic> _fixture() =>
@@ -52,6 +53,156 @@ ResponseBody _json(int status, Object body) => ResponseBody.fromString(
 }
 
 void main() {
+  test('catalog fixture uses the full product name in display metadata', () {
+    final catalog = PluginCatalog.fromJson(_fixture());
+    for (final plugin in catalog.plugins) {
+      final displayText = [
+        plugin.name,
+        plugin.description,
+        ...plugin.models,
+        ...plugin.families,
+        ...plugin.deviceNotes,
+        for (final release in plugin.releases) ...release.notes,
+      ];
+      for (final text in displayText) {
+        expect(
+          RegExp(r'\bKalinka\b(?! Player\b)').hasMatch(text),
+          isFalse,
+          reason: '${plugin.id}: $text',
+        );
+      }
+    }
+  });
+
+  test(
+    'preserves server checks and never infers them from raw catalog declarations',
+    () {
+      final json = _fixture();
+      expect(
+        PluginCatalog.fromJson(
+          json,
+        ).plugins.every((p) => p.compatibility == null),
+        true,
+      );
+      final blocked = {
+        'version': '6.0',
+        'channel': 'stable',
+        'status': 'blocked',
+        'reasons': [
+          {
+            'code': 'incompatible_server',
+            'installed': '5.5',
+            'required': '>=6',
+          },
+        ],
+      };
+      final qobuz = (json['plugins'] as List).singleWhere(
+        (p) => p['id'] == 'qobuz',
+      );
+      qobuz['compatibility'] = {
+        'status': 'metadata_compatible',
+        'channel': 'stable',
+        'latest_available_version': '6.0',
+        'latest_compatible_version': '5.0.1',
+        'newer_blocked_release': blocked,
+        'releases': [
+          blocked,
+          {
+            'version': '5.0.1',
+            'channel': 'stable',
+            'status': 'metadata_compatible',
+            'reasons': [],
+            'artifacts': [
+              {
+                'filename': 'qobuz.deb',
+                'status': 'metadata_compatible',
+                'reasons': [],
+              },
+              {
+                'filename': 'other-platform.rpm',
+                'status': 'blocked',
+                'reasons': [
+                  {'code': 'unsupported_package_format', 'format': 'rpm'},
+                ],
+              },
+            ],
+          },
+        ],
+        'installation_allowed': false,
+      };
+      final result = PluginCatalog.fromJson(
+        json,
+      ).plugins.singleWhere((p) => p.id == 'qobuz').compatibility!;
+      expect(result.status, 'metadata_compatible');
+      expect(result.latestAvailableVersion, '6.0');
+      expect(result.latestCompatibleVersion, '5.0.1');
+      expect(result.newerBlockedRelease!.explanations, [
+        'Server 5.5 does not meet >=6.',
+      ]);
+      expect(result.release('5.0.1', 'stable')!.explanations, isEmpty);
+      expect(result.release('5.0.1', 'beta'), isNull);
+      expect(result.release('unknown', 'stable'), isNull);
+      expect(
+        result.release('5.0.1', 'stable')!.artifacts.first.filename,
+        'qobuz.deb',
+      );
+    },
+  );
+
+  for (final component in ['server', 'sdk', 'python', 'renderer']) {
+    test('explains $component versions and unknown versions', () {
+      final mismatch = PluginCompatibilityReason.fromJson({
+        'code': 'incompatible_$component',
+        'required': '>=2',
+        'installed': '1.0',
+      });
+      final unknown = PluginCompatibilityReason.fromJson({
+        'code': '${component}_version_unknown',
+        'required': '>=2',
+      });
+      expect(mismatch.message, contains('1.0 does not meet >=2.'));
+      expect(unknown.message, contains('version is unknown; requires >=2.'));
+    });
+  }
+
+  for (final (code, expected) in [
+    ('release_withdrawn', 'withdrawn'),
+    ('channel_not_selected', 'outside the selected channel'),
+    ('release_not_yet_published', 'not yet published'),
+    ('platform_unknown', 'Server platform is unknown'),
+    ('architecture_unknown', 'Server architecture is unknown'),
+    ('unsupported_platform', 'Server platform linux is not supported'),
+    ('unsupported_architecture', 'Server architecture linux is not supported'),
+    ('missing_capability', 'Missing server capability: test'),
+    ('renderer_unavailable', 'Renderer is not connected'),
+    ('renderer_protocol_incompatible', 'Renderer protocol is incompatible'),
+    ('no_compatible_artifact', 'No package matches this server'),
+    ('unsupported_package_format', 'Package format rpm is not supported'),
+    ('invalid_package_metadata', 'Package metadata is inconsistent'),
+    ('distribution_unknown', 'Server distribution or version is unknown'),
+    (
+      'unsupported_distribution',
+      'Server distribution debian 12 is not supported',
+    ),
+    ('new_future_reason', 'cannot describe (new_future_reason)'),
+  ]) {
+    test('readable compatibility reason: $code', () {
+      final reason = PluginCompatibilityReason.fromJson({
+        'code': code,
+        'required': ['aarch64', 'x86_64'],
+        'actual': 'linux',
+        'capability': 'test',
+        'format': 'rpm',
+        'id': 'debian',
+        'version': '12',
+      });
+      expect(reason.message, contains(expected));
+      if (code == 'unsupported_architecture') {
+        expect(reason.message, contains('requires aarch64, x86_64'));
+      }
+    });
+  }
+
   test(
     'real feed preserves types, publisher tiers and native requirements',
     () {
