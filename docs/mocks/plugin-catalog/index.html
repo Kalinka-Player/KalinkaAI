@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Kalinka · Plugin catalog design</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="inline.css" />
+  </head>
+  <body>
+    <header class="review-bar">
+      <div class="review-brand">KALINKA <span>/ PLUGINS</span></div>
+      <nav class="variant-links" aria-label="Chosen and archived designs">
+        <a href="?layout=inline#catalog" data-variant="inline"
+          >Chosen · Expand in place</a
+        >
+        <a href="?layout=pages#catalog" data-variant="pages"
+          >Archive · Detail pages</a
+        >
+      </nav>
+      <nav class="scenarios" aria-label="Mock screens">
+        <button data-scene="entry">Entry point</button>
+        <button data-scene="catalog">Catalog</button>
+        <button data-scene="details">Details</button>
+        <button data-scene="installed">Installed</button>
+        <button data-scene="updates">Updates</button>
+        <label class="more-scenes"
+          ><span class="sr-only">More mock states</span
+          ><select id="more-scenes">
+            <option value="">More states</option>
+            <option value="confirm">Install confirmation</option>
+            <option value="restart">Restarting</option>
+            <option value="complete">Installed successfully</option>
+            <option value="failed">Update rolled back</option>
+            <option value="incompatible">Incompatible plugin</option>
+            <option value="manual">Install from URL</option>
+            <option value="offline">Catalog offline</option>
+          </select></label
+        >
+      </nav>
+      <span class="demo-label">INTERACTIVE MOCK · DEMO DATA</span>
+    </header>
+    <main class="app-window" aria-label="Kalinka application mock">
+      <div class="window-title">Kalinka <span aria-hidden="true">×</span></div>
+      <div class="app-layout">
+        <section
+          id="left-pane"
+          class="left-pane"
+          aria-label="Player and plugin management"
+        ></section>
+        <section class="right-pane" aria-label="Play queue">
+          <header class="topbar queue-topbar">
+            <img
+              class="wordmark"
+              src="../../../assets/images/kalinka_logo.svg"
+              alt="Kalinka"
+            />
+            <button
+              id="server-chip"
+              class="server-chip"
+              data-action="server-menu"
+              aria-haspopup="dialog"
+            >
+              <span class="online-dot"></span><span>My Kalinka Service</span
+              ><span data-icon="chevron-down"></span>
+            </button>
+          </header>
+          <div class="queue-heading">
+            <span
+              >NOW PLAYING
+              <span class="normal">· FLAC 24-bit · 96 kHz</span></span
+            ><span data-icon="more"></span>
+          </div>
+          <div class="current-track">
+            <div class="queue-art"></div>
+            <div>
+              <strong>The Foggy Edge of Time</strong>
+              <p><span class="source-tag">♫</span> Neil Young</p>
+            </div>
+            <span class="duration">−2:12</span>
+          </div>
+          <div class="queue-label">UP NEXT <span>· 6</span></div>
+          <div class="queue-tracks" id="queue-tracks"></div>
+          <div class="queue-dock">
+            <span data-icon="sparkles"></span><span>Discover something new</span
+            ><span data-icon="arrow-right"></span>
+          </div>
+          <div id="server-overlay"></div>
+        </section>
+      </div>
+    </main>
+    <footer class="review-footer">
+      <span id="review-caption"></span
+      ><span>Local prototype · no downloads or server changes</span>
+    </footer>
+    <div id="announcer" class="sr-only" aria-live="polite"></div>
+    <script type="module" src="prototype.mjs"></script>
+  </body>
+</html>
