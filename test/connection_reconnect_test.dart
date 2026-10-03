@@ -13,6 +13,7 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
+import 'package:kalinka/providers/monotonic_clock_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
 
@@ -60,6 +61,9 @@ const _localSettings = <String, Object>{
   'Kalinka.port': 8080,
   'Kalinka.name': 'Test',
 };
+
+Stopwatch _fakeStopwatch(FakeAsync async) =>
+    async.getClock(DateTime(2026)).stopwatch()..start();
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -143,9 +147,7 @@ void main() {
         kalinkaProxyProvider.overrideWithValue(api),
         appLifecycleProvider.overrideWith(_ResumedLifecycle.new),
         kioskActiveProvider.overrideWithValue(kiosk),
-        connectionStateProvider.overrideWith(
-          () => ConnectionStateNotifier(async.getClock(DateTime(2026)).now),
-        ),
+        monotonicClockProvider.overrideWithValue(_fakeStopwatch(async)),
       ],
     );
 
@@ -221,9 +223,7 @@ void main() {
             kalinkaProxyProvider.overrideWithValue(api),
             appLifecycleProvider.overrideWith(_ResumedLifecycle.new),
             kioskLaunchProvider.overrideWithValue(false),
-            connectionStateProvider.overrideWith(
-              () => ConnectionStateNotifier(async.getClock(DateTime(2026)).now),
-            ),
+            monotonicClockProvider.overrideWithValue(_fakeStopwatch(async)),
           ],
         );
         container.read(connectionStateProvider.notifier).startReconnecting();

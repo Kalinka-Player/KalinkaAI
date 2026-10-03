@@ -7,6 +7,7 @@ import 'package:logger/logger.dart' show Logger;
 import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
 import 'kiosk_provider.dart' show kioskActiveProvider;
+import 'monotonic_clock_provider.dart' show monotonicClockProvider;
 import 'playback_time_provider.dart' show appLifecycleProvider;
 
 final _logger = Logger();
@@ -36,12 +37,12 @@ class _RetryEpochNotifier extends Notifier<int> {
 }
 
 class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
-  ConnectionStateNotifier([this._now = DateTime.now]);
-
-  final DateTime Function() _now;
   Timer? _retryTimer;
   int _retryCount = 0;
-  DateTime? _reconnectStartedAt;
+
+  /// On the monotonic clock: a Pi without a real-time clock has its wall clock
+  /// set by NTP mid-outage, which would cut short or stretch these windows.
+  Duration? _reconnectStartedAt;
 
   /// When the app was last backgrounded (null while foregrounded).
   DateTime? _backgroundedAt;
@@ -59,9 +60,14 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   bool escalationDismissed = false;
 
   /// True when reconnecting has been going for >= 30 seconds.
-  bool get escalationReached =>
-      _reconnectStartedAt != null &&
-      _now().difference(_reconnectStartedAt!).inSeconds >= 30;
+  bool get escalationReached => _reconnectingFor >= const Duration(seconds: 30);
+
+  Duration get _reconnectingFor {
+    final startedAt = _reconnectStartedAt;
+    return startedAt == null ? Duration.zero : _monotonicNow - startedAt;
+  }
+
+  Duration get _monotonicNow => ref.read(monotonicClockProvider).elapsed;
 
   @override
   ConnectionStatus build() {
@@ -75,7 +81,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     // A display opened while offline has no Retry button, so probe again.
     ref.listen<bool>(kioskActiveProvider, (_, active) {
       if (active && state == ConnectionStatus.offline) {
-        _reconnectStartedAt = _now();
+        _reconnectStartedAt = _monotonicNow;
         state = ConnectionStatus.reconnecting;
         _startRetryTimer();
       }
@@ -88,7 +94,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     if (lifecycle == AppLifecycleState.resumed) {
       final backgroundedFor = _backgroundedAt == null
           ? Duration.zero
-          : _now().difference(_backgroundedAt!);
+          : DateTime.now().difference(_backgroundedAt!);
       _backgroundedAt = null;
 
       // Foregrounded: restart reconnection immediately if it was paused.
@@ -100,7 +106,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
         // a non-offline status to actually rebuild and connect — mirrors
         // retryNow().
         if (state == ConnectionStatus.offline) {
-          _reconnectStartedAt = _now();
+          _reconnectStartedAt = _monotonicNow;
           state = ConnectionStatus.reconnecting;
         }
         _startRetryTimer();
@@ -118,7 +124,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
       // Backgrounded: pause reconnection attempts to save battery and record
       // when we went down so resume can tell a quick app-switch from a long
       // suspend.
-      _backgroundedAt ??= _now();
+      _backgroundedAt ??= DateTime.now();
       _cancelRetryTimer();
     }
   }
@@ -132,7 +138,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     _cancelRetryTimer();
     _retryCount = 0;
     _reconnectStartedAt = null;
-    lastConnectedAt = _now();
+    lastConnectedAt = DateTime.now();
     state = ConnectionStatus.connected;
   }
 
@@ -149,7 +155,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
       return;
     }
     _retryCount = 0;
-    _reconnectStartedAt = _now();
+    _reconnectStartedAt = _monotonicNow;
     state = ConnectionStatus.reconnecting;
     _startRetryTimer();
   }
@@ -166,13 +172,9 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     _retryTimer = timer;
   }
 
-  Duration get _retryInterval {
-    final startedAt = _reconnectStartedAt;
-    final slow =
-        startedAt != null &&
-        _now().difference(startedAt) >= const Duration(minutes: 1);
-    return Duration(seconds: slow ? 15 : 5);
-  }
+  Duration get _retryInterval => Duration(
+    seconds: _reconnectingFor >= const Duration(minutes: 1) ? 15 : 5,
+  );
 
   void markEscalationDismissed() {
     escalationDismissed = true;
@@ -183,7 +185,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     ref.read(manualReconnectEpochProvider.notifier).increment();
     if (state == ConnectionStatus.offline) {
       _retryCount = 0;
-      _reconnectStartedAt = _now();
+      _reconnectStartedAt = _monotonicNow;
       escalationDismissed = false;
       state = ConnectionStatus.reconnecting;
       _startRetryTimer();
