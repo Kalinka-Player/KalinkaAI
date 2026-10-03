@@ -1,3 +1,4 @@
+import 'dart:async' show Completer;
 import 'dart:io' show HttpRequest, HttpServer, WebSocket, WebSocketTransformer;
 
 import 'package:flutter/widgets.dart' show AppLifecycleState;
@@ -28,9 +29,14 @@ class _FakeApi implements KalinkaPlayerProxy {
   bool shouldSucceed;
   int listModulesCalls = 0;
 
+  /// While set, probes hang until it completes, like a server that accepts
+  /// connections before it answers them.
+  Completer<void>? stall;
+
   @override
   Future<ModulesAndDevices> listModules() async {
     listModulesCalls++;
+    await stall?.future;
     if (!shouldSucceed) {
       throw DioException(requestOptions: RequestOptions(path: '/server/modules'));
     }
@@ -201,6 +207,76 @@ void main() {
         expect(
           container.read(connectionStateProvider),
           ConnectionStatus.reconnecting,
+        );
+        container.dispose();
+      });
+    });
+
+    test('a display opened while offline starts probing again', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false);
+        final container = ProviderContainer(
+          overrides: [
+            sharedPrefsProvider.overrideWithValue(prefs),
+            kalinkaProxyProvider.overrideWithValue(api),
+            appLifecycleProvider.overrideWith(_ResumedLifecycle.new),
+            kioskLaunchProvider.overrideWithValue(false),
+            connectionStateProvider.overrideWith(
+              () => ConnectionStateNotifier(async.getClock(DateTime(2026)).now),
+            ),
+          ],
+        );
+        container.read(connectionStateProvider.notifier).startReconnecting();
+        async.elapse(const Duration(seconds: 30));
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.offline,
+        );
+
+        container.read(kioskProvider.notifier).enter();
+        async.flushMicrotasks();
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+        final probes = api.listModulesCalls;
+        async.elapse(const Duration(seconds: 5));
+        expect(api.listModulesCalls, probes + 1);
+        container.dispose();
+      });
+    });
+
+    test('a probe that hangs holds back the next one', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false)..stall = Completer<void>();
+        final container = timedContainer(async, api, kiosk: true);
+        container.read(connectionStateProvider.notifier).startReconnecting();
+
+        async.elapse(const Duration(seconds: 25));
+        expect(api.listModulesCalls, 1);
+
+        api.stall!.complete();
+        api.stall = null;
+        async.elapse(const Duration(seconds: 5));
+        expect(api.listModulesCalls, 2);
+        container.dispose();
+      });
+    });
+
+    test('a probe failing after the user moved on leaves the state alone', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false)..stall = Completer<void>();
+        final container = timedContainer(async, api, kiosk: false);
+        final notifier = container.read(connectionStateProvider.notifier);
+        notifier.startReconnecting();
+        async.elapse(const Duration(seconds: 35));
+
+        notifier.connecting();
+        api.stall!.complete();
+        async.flushMicrotasks();
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.connecting,
         );
         container.dispose();
       });

@@ -72,6 +72,15 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
       _onLifecycleChange(next);
     });
 
+    // A display opened while offline has no Retry button, so probe again.
+    ref.listen<bool>(kioskActiveProvider, (_, active) {
+      if (active && state == ConnectionStatus.offline) {
+        _reconnectStartedAt = _now();
+        state = ConnectionStatus.reconnecting;
+        _startRetryTimer();
+      }
+    });
+
     return settings.isSet ? ConnectionStatus.connecting : ConnectionStatus.none;
   }
 
@@ -147,10 +156,14 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
 
   void _startRetryTimer() {
     _retryTimer?.cancel();
-    _retryTimer = Timer(_retryInterval, () {
-      _startRetryTimer();
-      _attemptReconnect();
+    late final Timer timer;
+    // Schedules the next probe only once this one settles, so a server that
+    // accepts but hangs never has probes piling up.
+    timer = Timer(_retryInterval, () async {
+      await _attemptReconnect();
+      if (identical(_retryTimer, timer)) _startRetryTimer();
     });
+    _retryTimer = timer;
   }
 
   Duration get _retryInterval {
@@ -208,8 +221,13 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
 
   void _checkEscalation() {
     // A display has no Retry button and often starts before its server, so it
-    // never gives up.
-    if (!escalationReached || ref.read(kioskActiveProvider)) return;
+    // never gives up. A late probe must not knock a connecting or disconnected
+    // state offline.
+    if (state != ConnectionStatus.reconnecting ||
+        !escalationReached ||
+        ref.read(kioskActiveProvider)) {
+      return;
+    }
     _cancelRetryTimer();
     state = ConnectionStatus.offline;
   }
