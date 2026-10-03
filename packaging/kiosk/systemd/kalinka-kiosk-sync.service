@@ -1,5 +1,6 @@
 [Unit]
 Description=Start or stop the Kalinka now-playing display to match the server's settings
+After=kalinka.service network-online.target
 
 [Service]
 Type=oneshot

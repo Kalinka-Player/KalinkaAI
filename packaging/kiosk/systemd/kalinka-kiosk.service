@@ -2,6 +2,8 @@
 Description=Kalinka now-playing display
 # Started and stopped by kalinka-kiosk-sync.service, never enabled directly.
 StartLimitIntervalSec=0
+# Ordering only: the display may face a server on another machine.
+After=kalinka.service
 
 [Service]
 # Skips the start while the display is switched off — and a skip, unlike a
