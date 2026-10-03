@@ -1,7 +1,9 @@
+import 'dart:async' show Completer;
 import 'dart:io' show HttpRequest, HttpServer, WebSocket, WebSocketTransformer;
 
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:dio/dio.dart' show DioException, RequestOptions;
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,6 +12,7 @@ import 'package:kalinka/data_model/data_model.dart' show ModulesAndDevices;
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
 
@@ -24,11 +27,13 @@ class _FakeApi implements KalinkaPlayerProxy {
   _FakeApi({this.shouldSucceed = true});
 
   bool shouldSucceed;
+  Completer<void>? reply;
   int listModulesCalls = 0;
 
   @override
   Future<ModulesAndDevices> listModules() async {
     listModulesCalls++;
+    await reply?.future;
     if (!shouldSucceed) {
       throw DioException(requestOptions: RequestOptions(path: '/server/modules'));
     }
@@ -40,11 +45,13 @@ class _FakeApi implements KalinkaPlayerProxy {
       throw UnimplementedError('${invocation.memberName}');
 }
 
-/// Lifecycle stuck at `resumed` so the reconnect path runs without a real
+/// Lifecycle starting at `resumed` so the reconnect path runs without a real
 /// AppLifecycleListener (which would need a full widget binding).
 class _ResumedLifecycle extends AppLifecycleNotifier {
   @override
   AppLifecycleState build() => AppLifecycleState.resumed;
+
+  void set(AppLifecycleState next) => state = next;
 }
 
 void main() {
@@ -112,6 +119,161 @@ void main() {
       container.read(connectionStateProvider),
       isNot(ConnectionStatus.connected),
     );
+  });
+
+  group('escalation to offline (issue #67)', () {
+    late SharedPreferences prefs;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({
+        'Kalinka.host': 'localhost',
+        'Kalinka.port': 8080,
+        'Kalinka.name': 'Test',
+      });
+      prefs = await SharedPreferences.getInstance();
+    });
+
+    // DateTime.now() ignores fakeAsync, so the notifier gets the fake clock.
+    ProviderContainer fakeClockContainer(
+      FakeAsync async,
+      _FakeApi api, {
+      required bool kiosk,
+    }) {
+      final start = DateTime(2026, 10, 3);
+      final container = ProviderContainer(
+        overrides: [
+          sharedPrefsProvider.overrideWithValue(prefs),
+          kalinkaProxyProvider.overrideWithValue(api),
+          appLifecycleProvider.overrideWith(_ResumedLifecycle.new),
+          kioskLaunchProvider.overrideWithValue(kiosk),
+          connectionStateProvider.overrideWith(
+            () => ConnectionStateNotifier(now: () => start.add(async.elapsed)),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('the display keeps probing until the server answers', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false);
+        final container = fakeClockContainer(async, api, kiosk: true);
+        final epochBefore = container.read(retryEpochProvider);
+
+        container.read(connectionStateProvider.notifier).startReconnecting();
+        async.elapse(const Duration(seconds: 60));
+
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+        final calls = api.listModulesCalls;
+        expect(calls, greaterThanOrEqualTo(12));
+        async.elapse(const Duration(seconds: 10));
+        expect(api.listModulesCalls, greaterThan(calls));
+        expect(container.read(retryEpochProvider), epochBefore);
+
+        api.shouldSucceed = true;
+        async.elapse(const Duration(seconds: 5));
+        expect(container.read(retryEpochProvider), greaterThan(epochBefore));
+      });
+    });
+
+    test('off the display, failures past 30s go offline and stop probing', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false);
+        final container = fakeClockContainer(async, api, kiosk: false);
+
+        container.read(connectionStateProvider.notifier).startReconnecting();
+        async.elapse(const Duration(seconds: 35));
+
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.offline,
+        );
+        final calls = api.listModulesCalls;
+        async.elapse(const Duration(seconds: 30));
+        expect(api.listModulesCalls, calls);
+      });
+    });
+
+    test('opening the display while offline starts probing again', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false);
+        final container = fakeClockContainer(async, api, kiosk: false);
+
+        container.read(connectionStateProvider.notifier).startReconnecting();
+        async.elapse(const Duration(seconds: 35));
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.offline,
+        );
+        final calls = api.listModulesCalls;
+        final manualEpochBefore = container.read(manualReconnectEpochProvider);
+
+        container.read(kioskProvider.notifier).enter();
+        async.flushMicrotasks();
+
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+        expect(api.listModulesCalls, calls + 1);
+        expect(container.read(manualReconnectEpochProvider), manualEpochBefore);
+
+        async.elapse(const Duration(seconds: 60));
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+        expect(api.listModulesCalls, greaterThan(calls + 1));
+      });
+    });
+
+    test('opening the display in the background waits for resume', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false);
+        final container = fakeClockContainer(async, api, kiosk: false);
+        final lifecycle =
+            container.read(appLifecycleProvider.notifier) as _ResumedLifecycle;
+
+        container.read(connectionStateProvider.notifier).startReconnecting();
+        async.elapse(const Duration(seconds: 35));
+        final timers = async.periodicTimerCount;
+        final calls = api.listModulesCalls;
+
+        lifecycle.set(AppLifecycleState.paused);
+        container.read(kioskProvider.notifier).enter();
+        async.elapse(const Duration(seconds: 30));
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+        expect(async.periodicTimerCount, timers);
+        expect(api.listModulesCalls, calls);
+
+        lifecycle.set(AppLifecycleState.resumed);
+        async.flushMicrotasks();
+        expect(async.periodicTimerCount, timers + 1);
+        expect(api.listModulesCalls, calls + 1);
+      });
+    });
+
+    test('a slow probe is not joined by another every tick', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false)..reply = Completer<void>();
+        final container = fakeClockContainer(async, api, kiosk: true);
+
+        container.read(connectionStateProvider.notifier).startReconnecting();
+        async.elapse(const Duration(seconds: 30));
+        expect(api.listModulesCalls, 1);
+
+        api.reply!.complete();
+        async.elapse(const Duration(seconds: 5));
+        expect(api.listModulesCalls, 2);
+      });
+    });
   });
 
   // Issue #21, second failure mode (Copilot review): the play-queue socket is

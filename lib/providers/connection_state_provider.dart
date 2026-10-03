@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart' show Logger;
 import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
+import 'kiosk_provider.dart' show kioskActiveProvider;
 import 'playback_time_provider.dart' show appLifecycleProvider;
 
 final _logger = Logger();
@@ -35,8 +36,14 @@ class _RetryEpochNotifier extends Notifier<int> {
 }
 
 class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
+  ConnectionStateNotifier({DateTime Function()? now})
+    : _now = now ?? DateTime.now;
+
+  final DateTime Function() _now;
+
   Timer? _retryTimer;
   int _retryCount = 0;
+  int _probesInFlight = 0;
   DateTime? _reconnectStartedAt;
 
   /// When the app was last backgrounded (null while foregrounded).
@@ -57,7 +64,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   /// True when reconnecting has been going for >= 30 seconds.
   bool get escalationReached =>
       _reconnectStartedAt != null &&
-      DateTime.now().difference(_reconnectStartedAt!).inSeconds >= 30;
+      _now().difference(_reconnectStartedAt!).inSeconds >= 30;
 
   @override
   ConnectionStatus build() {
@@ -68,6 +75,17 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
       _onLifecycleChange(next);
     });
 
+    // A display opened after the app gave up has no Retry button to press.
+    // Not retryNow(): that would also bring back the Android media controls.
+    ref.listen<bool>(kioskActiveProvider, (_, active) {
+      if (!active || state != ConnectionStatus.offline) return;
+      _leaveOffline();
+      // While backgrounded, resuming starts the timer.
+      if (ref.read(appLifecycleProvider) != AppLifecycleState.resumed) return;
+      _startRetryTimer();
+      _attemptReconnect();
+    });
+
     return settings.isSet ? ConnectionStatus.connecting : ConnectionStatus.none;
   }
 
@@ -75,7 +93,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     if (lifecycle == AppLifecycleState.resumed) {
       final backgroundedFor = _backgroundedAt == null
           ? Duration.zero
-          : DateTime.now().difference(_backgroundedAt!);
+          : _now().difference(_backgroundedAt!);
       _backgroundedAt = null;
 
       // Foregrounded: restart reconnection immediately if it was paused.
@@ -86,10 +104,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
         // socket hangs while `offline` (see websocket_provider), so it must see
         // a non-offline status to actually rebuild and connect — mirrors
         // retryNow().
-        if (state == ConnectionStatus.offline) {
-          _reconnectStartedAt = DateTime.now();
-          state = ConnectionStatus.reconnecting;
-        }
+        if (state == ConnectionStatus.offline) _leaveOffline();
         _startRetryTimer();
         _attemptReconnect();
       } else if (state == ConnectionStatus.connected &&
@@ -105,7 +120,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
       // Backgrounded: pause reconnection attempts to save battery and record
       // when we went down so resume can tell a quick app-switch from a long
       // suspend.
-      _backgroundedAt ??= DateTime.now();
+      _backgroundedAt ??= _now();
       _cancelRetryTimer();
     }
   }
@@ -119,7 +134,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     _cancelRetryTimer();
     _retryCount = 0;
     _reconnectStartedAt = null;
-    lastConnectedAt = DateTime.now();
+    lastConnectedAt = _now();
     state = ConnectionStatus.connected;
   }
 
@@ -135,7 +150,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
       return;
     }
     _retryCount = 0;
-    _reconnectStartedAt = DateTime.now();
+    _reconnectStartedAt = _now();
     state = ConnectionStatus.reconnecting;
     _startRetryTimer();
   }
@@ -143,7 +158,8 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   void _startRetryTimer() {
     _retryTimer?.cancel();
     _retryTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      _attemptReconnect();
+      // A slow server would otherwise pile up one probe per tick.
+      if (_probesInFlight == 0) _attemptReconnect();
     });
   }
 
@@ -155,13 +171,17 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   void retryNow() {
     ref.read(manualReconnectEpochProvider.notifier).increment();
     if (state == ConnectionStatus.offline) {
-      _retryCount = 0;
-      _reconnectStartedAt = DateTime.now();
+      _leaveOffline();
       escalationDismissed = false;
-      state = ConnectionStatus.reconnecting;
       _startRetryTimer();
     }
     _attemptReconnect();
+  }
+
+  void _leaveOffline() {
+    _retryCount = 0;
+    _reconnectStartedAt = _now();
+    state = ConnectionStatus.reconnecting;
   }
 
   Future<void> _attemptReconnect() async {
@@ -172,6 +192,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     // Cheap, timeout-bounded reachability probe over HTTP first (a bare
     // WebSocket.connect can hang on a dead network). Only when the server
     // answers do we rebuild the event socket.
+    _probesInFlight++;
     try {
       final proxy = ref.read(kalinkaProxyProvider);
       await proxy.listModules();
@@ -181,6 +202,8 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     } on Exception {
       _checkEscalation();
       return;
+    } finally {
+      _probesInFlight--;
     }
 
     // Server reachable — rebuild the event socket. Reaching `connected` is
@@ -193,8 +216,11 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   }
 
   void _checkEscalation() {
+    // The display has no Retry button and often starts before the server
+    // listens, so it keeps probing until the server answers.
+    if (ref.read(kioskActiveProvider)) return;
     if (_reconnectStartedAt != null &&
-        DateTime.now().difference(_reconnectStartedAt!).inSeconds >= 30) {
+        _now().difference(_reconnectStartedAt!).inSeconds >= 30) {
       _cancelRetryTimer();
       state = ConnectionStatus.offline;
     }

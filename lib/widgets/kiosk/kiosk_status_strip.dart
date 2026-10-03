@@ -263,7 +263,7 @@ class _Reconnecting extends StatelessWidget {
         SizedBox(width: s(12)),
         Flexible(
           child: Text(
-            'Reconnecting to $serverName…',
+            'Waiting for $serverName…',
             style: KalinkaFonts.sans(
               fontSize: s(17),
               fontWeight: FontWeight.w500,
