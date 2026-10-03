@@ -10,7 +10,7 @@ import '../utils/haptics.dart';
 import 'kalinka_bottom_sheet.dart';
 
 /// Actions that can be returned from the server sheet.
-enum ServerSheetAction { openSettings, openDiscovery }
+enum ServerSheetAction { openSettings, openDiscovery, openPlugins }
 
 /// Content body for the server sheet — used directly by [showKalinkaBottomSheet]
 /// on phone, and wrapped by [ServerSheet] (with animation/scrim) on tablet.
@@ -23,70 +23,79 @@ class ServerSheetContent extends ConsumerWidget {
     final settings = ref.watch(connectionSettingsProvider);
     final serverInfo = ref.watch(serverInfoProvider);
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Section label
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
-          child: Text('SERVER', style: KalinkaTextStyles.sectionHeaderMuted),
-        ),
-        // Status card
-        _ServerStatusCard(
-          connectionState: connectionState,
-          settings: settings,
-          serverInfo: serverInfo,
-        ),
-        const SizedBox(height: 4),
-        // Separator
-        const SheetDivider(),
-        // Server settings row
-        SheetRow(
-          icon: Icons.settings_outlined,
-          iconBackground: KalinkaColors.surfaceOverlay,
-          iconColor: KalinkaColors.textSecondary,
-          label: 'Server settings',
-          sublabel: 'Modules, audio, enrichment',
-          trailing: const SheetChevron(),
-          onTap: () {
-            KalinkaHaptics.lightImpact();
-            Navigator.pop(context, ServerSheetAction.openSettings);
-          },
-        ),
-        // Web is bound to its serving origin — no discovery, no disconnect.
-        if (!kIsWeb) ...[
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Section label
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+            child: Text('SERVER', style: KalinkaTextStyles.sectionHeaderMuted),
+          ),
+          // Status card
+          _ServerStatusCard(
+            connectionState: connectionState,
+            settings: settings,
+            serverInfo: serverInfo,
+          ),
+          const SizedBox(height: 4),
+          // Separator
           const SheetDivider(),
-          // Connect to different server
+          // Server settings row
           SheetRow(
-            icon: Icons.language,
+            icon: Icons.settings_outlined,
             iconBackground: KalinkaColors.surfaceOverlay,
             iconColor: KalinkaColors.textSecondary,
-            label: 'Connect to different server',
-            sublabel: 'Scan network for other instances',
+            label: 'Server settings',
+            sublabel: 'Modules, audio, enrichment',
             trailing: const SheetChevron(),
             onTap: () {
               KalinkaHaptics.lightImpact();
-              Navigator.pop(context, ServerSheetAction.openDiscovery);
+              Navigator.pop(context, ServerSheetAction.openSettings);
             },
           ),
-          const SheetDivider(),
-          // Disconnect
-          SheetRow(
-            icon: Icons.logout,
-            iconBackground: KalinkaColors.accent.withValues(alpha: 0.14),
-            iconColor: KalinkaColors.accent,
-            label: 'Disconnect',
-            onTap: () async {
-              KalinkaHaptics.heavyImpact();
-              await ref.read(connectionSettingsProvider.notifier).clearDevice();
-              ref.read(connectionStateProvider.notifier).disconnected();
-              if (context.mounted) Navigator.pop(context);
-            },
-          ),
+          if (ref.watch(pluginCatalogEnabledProvider))
+            _PluginsRow(
+              onTap: () =>
+                  Navigator.pop(context, ServerSheetAction.openPlugins),
+            ),
+          // Web is bound to its serving origin — no discovery, no disconnect.
+          if (!kIsWeb) ...[
+            const SheetDivider(),
+            // Connect to different server
+            SheetRow(
+              icon: Icons.language,
+              iconBackground: KalinkaColors.surfaceOverlay,
+              iconColor: KalinkaColors.textSecondary,
+              label: 'Connect to different server',
+              sublabel: 'Scan network for other instances',
+              trailing: const SheetChevron(),
+              onTap: () {
+                KalinkaHaptics.lightImpact();
+                Navigator.pop(context, ServerSheetAction.openDiscovery);
+              },
+            ),
+            const SheetDivider(),
+            // Disconnect
+            SheetRow(
+              icon: Icons.logout,
+              iconBackground: KalinkaColors.accent.withValues(alpha: 0.14),
+              iconColor: KalinkaColors.accent,
+              label: 'Disconnect',
+              onTap: () async {
+                KalinkaHaptics.heavyImpact();
+                await ref
+                    .read(connectionSettingsProvider.notifier)
+                    .clearDevice();
+                ref.read(connectionStateProvider.notifier).disconnected();
+                if (context.mounted) Navigator.pop(context);
+              },
+            ),
+          ],
+          const _AppVersionFooter(),
         ],
-        const _AppVersionFooter(),
-      ],
+      ),
     );
   }
 }
@@ -253,12 +262,14 @@ class ServerSheet extends ConsumerStatefulWidget {
   final VoidCallback onClose;
   final VoidCallback onOpenDiscovery;
   final VoidCallback onOpenSettings;
+  final VoidCallback onOpenPlugins;
 
   const ServerSheet({
     super.key,
     required this.onClose,
     required this.onOpenDiscovery,
     required this.onOpenSettings,
+    required this.onOpenPlugins,
   });
 
   @override
@@ -314,61 +325,71 @@ class _ServerSheetState extends ConsumerState<ServerSheet>
         child: Container(
           color: Colors.black.withValues(alpha: 0.60),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              const Spacer(),
-              SlideTransition(
-                position: _slideAnimation,
-                child: GestureDetector(
-                  onTap: () {}, // Prevent backdrop tap from passing through
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: KalinkaColors.surfaceRaised,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(24),
-                      ),
-                      border: const Border(
-                        top: BorderSide(color: KalinkaColors.borderDefault),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.7),
-                          blurRadius: 60,
-                          offset: const Offset(0, -20),
+              Flexible(
+                child: SlideTransition(
+                  position: _slideAnimation,
+                  child: GestureDetector(
+                    onTap: () {}, // Prevent backdrop tap from passing through
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: KalinkaColors.surfaceRaised,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(24),
                         ),
-                      ],
-                    ),
-                    child: SafeArea(
-                      top: false,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Drag handle
-                            Center(
-                              child: Container(
-                                width: 36,
-                                height: 4,
-                                margin: const EdgeInsets.only(top: 12),
-                                decoration: BoxDecoration(
-                                  color: KalinkaColors.surfaceOverlay,
-                                  borderRadius: BorderRadius.circular(2),
+                        border: const Border(
+                          top: BorderSide(color: KalinkaColors.borderDefault),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.7),
+                            blurRadius: 60,
+                            offset: const Offset(0, -20),
+                          ),
+                        ],
+                      ),
+                      child: SafeArea(
+                        top: false,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Drag handle
+                              Center(
+                                child: Container(
+                                  width: 36,
+                                  height: 4,
+                                  margin: const EdgeInsets.only(top: 12),
+                                  decoration: BoxDecoration(
+                                    color: KalinkaColors.surfaceOverlay,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
                                 ),
                               ),
-                            ),
-                            _TabletServerSheetContent(
-                              onClose: _animateClose,
-                              onOpenSettings: () async {
-                                await _animateClose();
-                                widget.onOpenSettings();
-                              },
-                              onOpenDiscovery: () async {
-                                await _animateClose();
-                                widget.onOpenDiscovery();
-                              },
-                            ),
-                          ],
+                              Flexible(
+                                child: SingleChildScrollView(
+                                  child: _TabletServerSheetContent(
+                                    onClose: _animateClose,
+                                    onOpenPlugins: () async {
+                                      await _animateClose();
+                                      widget.onOpenPlugins();
+                                    },
+                                    onOpenSettings: () async {
+                                      await _animateClose();
+                                      widget.onOpenSettings();
+                                    },
+                                    onOpenDiscovery: () async {
+                                      await _animateClose();
+                                      widget.onOpenDiscovery();
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -390,11 +411,13 @@ class _TabletServerSheetContent extends ConsumerWidget {
   final Future<void> Function() onClose;
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenDiscovery;
+  final VoidCallback onOpenPlugins;
 
   const _TabletServerSheetContent({
     required this.onClose,
     required this.onOpenSettings,
     required this.onOpenDiscovery,
+    required this.onOpenPlugins,
   });
 
   @override
@@ -432,6 +455,8 @@ class _TabletServerSheetContent extends ConsumerWidget {
             onOpenSettings();
           },
         ),
+        if (ref.watch(pluginCatalogEnabledProvider))
+          _PluginsRow(onTap: onOpenPlugins),
         // Web is bound to its serving origin — no discovery, no disconnect.
         if (!kIsWeb) ...[
           const SheetDivider(),
@@ -465,4 +490,29 @@ class _TabletServerSheetContent extends ConsumerWidget {
       ],
     );
   }
+}
+
+class _PluginsRow extends StatelessWidget {
+  final VoidCallback onTap;
+  const _PluginsRow({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const SheetDivider(),
+      SheetRow(
+        icon: Icons.extension_outlined,
+        iconBackground: KalinkaColors.surfaceOverlay,
+        iconColor: KalinkaColors.textSecondary,
+        label: 'Plugins',
+        sublabel: 'Browse sources and device controls · Preview',
+        trailing: const SheetChevron(),
+        onTap: () {
+          KalinkaHaptics.lightImpact();
+          onTap();
+        },
+      ),
+    ],
+  );
 }

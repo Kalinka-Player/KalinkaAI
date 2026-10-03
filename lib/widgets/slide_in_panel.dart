@@ -6,7 +6,7 @@ const Duration kSlideInPanelDuration = Duration(milliseconds: 320);
 /// Full-bleed panel that slides in from the right over whatever hosts it.
 ///
 /// Hosted as a `Positioned.fill` in a Stack rather than pushed as a route, so
-/// the tablet layout can put it in the left panel while the phone layout puts
+/// the tablet layout can put it in the right panel while the phone layout puts
 /// it over the whole screen — the same flag re-homes it across the breakpoint.
 ///
 /// [onClose] non-null means overlay mode: the system back and the panel's own

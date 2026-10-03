@@ -17,8 +17,8 @@ class RendererSettingsRoute {
 /// Whether the renderer settings panel is open, and for which renderer.
 ///
 /// A provider rather than a `Navigator.push`, because the panel is hosted by
-/// [MusicPlayerScreen] as an overlay: on tablet it belongs in the left panel
-/// beside Now Playing, which a route — always window-wide — cannot do. The
+/// [MusicPlayerScreen] as an overlay: on tablet it covers the right-hand queue,
+/// leaving Now Playing visible, which a window-wide route cannot do. The
 /// signal has to travel from the picker sheet, opened from deep inside the
 /// mini player or Now Playing, up to that host.
 class RendererSettingsRouteNotifier extends Notifier<RendererSettingsRoute?> {
