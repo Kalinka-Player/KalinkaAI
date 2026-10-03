@@ -761,8 +761,9 @@ class _StandbyView extends ConsumerWidget {
       headline = 'Ready to play';
       hint = 'Choose music in the Kalinka app to play here.';
     } else {
-      headline = 'Can’t reach $serverName';
-      hint = 'Reconnecting — this screen picks up where it left off.';
+      // Usually the server is still starting, so this must not read as a fault.
+      headline = 'Preparing…';
+      hint = 'Waiting for $serverName. This screen picks up by itself.';
     }
 
     return Center(
