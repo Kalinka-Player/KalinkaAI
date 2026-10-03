@@ -39,11 +39,11 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   ConnectionStateNotifier({DateTime Function()? now})
     : _now = now ?? DateTime.now;
 
-  /// Wall clock for the escalation window; tests pass a fake one.
   final DateTime Function() _now;
 
   Timer? _retryTimer;
   int _retryCount = 0;
+  int _probesInFlight = 0;
   DateTime? _reconnectStartedAt;
 
   /// When the app was last backgrounded (null while foregrounded).
@@ -78,12 +78,12 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     // A display opened after the app gave up has no Retry button to press.
     // Not retryNow(): that would also bring back the Android media controls.
     ref.listen<bool>(kioskActiveProvider, (_, active) {
-      if (active && state == ConnectionStatus.offline) {
-        _reconnectStartedAt = _now();
-        state = ConnectionStatus.reconnecting;
-        _startRetryTimer();
-        _attemptReconnect();
-      }
+      if (!active || state != ConnectionStatus.offline) return;
+      _leaveOffline();
+      // While backgrounded, resuming starts the timer.
+      if (ref.read(appLifecycleProvider) != AppLifecycleState.resumed) return;
+      _startRetryTimer();
+      _attemptReconnect();
     });
 
     return settings.isSet ? ConnectionStatus.connecting : ConnectionStatus.none;
@@ -104,10 +104,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
         // socket hangs while `offline` (see websocket_provider), so it must see
         // a non-offline status to actually rebuild and connect — mirrors
         // retryNow().
-        if (state == ConnectionStatus.offline) {
-          _reconnectStartedAt = _now();
-          state = ConnectionStatus.reconnecting;
-        }
+        if (state == ConnectionStatus.offline) _leaveOffline();
         _startRetryTimer();
         _attemptReconnect();
       } else if (state == ConnectionStatus.connected &&
@@ -161,7 +158,8 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   void _startRetryTimer() {
     _retryTimer?.cancel();
     _retryTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      _attemptReconnect();
+      // A slow server would otherwise pile up one probe per tick.
+      if (_probesInFlight == 0) _attemptReconnect();
     });
   }
 
@@ -173,13 +171,17 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   void retryNow() {
     ref.read(manualReconnectEpochProvider.notifier).increment();
     if (state == ConnectionStatus.offline) {
-      _retryCount = 0;
-      _reconnectStartedAt = _now();
+      _leaveOffline();
       escalationDismissed = false;
-      state = ConnectionStatus.reconnecting;
       _startRetryTimer();
     }
     _attemptReconnect();
+  }
+
+  void _leaveOffline() {
+    _retryCount = 0;
+    _reconnectStartedAt = _now();
+    state = ConnectionStatus.reconnecting;
   }
 
   Future<void> _attemptReconnect() async {
@@ -190,6 +192,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     // Cheap, timeout-bounded reachability probe over HTTP first (a bare
     // WebSocket.connect can hang on a dead network). Only when the server
     // answers do we rebuild the event socket.
+    _probesInFlight++;
     try {
       final proxy = ref.read(kalinkaProxyProvider);
       await proxy.listModules();
@@ -199,6 +202,8 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     } on Exception {
       _checkEscalation();
       return;
+    } finally {
+      _probesInFlight--;
     }
 
     // Server reachable — rebuild the event socket. Reaching `connected` is
