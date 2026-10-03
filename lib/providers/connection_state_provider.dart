@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart' show Logger;
 import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
+import 'kiosk_provider.dart' show kioskActiveProvider;
 import 'playback_time_provider.dart' show appLifecycleProvider;
 
 final _logger = Logger();
@@ -35,6 +36,9 @@ class _RetryEpochNotifier extends Notifier<int> {
 }
 
 class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
+  ConnectionStateNotifier([this._now = DateTime.now]);
+
+  final DateTime Function() _now;
   Timer? _retryTimer;
   int _retryCount = 0;
   DateTime? _reconnectStartedAt;
@@ -57,7 +61,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   /// True when reconnecting has been going for >= 30 seconds.
   bool get escalationReached =>
       _reconnectStartedAt != null &&
-      DateTime.now().difference(_reconnectStartedAt!).inSeconds >= 30;
+      _now().difference(_reconnectStartedAt!).inSeconds >= 30;
 
   @override
   ConnectionStatus build() {
@@ -75,7 +79,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     if (lifecycle == AppLifecycleState.resumed) {
       final backgroundedFor = _backgroundedAt == null
           ? Duration.zero
-          : DateTime.now().difference(_backgroundedAt!);
+          : _now().difference(_backgroundedAt!);
       _backgroundedAt = null;
 
       // Foregrounded: restart reconnection immediately if it was paused.
@@ -87,7 +91,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
         // a non-offline status to actually rebuild and connect — mirrors
         // retryNow().
         if (state == ConnectionStatus.offline) {
-          _reconnectStartedAt = DateTime.now();
+          _reconnectStartedAt = _now();
           state = ConnectionStatus.reconnecting;
         }
         _startRetryTimer();
@@ -105,7 +109,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
       // Backgrounded: pause reconnection attempts to save battery and record
       // when we went down so resume can tell a quick app-switch from a long
       // suspend.
-      _backgroundedAt ??= DateTime.now();
+      _backgroundedAt ??= _now();
       _cancelRetryTimer();
     }
   }
@@ -119,7 +123,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     _cancelRetryTimer();
     _retryCount = 0;
     _reconnectStartedAt = null;
-    lastConnectedAt = DateTime.now();
+    lastConnectedAt = _now();
     state = ConnectionStatus.connected;
   }
 
@@ -128,23 +132,33 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     state = ConnectionStatus.none;
   }
 
-  /// Begin automatic reconnect attempts every 5 seconds.
+  /// Begin automatic reconnect attempts: every 5 seconds for the first minute,
+  /// every 15 seconds after.
   void startReconnecting() {
     if (state == ConnectionStatus.reconnecting ||
         state == ConnectionStatus.offline) {
       return;
     }
     _retryCount = 0;
-    _reconnectStartedAt = DateTime.now();
+    _reconnectStartedAt = _now();
     state = ConnectionStatus.reconnecting;
     _startRetryTimer();
   }
 
   void _startRetryTimer() {
     _retryTimer?.cancel();
-    _retryTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _retryTimer = Timer(_retryInterval, () {
+      _startRetryTimer();
       _attemptReconnect();
     });
+  }
+
+  Duration get _retryInterval {
+    final startedAt = _reconnectStartedAt;
+    final slow =
+        startedAt != null &&
+        _now().difference(startedAt) >= const Duration(minutes: 1);
+    return Duration(seconds: slow ? 15 : 5);
   }
 
   void markEscalationDismissed() {
@@ -156,7 +170,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     ref.read(manualReconnectEpochProvider.notifier).increment();
     if (state == ConnectionStatus.offline) {
       _retryCount = 0;
-      _reconnectStartedAt = DateTime.now();
+      _reconnectStartedAt = _now();
       escalationDismissed = false;
       state = ConnectionStatus.reconnecting;
       _startRetryTimer();
@@ -193,11 +207,11 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   }
 
   void _checkEscalation() {
-    if (_reconnectStartedAt != null &&
-        DateTime.now().difference(_reconnectStartedAt!).inSeconds >= 30) {
-      _cancelRetryTimer();
-      state = ConnectionStatus.offline;
-    }
+    // A display has no Retry button and often starts before its server, so it
+    // never gives up.
+    if (!escalationReached || ref.read(kioskActiveProvider)) return;
+    _cancelRetryTimer();
+    state = ConnectionStatus.offline;
   }
 
   void _cancelRetryTimer() {

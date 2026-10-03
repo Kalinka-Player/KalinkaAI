@@ -2,6 +2,7 @@ import 'dart:io' show HttpRequest, HttpServer, WebSocket, WebSocketTransformer;
 
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:dio/dio.dart' show DioException, RequestOptions;
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,6 +11,7 @@ import 'package:kalinka/data_model/data_model.dart' show ModulesAndDevices;
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
 
@@ -47,15 +49,17 @@ class _ResumedLifecycle extends AppLifecycleNotifier {
   AppLifecycleState build() => AppLifecycleState.resumed;
 }
 
+const _localSettings = <String, Object>{
+  'Kalinka.host': 'localhost',
+  'Kalinka.port': 8080,
+  'Kalinka.name': 'Test',
+};
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   Future<ProviderContainer> makeContainer(_FakeApi api) async {
-    SharedPreferences.setMockInitialValues({
-      'Kalinka.host': 'localhost',
-      'Kalinka.port': 8080,
-      'Kalinka.name': 'Test',
-    });
+    SharedPreferences.setMockInitialValues(_localSettings);
     final prefs = await SharedPreferences.getInstance();
     final container = ProviderContainer(
       overrides: [
@@ -112,6 +116,112 @@ void main() {
       container.read(connectionStateProvider),
       isNot(ConnectionStatus.connected),
     );
+  });
+
+  // Issue #67: a kiosk started before its server must not give up on it.
+  group('escalation to offline', () {
+    late SharedPreferences prefs;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues(_localSettings);
+      prefs = await SharedPreferences.getInstance();
+    });
+
+    ProviderContainer timedContainer(
+      FakeAsync async,
+      _FakeApi api, {
+      required bool kiosk,
+    }) => ProviderContainer(
+      overrides: [
+        sharedPrefsProvider.overrideWithValue(prefs),
+        kalinkaProxyProvider.overrideWithValue(api),
+        appLifecycleProvider.overrideWith(_ResumedLifecycle.new),
+        kioskActiveProvider.overrideWithValue(kiosk),
+        connectionStateProvider.overrideWith(
+          () => ConnectionStateNotifier(async.getClock(DateTime(2026)).now),
+        ),
+      ],
+    );
+
+    test('outside the kiosk, gives up after 30 seconds', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false);
+        final container = timedContainer(async, api, kiosk: false);
+        container.read(connectionStateProvider.notifier).startReconnecting();
+
+        async.elapse(const Duration(seconds: 25));
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+
+        async.elapse(const Duration(seconds: 5));
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.offline,
+        );
+        final probes = api.listModulesCalls;
+
+        async.elapse(const Duration(minutes: 1));
+        expect(api.listModulesCalls, probes);
+        container.dispose();
+      });
+    });
+
+    test('on the kiosk, probes every 5 s for a minute, then every 15 s', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false);
+        final container = timedContainer(async, api, kiosk: true);
+        container.read(connectionStateProvider.notifier).startReconnecting();
+
+        async.elapse(const Duration(seconds: 60));
+        expect(api.listModulesCalls, 12);
+
+        async.elapse(const Duration(seconds: 30));
+        expect(api.listModulesCalls, 14);
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+        container.dispose();
+      });
+    });
+
+    test('on the kiosk, a late server is picked up at the next probe', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false);
+        final container = timedContainer(async, api, kiosk: true);
+        container.read(connectionStateProvider.notifier).startReconnecting();
+        async.elapse(const Duration(seconds: 90));
+        final epoch = container.read(retryEpochProvider);
+
+        api.shouldSucceed = true;
+        async.elapse(const Duration(seconds: 15));
+        expect(container.read(retryEpochProvider), epoch + 1);
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+        container.dispose();
+      });
+    });
+
+    test('on the kiosk, a connection restarts the 5 s cadence', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false);
+        final container = timedContainer(async, api, kiosk: true);
+        final notifier = container.read(connectionStateProvider.notifier);
+        notifier.startReconnecting();
+        async.elapse(const Duration(seconds: 90));
+
+        notifier.connected();
+        notifier.startReconnecting();
+        final probes = api.listModulesCalls;
+        async.elapse(const Duration(seconds: 10));
+        expect(api.listModulesCalls, probes + 2);
+        container.dispose();
+      });
+    });
   });
 
   // Issue #21, second failure mode (Copilot review): the play-queue socket is
