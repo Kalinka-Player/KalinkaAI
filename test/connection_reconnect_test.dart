@@ -1,3 +1,4 @@
+import 'dart:async' show Completer;
 import 'dart:io' show HttpRequest, HttpServer, WebSocket, WebSocketTransformer;
 
 import 'package:flutter/widgets.dart' show AppLifecycleState;
@@ -26,11 +27,13 @@ class _FakeApi implements KalinkaPlayerProxy {
   _FakeApi({this.shouldSucceed = true});
 
   bool shouldSucceed;
+  Completer<void>? reply;
   int listModulesCalls = 0;
 
   @override
   Future<ModulesAndDevices> listModules() async {
     listModulesCalls++;
+    await reply?.future;
     if (!shouldSucceed) {
       throw DioException(requestOptions: RequestOptions(path: '/server/modules'));
     }
@@ -42,11 +45,13 @@ class _FakeApi implements KalinkaPlayerProxy {
       throw UnimplementedError('${invocation.memberName}');
 }
 
-/// Lifecycle stuck at `resumed` so the reconnect path runs without a real
+/// Lifecycle starting at `resumed` so the reconnect path runs without a real
 /// AppLifecycleListener (which would need a full widget binding).
 class _ResumedLifecycle extends AppLifecycleNotifier {
   @override
   AppLifecycleState build() => AppLifecycleState.resumed;
+
+  void set(AppLifecycleState next) => state = next;
 }
 
 void main() {
@@ -223,6 +228,50 @@ void main() {
           ConnectionStatus.reconnecting,
         );
         expect(api.listModulesCalls, greaterThan(calls + 1));
+      });
+    });
+
+    test('opening the display in the background waits for resume', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false);
+        final container = fakeClockContainer(async, api, kiosk: false);
+        final lifecycle =
+            container.read(appLifecycleProvider.notifier) as _ResumedLifecycle;
+
+        container.read(connectionStateProvider.notifier).startReconnecting();
+        async.elapse(const Duration(seconds: 35));
+        final timers = async.periodicTimerCount;
+        final calls = api.listModulesCalls;
+
+        lifecycle.set(AppLifecycleState.paused);
+        container.read(kioskProvider.notifier).enter();
+        async.elapse(const Duration(seconds: 30));
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+        expect(async.periodicTimerCount, timers);
+        expect(api.listModulesCalls, calls);
+
+        lifecycle.set(AppLifecycleState.resumed);
+        async.flushMicrotasks();
+        expect(async.periodicTimerCount, timers + 1);
+        expect(api.listModulesCalls, calls + 1);
+      });
+    });
+
+    test('a slow probe is not joined by another every tick', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false)..reply = Completer<void>();
+        final container = fakeClockContainer(async, api, kiosk: true);
+
+        container.read(connectionStateProvider.notifier).startReconnecting();
+        async.elapse(const Duration(seconds: 30));
+        expect(api.listModulesCalls, 1);
+
+        api.reply!.complete();
+        async.elapse(const Duration(seconds: 5));
+        expect(api.listModulesCalls, 2);
       });
     });
   });
