@@ -1,4 +1,4 @@
-import 'dart:async' show Completer;
+import 'dart:async' show Completer, runZonedGuarded;
 import 'dart:io' show HttpRequest, HttpServer, WebSocket, WebSocketTransformer;
 
 import 'package:flutter/widgets.dart' show AppLifecycleState;
@@ -34,10 +34,15 @@ class _FakeApi implements KalinkaPlayerProxy {
   /// connections before it answers them.
   Completer<void>? stall;
 
+  /// Thrown by every probe while set, like a payload that fails to parse.
+  Error? error;
+
   @override
   Future<ModulesAndDevices> listModules() async {
     listModulesCalls++;
     await stall?.future;
+    final error = this.error;
+    if (error != null) throw error;
     if (!shouldSucceed) {
       throw DioException(requestOptions: RequestOptions(path: '/server/modules'));
     }
@@ -259,6 +264,23 @@ void main() {
         api.stall = null;
         async.elapse(const Duration(seconds: 5));
         expect(api.listModulesCalls, 2);
+        container.dispose();
+      });
+    });
+
+    test('a probe throwing an Error does not end the retries', () {
+      fakeAsync((async) {
+        final api = _FakeApi()..error = TypeError();
+        final errors = <Object>[];
+        late final ProviderContainer container;
+        runZonedGuarded(() {
+          container = timedContainer(async, api, kiosk: true);
+          container.read(connectionStateProvider.notifier).startReconnecting();
+        }, (error, _) => errors.add(error));
+
+        async.elapse(const Duration(seconds: 15));
+        expect(api.listModulesCalls, 3);
+        expect(errors, hasLength(3));
         container.dispose();
       });
     });

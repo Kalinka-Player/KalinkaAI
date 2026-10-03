@@ -80,11 +80,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
 
     // A display opened while offline has no Retry button, so probe again.
     ref.listen<bool>(kioskActiveProvider, (_, active) {
-      if (active && state == ConnectionStatus.offline) {
-        _reconnectStartedAt = _monotonicNow;
-        state = ConnectionStatus.reconnecting;
-        _startRetryTimer();
-      }
+      if (active && state == ConnectionStatus.offline) _beginReconnecting();
     });
 
     return settings.isSet ? ConnectionStatus.connecting : ConnectionStatus.none;
@@ -154,6 +150,10 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
         state == ConnectionStatus.offline) {
       return;
     }
+    _beginReconnecting();
+  }
+
+  void _beginReconnecting() {
     _retryCount = 0;
     _reconnectStartedAt = _monotonicNow;
     state = ConnectionStatus.reconnecting;
@@ -166,8 +166,12 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     // Schedules the next probe only once this one settles, so a server that
     // accepts but hangs never has probes piling up.
     timer = Timer(_retryInterval, () async {
-      await _attemptReconnect();
-      if (identical(_retryTimer, timer)) _startRetryTimer();
+      // An Error from the probe, such as a bad payload, must not end retries.
+      try {
+        await _attemptReconnect();
+      } finally {
+        if (identical(_retryTimer, timer)) _startRetryTimer();
+      }
     });
     _retryTimer = timer;
   }
@@ -184,11 +188,8 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   void retryNow() {
     ref.read(manualReconnectEpochProvider.notifier).increment();
     if (state == ConnectionStatus.offline) {
-      _retryCount = 0;
-      _reconnectStartedAt = _monotonicNow;
       escalationDismissed = false;
-      state = ConnectionStatus.reconnecting;
-      _startRetryTimer();
+      _beginReconnecting();
     }
     _attemptReconnect();
   }
