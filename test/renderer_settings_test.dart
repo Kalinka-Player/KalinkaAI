@@ -873,13 +873,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(SettingsTextInput), findsNothing);
-      final value = tester.widget<Text>(
-        find.descendant(
-          of: find.byType(SettingsReadonlyCard),
-          matching: find.byType(Text),
-        ),
-      );
-      expect(value.textSpan!.toPlainText(), 'Living Room');
+      expect(find.byType(SettingsReadonlyCard), findsNothing);
+      final value = tester.widget<Text>(find.text('Living Room').last);
+      expect(value.data, 'Living Room');
       expect(value.style!.color, KalinkaColors.textSecondary);
     });
   });

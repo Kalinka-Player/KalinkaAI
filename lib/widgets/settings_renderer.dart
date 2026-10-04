@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
 import 'server_update_banner.dart';
 import 'settings_controls/footer_note.dart';
+import 'settings_controls/inline_markdown.dart';
 import 'settings_controls/issue_notes.dart';
 import 'settings_controls/settings_binding.dart';
 import 'settings_controls/module_header_row.dart';
@@ -125,10 +126,39 @@ class SchemaFieldRenderer extends StatelessWidget {
     final isStaged = binding.isStaged(field.path);
     final value = binding.effectiveValue(field.path) ?? field.defaultValue;
 
-    // Read-only fields (including dynamic plugin-resolved status views)
-    // never get an editable control. Render as a labeled elevated card
-    // so users see the value as content, not as a disabled input.
+    // Plain read-only values are metadata, with no input border or fill.
+    // Rich status messages retain their card and markdown presentation.
     if (field.readonly) {
+      if (field.widget == WidgetKind.text) {
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(field.label, style: KalinkaTextStyles.trayRowSublabel),
+                  Text(
+                    (value ?? '').toString(),
+                    style: KalinkaTextStyles.trayRowSublabel.copyWith(
+                      color: KalinkaColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              if (field.help != null) ...[
+                const SizedBox(height: 2),
+                InlineMarkdown(
+                  text: field.help!,
+                  style: KalinkaTextStyles.trayRowSublabel,
+                ),
+              ],
+            ],
+          ),
+        );
+      }
       return SettingsRow(
         label: field.label,
         sublabel: field.help,
