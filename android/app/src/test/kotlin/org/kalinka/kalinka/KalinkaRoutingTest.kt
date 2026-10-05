@@ -318,13 +318,14 @@ class KalinkaRoutingTest {
     @Test fun anotherInstallsRoutesForTheSameRenderersAreNeitherSelectedNorListed() {
         val context = RuntimeEnvironment.getApplication()
         routing.stop()
+        ready = false
         shadowOf(Looper.getMainLooper()).idle()
         // Registered while ours are gone, so its routes come first in the router.
         val other = OtherInstallProvider(context)
         router.addProvider(other)
         try {
             routing.start(server.hostName, server.port)
-            await { ready }
+            await { ready && router.selectedRoute.name == "Kitchen" }
             val theirs = router.routes.filter { it.provider.packageName == OTHER_PACKAGE }
             assertEquals(2, theirs.size)
             assertTrue(theirs.none { it.supportsControlCategory(category) })
