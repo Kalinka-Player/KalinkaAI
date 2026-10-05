@@ -40,6 +40,7 @@ internal class KalinkaRouting(
     private val outputChanged: (Boolean) -> Unit,
 ) : KalinkaRoutes.Commands {
     private val routerContext = context.applicationContext
+    private val category = KalinkaRouteProvider.category(routerContext)
     private val router = MediaRouter.getInstance(routerContext)
     private val state get() = KalinkaRoutes.state
     private val client = OkHttpClient.Builder().callTimeout(15, TimeUnit.SECONDS).build()
@@ -68,7 +69,7 @@ internal class KalinkaRouting(
         override fun onRouteRemoved(router: MediaRouter, route: MediaRouter.RouteInfo) { reconcile() }
         override fun onRouteSelected(router: MediaRouter, route: MediaRouter.RouteInfo, reason: Int) {
             selectingId = null
-            if (route.supportsControlCategory(KalinkaRouteProvider.CATEGORY)) {
+            if (route.supportsControlCategory(category)) {
                 hadRemoteRoute = true
                 lostOutput = false
                 detached = false
@@ -108,7 +109,7 @@ internal class KalinkaRouting(
             .setTransferToLocalEnabled(false)
             .setOutputSwitcherEnabled(true).build()
         router.addCallback(
-            MediaRouteSelector.Builder().addControlCategory(KalinkaRouteProvider.CATEGORY).build(),
+            MediaRouteSelector.Builder().addControlCategory(category).build(),
             callback,
             MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY or MediaRouter.CALLBACK_FLAG_UNFILTERED_EVENTS,
         )
@@ -139,7 +140,7 @@ internal class KalinkaRouting(
         // Descriptor removal crosses the platform bridge asynchronously. Drop
         // the selected controller now, before a new connection can mistake its
         // old route (and volume-control ID) for an associated remote output.
-        if (router.selectedRoute.supportsControlCategory(KalinkaRouteProvider.CATEGORY)) {
+        if (router.selectedRoute.supportsControlCategory(category)) {
             router.unselect(MediaRouter.UNSELECT_REASON_DISCONNECTED)
         }
         if (KalinkaRoutes.commands === this) {
@@ -185,7 +186,7 @@ internal class KalinkaRouting(
             refreshVolume()
         }
         val selected = router.selectedRoute
-        val remote = selected.supportsControlCategory(KalinkaRouteProvider.CATEGORY)
+        val remote = selected.supportsControlCategory(category)
         val selectedId = selected.extras?.getString(KalinkaRouteProvider.RENDERER_ID)
         // Keep the token/notification during a confirmed renderer change while
         // its descriptor crosses the AndroidX/platform bridge asynchronously.
@@ -214,11 +215,7 @@ internal class KalinkaRouting(
         }
     }
 
-    // Below API 30 the compat router binds every package's provider service,
-    // so a debug and a release install also see each other's renderers.
-    internal fun outputs(): List<MediaRouter.RouteInfo> = router.routes.filter {
-        it.supportsControlCategory(KalinkaRouteProvider.CATEGORY) && it.provider.packageName == routerContext.packageName
-    }
+    internal fun outputs(): List<MediaRouter.RouteInfo> = router.routes.filter { it.supportsControlCategory(category) }
 
     private fun updateListing() {
         if (Build.VERSION.SDK_INT < 34) return

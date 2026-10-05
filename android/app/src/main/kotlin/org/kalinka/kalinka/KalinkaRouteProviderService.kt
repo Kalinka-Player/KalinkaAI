@@ -26,16 +26,19 @@ class KalinkaRouteProviderService : MediaRouteProviderService() {
 
 internal class KalinkaRouteProvider(context: Context) : MediaRouteProvider(context) {
     companion object {
-        const val CATEGORY = "org.kalinka.kalinka.RENDERER"
         const val RENDERER_ID = "org.kalinka.kalinka.RENDERER_ID"
-        // No PLAY/ENQUEUE actions: Kalinka transfers its existing queue; it is
-        // not a generic RemotePlaybackClient URL receiver for other apps.
-        private val filters = listOf(IntentFilter().apply {
-            addCategory(CATEGORY)
-            addCategory(MediaControlIntent.CATEGORY_REMOTE_PLAYBACK)
-        })
+
+        // Per application ID: below API 30 AndroidX binds every package's
+        // provider, and a debug install publishes the same renderers.
+        fun category(context: Context) = "${context.packageName}.RENDERER"
     }
 
+    // No PLAY/ENQUEUE actions: Kalinka transfers its existing queue; it is
+    // not a generic RemotePlaybackClient URL receiver for other apps.
+    private val filters = listOf(IntentFilter().apply {
+        addCategory(category(context))
+        addCategory(MediaControlIntent.CATEGORY_REMOTE_PLAYBACK)
+    })
     private val controllers = mutableSetOf<OutputController>()
     private val listener: () -> Unit = { publish() }
 

@@ -40,6 +40,7 @@ class KalinkaRoutingTest {
     private lateinit var routing: KalinkaRouting
     private lateinit var provider: KalinkaRouteProvider
     private lateinit var router: MediaRouter
+    private val category get() = KalinkaRouteProvider.category(RuntimeEnvironment.getApplication())
     private val writes = CopyOnWriteArrayList<RecordedRequest>()
     @Volatile private var active = "kitchen"
     @Volatile private var singleRenderer = false
@@ -284,11 +285,11 @@ class KalinkaRoutingTest {
     }
 
     @Test fun stoppingReleasesTheSelectedRouteBeforeAnotherConnectionCanUseIt() {
-        assertTrue(router.selectedRoute.supportsControlCategory(KalinkaRouteProvider.CATEGORY))
+        assertTrue(router.selectedRoute.supportsControlCategory(category))
         routing.stop()
         // Descriptor removal is asynchronous. A new connection must not see
         // the old selection in the meantime and treat it as a ready output.
-        assertFalse(router.selectedRoute.supportsControlCategory(KalinkaRouteProvider.CATEGORY))
+        assertFalse(router.selectedRoute.supportsControlCategory(category))
         assertNull(router.mediaSessionToken)
         assertTrue(writes.isEmpty())
         routing.start(server.hostName, server.port)
@@ -324,7 +325,9 @@ class KalinkaRoutingTest {
         try {
             routing.start(server.hostName, server.port)
             await { ready }
-            assertEquals(2, router.routes.count { it.provider.packageName == OTHER_PACKAGE })
+            val theirs = router.routes.filter { it.provider.packageName == OTHER_PACKAGE }
+            assertEquals(2, theirs.size)
+            assertTrue(theirs.none { it.supportsControlCategory(category) })
             assertEquals(context.packageName, router.selectedRoute.provider.packageName)
             assertEquals("Kitchen", router.selectedRoute.name)
             assertEquals(0, other.selections)
@@ -336,16 +339,17 @@ class KalinkaRoutingTest {
         }
     }
 
-    private class OtherInstallProvider(context: Context) : MediaRouteProvider(object : ContextWrapper(context) {
+    private class OtherInstallProvider(app: Context) : MediaRouteProvider(object : ContextWrapper(app) {
         override fun getPackageName() = OTHER_PACKAGE
     }) {
         var selections = 0
 
         init {
+            val theirCategory = KalinkaRouteProvider.category(context)
             descriptor = MediaRouteProviderDescriptor.Builder().addRoutes(
                 listOf("kitchen" to "Kitchen", "study" to "Study").map { (id, name) ->
                     MediaRouteDescriptor.Builder(id, name)
-                        .addControlFilter(IntentFilter().apply { addCategory(KalinkaRouteProvider.CATEGORY) })
+                        .addControlFilter(IntentFilter().apply { addCategory(theirCategory) })
                         .setExtras(Bundle().apply { putString(KalinkaRouteProvider.RENDERER_ID, id) })
                         .setPlaybackType(MediaRouter.RouteInfo.PLAYBACK_TYPE_REMOTE)
                         .build()

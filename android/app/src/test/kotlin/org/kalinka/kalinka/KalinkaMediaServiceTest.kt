@@ -137,7 +137,7 @@ class KalinkaMediaServiceTest {
         await { KalinkaRoutes.commands == null }
         assertNull(router.mediaSessionToken)
         assertTrue(service.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
-        assertFalse(router.selectedRoute.supportsControlCategory(KalinkaRouteProvider.CATEGORY))
+        assertFalse(router.selectedRoute.supportsControlCategory(KalinkaRouteProvider.category(service)))
         while (server.takeRequest(0, TimeUnit.MILLISECONDS) != null) { }
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
         assertNull("The notification must not reconnect itself", server.takeRequest(1, TimeUnit.SECONDS))
