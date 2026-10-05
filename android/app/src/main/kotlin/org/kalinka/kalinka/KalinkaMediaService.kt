@@ -64,9 +64,8 @@ class KalinkaMediaService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // --- Connection config ---
-    private var host: String = ""
+    private var server = ServerAddress("http", "", 0)
     private var enableOwner: Any? = null
-    private var port: Int = 0
     private var isEnabled = false
 
     private var notificationVisible = false
@@ -164,23 +163,22 @@ class KalinkaMediaService : Service() {
     // Public API (called from KalinkaMediaPlugin)
     // -------------------------------------------------------------------------
 
-    fun enable(newHost: String, newPort: Int, owner: Any? = null) {
-        Log.d(TAG, "enable: host=$newHost port=$newPort")
-        if (isEnabled && newHost == host && newPort == port && queueWs != null && deviceWs != null) {
+    internal fun enable(address: ServerAddress, owner: Any? = null) {
+        Log.d(TAG, "enable: $address")
+        if (isEnabled && address == server && queueWs != null && deviceWs != null) {
             enableOwner = owner
             return
         }
         // If switching servers, fully tear down first so we don't mix state.
-        if (isEnabled && (newHost != host || newPort != port)) {
+        if (isEnabled && address != server) {
             disable()
         }
-        host = newHost
-        port = newPort
+        server = address
         enableOwner = owner
         isEnabled = true
         // Reset playback state — fresh session, fresh state.
         resetPlaybackState()
-        routing.start(host, port)
+        routing.start(server)
         connectQueueWs()
         connectDeviceWs()
     }
@@ -220,7 +218,7 @@ class KalinkaMediaService : Service() {
     // -------------------------------------------------------------------------
 
     private fun connectQueueWs() {
-        val url = "ws://$host:$port/queue/ws"
+        val url = server.webSocketUrl("/queue/ws")
         Log.d(TAG, "connectQueueWs: $url")
         val old = queueWs; queueWs = null; old?.close(1000, null)
 
@@ -262,7 +260,7 @@ class KalinkaMediaService : Service() {
     }
 
     private fun connectDeviceWs() {
-        val url = "ws://$host:$port/device/ws"
+        val url = server.webSocketUrl("/device/ws")
         Log.d(TAG, "connectDeviceWs: $url")
         val old = deviceWs; deviceWs = null; old?.close(1000, null)
 
@@ -429,13 +427,7 @@ class KalinkaMediaService : Service() {
             ?.optJSONObject("image")
             ?.optString("small", "")
             ?.takeIf { it.isNotEmpty() }
-            ?.let { path ->
-                if (path.startsWith("http")) path
-                else {
-                    val sep = if (path.startsWith("/")) "" else "/"
-                    "http://$host:$port$sep$path"
-                }
-            }
+            ?.let(server::resolve)
 
         Log.d(TAG, "albumArt: newArtUrl=$newArtUrl currentAlbumArtUrl=$currentAlbumArtUrl changed=${newArtUrl != currentAlbumArtUrl}")
         if (newArtUrl != currentAlbumArtUrl) {

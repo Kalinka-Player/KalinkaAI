@@ -98,7 +98,7 @@ final webSocketProvider = FutureProvider.family<WebSocketChannel, String>((
   }
 
   final uri = Uri(
-    scheme: 'ws',
+    scheme: settings.wsScheme,
     host: settings.host,
     port: settings.port,
     path: path.startsWith('/') ? path.substring(1) : path,

@@ -47,7 +47,7 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
     private var bindingRegistered = false
 
     // Pending enable call that arrived before the service finished binding.
-    private var pendingEnable: Pair<String, Int>? = null
+    private var pendingEnable: ServerAddress? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -59,10 +59,10 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
             }
             mediaService = localBinder.getService()
             serviceBound = true
-            pendingEnable?.let { (host, port) ->
-                Log.d(TAG, "onServiceConnected: flushing pendingEnable host=$host port=$port")
+            pendingEnable?.let { address ->
+                Log.d(TAG, "onServiceConnected: flushing pendingEnable $address")
                 pendingEnable = null
-                mediaService?.enable(host, port, this@KalinkaMediaPlugin)
+                mediaService?.enable(address, this@KalinkaMediaPlugin)
             }
         }
 
@@ -96,6 +96,7 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
                 val rawPort = args?.get("port")
                 Log.d(TAG, "enableNotification: rawPort=$rawPort (${rawPort?.javaClass?.simpleName})")
                 val host = args?.get("host") as? String ?: ""
+                val scheme = args?.get("scheme") as? String ?: "http"
                 val port = when (rawPort) {
                     is Int -> rawPort
                     is Long -> rawPort.toInt()
@@ -103,11 +104,12 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
                 }
                 Log.d(TAG, "enableNotification: host=$host port=$port serviceBound=$serviceBound")
                 if (host.isNotEmpty() && port > 0) {
+                    val address = ServerAddress(scheme, host, port)
                     if (!serviceBound) {
-                        pendingEnable = Pair(host, port)
+                        pendingEnable = address
                         startAndBindService()
                     } else {
-                        mediaService?.enable(host, port, this)
+                        mediaService?.enable(address, this)
                     }
                 } else {
                     Log.w(TAG, "enableNotification: skipped (host='$host' port=$port)")

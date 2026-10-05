@@ -9,6 +9,7 @@ import '../providers/upgrade_provider.dart';
 import '../data_model/presentation_schema.dart' show PageSpec;
 import '../theme/app_theme.dart';
 import '../widgets/connection_banner.dart';
+import '../widgets/demo_read_only_dialog.dart';
 import '../widgets/kalinka_dialog.dart' show showKalinkaDialog;
 import '../widgets/kalinka_button.dart';
 import '../widgets/pending_changes_banner.dart';
@@ -66,7 +67,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _onApply() async {
-    if (_applying) return;
+    if (_applying || await refusedAsDemo(context, ref) || !mounted) return;
     setState(() => _applying = true);
     try {
       final ready = await ref.read(settingsProvider.notifier).readyToApply();
@@ -340,6 +341,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _onRestart() async {
+    if (await refusedAsDemo(context, ref) || !mounted) return;
     final confirmed = await showKalinkaDialog<bool>(
       context: context,
       builder: (_) => const RestartConfirmDialog(),

@@ -28,6 +28,7 @@ import '../data_model/presentation_schema.dart'
 import '../data_model/renderer_config.dart'
     show RendererConfigResult, RendererConfigSnapshot;
 import '../utils/renderer_fault_text.dart' show rendererSwitchRefusal;
+import 'demo_refusal.dart';
 
 /// A collection was written to between an edit being staged and being sent,
 /// so the server refused the whole edit rather than apply it to a list the
@@ -1138,13 +1139,14 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
 
   /// Settings travel to the renderer over its socket, so the failures are
   /// about that hop rather than about the server.
-  static String _configFailure(DioException e) =>
-      switch (e.response?.statusCode) {
-        404 => 'That output is no longer available',
-        409 => 'That output isn’t connected',
-        504 => 'That output didn’t respond',
-        _ => 'Couldn’t reach that output',
-      };
+  static String _configFailure(DioException e) => e is DemoReadOnlyException
+      ? e.reason
+      : switch (e.response?.statusCode) {
+          404 => 'That output is no longer available',
+          409 => 'That output isn’t connected',
+          504 => 'That output didn’t respond',
+          _ => 'Couldn’t reach that output',
+        };
 
   // A 404 here is the server rejecting an unknown renderer id, not a missing
   // endpoint — the switcher only exists once `listRenderers` has succeeded.
@@ -1184,6 +1186,8 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
       if (response.statusCode != 200) {
         throw const RendererSwitchException('Couldn’t switch output');
       }
+    } on DemoReadOnlyException catch (e) {
+      throw RendererSwitchException(e.reason);
     } on DioException catch (e) {
       final data = e.response?.data;
       throw RendererSwitchException(
@@ -1228,6 +1232,7 @@ final httpClientProvider = Provider<Dio>((ref) {
       sendTimeout: const Duration(seconds: 15),
     ),
   );
+  dio.interceptors.add(DemoReadOnlyInterceptor());
   return dio;
 });
 

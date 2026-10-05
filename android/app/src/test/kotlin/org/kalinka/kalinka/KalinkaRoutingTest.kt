@@ -83,7 +83,7 @@ class KalinkaRoutingTest {
         provider = KalinkaRouteProvider(context)
         router.addProvider(provider) // test-only; production discovers the service
         routing = KalinkaRouting(context) { ready = it }
-        routing.start(server.hostName, server.port)
+        routing.start(ServerAddress("http", server.hostName, server.port))
         routing.queueEvent(JSONObject("""{"event_type":"state_changed","state":{"state":"PLAYING"}}"""))
         await { ready && KalinkaRoutes.state.volume?.current == 25 }
     }
@@ -162,7 +162,7 @@ class KalinkaRoutingTest {
             }
         }
         try {
-            routing.start(server.hostName, server.port)
+            routing.start(ServerAddress("http", server.hostName, server.port))
             routing.setSession(session)
             routing.queueEvent(JSONObject("""{"event_type":"state_changed","state":{"state":"PLAYING"}}"""))
             await { ready && remoteVolume?.maxVolume == 70 }
@@ -272,7 +272,7 @@ class KalinkaRoutingTest {
         routing.stop()
         assertNull(KalinkaRoutes.state.currentId)
         active = "study"
-        routing.start(server.hostName, server.port)
+        routing.start(ServerAddress("http", server.hostName, server.port))
         await { ready && router.selectedRoute.name == "Study" }
         assertTrue(writes.isEmpty())
     }
@@ -285,7 +285,7 @@ class KalinkaRoutingTest {
         assertFalse(router.selectedRoute.supportsControlCategory(KalinkaRouteProvider.CATEGORY))
         assertNull(router.mediaSessionToken)
         assertTrue(writes.isEmpty())
-        routing.start(server.hostName, server.port)
+        routing.start(ServerAddress("http", server.hostName, server.port))
         await { ready && router.selectedRoute.name == "Kitchen" }
         assertTrue(writes.isEmpty())
     }
@@ -302,7 +302,7 @@ class KalinkaRoutingTest {
             assertTrue(provider.descriptor!!.routes.isEmpty())
             assertNull(KalinkaRoutes.commands)
             assertNull(router.mediaSessionToken)
-            routing.start(server.hostName, server.port)
+            routing.start(ServerAddress("http", server.hostName, server.port))
             await { ready && router.selectedRoute.name == "Kitchen" }
         }
         assertTrue(writes.isEmpty())

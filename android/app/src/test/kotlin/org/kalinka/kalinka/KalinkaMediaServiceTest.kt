@@ -78,7 +78,7 @@ class KalinkaMediaServiceTest {
         provider = KalinkaRouteProvider(context)
         router.addProvider(provider)
         service = Robolectric.buildService(KalinkaMediaService::class.java).create().get()
-        service.enable(server.hostName, server.port)
+        service.enable(ServerAddress("http", server.hostName, server.port))
         await { shadowOf(service).lastForegroundNotification != null }
     }
 
@@ -160,7 +160,7 @@ class KalinkaMediaServiceTest {
         assertDisconnectedWithoutRetry()
         val dispatcher = server.dispatcher
         server = MockWebServer().also { it.dispatcher = dispatcher; it.start() }
-        service.enable(server.hostName, server.port)
+        service.enable(ServerAddress("http", server.hostName, server.port))
         await { router.mediaSessionToken != null }
         assertEquals("Kitchen", router.selectedRoute.name)
         assertEquals(1, service.getSystemService(NotificationManager::class.java).activeNotifications.size)
@@ -169,9 +169,9 @@ class KalinkaMediaServiceTest {
     @Test fun oldEngineDetachingCannotDisableTheNewEnginesNotification() {
         val oldOwner = Any()
         val newOwner = Any()
-        service.enable(server.hostName, server.port, oldOwner)
+        service.enable(ServerAddress("http", server.hostName, server.port), oldOwner)
         val token = router.mediaSessionToken
-        service.enable(server.hostName, server.port, newOwner)
+        service.enable(ServerAddress("http", server.hostName, server.port), newOwner)
         service.disable(oldOwner)
         assertEquals(token, router.mediaSessionToken)
         assertEquals(1, service.getSystemService(NotificationManager::class.java).activeNotifications.size)
