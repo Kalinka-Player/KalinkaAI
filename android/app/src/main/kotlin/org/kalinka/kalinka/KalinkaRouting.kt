@@ -204,9 +204,8 @@ internal class KalinkaRouting(
         // descriptors. Selecting it again would create an extra controller.
         val needsSelection = !remote || (Build.VERSION.SDK_INT < 30 && selectedId != current?.id && state.pendingId == null)
         if (!detached && current != null && needsSelection && selectingId != current.id) {
-            val target = router.routes.firstOrNull {
-                it.supportsControlCategory(KalinkaRouteProvider.CATEGORY) &&
-                    it.extras?.getString(KalinkaRouteProvider.RENDERER_ID) == current.id && it.isEnabled
+            val target = outputs().firstOrNull {
+                it.extras?.getString(KalinkaRouteProvider.RENDERER_ID) == current.id && it.isEnabled
             }
             if (target != null) {
                 selectingId = current.id
@@ -215,12 +214,17 @@ internal class KalinkaRouting(
         }
     }
 
+    // Below API 30 the compat router binds every package's provider service,
+    // so a debug and a release install also see each other's renderers.
+    internal fun outputs(): List<MediaRouter.RouteInfo> = router.routes.filter {
+        it.supportsControlCategory(KalinkaRouteProvider.CATEGORY) && it.provider.packageName == routerContext.packageName
+    }
+
     private fun updateListing() {
         if (Build.VERSION.SDK_INT < 34) return
         val rows = state.renderers.associateBy { it.id }
-        val items = router.routes.mapNotNull { route ->
+        val items = outputs().mapNotNull { route ->
             val row = rows[route.extras?.getString(KalinkaRouteProvider.RENDERER_ID)] ?: return@mapNotNull null
-            if (!route.supportsControlCategory(KalinkaRouteProvider.CATEGORY)) return@mapNotNull null
             val item = RouteListingPreference.Item.Builder(route.id)
                 .setSelectionBehavior(if (row.available) RouteListingPreference.Item.SELECTION_BEHAVIOR_TRANSFER else RouteListingPreference.Item.SELECTION_BEHAVIOR_NONE)
             if (!row.available) {
