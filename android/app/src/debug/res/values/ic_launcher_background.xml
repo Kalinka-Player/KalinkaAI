@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- statusOnline, so a debug install is told apart from release at a glance. -->
+    <!-- statusOnline, so a debug install is told apart from release at a glance.
+         Only adaptive icons (API 26+) use it; below that the label tells them apart. -->
     <color name="ic_launcher_background">#3D8A58</color>
 </resources>
