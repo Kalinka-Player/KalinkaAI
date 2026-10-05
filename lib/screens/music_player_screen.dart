@@ -187,6 +187,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     try {
       await ref.read(settingsProvider.notifier).loadConfig();
       if (!mounted || _wizardOpen) return;
+      if (await leaveDemoAddressIfNotADemo(ref)) {
+        showSafeToast(demoServerUnavailable, isError: true);
+        return;
+      }
       final values = ref.read(settingsProvider).values;
       if (values[OnboardingStatusNotifier.serverOobeFlagPath] == false) {
         _openWizard(startAtSetup: true);
@@ -389,7 +393,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         persist: true,
       );
     } catch (_) {
-      showSafeToast(demoServerUnreachable, isError: true);
+      showSafeToast(demoServerUnavailable, isError: true);
     }
   }
 

@@ -132,7 +132,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
       demo.host,
       demo.port,
       scheme: demo.scheme,
-      failure: demoServerUnreachable,
+      failure: demoServerUnavailable,
     );
   }
 

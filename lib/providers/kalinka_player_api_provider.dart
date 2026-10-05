@@ -1215,11 +1215,9 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
   }
 }
 
-final httpClientProvider = Provider<Dio>((ref) {
-  final settings = ref.watch(connectionSettingsProvider);
-  final baseUrl = settings.isSet
-      ? settings.baseUrl.toString()
-      : 'http://127.0.0.1:0';
+/// A client for the server at [baseUrl], as every request to a server is
+/// made: bounded in time, and reading a demo server's refusals in its words.
+Dio kalinkaHttpClient(String baseUrl) {
   // Bound every request so a dead/blackholed route (e.g. Wi-Fi dropped while
   // backgrounded) fails fast instead of hanging forever. Without this the
   // reconnect reachability probe (listModules) could stall indefinitely,
@@ -1234,6 +1232,13 @@ final httpClientProvider = Provider<Dio>((ref) {
   );
   dio.interceptors.add(DemoRefusalInterceptor());
   return dio;
+}
+
+final httpClientProvider = Provider<Dio>((ref) {
+  final settings = ref.watch(connectionSettingsProvider);
+  return kalinkaHttpClient(
+    settings.isSet ? settings.baseUrl.toString() : 'http://127.0.0.1:0',
+  );
 });
 
 // The proxy instance itself (constructed once, disposed automatically)
