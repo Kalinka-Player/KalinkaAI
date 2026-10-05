@@ -138,8 +138,8 @@ class DioLogExportApi implements LogExportApi {
   }) async {
     try {
       return await request();
-    } on DemoReadOnlyException catch (e) {
-      throw LogExportException('demo_read_only', e.reason);
+    } on DemoRefusalException catch (e) {
+      throw LogExportException(e.code, e.reason);
     } on DioException catch (e) {
       final response = e.response;
       if (response == null) throw const LogExportUnreachableException();

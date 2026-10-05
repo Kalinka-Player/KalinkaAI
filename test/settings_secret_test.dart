@@ -6,8 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/presentation_schema.dart';
+import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/widgets/onboarding/onboarding_fields.dart';
@@ -134,6 +136,7 @@ Future<SettingsNotifier> _loaded(ProviderContainer container) async {
 ProviderContainer _container() {
   final container = ProviderContainer(
     overrides: [
+      sharedPrefsProvider.overrideWithValue(_prefs),
       kalinkaProxyProvider.overrideWithValue(
         _FakeApi({
           'schema_version': 'v1',
@@ -147,7 +150,14 @@ ProviderContainer _container() {
   return container;
 }
 
+late SharedPreferences _prefs;
+
 void main() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    _prefs = await SharedPreferences.getInstance();
+  });
+
   group('the field', () {
     testWidgets('a held credential shows as set and reveals nothing', (
       tester,
