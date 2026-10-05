@@ -58,12 +58,16 @@ android {
     }
 
     buildTypes {
-        // Debug is signed with another key, so under the release ID it could
-        // only replace the release install, wiping its settings.
-        debug {
-            applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
-            manifestPlaceholders["appLabel"] = "Kalinka Debug"
+        // Debug and profile are signed with the debug key, so under the release
+        // ID they could only replace the release install, wiping its settings.
+        // Flutter's plugin copies profile from debug before this block runs,
+        // so profile is set here too; it shares the debug install.
+        for (name in listOf("debug", "profile")) {
+            getByName(name) {
+                applicationIdSuffix = ".debug"
+                versionNameSuffix = "-$name"
+                manifestPlaceholders["appLabel"] = "Kalinka Debug"
+            }
         }
         release {
             // Falls back to debug keys when key.properties is absent,

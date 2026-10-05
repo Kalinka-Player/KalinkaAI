@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Profile installs under the debug application ID, so it gets the debug colour. -->
+    <color name="ic_launcher_background">#3D8A58</color>
+</resources>
