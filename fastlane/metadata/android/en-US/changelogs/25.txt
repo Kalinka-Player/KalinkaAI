@@ -1,0 +1,3 @@
+- Try demo server: try Kalinka on a public demo, no server of your own needed
+- Server addresses entered by hand can start with https://
+- Settings that cannot be changed show as plain text

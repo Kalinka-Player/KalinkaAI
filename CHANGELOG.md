@@ -8,6 +8,20 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.16.0
+
+You can now try Kalinka without a server of your own, on a public demo server. This release needs no server update.
+
+### Added
+- A "Try demo server" button, on the no-server screen and under the server list, connects to a public read-only demo. You can search Jamendo's catalogue, queue tracks and play them. Playback is simulated, so nothing is heard, and everyone trying the demo shares one queue. Settings can be looked at but not saved. The browser web UI does not offer it.
+- A server address entered by hand can start with `https://`, for a server behind a reverse proxy that serves HTTPS.
+
+### Changed
+- Settings that cannot be changed show their value as plain text beside the label instead of in a card.
+
+### Fixed
+- The browser web UI, when served over HTTPS (for example behind a reverse proxy), now reaches its server over HTTPS and secure WebSockets. Before, it used plain HTTP and could not connect.
+
 ## 0.15.2
 
 ### Fixed
