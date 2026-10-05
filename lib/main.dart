@@ -43,6 +43,10 @@ void main() async {
       server.host,
     );
     await prefs.setInt(ConnectionSettingsNotifier.sharedPrefPort, server.port);
+    await prefs.setString(
+      ConnectionSettingsNotifier.sharedPrefScheme,
+      server.scheme,
+    );
     await prefs.setBool(OnboardingStatusNotifier.sharedPrefOobeComplete, true);
   }
 

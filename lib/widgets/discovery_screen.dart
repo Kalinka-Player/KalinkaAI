@@ -2,9 +2,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/connection_settings_provider.dart';
-import '../providers/connection_state_provider.dart';
+import '../providers/demo_mode.dart';
 import '../providers/discovery_provider.dart';
-import '../providers/kalinka_player_api_provider.dart';
+import '../providers/server_address.dart';
+import '../providers/server_connect.dart';
 import '../theme/app_theme.dart';
 import 'kalinka_button.dart';
 import 'sonar_animation.dart';
@@ -51,6 +52,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
   bool _showManualEntry = false;
   bool _isConnecting = false;
   String? _connectError;
+  VoidCallback? _retry;
 
   final _hostController = TextEditingController();
   final _portController = TextEditingController(text: '8000');
@@ -78,35 +80,27 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
     super.dispose();
   }
 
-  Future<void> _connectToServer(String name, String host, int port) async {
-    final settings = ref.read(connectionSettingsProvider.notifier);
-    final connection = ref.read(connectionStateProvider.notifier);
-
+  Future<void> _connectToServer(
+    String name,
+    String host,
+    int port, {
+    String scheme = 'http',
+    String failure = 'Could not connect. Check the address and try again.',
+  }) async {
     setState(() {
       _isConnecting = true;
       _connectError = null;
+      _retry = () =>
+          _connectToServer(name, host, port, scheme: scheme, failure: failure);
     });
 
     try {
-      // Save connection settings (in memory only for the setup wizard)
-      if (widget.persistConnection) {
-        await settings.setDevice(name, host, port);
-      } else {
-        settings.setDeviceEphemeral(name, host, port);
-      }
-
-      // Recreate API client against the newly selected server.
-      ref.invalidate(httpClientProvider);
-      ref.invalidate(kalinkaProxyProvider);
-      final api = ref.read(kalinkaProxyProvider);
-
-      // Attempt connection
-      connection.connecting();
-
-      // Try fetching modules as a health check
-      await api.listModules();
-
-      connection.connected();
+      await connectToServer(
+        ref,
+        name: name,
+        address: (scheme: scheme, host: host, port: port),
+        persist: widget.persistConnection,
+      );
 
       // Success — hand off to the embedding wizard, or close discovery
       if (mounted) {
@@ -117,14 +111,29 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
         }
       }
     } catch (e) {
-      // Reset connection state so the retry timer / websocket take over.
-      connection.startReconnecting();
       if (mounted) {
-        setState(() {
-          _connectError = 'Could not connect. Check the address and try again.';
-        });
+        setState(() => _connectError = failure);
       }
     }
+  }
+
+  /// The address field as it has always read — a bare host means port 8000 —
+  /// plus a scheme for a server behind TLS.
+  static ServerAddress? _manualAddress(String input) {
+    if (input.isEmpty) return null;
+    if (input.contains('://')) return parseServerAddress(input);
+    return parseServerAddress(input.contains(':') ? input : '$input:8000');
+  }
+
+  void _tryDemo() {
+    final demo = demoServer();
+    _connectToServer(
+      demoServerName,
+      demo.host,
+      demo.port,
+      scheme: demo.scheme,
+      failure: demoServerUnreachable,
+    );
   }
 
   Future<void> _animateClose() async {
@@ -354,6 +363,14 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
             fullWidth: true,
             onTap: _rescan,
           ),
+          const SizedBox(height: 12),
+          KalinkaButton(
+            label: 'Try demo server',
+            variant: KalinkaButtonVariant.neutral,
+            size: KalinkaButtonSize.normal,
+            fullWidth: true,
+            onTap: _tryDemo,
+          ),
           const SizedBox(height: 20),
           // Separator
           Divider(color: Colors.white.withValues(alpha: 0.07), height: 1),
@@ -467,16 +484,24 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
               ],
             ),
           ),
-          // Manual entry link
           Padding(
             padding: const EdgeInsets.only(bottom: 24),
-            child: _HoverLink(
-              label: 'Enter Address Manually',
-              style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                fontSize: KalinkaTypography.baseSize + 2,
-                decoration: TextDecoration.underline,
-              ),
-              onTap: () => setState(() => _showManualEntry = true),
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 24,
+              runSpacing: 8,
+              children: [
+                _HoverLink(
+                  label: 'Enter Address Manually',
+                  style: _footerLinkStyle,
+                  onTap: () => setState(() => _showManualEntry = true),
+                ),
+                _HoverLink(
+                  label: 'Try Demo Server',
+                  style: _footerLinkStyle,
+                  onTap: _tryDemo,
+                ),
+              ],
             ),
           ),
         ],
@@ -489,6 +514,11 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
       ],
     );
   }
+
+  static final _footerLinkStyle = KalinkaTextStyles.trayRowSublabel.copyWith(
+    fontSize: KalinkaTypography.baseSize + 2,
+    decoration: TextDecoration.underline,
+  );
 
   Widget _buildServerRow(
     DiscoveredServer server,
@@ -700,20 +730,14 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
           variant: KalinkaButtonVariant.accent,
           size: KalinkaButtonSize.compact,
           onTap: () {
-            final input = _hostController.text.trim();
-            if (input.isEmpty) return;
-
-            String host;
-            int port;
-            if (input.contains(':')) {
-              final parts = input.split(':');
-              host = parts[0];
-              port = int.tryParse(parts[1]) ?? 8000;
-            } else {
-              host = input;
-              port = 8000;
-            }
-            _connectToServer('Kalinka Server', host, port);
+            final address = _manualAddress(_hostController.text.trim());
+            if (address == null) return;
+            _connectToServer(
+              'Kalinka Server',
+              address.host,
+              address.port,
+              scheme: address.scheme,
+            );
           },
         ),
       ],
@@ -765,14 +789,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
                   label: 'Try again',
                   variant: KalinkaButtonVariant.neutral,
                   size: KalinkaButtonSize.compact,
-                  onTap: () {
-                    final settings = ref.read(connectionSettingsProvider);
-                    _connectToServer(
-                      settings.name,
-                      settings.host,
-                      settings.port,
-                    );
-                  },
+                  onTap: () => _retry?.call(),
                 ),
                 const SizedBox(width: 12),
                 GestureDetector(

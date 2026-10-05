@@ -8,6 +8,7 @@ import '../providers/settings_provider.dart' show expertModeProvider;
 import '../theme/app_theme.dart';
 import '../widgets/connection_banner.dart';
 import '../widgets/expert_field_list.dart';
+import '../widgets/demo_read_only_dialog.dart';
 import '../widgets/expert_mode_toggle.dart';
 import '../widgets/kalinka_button.dart';
 import '../widgets/kalinka_dialog.dart' show showKalinkaDialog;
@@ -86,7 +87,9 @@ class _RendererSettingsScreenState
           consequence: state.pendingCost.warning,
           busy: state.saving,
           onDiscard: _notifier.discard,
-          onApply: _notifier.save,
+          onApply: () async {
+            if (!await refusedAsDemo(context, ref)) await _notifier.save();
+          },
         ),
         Expanded(child: _buildBody(state, expertMode)),
       ],

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/app_version_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
+import '../providers/demo_mode.dart';
 import '../providers/server_info_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
@@ -119,7 +120,7 @@ class _AppVersionFooter extends ConsumerWidget {
   }
 }
 
-class _ServerStatusCard extends StatelessWidget {
+class _ServerStatusCard extends ConsumerWidget {
   final ConnectionStatus connectionState;
   final ConnectionSettings settings;
   final AsyncValue<ServerInfo> serverInfo;
@@ -131,7 +132,8 @@ class _ServerStatusCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDemo = ref.watch(demoModeProvider);
     Color dotColor;
     String stateLabel;
     switch (connectionState) {
@@ -158,7 +160,7 @@ class _ServerStatusCard extends StatelessWidget {
     final versionText = serverInfo.whenOrNull(data: (info) => info.version);
 
     final detailParts = <String>[
-      if (settings.host.isNotEmpty) '${settings.host}:${settings.port}',
+      if (settings.host.isNotEmpty) settings.displayAddress,
       if (versionText != null) 'v$versionText',
       if (latencyText != null && connectionState == ConnectionStatus.connected)
         latencyText,
@@ -199,15 +201,25 @@ class _ServerStatusCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    settings.name.isNotEmpty
-                        ? settings.name
-                        : 'No server configured',
-                    style: KalinkaTextStyles.trayRowLabel.copyWith(
-                      fontSize: KalinkaTypography.baseSize + 3,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          settings.name.isNotEmpty
+                              ? settings.name
+                              : 'No server configured',
+                          style: KalinkaTextStyles.trayRowLabel.copyWith(
+                            fontSize: KalinkaTypography.baseSize + 3,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (isDemo) ...[
+                        const SizedBox(width: 8),
+                        const _DemoPill(),
+                      ],
+                    ],
                   ),
                   if (detailParts.isNotEmpty) ...[
                     const SizedBox(height: 3),
@@ -240,6 +252,32 @@ class _ServerStatusCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Marks the read-only demo server, so a visitor knows why changes are
+/// refused.
+class _DemoPill extends StatelessWidget {
+  const _DemoPill();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: KalinkaColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: KalinkaColors.borderDefault),
+      ),
+      child: Text(
+        'DEMO',
+        style: KalinkaTextStyles.tagPill.copyWith(
+          color: KalinkaColors.textMuted,
+          fontSize: KalinkaTypography.baseSize - 2,
+          letterSpacing: 0.8,
         ),
       ),
     );

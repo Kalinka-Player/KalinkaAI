@@ -55,11 +55,12 @@ void main() {
 
   Future<ProviderContainer> create({
     ConnectionStatus status = ConnectionStatus.connected,
-  }) async {
-    SharedPreferences.setMockInitialValues({
+    Map<String, Object> server = const {
       'Kalinka.host': 'server.test',
       'Kalinka.port': 8000,
-    });
+    },
+  }) async {
+    SharedPreferences.setMockInitialValues(server);
     final prefs = await SharedPreferences.getInstance();
     final container = ProviderContainer(
       overrides: [
@@ -84,7 +85,26 @@ void main() {
     );
     await pumpEventQueue();
     expect(methods(), ['enableNotification']);
-    expect(calls.single.arguments, {'host': 'server.test', 'port': 8000});
+    expect(calls.single.arguments, {
+      'host': 'server.test',
+      'port': 8000,
+      'scheme': 'http',
+    });
+  });
+
+  test('a server behind TLS is handed over with its scheme', () async {
+    await create(
+      server: {
+        'Kalinka.host': 'demo.test',
+        'Kalinka.port': 443,
+        'Kalinka.scheme': 'https',
+      },
+    );
+    expect(calls.single.arguments, {
+      'host': 'demo.test',
+      'port': 443,
+      'scheme': 'https',
+    });
   });
 
   test(

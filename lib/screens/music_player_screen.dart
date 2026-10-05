@@ -5,6 +5,7 @@ import '../data_model/data_model.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
+import '../providers/demo_mode.dart';
 import '../providers/kalinka_player_api_provider.dart';
 import '../providers/onboarding_provider.dart';
 import '../providers/playback_failure_provider.dart';
@@ -12,6 +13,7 @@ import '../providers/renderer_host_provider.dart' show rendererIdentityProvider;
 import '../providers/renderer_provider.dart';
 import '../providers/renderer_settings_route_provider.dart';
 import '../providers/search_session_provider.dart';
+import '../providers/server_connect.dart';
 import '../providers/settings_provider.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
@@ -364,11 +366,31 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                 ),
                 onTap: () => setState(() => _discoveryOpen = true),
               ),
+              const SizedBox(height: 12),
+              KalinkaButton(
+                label: 'Try demo server',
+                variant: KalinkaButtonVariant.neutral,
+                size: KalinkaButtonSize.normal,
+                onTap: _tryDemo,
+              ),
             ],
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _tryDemo() async {
+    try {
+      await connectToServer(
+        ref,
+        name: demoServerName,
+        address: demoServer(),
+        persist: true,
+      );
+    } catch (_) {
+      showSafeToast(demoServerUnreachable, isError: true);
+    }
   }
 
   /// An output failure arrives in the server's words, which name renderers by

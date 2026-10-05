@@ -180,7 +180,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         : connection.name;
     await ref
         .read(connectionSettingsProvider.notifier)
-        .setDevice(name, connection.host, connection.port);
+        .setDevice(
+          name,
+          connection.host,
+          connection.port,
+          scheme: connection.scheme,
+        );
     await ref.read(onboardingStatusProvider.notifier).markOobeComplete();
 
     // Detached on purpose: the wizard pops right after this commit, and the

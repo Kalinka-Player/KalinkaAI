@@ -74,13 +74,10 @@ class MediaNotificationNotifier extends Notifier<void> {
     final settings = ref.read(connectionSettingsProvider);
     if (!settings.isSet) return;
     _enableWhenConnected = false;
-    _enable(settings.host, settings.port);
-  }
-
-  void _enable(String host, int port) {
     _methodChannel.invokeMethod<void>('enableNotification', {
-      'host': host,
-      'port': port,
+      'host': settings.host,
+      'port': settings.port,
+      'scheme': settings.scheme,
     });
   }
 
