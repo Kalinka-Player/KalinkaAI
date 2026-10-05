@@ -1,10 +1,16 @@
 package org.kalinka.kalinka
 
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.IntentFilter
+import android.os.Bundle
 import android.os.Looper
 import android.support.v4.media.session.MediaSessionCompat
 import android.view.KeyEvent
 import androidx.media.VolumeProviderCompat
+import androidx.mediarouter.media.MediaRouteDescriptor
 import androidx.mediarouter.media.MediaRouteProvider
+import androidx.mediarouter.media.MediaRouteProviderDescriptor
 import androidx.mediarouter.media.MediaRouter
 import androidx.mediarouter.testing.MediaRouterTestHelper
 import okhttp3.mockwebserver.Dispatcher
@@ -306,5 +312,52 @@ class KalinkaRoutingTest {
             await { ready && router.selectedRoute.name == "Kitchen" }
         }
         assertTrue(writes.isEmpty())
+    }
+
+    @Test fun anotherInstallsRoutesForTheSameRenderersAreNeitherSelectedNorListed() {
+        val context = RuntimeEnvironment.getApplication()
+        routing.stop()
+        shadowOf(Looper.getMainLooper()).idle()
+        // Registered while ours are gone, so its routes come first in the router.
+        val other = OtherInstallProvider(context)
+        router.addProvider(other)
+        try {
+            routing.start(server.hostName, server.port)
+            await { ready }
+            assertEquals(2, router.routes.count { it.provider.packageName == OTHER_PACKAGE })
+            assertEquals(context.packageName, router.selectedRoute.provider.packageName)
+            assertEquals("Kitchen", router.selectedRoute.name)
+            assertEquals(0, other.selections)
+            assertEquals(listOf("Kitchen", "Study"), routing.outputs().map { it.name })
+            assertTrue(routing.outputs().all { it.provider.packageName == context.packageName })
+            assertTrue(writes.isEmpty())
+        } finally {
+            router.removeProvider(other)
+        }
+    }
+
+    private class OtherInstallProvider(context: Context) : MediaRouteProvider(object : ContextWrapper(context) {
+        override fun getPackageName() = OTHER_PACKAGE
+    }) {
+        var selections = 0
+
+        init {
+            descriptor = MediaRouteProviderDescriptor.Builder().addRoutes(
+                listOf("kitchen" to "Kitchen", "study" to "Study").map { (id, name) ->
+                    MediaRouteDescriptor.Builder(id, name)
+                        .addControlFilter(IntentFilter().apply { addCategory(KalinkaRouteProvider.CATEGORY) })
+                        .setExtras(Bundle().apply { putString(KalinkaRouteProvider.RENDERER_ID, id) })
+                        .setPlaybackType(MediaRouter.RouteInfo.PLAYBACK_TYPE_REMOTE)
+                        .build()
+                }).build()
+        }
+
+        override fun onCreateRouteController(routeId: String): RouteController = object : RouteController() {
+            override fun onSelect() { selections++ }
+        }
+    }
+
+    private companion object {
+        const val OTHER_PACKAGE = "org.kalinka.kalinka.other"
     }
 }
