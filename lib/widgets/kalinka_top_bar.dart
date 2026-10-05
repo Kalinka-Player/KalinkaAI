@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -46,10 +47,41 @@ class KalinkaTopBar extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: Padding(
         padding: const EdgeInsets.only(left: 4),
-        child: SvgPicture.asset(
-          'assets/images/kalinka_logo.svg',
-          height: kKalinkaWordmarkHeight,
-          fit: BoxFit.contain,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SvgPicture.asset(
+              'assets/images/kalinka_logo.svg',
+              height: kKalinkaWordmarkHeight,
+              fit: BoxFit.contain,
+            ),
+            if (!kReleaseMode) ...[
+              const SizedBox(width: 10),
+              Flexible(child: _buildDebugBadge()),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDebugBadge() {
+    // Shrinks rather than overflows beside a long server name on a narrow phone.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: KalinkaColors.statusOnline,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          'DEBUG',
+          style: KalinkaTextStyles.tagPill.copyWith(
+            color: KalinkaColors.textPrimary,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+          ),
         ),
       ),
     );
