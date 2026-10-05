@@ -1139,7 +1139,7 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
 
   /// Settings travel to the renderer over its socket, so the failures are
   /// about that hop rather than about the server.
-  static String _configFailure(DioException e) => e is DemoReadOnlyException
+  static String _configFailure(DioException e) => e is DemoRefusalException
       ? e.reason
       : switch (e.response?.statusCode) {
           404 => 'That output is no longer available',
@@ -1186,7 +1186,7 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
       if (response.statusCode != 200) {
         throw const RendererSwitchException('Couldn’t switch output');
       }
-    } on DemoReadOnlyException catch (e) {
+    } on DemoRefusalException catch (e) {
       throw RendererSwitchException(e.reason);
     } on DioException catch (e) {
       final data = e.response?.data;
@@ -1232,7 +1232,7 @@ final httpClientProvider = Provider<Dio>((ref) {
       sendTimeout: const Duration(seconds: 15),
     ),
   );
-  dio.interceptors.add(DemoReadOnlyInterceptor());
+  dio.interceptors.add(DemoRefusalInterceptor());
   return dio;
 });
 

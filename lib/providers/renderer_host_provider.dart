@@ -14,6 +14,7 @@ import '../renderer/renderer_engine.dart';
 import '../renderer/renderer_identity.dart';
 import '../renderer/renderer_platform.dart';
 import 'connection_settings_provider.dart';
+import 'demo_mode.dart';
 import 'renderer_provider.dart';
 import 'websocket_provider.dart';
 
@@ -97,11 +98,7 @@ final rendererReconnectBackoffProvider = Provider<RendererReconnectBackoff>((
   ref,
 ) {
   // Terminal rejection applies only to the current endpoint.
-  ref.watch(
-    connectionSettingsProvider.select(
-      (settings) => (settings.scheme, settings.host, settings.port),
-    ),
-  );
+  ref.watch(connectionSettingsProvider.select((settings) => settings.address));
   final backoff = RendererReconnectBackoff(() {
     if (ref.mounted) {
       ref.read(rendererSocketRetryEpochProvider.notifier).increment();
@@ -115,6 +112,8 @@ final rendererReconnectBackoffProvider = Provider<RendererReconnectBackoff>((
 final rendererHostProvider = Provider<void>((ref) {
   final engine = ref.watch(rendererEngineProvider);
   if (engine == null) return;
+  // The demo server turns every outside renderer away at the handshake.
+  if (ref.watch(demoModeProvider)) return;
   final reconnect = ref.watch(rendererReconnectBackoffProvider);
   if (!ref.watch(rendererListProvider.select((s) => s.supported))) return;
   final identity = ref.watch(rendererIdentityProvider).value;

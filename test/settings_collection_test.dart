@@ -16,11 +16,13 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/collection_entry.dart';
 import 'package:kalinka/data_model/data_model.dart' show ModulesAndDevices;
 import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/providers/collection_entry_binding.dart';
+import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/modules_state_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
@@ -171,7 +173,14 @@ Future<void> _tap(WidgetTester tester, String text) async {
   await tester.pumpAndSettle();
 }
 
+late SharedPreferences _prefs;
+
 void main() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    _prefs = await SharedPreferences.getInstance();
+  });
+
   group('the schema the server sends', () {
     test('names each shape an entry can take', () {
       expect(
@@ -756,7 +765,10 @@ void main() {
       () async {
         final api = _Api();
         final container = ProviderContainer(
-          overrides: [kalinkaProxyProvider.overrideWithValue(api)],
+          overrides: [
+            sharedPrefsProvider.overrideWithValue(_prefs),
+            kalinkaProxyProvider.overrideWithValue(api),
+          ],
         );
         addTearDown(container.dispose);
         final notifier = container.read(settingsProvider.notifier);
@@ -786,7 +798,10 @@ void main() {
       const saved = '$_path.rec_nas.authentication.password';
       final api = _Api(secretsSet: [saved], secretsAfterSave: {});
       final container = ProviderContainer(
-        overrides: [kalinkaProxyProvider.overrideWithValue(api)],
+        overrides: [
+          sharedPrefsProvider.overrideWithValue(_prefs),
+          kalinkaProxyProvider.overrideWithValue(api),
+        ],
       );
       addTearDown(container.dispose);
       final notifier = container.read(settingsProvider.notifier);

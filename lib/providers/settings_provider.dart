@@ -5,7 +5,9 @@ import 'package:logger/logger.dart' show Logger;
 import '../data_model/collection_entry.dart';
 import '../data_model/presentation_schema.dart';
 import '../utils/json_equality.dart';
+import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
+import 'server_address.dart';
 import 'settings_binding.dart';
 
 /// How long an edit settles before the server is asked what it thinks of it.
@@ -151,13 +153,23 @@ class SettingsNotifier extends Notifier<SettingsState> {
   // Bumped on every check so a slow answer cannot land on top of a newer one.
   int _validationGeneration = 0;
 
+  ServerAddress _server() => ref.read(connectionSettingsProvider).address;
+
+  /// Whether the app has moved to another server since [server] was asked,
+  /// so its answer belongs to settings no longer shown.
+  bool _stale(ServerAddress server) => !ref.mounted || _server() != server;
+
   @override
   SettingsState build() {
+    // Another server's settings, staged or loaded, say nothing about this one.
+    ref.watch(connectionSettingsProvider.select((s) => s.address));
+    _refreshingOptions = null;
     ref.onDispose(() => _validationTimer?.cancel());
     return const SettingsState();
   }
 
   Future<void> loadConfig() async {
+    final server = _server();
     state = state.copyWith(isLoading: true, error: null);
     try {
       final api = ref.read(kalinkaProxyProvider);
@@ -166,6 +178,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
         api.getSettingsSchema(),
         api.getSettings(),
       ]);
+      if (_stale(server)) return;
       final schema = results[0] as PresentationSchema;
       final envelope = (results[1] as Map).cast<String, dynamic>();
       final values = (envelope['values'] as Map? ?? {}).cast<String, dynamic>();
@@ -191,6 +204,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
         isLoading: false,
       );
     } catch (e) {
+      if (_stale(server)) return;
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
@@ -204,8 +218,10 @@ class SettingsNotifier extends Notifier<SettingsState> {
   Future<void>? _refreshingOptions;
 
   Future<void> _readOptions() async {
+    final server = _server();
     try {
       final envelope = await ref.read(kalinkaProxyProvider).getSettings();
+      if (_stale(server)) return;
       final options = _optionsFromEnvelope(envelope);
       // Unchanged is the usual answer; it should not rebuild the page.
       if (jsonEquals(options, state.enumOptions)) return;
@@ -308,8 +324,9 @@ class SettingsNotifier extends Notifier<SettingsState> {
   /// its mind, and says whether the server takes all of it. It refuses a
   /// batch whole, so one refused value would cost the restart.
   Future<bool> readyToApply() async {
+    final server = _server();
     await validateStaged();
-    return !state.hasBlockingIssues;
+    return !_stale(server) && !state.hasBlockingIssues;
   }
 
   Future<void> validateStaged() async {
@@ -317,6 +334,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final version = state.schemaVersion;
     final staged = Map<String, dynamic>.from(state.stagedChanges);
     final generation = ++_validationGeneration;
+    final server = _server();
     if (version == null || staged.isEmpty) return;
     try {
       final api = ref.read(kalinkaProxyProvider);
@@ -324,13 +342,13 @@ class SettingsNotifier extends Notifier<SettingsState> {
         schemaVersion: version,
         changes: staged,
       );
-      if (generation != _validationGeneration) return;
+      if (_stale(server) || generation != _validationGeneration) return;
       state = state.copyWith(issues: _byPath(issues));
     } catch (e) {
       // Not worth reporting: a page that cannot reach the server has bigger
       // news to show, and the save refuses on its own if the value is bad.
       _logger.d('Validating staged settings failed: $e');
-      if (generation == _validationGeneration) {
+      if (!_stale(server) && generation == _validationGeneration) {
         state = state.copyWith(issues: {});
       }
     }
@@ -384,12 +402,14 @@ class SettingsNotifier extends Notifier<SettingsState> {
     // Only what is sent here is saved; an edit staged during the round trip
     // stays pending.
     final changes = Map<String, dynamic>.from(state.stagedChanges);
+    final server = _server();
     try {
       final api = ref.read(kalinkaProxyProvider);
       final saved = await api.saveSettings(
         schemaVersion: version,
         changes: changes,
       );
+      if (_stale(server)) return;
       // Fold staged → values on success; a credential is kept only as set.
       final newValues = Map<String, dynamic>.from(state.values);
       final newSecrets = Set<String>.from(state.secretsSet);
@@ -428,11 +448,13 @@ class SettingsNotifier extends Notifier<SettingsState> {
       if (unsent.isNotEmpty) _scheduleValidation();
     } on SettingsValidationException catch (e) {
       // Nothing was saved, so the staged set stands; mark the rows it is about.
-      _validationGeneration++;
-      state = state.copyWith(issues: _byPath(e.issues), error: e.detail);
+      if (!_stale(server)) {
+        _validationGeneration++;
+        state = state.copyWith(issues: _byPath(e.issues), error: e.detail);
+      }
       rethrow;
     } catch (e) {
-      state = state.copyWith(error: 'Failed to save: $e');
+      if (!_stale(server)) state = state.copyWith(error: 'Failed to save: $e');
       rethrow;
     }
   }
