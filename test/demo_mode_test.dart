@@ -166,6 +166,12 @@ void main() {
     ));
   });
 
+  test('only a server that says so is taken for the demo', () async {
+    expect(await saysItIsADemo(_Settings({demoModeFlagPath: true})), isTrue);
+    expect(await saysItIsADemo(_Settings({demoModeFlagPath: false})), isFalse);
+    expect(await saysItIsADemo(_Settings({})), isFalse);
+  });
+
   test('the server says whether it is a demo', () async {
     expect(await _demoModeOf({demoModeFlagPath: true}), isTrue);
     expect(await _demoModeOf({demoModeFlagPath: false}), isFalse);

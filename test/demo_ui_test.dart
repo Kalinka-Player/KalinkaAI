@@ -14,25 +14,40 @@ import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/discovery_provider.dart';
 import 'package:kalinka/providers/discovery_types.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/server_connect.dart';
+import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/screens/settings_screen.dart';
 import 'package:kalinka/widgets/demo_read_only_dialog.dart';
 import 'package:kalinka/widgets/discovery_screen.dart';
 import 'package:kalinka/widgets/server_sheet.dart';
 
 class _FakeApi implements KalinkaPlayerProxy {
-  _FakeApi({this.demo = false});
+  _FakeApi({this.demo = false, this.olderThanDemoMode = false})
+    : unreachable = false;
+
+  _FakeApi.unreachable()
+    : demo = false,
+      olderThanDemoMode = false,
+      unreachable = true;
 
   final bool demo;
+  final bool olderThanDemoMode;
+  final bool unreachable;
   int restarts = 0;
   int saves = 0;
   int modulesListed = 0;
 
   @override
-  Future<Map<String, dynamic>> getSettings() async => {
-    'schema_version': 'v1',
-    'values': {demoModeFlagPath: demo},
-    'enum_options': const {},
-  };
+  Future<Map<String, dynamic>> getSettings() async {
+    if (unreachable) throw Exception('offline');
+    return {
+      'schema_version': 'v1',
+      'values': olderThanDemoMode
+          ? <String, dynamic>{}
+          : {demoModeFlagPath: demo},
+      'enum_options': const {},
+    };
+  }
 
   // What the demo server's General page carries; an ordinary server, nothing.
   @override
@@ -108,6 +123,65 @@ class _NothingFound extends DiscoveryNotifier {
 Future<SharedPreferences> _prefs([Map<String, Object> stored = const {}]) {
   SharedPreferences.setMockInitialValues(stored);
   return SharedPreferences.getInstance();
+}
+
+const _storedDemo = <String, Object>{
+  ConnectionSettingsNotifier.sharedPrefName: demoServerName,
+  ConnectionSettingsNotifier.sharedPrefHost: 'demo.kalinkaplayer.com',
+  ConnectionSettingsNotifier.sharedPrefPort: 443,
+  ConnectionSettingsNotifier.sharedPrefScheme: 'https',
+};
+
+/// A ref on an app whose stored server answers through [api], once its
+/// settings have been read, as they are on every connect.
+Future<WidgetRef> _connectedTo(
+  WidgetTester tester, {
+  required Map<String, Object> stored,
+  required _FakeApi api,
+}) async {
+  late WidgetRef captured;
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        sharedPrefsProvider.overrideWithValue(await _prefs(stored)),
+        kalinkaProxyProvider.overrideWithValue(api),
+      ],
+      child: Consumer(
+        builder: (_, ref, _) {
+          captured = ref;
+          return const SizedBox();
+        },
+      ),
+    ),
+  );
+  await captured.read(settingsProvider.notifier).loadConfig();
+  return captured;
+}
+
+Future<void> _pumpDiscovery(
+  WidgetTester tester, {
+  required SharedPreferences prefs,
+  required _FakeApi api,
+  required bool demoAnswers,
+  VoidCallback? onClose,
+}) async {
+  await tester.binding.setSurfaceSize(const Size(400, 900));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        sharedPrefsProvider.overrideWithValue(prefs),
+        kalinkaProxyProvider.overrideWithValue(api),
+        connectionStateProvider.overrideWith(_Connection.new),
+        discoveryProvider.overrideWith(_NothingFound.new),
+        demoCheckProvider.overrideWithValue((_) async => demoAnswers),
+      ],
+      child: MaterialApp(
+        home: Scaffold(body: DiscoveryScreen(onClose: onClose)),
+      ),
+    ),
+  );
+  await tester.pump(const Duration(milliseconds: 500));
 }
 
 Future<void> _pumpSettings(WidgetTester tester, _FakeApi api) async {
@@ -189,22 +263,13 @@ void main() {
     final prefs = await _prefs();
     final api = _FakeApi(demo: true);
     var closed = false;
-    await tester.binding.setSurfaceSize(const Size(400, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          sharedPrefsProvider.overrideWithValue(prefs),
-          kalinkaProxyProvider.overrideWithValue(api),
-          connectionStateProvider.overrideWith(_Connection.new),
-          discoveryProvider.overrideWith(_NothingFound.new),
-        ],
-        child: MaterialApp(
-          home: Scaffold(body: DiscoveryScreen(onClose: () => closed = true)),
-        ),
-      ),
+    await _pumpDiscovery(
+      tester,
+      prefs: prefs,
+      api: api,
+      demoAnswers: true,
+      onClose: () => closed = true,
     );
-    await tester.pump(const Duration(milliseconds: 500));
 
     await tester.tap(find.text('Try demo server'));
     await tester.pump(const Duration(milliseconds: 500));
@@ -225,5 +290,70 @@ void main() {
     );
     expect(api.modulesListed, 1);
     expect(closed, isTrue);
+  });
+
+  testWidgets('the demo button never connects to a server that is not one', (
+    tester,
+  ) async {
+    final prefs = await _prefs();
+    final api = _FakeApi(olderThanDemoMode: true);
+    await _pumpDiscovery(tester, prefs: prefs, api: api, demoAnswers: false);
+
+    await tester.tap(find.text('Try demo server'));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(DiscoveryScreen)),
+    );
+    expect(container.read(connectionSettingsProvider).isSet, isFalse);
+    expect(prefs.getString(ConnectionSettingsNotifier.sharedPrefHost), isNull);
+    expect(api.modulesListed, 0);
+    expect(find.text(demoServerUnavailable), findsOneWidget);
+  });
+
+  group('a stored demo connection', () {
+    for (final (server, api) in [
+      ('older than demo mode', () => _FakeApi(olderThanDemoMode: true)),
+      ('with demo mode off', () => _FakeApi(demo: false)),
+    ]) {
+      testWidgets('is left for a server $server', (tester) async {
+        final ref = await _connectedTo(tester, stored: _storedDemo, api: api());
+        expect(await leaveDemoAddressIfNotADemo(ref), isTrue);
+        expect(ref.read(connectionSettingsProvider).isSet, isFalse);
+      });
+    }
+
+    testWidgets('stays while the demo says it is one', (tester) async {
+      final ref = await _connectedTo(
+        tester,
+        stored: _storedDemo,
+        api: _FakeApi(demo: true),
+      );
+      expect(await leaveDemoAddressIfNotADemo(ref), isFalse);
+      expect(ref.read(connectionSettingsProvider).isSet, isTrue);
+    });
+
+    testWidgets('stays when its settings could not be read', (tester) async {
+      final ref = await _connectedTo(
+        tester,
+        stored: _storedDemo,
+        api: _FakeApi.unreachable(),
+      );
+      expect(await leaveDemoAddressIfNotADemo(ref), isFalse);
+      expect(ref.read(connectionSettingsProvider).isSet, isTrue);
+    });
+
+    testWidgets('never touches an ordinary server elsewhere', (tester) async {
+      final ref = await _connectedTo(
+        tester,
+        stored: const {
+          ConnectionSettingsNotifier.sharedPrefHost: 'nas.local',
+          ConnectionSettingsNotifier.sharedPrefPort: 8000,
+        },
+        api: _FakeApi(olderThanDemoMode: true),
+      );
+      expect(await leaveDemoAddressIfNotADemo(ref), isFalse);
+      expect(ref.read(connectionSettingsProvider).isSet, isTrue);
+    });
   });
 }
