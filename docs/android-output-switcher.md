@@ -68,6 +68,7 @@ Install and connect normally, then start a known queue:
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 adb shell dumpsys media_session > media-session-before.txt
 adb shell dumpsys media_router > media-router-before.txt
+# Release build: org.kalinka.kalinka/org.kalinka.kalinka.KalinkaMediaService
 adb shell dumpsys activity service org.kalinka.kalinka.debug/org.kalinka.kalinka.KalinkaMediaService > media-service-before.txt
 adb shell dumpsys notification --noredact > notifications-before.txt
 adb logcat -s KalinkaMedia KalinkaRouting MediaRouter MR2ProviderService
