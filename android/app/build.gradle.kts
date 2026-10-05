@@ -35,6 +35,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appLabel"] = "Kalinka"
     }
 
     signingConfigs {
@@ -57,6 +58,13 @@ android {
     }
 
     buildTypes {
+        // Debug is signed with another key, so under the release ID it could
+        // only replace the release install, wiping its settings.
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            manifestPlaceholders["appLabel"] = "Kalinka Debug"
+        }
         release {
             // Falls back to debug keys when key.properties is absent,
             // so `flutter run --release` still works on dev machines.

@@ -68,14 +68,14 @@ Install and connect normally, then start a known queue:
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 adb shell dumpsys media_session > media-session-before.txt
 adb shell dumpsys media_router > media-router-before.txt
-adb shell dumpsys activity service org.kalinka.kalinka/.KalinkaMediaService > media-service-before.txt
+adb shell dumpsys activity service org.kalinka.kalinka.debug/.KalinkaMediaService > media-service-before.txt
 adb shell dumpsys notification --noredact > notifications-before.txt
 adb logcat -s KalinkaMedia KalinkaRouting MediaRouter MR2ProviderService
 ```
 
 1. Check there is one active `KaiMediaSession`, one Kalinka media notification, correct artwork/track/position, and a chip naming the **renderer**, even when the controller is on a differently named machine.
    Repeat with only one renderer available, including a cold app start and selecting that same renderer in the picker. Check both debug and release APKs. If the chip shows **This phone**, capture the dumps before switching outputs or restarting; include `adb shell dumpsys activity service com.android.systemui/.SystemUIService` to compare SystemUI's cached device with the media session and router.
-2. In `media_router`, find `KalinkaRouteProviderService`, both renderer route IDs, and a routing session for `org.kalinka.kalinka`. Its selected route must match the renderer. In `media_session`, check remote playback, current/max volume, and (where printed by that Android build) that the volume control ID matches the routing session/controller ID, not the renderer UUID.
+2. In `media_router`, find `KalinkaRouteProviderService`, both renderer route IDs, and a routing session for `org.kalinka.kalinka.debug` (`org.kalinka.kalinka` for a release build). Its selected route must match the renderer. In `media_session`, check remote playback, current/max volume, and (where printed by that Android build) that the volume control ID matches the routing session/controller ID, not the renderer UUID.
 3. Open the native picker. Check names, availability, selected row, speaker icon, and volume. Select the other renderer. Verify playback follows existing controller transfer semantics, the queue is preserved, and transport commands still work. Compare dumps before/after: media-session identity should persist through an ordinary output switch.
 4. Switch from Flutter, then from the second client. Check Android follows each confirmed output without an extra `/renderer/active` request. Controller HTTP logs can establish exact command counts. Pre-topology-event servers can take up to the 15-second inventory refresh interval.
 5. Drag the picker volume and press volume keys while Android has assigned them to Kalinka. Check the renderer, Flutter slider, and Android values agree. Change volume from the second client immediately afterward. Test at both limits and switch to the fixed-volume renderer; its slider must not issue commands. Bring Kalinka to the foreground and press/hold both volume buttons: only the compact in-app indicator should appear, including at a volume limit. Drag it, wait for its fade, then check kiosk mode shows only its larger indicator. In the background, verify SystemUI volume still reaches the selected renderer and no missing-controller warning appears in logcat.
