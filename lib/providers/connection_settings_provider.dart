@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'server_address.dart';
+
 final sharedPrefsProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('override in main()');
 });
@@ -28,6 +30,8 @@ class ConnectionSettings {
   Uri get baseUrl => Uri(scheme: scheme, host: host, port: port);
 
   String get wsScheme => scheme == 'https' ? 'wss' : 'ws';
+
+  ServerAddress get address => (scheme: scheme, host: host, port: port);
 
   /// The address as the user would type it: `host:port` on a local network,
   /// the bare host for a server on the default HTTPS port.

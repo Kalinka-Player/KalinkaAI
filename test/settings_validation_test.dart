@@ -4,8 +4,10 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/presentation_schema.dart';
+import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 
@@ -65,7 +67,10 @@ class _FakeApi implements KalinkaPlayerProxy {
 
 ProviderContainer _container(_FakeApi api) {
   final container = ProviderContainer(
-    overrides: [kalinkaProxyProvider.overrideWithValue(api)],
+    overrides: [
+      sharedPrefsProvider.overrideWithValue(_prefs),
+      kalinkaProxyProvider.overrideWithValue(api),
+    ],
   );
   addTearDown(container.dispose);
   return container;
@@ -77,7 +82,14 @@ Future<SettingsNotifier> _loaded(ProviderContainer container) async {
   return notifier;
 }
 
+late SharedPreferences _prefs;
+
 void main() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    _prefs = await SharedPreferences.getInstance();
+  });
+
   group('asking while the user types', () {
     test('a keystroke does not put a request on the wire', () async {
       final api = _FakeApi();

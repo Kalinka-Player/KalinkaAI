@@ -8,8 +8,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/presentation_schema.dart';
+import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/widgets/kalinka_button.dart';
@@ -91,6 +93,7 @@ Future<ProviderContainer> _pump(
   addTearDown(tester.view.reset);
   final container = ProviderContainer(
     overrides: [
+      sharedPrefsProvider.overrideWithValue(_prefs),
       kalinkaProxyProvider.overrideWithValue(_Api(schema, refuse: refuse)),
     ],
   );
@@ -110,7 +113,14 @@ Future<ProviderContainer> _pump(
   return container;
 }
 
+late SharedPreferences _prefs;
+
 void main() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    _prefs = await SharedPreferences.getInstance();
+  });
+
   testWidgets('asks for music sources in place of the folder list', (
     tester,
   ) async {

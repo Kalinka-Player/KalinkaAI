@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/presentation_schema.dart';
+import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/widgets/settings_controls/settings_binding.dart';
 import 'package:kalinka/widgets/settings_controls/settings_combo_input.dart';
@@ -101,7 +103,14 @@ Widget _wrap(SettingsBinding binding) => ProviderScope(
   ),
 );
 
+late SharedPreferences _prefs;
+
 void main() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    _prefs = await SharedPreferences.getInstance();
+  });
+
   testWidgets('the schema renderer draws a page from any binding', (
     tester,
   ) async {
@@ -165,7 +174,9 @@ void main() {
   ) async {
     // Guards the refactor that moved these widgets off settingsProvider: the
     // server's own page must keep rendering through the shared interface.
-    final container = ProviderContainer();
+    final container = ProviderContainer(
+      overrides: [sharedPrefsProvider.overrideWithValue(_prefs)],
+    );
     addTearDown(container.dispose);
     final notifier = container.read(settingsProvider.notifier);
     notifier.stageChange('base_config.server.service_name', 'Renamed');
