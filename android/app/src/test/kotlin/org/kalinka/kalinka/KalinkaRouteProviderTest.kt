@@ -81,7 +81,7 @@ class KalinkaRouteProviderTest {
         assertEquals("Kitchen", rows[0].name)
         assertEquals("speaker-1", rows[0].extras!!.getString(KalinkaRouteProvider.RENDERER_ID))
         assertEquals(MediaRouter.RouteInfo.DEVICE_TYPE_REMOTE_SPEAKER, rows[0].deviceType)
-        assertTrue(rows[0].controlFilters.any { it.hasCategory(KalinkaRouteProvider.CATEGORY) })
+        assertTrue(rows[0].controlFilters.any { it.hasCategory("${context.packageName}.RENDERER") })
         assertTrue(rows[0].controlFilters.any { it.hasCategory(MediaControlIntent.CATEGORY_REMOTE_PLAYBACK) })
         assertEquals(70, rows[0].volumeMax)
         assertEquals(25, rows[0].volume)
