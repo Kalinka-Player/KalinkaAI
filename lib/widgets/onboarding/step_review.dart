@@ -121,7 +121,7 @@ class OnboardingReviewStep extends ConsumerWidget {
               label: 'Server',
               value:
                   '${(serviceName?.isNotEmpty ?? false) ? serviceName! : connection.name}'
-                  ' · ${connection.host}:${connection.port}',
+                  ' · ${connection.displayAddress}',
             ),
             _SummaryRow(
               label: 'Music sources',

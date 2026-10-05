@@ -605,7 +605,7 @@ class SchemaSectionRenderer extends StatelessWidget {
   }
 }
 
-/// Shows `host:port · v<version>` on the metadata line under the Server
+/// Shows the address and `v<version>` on the metadata line under the Server
 /// section title. Version is shown in full; the Text ellipsises if it
 /// overflows the available width.
 class _ServerAddressBadge extends ConsumerWidget {
@@ -618,7 +618,7 @@ class _ServerAddressBadge extends ConsumerWidget {
     final version = serverInfo.whenOrNull(data: (i) => i.version);
 
     final parts = <String>[
-      if (settings.host.isNotEmpty) '${settings.host}:${settings.port}',
+      if (settings.host.isNotEmpty) settings.displayAddress,
       if (version != null && version != 'Unknown') 'v$version',
     ];
     if (parts.isEmpty) return const SizedBox.shrink();

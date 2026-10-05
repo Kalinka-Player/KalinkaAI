@@ -99,7 +99,7 @@ final rendererReconnectBackoffProvider = Provider<RendererReconnectBackoff>((
   // Terminal rejection applies only to the current endpoint.
   ref.watch(
     connectionSettingsProvider.select(
-      (settings) => (settings.host, settings.port),
+      (settings) => (settings.scheme, settings.host, settings.port),
     ),
   );
   final backoff = RendererReconnectBackoff(() {

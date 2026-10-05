@@ -94,10 +94,10 @@ internal class KalinkaRouting(
         }
     }
 
-    fun start(host: String, port: Int) {
+    fun start(server: ServerAddress) {
         if (Build.VERSION.SDK_INT >= 30) KalinkaRouteObserver.ensureRegistered(context = routerContext)
         stop()
-        baseUrl = HttpUrl.Builder().scheme("http").host(host).port(port).build()
+        baseUrl = HttpUrl.Builder().scheme(server.scheme).host(server.host).port(server.port).build()
         scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
         detached = false
         pushedTopology = false
