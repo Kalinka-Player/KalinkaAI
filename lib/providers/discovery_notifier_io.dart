@@ -12,6 +12,7 @@ import 'package:logger/logger.dart' show Logger;
 import 'package:multicast_dns/multicast_dns.dart';
 
 import 'discovery_grouping.dart';
+import 'discovery_notifier_bonjour.dart';
 import 'discovery_types.dart';
 
 final _logger = Logger();
@@ -74,7 +75,9 @@ Future<Iterable<NetworkInterface>> _multicastCapableInterfaces(
   return usable;
 }
 
-DiscoveryNotifier createDiscoveryNotifier() => IoDiscoveryNotifier();
+DiscoveryNotifier createDiscoveryNotifier() => Platform.isIOS || Platform.isMacOS
+    ? BonjourDiscoveryNotifier()
+    : IoDiscoveryNotifier();
 
 /// Native mDNS discovery of `_kalinkaplayer._tcp` services on the local network.
 class IoDiscoveryNotifier extends DiscoveryNotifier {
