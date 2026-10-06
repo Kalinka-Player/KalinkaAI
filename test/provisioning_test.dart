@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,6 +35,7 @@ class FakeTransport implements ProvisioningTransport {
   bool failRead = false;
   bool holdScan = false;
   bool holdJoin = false;
+  bool holdNetworkChange = false;
   bool changeSupported = false;
   int? currentStage;
   final progressStages = <int>[];
@@ -159,7 +161,7 @@ class FakeTransport implements ProvisioningTransport {
       }
     }
     if (command['op'] == 'change_network') {
-      state = BoxState.idle;
+      state = holdNetworkChange ? BoxState.joining : BoxState.idle;
       reason = 0;
     }
     if (command['op'] == 'join') {
@@ -178,6 +180,50 @@ class FakeTransport implements ProvisioningTransport {
 }
 
 void main() {
+  test('changing network waits for the full server rollback budget', () {
+    fakeAsync((async) {
+      final transport = FakeTransport()
+        ..changeSupported = true
+        ..holdNetworkChange = true;
+      final controller = ProvisioningController(transport, (_, _) async => null);
+      controller.select(const NearbyBox('radio', 'Box'));
+      async.flushMicrotasks();
+      controller.changeNetwork();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 55));
+      expect(controller.phase, SetupPhase.changingNetwork);
+      expect(controller.error, isNull);
+      transport.state = BoxState.idle;
+      async.elapse(const Duration(seconds: 2));
+      expect(controller.phase, SetupPhase.credentials);
+      expect(controller.error, isNull);
+      expect(transport.commands.map((c) => c['op']), ['change_network']);
+      controller.dispose();
+      async.flushMicrotasks();
+      expect(async.pendingTimers, isEmpty);
+    });
+  });
+
+  test('changing network still times out when rollback never finishes', () {
+    fakeAsync((async) {
+      final transport = FakeTransport()
+        ..changeSupported = true
+        ..holdNetworkChange = true;
+      final controller = ProvisioningController(transport, (_, _) async => null);
+      controller.select(const NearbyBox('radio', 'Box'));
+      async.flushMicrotasks();
+      controller.changeNetwork();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 76));
+      expect(controller.phase, SetupPhase.choosing);
+      expect(controller.error, contains('has not reopened'));
+      expect(transport.commands.map((c) => c['op']), ['change_network']);
+      controller.dispose();
+      async.flushMicrotasks();
+      expect(async.pendingTimers, isEmpty);
+    });
+  });
+
   testWidgets(
     'wizard keeps its action above the keyboard on a small screen with large text',
     (tester) async {
