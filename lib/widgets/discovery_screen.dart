@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../screens/provisioning_screen.dart';
+import '../providers/provisioning_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/demo_mode.dart';
@@ -222,8 +224,53 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          if (!kIsWeb && !_isConnecting)
+            Flexible(
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: KalinkaColors.textPrimary,
+                  backgroundColor: KalinkaColors.surfaceRaised,
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  textStyle: KalinkaTextStyles.sectionHeaderMuted.copyWith(
+                    fontSize: 14,
+                    letterSpacing: 1,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: KalinkaColors.borderDefault),
+                  ),
+                ),
+                icon: const Icon(
+                  Icons.bluetooth,
+                  size: 20,
+                  color: KalinkaColors.accentTint,
+                ),
+                label: const Text('SET UP A BOX'),
+                onPressed: () async {
+                  final endpoint = await Navigator.of(context)
+                      .push<ProvisionedEndpoint>(
+                        MaterialPageRoute(
+                          builder: (_) => const ProvisioningScreen(),
+                        ),
+                      );
+                  if (mounted && endpoint != null) {
+                    await _connectToServer(
+                      endpoint.name,
+                      endpoint.host,
+                      endpoint.port,
+                    );
+                  }
+                },
+              ),
+            )
+          else
+            const Spacer(),
           if (widget.allowCancel)
             _HoverLink(
               label: 'Cancel',

@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Connect a nearby Kalinka box to your Wi-Fi.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Find and connect to Kalinka players on your network.</string>
+	<key>NSBonjourServices</key>
+	<array><string>_kalinkaplayer._tcp</string></array>
+	<key>NSAppTransportSecurity</key>
+	<dict><key>NSAllowsLocalNetworking</key><true/></dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

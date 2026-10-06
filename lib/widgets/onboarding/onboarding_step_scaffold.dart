@@ -62,16 +62,11 @@ class OnboardingStepScaffold extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'STEP $stepNumber OF $stepCount',
-                        style: KalinkaTextStyles.sectionHeaderMuted,
+                      OnboardingProgress(
+                        stepNumber: stepNumber,
+                        stepCount: stepCount,
+                        stepLabels: stepLabels,
                       ),
-                      if (stepLabels.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        _buildStepper(),
-                      ],
-                      const SizedBox(height: 8),
-                      _buildProgressBar(),
                       const SizedBox(height: 20),
                       Text(title, style: KalinkaTextStyles.dialogTitle),
                       if (subtitle != null) ...[
@@ -129,6 +124,37 @@ class OnboardingStepScaffold extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Shared step count, labels, and progress for box setup and onboarding.
+class OnboardingProgress extends StatelessWidget {
+  final int stepNumber;
+  final int stepCount;
+  final List<String> stepLabels;
+
+  const OnboardingProgress({
+    super.key,
+    required this.stepNumber,
+    required this.stepCount,
+    this.stepLabels = const [],
+  });
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'STEP $stepNumber OF $stepCount',
+        style: KalinkaTextStyles.sectionHeaderMuted,
+      ),
+      if (stepLabels.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        _buildStepper(),
+      ],
+      const SizedBox(height: 8),
+      _buildProgressBar(),
+    ],
+  );
 
   /// The step names in one mono line — walked steps in accent, the current
   /// one bright, the rest muted. Scaled down as a whole when width runs out,
