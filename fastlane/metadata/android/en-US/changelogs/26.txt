@@ -1,0 +1,3 @@
+- Set up a box: connect a new Kalinka box to Wi-Fi over Bluetooth
+- Redesigned now-playing display for a box's screen
+- Read-only plugin catalog, when turned on in the server's settings

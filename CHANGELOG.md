@@ -8,6 +8,18 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.17.0
+
+You can set up a new Kalinka box over Bluetooth, and the now-playing display on a box's screen has a new look. This release needs no server update.
+
+### Added
+- "Set up a box" on the server list finds a nearby Kalinka box over Bluetooth, lets you pick its Wi-Fi network and enter the password, then connects to the box as usual. If Bluetooth drops partway, the app reconnects without sending the password again. The box needs the new Kalinka supervisor, which comes with the next Kalinka Player images. The browser web UI does not offer it. On Android, the app asks for permission to find nearby devices.
+- A read-only plugin catalog. With "Plugin catalog preview" turned on in the server's settings, Plugins in the server menu lists the plugins available for Kalinka, with details and whether each works with your server. Plugins cannot be installed from it yet.
+
+### Changed
+- The now-playing display on a box's screen is redesigned. On a landscape screen the cover stands beside the track, with the output and the time at the top and the controls and progress below; a portrait screen stacks them, and a small or near-square screen lets the cover fill it. The background is the cover, blurred. Tapping the output opens the volume and the other outputs.
+- On a tablet, the server's management panels open over the queue.
+
 ## 0.16.0
 
 You can now try Kalinka without a server of your own, on a public demo server. This release needs no server update.
