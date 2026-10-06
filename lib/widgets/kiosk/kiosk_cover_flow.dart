@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../procedural_album_art.dart';
 
-/// The cover standing on a glossy floor, swinging aside cover-flow style
-/// when the track changes: the old one turns away and recedes, the new one
-/// turns in from the side playback moved towards.
+/// The cover, swinging aside cover-flow style when the track changes: the
+/// old one turns away and recedes, the new one turns in from the side
+/// playback moved towards.
 class KioskCoverFlow extends StatelessWidget {
   final String trackId;
   final String? imageUrl;
@@ -14,29 +14,19 @@ class KioskCoverFlow extends StatelessWidget {
   /// -1 when it went back.
   final int direction;
 
-  /// False where the cover has something laid over its foot, which would
-  /// hide a reflection anyway.
-  final bool reflected;
-
   const KioskCoverFlow({
     super.key,
     required this.trackId,
     required this.imageUrl,
     required this.size,
     required this.direction,
-    this.reflected = true,
   });
-
-  /// Height the floor reflection adds under a cover of [size].
-  // Kept short and faint: a hint of gloss, not a second cover.
-  static double reflectionExtent(double size) => size * 0.09;
 
   @override
   Widget build(BuildContext context) {
     final key = ValueKey(trackId);
-    return SizedBox(
-      width: size,
-      height: reflected ? size + reflectionExtent(size) : size,
+    return SizedBox.square(
+      dimension: size,
       child: AnimatedSwitcher(
         duration: MediaQuery.disableAnimationsOf(context)
             ? Duration.zero
@@ -56,14 +46,64 @@ class KioskCoverFlow extends StatelessWidget {
           travel: size * 0.6,
           child: child,
         ),
-        child: _ReflectedCover(
+        child: _Cover(
           key: key,
           trackId: trackId,
           imageUrl: imageUrl,
           size: size,
-          reflected: reflected,
         ),
       ),
+    );
+  }
+}
+
+/// The cover filling the whole screen, for a display too small to set it
+/// beside anything. A new track's cover fades in over the old one.
+class KioskCoverFill extends StatelessWidget {
+  final String trackId;
+  final String? imageUrl;
+
+  const KioskCoverFill({
+    super.key,
+    required this.trackId,
+    required this.imageUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final side = constraints.biggest.longestSide;
+        final url = imageUrl;
+        Widget fallback() => FittedBox(
+          fit: BoxFit.cover,
+          clipBehavior: Clip.hardEdge,
+          child: ProceduralAlbumArt(trackId: trackId, size: side),
+        );
+        return RepaintBoundary(
+          child: AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 900),
+            layoutBuilder: (current, previous) =>
+                Stack(fit: StackFit.expand, children: [...previous, ?current]),
+            child: KeyedSubtree(
+              key: ValueKey(trackId),
+              child: url == null
+                  ? fallback()
+                  : Image.network(
+                      url,
+                      fit: BoxFit.cover,
+                      cacheWidth:
+                          (side * MediaQuery.devicePixelRatioOf(context))
+                              .round(),
+                      gaplessPlayback: true,
+                      errorBuilder: (_, _, _) => fallback(),
+                    ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -110,88 +150,56 @@ class _Swing extends StatelessWidget {
   }
 }
 
-class _ReflectedCover extends StatelessWidget {
+class _Cover extends StatelessWidget {
   final String trackId;
   final String? imageUrl;
   final double size;
-  final bool reflected;
 
-  const _ReflectedCover({
+  const _Cover({
     super.key,
     required this.trackId,
     required this.imageUrl,
     required this.size,
-    required this.reflected,
   });
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(size * 0.035);
-    final reflection = KioskCoverFlow.reflectionExtent(size);
-    final gap = size * 0.012;
-    // One decode serves the cover and its reflection: same provider, same
-    // size, same cache entry.
+    final radius = BorderRadius.circular(size * 0.03);
     final cacheWidth = (size * MediaQuery.devicePixelRatioOf(context)).round();
-    Widget art() => ClipRRect(
-      borderRadius: radius,
-      child: imageUrl == null
-          ? ProceduralAlbumArt(trackId: trackId, size: size)
-          : Image.network(
-              imageUrl!,
-              width: size,
-              height: size,
-              cacheWidth: cacheWidth,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              errorBuilder: (_, _, _) =>
-                  ProceduralAlbumArt(trackId: trackId, size: size),
-            ),
-    );
-
     return RepaintBoundary(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  blurRadius: size * 0.12,
-                  offset: Offset(0, size * 0.05),
-                ),
-              ],
-            ),
-            child: SizedBox.square(dimension: size, child: art()),
-          ),
-          if (reflected) ...[
-            SizedBox(height: gap),
-            ExcludeSemantics(
-              child: ClipRect(
-                child: SizedBox(
-                  width: size,
-                  height: reflection - gap,
-                  child: OverflowBox(
-                    alignment: Alignment.topCenter,
-                    minHeight: size,
-                    maxHeight: size,
-                    child: ShaderMask(
-                      blendMode: BlendMode.dstIn,
-                      shaderCallback: (bounds) => LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: const [Color(0x26FFFFFF), Color(0x00FFFFFF)],
-                        stops: [0.0, reflection / size],
-                      ).createShader(bounds),
-                      child: Transform.flip(flipY: true, child: art()),
-                    ),
-                  ),
-                ),
-              ),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: size * 0.08,
             ),
           ],
-        ],
+        ),
+        // A hairline of light round the edge lifts the cover off a backdrop
+        // made of its own colours.
+        foregroundDecoration: BoxDecoration(
+          borderRadius: radius,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        ),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: imageUrl == null
+              ? ProceduralAlbumArt(trackId: trackId, size: size)
+              : Image.network(
+                  imageUrl!,
+                  width: size,
+                  height: size,
+                  cacheWidth: cacheWidth,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, _, _) =>
+                      ProceduralAlbumArt(trackId: trackId, size: size),
+                ),
+        ),
       ),
     );
   }
