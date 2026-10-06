@@ -6,22 +6,17 @@ import '../../theme/app_theme.dart';
 import '../../utils/playback_utils.dart';
 import '../playback_progress_slider.dart' show OptimisticSeek;
 
-/// Full-width progress for a screen read from across the room: a thick bar,
-/// elapsed and remaining time large above it, and a touch zone taller than
-/// the bar so a fingertip finds it. Tap or drag anywhere along it to seek.
+/// Full-width progress for a screen read from across the room: the bar,
+/// elapsed and total time under it, and a touch zone taller than the bar so
+/// a fingertip finds it. Tap or drag anywhere along it to seek.
 class KioskProgressBar extends ConsumerStatefulWidget {
   final int durationMs;
   final double scale;
-
-  /// False while the display rests: the bar is still shown but takes no
-  /// touches, so the tap that wakes the screen cannot seek.
-  final bool interactive;
 
   const KioskProgressBar({
     super.key,
     required this.durationMs,
     required this.scale,
-    this.interactive = true,
   });
 
   @override
@@ -45,19 +40,19 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
     final positionMs = seekAwarePositionMs(playbackTimeMs);
     final progress = seekAwareProgress(playbackTimeMs);
     final durationMs = widget.durationMs;
-    final canSeek = widget.interactive && durationMs > 0;
-    final remainingMs = durationMs > 0 ? durationMs - positionMs : 0;
+    final canSeek = durationMs > 0;
 
-    final timeStyle = KalinkaFonts.mono(
-      fontSize: s(17),
+    final timeStyle = KalinkaFonts.sans(
+      fontSize: s(16),
       fontWeight: FontWeight.w500,
       color: KalinkaColors.textPrimary,
-    );
+      height: 1.2,
+    ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
 
     final labels = SizedBox(
       // Fixed height keeps the per-second label change from relaying out
-      // anything above.
-      height: s(26),
+      // anything around it.
+      height: s(22),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -69,9 +64,9 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
           ),
           Text(
             durationMs > 0
-                ? '\u2212${formatClock(Duration(milliseconds: remainingMs))}'
+                ? formatClock(Duration(milliseconds: durationMs))
                 : '',
-            style: timeStyle.copyWith(color: _remaining),
+            style: timeStyle.copyWith(color: _total),
           ),
         ],
       ),
@@ -111,7 +106,6 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    labels,
                     // Glides to each new second instead of stepping — a bar
                     // this long moves a visible distance per tick.
                     TweenAnimationBuilder<double>(
@@ -121,14 +115,15 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
                           : const Duration(milliseconds: 380),
                       curve: Curves.easeOutCubic,
                       builder: (context, value, _) => CustomPaint(
-                        size: Size(width, s(44)),
+                        size: Size(width, s(28)),
                         painter: _BarPainter(
                           progress: value,
-                          thickness: s(isSeeking ? 10 : 6),
-                          knobRadius: canSeek ? s(isSeeking ? 13 : 8) : 0,
+                          thickness: s(isSeeking ? 9 : 5),
+                          knobRadius: canSeek ? s(isSeeking ? 13 : 9) : 0,
                         ),
                       ),
                     ),
+                    labels,
                   ],
                 ),
               ),
@@ -140,7 +135,7 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
   }
 }
 
-final _remaining = KalinkaColors.textPrimary.withValues(alpha: 0.74);
+final _total = KalinkaColors.textPrimary.withValues(alpha: 0.74);
 
 class _BarPainter extends CustomPainter {
   final double progress;
@@ -160,7 +155,7 @@ class _BarPainter extends CustomPainter {
     final track = Rect.fromLTWH(0, cy - thickness / 2, size.width, thickness);
     canvas.drawRRect(
       RRect.fromRectAndRadius(track, radius),
-      Paint()..color = Colors.white.withValues(alpha: 0.14),
+      Paint()..color = Colors.white.withValues(alpha: 0.24),
     );
 
     final head = size.width * progress;
