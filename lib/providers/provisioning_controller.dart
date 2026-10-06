@@ -33,6 +33,7 @@ class ProvisioningController extends ChangeNotifier {
   final Duration joinTimeout;
   final Duration handoffTimeout;
   final Duration wifiScanTimeout;
+  final Duration changeNetworkTimeout;
   final List<NearbyBox> boxes = [];
   final List<ProvisioningNetwork> networks = [];
   bool scanningWifi = false;
@@ -57,6 +58,7 @@ class ProvisioningController extends ChangeNotifier {
     this.joinTimeout = const Duration(seconds: 100),
     this.handoffTimeout = const Duration(seconds: 150),
     this.wifiScanTimeout = const Duration(seconds: 30),
+    this.changeNetworkTimeout = const Duration(seconds: 75),
   });
 
   void _changed() {
@@ -321,6 +323,7 @@ class ProvisioningController extends ChangeNotifier {
     error = null;
     phase = SetupPhase.changingNetwork;
     _changed();
+    Timer? timeout;
     try {
       await transport.connect(selected!.id);
       if (!_current(generation)) return;
@@ -328,8 +331,10 @@ class ProvisioningController extends ChangeNotifier {
         if (!_current(generation)) return;
         await transport.write(frame);
       }
-      final deadline = DateTime.now().add(const Duration(seconds: 45));
-      while (_current(generation) && DateTime.now().isBefore(deadline)) {
+      var expired = false;
+      // Backends allow 55 seconds for rollback, plus cancellation and BLE polling.
+      timeout = Timer(changeNetworkTimeout, () => expired = true);
+      while (_current(generation) && !expired) {
         final next = ProvisioningStatus.decode(
           await transport.read(provisionStatusUuid),
         );
@@ -354,6 +359,8 @@ class ProvisioningController extends ChangeNotifier {
         phase = SetupPhase.choosing;
         _changed();
       }
+    } finally {
+      timeout?.cancel();
     }
   }
 
