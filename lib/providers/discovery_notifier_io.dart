@@ -7,12 +7,12 @@ import 'dart:io'
         Platform,
         RawDatagramSocket;
 
-import 'package:dio/dio.dart' show Dio, BaseOptions;
 import 'package:logger/logger.dart' show Logger;
 import 'package:multicast_dns/multicast_dns.dart';
 
 import 'discovery_grouping.dart';
 import 'discovery_notifier_bonjour.dart';
+import 'discovery_probe.dart';
 import 'discovery_types.dart';
 
 final _logger = Logger();
@@ -20,11 +20,6 @@ final _logger = Logger();
 /// How long to wait for every A/AAAA record of a service — a multi-homed
 /// server answers with one per interface, so we cannot stop at the first.
 const _addressLookupTimeout = Duration(seconds: 1);
-
-/// Budget for the health check that decides whether an address is reachable.
-const _probeTimeout = Duration(seconds: 1);
-
-const _unreachableLatencyMs = 9999;
 
 /// How long to keep listening for service announcements.
 const _announcementWindow = Duration(seconds: 4);
@@ -281,7 +276,7 @@ class IoDiscoveryNotifier extends DiscoveryNotifier {
     // Probe every advertised address at once, so an interface we cannot
     // route to never becomes the listed entry.
     final probes = await Future.wait([
-      for (final candidate in candidates) _measureLatency(candidate, port),
+      for (final candidate in candidates) probeServerEndpoint(candidate, port),
     ]);
 
     foundInstances.add(
@@ -314,30 +309,6 @@ class IoDiscoveryNotifier extends DiscoveryNotifier {
       servers: groupResolvedInstances(instances),
     );
     _cleanupDiscovery();
-  }
-
-  /// Measure latency to a server with a quick HTTP health check.
-  ///
-  /// Doubles as the reachability test: an address on a network we cannot route
-  /// to times out and scores [_unreachableLatencyMs].
-  Future<int> _measureLatency(String host, int port) async {
-    try {
-      final dio = Dio(
-        BaseOptions(
-          // Uri() brackets IPv6 hosts (the SRV lookup can resolve one).
-          baseUrl: Uri(scheme: 'http', host: host, port: port).toString(),
-          connectTimeout: _probeTimeout,
-          receiveTimeout: _probeTimeout,
-        ),
-      );
-      final stopwatch = Stopwatch()..start();
-      await dio.get('/server/modules');
-      stopwatch.stop();
-      dio.close();
-      return stopwatch.elapsedMilliseconds;
-    } catch (e) {
-      return _unreachableLatencyMs;
-    }
   }
 
   @override
