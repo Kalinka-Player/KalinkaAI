@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../theme/app_theme.dart';
+import 'box_actions.dart';
 import 'kalinka_button.dart';
 
 /// Card that appears above the mini-player after 30s of failed reconnection.
 ///
-/// Offers "Scan for servers" and "Retry" actions, plus a dismiss link.
+/// Offers "Scan for servers" — or "Restart server" when the server's box still
+/// answers — and "Retry", plus a dismiss link.
 /// Once dismissed, it won't reappear until the app restarts.
 class EscalationCard extends ConsumerStatefulWidget {
   final VoidCallback onScanForServers;
@@ -53,6 +55,10 @@ class _EscalationCardState extends ConsumerState<EscalationCard>
         !notifier.escalationDismissed;
 
     if (!shouldShow) return const SizedBox.shrink();
+
+    // The box still answers at this address, so the server has not moved:
+    // restarting it is the remedy, not scanning for it.
+    final boxAnswers = ref.watch(canRestartServerThroughBoxProvider);
 
     return AnimatedBuilder(
       animation: _entryController,
@@ -110,18 +116,30 @@ class _EscalationCardState extends ConsumerState<EscalationCard>
               ),
               const SizedBox(height: 10),
               Text(
-                'The server hasn\'t responded for over 30 seconds. '
-                'It may be offline or unreachable on the network.',
+                boxAnswers
+                    ? 'The server hasn\'t responded for over 30 seconds, but '
+                          'its box is still on the network. Restarting the '
+                          'server may bring it back.'
+                    : 'The server hasn\'t responded for over 30 seconds. '
+                          'It may be offline or unreachable on the network.',
                 style: KalinkaTextStyles.trayRowSublabel.copyWith(
                   fontSize: KalinkaTypography.baseSize + 0,
                   height: 1.5,
                 ),
               ),
               const SizedBox(height: 14),
-              // Action buttons — web has no mDNS, so Retry only.
+              // Web has no mDNS to scan with, so there it is Retry alone.
               Row(
                 children: [
-                  if (!kIsWeb) ...[
+                  if (boxAnswers) ...[
+                    KalinkaButton(
+                      label: 'Restart server',
+                      variant: KalinkaButtonVariant.accent,
+                      size: KalinkaButtonSize.compact,
+                      onTap: () => restartServerThroughBox(context, ref),
+                    ),
+                    const Spacer(),
+                  ] else if (!kIsWeb) ...[
                     // Scan for servers
                     KalinkaButton(
                       label: 'Scan for servers',
@@ -134,7 +152,7 @@ class _EscalationCardState extends ConsumerState<EscalationCard>
                   // Retry
                   KalinkaButton(
                     label: 'Retry',
-                    variant: kIsWeb
+                    variant: kIsWeb && !boxAnswers
                         ? KalinkaButtonVariant.accent
                         : KalinkaButtonVariant.neutral,
                     size: KalinkaButtonSize.compact,

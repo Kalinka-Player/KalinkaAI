@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/kiosk_screen.dart';
 import 'screens/music_player_screen.dart';
 import 'theme/app_theme.dart';
+import 'providers/box_control_provider.dart';
 import 'providers/connection_settings_provider.dart';
 import 'providers/kiosk_provider.dart';
 import 'providers/onboarding_provider.dart';
@@ -65,6 +66,7 @@ class KalinkaApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(rendererHostProvider);
     ref.watch(mediaNotificationProvider);
+    ref.watch(rememberServerIdentityProvider);
     return MaterialApp(
       title: 'Kalinka',
       theme: AppTheme.dark(),
