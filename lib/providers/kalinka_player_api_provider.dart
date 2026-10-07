@@ -28,7 +28,7 @@ import '../data_model/presentation_schema.dart'
 import '../data_model/renderer_config.dart'
     show RendererConfigResult, RendererConfigSnapshot;
 import '../utils/renderer_fault_text.dart' show rendererSwitchRefusal;
-import 'demo_refusal.dart';
+import 'server_refusal.dart';
 
 /// A collection was written to between an edit being staged and being sent,
 /// so the server refused the whole edit rather than apply it to a list the
@@ -1139,7 +1139,7 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
 
   /// Settings travel to the renderer over its socket, so the failures are
   /// about that hop rather than about the server.
-  static String _configFailure(DioException e) => e is DemoRefusalException
+  static String _configFailure(DioException e) => e is ServerRefusalException
       ? e.reason
       : switch (e.response?.statusCode) {
           404 => 'That output is no longer available',
@@ -1186,7 +1186,7 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
       if (response.statusCode != 200) {
         throw const RendererSwitchException('Couldn’t switch output');
       }
-    } on DemoRefusalException catch (e) {
+    } on ServerRefusalException catch (e) {
       throw RendererSwitchException(e.reason);
     } on DioException catch (e) {
       final data = e.response?.data;
@@ -1230,7 +1230,7 @@ Dio kalinkaHttpClient(String baseUrl) {
       sendTimeout: const Duration(seconds: 15),
     ),
   );
-  dio.interceptors.add(DemoRefusalInterceptor());
+  dio.interceptors.add(ServerRefusalInterceptor());
   return dio;
 }
 
