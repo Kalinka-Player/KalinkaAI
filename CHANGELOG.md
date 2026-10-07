@@ -8,6 +8,11 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.17.1
+
+### Fixed
+- Restore Google Play availability on devices without Bluetooth or location hardware. These features are optional; the permissions used by Bluetooth box setup no longer make them requirements for installing the app.
+
 ## 0.17.0
 
 You can set up a new Kalinka box over Bluetooth, and the now-playing display on a box's screen has a new look. This release needs no server update.

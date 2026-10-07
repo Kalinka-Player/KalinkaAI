@@ -1,0 +1,5 @@
+- Set up supported Kalinka boxes on Wi-Fi over Bluetooth
+- Redesigned now-playing display for box screens
+- Browse plugins when Plugin catalog preview is enabled (browsing only)
+- Keep playback controls visible while changing settings on tablets
+- Fixed compatibility with devices without Bluetooth or location hardware
