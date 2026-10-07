@@ -13,22 +13,29 @@ import '../../providers/search_session_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/haptics.dart';
 import '../browse_filters/active_filter_chips.dart';
 import '../browse_filters/browse_filter_form.dart' show filterTypeLabel;
 import '../browse_filters/filters_match_nothing.dart';
 import '../browse_rows_shimmer.dart';
+import '../fitted_title.dart';
 import '../infinite_list_view.dart';
+import '../search_cards/action_pill_button.dart';
 import '../search_cards/browse_item_rows.dart';
+import '../shelf_heading.dart';
 import '../source_badge.dart';
 import 'catalog_sections_view.dart';
 import 'collections_edit_bar.dart';
 import 'collections_section.dart';
+import 'folder_trail.dart';
+import 'track_group_actions.dart';
 
 /// One selected catalog page — the single navigation level below the
 /// Catalogs root (back lives in the title bar). The banner scrolls away with
-/// the items; albums/artists/playlists unroll inline. Items are pulled in
-/// chunks by an [InfiniteListView] straight off the browse endpoint
-/// (deterministic — never the AI router).
+/// the items; albums/artists/playlists unroll inline. A page of folders shows
+/// one folder at a time under a breadcrumb, its subfolders above its tracks.
+/// Items are pulled in chunks by an [InfiniteListView] straight off the
+/// browse endpoint (deterministic — never the AI router).
 class CatalogPageView extends ConsumerStatefulWidget {
   final CatalogPage page;
 
@@ -51,8 +58,40 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   /// an action on the listing has nothing to act on when there are not.
   int _rows = -1;
 
+  /// The listing's size as the server last said, -1 before it has.
+  int _total = -1;
+
   void _countRows(int rows) {
     if (rows != _rows) setState(() => _rows = rows);
+  }
+
+  /// A folder's header and the actions in it. Where the actions sit in the
+  /// header is measured while both are laid out, since a header scrolled far
+  /// enough away is kept without being laid out again.
+  final _headerKey = GlobalKey();
+  final _actionsKey = GlobalKey();
+  double? _actionsTop;
+
+  /// The folder's actions have scrolled up to the trail and are held there.
+  bool _actionsHeld = false;
+
+  static const _heldInset = 8.0;
+
+  bool _holdActions(ScrollNotification notification) {
+    if (notification.depth != 0 || notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+    final actions = _actionsKey.currentContext?.findRenderObject();
+    final header = _headerKey.currentContext?.findRenderObject();
+    if (actions is RenderBox && header is RenderBox && actions.hasSize) {
+      _actionsTop = actions.localToGlobal(Offset.zero, ancestor: header).dy;
+    }
+    final top = _actionsTop;
+    // The header is the list's first row, so its offsets are scroll offsets.
+    final reached =
+        top != null && notification.metrics.pixels >= top - _heldInset;
+    if (reached != _actionsHeld) setState(() => _actionsHeld = reached);
+    return false;
   }
 
   /// See [_pollWhileComposing].
@@ -109,20 +148,36 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     final notifier = ref.read(searchSessionProvider.notifier);
     void setQuery(BrowseFilterQuery next) => notifier.setCatalogFilter(next);
 
-    final header = _CatalogHeader(
-      page: page,
-      capabilities: capabilities,
-      query: filter,
-      onQueryChanged: setQuery,
-      expandedShelf: expandedShelf,
-      onCollapse: () => notifier.expandShelf(null),
-      hasRows: _rows > 0,
-    );
+    final listing = page.folderLayout
+        ? ref.watch(searchSessionProvider.select((s) => s.shownListing))
+        : page;
+    // Any folder shown, the same one again included, opens at its top.
+    ref.listen(searchSessionProvider.select((s) => s.shownListing), (_, __) {
+      _actionsTop = null;
+      if (_actionsHeld) setState(() => _actionsHeld = false);
+    });
+
+    final Widget header = page.folderLayout
+        ? _FolderHeader(
+            key: _headerKey,
+            page: page,
+            listing: listing,
+            actionsKey: _actionsKey,
+          )
+        : _CatalogHeader(
+            page: page,
+            capabilities: capabilities,
+            query: filter,
+            onQueryChanged: setQuery,
+            expandedShelf: expandedShelf,
+            onCollapse: () => notifier.expandShelf(null),
+            hasRows: _rows > 0,
+          );
 
     // A catalog made of shelves shows them until a kind is chosen; choosing
     // one narrows the catalog to that kind's flat listing, which is the same
     // listing its shelf was previewing.
-    if (page.sections.isNotEmpty && query.type == null) {
+    if (!page.folderLayout && page.sections.isNotEmpty && query.type == null) {
       return CatalogSectionsView(
         page: page,
         query: query,
@@ -133,11 +188,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       );
     }
 
-    return InfiniteListView<BrowseItem>(
-      key: ValueKey(page.id),
+    final listView = InfiniteListView<BrowseItem>(
+      key: ValueKey(listing.id),
       // Only the facets the server honours restart the list, so touching an
       // inert placeholder never costs a refetch.
-      reloadKey: '${page.id}|${query.serverKey(capabilities)}|$revision',
+      reloadKey: '${listing.id}|${query.serverKey(capabilities)}|$revision',
       refreshKey: _artRefresh,
       onLoadedCount: _countRows,
       // No horizontal list padding — the banner bleeds edge to edge; rows and
@@ -147,12 +202,13 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       fetchChunk: (offset, limit) async {
         final api = ref.read(kalinkaProxyProvider);
         final list = await api.browse(
-          page.id!,
+          listing.id!,
           offset: offset,
           limit: limit,
           filter: query.encoded(capabilities),
         );
         _pollWhileComposing(list.items);
+        _total = list.total;
         return ItemChunk(items: list.items, total: list.total);
       },
       // Inset past the artwork of the row it follows, so the thumbnails read
@@ -172,12 +228,19 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         // Track rows play the whole loaded list as a queue from the
         // tapped row; as more chunks scroll in, the context grows.
         final trackIds = trackIdsMemo.of(loaded);
+        final row = BrowseItemRows.buildRow(
+          item,
+          queueContextIds: trackIds.isEmpty ? null : trackIds,
+        );
+        final heading = page.folderLayout ? _groupHeading(index, loaded) : null;
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: BrowseItemRows.buildRow(
-            item,
-            queueContextIds: trackIds.isEmpty ? null : trackIds,
-          ),
+          child: heading == null
+              ? row
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [heading, row],
+                ),
         );
       },
       initialPlaceholder: const Padding(
@@ -198,6 +261,66 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           Expanded(child: _CatalogError(onReturn: widget.onBackToCatalogs)),
         ],
       ),
+    );
+    if (!page.folderLayout) return listView;
+
+    // Outside the list, so the way back stays in reach however far it scrolls.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const FolderTrail(),
+        Expanded(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              NotificationListener<ScrollNotification>(
+                onNotification: _holdActions,
+                child: listView,
+              ),
+              if (_actionsHeld && _FolderActions.anyFor(page, listing))
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      color: KalinkaColors.background,
+                      border: Border(
+                        bottom: BorderSide(color: KalinkaColors.borderSubtle),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: _heldInset,
+                      ),
+                      child: _FolderActions(page: page, listing: listing),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The heading over the first of a folder's subfolders and over the first
+  /// of its tracks; a folder lists all its subfolders first, so once a track
+  /// has loaded both counts are known.
+  Widget? _groupHeading(int index, List<BrowseItem> loaded) {
+    bool isFolder(BrowseItem item) => item.browseType == BrowseType.folder;
+    final folder = isFolder(loaded[index]);
+    if (index > 0 && isFolder(loaded[index - 1]) == folder) return null;
+
+    final folders = loaded.takeWhile(isFolder).length;
+    final settled = folders < loaded.length || loaded.length == _total;
+    final int? count = folder
+        ? (settled ? folders : null)
+        : (_total >= 0 ? _total - folders : null);
+    return Padding(
+      padding: EdgeInsets.only(top: index == 0 ? 4 : 18, bottom: 10),
+      child: ShelfHeading(title: folder ? 'FOLDERS' : 'TRACKS', count: count),
     );
   }
 
@@ -281,6 +404,82 @@ class _CatalogHeader extends StatelessWidget {
   }
 }
 
+/// The head of a page of folders under its breadcrumb: the folder shown's
+/// banner, its actions, and — at the page's own top — the page's shelves.
+class _FolderHeader extends StatelessWidget {
+  final CatalogPage page;
+
+  /// The folder shown, or [page] at its top.
+  final CatalogPage listing;
+
+  /// Marks the actions, which are held under the trail once scrolled to it.
+  final GlobalKey actionsKey;
+
+  const _FolderHeader({
+    super.key,
+    required this.page,
+    required this.listing,
+    required this.actionsKey,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _CatalogBanner(page: listing),
+        if (_FolderActions.anyFor(page, listing))
+          Padding(
+            key: actionsKey,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            child: _FolderActions(page: page, listing: listing),
+          ),
+        if (identical(listing, page) && page.sections.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: SectionShelves(sections: page.sections),
+          ),
+      ],
+    );
+  }
+}
+
+/// What can be done from the folder shown: play or enqueue everything in it,
+/// and, at the far end, go up to the folder enclosing it — away from Play
+/// all, which replaces the queue.
+class _FolderActions extends ConsumerWidget {
+  final CatalogPage page;
+  final CatalogPage listing;
+
+  const _FolderActions({required this.page, required this.listing});
+
+  static bool anyFor(CatalogPage page, CatalogPage listing) =>
+      !identical(listing, page) || listing.canAdd;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Row(
+      children: [
+        if (listing.canAdd) ...[
+          PlayAllChip(trackIds: [listing.id!]),
+          const SizedBox(width: 8),
+          AddAllChip(trackIds: [listing.id!], name: listing.title),
+        ],
+        const Spacer(),
+        if (!identical(listing, page))
+          ActionPillButton(
+            icon: Icons.drive_folder_upload_outlined,
+            semanticsLabel: 'Up one folder',
+            onTap: () {
+              KalinkaHaptics.lightImpact();
+              ref.read(searchSessionProvider.notifier).showEnclosingFolder();
+            },
+          ),
+      ],
+    );
+  }
+}
+
 /// Caches the queue-context track ids per loaded-chunk count, so row builds
 /// share one list instead of rescanning all loaded items each time.
 class _TrackIdsMemo {
@@ -313,7 +512,21 @@ double _artZoneHeight(double width) => (120 + width * 0.12).clamp(150.0, 230.0);
 class CatalogArtBackdrop extends ConsumerWidget {
   final String artPath;
 
-  const CatalogArtBackdrop({super.key, required this.artPath});
+  /// The art is a square cover rather than a card's wide art, so it is laid
+  /// on the right and fades in from the left the way card art does, leaving
+  /// the text column dark.
+  final bool fromCover;
+
+  /// Where card art starts to clear from black, and where it is fully clear
+  /// (the server's card renderer, `_LEFT_DARK_HOLD` and `_LEFT_DARK_END`).
+  static const _coverStart = 0.38;
+  static const _coverClear = 0.60;
+
+  const CatalogArtBackdrop({
+    super.key,
+    required this.artPath,
+    this.fromCover = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -335,7 +548,12 @@ class CatalogArtBackdrop extends ConsumerWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Opacity(opacity: 0.45, child: _BakedBlurImage(url: url)),
+              Opacity(
+                opacity: 0.45,
+                child: fromCover
+                    ? _onTheRight(_BakedBlurImage(url: url))
+                    : _BakedBlurImage(url: url),
+              ),
               const DecoratedBox(
                 decoration: BoxDecoration(
                   // Full strength across the title bar and the title, then
@@ -356,6 +574,23 @@ class CatalogArtBackdrop extends ConsumerWidget {
     );
   }
 }
+
+Widget _onTheRight(Widget art) => FractionallySizedBox(
+  alignment: Alignment.centerRight,
+  widthFactor: 1 - CatalogArtBackdrop._coverStart,
+  child: ShaderMask(
+    blendMode: BlendMode.dstIn,
+    shaderCallback: (bounds) => const LinearGradient(
+      stops: [
+        0,
+        (CatalogArtBackdrop._coverClear - CatalogArtBackdrop._coverStart) /
+            (1 - CatalogArtBackdrop._coverStart),
+      ],
+      colors: [Colors.transparent, Colors.white],
+    ).createShader(bounds),
+    child: art,
+  ),
+);
 
 /// The scrolling page banner: the Playfair title + attribution over the
 /// left half of [CatalogArtBackdrop]'s art zone (the art itself is fixed at
@@ -403,13 +638,14 @@ class _CatalogBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
+                FittedTitle(
                   page.title ?? '',
                   style: KalinkaFonts.display(
                     fontSize: (KalinkaTypography.baseSize + 21) * scale,
                     fontWeight: FontWeight.w600,
                     color: KalinkaColors.textPrimary,
                   ),
+                  minFontSize: (KalinkaTypography.baseSize + 7) * scale,
                 ),
                 if (subtitle.isNotEmpty)
                   Padding(

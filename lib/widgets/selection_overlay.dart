@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../data_model/data_model.dart';
 import '../providers/browse_detail_provider.dart';
 import '../providers/selection_state_provider.dart';
 import '../providers/kalinka_player_api_provider.dart';
@@ -175,11 +176,18 @@ class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar> {
   }
 
   /// How many tracks the selection comes to, in words. A container counts
-  /// through what it holds, so one still loading leaves the total open.
+  /// through what it holds, so one still loading leaves the total open. A
+  /// folder adds everything below it, which its listing does not show, so
+  /// folders are counted as folders.
   String _trackTally(SelectionState selection) {
     int tracks = selection.selectedIds.length;
     int unresolved = 0;
+    int folders = 0;
     for (final containerId in selection.selectedContainerIds) {
+      if (_isFolder(containerId)) {
+        folders++;
+        continue;
+      }
       final items = ref.watch(browseDetailProvider(containerId)).value?.items;
       if (items == null) {
         unresolved++;
@@ -189,8 +197,23 @@ class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar> {
       final excluded = selection.containerExclusions[containerId]?.length ?? 0;
       tracks += (trackCount - excluded).clamp(0, trackCount);
     }
-    if (unresolved > 0) return tracks > 0 ? '$tracks+ tracks' : '…';
-    return '$tracks ${tracks == 1 ? 'track' : 'tracks'}';
+    final trackPart = unresolved > 0
+        ? (tracks > 0 ? '$tracks+ tracks' : '…')
+        : '$tracks ${tracks == 1 ? 'track' : 'tracks'}';
+    if (folders == 0) return trackPart;
+    final folderPart = '$folders ${folders == 1 ? 'folder' : 'folders'}';
+    return tracks == 0 && unresolved == 0
+        ? folderPart
+        : '$trackPart · $folderPart';
+  }
+
+  /// The only catalogs a selection takes whole are folders.
+  static bool _isFolder(String containerId) {
+    try {
+      return EntityId.fromString(containerId).type == EntityType.catalog;
+    } catch (_) {
+      return false;
+    }
   }
 
   // Each queue action dismisses the panel immediately and reports progress via

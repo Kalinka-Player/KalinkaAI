@@ -24,8 +24,14 @@ import '../procedural_album_art.dart';
 class TrackThumb extends ConsumerWidget {
   final BrowseItem item;
   final double size;
+  final double radius;
 
-  const TrackThumb({super.key, required this.item, this.size = 44});
+  const TrackThumb({
+    super.key,
+    required this.item,
+    this.size = 44,
+    this.radius = 6,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -33,7 +39,7 @@ class TrackThumb extends ConsumerWidget {
         item.image?.small ?? item.image?.thumbnail ?? item.image?.large;
     final stand = ProceduralAlbumArt(trackId: item.id, size: size);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(radius),
       child: path == null
           ? stand
           : Image.network(
@@ -47,6 +53,27 @@ class TrackThumb extends ConsumerWidget {
               filterQuality: FilterQuality.low,
               errorBuilder: (_, __, ___) => stand,
             ),
+    );
+  }
+}
+
+/// The small mark in a row thumbnail's corner that says what kind of thing
+/// the art stands for — a playlist, a catalog, a folder.
+class CornerGlyph extends StatelessWidget {
+  final IconData icon;
+
+  const CornerGlyph(this.icon, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Icon(icon, size: 11, color: Colors.white),
     );
   }
 }

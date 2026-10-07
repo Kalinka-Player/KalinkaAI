@@ -52,6 +52,19 @@ BrowseItem _catalog() => BrowseItem(
   catalog: Catalog(id: 'c', title: _title),
 );
 
+BrowseItem _folder() => BrowseItem(
+  id: 'kalinka:x:catalog:folder.L2E',
+  name: _title,
+  subname: '3 tracks',
+  canBrowse: true,
+  canAdd: true,
+  catalog: Catalog(
+    id: 'folder.L2E',
+    title: _title,
+    previewConfig: Preview(type: PreviewType.folder),
+  ),
+);
+
 void main() {
   late SharedPreferences prefs;
 
@@ -94,6 +107,7 @@ void main() {
       'a playlist': _playlist(),
       'a collection': _playlist(canEdit: true),
       'a catalog': _catalog(),
+      'a folder': _folder(),
     };
 
     for (final entry in rows.entries) {

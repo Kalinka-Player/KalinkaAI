@@ -196,4 +196,23 @@ void main() {
     // Nothing has landed anywhere, so the selection is still there to save.
     expect(container.read(selectionStateProvider).count, 2);
   });
+
+  testWidgets('a folder is counted as a folder and queued whole', (
+    tester,
+  ) async {
+    const folder = 'kalinka:localfiles:catalog:folder.L211c2lj';
+    final api = _QueueApi();
+    final container = await openBar(tester, api);
+    container.read(selectionStateProvider.notifier).toggleContainer(folder);
+    await tester.pumpAndSettle();
+
+    expect(find.text('3 selected'), findsOneWidget);
+    expect(find.text('2 tracks · 1 folder'), findsOneWidget);
+
+    await tap(tester, 'Queue…');
+    await tap(tester, 'Enqueue');
+
+    expect(api.added.single.$1, unorderedEquals([_t1, _t2, folder]));
+    await letToastsGo(tester);
+  });
 }

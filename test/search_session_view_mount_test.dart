@@ -15,6 +15,7 @@ import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_button.dart';
 import 'package:kalinka/widgets/overlay_card.dart';
+import 'package:kalinka/widgets/search/folder_trail.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 
 /// Mounting the whole Find Music surface is the only thing that exercises its
@@ -238,6 +239,28 @@ void main() {
     expect(container.read(searchSessionProvider).catalogPage.isRoot, isFalse);
 
     await tester.tap(find.text('DISCOVER'));
+    await tester.pumpAndSettle();
+    expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
+  });
+
+  testWidgets('a page of folders keeps the bar\'s crumb, its trail below', (
+    tester,
+  ) async {
+    final container = await pumpSurface(tester);
+    container
+        .read(searchSessionProvider.notifier)
+        .openCatalog(
+          id: 'kalinka:localfiles:catalog:files',
+          title: 'My Library',
+          folderLayout: true,
+        );
+    await tester.pumpAndSettle();
+
+    expect(find.text('DISCOVER'), findsOneWidget);
+    expect(find.text('MY LIBRARY'), findsOneWidget);
+    expect(find.byType(FolderTrail), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
     expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
   });

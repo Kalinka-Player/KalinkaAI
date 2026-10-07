@@ -561,6 +561,13 @@ class KalinkaTextStyles {
     color: KalinkaColors.textSecondary,
   );
 
+  /// A folder trail: the title bar's mono face, in the folders' own case.
+  static TextStyle pathLabel = KalinkaFonts.mono(
+    fontSize: KalinkaTypography.baseSize + 1,
+    fontWeight: FontWeight.w500,
+    color: KalinkaColors.textPrimary,
+  );
+
   static TextStyle traySectionLabel = KalinkaFonts.mono(
     fontSize: KalinkaTypography.baseSize + 1,
     fontWeight: FontWeight.w600,

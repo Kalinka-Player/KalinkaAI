@@ -8,6 +8,7 @@ import '../../theme/app_theme.dart';
 import '../procedural_album_art.dart';
 import 'browse_item_rows.dart';
 import 'expand_chevron_button.dart';
+import 'track_row_support.dart';
 
 /// Catalog row for search results: a browsable sub-catalog with no cover of
 /// its own. Presented like a playlist — a glyph over generated art — expanding
@@ -70,7 +71,7 @@ class SearchCatalogRow extends ConsumerWidget {
                       const Positioned(
                         right: 3,
                         bottom: 3,
-                        child: _CatalogBadge(),
+                        child: CornerGlyph(Icons.queue_music),
                       ),
                     ],
                   ),
@@ -164,24 +165,6 @@ class _CatalogExpansion extends ConsumerWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Corner glyph marking generated art as a browsable catalog.
-class _CatalogBadge extends StatelessWidget {
-  const _CatalogBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 16,
-      height: 16,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: const Icon(Icons.queue_music, size: 11, color: Colors.white),
     );
   }
 }

@@ -11,6 +11,7 @@ import '../../providers/search_session_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/haptics.dart';
+import '../breadcrumb_crumb.dart';
 import '../browse_filters/search_filter_button.dart';
 import '../browse_filters/search_filter_overlay.dart';
 import '../mini_player.dart';
@@ -272,6 +273,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           sections: plan.sections,
           canEdit: plan.canEdit,
           focusItemId: focusItemId,
+          folderLayout: plan.folderLayout,
+          canAdd: plan.canAdd,
         );
   }
 
@@ -378,7 +381,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     // nothing on screen still shows.
     ref.listen(
       searchSessionProvider.select(
-        (s) => (s.isOpen, s.activeView, s.catalogPage.id),
+        (s) => (s.isOpen, s.activeView, s.shownListing.id),
       ),
       (_, __) => ref.read(selectionStateProvider.notifier).exitSelectionMode(),
     );
@@ -433,14 +436,17 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
             // the canvas before the rows (same layer as the bloom above).
             if (session.activeView == FindMusicView.catalogs &&
                 !session.catalogPage.isRoot &&
-                session.catalogPage.artPath != null)
+                session.shownListing.artPath != null)
               Positioned(
                 top: 0,
                 left: 0,
                 right: 0,
                 child: IgnorePointer(
                   child: CatalogArtBackdrop(
-                    artPath: session.catalogPage.artPath!,
+                    artPath: session.shownListing.artPath!,
+                    // Only a folder's art is a cover; the page's own is
+                    // card art like any catalog's.
+                    fromCover: session.folderPath.isNotEmpty,
                   ),
                 ),
               ),
@@ -571,8 +577,9 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
 
     return Row(
       children: [
-        _BreadcrumbCrumb(
+        BreadcrumbCrumb(
           label: 'DISCOVER',
+          semanticsLabel: 'Back to Discover',
           style: style,
           // At the root there is nowhere to go: DISCOVER is the page itself.
           onTap: current == null ? null : _handleBack,
@@ -1119,84 +1126,6 @@ class _IndexerProgressCard extends ConsumerWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// The parent segment of the breadcrumb: a plain label until the pointer finds
-/// it, then an outlined target. Tapping it goes back a layer — the same action
-/// as the arrow beside it — so the crumb is not merely a caption.
-class _BreadcrumbCrumb extends StatefulWidget {
-  final String label;
-  final TextStyle style;
-
-  /// Null at the root, where this crumb names the page you are already on.
-  final VoidCallback? onTap;
-
-  const _BreadcrumbCrumb({
-    required this.label,
-    required this.style,
-    required this.onTap,
-  });
-
-  @override
-  State<_BreadcrumbCrumb> createState() => _BreadcrumbCrumbState();
-}
-
-class _BreadcrumbCrumbState extends State<_BreadcrumbCrumb> {
-  bool _hovering = false;
-
-  void _setHovering(bool value) {
-    if (value == _hovering) return;
-    setState(() => _hovering = value);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final interactive = widget.onTap != null;
-
-    final crumb = AnimatedContainer(
-      duration: const Duration(milliseconds: 130),
-      curve: Curves.easeOut,
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        // White alpha rather than a surface tone: the bar is transparent, so
-        // on a catalog page this plate sits over blurred art, and only
-        // lightening whatever is behind it reads on both.
-        color: _hovering && interactive
-            ? Colors.white.withValues(alpha: 0.10)
-            : Colors.transparent,
-      ),
-      child: Text(
-        widget.label,
-        style: widget.style.copyWith(
-          color: interactive
-              ? KalinkaColors.textMuted
-              : KalinkaColors.textPrimary,
-        ),
-      ),
-    );
-
-    if (!interactive) return crumb;
-
-    return Semantics(
-      button: true,
-      label: 'Back to Discover',
-      excludeSemantics: true,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => _setHovering(true),
-        onExit: (_) => _setHovering(false),
-        child: GestureDetector(
-          onTap: () {
-            KalinkaHaptics.lightImpact();
-            widget.onTap!();
-          },
-          behavior: HitTestBehavior.opaque,
-          child: crumb,
-        ),
       ),
     );
   }

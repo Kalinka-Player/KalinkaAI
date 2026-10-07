@@ -7,6 +7,7 @@ import 'collection_row.dart';
 import 'search_album_row.dart';
 import 'search_artist_row.dart';
 import 'search_catalog_row.dart';
+import 'search_folder_row.dart';
 import 'search_playlist_row.dart';
 import 'search_track_row.dart';
 import 'show_more_row.dart';
@@ -123,6 +124,7 @@ class BrowseItemRows extends StatelessWidget {
   static double textInsetOf(BrowseItem item) => switch (item.browseType) {
     BrowseType.track => 57,
     BrowseType.album || BrowseType.artist || BrowseType.catalog => 75,
+    BrowseType.folder => 84,
     BrowseType.playlist => item.canEdit ? 81 : 71,
     BrowseType.unknown => 57,
   };
@@ -155,6 +157,8 @@ class BrowseItemRows extends StatelessWidget {
             : SearchPlaylistRow(item: item);
       case BrowseType.catalog:
         return SearchCatalogRow(item: item);
+      case BrowseType.folder:
+        return SearchFolderRow(item: item);
       case BrowseType.unknown:
         return const SizedBox.shrink();
     }
