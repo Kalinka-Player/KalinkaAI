@@ -201,7 +201,7 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
                               const Positioned(
                                 right: 3,
                                 bottom: 3,
-                                child: _PlaylistBadge(),
+                                child: CornerGlyph(Icons.queue_music),
                               ),
                             ],
                           ),
@@ -310,25 +310,6 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
           sizeCurve: Curves.easeOut,
         ),
       ],
-    );
-  }
-}
-
-/// Tiny corner glyph that marks a thumbnail as a playlist rather than a
-/// single album.
-class _PlaylistBadge extends StatelessWidget {
-  const _PlaylistBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 16,
-      height: 16,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: const Icon(Icons.queue_music, size: 11, color: Colors.white),
     );
   }
 }

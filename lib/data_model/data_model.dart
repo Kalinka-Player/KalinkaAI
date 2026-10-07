@@ -2,7 +2,7 @@ import '../utils/html_unescape.dart';
 
 enum PlayerStateType { stopped, playing, paused, buffering, error }
 
-enum BrowseType { album, artist, playlist, catalog, track, unknown }
+enum BrowseType { album, artist, playlist, catalog, folder, track, unknown }
 
 extension PlayerStateTypeExtension on PlayerStateType {
   String toValue() {
@@ -558,6 +558,11 @@ enum PreviewType {
   tileNumbered,
   card,
   none,
+
+  /// A folder of a file-backed source: its subfolders, each a catalog of this
+  /// same type, then the tracks directly in it. Opened as a page of its own
+  /// under a path trail.
+  folder,
 }
 
 extension PreviewTypeExtension on PreviewType {
@@ -577,6 +582,8 @@ extension PreviewTypeExtension on PreviewType {
         return 'card';
       case PreviewType.none:
         return 'none';
+      case PreviewType.folder:
+        return 'folder';
     }
   }
 
@@ -596,6 +603,8 @@ extension PreviewTypeExtension on PreviewType {
         return PreviewType.card;
       case 'none':
         return PreviewType.none;
+      case 'folder':
+        return PreviewType.folder;
       default:
         // Tolerate unknown/newer server layout types instead of throwing:
         // the section still renders as a plain tile list.
@@ -1172,7 +1181,9 @@ class BrowseItem {
     } else if (playlist != null) {
       return BrowseType.playlist;
     } else if (catalog != null) {
-      return BrowseType.catalog;
+      return catalog?.previewConfig?.type == PreviewType.folder
+          ? BrowseType.folder
+          : BrowseType.catalog;
     } else if (track != null) {
       return BrowseType.track;
     }

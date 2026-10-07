@@ -57,6 +57,13 @@ class CatalogCardPlan {
   /// that make those writes live.
   final bool canEdit;
 
+  /// The catalog is a folder of a file-backed source, browsed under a
+  /// breadcrumb rather than as rows.
+  final bool folderLayout;
+
+  /// Adding the catalog's id to the queue adds tracks.
+  final bool canAdd;
+
   const CatalogCardPlan({
     required this.id,
     required this.title,
@@ -68,6 +75,8 @@ class CatalogCardPlan {
     this.filters = const [],
     this.sections = const [],
     this.canEdit = false,
+    this.folderLayout = false,
+    this.canAdd = false,
   });
 }
 
@@ -157,6 +166,8 @@ final catalogCardGroupsProvider = FutureProvider<List<CatalogCardGroup>>((
           artPath: artPathOf(item),
           filters: catalog.filters,
           sections: item.sections ?? const [],
+          folderLayout: item.browseType == BrowseType.folder,
+          canAdd: item.canAdd,
         ),
       );
       if (cards.length >= _kMaxCardsPerSource) break;

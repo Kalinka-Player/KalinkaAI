@@ -22,6 +22,9 @@ const _resultsFilterKey = 'Kalinka.resultsFilter';
 
 const _catalogFiltersKey = 'Kalinka.catalogFilters';
 
+/// The folder each page of folders was left on, by server and page.
+const _folderPathsKey = 'Kalinka.folderPaths';
+
 /// Minimum time the "working…" state stays up, even if results resolve
 /// instantly — the request may be slow, so the UI must always read as busy
 /// rather than flickering a frame of loading.
@@ -55,7 +58,8 @@ typedef ExpandedBlock = ({ResultKind kind, String? source});
 
 /// The Catalogs view is either at its root (search invitation + catalog cards)
 /// or on one selected catalog page. Navigation is exactly one level deep — a
-/// page never opens another page; albums/artists/playlists unroll inline.
+/// page never opens another page; albums/artists/playlists unroll inline, and
+/// a page of folders moves between its folders in place.
 class CatalogPage {
   /// Stable browse id of the open catalog category; null on the root screen.
   final String? id;
@@ -91,6 +95,14 @@ class CatalogPage {
   /// scrolls to it. Null when the page was opened at its top.
   final String? focusItemId;
 
+  /// The listing is a folder's: its subfolders, then its tracks, under a
+  /// breadcrumb of the folders enclosing it.
+  final bool folderLayout;
+
+  /// Adding the id to the queue adds tracks — for a folder, whether any sit
+  /// directly in it.
+  final bool canAdd;
+
   const CatalogPage.root()
     : id = null,
       title = null,
@@ -100,7 +112,9 @@ class CatalogPage {
       filters = const [],
       sections = const [],
       canEdit = false,
-      focusItemId = null;
+      focusItemId = null,
+      folderLayout = false,
+      canAdd = false;
 
   const CatalogPage.category({
     required this.id,
@@ -112,7 +126,48 @@ class CatalogPage {
     this.sections = const [],
     this.canEdit = false,
     this.focusItemId,
+    this.folderLayout = false,
+    this.canAdd = false,
   });
+
+  /// The listing a browsable [item] stands for, owned by [provider].
+  factory CatalogPage.fromItem(BrowseItem item, {String? provider}) =>
+      CatalogPage.category(
+        id: item.id,
+        title: item.catalog?.title ?? item.name,
+        provider: provider,
+        description: item.catalog?.description,
+        artPath: artPathOf(item),
+        filters: item.catalog?.filters ?? const [],
+        sections: item.sections ?? const [],
+        canEdit: item.canEdit,
+        folderLayout: item.browseType == BrowseType.folder,
+        canAdd: item.canAdd,
+      );
+
+  /// A folder as [toFolderJson] kept it, owned by [provider].
+  factory CatalogPage.savedFolder(
+    Map<String, dynamic> json, {
+    String? provider,
+  }) => CatalogPage.category(
+    id: json['id'] as String,
+    title: json['title'] as String?,
+    provider: provider,
+    description: json['description'] as String?,
+    artPath: json['artPath'] as String?,
+    folderLayout: true,
+    canAdd: json['canAdd'] == true,
+  );
+
+  /// What of a folder outlives the app: enough to show it again before its
+  /// listing loads.
+  Map<String, dynamic> toFolderJson() => {
+    'id': id,
+    if (title != null) 'title': title,
+    if (description != null) 'description': description,
+    if (artPath != null) 'artPath': artPath,
+    'canAdd': canAdd,
+  };
 
   bool get isRoot => id == null;
 
@@ -127,6 +182,8 @@ class CatalogPage {
     filters: filters,
     sections: sections,
     canEdit: canEdit,
+    folderLayout: folderLayout,
+    canAdd: canAdd,
   );
 
   /// The entity kinds this category holds, in the order its source listed
@@ -223,6 +280,10 @@ class SearchSessionState {
   /// page view via `browseDetailProvider(id)` (cached across view switches).
   final CatalogPage catalogPage;
 
+  /// The folders opened one inside another on a [CatalogPage.folderLayout]
+  /// page, outermost first; empty at the page's own top.
+  final List<CatalogPage> folderPath;
+
   /// Filters applied to [catalogPage]. Lives here rather than inside the page
   /// because the control that edits it sits in the title bar, a sibling of the
   /// page. Remembered per category.
@@ -254,6 +315,7 @@ class SearchSessionState {
     this.matchSource,
     this.expandedBlock,
     this.catalogPage = const CatalogPage.root(),
+    this.folderPath = const [],
     this.catalogFilter = const BrowseFilterQuery(),
     this.expandedShelf,
     this.history = const [],
@@ -261,6 +323,11 @@ class SearchSessionState {
     this.zeroStateLoading = false,
     this.aiSuggestions = const [],
   });
+
+  /// What the catalog page lists now: the folder it was moved to, or the
+  /// page itself.
+  CatalogPage get shownListing =>
+      folderPath.isEmpty ? catalogPage : folderPath.last;
 
   /// Prompts shown in the search overlay: the server's context-aware
   /// suggestions once fetched, static examples until then.
@@ -348,6 +415,7 @@ class SearchSessionState {
     ExpandedBlock? expandedBlock,
     bool clearExpandedBlock = false,
     CatalogPage? catalogPage,
+    List<CatalogPage>? folderPath,
     BrowseFilterQuery? catalogFilter,
     SearchType? expandedShelf,
     bool clearExpandedShelf = false,
@@ -372,6 +440,7 @@ class SearchSessionState {
           ? null
           : (expandedBlock ?? this.expandedBlock),
       catalogPage: catalogPage ?? this.catalogPage,
+      folderPath: folderPath ?? this.folderPath,
       catalogFilter: catalogFilter ?? this.catalogFilter,
       expandedShelf: clearExpandedShelf
           ? null
@@ -396,6 +465,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   BrowseFilterQuery _savedResultsFilter = const BrowseFilterQuery();
   Map<String, String> _savedResultsGenreNames = {};
   Map<String, BrowseFilterQuery> _savedCatalogFilters = {};
+  Map<String, List<Map<String, dynamic>>> _savedFolderPaths = {};
 
   @override
   SearchSessionState build() {
@@ -403,6 +473,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     ref.onDispose(() => _disposed = true);
     _savedResultsFilter = _loadResultsFilter();
     _savedCatalogFilters = _loadCatalogFilters();
+    _savedFolderPaths = _loadFolderPaths();
     return SearchSessionState(
       history: _loadHistory(),
       resultsFilter: _savedResultsFilter,
@@ -440,6 +511,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       clearMatchSource: true,
       clearExpandedBlock: true,
       catalogPage: const CatalogPage.root(),
+      folderPath: const [],
       catalogFilter: const BrowseFilterQuery(),
       clearExpandedShelf: true,
       history: _loadHistory(),
@@ -455,6 +527,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         !state.catalogPage.isRoot) {
       state = state.copyWith(
         catalogPage: const CatalogPage.root(),
+        folderPath: const [],
         catalogFilter: const BrowseFilterQuery(),
         clearExpandedShelf: true,
       );
@@ -476,6 +549,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     List<BrowseItem> sections = const [],
     bool canEdit = false,
     String? focusItemId,
+    bool folderLayout = false,
+    bool canAdd = false,
   }) {
     final page = CatalogPage.category(
       id: id,
@@ -487,10 +562,13 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       sections: sections,
       canEdit: canEdit,
       focusItemId: focusItemId,
+      folderLayout: folderLayout,
+      canAdd: canAdd,
     );
     state = state.copyWith(
       activeView: FindMusicView.catalogs,
       catalogPage: page,
+      folderPath: folderLayout ? _savedFolderPath(id, provider) : const [],
       // The source may have dropped a field since the filter was chosen.
       catalogFilter:
           _savedCatalogFilters[id]?.fittedTo(page.filterCapabilities) ??
@@ -507,11 +585,33 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     state = state.copyWith(catalogPage: state.catalogPage.withoutFocus());
   }
 
+  /// Show [folder], listed in the folder shown now, in its place.
+  void openFolder(BrowseItem folder) {
+    state = state.copyWith(
+      folderPath: [
+        ...state.folderPath,
+        CatalogPage.fromItem(folder, provider: state.catalogPage.provider),
+      ],
+    );
+    _rememberFolderPath();
+  }
+
+  /// Show the folder [depth] steps in from the page's top, which zero is.
+  void showFolderAt(int depth) {
+    if (depth < 0 || depth >= state.folderPath.length) return;
+    state = state.copyWith(folderPath: state.folderPath.sublist(0, depth));
+    _rememberFolderPath();
+  }
+
+  /// Show the folder enclosing the one shown.
+  void showEnclosingFolder() => showFolderAt(state.folderPath.length - 1);
+
   /// Return from a catalog page to the Catalogs root (the search screen).
   void backToCatalogsRoot() {
     if (state.catalogPage.isRoot) return;
     state = state.copyWith(
       catalogPage: const CatalogPage.root(),
+      folderPath: const [],
       catalogFilter: const BrowseFilterQuery(),
       clearExpandedShelf: true,
     );
@@ -1031,6 +1131,53 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
             id: filter.toJson(),
         }),
       );
+    }
+  }
+
+  /// Folder paths differ from one server's library to the next, so each is
+  /// kept per server as well as per page.
+  String _folderPathKey(String pageId) =>
+      '${ref.read(connectionSettingsProvider).baseUrl} $pageId';
+
+  List<CatalogPage> _savedFolderPath(String pageId, String? provider) => [
+    for (final folder in _savedFolderPaths[_folderPathKey(pageId)] ?? const [])
+      CatalogPage.savedFolder(folder, provider: provider),
+  ];
+
+  Map<String, List<Map<String, dynamic>>> _loadFolderPaths() {
+    final json = _prefs.getString(_folderPathsKey);
+    if (json == null) return {};
+    try {
+      return {
+        for (final MapEntry(key: key, value: path)
+            in (jsonDecode(json) as Map<String, dynamic>).entries)
+          if (path is List)
+            key: [
+              for (final folder in path)
+                if (folder is Map<String, dynamic> && folder['id'] is String)
+                  folder,
+            ],
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  void _rememberFolderPath() {
+    final pageId = state.catalogPage.id;
+    if (pageId == null) return;
+    final key = _folderPathKey(pageId);
+    if (state.folderPath.isEmpty) {
+      _savedFolderPaths.remove(key);
+    } else {
+      _savedFolderPaths[key] = [
+        for (final folder in state.folderPath) folder.toFolderJson(),
+      ];
+    }
+    if (_savedFolderPaths.isEmpty) {
+      _prefs.remove(_folderPathsKey);
+    } else {
+      _prefs.setString(_folderPathsKey, jsonEncode(_savedFolderPaths));
     }
   }
 

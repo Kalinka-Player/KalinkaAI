@@ -139,9 +139,30 @@ _ShelfPlan? _plan(BrowseItem section, BrowseFilterQuery query, int revision) {
   );
 }
 
+/// A page's shelves stacked in place, for a page whose own listing follows
+/// them in the same scroll. An empty shelf takes no room; none offers View
+/// all, which would narrow a listing these shelves are not.
+class SectionShelves extends StatelessWidget {
+  final List<BrowseItem> sections;
+
+  const SectionShelves({super.key, required this.sections});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final section in sections)
+          if (_plan(section, const BrowseFilterQuery(), 0) case final shelf?)
+            _SectionShelf(shelf: shelf, onViewAll: null, onEmpty: (_) {}),
+      ],
+    );
+  }
+}
+
 class _SectionShelf extends ConsumerWidget {
   final _ShelfPlan shelf;
-  final ValueChanged<SearchType> onViewAll;
+  final ValueChanged<SearchType>? onViewAll;
   final ValueChanged<CatalogSectionRequest> onEmpty;
 
   const _SectionShelf({
@@ -186,9 +207,12 @@ class _SectionShelf extends ConsumerWidget {
         return _Shelf(
           title: title,
           count: list.total,
-          onViewAll: type == null || list.total <= list.items.length
+          onViewAll:
+              type == null ||
+                  onViewAll == null ||
+                  list.total <= list.items.length
               ? null
-              : () => onViewAll(type),
+              : () => onViewAll!(type),
           child: BrowseItemRows(
             items: list.items,
             queueContextIds: trackIds.isEmpty ? null : trackIds,
