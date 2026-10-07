@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
-import '../utils/click_cursor.dart';
+import 'settings_controls/settings_action_row.dart';
 import 'settings_controls/settings_card.dart';
 
 /// "SUPPORT" at the foot of the General settings page: what a user needs
@@ -22,46 +22,10 @@ class SupportSection extends StatelessWidget {
         ),
         SettingsCard(
           children: [
-            // Ink paints on the nearest Material, which must sit above the
-            // card's fill for the press to show.
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onDownloadLogs,
-                mouseCursor: clickCursor(interactive: true),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Download server logs',
-                              style: KalinkaTextStyles.trayRowLabel,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'An archive of recent logs to attach to a bug '
-                              'report.',
-                              style: KalinkaTextStyles.trayRowSublabel,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(
-                        Icons.chevron_right,
-                        size: 20,
-                        color: KalinkaColors.textSecondary,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            SettingsActionRow(
+              label: 'Download server logs',
+              sublabel: 'An archive of recent logs to attach to a bug report.',
+              onTap: onDownloadLogs,
             ),
           ],
         ),
