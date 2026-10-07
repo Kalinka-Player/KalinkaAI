@@ -13,6 +13,7 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
+import 'package:kalinka/providers/monotonic_clock_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
 
@@ -35,7 +36,9 @@ class _FakeApi implements KalinkaPlayerProxy {
     listModulesCalls++;
     await reply?.future;
     if (!shouldSucceed) {
-      throw DioException(requestOptions: RequestOptions(path: '/server/modules'));
+      throw DioException(
+        requestOptions: RequestOptions(path: '/server/modules'),
+      );
     }
     return ModulesAndDevices(inputModules: const [], devices: const []);
   }
@@ -86,11 +89,17 @@ void main() {
       final manualEpochBefore = container.read(manualReconnectEpochProvider);
 
       notifier.startReconnecting();
-      expect(container.read(connectionStateProvider), ConnectionStatus.reconnecting);
+      expect(
+        container.read(connectionStateProvider),
+        ConnectionStatus.reconnecting,
+      );
       expect(container.read(manualReconnectEpochProvider), manualEpochBefore);
 
       notifier.retryNow();
-      expect(container.read(manualReconnectEpochProvider), manualEpochBefore + 1);
+      expect(
+        container.read(manualReconnectEpochProvider),
+        manualEpochBefore + 1,
+      );
       await pumpEventQueue();
 
       // The probe reached the server (so the socket rebuild is triggered)...
@@ -133,21 +142,26 @@ void main() {
       prefs = await SharedPreferences.getInstance();
     });
 
-    // DateTime.now() ignores fakeAsync, so the notifier gets the fake clock.
+    // Drive elapsed retry time separately from wall-clock timestamps.
     ProviderContainer fakeClockContainer(
       FakeAsync async,
       _FakeApi api, {
       required bool kiosk,
+      DateTime Function()? wallClock,
     }) {
       final start = DateTime(2026, 10, 3);
+      final stopwatch = async.getClock(start).stopwatch()..start();
       final container = ProviderContainer(
         overrides: [
           sharedPrefsProvider.overrideWithValue(prefs),
           kalinkaProxyProvider.overrideWithValue(api),
           appLifecycleProvider.overrideWith(_ResumedLifecycle.new),
           kioskLaunchProvider.overrideWithValue(kiosk),
+          monotonicClockProvider.overrideWithValue(stopwatch),
           connectionStateProvider.overrideWith(
-            () => ConnectionStateNotifier(now: () => start.add(async.elapsed)),
+            () => ConnectionStateNotifier(
+              now: wallClock ?? () => start.add(async.elapsed),
+            ),
           ),
         ],
       );
@@ -231,6 +245,123 @@ void main() {
       });
     });
 
+    for (final shift in [const Duration(hours: 1), const Duration(hours: -1)]) {
+      test('a ${shift.inHours}h wall-clock jump preserves the 30s window', () {
+        fakeAsync((async) {
+          var adjustment = Duration.zero;
+          final api = _FakeApi(shouldSucceed: false);
+          final container = fakeClockContainer(
+            async,
+            api,
+            kiosk: false,
+            wallClock: () => DateTime(2026).add(async.elapsed).add(adjustment),
+          );
+          final notifier = container.read(connectionStateProvider.notifier);
+          notifier.startReconnecting();
+          async.elapse(const Duration(seconds: 5));
+
+          adjustment = shift;
+          async.elapse(const Duration(seconds: 20));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+          expect(notifier.escalationReached, isFalse);
+
+          async.elapse(const Duration(seconds: 5));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.offline,
+          );
+          expect(notifier.escalationReached, isTrue);
+        });
+      });
+    }
+
+    for (final disconnect in [false, true]) {
+      test(
+        'a late failed probe leaves ${disconnect ? 'a disconnect' : 'a new connection attempt'} alone',
+        () {
+          fakeAsync((async) {
+            final api = _FakeApi(shouldSucceed: false)
+              ..reply = Completer<void>();
+            final container = fakeClockContainer(async, api, kiosk: false);
+            final notifier = container.read(connectionStateProvider.notifier);
+            notifier.startReconnecting();
+            async.elapse(const Duration(seconds: 35));
+            expect(api.listModulesCalls, 1);
+
+            if (disconnect) {
+              notifier.disconnected();
+            } else {
+              notifier.connecting();
+            }
+            api.reply!.complete();
+            async.flushMicrotasks();
+            expect(
+              container.read(connectionStateProvider),
+              disconnect ? ConnectionStatus.none : ConnectionStatus.connecting,
+            );
+            async.elapse(const Duration(seconds: 10));
+            expect(api.listModulesCalls, 1);
+          });
+        },
+      );
+    }
+
+    test('a new outage gets a fresh 30s window after connecting', () {
+      fakeAsync((async) {
+        final api = _FakeApi(shouldSucceed: false);
+        final container = fakeClockContainer(async, api, kiosk: false);
+        final notifier = container.read(connectionStateProvider.notifier);
+        notifier.startReconnecting();
+        async.elapse(const Duration(seconds: 25));
+
+        notifier.connected();
+        expect(notifier.escalationReached, isFalse);
+        async.elapse(const Duration(seconds: 60));
+        notifier.startReconnecting();
+        async.elapse(const Duration(seconds: 25));
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+        expect(notifier.escalationReached, isFalse);
+
+        async.elapse(const Duration(seconds: 5));
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.offline,
+        );
+      });
+    });
+
+    test('resume still counts suspend time when the monotonic clock stops', () {
+      fakeAsync((async) {
+        var suspendedFor = Duration.zero;
+        final api = _FakeApi();
+        final container = fakeClockContainer(
+          async,
+          api,
+          kiosk: false,
+          wallClock: () => DateTime(2026).add(async.elapsed).add(suspendedFor),
+        );
+        final lifecycle =
+            container.read(appLifecycleProvider.notifier) as _ResumedLifecycle;
+        container.read(connectionStateProvider.notifier).connected();
+        final epoch = container.read(retryEpochProvider);
+
+        lifecycle.set(AppLifecycleState.paused);
+        suspendedFor = const Duration(seconds: 30);
+        lifecycle.set(AppLifecycleState.resumed);
+        expect(container.read(retryEpochProvider), epoch + 1);
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.connected,
+        );
+      });
+    });
+
     test('opening the display in the background waits for resume', () {
       fakeAsync((async) {
         final api = _FakeApi(shouldSucceed: false);
@@ -289,7 +420,9 @@ void main() {
       server = await HttpServer.bind('127.0.0.1', 0);
       server.listen((HttpRequest req) async {
         if (WebSocketTransformer.isUpgradeRequest(req)) {
-          open.add(await WebSocketTransformer.upgrade(req)); // accept, stay open
+          open.add(
+            await WebSocketTransformer.upgrade(req),
+          ); // accept, stay open
         } else {
           req.response.statusCode = 404;
           await req.response.close();

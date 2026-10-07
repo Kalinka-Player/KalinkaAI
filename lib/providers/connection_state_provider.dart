@@ -7,6 +7,7 @@ import 'package:logger/logger.dart' show Logger;
 import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
 import 'kiosk_provider.dart' show kioskActiveProvider;
+import 'monotonic_clock_provider.dart' show monotonicClockProvider;
 import 'playback_time_provider.dart' show appLifecycleProvider;
 
 final _logger = Logger();
@@ -21,13 +22,15 @@ final connectionStateProvider =
 /// Incremented each time a reconnect attempt fires. `webSocketProvider` watches
 /// this so that only timer-driven ticks (or a manual retry) trigger new socket
 /// connection attempts — preventing Riverpod's autoDispose rebuild loop.
-final retryEpochProvider =
-    NotifierProvider<_RetryEpochNotifier, int>(_RetryEpochNotifier.new);
+final retryEpochProvider = NotifierProvider<_RetryEpochNotifier, int>(
+  _RetryEpochNotifier.new,
+);
 
 /// Explicit retries are also user intent to restore Android media controls.
 /// Automatic reachability probes must not carry that intent.
-final manualReconnectEpochProvider =
-    NotifierProvider<_RetryEpochNotifier, int>(_RetryEpochNotifier.new);
+final manualReconnectEpochProvider = NotifierProvider<_RetryEpochNotifier, int>(
+  _RetryEpochNotifier.new,
+);
 
 class _RetryEpochNotifier extends Notifier<int> {
   @override
@@ -44,7 +47,8 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   Timer? _retryTimer;
   int _retryCount = 0;
   int _probesInFlight = 0;
-  DateTime? _reconnectStartedAt;
+  // NTP can adjust a Pi's wall clock while it is waiting for the server.
+  Duration? _reconnectStartedAt;
 
   /// When the app was last backgrounded (null while foregrounded).
   DateTime? _backgroundedAt;
@@ -64,7 +68,9 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   /// True when reconnecting has been going for >= 30 seconds.
   bool get escalationReached =>
       _reconnectStartedAt != null &&
-      _now().difference(_reconnectStartedAt!).inSeconds >= 30;
+      _monotonicNow - _reconnectStartedAt! >= const Duration(seconds: 30);
+
+  Duration get _monotonicNow => ref.read(monotonicClockProvider).elapsed;
 
   @override
   ConnectionStatus build() {
@@ -150,7 +156,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
       return;
     }
     _retryCount = 0;
-    _reconnectStartedAt = _now();
+    _reconnectStartedAt = _monotonicNow;
     state = ConnectionStatus.reconnecting;
     _startRetryTimer();
   }
@@ -180,7 +186,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
 
   void _leaveOffline() {
     _retryCount = 0;
-    _reconnectStartedAt = _now();
+    _reconnectStartedAt = _monotonicNow;
     state = ConnectionStatus.reconnecting;
   }
 
@@ -216,14 +222,13 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   }
 
   void _checkEscalation() {
+    // A failed probe may finish after a new connection attempt or disconnect.
+    if (state != ConnectionStatus.reconnecting || !escalationReached) return;
     // The display has no Retry button and often starts before the server
     // listens, so it keeps probing until the server answers.
     if (ref.read(kioskActiveProvider)) return;
-    if (_reconnectStartedAt != null &&
-        _now().difference(_reconnectStartedAt!).inSeconds >= 30) {
-      _cancelRetryTimer();
-      state = ConnectionStatus.offline;
-    }
+    _cancelRetryTimer();
+    state = ConnectionStatus.offline;
   }
 
   void _cancelRetryTimer() {
