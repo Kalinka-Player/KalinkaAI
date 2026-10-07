@@ -8,6 +8,8 @@ import '../providers/settings_provider.dart';
 import '../providers/upgrade_provider.dart';
 import '../data_model/presentation_schema.dart' show PageSpec;
 import '../theme/app_theme.dart';
+import '../widgets/box_actions.dart';
+import '../widgets/box_section.dart';
 import '../widgets/connection_banner.dart';
 import '../widgets/demo_read_only_dialog.dart';
 import '../widgets/kalinka_dialog.dart' show showKalinkaDialog;
@@ -239,6 +241,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                                 CrossAxisAlignment.stretch,
                                             children: [
                                               const ThisDeviceSection(),
+                                              const BoxSection(),
                                               SupportSection(
                                                 onDownloadLogs: () => setState(
                                                   () => _logExportOpen = true,
@@ -382,6 +385,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               textAlign: TextAlign.center,
               style: KalinkaTextStyles.trayRowSublabel,
             ),
+            if (ref.watch(canRestartServerThroughBoxProvider)) ...[
+              const SizedBox(height: 16),
+              KalinkaButton(
+                label: 'Restart server',
+                variant: KalinkaButtonVariant.accent,
+                size: KalinkaButtonSize.compact,
+                onTap: () =>
+                    restartServerThroughBox(context, ref, inPanel: true),
+              ),
+            ],
           ],
         ),
       ),
