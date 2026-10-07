@@ -14,7 +14,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/demo_mode.dart';
-import 'package:kalinka/providers/demo_refusal.dart';
+import 'package:kalinka/providers/server_refusal.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/log_export_api.dart';
 import 'package:kalinka/providers/renderer_host_provider.dart';
@@ -52,7 +52,7 @@ class _Answer implements HttpClientAdapter {
 Dio _answering(int status, Object body) {
   final dio = Dio(BaseOptions(baseUrl: 'http://server.test'))
     ..httpClientAdapter = _Answer(status, body)
-    ..interceptors.add(DemoRefusalInterceptor());
+    ..interceptors.add(ServerRefusalInterceptor());
   return dio;
 }
 
@@ -219,7 +219,7 @@ void main() {
     addTearDown(container.dispose);
     expect(
       container.read(httpClientProvider).interceptors,
-      contains(isA<DemoRefusalInterceptor>()),
+      contains(isA<ServerRefusalInterceptor>()),
     );
   });
 
@@ -228,7 +228,7 @@ void main() {
       await expectLater(
         _answering(403, _refusal).put('/collections'),
         throwsA(
-          isA<DemoRefusalException>()
+          isA<ServerRefusalException>()
               .having((e) => e.code, 'code', 'demo_read_only')
               .having((e) => e.reason, 'reason', _reason)
               .having((e) => '$e', 'text', _reason)
@@ -241,6 +241,7 @@ void main() {
       for (final (status, code) in [
         (409, 'demo_queue_full'),
         (429, 'demo_rate_limited'),
+        (409, 'queue_full'),
       ]) {
         final body = {
           'detail': {'code': code, 'message': _reason},
@@ -248,7 +249,7 @@ void main() {
         await expectLater(
           _answering(status, body).post('/queue/add'),
           throwsA(
-            isA<DemoRefusalException>()
+            isA<ServerRefusalException>()
                 .having((e) => e.code, 'code', code)
                 .having((e) => '$e', 'text', _reason),
           ),
@@ -265,8 +266,8 @@ void main() {
           _answering(status, body).put('/collections'),
           throwsA(
             isA<DioException>().having(
-              (e) => e is DemoRefusalException,
-              'is a demo refusal',
+              (e) => e is ServerRefusalException,
+              'is a refusal',
               isFalse,
             ),
           ),

@@ -3,7 +3,7 @@ import 'package:dio/dio.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/log_export.dart';
-import 'demo_refusal.dart';
+import 'server_refusal.dart';
 import 'kalinka_player_api_provider.dart' show httpClientProvider;
 
 const _exportPath = '/server/logs/export';
@@ -138,7 +138,7 @@ class DioLogExportApi implements LogExportApi {
   }) async {
     try {
       return await request();
-    } on DemoRefusalException catch (e) {
+    } on ServerRefusalException catch (e) {
       throw LogExportException(e.code, e.reason);
     } on DioException catch (e) {
       final response = e.response;
