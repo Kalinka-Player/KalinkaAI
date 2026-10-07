@@ -26,7 +26,7 @@ class KalinkaHaptics {
   static void selectionClick() {
     if (_isAndroid) {
       _nativeChannel.invokeMethod('hapticTick').catchError((_) {
-        Vibration.vibrate(duration: 15, amplitude: 80);
+        Vibration.vibrate(duration: 15, amplitude: 80).ignore();
       });
     } else if (_isIOS) {
       HapticFeedback.selectionClick();
@@ -35,7 +35,7 @@ class KalinkaHaptics {
 
   static void lightImpact() {
     if (_isAndroid) {
-      Vibration.vibrate(duration: 20, amplitude: 110);
+      Vibration.vibrate(duration: 20, amplitude: 110).ignore();
     } else if (_isIOS) {
       HapticFeedback.lightImpact();
     }
@@ -43,7 +43,7 @@ class KalinkaHaptics {
 
   static void mediumImpact() {
     if (_isAndroid) {
-      Vibration.vibrate(duration: 35, amplitude: 160);
+      Vibration.vibrate(duration: 35, amplitude: 160).ignore();
     } else if (_isIOS) {
       HapticFeedback.mediumImpact();
     }
@@ -51,7 +51,7 @@ class KalinkaHaptics {
 
   static void heavyImpact() {
     if (_isAndroid) {
-      Vibration.vibrate(duration: 50, amplitude: 230);
+      Vibration.vibrate(duration: 50, amplitude: 230).ignore();
     } else if (_isIOS) {
       HapticFeedback.heavyImpact();
     }
@@ -68,7 +68,7 @@ class KalinkaHaptics {
       Vibration.vibrate(
         pattern: [0, 40, 100, 25],
         intensities: [0, 180, 0, 110],
-      );
+      ).ignore();
     } else if (_isIOS) {
       HapticFeedback.mediumImpact();
       await Future.delayed(const Duration(milliseconds: 80));
@@ -85,7 +85,7 @@ class KalinkaHaptics {
       Vibration.vibrate(
         pattern: [0, 30, 80, 70],
         intensities: [0, 100, 0, 230],
-      );
+      ).ignore();
     } else if (_isIOS) {
       HapticFeedback.lightImpact();
       await Future.delayed(const Duration(milliseconds: 60));
@@ -115,7 +115,7 @@ class KalinkaHaptics {
         Vibration.vibrate(
           pattern: [0, 5, 5, 15, 10],
           intensities: [0, 180, 220, 80, 0],
-        );
+        ).ignore();
       }
     } else if (_isIOS) {
       HapticFeedback.heavyImpact();
@@ -141,7 +141,7 @@ class KalinkaHaptics {
         Vibration.vibrate(
           pattern: [0, 8, 20, 30],
           intensities: [0, 80, 0, 220],
-        );
+        ).ignore();
       }
     } else if (_isIOS) {
       HapticFeedback.lightImpact();
