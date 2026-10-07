@@ -807,8 +807,26 @@ void main() {
     await _pump(tester, _emptyQueue, connection: ConnectionStatus.reconnecting);
 
     expect(find.text('Ready to play'), findsNothing);
-    expect(find.text('Can’t reach Den server'), findsOneWidget);
-    expect(find.text('Reconnecting to Den server…'), findsOneWidget);
+    expect(find.text('Preparing…'), findsOneWidget);
+    expect(
+      find.text('Waiting for Den server. This screen picks up by itself.'),
+      findsOneWidget,
+    );
+    expect(find.text('Waiting for Den server…'), findsOneWidget);
+  });
+
+  testWidgets('offline reads the same as reconnecting, never "ready"', (
+    tester,
+  ) async {
+    await _pump(tester, _emptyQueue, connection: ConnectionStatus.offline);
+
+    expect(find.text('Ready to play'), findsNothing);
+    expect(find.text('Preparing…'), findsOneWidget);
+    expect(
+      find.text('Waiting for Den server. This screen picks up by itself.'),
+      findsOneWidget,
+    );
+    expect(find.text('Waiting for Den server…'), findsOneWidget);
   });
 
   testWidgets('paused, the cover and track stay', (tester) async {
