@@ -3,10 +3,8 @@ import '../../theme/app_theme.dart';
 
 /// Password/masked input with eye toggle button.
 ///
-/// Same commit semantics as [SettingsTextInput]: the typed value is held
-/// locally and only propagated to [onChanged] on focus loss, submit, or
-/// dispose. Re-staging on every keystroke would steal focus and the user
-/// would lose every character after the first.
+/// The typed value is held locally and only propagated to [onChanged] on
+/// focus loss, submit, or dispose.
 ///
 /// With [hidden] the store holds a value it never sends: the field shows a
 /// mask in its place and the eye does nothing, there being nothing to

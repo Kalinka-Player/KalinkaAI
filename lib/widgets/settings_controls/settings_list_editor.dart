@@ -8,9 +8,8 @@ import 'settings_text_input.dart';
 
 /// List editor for array settings, one row per item.
 ///
-/// Rows commit like every other settings input — on blur, submit and dispose,
-/// not per keystroke — so a half-typed path is not staged and judged while it
-/// is still being written.
+/// Text edits are staged as the user types, so Apply includes the focused row
+/// and removing a row does not need to commit during widget disposal.
 ///
 /// [suggestions] turns the rows into combos; [issues] are the backend's
 /// verdicts, each landing under the item it is about.

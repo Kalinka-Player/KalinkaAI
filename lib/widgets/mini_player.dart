@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import '../data_model/kalinka_ws_api.dart';
+import '../data_model/playqueue_events.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_ws_api_provider.dart';
@@ -63,6 +65,10 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
   bool _swipeHapticFired = false;
   Track? _incomingTrackSnapshot;
   Track? _latchedCurrentTrack;
+  PlayQueueState? _swipeStartState;
+  PlayQueueState? _pendingSwipeState;
+  Timer? _previewTimeout;
+  int _swipeRequestId = 0;
 
   /// True while the auto-complete animation is running so gesture updates are ignored.
   bool _committed = false;
@@ -93,6 +99,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
 
   @override
   void dispose() {
+    _previewTimeout?.cancel();
     _carouselController.dispose();
     super.dispose();
   }
@@ -102,8 +109,10 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
   void _onHorizontalDragStart(DragStartDetails _) {
     if (_committed) return;
     _carouselController.stop();
+    _swipeIsNext = null;
     _swipeHapticFired = false;
     _incomingTrackSnapshot = null;
+    _swipeStartState = null;
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails d) {
@@ -115,6 +124,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     if (_swipeIsNext == null && normalizedDelta.abs() > 0.001) {
       setState(() {
         _swipeIsNext = normalizedDelta < 0; // left = next
+        _swipeStartState = ref.read(playQueueStateStoreProvider);
         _incomingTrackSnapshot = _peekIncomingTrack(_swipeIsNext!);
       });
     }
@@ -144,6 +154,39 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     _snapBack();
   }
 
+  void _onHorizontalDragCancel() {
+    if (!_committed && _swipeIsNext != null) _snapBack();
+  }
+
+  // A neighbour preview is valid only for the queue and playback position it
+  // came from. Insertions, shuffle, renderer changes, or a skipped track can
+  // make the server choose a different track from the one we predicted.
+  bool _sameQueuePosition(PlayQueueState a, PlayQueueState b) =>
+      identical(a.trackList, b.trackList) &&
+      a.playbackState.index == b.playbackState.index &&
+      a.playbackState.currentTrack?.id == b.playbackState.currentTrack?.id &&
+      a.playbackControl == b.playbackControl &&
+      a.currentRendererId == b.currentRendererId;
+
+  void _releaseTrackPreview() {
+    _previewTimeout?.cancel();
+    _previewTimeout = null;
+    if (_latchedCurrentTrack == null) return;
+    setState(() {
+      _latchedCurrentTrack = null;
+      _pendingSwipeState = null;
+    });
+  }
+
+  Future<void> _sendSwipeCommand(QueueCommand command, int requestId) async {
+    try {
+      await ref.read(kalinkaWsApiProvider).sendQueueCommand(command);
+    } catch (error) {
+      debugPrint('MiniPlayer swipe command failed: $error');
+      if (mounted && requestId == _swipeRequestId) _releaseTrackPreview();
+    }
+  }
+
   /// Animates the carousel to ±1.0, sends the queue command, then resets.
   void _autoComplete() {
     if (_committed) return;
@@ -166,27 +209,38 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
           final isOffline =
               connectionState == ConnectionStatus.reconnecting ||
               connectionState == ConnectionStatus.offline;
-          final sentCommand = !isOffline;
-          if (!isOffline) {
-            ref
-                .read(kalinkaWsApiProvider)
-                .sendQueueCommand(
-                  _swipeIsNext == true
-                      ? const QueueCommand.next()
-                      : const QueueCommand.prev(),
-                );
-          }
+          final command = _swipeIsNext == true
+              ? const QueueCommand.next()
+              : const QueueCommand.prev();
+          final queueState = ref.read(playQueueStateStoreProvider);
+          final previewIsValid =
+              !isOffline &&
+              _swipeStartState != null &&
+              _sameQueuePosition(_swipeStartState!, queueState);
           // Reset carousel to centre; new track info arrives via WebSocket.
           setState(() {
-            if (sentCommand && _incomingTrackSnapshot != null) {
+            if (previewIsValid && _incomingTrackSnapshot != null) {
               _latchedCurrentTrack = _incomingTrackSnapshot;
+              _pendingSwipeState = queueState;
+              // Commands have no acknowledgement. A no-op or lost response
+              // must not leave stale metadata and disabled swipes forever.
+              _previewTimeout = Timer(const Duration(seconds: 2), () {
+                debugPrint(
+                  'MiniPlayer swipe preview expired; using queue state',
+                );
+                _releaseTrackPreview();
+              });
             }
             _committed = false;
             _swipeIsNext = null;
             _swipeHapticFired = false;
             _incomingTrackSnapshot = null;
+            _swipeStartState = null;
           });
           _carouselController.value = 0.0;
+          if (!isOffline) {
+            unawaited(_sendSwipeCommand(command, ++_swipeRequestId));
+          }
         });
   }
 
@@ -196,6 +250,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
       _swipeIsNext = null;
       _swipeHapticFired = false;
       _incomingTrackSnapshot = null;
+      _swipeStartState = null;
     });
     _carouselController.animateTo(
       0.0,
@@ -227,6 +282,20 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(playQueueStateStoreProvider, (_, next) {
+      final pending = _pendingSwipeState;
+      if (pending != null &&
+          (!_sameQueuePosition(pending, next) ||
+              next.playbackState.state == PlayerStateType.error)) {
+        _releaseTrackPreview();
+      }
+    });
+    ref.listen(connectionStateProvider, (_, next) {
+      if (next == ConnectionStatus.offline ||
+          next == ConnectionStatus.reconnecting) {
+        _releaseTrackPreview();
+      }
+    });
     final queueSnapshot = ref.watch(
       playQueueStateStoreProvider.select(
         (s) => (
@@ -278,26 +347,6 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     final effectiveCurrentTrack = _latchedCurrentTrack ?? currentTrack;
     final playerState = queueSnapshot.playerState;
     final urlResolver = ref.read(urlResolverProvider);
-
-    if (_latchedCurrentTrack != null &&
-        currentTrack?.id == _latchedCurrentTrack?.id) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _latchedCurrentTrack == null) return;
-        setState(() {
-          _latchedCurrentTrack = null;
-        });
-      });
-    }
-
-    // Release the latch if the queue was emptied while a swipe was in progress.
-    if (trackList.isEmpty && _latchedCurrentTrack != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _latchedCurrentTrack == null) return;
-        setState(() {
-          _latchedCurrentTrack = null;
-        });
-      });
-    }
 
     // Queue peek for carousel incoming-track preview.
     final currentIndex = playbackIndex;
@@ -419,6 +468,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                       ? _onHorizontalDragUpdate
                       : null,
                   onHorizontalDragEnd: canSwipe ? _onHorizontalDragEnd : null,
+                  onHorizontalDragCancel: canSwipe
+                      ? _onHorizontalDragCancel
+                      : null,
                   onVerticalDragEnd: (d) {
                     // Swipe up → open now-playing
                     if ((d.primaryVelocity ?? 0) < -200) widget.onTap?.call();

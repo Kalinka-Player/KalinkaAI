@@ -46,16 +46,17 @@ class SettingsRow extends StatelessWidget {
     return Container(
       color: isStaged
           ? KalinkaColors.statusPending.withValues(alpha: 0.04)
-          : null,
+          : Colors.transparent,
       // Painted over the row rather than laid out with it, so staging never
-      // shifts the content off its gutter.
-      foregroundDecoration: isStaged
-          ? const BoxDecoration(
-              border: Border(
-                left: BorderSide(color: KalinkaColors.statusPending),
-              ),
-            )
-          : null,
+      // shifts the content off its gutter. Keep both decorations present:
+      // adding/removing Container wrappers remounts the control and loses focus.
+      foregroundDecoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(
+            color: isStaged ? KalinkaColors.statusPending : Colors.transparent,
+          ),
+        ),
+      ),
       padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 12),
       child: isVertical
           ? Column(
