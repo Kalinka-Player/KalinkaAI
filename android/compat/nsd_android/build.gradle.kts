@@ -1,6 +1,4 @@
-// Build configuration for the published nsd_android 2.2.0 sources.
-// Its upstream script still applies KGP and configures the removed kotlinOptions
-// DSL. Keep namespace, SDK levels and JVM targets aligned with that script.
+// Replaces nsd_android 2.2.0's legacy Kotlin build script.
 // https://github.com/sebastianhaberey/nsd/tree/main/nsd_android
 
 plugins {
