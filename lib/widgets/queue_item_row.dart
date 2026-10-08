@@ -9,7 +9,6 @@ import '../providers/toast_provider.dart';
 import '../providers/kalinka_ws_api_provider.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
-import '../utils/haptics.dart';
 import '../utils/playback_utils.dart';
 import 'procedural_album_art.dart';
 import 'source_badge.dart';
@@ -195,7 +194,6 @@ class QueueItemRow extends ConsumerWidget {
 
     final rowContent = GestureDetector(
       onTap: () {
-        KalinkaHaptics.lightImpact();
         api.sendQueueCommand(QueueCommand.play(index: index));
       },
       child: Stack(

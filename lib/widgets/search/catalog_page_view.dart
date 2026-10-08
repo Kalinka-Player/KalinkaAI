@@ -13,7 +13,6 @@ import '../../providers/search_session_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import '../browse_filters/active_filter_chips.dart';
 import '../browse_filters/browse_filter_form.dart' show filterTypeLabel;
 import '../browse_filters/filters_match_nothing.dart';
@@ -471,7 +470,6 @@ class _FolderActions extends ConsumerWidget {
             icon: Icons.drive_folder_upload_outlined,
             semanticsLabel: 'Up one folder',
             onTap: () {
-              KalinkaHaptics.lightImpact();
               ref.read(searchSessionProvider.notifier).showEnclosingFolder();
             },
           ),

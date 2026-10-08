@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../data_model/presentation_schema.dart' show OptionSpec;
 import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
-import '../../utils/haptics.dart';
 import '../kalinka_bottom_sheet.dart';
 import 'option_picker.dart';
 import 'settings_text_input.dart';
@@ -50,7 +49,6 @@ class SettingsComboInput extends StatelessWidget {
     BuildContext context,
     ValueChanged<String> replace,
   ) async {
-    KalinkaHaptics.selectionClick();
     final picked = await showKalinkaBottomSheet<String>(
       context: context,
       contentBuilder: (_) => OptionPicker(

@@ -131,11 +131,10 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
 
     _carouselController.value = newOffset; // triggers addListener → setState
 
-    // Haptic once at 1/2 of the gap, then auto-complete.
     if (!_swipeHapticFired &&
         newOffset.abs() >= _carouselGap * _commitThreshold) {
       _swipeHapticFired = true;
-      KalinkaHaptics.mediumImpact();
+      KalinkaHaptics.selectionClick();
       _autoComplete();
     }
   }
@@ -562,11 +561,6 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
           // Ripple has to read against the white face, so use a dark tint.
           splashColor: KalinkaColors.background.withValues(alpha: 0.18),
           highlightColor: KalinkaColors.background.withValues(alpha: 0.08),
-          onTapDown: disabled
-              ? null
-              : (_) => playerState == PlayerStateType.playing
-                    ? KalinkaHaptics.lightImpact()
-                    : KalinkaHaptics.mediumImpact(),
           onTap: disabled
               ? null
               : () => sendPlayPauseCommand(

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../data_model/presentation_schema.dart' show OptionSpec;
 import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
-import '../../utils/haptics.dart';
 import '../tap_highlight.dart';
 import 'inline_markdown.dart';
 
@@ -78,10 +77,7 @@ class OptionRow extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {
-          KalinkaHaptics.selectionClick();
-          onTap();
-        },
+        onTap: onTap,
         mouseCursor: clickCursor(interactive: true),
         overlayColor: kalinkaOverlay,
         child: Padding(

@@ -134,7 +134,6 @@ mixin OptimisticVolume<T extends ConsumerStatefulWidget> on ConsumerState<T> {
 
   void adjustVolume(double value) {
     if (!_isAdjustingVolume || _settleTarget != null) {
-      KalinkaHaptics.lightImpact();
       _lastHapticVolumePosition = value;
     } else if ((value - _lastHapticVolumePosition).abs() >= 0.10) {
       KalinkaHaptics.selectionClick();

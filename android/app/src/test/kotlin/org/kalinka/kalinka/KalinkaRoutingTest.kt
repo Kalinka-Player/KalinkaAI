@@ -324,7 +324,7 @@ class KalinkaRoutingTest {
         val other = OtherInstallProvider(context)
         router.addProvider(other)
         try {
-            routing.start(server.hostName, server.port)
+            routing.start(ServerAddress("http", server.hostName, server.port))
             await { ready && router.selectedRoute.name == "Kitchen" }
             val theirs = router.routes.filter { it.provider.packageName == OTHER_PACKAGE }
             assertEquals(2, theirs.size)

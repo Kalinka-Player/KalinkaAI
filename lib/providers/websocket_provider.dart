@@ -83,8 +83,7 @@ final webSocketProvider = FutureProvider.family<WebSocketChannel, String>((
 
   // Only the play-queue socket owns global connection state (see
   // _connectionStatePath). Auxiliary sockets (e.g. /device/ws) must not touch
-  // it — a second socket initialising lazily must not downgrade global state
-  // nor re-trigger the connected-haptic in mini_player.
+  // it — a second socket initialising lazily must not downgrade global state.
   final ownsConnectionState = path == _connectionStatePath;
 
   // Defer state updates to avoid modifying providers during build.

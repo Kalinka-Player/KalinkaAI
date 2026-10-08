@@ -7,7 +7,6 @@ import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import '../search_cards/action_pill_button.dart';
 
 /// The batch actions a group of tracks carries under its heading: play them
@@ -64,7 +63,6 @@ class _PlayAllChipState extends ConsumerState<PlayAllChip> {
   Future<void> _playAll() async {
     if (_busy) return;
     setState(() => _busy = true);
-    KalinkaHaptics.mediumImpact();
     final api = ref.read(kalinkaProxyProvider);
     final expected = widget.trackCount ?? widget.trackIds.length;
     await runQueueActivity(
@@ -135,7 +133,6 @@ class _AddAllChipState extends ConsumerState<AddAllChip> {
     // Busy (disabled) while the request is in flight — the "Added ✓"
     // confirmation only appears once the add actually succeeds.
     setState(() => _status = _AddStatus.busy);
-    KalinkaHaptics.mediumImpact();
     final api = ref.read(kalinkaProxyProvider);
     final toast = ref.read(toastProvider.notifier);
     final expected = widget.trackCount ?? widget.trackIds.length;
@@ -207,7 +204,6 @@ class SelectAllButton extends ConsumerWidget {
         label: allSelected ? 'Clear' : 'Select all',
         accent: allSelected,
         onTap: () {
-          KalinkaHaptics.lightImpact();
           final notifier = ref.read(selectionStateProvider.notifier);
           if (allSelected) {
             notifier.deselectTracks(trackIds);

@@ -1,6 +1,5 @@
 package org.kalinka.kalinka
 
-import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.ContextWrapper
@@ -40,14 +39,20 @@ class KalinkaMediaPluginTest {
         MediaRouterTestHelper.resetMediaRouter()
     }
 
-    @SuppressLint("NewApi")
-    private fun call(method: String) {
+    private fun call(method: String): Any? {
+        var answer: Any? = null
         plugin.onMethodCall(MethodCall(method, mapOf("host" to "localhost", "port" to 8000)),
             object : MethodChannel.Result {
-                override fun success(result: Any?) = Unit
+                override fun success(result: Any?) { answer = result }
                 override fun error(code: String, message: String?, details: Any?) { fail(message) }
                 override fun notImplemented() { fail("Method not implemented") }
             })
+        return answer
+    }
+
+    @Test fun swipeHapticsAnswerWhetherTheyPlayedSoDartCanFallBack() {
+        assertEquals(false, call("hapticCorkPop"))
+        assertEquals(false, call("hapticDelete"))
     }
 
     @Test fun disableCancelsPendingBindingAndItsQueuedEnable() {

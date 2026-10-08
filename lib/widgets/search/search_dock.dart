@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import 'floating_search_bar.dart';
 
 /// Collapsed search entry point: a floating circular button in the bottom-right
@@ -63,12 +62,9 @@ class _SearchDockState extends State<SearchDock> {
               onEnter: (_) => _setHovering(true),
               onExit: (_) => _setHovering(false),
               child: GestureDetector(
-                // Haptic + scale fire on touch-down so the press is felt and seen
-                // immediately; the tap itself opens search on release.
-                onTapDown: (_) {
-                  KalinkaHaptics.lightImpact();
-                  _setPressed(true);
-                },
+                // Scale on touch-down so the press shows at once; the tap
+                // itself opens search on release.
+                onTapDown: (_) => _setPressed(true),
                 onTapUp: (_) => _setPressed(false),
                 onTapCancel: () => _setPressed(false),
                 onTap: widget.onTap,

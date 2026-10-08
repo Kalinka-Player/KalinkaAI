@@ -8,7 +8,6 @@ import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import '../kalinka_button.dart';
 import '../kalinka_dialog.dart';
 import '../search_cards/action_pill_button.dart';
@@ -73,7 +72,6 @@ class _RestingActions extends ConsumerWidget {
           enabled: hasRows,
           semanticsLabel: 'Edit collections',
           onTap: () {
-            KalinkaHaptics.lightImpact();
             // Two ways of marking rows at once would fight over the same tap.
             ref.read(selectionStateProvider.notifier).exitSelectionMode();
             ref.read(collectionEditProvider.notifier).begin();
@@ -146,7 +144,6 @@ class _EditingBarState extends ConsumerState<_EditingBar> {
   Future<void> _cancel() async {
     final changes = ref.read(collectionEditProvider).changes;
     if (changes > 0 && !await _confirmDiscard(changes)) return;
-    KalinkaHaptics.lightImpact();
     ref.read(collectionEditProvider.notifier).end();
   }
 
@@ -159,7 +156,6 @@ class _EditingBarState extends ConsumerState<_EditingBar> {
     final notifier = ref.read(collectionEditProvider.notifier);
     final changed = ref.read(collectionEditProvider).changed.toList();
     if (changed.isEmpty) {
-      KalinkaHaptics.lightImpact();
       notifier.end();
       return;
     }
@@ -168,8 +164,6 @@ class _EditingBarState extends ConsumerState<_EditingBar> {
         if (entry.value.removing.isNotEmpty) entry.value,
     ];
     if (losing.isNotEmpty && !await _confirmRemoval(losing)) return;
-
-    KalinkaHaptics.mediumImpact();
     setState(() => _busy = true);
     final api = ref.read(kalinkaProxyProvider);
     final toast = ref.read(toastProvider.notifier);

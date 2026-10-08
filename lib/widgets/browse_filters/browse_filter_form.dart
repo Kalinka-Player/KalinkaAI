@@ -7,7 +7,6 @@ import '../../data_model/browse_filters.dart';
 import '../../data_model/data_model.dart' show SearchType;
 import '../../providers/browse_genres_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import '../source_badge.dart';
 
 /// Default idle time before a keystroke becomes a query — long enough that
@@ -639,10 +638,7 @@ class _FilterPillState extends State<FilterPill> {
         onEnter: (_) => _setHovering(true),
         onExit: (_) => _setHovering(false),
         child: GestureDetector(
-          onTap: () {
-            KalinkaHaptics.selectionClick();
-            widget.onTap!();
-          },
+          onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: pill,
         ),

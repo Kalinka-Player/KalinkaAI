@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 
 /// Bits the three sound-related wizard steps (output, amplifier control,
 /// speaker test) share.
@@ -67,12 +66,7 @@ class TestSoundButton extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: enabled
-              ? () {
-                  KalinkaHaptics.lightImpact();
-                  onTap();
-                }
-              : null,
+          onTap: enabled ? onTap : null,
           overlayColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.pressed) ||
                 states.contains(WidgetState.hovered)) {

@@ -9,7 +9,7 @@ import '../utils/haptics.dart';
 /// Swipe right → "Add to queue" (white + icon on gold background).
 /// Swipe left  → "Play next"   (white ↑ icon on gold background).
 /// Icon zooms from minimal to full size as you swipe.
-/// Haptics trigger at 1/3 of max drag.
+/// Ticks as the drag unlocks and pops when released past the trigger.
 class SwipeToActRow extends StatefulWidget {
   final Widget child;
   final VoidCallback onAddToQueue;
@@ -112,8 +112,7 @@ class _SwipeToActRowState extends State<SwipeToActRow>
       _dragging = true;
       _rawDragOffset += details.delta.dx;
 
-      if (!_dragUnlocked &&
-          _rawDragOffset.abs() > _dragActivationThreshold) {
+      if (!_dragUnlocked && _rawDragOffset.abs() > _dragActivationThreshold) {
         _dragUnlocked = true;
         unlockedThisFrame = true;
       }
@@ -160,11 +159,7 @@ class _SwipeToActRowState extends State<SwipeToActRow>
 
   void _animateSpringSnap(double target, {VoidCallback? onComplete}) {
     final simulation = SpringSimulation(
-      const SpringDescription(
-        mass: 1.0,
-        stiffness: 300.0,
-        damping: 30.0,
-      ),
+      const SpringDescription(mass: 1.0, stiffness: 300.0, damping: 30.0),
       _dragOffset,
       target,
       0.0,

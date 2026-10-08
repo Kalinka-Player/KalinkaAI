@@ -7,7 +7,6 @@ import '../providers/connection_state_provider.dart';
 import '../providers/demo_mode.dart';
 import '../providers/server_info_provider.dart';
 import '../theme/app_theme.dart';
-import '../utils/haptics.dart';
 import 'kalinka_bottom_sheet.dart';
 
 /// Actions that can be returned from the server sheet.
@@ -52,7 +51,6 @@ class ServerSheetContent extends ConsumerWidget {
             sublabel: 'Modules, audio, enrichment',
             trailing: const SheetChevron(),
             onTap: () {
-              KalinkaHaptics.lightImpact();
               Navigator.pop(context, ServerSheetAction.openSettings);
             },
           ),
@@ -73,7 +71,6 @@ class ServerSheetContent extends ConsumerWidget {
               sublabel: 'Scan network for other instances',
               trailing: const SheetChevron(),
               onTap: () {
-                KalinkaHaptics.lightImpact();
                 Navigator.pop(context, ServerSheetAction.openDiscovery);
               },
             ),
@@ -85,7 +82,6 @@ class ServerSheetContent extends ConsumerWidget {
               iconColor: KalinkaColors.accent,
               label: 'Disconnect',
               onTap: () async {
-                KalinkaHaptics.heavyImpact();
                 await ref
                     .read(connectionSettingsProvider.notifier)
                     .clearDevice();
@@ -488,10 +484,7 @@ class _TabletServerSheetContent extends ConsumerWidget {
           label: 'Server settings',
           sublabel: 'Modules, audio, enrichment',
           trailing: const SheetChevron(),
-          onTap: () {
-            KalinkaHaptics.lightImpact();
-            onOpenSettings();
-          },
+          onTap: onOpenSettings,
         ),
         if (ref.watch(pluginCatalogEnabledProvider))
           _PluginsRow(onTap: onOpenPlugins),
@@ -505,10 +498,7 @@ class _TabletServerSheetContent extends ConsumerWidget {
             label: 'Connect to different server',
             sublabel: 'Scan network for other instances',
             trailing: const SheetChevron(),
-            onTap: () {
-              KalinkaHaptics.lightImpact();
-              onOpenDiscovery();
-            },
+            onTap: onOpenDiscovery,
           ),
           const SheetDivider(),
           SheetRow(
@@ -517,7 +507,6 @@ class _TabletServerSheetContent extends ConsumerWidget {
             iconColor: KalinkaColors.accent,
             label: 'Disconnect',
             onTap: () async {
-              KalinkaHaptics.heavyImpact();
               await ref.read(connectionSettingsProvider.notifier).clearDevice();
               ref.read(connectionStateProvider.notifier).disconnected();
               await onClose();
@@ -546,10 +535,7 @@ class _PluginsRow extends StatelessWidget {
         label: 'Plugins',
         sublabel: 'Browse sources and device controls · Preview',
         trailing: const SheetChevron(),
-        onTap: () {
-          KalinkaHaptics.lightImpact();
-          onTap();
-        },
+        onTap: onTap,
       ),
     ],
   );

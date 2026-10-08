@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 
 /// The input row of the docked search surface. Chromeless — the parent
 /// container paints the surface and border — so the field and the suggestion
@@ -45,7 +44,6 @@ class _SearchComposerState extends State<SearchComposer> {
   void _submit() {
     final text = widget.controller.text.trim();
     if (text.isEmpty) return;
-    KalinkaHaptics.lightImpact();
     widget.onSubmit(text);
     widget.controller.clear();
     // Drop focus and dismiss the keyboard once the query is sent.
@@ -141,7 +139,6 @@ class _SearchComposerState extends State<SearchComposer> {
   }
 
   void _clear() {
-    KalinkaHaptics.lightImpact();
     widget.controller.clear();
     // Keep focus so a corrected query can be typed straight away.
     widget.focusNode.requestFocus();

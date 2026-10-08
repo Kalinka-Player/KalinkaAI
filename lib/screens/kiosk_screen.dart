@@ -1357,7 +1357,6 @@ class _ExitButton extends StatelessWidget {
         child: TransportButton(
           hitDiameter: diameter,
           background: Colors.black.withValues(alpha: 0.36),
-          onTapDown: null,
           onTap: onTap,
           child: Icon(
             Icons.fullscreen_exit_rounded,

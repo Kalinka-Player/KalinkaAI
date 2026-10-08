@@ -5,7 +5,6 @@ import '../../data_model/data_model.dart' show SearchSuggestion;
 import '../../providers/catalog_cards_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import '../search_cards/browse_item_rows.dart';
 import 'catalog_cards_section.dart';
 import 'collections_section.dart';
@@ -271,10 +270,7 @@ class SearchSuggestionsList extends ConsumerWidget {
           children: [
             Expanded(child: Text('RECENT SEARCHES', style: _sectionTitle)),
             TextButton(
-              onPressed: () {
-                KalinkaHaptics.lightImpact();
-                onClear();
-              },
+              onPressed: onClear,
               style: TextButton.styleFrom(
                 foregroundColor: KalinkaColors.textMuted,
                 textStyle: KalinkaTextStyles.clearAllChips,
@@ -449,10 +445,7 @@ class _HistoryTile extends StatelessWidget {
               ),
             ),
             IconButton(
-              onPressed: () {
-                KalinkaHaptics.lightImpact();
-                onDelete();
-              },
+              onPressed: onDelete,
               icon: const Icon(Icons.close_rounded, size: 18),
               color: KalinkaColors.textMuted,
               padding: EdgeInsets.zero,
@@ -482,10 +475,7 @@ class _HoverRow extends StatelessWidget {
     return Material(
       type: MaterialType.transparency,
       child: InkWell(
-        onTap: () {
-          KalinkaHaptics.lightImpact();
-          onTap();
-        },
+        onTap: onTap,
         onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(14),
         hoverColor: KalinkaColors.surfaceElevated,

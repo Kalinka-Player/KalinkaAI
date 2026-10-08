@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
-import '../utils/haptics.dart';
 
 /// One earlier segment of a breadcrumb: a plain label until the pointer finds
 /// it, then an outlined target. Tapping it returns to the place it names, so
@@ -137,10 +136,7 @@ class _BreadcrumbCrumbState extends State<BreadcrumbCrumb> {
         onEnter: (_) => _setHovering(true),
         onExit: (_) => _setHovering(false),
         child: GestureDetector(
-          onTap: () {
-            KalinkaHaptics.lightImpact();
-            widget.onTap!();
-          },
+          onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: crumb,
         ),

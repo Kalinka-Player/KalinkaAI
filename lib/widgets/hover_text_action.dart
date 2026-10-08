@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
-import '../utils/haptics.dart';
 
 /// A textual action: mono caps, no fill, its colour lifting under the pointer.
 ///
@@ -60,10 +59,7 @@ class _HoverTextActionState extends State<HoverTextAction> {
         onEnter: (_) => _setHovering(true),
         onExit: (_) => _setHovering(false),
         child: GestureDetector(
-          onTap: () {
-            KalinkaHaptics.selectionClick();
-            widget.onTap();
-          },
+          onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: Padding(
             padding: widget.padding,

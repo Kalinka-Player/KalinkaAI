@@ -85,7 +85,7 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
     ref
         .read(kalinkaWsApiProvider)
         .sendQueueCommand(QueueCommand.move(fromIndex: from, toIndex: to));
-    KalinkaHaptics.mediumImpact();
+    KalinkaHaptics.lightImpact();
   }
 
   Widget _proxyDecorator(Widget child, int index, Animation<double> animation) {

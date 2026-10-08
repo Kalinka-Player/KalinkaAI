@@ -8,7 +8,6 @@ import '../../providers/row_expansion_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import '../../utils/play_next.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
@@ -80,7 +79,6 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
         GestureDetector(
           onTap: selectionMode ? null : _toggleExpand,
           onLongPress: () {
-            KalinkaHaptics.lightImpact();
             showSafeToast('Artists can’t be multi-selected');
           },
           behavior: HitTestBehavior.opaque,

@@ -7,7 +7,6 @@ import '../providers/kalinka_player_api_provider.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/play_next.dart';
-import '../utils/haptics.dart';
 import 'search/add_to_collection_sheet.dart';
 import 'search_cards/action_icon_chip.dart';
 
@@ -76,7 +75,6 @@ class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar> {
           icon: Icons.close,
           semanticsLabel: 'Cancel selection',
           onTap: () {
-            KalinkaHaptics.lightImpact();
             ref.read(selectionStateProvider.notifier).exitSelectionMode();
           },
         ),
@@ -96,7 +94,6 @@ class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar> {
           look: _BatchLook.filled,
           onTap: ready
               ? () {
-                  KalinkaHaptics.mediumImpact();
                   _playNow(selection);
                 }
               : null,
@@ -107,7 +104,6 @@ class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar> {
           label: 'Queue…',
           onTap: ready
               ? () {
-                  KalinkaHaptics.lightImpact();
                   setState(() => _placing = true);
                 }
               : null,
@@ -131,7 +127,6 @@ class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar> {
           icon: Icons.chevron_left_rounded,
           semanticsLabel: 'Back to actions',
           onTap: () {
-            KalinkaHaptics.lightImpact();
             setState(() => _placing = false);
           },
         ),
@@ -153,7 +148,6 @@ class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar> {
             look: _BatchLook.outlined,
             width: null,
             onTap: () {
-              KalinkaHaptics.mediumImpact();
               _playNext(selection);
             },
           ),
@@ -166,7 +160,6 @@ class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar> {
             label: 'Enqueue',
             width: null,
             onTap: () {
-              KalinkaHaptics.mediumImpact();
               _appendToQueue(selection);
             },
           ),
@@ -279,7 +272,6 @@ class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar> {
   /// Hands the selection to the destination sheet, which is where the
   /// collection it joins and the terms it joins on are settled.
   Future<void> _saveToCollection() async {
-    KalinkaHaptics.mediumImpact();
     final selectionNotifier = ref.read(selectionStateProvider.notifier);
     final landed = await showAddToCollectionSheet(
       context,

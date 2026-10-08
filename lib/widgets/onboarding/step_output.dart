@@ -4,7 +4,6 @@ import '../../providers/renderer_host_provider.dart'
     show rendererIdentityProvider;
 import '../../providers/renderer_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import '../kalinka_button.dart';
 import '../renderer_switcher.dart' show rendererDisplayName, rendererDetail;
 import '../settings_controls/settings_card.dart';
@@ -118,7 +117,6 @@ class _OnboardingOutputStepState extends ConsumerState<OnboardingOutputStep> {
                 selected: r.active,
                 connected: r.isConnected,
                 onTap: () {
-                  KalinkaHaptics.lightImpact();
                   ref.read(rendererListProvider.notifier).select(r.rendererId);
                 },
                 onSettings: widget.onOpenSettings == null

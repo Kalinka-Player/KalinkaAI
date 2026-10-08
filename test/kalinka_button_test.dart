@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/widgets/kalinka_button.dart';
 
+import 'support/haptic_recorder.dart';
+
 void main() {
   testWidgets('full-width button truncates a long label without overflow', (
     tester,
@@ -44,5 +46,52 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Try again'), findsOneWidget);
+  });
+
+  testWidgets('a tap acts without vibrating, whatever the variant', (
+    tester,
+  ) async {
+    final haptics = HapticRecorder.install();
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              KalinkaButton(label: 'Accent', onTap: () => taps++),
+              KalinkaButton(
+                label: 'Neutral',
+                variant: KalinkaButtonVariant.neutral,
+                onTap: () => taps++,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Accent'));
+    await tester.tap(find.text('Neutral'));
+    await tester.pump();
+    expect(taps, 2);
+    expect(haptics.calls, isEmpty);
+  });
+
+  testWidgets('a disabled button ignores taps', (tester) async {
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: KalinkaButton(
+            label: 'Off',
+            enabled: false,
+            onTap: () => taps++,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Off'), warnIfMissed: false);
+    expect(taps, 0);
   });
 }

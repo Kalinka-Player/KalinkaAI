@@ -70,14 +70,7 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
     final upgradeState = ref.watch(upgradeProvider);
 
     ref.listen(upgradeProvider, (prev, next) {
-      if (prev == null) return;
-      if (next.completedSteps.length > prev.completedSteps.length) {
-        if (next.isDone) {
-          KalinkaHaptics.successCrescendo();
-        } else {
-          KalinkaHaptics.lightImpact();
-        }
-      }
+      if (prev != null && !prev.isDone && next.isDone) KalinkaHaptics.success();
     });
 
     if (upgradeState.isDone && _autoDismissTimer == null) {

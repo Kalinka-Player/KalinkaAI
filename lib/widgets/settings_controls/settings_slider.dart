@@ -126,6 +126,7 @@ class _SettingsSliderState extends State<SettingsSlider> {
         value: liveValue,
         min: widget.min,
         max: widget.max,
+        onChangeStart: (value) => _lastHapticPosition = _snap(value),
         onChanged: (value) {
           final snapped = _snap(value);
           final tickSize = (widget.max - widget.min) * 0.10;

@@ -8,6 +8,8 @@ import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/widgets/volume_control_slider.dart';
 
+import 'support/haptic_recorder.dart';
+
 // ── Fakes ──────────────────────────────────────────────────────────────────────
 
 class _SettableExtDeviceNotifier extends ExtDeviceStateStore {
@@ -254,6 +256,29 @@ void main() {
 
       await tester.pump(const Duration(seconds: 5));
       expect(sliderValue(tester), closeTo(0.30, 0.001));
+    });
+
+    // ── Haptics ───────────────────────────────────────────────────────────────
+
+    testWidgets('a drag ticks every tenth and is silent otherwise', (
+      tester,
+    ) async {
+      final haptics = HapticRecorder.install();
+      await _pump(tester, initialState: _deviceState(currentVolume: 50));
+      final slider = tester.widget<Slider>(find.byType(Slider));
+
+      slider.onChanged!(0.50);
+      slider.onChanged!(0.56);
+      await tester.pump();
+      expect(haptics.calls, isEmpty);
+
+      slider.onChanged!(0.62);
+      await tester.pump();
+      expect(haptics.calls, ['selectionClick']);
+
+      slider.onChangeEnd!(0.62);
+      await tester.pump(const Duration(seconds: 5));
+      expect(haptics.calls, ['selectionClick']);
     });
 
     // ── Commands ──────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 package org.kalinka.kalinka
 
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.media.AudioAttributes
 import android.media.VolumeProvider
@@ -124,6 +125,27 @@ class KalinkaMediaServiceTest {
         assertNull("WebSocket inventory should disable periodic HTTP polling", server.takeRequest(1, TimeUnit.SECONDS))
         assertEquals(initialRequests, rendererListRequests.get())
         assertEquals(token, router.mediaSessionToken)
+    }
+
+    @Test fun playbackNotificationIsPostedOnASilentChannel() {
+        val channel = service.getSystemService(NotificationManager::class.java)
+            .getNotificationChannel(KalinkaMediaService.CHANNEL_ID)
+        assertEquals(NotificationManager.IMPORTANCE_LOW, channel.importance)
+        assertNull(channel.sound)
+        assertFalse(channel.shouldVibrate())
+        assertEquals(KalinkaMediaService.CHANNEL_ID, shadowOf(service).lastForegroundNotification!!.channelId)
+    }
+
+    @Test fun theAlertingChannelOfEarlierVersionsIsRemoved() {
+        val manager = service.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel("KAI_MEDIA_CHANNEL", "Media Playback", NotificationManager.IMPORTANCE_DEFAULT))
+        val upgraded = Robolectric.buildService(KalinkaMediaService::class.java).create().get()
+        try {
+            assertNull(manager.getNotificationChannel("KAI_MEDIA_CHANNEL"))
+        } finally {
+            upgraded.onDestroy()
+        }
     }
 
     @Test fun sessionIsRemoteFromItsFirstActivation() {
