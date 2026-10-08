@@ -2,6 +2,8 @@ import 'dart:async' show Timer;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart' show Logger;
+import 'box_control_provider.dart';
+import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
 import 'settings_provider.dart';
 
@@ -47,10 +49,17 @@ final restartProvider = NotifierProvider<RestartNotifier, RestartState>(
 
 class RestartNotifier extends Notifier<RestartState> {
   Timer? _dismissTimer;
+  int _generation = 0;
 
   @override
   RestartState build() {
-    ref.onDispose(() => _dismissTimer?.cancel());
+    ref.watch(
+      connectionSettingsProvider.select((settings) => settings.address),
+    );
+    ref.onDispose(() {
+      _generation++;
+      _dismissTimer?.cancel();
+    });
     return const RestartState();
   }
 
@@ -60,6 +69,9 @@ class RestartNotifier extends Notifier<RestartState> {
   /// 3. Wait for server to go down
   /// 4. Poll until server comes back
   Future<void> executeRestart() async {
+    final generation = ++_generation;
+    bool current() => ref.mounted && generation == _generation;
+    _dismissTimer?.cancel();
     final completed = <RestartStep>{};
 
     try {
@@ -71,6 +83,7 @@ class RestartNotifier extends Notifier<RestartState> {
       );
 
       await ref.read(settingsProvider.notifier).applyChanges();
+      if (!current()) return;
       completed.add(RestartStep.saving);
 
       // Step 2: Trigger restart
@@ -85,6 +98,7 @@ class RestartNotifier extends Notifier<RestartState> {
       } catch (_) {
         // Server may close the connection during restart — that's expected
       }
+      if (!current()) return;
       completed.add(RestartStep.stopping);
 
       // Step 3: Wait for server to go down
@@ -93,6 +107,7 @@ class RestartNotifier extends Notifier<RestartState> {
         completedSteps: Set.from(completed),
       );
       await Future.delayed(const Duration(seconds: 2));
+      if (!current()) return;
       completed.add(RestartStep.starting);
 
       // Step 4: Poll health check until server comes back
@@ -102,14 +117,20 @@ class RestartNotifier extends Notifier<RestartState> {
       );
 
       bool connected = false;
-      for (int attempt = 0; attempt < 20; attempt++) {
+      // Applying settings can install system packages or optional Python
+      // dependencies. Keep waiting while that work runs with Core stopped.
+      const maxAttempts = 450;
+      for (int attempt = 0; attempt < maxAttempts; attempt++) {
         await Future.delayed(const Duration(seconds: 2));
+        if (!current()) return;
         try {
           await ref.read(kalinkaProxyProvider).listModules();
+          if (!current()) return;
           connected = true;
           break;
         } catch (_) {
-          _logger.d('Restart reconnect attempt ${attempt + 1}/20');
+          if (!current()) return;
+          _logger.d('Restart reconnect attempt ${attempt + 1}/$maxAttempts');
         }
       }
 
@@ -122,6 +143,12 @@ class RestartNotifier extends Notifier<RestartState> {
         );
         return;
       }
+
+      // A requested setting is not proof that its package operation worked.
+      // Read the actual result and discover newly installed/removed controls.
+      await ref.read(settingsProvider.notifier).loadConfig();
+      if (!current()) return;
+      ref.invalidate(boxControlProvider);
 
       // All done
       state = RestartState(
@@ -136,6 +163,7 @@ class RestartNotifier extends Notifier<RestartState> {
         state = const RestartState();
       });
     } catch (e) {
+      if (!current()) return;
       _logger.e('Restart failed', error: e);
       state = state.copyWith(
         error: e.toString(),
@@ -145,6 +173,9 @@ class RestartNotifier extends Notifier<RestartState> {
   }
 
   void dismiss() {
+    // The server keeps doing the requested work; only stop this UI's wait.
+    _generation++;
+    _dismissTimer?.cancel();
     state = const RestartState();
   }
 }
