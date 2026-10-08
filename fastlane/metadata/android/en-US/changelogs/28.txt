@@ -1,0 +1,6 @@
+- Browse My Library by folder (with the next server update)
+- Restart or power off your box from settings (with the next supervisor update)
+- Haptics only for drags, long-presses and swipes, following your phone's setting
+- Silent media notification on track changes
+- Box display keeps waiting for the server instead of giving up
+- Fixed artwork flicker when swiping rows, and the mini-player showing the wrong track after a swipe

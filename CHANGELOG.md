@@ -8,6 +8,28 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.18.0
+
+This release needs no server update. Folder browsing, the box controls and the full-queue message come alive with the next server and supervisor releases; until then the app looks and behaves as before in those places.
+
+### Added
+- Browse My Library by folder. A folder catalog opens as a file browser: one folder at a time under a breadcrumb trail, its subfolders and then its tracks. Play all or enqueue a whole folder, go up a level with the up button, or hold folders to add them to a selection. The last folder you visited is remembered per server.
+- Restart or power off the box from General settings, and open the box dashboard in your browser. The BOX section only appears when the box runs a supervisor that belongs to the connected server.
+
+### Changed
+- Haptics are kept for drags, long-presses, swipe commits and a finished restart or upgrade; ordinary taps and buttons no longer buzz. On Android they now follow the phone's own touch-feedback setting.
+- Android's media notification no longer buzzes or chimes on track changes.
+- The tour's tip card stays in the middle of the screen, and the control it explains is marked with a pulsing spotlight.
+- A box's display says "Preparing…" while it waits for the server, and keeps retrying until the server answers instead of giving up after 30 seconds.
+- Applying settings that install packages waits for the install to finish instead of reporting a failed restart.
+- When a server refuses an add because the queue is full, the toast shows the server's own message.
+
+### Fixed
+- Swiping a track, album, artist or playlist row no longer makes its artwork flicker, and a second swipe started before the first settles is no longer lost.
+- Swiping the mini-player to the next or previous track no longer leaves it showing the wrong track, with swipes disabled, when the queue changed or the server did not answer.
+- Discarding settings changes now also resets the field you are typing in.
+- An icon-only pill is now as tall as the labelled pills beside it.
+
 ## 0.17.1
 
 ### Fixed
