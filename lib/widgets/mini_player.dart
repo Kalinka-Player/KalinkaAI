@@ -535,7 +535,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
               width: 46,
               height: 46,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
+              errorBuilder: (_, _, _) =>
                   ProceduralAlbumArt(trackId: trackId, size: 46),
             )
           : ProceduralAlbumArt(trackId: trackId, size: 46),

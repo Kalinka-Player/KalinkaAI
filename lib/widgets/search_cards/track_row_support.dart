@@ -51,7 +51,7 @@ class TrackThumb extends ConsumerWidget {
               fit: BoxFit.cover,
               gaplessPlayback: true,
               filterQuality: FilterQuality.low,
-              errorBuilder: (_, __, ___) => stand,
+              errorBuilder: (_, _, _) => stand,
             ),
     );
   }

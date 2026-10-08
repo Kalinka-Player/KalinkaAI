@@ -123,7 +123,7 @@ class _ExpertFieldListState extends State<ExpertFieldList> {
                   itemCount: filtered.length,
                   // 8 px gap between rows; each row carries its own
                   // horizontal margin so it reads as a discrete card.
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (_, i) => _ExpertRow(
                     key: ValueKey(filtered[i].path),
                     field: filtered[i],

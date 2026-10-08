@@ -209,11 +209,11 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       opaque: true,
       transitionDuration: const Duration(milliseconds: 280),
       reverseTransitionDuration: const Duration(milliseconds: 280),
-      pageBuilder: (_, __, ___) => Material(
+      pageBuilder: (_, _, _) => Material(
         type: MaterialType.transparency,
         child: OnboardingScreen(startAtSetup: startAtSetup),
       ),
-      transitionsBuilder: (_, anim, __, child) =>
+      transitionsBuilder: (_, anim, _, child) =>
           FadeTransition(opacity: anim, child: child),
     );
   }

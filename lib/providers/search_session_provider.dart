@@ -191,7 +191,7 @@ class CatalogPage {
   /// keeps the kind facet off a page with nothing to choose between.
   List<SearchType> get sectionTypes => [
     for (final section in sections)
-      if (typeOf(section) case final type?) type,
+      ?typeOf(section),
   ];
 
   /// The entity kind a shelf stands for, as its source declared it — null
@@ -1077,7 +1077,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     };
     _savedResultsGenreNames = {
       for (final id in filter.genreIds)
-        if (names[id] case final name?) id: name,
+        id: ?names[id],
     };
     if (_savedResultsFilter.isEmpty) {
       _prefs.remove(_resultsFilterKey);

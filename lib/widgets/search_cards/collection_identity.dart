@@ -106,7 +106,7 @@ class CollectionIdentity extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (nameAction != null) nameAction!,
+                  ?nameAction,
                 ],
               ),
               const SizedBox(height: 5),

@@ -5,6 +5,7 @@ import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/playback_error_dialog.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 // The playback-error dialog used to live in MiniPlayer; it now renders via
 // showKalinkaDialog (driven from MusicPlayerScreen so it also shows on
@@ -23,9 +24,8 @@ class _FakeWsApi extends KalinkaWsApi {
   }
 }
 
-// Return type intentionally inferred — Riverpod's Override type is sealed and
-// resolved by the package internally (mirrors mini_player_test.dart).
-_overrides() => [
+// Use the public Override type to give this helper an explicit return type.
+List<Override> _overrides() => [
       kalinkaWsApiProvider.overrideWith((ref) => _FakeWsApi(ref)),
     ];
 

@@ -59,8 +59,7 @@ class _CatalogSectionsViewState extends State<CatalogSectionsView> {
 
   List<_ShelfPlan> _planShelves() => [
     for (final section in widget.page.sections)
-      if (_plan(section, widget.query, widget.revision) case final shelf?)
-        shelf,
+      ?_plan(section, widget.query, widget.revision),
   ];
 
   @override
@@ -184,7 +183,7 @@ class _SectionShelf extends ConsumerWidget {
           _Shelf(title: title, child: const BrowseRowsShimmer(count: 3)),
       // A shelf that failed says so in its own space; the rest of the page,
       // and the filters that could undo it, stay usable.
-      error: (_, __) => _Shelf(
+      error: (_, _) => _Shelf(
         title: title,
         child: Text(
           'Could not load',

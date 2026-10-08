@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // coverage:ignore-file
-// ignore_for_file: type=lint
+// ignore_for_file: type=lint, type=warning, deprecated_member_use, deprecated_member_use_from_same_package
 // ignore_for_file: unused_element, deprecated_member_use, deprecated_member_use_from_same_package, use_function_type_syntax_for_parameters, unnecessary_const, avoid_init_to_null, invalid_override_different_default_values_named, prefer_expression_function_bodies, annotate_overrides, invalid_annotation_target, unnecessary_question_mark
 
 part of 'ext_device_events.dart';
@@ -9,6 +9,7 @@ part of 'ext_device_events.dart';
 // FreezedGenerator
 // **************************************************************************
 
+// GENERATED CODE - DO NOT MODIFY BY HAND
 // dart format off
 T _$identity<T>(T value) => value;
 /// @nodoc
@@ -25,16 +26,21 @@ $ExtDeviceEventCopyWith<ExtDeviceEvent> get copyWith => _$ExtDeviceEventCopyWith
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ExtDeviceEvent&&(identical(other.seq, seq) || other.seq == seq));
+  final _this = this as ExtDeviceEvent;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ExtDeviceEvent&&(identical(other.seq, _this.seq) || other.seq == _this.seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,seq);
+int get hashCode {
+  final _this = this as ExtDeviceEvent;
+  return Object.hash(runtimeType,_this.seq);
+}
 
 @override
 String toString() {
-  return 'ExtDeviceEvent(seq: $seq)';
+  final _this = this as ExtDeviceEvent;
+  return 'ExtDeviceEvent(seq: ${_this.seq})';
 }
 
 
@@ -228,16 +234,18 @@ $DevicePowerStateChangedEventCopyWith<DevicePowerStateChangedEvent> get copyWith
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is DevicePowerStateChangedEvent&&(identical(other.powerOn, powerOn) || other.powerOn == powerOn)&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is DevicePowerStateChangedEvent&&(identical(other.powerOn, powerOn) || other.powerOn == powerOn)&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,powerOn,seq);
+int get hashCode {
+    return Object.hash(runtimeType,powerOn,seq);
+}
 
 @override
 String toString() {
-  return 'ExtDeviceEvent.devicePowerStateChanged(powerOn: $powerOn, seq: $seq)';
+    return 'ExtDeviceEvent.devicePowerStateChanged(powerOn: $powerOn, seq: $seq)';
 }
 
 
@@ -296,16 +304,18 @@ $VolumeChangedEventCopyWith<VolumeChangedEvent> get copyWith => _$VolumeChangedE
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is VolumeChangedEvent&&(identical(other.volume, volume) || other.volume == volume)&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is VolumeChangedEvent&&(identical(other.volume, volume) || other.volume == volume)&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,volume,seq);
+int get hashCode {
+    return Object.hash(runtimeType,volume,seq);
+}
 
 @override
 String toString() {
-  return 'ExtDeviceEvent.volumeChanged(volume: $volume, seq: $seq)';
+    return 'ExtDeviceEvent.volumeChanged(volume: $volume, seq: $seq)';
 }
 
 
@@ -365,16 +375,18 @@ $ExtDeviceReplayEventCopyWith<ExtDeviceReplayEvent> get copyWith => _$ExtDeviceR
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ExtDeviceReplayEvent&&(identical(other.state, state) || other.state == state)&&(identical(other.serverTimeNs, serverTimeNs) || other.serverTimeNs == serverTimeNs)&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is ExtDeviceReplayEvent&&(identical(other.state, state) || other.state == state)&&(identical(other.serverTimeNs, serverTimeNs) || other.serverTimeNs == serverTimeNs)&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,state,serverTimeNs,seq);
+int get hashCode {
+    return Object.hash(runtimeType,state,serverTimeNs,seq);
+}
 
 @override
 String toString() {
-  return 'ExtDeviceEvent.replayEvent(state: $state, serverTimeNs: $serverTimeNs, seq: $seq)';
+    return 'ExtDeviceEvent.replayEvent(state: $state, serverTimeNs: $serverTimeNs, seq: $seq)';
 }
 
 

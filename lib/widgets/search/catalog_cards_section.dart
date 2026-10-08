@@ -50,7 +50,7 @@ class CatalogCardsSection extends ConsumerWidget {
       // Counts unknown yet — one nominal shimmer group so the section doesn't
       // pop in. Once plans resolve, each source gets its exact card count.
       loading: () => const _CardGrid(cardCount: 3, children: null),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
       data: (groups) {
         if (groups.isEmpty) return const SizedBox.shrink();
         return _sectionColumn([
@@ -467,7 +467,7 @@ class _CardBackground extends ConsumerWidget {
           child: child,
         );
       },
-      errorBuilder: (_, __, ___) => const ColoredBox(color: Colors.black),
+      errorBuilder: (_, _, _) => const ColoredBox(color: Colors.black),
     );
   }
 }

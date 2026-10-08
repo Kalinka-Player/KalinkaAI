@@ -246,7 +246,7 @@ class _HeaderDelegate extends SliverPersistentHeaderDelegate {
                 progress,
               ),
               child: Semantics(
-                header: true,
+                headingLevel: 1,
                 child: Text(
                   'Plugins',
                   maxLines: 1,

@@ -86,7 +86,7 @@ class _SchemaCollectionRendererState extends State<SchemaCollectionRenderer> {
     final discriminator = _collection.discriminator;
     final entry = <String, dynamic>{
       'id': newRecordId(),
-      if (discriminator != null) discriminator: variants.first.key,
+      ?discriminator: variants.first.key,
     };
     await _open(_entries(), null, entry);
   }

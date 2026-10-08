@@ -84,7 +84,7 @@ class QueueSectionHeader extends StatelessWidget {
             ),
           ),
           // Right side
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );

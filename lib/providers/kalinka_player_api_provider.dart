@@ -423,9 +423,9 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
         .put(
           '/queue/mode',
           queryParameters: {
-            if (repeatOne != null) 'repeat_single': repeatOne,
-            if (repeatAll != null) 'repeat_all': repeatAll,
-            if (shuffle != null) 'shuffle': shuffle,
+            'repeat_single': ?repeatOne,
+            'repeat_all': ?repeatAll,
+            'shuffle': ?shuffle,
           },
         )
         .then((response) {
@@ -548,7 +548,7 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
           queryParameters: {
             'offset': offset.toString(),
             'limit': limit.toString(),
-            if (filter != null) 'filter': filter,
+            'filter': ?filter,
           },
         )
         .then((response) {
@@ -825,7 +825,7 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
           '/playlist/create',
           queryParameters: {
             'name': name,
-            if (description != null) 'description': description,
+            'description': ?description,
           },
         )
         .then((response) {

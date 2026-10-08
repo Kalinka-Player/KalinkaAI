@@ -382,7 +382,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
       searchSessionProvider.select(
         (s) => (s.isOpen, s.activeView, s.shownListing.id),
       ),
-      (_, __) => ref.read(selectionStateProvider.notifier).exitSelectionMode(),
+      (_, _) => ref.read(selectionStateProvider.notifier).exitSelectionMode(),
     );
 
     // The shared tiles long-press into multi-select; surface the same batch
