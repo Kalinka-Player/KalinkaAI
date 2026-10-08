@@ -792,7 +792,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// differs, which the keys take care of.
   Widget _buildCoachMarks() {
     // Mirror the switcher's own visibility rule: a stop with no target on
-    // screen shows as a centred card describing a control the user hasn't got.
+    // screen would describe a control the user hasn't got.
     final hasOutputSwitcher = ref.watch(
       rendererListProvider.select((s) => s.switcherVisible),
     );

@@ -72,23 +72,29 @@ class _HostState extends State<_Host> {
   }
 }
 
+/// The spotlight pulses forever, so pumpAndSettle would never return.
+Future<void> _settle(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump();
+}
+
 void main() {
   testWidgets('a stop that disappears mid-tour leaves the index in range', (
     tester,
   ) async {
     await tester.pumpWidget(const _Host());
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     // Advance to the last stop, then lose one from under it.
     await tester.tap(find.text('Next'));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     await tester.tap(find.text('Next'));
-    await tester.pumpAndSettle();
+    await _settle(tester);
     expect(find.text('Your server lives here'), findsOneWidget);
     expect(find.text('3 / 3'), findsOneWidget);
 
     tester.state<_HostState>(find.byType(_Host)).dropMiddleStop();
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     expect(tester.takeException(), isNull);
     expect(find.text('Your server lives here'), findsOneWidget);
@@ -97,14 +103,14 @@ void main() {
 
   testWidgets('the stop for a missing control is never shown', (tester) async {
     await tester.pumpWidget(const _Host());
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     tester.state<_HostState>(find.byType(_Host)).dropMiddleStop();
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     expect(find.text('1 / 2'), findsOneWidget);
     await tester.tap(find.text('Next'));
-    await tester.pumpAndSettle();
+    await _settle(tester);
 
     expect(find.text('Choose where it plays'), findsNothing);
     expect(find.text('Your server lives here'), findsOneWidget);
