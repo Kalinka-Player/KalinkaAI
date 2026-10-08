@@ -66,10 +66,12 @@ class _FakeWsApi extends KalinkaWsApi {
   _FakeWsApi(super.ref);
 
   final List<QueueCommand> sent = [];
+  Object? sendError;
 
   @override
   Future<void> sendQueueCommand(QueueCommand command) async {
     sent.add(command);
+    if (sendError != null) throw sendError!;
   }
 }
 
@@ -117,6 +119,162 @@ Future<void> pumpMiniPlayer(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
+  group('swipe track changes', () {
+    final current = Track(id: 'current', title: 'Current track', duration: 120);
+    final next = Track(id: 'next', title: 'Old next track', duration: 180);
+    final inserted = Track(
+      id: 'inserted',
+      title: 'Inserted track',
+      duration: 240,
+    );
+
+    PlayQueueState initialQueue() => PlayQueueState(
+      playbackState: PlaybackState(index: 0, state: PlayerStateType.playing),
+      trackList: [current, next],
+      playbackMode: PlaybackMode.empty,
+      seq: 0,
+    );
+
+    Future<ProviderContainer> mount(WidgetTester tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          ..._buildOverrides(queueState: initialQueue()),
+          kalinkaWsApiProvider.overrideWith((ref) => _FakeWsApi(ref)),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Center(child: SizedBox(width: 360, child: MiniPlayer())),
+            ),
+          ),
+        ),
+      );
+      return container;
+    }
+
+    Future<void> swipeNext(WidgetTester tester) async {
+      await tester.dragFrom(
+        tester.getTopLeft(find.byType(MiniPlayer)) + const Offset(200, 36),
+        const Offset(-180, 0),
+      );
+      await tester.pump();
+    }
+
+    for (final duringAnimation in [true, false]) {
+      testWidgets(
+        'play next ${duringAnimation ? 'during' : 'after'} a swipe cannot leave a stale preview',
+        (tester) async {
+          final container = await mount(tester);
+          final notifier =
+              container.read(playQueueStateStoreProvider.notifier)
+                  as _SettableQueueNotifier;
+          final api = container.read(kalinkaWsApiProvider) as _FakeWsApi;
+
+          await swipeNext(tester);
+          if (!duringAnimation) {
+            await tester.pump(const Duration(milliseconds: 300));
+            expect(find.text('Old next track'), findsOneWidget);
+          }
+          final added = initialQueue().apply(
+            PlayQueueEvent.tracksAdded(tracks: [inserted], index: 1, seq: 1),
+            0,
+          );
+          notifier.emit(added);
+          await tester.pumpAndSettle();
+          expect(api.sent, [const QueueCommand.next()]);
+
+          notifier.emit(
+            added.apply(
+              PlayQueueEvent.playbackStateChanged(
+                state: PlaybackState(index: 1, state: PlayerStateType.playing),
+                seq: 2,
+              ),
+              0,
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Inserted track'), findsOneWidget);
+          expect(find.text('Old next track'), findsNothing);
+
+          await swipeNext(tester);
+          await tester.pumpAndSettle();
+          expect(api.sent, [
+            const QueueCommand.next(),
+            const QueueCommand.next(),
+          ]);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+
+    testWidgets('a different server-selected track replaces the prediction', (
+      tester,
+    ) async {
+      final container = await mount(tester);
+      final notifier =
+          container.read(playQueueStateStoreProvider.notifier)
+              as _SettableQueueNotifier;
+      final queue = initialQueue().copyWith(
+        trackList: [current, next, inserted],
+        seq: 1,
+      );
+      notifier.emit(queue);
+      await tester.pump();
+      await swipeNext(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Old next track'), findsOneWidget);
+
+      notifier.emit(
+        queue.apply(
+          PlayQueueEvent.playbackStateChanged(
+            state: PlaybackState(index: 2, state: PlayerStateType.playing),
+            seq: 2,
+          ),
+          0,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Inserted track'), findsOneWidget);
+      expect(find.text('Old next track'), findsNothing);
+    });
+
+    testWidgets('an unanswered swipe expires and can be retried', (
+      tester,
+    ) async {
+      final container = await mount(tester);
+      final api = container.read(kalinkaWsApiProvider) as _FakeWsApi;
+      await swipeNext(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Old next track'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 3));
+      expect(find.text('Current track'), findsOneWidget);
+      await swipeNext(tester);
+      await tester.pumpAndSettle();
+      expect(api.sent, [const QueueCommand.next(), const QueueCommand.next()]);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a failed command releases the preview and allows retry', (
+      tester,
+    ) async {
+      final container = await mount(tester);
+      final api = container.read(kalinkaWsApiProvider) as _FakeWsApi;
+      api.sendError = StateError('Socket closed');
+      await swipeNext(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Current track'), findsOneWidget);
+      api.sendError = null;
+      await swipeNext(tester);
+      await tester.pumpAndSettle();
+      expect(api.sent, [const QueueCommand.next(), const QueueCommand.next()]);
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
+
   group('play button icons', () {
     testWidgets('shows pause icon when playing', (tester) async {
       await pumpMiniPlayer(

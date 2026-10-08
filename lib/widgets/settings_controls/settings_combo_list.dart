@@ -7,7 +7,7 @@ import 'settings_text_input.dart';
 /// A text field with the values the backend found listed right under it, for
 /// a form with the room to show them: tap one to take it, or type your own.
 /// Once the user types, the list narrows to what the text could still become.
-class SettingsComboList extends StatelessWidget {
+class SettingsComboList extends StatefulWidget {
   final String value;
   final List<OptionSpec> options;
   final ValueChanged<String> onChanged;
@@ -24,20 +24,43 @@ class SettingsComboList extends StatelessWidget {
   });
 
   @override
+  State<SettingsComboList> createState() => _SettingsComboListState();
+}
+
+class _SettingsComboListState extends State<SettingsComboList> {
+  late String _unfilteredValue = widget.value;
+  String? _lastEdit;
+
+  @override
+  void didUpdateWidget(covariant SettingsComboList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Staging echoes each keystroke. Only an external reset changes the value
+    // for which all suggestions are shown; typing must keep narrowing them.
+    if (widget.value != oldWidget.value && widget.value != _lastEdit) {
+      _unfilteredValue = widget.value;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return SettingsTextInput(
-      value: value,
-      hintText: hintText,
-      borderColor: borderColor,
-      onChanged: onChanged,
-      // Part of the field for a click: one that unfocused it would commit the
-      // text first, and the list would change under the pointer.
+      value: widget.value,
+      hintText: widget.hintText,
+      borderColor: widget.borderColor,
+      onChanged: (value) {
+        _lastEdit = value;
+        widget.onChanged(value);
+      },
+      // Picking a suggestion is part of the editing interaction.
       belowBuilder: (context, typed, replace) => TextFieldTapRegion(
         child: _Suggestions(
           matching: _matching(typed),
-          anyFound: options.isNotEmpty,
+          anyFound: widget.options.isNotEmpty,
           typed: typed.trim(),
-          onPick: replace,
+          onPick: (value) {
+            _unfilteredValue = value;
+            replace(value);
+          },
         ),
       ),
     );
@@ -47,9 +70,11 @@ class SettingsComboList extends StatelessWidget {
   /// goes on inside — a folder typed under a disk that was offered.
   List<OptionSpec> _matching(String typed) {
     final needle = typed.trim().toLowerCase();
-    if (needle.isEmpty || typed.trim() == value.trim()) return options;
+    if (needle.isEmpty || typed.trim() == _unfilteredValue.trim()) {
+      return widget.options;
+    }
     return [
-      for (final option in options)
+      for (final option in widget.options)
         if (option.value.toLowerCase().contains(needle) ||
             option.label.toLowerCase().contains(needle) ||
             needle.startsWith(option.value.toLowerCase()))

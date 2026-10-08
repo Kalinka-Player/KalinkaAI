@@ -6,12 +6,9 @@ import '../../theme/app_theme.dart';
 /// Dark surface background, small font. Supports wide (145px) and full-width
 /// variants. Shows accent-colored border on focus.
 ///
-/// Commit semantics: [onChanged] is **not** fired on every keystroke — that
-/// would re-stage the field on each character and bounce focus when the
-/// parent rebuilds. Instead, the typed value is held locally and committed
-/// (a) when the field loses focus, (b) when the user submits (Enter), and
-/// (c) on dispose if the field still holds an uncommitted edit. This keeps
-/// the "Staged" badge from flashing while typing and stops focus loss.
+/// Edits are staged as the user types, so Apply includes the focused field.
+/// Nothing is committed from dispose: writing to a provider while the widget
+/// tree is being removed interrupts cleanup and breaks subsequent navigation.
 class SettingsTextInput extends StatefulWidget {
   final String value;
   final String? hintText;
@@ -59,18 +56,14 @@ class _SettingsTextInputState extends State<SettingsTextInput> {
     super.initState();
     _controller = TextEditingController(text: widget.value);
     _focusNode = FocusNode();
-    _focusNode.addListener(_onFocusChange);
   }
 
   @override
   void didUpdateWidget(covariant SettingsTextInput oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // External value changed (e.g. config reload, parent reverted). Adopt
-    // it only when the user isn't actively typing — otherwise we'd clobber
-    // their in-progress edit mid-stroke.
-    if (widget.value != oldWidget.value &&
-        !_focusNode.hasFocus &&
-        _controller.text != widget.value) {
+    // Staged edits echo the controller's current text. A different value is
+    // an external reset (e.g. Discard), which must also update a focused field.
+    if (widget.value != oldWidget.value && _controller.text != widget.value) {
       _controller.text = widget.value;
       _controller.selection = TextSelection.collapsed(
         offset: widget.value.length,
@@ -80,17 +73,9 @@ class _SettingsTextInputState extends State<SettingsTextInput> {
 
   @override
   void dispose() {
-    // If the user navigated away with focus still in the field, commit
-    // their pending edit so it isn't silently dropped.
-    _commitIfChanged();
-    _focusNode.removeListener(_onFocusChange);
     _focusNode.dispose();
     _controller.dispose();
     super.dispose();
-  }
-
-  void _onFocusChange() {
-    if (!_focusNode.hasFocus) _commitIfChanged();
   }
 
   void _commitIfChanged() {
@@ -128,8 +113,8 @@ class _SettingsTextInputState extends State<SettingsTextInput> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         isDense: true,
       ),
+      onChanged: (_) => _commitIfChanged(),
       onSubmitted: (_) => _commitIfChanged(),
-      onEditingComplete: _commitIfChanged,
     );
     final trailing = widget.trailingBuilder?.call(context, _replaceWith);
 

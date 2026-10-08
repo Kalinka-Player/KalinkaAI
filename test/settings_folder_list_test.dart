@@ -1,6 +1,6 @@
 // Editing the list of music folders — the control the backend's suggestions
-// and verdicts both land on. Rows commit on blur and submit, not per
-// keystroke, so a half-typed path is not staged and judged mid-word.
+// and verdicts both land on. Text edits are staged while typing, without
+// losing focus or committing again when a row is left.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,17 +44,26 @@ Future<void> _pumpEditor(
 
 void main() {
   group('typing a folder', () {
-    testWidgets('is not staged before the row is left', (tester) async {
+    testWidgets('is staged while typing without losing focus', (tester) async {
       final staged = <List<String>>[];
       await _pumpEditor(tester, items: const ['/music'], onChanged: staged.add);
 
       await tester.enterText(find.byType(TextField).first, '/mus');
       await tester.pump();
 
-      expect(staged, isEmpty);
+      expect(staged, [
+        ['/mus'],
+      ]);
+      expect(
+        tester
+            .widget<TextField>(find.byType(TextField).first)
+            .focusNode!
+            .hasFocus,
+        isTrue,
+      );
     });
 
-    testWidgets('is staged once the row is left', (tester) async {
+    testWidgets('is not staged twice when the row is left', (tester) async {
       final staged = <List<String>>[];
       await _pumpEditor(
         tester,

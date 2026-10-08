@@ -103,6 +103,20 @@ class _SwipeToActRowState extends State<SwipeToActRow>
         _resistanceCoefficient;
   }
 
+  void _onDragStart(DragStartDetails details) {
+    if (!widget.enabled) return;
+    // A new gesture takes over the current position from the spring. Its
+    // ticker must not keep moving the row underneath the finger.
+    _snapController?.stop();
+    _confirmController?.reset();
+    _rawDragOffset =
+        _dragOffset.sign *
+        _resistanceCoefficient *
+        (math.exp(_dragOffset.abs() / _resistanceCoefficient) - 1);
+    _dragUnlocked = _dragOffset.abs() > _settleEpsilon;
+    setState(() => _dragging = true);
+  }
+
   void _onDragUpdate(DragUpdateDetails details) {
     if (!widget.enabled) return;
 
@@ -138,26 +152,32 @@ class _SwipeToActRowState extends State<SwipeToActRow>
     final bool triggered = _dragOffset.abs() >= _hapticThreshold;
     final bool isQueue = _dragOffset > 0;
 
-    _animateSpringSnap(
-      0.0,
-      onComplete: () {
-        if (triggered) {
-          if (isQueue) {
-            widget.onAddToQueue();
-          } else {
-            widget.onPlayNext();
-          }
-        }
-      },
-    );
+    _dragUnlocked = false;
+    _rawDragOffset = 0.0;
+    _animateSpringSnap(0.0);
 
     if (triggered) {
       KalinkaHaptics.corkPop();
       _ensureConfirmController().forward(from: 0.0);
+      // Commit on release. Waiting for the spring loses this action if the
+      // user starts another swipe before the animation finishes.
+      if (isQueue) {
+        widget.onAddToQueue();
+      } else {
+        widget.onPlayNext();
+      }
     }
   }
 
-  void _animateSpringSnap(double target, {VoidCallback? onComplete}) {
+  void _onDragCancel() {
+    if (!_dragging) return;
+    _dragging = false;
+    _dragUnlocked = false;
+    _rawDragOffset = 0.0;
+    _animateSpringSnap(0.0);
+  }
+
+  void _animateSpringSnap(double target) {
     final simulation = SpringSimulation(
       const SpringDescription(mass: 1.0, stiffness: 300.0, damping: 30.0),
       _dragOffset,
@@ -166,16 +186,9 @@ class _SwipeToActRowState extends State<SwipeToActRow>
     );
 
     _ensureSnapController().animateWith(simulation).then((_) {
-      if (target == 0.0) {
-        _dragUnlocked = false;
-        _rawDragOffset = 0.0;
-        if (mounted) {
-          setState(() {
-            _dragOffset = 0.0;
-          });
-        }
+      if (mounted && target == 0.0) {
+        setState(() => _dragOffset = 0.0);
       }
-      onComplete?.call();
     });
   }
 
@@ -187,126 +200,101 @@ class _SwipeToActRowState extends State<SwipeToActRow>
         .toDouble();
     _hapticThreshold = _applyResistance(rawTrigger);
 
-    Widget inner;
+    final isActive =
+        widget.enabled &&
+        (_dragOffset.abs() > _settleEpsilon ||
+            _dragging ||
+            (_snapController?.isAnimating ?? false));
+    final offset = isActive ? _dragOffset : 0.0;
+    final absOffset = offset.abs();
+    final progress = (absOffset / _hapticThreshold).clamp(0.0, 1.0);
+    final currentIconSize =
+        _iconMinSize + (_iconSize - _iconMinSize) * progress;
+    final isRight = offset > 0;
+    final bgColor = isRight ? KalinkaColors.gold : KalinkaColors.statusPending;
+    final confirmOpacity = _confirmOpacity;
 
-    if (!widget.enabled ||
-        _dragOffset.abs() <= _settleEpsilon &&
-            !_dragging &&
-            !(_snapController?.isAnimating ?? false)) {
-      inner = GestureDetector(
-        onHorizontalDragUpdate: _onDragUpdate,
-        onHorizontalDragEnd: _onDragEnd,
-        child: widget.child,
-      );
-    } else {
-      final absOffset = _dragOffset.abs();
-      final progress = (absOffset / _hapticThreshold).clamp(0.0, 1.0);
-      final currentIconSize =
-          _iconMinSize + (_iconSize - _iconMinSize) * progress;
-      final isRight = _dragOffset > 0;
-
-      // Right swipe (queue): warm white bg. Left swipe (play next): amber bg.
-      final bgColor = isRight
-          ? KalinkaColors.gold
-          : KalinkaColors.statusPending;
-
-      inner = GestureDetector(
-        onHorizontalDragUpdate: _onDragUpdate,
-        onHorizontalDragEnd: _onDragEnd,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            return Stack(
-              clipBehavior: Clip.hardEdge,
+    // Keep the child's ancestors stable at rest, during the swipe, and when
+    // confirmation first appears. Swapping the wrapper remounts Image widgets
+    // and drops their decoded artwork, even with gaplessPlayback enabled.
+    return GestureDetector(
+      onHorizontalDragStart: _onDragStart,
+      onHorizontalDragUpdate: _onDragUpdate,
+      onHorizontalDragEnd: _onDragEnd,
+      onHorizontalDragCancel: _onDragCancel,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          // Stack's clip only covers layout overflow. Translation overflows
+          // during paint, so without an explicit clip the artwork can alternate
+          // between ancestor and raster-cache bounds as it crosses this edge.
+          // Keep cached and uncached frames under the same fixed boundary.
+          return ClipRect(
+            child: Stack(
+              clipBehavior: Clip.none,
               children: [
-                // Background on the revealed side only
-                if (isRight)
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: _dragOffset.clamp(0.0, width),
-                    child: ColoredBox(color: bgColor),
-                  )
-                else
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: absOffset.clamp(0.0, width),
-                    child: ColoredBox(color: bgColor),
-                  ),
-                // Icon on the revealed side
-                if (isRight)
-                  Positioned(
-                    left: _iconPadding,
-                    top: 0,
-                    bottom: 0,
+                // Background on the revealed side only (zero width at rest).
+                Positioned(
+                  left: isRight ? 0 : null,
+                  right: isRight ? null : 0,
+                  top: 0,
+                  bottom: 0,
+                  width: absOffset.clamp(0.0, width),
+                  child: ColoredBox(color: bgColor),
+                ),
+                Positioned(
+                  left: isRight ? _iconPadding : null,
+                  right: isRight ? null : _iconPadding,
+                  top: 0,
+                  bottom: 0,
+                  child: Visibility(
+                    visible: isActive,
                     child: Center(
                       child: Icon(
-                        Icons.add,
-                        color: Colors.white,
-                        size: currentIconSize,
-                      ),
-                    ),
-                  )
-                else
-                  Positioned(
-                    right: _iconPadding,
-                    top: 0,
-                    bottom: 0,
-                    child: Center(
-                      child: Icon(
-                        Icons.arrow_upward,
+                        isRight ? Icons.add : Icons.arrow_upward,
                         color: Colors.white,
                         size: currentIconSize,
                       ),
                     ),
                   ),
-                // Content layer (slides with drag)
+                ),
                 Transform.translate(
-                  offset: Offset(_dragOffset, 0),
+                  offset: Offset(offset, 0),
                   child: SizedBox(
                     width: width,
                     child: ColoredBox(
-                      color: KalinkaColors.surfaceRaised,
-                      child: widget.child,
+                      color: isActive
+                          ? KalinkaColors.surfaceRaised
+                          : Colors.transparent,
+                      // Translate the retained artwork/text layer while the
+                      // background and action icon repaint independently.
+                      child: RepaintBoundary(child: widget.child),
                     ),
                   ),
                 ),
-              ],
-            );
-          },
-        ),
-      );
-    }
-
-    // Confirmation overlay — only mounted once a swipe has triggered, so most
-    // recycled rows skip the FadeTransition entirely.
-    final confirmOpacity = _confirmOpacity;
-    if (confirmOpacity == null) return inner;
-
-    return Stack(
-      children: [
-        inner,
-        Positioned.fill(
-          child: IgnorePointer(
-            child: FadeTransition(
-              opacity: confirmOpacity,
-              child: ColoredBox(
-                color: KalinkaColors.gold.withValues(alpha: 0.18),
-                child: const Center(
-                  child: Icon(
-                    Icons.check_rounded,
-                    color: KalinkaColors.gold,
-                    size: 22,
+                // Keep confirmation lazy without wrapping/reparenting content.
+                if (confirmOpacity != null)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: FadeTransition(
+                        opacity: confirmOpacity,
+                        // Keep feedback on the icon; a full-row tint flashes
+                        // over the artwork on every committed swipe.
+                        child: const Center(
+                          child: Icon(
+                            Icons.check_rounded,
+                            color: KalinkaColors.gold,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
+              ],
             ),
-          ),
-        ),
-      ],
+          );
+        },
+      ),
     );
   }
 }

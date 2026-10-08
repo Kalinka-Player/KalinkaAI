@@ -4,10 +4,8 @@ import '../../theme/app_theme.dart';
 /// Numeric input with optional constraints. 80px wide, right-aligned.
 /// Shows accent-colored border on focus.
 ///
-/// Commit semantics mirror [SettingsTextInput]: the parsed value is held
-/// locally while the field has focus and only propagated on blur, submit,
-/// or dispose. Staging on every keystroke would re-render the parent on
-/// each character and steal focus mid-edit.
+/// The parsed value is held locally while the field has focus and only
+/// propagated on blur, submit, or dispose, allowing incomplete numeric input.
 class SettingsNumericInput extends StatefulWidget {
   final num value;
   final ValueChanged<num> onChanged;
