@@ -5,7 +5,6 @@ import '../../data_model/browse_filters.dart';
 import '../../data_model/data_model.dart' show Genre;
 import '../../providers/browse_genres_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import '../hover_text_action.dart';
 import 'browse_filter_form.dart';
 
@@ -174,10 +173,7 @@ class _ActiveFilterChipState extends State<ActiveFilterChip> {
         onEnter: (_) => _setHovering(true),
         onExit: (_) => _setHovering(false),
         child: GestureDetector(
-          onTap: () {
-            KalinkaHaptics.selectionClick();
-            widget.onRemove();
-          },
+          onTap: widget.onRemove,
           behavior: HitTestBehavior.opaque,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 130),

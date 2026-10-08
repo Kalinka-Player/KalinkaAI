@@ -42,7 +42,9 @@ class KalinkaMediaService : Service() {
 
     companion object {
         private const val TAG = "KalinkaMedia"
-        const val CHANNEL_ID = "KAI_MEDIA_CHANNEL"
+        // A channel's importance is frozen once created, so lowering it needs a new id.
+        const val CHANNEL_ID = "KALINKA_MEDIA_PLAYBACK"
+        private const val LEGACY_CHANNEL_ID = "KAI_MEDIA_CHANNEL"
         const val NOTIFICATION_ID = 1001
         const val ACTION_PLAY = "org.kalinka.kalinka.ACTION_PLAY"
         const val ACTION_PAUSE = "org.kalinka.kalinka.ACTION_PAUSE"
@@ -471,13 +473,17 @@ class KalinkaMediaService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.deleteNotificationChannel(LEGACY_CHANNEL_ID)
             val channel = NotificationChannel(
-                CHANNEL_ID, "Media Playback", NotificationManager.IMPORTANCE_DEFAULT
+                CHANNEL_ID, "Media Playback", NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Kalinka media playback controls"
                 setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
             }
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+            manager.createNotificationChannel(channel)
         }
     }
 
@@ -581,6 +587,7 @@ class KalinkaMediaService : Service() {
             .setContentIntent(contentIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOnlyAlertOnce(true)
+            .setSilent(true)
             .addAction(prevAction)
             .addAction(playPauseAction)
             .addAction(nextAction)

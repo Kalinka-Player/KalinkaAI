@@ -10,7 +10,6 @@ import '../../providers/row_expansion_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import '../breadcrumb_crumb.dart';
 import '../browse_filters/search_filter_button.dart';
 import '../browse_filters/search_filter_overlay.dart';
@@ -521,10 +520,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                 label: 'Back',
                 button: true,
                 child: GestureDetector(
-                  onTap: () {
-                    KalinkaHaptics.lightImpact();
-                    _handleBack();
-                  },
+                  onTap: _handleBack,
                   behavior: HitTestBehavior.opaque,
                   child: const SizedBox(
                     width: 42,
@@ -620,7 +616,6 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           _ResultsReturnPill(
             query: session.searchQuery,
             onTap: () {
-              KalinkaHaptics.lightImpact();
               ref
                   .read(searchSessionProvider.notifier)
                   .selectView(FindMusicView.results);
@@ -1003,10 +998,7 @@ class _SearchEntryButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(22),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: () {
-              KalinkaHaptics.lightImpact();
-              onTap();
-            },
+            onTap: onTap,
             child: Container(
               height: 54,
               padding: const EdgeInsets.symmetric(horizontal: 12),

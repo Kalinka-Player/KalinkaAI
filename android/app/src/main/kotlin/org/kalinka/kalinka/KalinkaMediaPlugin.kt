@@ -8,16 +8,8 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
-import android.os.VibrationEffect
-import android.os.VibrationEffect.Composition.DELAY_TYPE_PAUSE
-import android.os.VibrationEffect.Composition.PRIMITIVE_CLICK
-import android.os.VibrationEffect.Composition.PRIMITIVE_QUICK_FALL
-import android.os.VibrationEffect.Composition.PRIMITIVE_TICK
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.util.Log
 import android.view.KeyEvent
-import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -41,6 +33,7 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
         volumeKeys.dispatch(event, foreground)
 
     private var context: Context? = null
+    private var haptics: KalinkaHaptics? = null
     private var activityBinding: ActivityPluginBinding? = null
     private var mediaService: KalinkaMediaService? = null
     private var serviceBound = false
@@ -75,6 +68,7 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
+        haptics = KalinkaHaptics.of(binding.applicationContext)
         methodChannel = MethodChannel(binding.binaryMessenger, "org.kalinka.kalinka/media_session")
         methodChannel.setMethodCallHandler(this)
     }
@@ -83,11 +77,11 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
         methodChannel.setMethodCallHandler(null)
         unbindAndStop()
         context = null
+        haptics = null
     }
 
     // --- MethodCallHandler ---
 
-    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         Log.d(TAG, "onMethodCall: ${call.method}")
         when (call.method) {
@@ -121,105 +115,9 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
                 unbindAndStop()
                 result.success(null)
             }
-            "hapticCorkPop" -> {
-                hapticCorkPop()
-                result.success(null)
-            }
-            "hapticDelete" -> {
-                hapticDelete()
-                result.success(null)
-            }
-            "hapticTick" -> {
-                hapticTick()
-                result.success(null)
-            }
+            "hapticCorkPop" -> result.success(haptics?.corkPop() ?: false)
+            "hapticDelete" -> result.success(haptics?.delete() ?: false)
             else -> result.notImplemented()
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun hapticTick() {
-        val ctx = context ?: return
-        val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            ctx.getSystemService(VibratorManager::class.java).defaultVibrator
-        } else {
-            ctx.getSystemService(Vibrator::class.java)
-        }
-
-        when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                val effect = VibrationEffect.startComposition()
-                    .addPrimitive(PRIMITIVE_TICK)
-                    .compose()
-                vibrator.vibrate(effect)
-            }
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
-                val effect = VibrationEffect.createOneShot(15, 80)
-                vibrator.vibrate(effect)
-            }
-            else -> {
-                vibrator.vibrate(15)
-            }
-        }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
-    @Suppress("DEPRECATION")
-    private fun hapticCorkPop() {
-        val ctx = context ?: return
-        val vibrator: Vibrator =
-            ctx.getSystemService(VibratorManager::class.java).defaultVibrator
-
-        when {
-            true -> {
-                val effect = VibrationEffect.startComposition()
-                    .addPrimitive(PRIMITIVE_QUICK_FALL)
-                    .addPrimitive(PRIMITIVE_CLICK, 0.7F, 50, DELAY_TYPE_PAUSE)
-                    .compose()
-                vibrator.vibrate(effect)
-            }
-            true -> {
-                val effect = VibrationEffect.createWaveform(
-                    longArrayOf(0, 5, 5, 15, 10),
-                    intArrayOf(0, 180, 220, 80, 0),
-                    -1
-                )
-                vibrator.vibrate(effect)
-            }
-            else -> {
-                vibrator.vibrate(30)
-            }
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun hapticDelete() {
-        val ctx = context ?: return
-        val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            ctx.getSystemService(VibratorManager::class.java).defaultVibrator
-        } else {
-            ctx.getSystemService(Vibrator::class.java)
-        }
-
-        when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                val effect = VibrationEffect.startComposition()
-                    .addPrimitive(PRIMITIVE_TICK, 0.4f, 0)
-                    .addPrimitive(VibrationEffect.Composition.PRIMITIVE_THUD, 0.9f, 30)
-                    .compose()
-                vibrator.vibrate(effect)
-            }
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
-                val effect = VibrationEffect.createWaveform(
-                    longArrayOf(0, 8, 20, 30),
-                    intArrayOf(0, 80, 0, 220),
-                    -1
-                )
-                vibrator.vibrate(effect)
-            }
-            else -> {
-                vibrator.vibrate(30)
-            }
         }
     }
 

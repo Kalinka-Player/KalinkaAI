@@ -8,7 +8,6 @@ import '../providers/now_playing_provider.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
-import '../utils/haptics.dart';
 import '../utils/playback_utils.dart';
 import '../providers/source_modules_provider.dart';
 import 'bit_perfect_badge.dart';
@@ -248,7 +247,6 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           borderRadius: BorderRadius.circular(6),
           mouseCursor: clickCursor(interactive: true),
           onTap: () {
-            KalinkaHaptics.selectionClick();
             showKalinkaDialog<void>(
               context: context,
               builder: (_) => const StreamInfoDialog(),
@@ -486,9 +484,6 @@ class _TransportControls extends ConsumerWidget {
           if (!exclusive)
             TransportButton(
               hitDiameter: 44,
-              onTapDown: (_) => isShuffle
-                  ? KalinkaHaptics.lightImpact()
-                  : KalinkaHaptics.mediumImpact(),
               onTap: () {
                 api.sendQueueCommand(
                   QueueCommand.setPlaybackMode(
@@ -510,7 +505,6 @@ class _TransportControls extends ConsumerWidget {
             opacity: canPrev ? 1.0 : 0.4,
             child: TransportButton(
               hitDiameter: 52,
-              onTapDown: canPrev ? (_) => KalinkaHaptics.mediumImpact() : null,
               onTap: canPrev
                   ? () => api.sendQueueCommand(const QueueCommand.prev())
                   : null,
@@ -530,11 +524,6 @@ class _TransportControls extends ConsumerWidget {
               // disc, so use a dark tint instead of the default white-on-dark.
               splashColor: KalinkaColors.background.withValues(alpha: 0.18),
               highlightColor: KalinkaColors.background.withValues(alpha: 0.08),
-              onTapDown: playPauseDisabled
-                  ? null
-                  : (_) => playerState == PlayerStateType.playing
-                        ? KalinkaHaptics.lightImpact()
-                        : KalinkaHaptics.mediumImpact(),
               onTap: playPauseDisabled
                   ? null
                   : () => sendPlayPauseCommand(
@@ -554,7 +543,6 @@ class _TransportControls extends ConsumerWidget {
             opacity: canNext ? 1.0 : 0.4,
             child: TransportButton(
               hitDiameter: 52,
-              onTapDown: canNext ? (_) => KalinkaHaptics.mediumImpact() : null,
               onTap: canNext
                   ? () => api.sendQueueCommand(const QueueCommand.next())
                   : null,
@@ -568,7 +556,6 @@ class _TransportControls extends ConsumerWidget {
           if (!exclusive)
             TransportButton(
               hitDiameter: 44,
-              onTapDown: (_) => KalinkaHaptics.selectionClick(),
               onTap: () {
                 final bool newRepeatAll;
                 final bool newRepeatSingle;

@@ -61,14 +61,7 @@ class _RestartOverlayState extends ConsumerState<RestartOverlay>
     final restartState = ref.watch(restartProvider);
 
     ref.listen(restartProvider, (prev, next) {
-      if (prev == null) return;
-      if (next.completedSteps.length > prev.completedSteps.length) {
-        if (next.isDone) {
-          KalinkaHaptics.successCrescendo();
-        } else {
-          KalinkaHaptics.lightImpact();
-        }
-      }
+      if (prev != null && !prev.isDone && next.isDone) KalinkaHaptics.success();
     });
 
     // Auto-dismiss when done

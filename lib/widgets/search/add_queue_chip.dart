@@ -6,7 +6,6 @@ import '../../providers/app_state_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/toast_provider.dart';
-import '../../utils/haptics.dart';
 import '../search_cards/action_pill_button.dart';
 import 'add_to_collection_sheet.dart';
 
@@ -33,7 +32,6 @@ class _AddQueueChipState extends ConsumerState<AddQueueChip> {
   Future<void> _add(List<String> trackIds) async {
     if (_busy) return;
     setState(() => _busy = true);
-    KalinkaHaptics.mediumImpact();
     // Read before the await: the row may be gone by the time the write lands.
     final api = ref.read(kalinkaProxyProvider);
     final toast = ref.read(toastProvider.notifier);

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/kiosk_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import '../transport_button.dart';
 
 /// Switches the app to the full-screen now-playing display.
@@ -20,7 +19,6 @@ class KioskEnterButton extends ConsumerWidget {
         excludeFromSemantics: true,
         child: TransportButton(
           hitDiameter: 36,
-          onTapDown: (_) => KalinkaHaptics.selectionClick(),
           onTap: () {
             // The display replaces the home screen; anything stacked above it
             // (the phone's player sheet) would stay on top.

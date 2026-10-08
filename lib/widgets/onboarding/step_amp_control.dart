@@ -6,7 +6,6 @@ import '../../providers/renderer_host_provider.dart'
 import '../../providers/renderer_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import '../renderer_switcher.dart' show rendererDisplayName;
 import '../settings_controls/settings_card.dart';
 import 'onboarding_fields.dart';
@@ -55,7 +54,6 @@ class OnboardingAmpControlStep extends ConsumerWidget {
     }
 
     void select(ModuleSpec? device) {
-      KalinkaHaptics.lightImpact();
       for (final m in choices) {
         notifier.stageChange(enabledPath(m), m == device);
       }

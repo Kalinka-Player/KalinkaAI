@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data_model/presentation_schema.dart' show OptionSpec;
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 import '../kalinka_bottom_sheet.dart';
 import 'option_picker.dart';
 
@@ -87,7 +86,6 @@ class SettingsEnumDropdown extends StatelessWidget {
   }
 
   Future<void> _openPicker(BuildContext context) async {
-    KalinkaHaptics.selectionClick();
     final picked = await showKalinkaBottomSheet<String>(
       context: context,
       contentBuilder: (_) =>

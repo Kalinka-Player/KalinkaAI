@@ -12,7 +12,6 @@ import '../theme/app_theme.dart';
 class TransportButton extends StatefulWidget {
   final Widget child;
   final VoidCallback? onTap;
-  final ValueChanged<TapDownDetails>? onTapDown;
   final double hitDiameter;
   final Color? background;
   final Color? splashColor;
@@ -22,7 +21,6 @@ class TransportButton extends StatefulWidget {
     super.key,
     required this.child,
     required this.onTap,
-    required this.onTapDown,
     required this.hitDiameter,
     this.background,
     this.splashColor,
@@ -57,7 +55,6 @@ class _TransportButtonState extends State<TransportButton> {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: widget.onTap,
-            onTapDown: widget.onTapDown,
             // Drive the scale animation off the highlight signal so the
             // press state matches what the ripple shows.
             onHighlightChanged: (highlighted) {

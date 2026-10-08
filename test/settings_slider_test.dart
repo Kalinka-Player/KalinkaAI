@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kalinka/widgets/settings_controls/settings_slider.dart';
 
+import 'support/haptic_recorder.dart';
+
 void main() {
   Future<double?> drag(
     WidgetTester tester, {
@@ -80,6 +82,46 @@ void main() {
     final committed = await drag(tester, min: 0, max: 100, fraction: 0.333);
 
     expect(committed, isNot(closeTo(committed!.roundToDouble(), 0.0001)));
+  });
+
+  testWidgets('touching the thumb is silent; each tenth of travel ticks', (
+    tester,
+  ) async {
+    final haptics = HapticRecorder.install();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 400,
+              child: SettingsSlider(
+                label: 'Latency',
+                value: 0,
+                min: 0,
+                max: 100,
+                onChanged: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final track = tester.getRect(find.byType(Slider));
+    const inset = 14.0;
+    final usable = track.width - 2 * inset;
+
+    final gesture = await tester.startGesture(
+      Offset(track.left + inset, track.center.dy),
+    );
+    await gesture.moveBy(Offset(usable * 0.06, 0));
+    await tester.pump();
+    expect(haptics.calls, isEmpty);
+
+    await gesture.moveBy(Offset(usable * 0.06, 0));
+    await tester.pump();
+    expect(haptics.calls, ['selectionClick']);
+    await gesture.up();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('a drag never reports past the ends', (tester) async {

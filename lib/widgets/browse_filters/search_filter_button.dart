@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 
 /// The folded state of the search-and-filters control: one pill in the title
 /// bar carrying a magnifier and a sliders glyph, badged with how many answers
@@ -63,10 +62,7 @@ class _SearchFilterButtonState extends State<SearchFilterButton> {
         onEnter: (_) => _setHovering(true),
         onExit: (_) => _setHovering(false),
         child: GestureDetector(
-          onTap: () {
-            KalinkaHaptics.lightImpact();
-            widget.onTap();
-          },
+          onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: Padding(
             // Room for the badge to sit proud of the pill without clipping.

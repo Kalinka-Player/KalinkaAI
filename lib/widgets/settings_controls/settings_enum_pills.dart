@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/haptics.dart';
 
 /// Connected segmented control for enum-like settings.
 ///
@@ -35,7 +34,6 @@ class SettingsEnumPills extends StatelessWidget {
                 label: options[i],
                 isActive: options[i] == selected,
                 onTap: () {
-                  KalinkaHaptics.selectionClick();
                   onChanged(options[i]);
                 },
               ),

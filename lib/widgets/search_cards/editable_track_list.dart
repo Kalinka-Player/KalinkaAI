@@ -304,10 +304,7 @@ class _RemoveToggle extends StatelessWidget {
       child: MouseRegion(
         cursor: clickCursor(interactive: true),
         child: GestureDetector(
-          onTap: () {
-            KalinkaHaptics.lightImpact();
-            onTap();
-          },
+          onTap: onTap,
           behavior: HitTestBehavior.opaque,
           child: SizedBox(
             width: 44,

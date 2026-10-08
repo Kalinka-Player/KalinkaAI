@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../theme/app_theme.dart';
-import '../utils/haptics.dart';
 
 /// Server status chip — top-right of the header.
 ///
@@ -71,12 +70,7 @@ class _ServerChipState extends ConsumerState<ServerChip>
         label: chipData.label,
         button: widget.onTap != null,
         child: GestureDetector(
-          onTap: widget.onTap != null
-              ? () {
-                  KalinkaHaptics.lightImpact();
-                  widget.onTap!();
-                }
-              : null,
+          onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: Padding(
             padding: const EdgeInsets.all(10),
@@ -87,12 +81,7 @@ class _ServerChipState extends ConsumerState<ServerChip>
     }
 
     return GestureDetector(
-      onTap: widget.onTap != null
-          ? () {
-              KalinkaHaptics.lightImpact();
-              widget.onTap!();
-            }
-          : null,
+      onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),

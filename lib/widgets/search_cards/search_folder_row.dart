@@ -6,7 +6,6 @@ import '../../providers/search_session_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
-import '../../utils/haptics.dart';
 import 'long_press_ring_painter.dart';
 import 'track_row_support.dart';
 
@@ -52,7 +51,6 @@ class _SearchFolderRowState extends ConsumerState<SearchFolderRow>
               toggle();
               return;
             }
-            KalinkaHaptics.lightImpact();
             ref.read(searchSessionProvider.notifier).openFolder(item);
           },
           onLongPressStart: selectionMode

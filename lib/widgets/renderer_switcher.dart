@@ -13,7 +13,6 @@ import '../providers/renderer_settings_route_provider.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
-import '../utils/haptics.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'kalinka_dialog.dart' show showKalinkaDialog;
 import 'renderer_upgrade_dialog.dart';
@@ -91,7 +90,6 @@ class RendererSwitcherButton extends ConsumerWidget {
         excludeFromSemantics: true,
         child: TransportButton(
           hitDiameter: hitDiameter,
-          onTapDown: (_) => KalinkaHaptics.selectionClick(),
           onTap: () => showRendererPicker(context, ref),
           child: _CastGlyph(size: iconSize, live: outputLive),
         ),
@@ -176,7 +174,6 @@ class RendererSwitcherDropdown extends ConsumerWidget {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () {
-              KalinkaHaptics.selectionClick();
               showRendererPicker(context, ref);
             },
             child: Padding(
@@ -500,12 +497,10 @@ class _RendererRow extends StatelessWidget {
                   // waiting for new software.
                   onTap: canPlayHere
                       ? () {
-                          KalinkaHaptics.selectionClick();
                           onIntent(RendererPickerIntent.play);
                         }
                       : (offerUpgrade && !usable)
                       ? () {
-                          KalinkaHaptics.selectionClick();
                           onIntent(RendererPickerIntent.upgrade);
                         }
                       : null,
@@ -575,7 +570,6 @@ class _RendererRow extends StatelessWidget {
                       // an upgrade that is merely available is not a fault.
                       urgent: !renderer.compatible,
                       onTap: () {
-                        KalinkaHaptics.selectionClick();
                         onIntent(RendererPickerIntent.upgrade);
                       },
                     ),
@@ -584,7 +578,6 @@ class _RendererRow extends StatelessWidget {
                       rendererName: name,
                       onTap: canConfigure
                           ? () {
-                              KalinkaHaptics.selectionClick();
                               onIntent(RendererPickerIntent.configure);
                             }
                           : null,

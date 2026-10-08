@@ -8,7 +8,7 @@ import '../utils/haptics.dart';
 ///
 /// Swipe left to trigger "Remove" on release.
 /// Bin icon zooms from minimal to full size until trigger point (1/3 from right).
-/// Haptics trigger at deletion threshold.
+/// Ticks as the drag unlocks and thuds when released past the threshold.
 class SwipeToDeleteRow extends StatefulWidget {
   final Widget child;
   final VoidCallback onDelete;

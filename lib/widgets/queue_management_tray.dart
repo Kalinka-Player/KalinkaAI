@@ -5,7 +5,6 @@ import '../data_model/kalinka_ws_api.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/kalinka_ws_api_provider.dart';
 import '../theme/app_theme.dart';
-import '../utils/haptics.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'tap_highlight.dart';
 
@@ -72,9 +71,6 @@ class QueueManagementTrayContent extends ConsumerWidget {
             value: isShuffle,
             activeColor: KalinkaColors.accent,
             onTap: () {
-              isShuffle
-                  ? KalinkaHaptics.lightImpact()
-                  : KalinkaHaptics.mediumImpact();
               // Shuffle not yet wired to API
             },
           ),
@@ -109,7 +105,6 @@ class QueueManagementTrayContent extends ConsumerWidget {
           onTap: queued == 0
               ? null
               : () {
-                  KalinkaHaptics.mediumImpact();
                   _emitAction(context, TrayAction.saveToCollection);
                 },
         ),
@@ -125,7 +120,6 @@ class QueueManagementTrayContent extends ConsumerWidget {
           label: 'Clear played',
           sublabel: 'Remove tracks from listening history',
           onTap: () {
-            KalinkaHaptics.mediumImpact();
             _emitAction(context, TrayAction.clearPlayed);
           },
         ),
@@ -138,7 +132,6 @@ class QueueManagementTrayContent extends ConsumerWidget {
           sublabel: 'Remove current and upcoming tracks',
           labelColor: KalinkaColors.actionDelete,
           onTap: () {
-            KalinkaHaptics.heavyImpact();
             _emitAction(context, TrayAction.clearAll);
           },
         ),
@@ -458,10 +451,7 @@ class _RepeatSegmentedControl extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return TapHighlight(
-      onTap: () {
-        KalinkaHaptics.selectionClick();
-        onTap();
-      },
+      onTap: onTap,
       borderRadius: BorderRadius.circular(7),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),

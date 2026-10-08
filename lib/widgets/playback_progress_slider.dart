@@ -128,7 +128,6 @@ mixin OptimisticSeek<T extends ConsumerStatefulWidget> on ConsumerState<T> {
     _seekBeforeSeq = null;
     _dragging = true;
     _lastHapticSeekPosition = progress;
-    KalinkaHaptics.mediumImpact();
     seekTo(progress);
   }
 

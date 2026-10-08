@@ -7,7 +7,6 @@ import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/field_decoration.dart';
-import '../../utils/haptics.dart';
 import '../kalinka_bottom_sheet.dart';
 import '../kalinka_button.dart';
 import '../kalinka_dialog.dart';
@@ -131,7 +130,6 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
       items.where((item) => item.id == _chosenId).firstOrNull;
 
   Future<void> _createAndSave() async {
-    KalinkaHaptics.lightImpact();
     final made = await createCollectionByName(context, ref);
     if (made == null || !mounted) return;
     // One just made has nothing to replace, so filling it is all there is.
@@ -394,7 +392,6 @@ class _KeepDuplicates extends StatelessWidget {
             : 'Tracks the collection already holds are skipped.',
         trailing: SettingsToggle(value: keeping, onChanged: onChanged),
         onTap: () {
-          KalinkaHaptics.mediumImpact();
           onChanged(!keeping);
         },
       ),

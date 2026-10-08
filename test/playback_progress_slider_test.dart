@@ -12,6 +12,8 @@ import 'package:kalinka/providers/monotonic_clock_provider.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_progress_bar.dart';
 import 'package:kalinka/widgets/playback_progress_slider.dart';
 
+import 'support/haptic_recorder.dart';
+
 const _duration = 120000;
 
 PlayQueueState _queue({
@@ -227,6 +229,28 @@ void main() {
     h.queue.emit(_queue(position: 0, seq: 2, state: PlayerStateType.stopped));
     await tester.pump();
     expect(_position(tester), 0);
+  });
+
+  testWidgets('a seek ticks every 5% and taps lightly on release', (
+    tester,
+  ) async {
+    final haptics = HapticRecorder.install();
+    await _pump(tester);
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    final start = slider.value;
+
+    slider.onChangeStart!(start);
+    slider.onChanged!(start + 0.03);
+    await tester.pump();
+    expect(haptics.calls, isEmpty);
+
+    slider.onChanged!(start + 0.06);
+    await tester.pump();
+    expect(haptics.calls, ['selectionClick']);
+
+    slider.onChangeEnd!(start + 0.06);
+    await tester.pump();
+    expect(haptics.calls, ['selectionClick', 'lightImpact']);
   });
 
   testWidgets(

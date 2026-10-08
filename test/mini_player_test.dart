@@ -16,6 +16,8 @@ import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 
+import 'support/haptic_recorder.dart';
+
 // ── Fake notifiers ────────────────────────────────────────────────────────────
 // Each extends the real notifier and overrides build() to return a fixed value,
 // avoiding any network/timer setup from the real implementations.
@@ -213,6 +215,68 @@ void main() {
 
       final api = container.read(kalinkaWsApiProvider) as _FakeWsApi;
       expect(api.sent, [const QueueCommand.play()]);
+    });
+  });
+
+  group('haptics', () {
+    Future<_FakeWsApi> pumpTwoTracks(WidgetTester tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          ..._buildOverrides(
+            queueState: PlayQueueState(
+              playbackState: PlaybackState(
+                state: PlayerStateType.playing,
+                index: 0,
+              ),
+              trackList: [
+                Track(id: 't0', title: 'First', duration: 100),
+                Track(id: 't1', title: 'Second', duration: 100),
+              ],
+              playbackMode: PlaybackMode.empty,
+              seq: 0,
+            ),
+          ),
+          kalinkaWsApiProvider.overrideWith((ref) => _FakeWsApi(ref)),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: MiniPlayer())),
+        ),
+      );
+      await tester.pump();
+      return container.read(kalinkaWsApiProvider) as _FakeWsApi;
+    }
+
+    testWidgets('a swipe to the next track ticks once', (tester) async {
+      final haptics = HapticRecorder.install();
+      final api = await pumpTwoTracks(tester);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('First')),
+      );
+      for (var i = 0; i < 10; i++) {
+        await gesture.moveBy(const Offset(-50, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(haptics.calls, ['selectionClick']);
+      expect(api.sent, [const QueueCommand.next()]);
+    });
+
+    testWidgets('the play button is silent', (tester) async {
+      final haptics = HapticRecorder.install();
+      final api = await pumpTwoTracks(tester);
+
+      await tester.tap(find.byIcon(Icons.pause_rounded));
+      await tester.pump();
+
+      expect(api.sent, isNotEmpty);
+      expect(haptics.calls, isEmpty);
     });
   });
 

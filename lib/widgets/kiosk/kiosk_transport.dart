@@ -43,7 +43,6 @@ class KioskTransport extends ConsumerWidget {
       opacity: enabled ? 1.0 : 0.35,
       child: TransportButton(
         hitDiameter: s(68),
-        onTapDown: null,
         onTap: enabled ? () => onSkip(direction) : null,
         child: Icon(icon, size: s(52), color: KalinkaColors.textPrimary),
       ),
@@ -57,7 +56,6 @@ class KioskTransport extends ConsumerWidget {
         ? SizedBox.square(dimension: s(56))
         : TransportButton(
             hitDiameter: s(56),
-            onTapDown: null,
             onTap: () => api.sendQueueCommand(command),
             child: Icon(
               icon,
@@ -91,7 +89,6 @@ class KioskTransport extends ConsumerWidget {
             // than the ring itself.
             child: TransportButton(
               hitDiameter: ring + 2 * glow,
-              onTapDown: null,
               onTap: transport.playPauseDisabled
                   ? null
                   : () => sendPlayPauseCommand(

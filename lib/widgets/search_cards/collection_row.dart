@@ -10,7 +10,6 @@ import '../../providers/selection_state_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
-import '../../utils/haptics.dart';
 import '../search/add_queue_chip.dart';
 import '../search/collection_menu_sheet.dart';
 import 'action_pill_button.dart';
@@ -76,7 +75,6 @@ class _CollectionRowState extends ConsumerState<CollectionRow>
   }
 
   void _toggle() {
-    KalinkaHaptics.lightImpact();
     ref.read(rowExpansionProvider.notifier).toggleUnrolled(widget.item.id);
   }
 
@@ -256,7 +254,6 @@ class _CollectionShelfRowState extends ConsumerState<CollectionShelfRow> {
   Future<void> _play() async {
     if (_starting) return;
     setState(() => _starting = true);
-    KalinkaHaptics.mediumImpact();
     final api = ref.read(kalinkaProxyProvider);
     await runQueueActivity(
       pending: 'Starting playback…',
@@ -281,10 +278,7 @@ class _CollectionShelfRowState extends ConsumerState<CollectionShelfRow> {
 
     return CollectionFace(
       item: widget.item,
-      onTap: () {
-        KalinkaHaptics.lightImpact();
-        widget.onOpen();
-      },
+      onTap: widget.onOpen,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
