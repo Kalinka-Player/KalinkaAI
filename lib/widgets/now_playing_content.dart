@@ -633,7 +633,7 @@ class _AlbumArtSection extends StatelessWidget {
                       width: artSize,
                       height: artSize,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => ProceduralAlbumArt(
+                      errorBuilder: (_, _, _) => ProceduralAlbumArt(
                         trackId: trackId ?? '',
                         size: artSize,
                       ),

@@ -84,7 +84,7 @@ class ActionPillButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (leading != null) leading!,
+                ?leading,
                 if (icon != null) Icon(icon, size: 16, color: fg),
                 if ((icon != null || leading != null) && label != null)
                   const SizedBox(width: 5),

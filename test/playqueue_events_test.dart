@@ -23,7 +23,7 @@ Map<String, dynamic> _replayJson({Object? control}) => {
     'repeat_all': false,
   },
   'seq': 1,
-  if (control != null) 'playback_control': control,
+  'playback_control': ?control,
 };
 
 void main() {

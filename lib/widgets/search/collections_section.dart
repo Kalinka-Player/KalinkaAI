@@ -47,7 +47,7 @@ class CollectionsSection extends ConsumerWidget {
       ),
       // A shelf that failed to load is not worth a message on the root; the
       // catalogs below still work, and the next reload tries again.
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
       data: (shelf) {
         if (shelf == null) return const SizedBox.shrink();
         if (shelf.isEmpty) {

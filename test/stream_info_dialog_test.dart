@@ -7,6 +7,7 @@ import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/bit_perfect_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/widgets/stream_info_dialog.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 // The dialog is a debug read-out of /queue/state, so what it must get right is
 // which fields it takes from the state and how it renders a value the server
@@ -58,9 +59,8 @@ class _FakePlaybackTimeNotifier extends PlaybackTimeMsNotifier {
   int build() => 83000;
 }
 
-// Return type intentionally inferred — Riverpod's Override type is sealed and
-// resolved by the package internally.
-_overrides(PlaybackState state) => [
+// Use the public Override type to give this helper an explicit return type.
+List<Override> _overrides(PlaybackState state) => [
   playQueueStateStoreProvider.overrideWith(
     () => _SettableQueueNotifier(
       PlayQueueState(

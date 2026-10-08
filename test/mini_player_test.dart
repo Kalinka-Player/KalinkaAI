@@ -15,6 +15,7 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/mini_player.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 
 import 'support/haptic_recorder.dart';
 
@@ -75,7 +76,7 @@ class _FakeWsApi extends KalinkaWsApi {
   }
 }
 
-_buildOverrides({
+List<Override> _buildOverrides({
   required PlayQueueState queueState,
   ConnectionStatus connectionStatus = ConnectionStatus.connected,
 }) => [

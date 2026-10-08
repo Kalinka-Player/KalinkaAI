@@ -46,7 +46,7 @@ class CollectionCover extends StatelessWidget {
         cacheHeight: (size * 3).round(),
         gaplessPlayback: true,
         filterQuality: FilterQuality.low,
-        errorBuilder: (_, __, ___) => tile,
+        errorBuilder: (_, _, _) => tile,
       ),
     );
   }

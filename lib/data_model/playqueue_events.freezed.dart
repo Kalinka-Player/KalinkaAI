@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // coverage:ignore-file
-// ignore_for_file: type=lint
+// ignore_for_file: type=lint, type=warning, deprecated_member_use, deprecated_member_use_from_same_package
 // ignore_for_file: unused_element, deprecated_member_use, deprecated_member_use_from_same_package, use_function_type_syntax_for_parameters, unnecessary_const, avoid_init_to_null, invalid_override_different_default_values_named, prefer_expression_function_bodies, annotate_overrides, invalid_annotation_target, unnecessary_question_mark
 
 part of 'playqueue_events.dart';
@@ -9,6 +9,7 @@ part of 'playqueue_events.dart';
 // FreezedGenerator
 // **************************************************************************
 
+// GENERATED CODE - DO NOT MODIFY BY HAND
 // dart format off
 T _$identity<T>(T value) => value;
 /// @nodoc
@@ -25,16 +26,21 @@ $PlayQueueEventCopyWith<PlayQueueEvent> get copyWith => _$PlayQueueEventCopyWith
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayQueueEvent&&(identical(other.seq, seq) || other.seq == seq));
+  final _this = this as PlayQueueEvent;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayQueueEvent&&(identical(other.seq, _this.seq) || other.seq == _this.seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,seq);
+int get hashCode {
+  final _this = this as PlayQueueEvent;
+  return Object.hash(runtimeType,_this.seq);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent(seq: $seq)';
+  final _this = this as PlayQueueEvent;
+  return 'PlayQueueEvent(seq: ${_this.seq})';
 }
 
 
@@ -282,16 +288,18 @@ $PlaybackStateChangedEventCopyWith<PlaybackStateChangedEvent> get copyWith => _$
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PlaybackStateChangedEvent&&(identical(other.state, state) || other.state == state)&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlaybackStateChangedEvent&&(identical(other.state, state) || other.state == state)&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,state,seq);
+int get hashCode {
+    return Object.hash(runtimeType,state,seq);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent.playbackStateChanged(state: $state, seq: $seq)';
+    return 'PlayQueueEvent.playbackStateChanged(state: $state, seq: $seq)';
 }
 
 
@@ -349,16 +357,18 @@ $RequestMoreTracksEventCopyWith<RequestMoreTracksEvent> get copyWith => _$Reques
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is RequestMoreTracksEvent&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is RequestMoreTracksEvent&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,seq);
+int get hashCode {
+    return Object.hash(runtimeType,seq);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent.requestMoreTracks(seq: $seq)';
+    return 'PlayQueueEvent.requestMoreTracks(seq: $seq)';
 }
 
 
@@ -400,7 +410,7 @@ as int,
 
 
 class TracksAddedEvent implements PlayQueueEvent {
-  const TracksAddedEvent({required final  List<Track> tracks, required this.seq, this.index}): _tracks = tracks;
+  const TracksAddedEvent({required  List<Track> tracks, required this.seq, this.index}): _tracks = tracks;
   
 
  final  List<Track> _tracks;
@@ -423,16 +433,18 @@ $TracksAddedEventCopyWith<TracksAddedEvent> get copyWith => _$TracksAddedEventCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is TracksAddedEvent&&const DeepCollectionEquality().equals(other._tracks, _tracks)&&(identical(other.seq, seq) || other.seq == seq)&&(identical(other.index, index) || other.index == index));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is TracksAddedEvent&&const DeepCollectionEquality().equals(other.tracks, _tracks)&&(identical(other.seq, seq) || other.seq == seq)&&(identical(other.index, index) || other.index == index));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_tracks),seq,index);
+int get hashCode {
+    return Object.hash(runtimeType,const DeepCollectionEquality().hash(_tracks),seq,index);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent.tracksAdded(tracks: $tracks, seq: $seq, index: $index)';
+    return 'PlayQueueEvent.tracksAdded(tracks: $tracks, seq: $seq, index: $index)';
 }
 
 
@@ -476,7 +488,7 @@ as int?,
 
 
 class TracksRemovedEvent implements PlayQueueEvent {
-  const TracksRemovedEvent({required final  List<int> indices, required this.seq}): _indices = indices;
+  const TracksRemovedEvent({required  List<int> indices, required this.seq}): _indices = indices;
   
 
  final  List<int> _indices;
@@ -498,16 +510,18 @@ $TracksRemovedEventCopyWith<TracksRemovedEvent> get copyWith => _$TracksRemovedE
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is TracksRemovedEvent&&const DeepCollectionEquality().equals(other._indices, _indices)&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is TracksRemovedEvent&&const DeepCollectionEquality().equals(other.indices, _indices)&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_indices),seq);
+int get hashCode {
+    return Object.hash(runtimeType,const DeepCollectionEquality().hash(_indices),seq);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent.tracksRemoved(indices: $indices, seq: $seq)';
+    return 'PlayQueueEvent.tracksRemoved(indices: $indices, seq: $seq)';
 }
 
 
@@ -567,16 +581,18 @@ $TrackMovedEventCopyWith<TrackMovedEvent> get copyWith => _$TrackMovedEventCopyW
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is TrackMovedEvent&&(identical(other.fromIndex, fromIndex) || other.fromIndex == fromIndex)&&(identical(other.toIndex, toIndex) || other.toIndex == toIndex)&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is TrackMovedEvent&&(identical(other.fromIndex, fromIndex) || other.fromIndex == fromIndex)&&(identical(other.toIndex, toIndex) || other.toIndex == toIndex)&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,fromIndex,toIndex,seq);
+int get hashCode {
+    return Object.hash(runtimeType,fromIndex,toIndex,seq);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent.trackMoved(fromIndex: $fromIndex, toIndex: $toIndex, seq: $seq)';
+    return 'PlayQueueEvent.trackMoved(fromIndex: $fromIndex, toIndex: $toIndex, seq: $seq)';
 }
 
 
@@ -638,16 +654,18 @@ $TrackUnavailableEventCopyWith<TrackUnavailableEvent> get copyWith => _$TrackUna
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is TrackUnavailableEvent&&(identical(other.index, index) || other.index == index)&&(identical(other.unavailable, unavailable) || other.unavailable == unavailable)&&(identical(other.seq, seq) || other.seq == seq)&&(identical(other.reason, reason) || other.reason == reason));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is TrackUnavailableEvent&&(identical(other.index, index) || other.index == index)&&(identical(other.unavailable, unavailable) || other.unavailable == unavailable)&&(identical(other.seq, seq) || other.seq == seq)&&(identical(other.reason, reason) || other.reason == reason));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,index,unavailable,seq,reason);
+int get hashCode {
+    return Object.hash(runtimeType,index,unavailable,seq,reason);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent.trackUnavailable(index: $index, unavailable: $unavailable, seq: $seq, reason: $reason)';
+    return 'PlayQueueEvent.trackUnavailable(index: $index, unavailable: $unavailable, seq: $seq, reason: $reason)';
 }
 
 
@@ -708,16 +726,18 @@ $PlaybackErrorEventCopyWith<PlaybackErrorEvent> get copyWith => _$PlaybackErrorE
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PlaybackErrorEvent&&(identical(other.message, message) || other.message == message)&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlaybackErrorEvent&&(identical(other.message, message) || other.message == message)&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,message,seq);
+int get hashCode {
+    return Object.hash(runtimeType,message,seq);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent.playbackError(message: $message, seq: $seq)';
+    return 'PlayQueueEvent.playbackError(message: $message, seq: $seq)';
 }
 
 
@@ -776,16 +796,18 @@ $PlaybackModeChangedEventCopyWith<PlaybackModeChangedEvent> get copyWith => _$Pl
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PlaybackModeChangedEvent&&(identical(other.mode, mode) || other.mode == mode)&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlaybackModeChangedEvent&&(identical(other.mode, mode) || other.mode == mode)&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,mode,seq);
+int get hashCode {
+    return Object.hash(runtimeType,mode,seq);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent.playbackModeChanged(mode: $mode, seq: $seq)';
+    return 'PlayQueueEvent.playbackModeChanged(mode: $mode, seq: $seq)';
 }
 
 
@@ -845,16 +867,18 @@ $ReplayPlayQueueEventCopyWith<ReplayPlayQueueEvent> get copyWith => _$ReplayPlay
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ReplayPlayQueueEvent&&(identical(other.state, state) || other.state == state)&&(identical(other.serverTimeNs, serverTimeNs) || other.serverTimeNs == serverTimeNs)&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is ReplayPlayQueueEvent&&(identical(other.state, state) || other.state == state)&&(identical(other.serverTimeNs, serverTimeNs) || other.serverTimeNs == serverTimeNs)&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,state,serverTimeNs,seq);
+int get hashCode {
+    return Object.hash(runtimeType,state,serverTimeNs,seq);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent.replayEvent(state: $state, serverTimeNs: $serverTimeNs, seq: $seq)';
+    return 'PlayQueueEvent.replayEvent(state: $state, serverTimeNs: $serverTimeNs, seq: $seq)';
 }
 
 
@@ -898,7 +922,7 @@ as int,
 
 
 class RenderersChangedEvent implements PlayQueueEvent {
-  const RenderersChangedEvent({required final  List<RendererInfo> renderers, required this.seq}): _renderers = renderers;
+  const RenderersChangedEvent({required  List<RendererInfo> renderers, required this.seq}): _renderers = renderers;
   
 
  final  List<RendererInfo> _renderers;
@@ -920,16 +944,18 @@ $RenderersChangedEventCopyWith<RenderersChangedEvent> get copyWith => _$Renderer
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is RenderersChangedEvent&&const DeepCollectionEquality().equals(other._renderers, _renderers)&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is RenderersChangedEvent&&const DeepCollectionEquality().equals(other.renderers, _renderers)&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_renderers),seq);
+int get hashCode {
+    return Object.hash(runtimeType,const DeepCollectionEquality().hash(_renderers),seq);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent.renderersChanged(renderers: $renderers, seq: $seq)';
+    return 'PlayQueueEvent.renderersChanged(renderers: $renderers, seq: $seq)';
 }
 
 
@@ -989,16 +1015,18 @@ $CurrentRendererChangedEventCopyWith<CurrentRendererChangedEvent> get copyWith =
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is CurrentRendererChangedEvent&&(identical(other.rendererId, rendererId) || other.rendererId == rendererId)&&(identical(other.selectedRendererId, selectedRendererId) || other.selectedRendererId == selectedRendererId)&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CurrentRendererChangedEvent&&(identical(other.rendererId, rendererId) || other.rendererId == rendererId)&&(identical(other.selectedRendererId, selectedRendererId) || other.selectedRendererId == selectedRendererId)&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,rendererId,selectedRendererId,seq);
+int get hashCode {
+    return Object.hash(runtimeType,rendererId,selectedRendererId,seq);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent.currentRendererChanged(rendererId: $rendererId, selectedRendererId: $selectedRendererId, seq: $seq)';
+    return 'PlayQueueEvent.currentRendererChanged(rendererId: $rendererId, selectedRendererId: $selectedRendererId, seq: $seq)';
 }
 
 
@@ -1058,16 +1086,18 @@ $PlaybackControlChangedEventCopyWith<PlaybackControlChangedEvent> get copyWith =
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PlaybackControlChangedEvent&&(identical(other.control, control) || other.control == control)&&(identical(other.seq, seq) || other.seq == seq));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlaybackControlChangedEvent&&(identical(other.control, control) || other.control == control)&&(identical(other.seq, seq) || other.seq == seq));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,control,seq);
+int get hashCode {
+    return Object.hash(runtimeType,control,seq);
+}
 
 @override
 String toString() {
-  return 'PlayQueueEvent.playbackControlChanged(control: $control, seq: $seq)';
+    return 'PlayQueueEvent.playbackControlChanged(control: $control, seq: $seq)';
 }
 
 

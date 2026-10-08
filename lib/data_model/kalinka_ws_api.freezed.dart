@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // coverage:ignore-file
-// ignore_for_file: type=lint
+// ignore_for_file: type=lint, type=warning, deprecated_member_use, deprecated_member_use_from_same_package
 // ignore_for_file: unused_element, deprecated_member_use, deprecated_member_use_from_same_package, use_function_type_syntax_for_parameters, unnecessary_const, avoid_init_to_null, invalid_override_different_default_values_named, prefer_expression_function_bodies, annotate_overrides, invalid_annotation_target, unnecessary_question_mark
 
 part of 'kalinka_ws_api.dart';
@@ -9,6 +9,7 @@ part of 'kalinka_ws_api.dart';
 // FreezedGenerator
 // **************************************************************************
 
+// GENERATED CODE - DO NOT MODIFY BY HAND
 // dart format off
 T _$identity<T>(T value) => value;
 DeviceCommand _$DeviceCommandFromJson(
@@ -50,7 +51,7 @@ mixin _$DeviceCommand {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is DeviceCommand);
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is DeviceCommand);
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -59,7 +60,7 @@ int get hashCode => runtimeType.hashCode;
 
 @override
 String toString() {
-  return 'DeviceCommand()';
+    return 'DeviceCommand()';
 }
 
 
@@ -211,7 +212,7 @@ return setVolume(_that.volume);case _:
 @JsonSerializable()
 
 class PowerOnCommand implements DeviceCommand {
-  const PowerOnCommand({final  String? $type}): $type = $type ?? 'power_on';
+  const PowerOnCommand({ String? $type}): $type = $type ?? 'power_on';
   factory PowerOnCommand.fromJson(Map<String, dynamic> json) => _$PowerOnCommandFromJson(json);
 
 
@@ -228,7 +229,7 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PowerOnCommand);
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PowerOnCommand);
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -237,7 +238,7 @@ int get hashCode => runtimeType.hashCode;
 
 @override
 String toString() {
-  return 'DeviceCommand.powerOn()';
+    return 'DeviceCommand.powerOn()';
 }
 
 
@@ -250,7 +251,7 @@ String toString() {
 @JsonSerializable()
 
 class PowerOffCommand implements DeviceCommand {
-  const PowerOffCommand({final  String? $type}): $type = $type ?? 'power_off';
+  const PowerOffCommand({ String? $type}): $type = $type ?? 'power_off';
   factory PowerOffCommand.fromJson(Map<String, dynamic> json) => _$PowerOffCommandFromJson(json);
 
 
@@ -267,7 +268,7 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PowerOffCommand);
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PowerOffCommand);
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -276,7 +277,7 @@ int get hashCode => runtimeType.hashCode;
 
 @override
 String toString() {
-  return 'DeviceCommand.powerOff()';
+    return 'DeviceCommand.powerOff()';
 }
 
 
@@ -289,7 +290,7 @@ String toString() {
 @JsonSerializable()
 
 class SetVolumeCommand implements DeviceCommand {
-  const SetVolumeCommand({required this.volume, final  String? $type}): assert(volume >= 0, 'Volume must be non-negative'),$type = $type ?? 'set_volume';
+  const SetVolumeCommand({required this.volume,  String? $type}): assert(volume >= 0, 'Volume must be non-negative'),$type = $type ?? 'set_volume';
   factory SetVolumeCommand.fromJson(Map<String, dynamic> json) => _$SetVolumeCommandFromJson(json);
 
  final  int volume;
@@ -311,16 +312,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SetVolumeCommand&&(identical(other.volume, volume) || other.volume == volume));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is SetVolumeCommand&&(identical(other.volume, volume) || other.volume == volume));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,volume);
+int get hashCode {
+    return Object.hash(runtimeType,volume);
+}
 
 @override
 String toString() {
-  return 'DeviceCommand.setVolume(volume: $volume)';
+    return 'DeviceCommand.setVolume(volume: $volume)';
 }
 
 
@@ -417,7 +420,7 @@ mixin _$QueueCommand {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is QueueCommand);
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is QueueCommand);
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -426,7 +429,7 @@ int get hashCode => runtimeType.hashCode;
 
 @override
 String toString() {
-  return 'QueueCommand()';
+    return 'QueueCommand()';
 }
 
 
@@ -608,7 +611,7 @@ return move(_that.fromIndex,_that.toIndex);case _:
 @JsonSerializable()
 
 class PlayCommand extends QueueCommand {
-  const PlayCommand({this.index, final  String? $type}): $type = $type ?? 'play',super._();
+  const PlayCommand({this.index,  String? $type}): $type = $type ?? 'play',super._();
   factory PlayCommand.fromJson(Map<String, dynamic> json) => _$PlayCommandFromJson(json);
 
  final  int? index;
@@ -630,16 +633,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayCommand&&(identical(other.index, index) || other.index == index));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PlayCommand&&(identical(other.index, index) || other.index == index));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,index);
+int get hashCode {
+    return Object.hash(runtimeType,index);
+}
 
 @override
 String toString() {
-  return 'QueueCommand.play(index: $index)';
+    return 'QueueCommand.play(index: $index)';
 }
 
 
@@ -681,7 +686,7 @@ as int?,
 @JsonSerializable()
 
 class PauseCommand extends QueueCommand {
-  const PauseCommand({this.paused = true, final  String? $type}): $type = $type ?? 'pause',super._();
+  const PauseCommand({this.paused = true,  String? $type}): $type = $type ?? 'pause',super._();
   factory PauseCommand.fromJson(Map<String, dynamic> json) => _$PauseCommandFromJson(json);
 
 @JsonKey() final  bool paused;
@@ -703,16 +708,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PauseCommand&&(identical(other.paused, paused) || other.paused == paused));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PauseCommand&&(identical(other.paused, paused) || other.paused == paused));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,paused);
+int get hashCode {
+    return Object.hash(runtimeType,paused);
+}
 
 @override
 String toString() {
-  return 'QueueCommand.pause(paused: $paused)';
+    return 'QueueCommand.pause(paused: $paused)';
 }
 
 
@@ -754,7 +761,7 @@ as bool,
 @JsonSerializable()
 
 class NextCommand extends QueueCommand {
-  const NextCommand({final  String? $type}): $type = $type ?? 'next',super._();
+  const NextCommand({ String? $type}): $type = $type ?? 'next',super._();
   factory NextCommand.fromJson(Map<String, dynamic> json) => _$NextCommandFromJson(json);
 
 
@@ -771,7 +778,7 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is NextCommand);
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is NextCommand);
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -780,7 +787,7 @@ int get hashCode => runtimeType.hashCode;
 
 @override
 String toString() {
-  return 'QueueCommand.next()';
+    return 'QueueCommand.next()';
 }
 
 
@@ -793,7 +800,7 @@ String toString() {
 @JsonSerializable()
 
 class PrevCommand extends QueueCommand {
-  const PrevCommand({final  String? $type}): $type = $type ?? 'prev',super._();
+  const PrevCommand({ String? $type}): $type = $type ?? 'prev',super._();
   factory PrevCommand.fromJson(Map<String, dynamic> json) => _$PrevCommandFromJson(json);
 
 
@@ -810,7 +817,7 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PrevCommand);
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PrevCommand);
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -819,7 +826,7 @@ int get hashCode => runtimeType.hashCode;
 
 @override
 String toString() {
-  return 'QueueCommand.prev()';
+    return 'QueueCommand.prev()';
 }
 
 
@@ -832,7 +839,7 @@ String toString() {
 @JsonSerializable()
 
 class StopCommand extends QueueCommand {
-  const StopCommand({final  String? $type}): $type = $type ?? 'stop',super._();
+  const StopCommand({ String? $type}): $type = $type ?? 'stop',super._();
   factory StopCommand.fromJson(Map<String, dynamic> json) => _$StopCommandFromJson(json);
 
 
@@ -849,7 +856,7 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is StopCommand);
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is StopCommand);
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -858,7 +865,7 @@ int get hashCode => runtimeType.hashCode;
 
 @override
 String toString() {
-  return 'QueueCommand.stop()';
+    return 'QueueCommand.stop()';
 }
 
 
@@ -871,7 +878,7 @@ String toString() {
 @JsonSerializable()
 
 class SeekCommand extends QueueCommand {
-  const SeekCommand({required this.positionMs, final  String? $type}): $type = $type ?? 'seek',super._();
+  const SeekCommand({required this.positionMs,  String? $type}): $type = $type ?? 'seek',super._();
   factory SeekCommand.fromJson(Map<String, dynamic> json) => _$SeekCommandFromJson(json);
 
  final  int positionMs;
@@ -893,16 +900,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SeekCommand&&(identical(other.positionMs, positionMs) || other.positionMs == positionMs));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is SeekCommand&&(identical(other.positionMs, positionMs) || other.positionMs == positionMs));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,positionMs);
+int get hashCode {
+    return Object.hash(runtimeType,positionMs);
+}
 
 @override
 String toString() {
-  return 'QueueCommand.seek(positionMs: $positionMs)';
+    return 'QueueCommand.seek(positionMs: $positionMs)';
 }
 
 
@@ -944,7 +953,7 @@ as int,
 @JsonSerializable()
 
 class SetPlaybackModeCommand extends QueueCommand {
-  const SetPlaybackModeCommand({this.shuffle, this.repeatSingle, this.repeatAll, final  String? $type}): $type = $type ?? 'set_playback_mode',super._();
+  const SetPlaybackModeCommand({this.shuffle, this.repeatSingle, this.repeatAll,  String? $type}): $type = $type ?? 'set_playback_mode',super._();
   factory SetPlaybackModeCommand.fromJson(Map<String, dynamic> json) => _$SetPlaybackModeCommandFromJson(json);
 
  final  bool? shuffle;
@@ -968,16 +977,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SetPlaybackModeCommand&&(identical(other.shuffle, shuffle) || other.shuffle == shuffle)&&(identical(other.repeatSingle, repeatSingle) || other.repeatSingle == repeatSingle)&&(identical(other.repeatAll, repeatAll) || other.repeatAll == repeatAll));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is SetPlaybackModeCommand&&(identical(other.shuffle, shuffle) || other.shuffle == shuffle)&&(identical(other.repeatSingle, repeatSingle) || other.repeatSingle == repeatSingle)&&(identical(other.repeatAll, repeatAll) || other.repeatAll == repeatAll));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,shuffle,repeatSingle,repeatAll);
+int get hashCode {
+    return Object.hash(runtimeType,shuffle,repeatSingle,repeatAll);
+}
 
 @override
 String toString() {
-  return 'QueueCommand.setPlaybackMode(shuffle: $shuffle, repeatSingle: $repeatSingle, repeatAll: $repeatAll)';
+    return 'QueueCommand.setPlaybackMode(shuffle: $shuffle, repeatSingle: $repeatSingle, repeatAll: $repeatAll)';
 }
 
 
@@ -1021,7 +1032,7 @@ as bool?,
 @JsonSerializable()
 
 class MoveCommand extends QueueCommand {
-  const MoveCommand({required this.fromIndex, required this.toIndex, final  String? $type}): $type = $type ?? 'move',super._();
+  const MoveCommand({required this.fromIndex, required this.toIndex,  String? $type}): $type = $type ?? 'move',super._();
   factory MoveCommand.fromJson(Map<String, dynamic> json) => _$MoveCommandFromJson(json);
 
  final  int fromIndex;
@@ -1044,16 +1055,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is MoveCommand&&(identical(other.fromIndex, fromIndex) || other.fromIndex == fromIndex)&&(identical(other.toIndex, toIndex) || other.toIndex == toIndex));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is MoveCommand&&(identical(other.fromIndex, fromIndex) || other.fromIndex == fromIndex)&&(identical(other.toIndex, toIndex) || other.toIndex == toIndex));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,fromIndex,toIndex);
+int get hashCode {
+    return Object.hash(runtimeType,fromIndex,toIndex);
+}
 
 @override
 String toString() {
-  return 'QueueCommand.move(fromIndex: $fromIndex, toIndex: $toIndex)';
+    return 'QueueCommand.move(fromIndex: $fromIndex, toIndex: $toIndex)';
 }
 
 

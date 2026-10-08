@@ -32,7 +32,7 @@ class DiscoverSection extends ConsumerWidget {
 
     return plansAsync.when(
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
       data: (shelves) {
         // BrowseItemRows dispatches by entity type; raw catalog items have
         // no row widget, so those shelves would render blank — skip them.
@@ -87,7 +87,7 @@ class _DiscoverShelfState extends ConsumerState<_DiscoverShelf> {
               ),
             ),
           ),
-          error: (_, __) => _ShelfPlaceholder(
+          error: (_, _) => _ShelfPlaceholder(
             child: Text(
               "Couldn't load ${widget.shelf.title}",
               style: KalinkaTextStyles.trackRowSubtitle,

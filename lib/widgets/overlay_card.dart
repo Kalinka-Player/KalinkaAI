@@ -97,7 +97,7 @@ class OverlayCardHeader extends StatelessWidget {
               ),
             ),
           ),
-          if (action != null) action!,
+          ?action,
           OverlayCloseButton(onTap: onClose, label: closeLabel),
         ],
       ),

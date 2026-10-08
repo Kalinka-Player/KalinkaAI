@@ -140,7 +140,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     // A listing the server takes writes for can change under the page, so a
     // write restarts it the way a filter does.
     final revision = ref.watch(collectionsRevisionProvider);
-    ref.listen(collectionsRevisionProvider, (_, __) => _artPolls = 0);
+    ref.listen(collectionsRevisionProvider, (_, _) => _artPolls = 0);
     // Recomputed per chunk, not per row (O(n²) otherwise).
     final trackIdsMemo = _TrackIdsMemo();
 
@@ -151,7 +151,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         ? ref.watch(searchSessionProvider.select((s) => s.shownListing))
         : page;
     // Any folder shown, the same one again included, opens at its top.
-    ref.listen(searchSessionProvider.select((s) => s.shownListing), (_, __) {
+    ref.listen(searchSessionProvider.select((s) => s.shownListing), (_, _) {
       _actionsTop = null;
       if (_actionsHeld) setState(() => _actionsHeld = false);
     });
@@ -722,7 +722,7 @@ class _BakedBlurImageState extends State<_BakedBlurImage> {
     final gen = ++_bakeGen;
     _listener = ImageStreamListener(
       (info, _) => _bake(info, gen),
-      onError: (_, __) {}, // No art is a valid banner — keep what's shown.
+      onError: (_, _) {}, // No art is a valid banner — keep what's shown.
     );
     _stream = ResizeImage(
       NetworkImage(widget.url),

@@ -22,6 +22,8 @@ class _Connected extends ConnectionStateNotifier {
 // Keep the approved inline layout and large display title; the remaining text
 // uses the settings screen's shared type scale. Load the real bundled weights.
 // Fixtures contain catalog declarations, not illustrative installed states.
+// Baselines use Flutter 3.47.6, matching CI; rounded-border rasterization differs
+// from 3.44.8. Review the image diffs when changing the SDK before updating them.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {

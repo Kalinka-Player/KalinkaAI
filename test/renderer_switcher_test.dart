@@ -213,7 +213,7 @@ void main() {
   test('connecting loads the renderer list', () async {
     final api = _FakeApi();
     final container = makeContainer(api);
-    container.listen(rendererListProvider, (_, __) {}, fireImmediately: true);
+    container.listen(rendererListProvider, (_, _) {}, fireImmediately: true);
     await Future.delayed(const Duration(milliseconds: 50));
 
     expect(api.listCalls, 1);
@@ -237,7 +237,7 @@ void main() {
   test('a server without /renderer/* hides the switcher', () async {
     final api = _FakeApi(unsupported: true);
     final container = makeContainer(api);
-    container.listen(rendererListProvider, (_, __) {}, fireImmediately: true);
+    container.listen(rendererListProvider, (_, _) {}, fireImmediately: true);
     await Future.delayed(const Duration(milliseconds: 50));
 
     final state = container.read(rendererListProvider);
@@ -248,7 +248,7 @@ void main() {
   test('select() PUTs the renderer id and moves the active marker', () async {
     final api = _FakeApi();
     final container = makeContainer(api);
-    container.listen(rendererListProvider, (_, __) {}, fireImmediately: true);
+    container.listen(rendererListProvider, (_, _) {}, fireImmediately: true);
     await Future.delayed(const Duration(milliseconds: 50));
 
     await container.read(rendererListProvider.notifier).select('r-kitchen');
@@ -263,7 +263,7 @@ void main() {
       failWith: const RendererSwitchException('That output is busy'),
     );
     final container = makeContainer(api);
-    container.listen(rendererListProvider, (_, __) {}, fireImmediately: true);
+    container.listen(rendererListProvider, (_, _) {}, fireImmediately: true);
     await Future.delayed(const Duration(milliseconds: 50));
     final callsBefore = api.listCalls;
 

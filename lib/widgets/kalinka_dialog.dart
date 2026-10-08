@@ -247,7 +247,7 @@ Future<T?> showKalinkaDialog<T>({
       opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
       child: child,
     ),
-    pageBuilder: (ctx, _, __) =>
+    pageBuilder: (ctx, _, _) =>
         Material(type: MaterialType.transparency, child: builder(ctx)),
   );
 }

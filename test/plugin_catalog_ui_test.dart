@@ -451,6 +451,10 @@ void main() {
       find.descendant(of: heading, matching: find.text('Plugins')),
       findsOneWidget,
     );
+    expect(
+      tester.getSemantics(find.text('Plugins')).getSemanticsData().headingLevel,
+      1,
+    );
     for (final (status, color, label) in [
       (ConnectionStatus.connected, KalinkaColors.statusOnline, 'Server online'),
       (

@@ -1306,7 +1306,7 @@ void main() {
           container: container,
           child: MaterialApp(
             home: Scaffold(
-              body: SearchZeroState(onOpenCatalog: (_, __, {focusItemId}) {}),
+              body: SearchZeroState(onOpenCatalog: (_, _, {focusItemId}) {}),
             ),
           ),
         ),

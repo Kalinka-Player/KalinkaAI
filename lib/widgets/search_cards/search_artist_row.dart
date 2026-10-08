@@ -142,7 +142,7 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
                                   fit: BoxFit.cover,
                                   gaplessPlayback: true,
                                   filterQuality: FilterQuality.low,
-                                  errorBuilder: (_, __, ___) =>
+                                  errorBuilder: (_, _, _) =>
                                       ProceduralAlbumArt(
                                         trackId: widget.item.id,
                                         size: 60,

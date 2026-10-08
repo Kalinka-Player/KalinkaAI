@@ -76,7 +76,7 @@ void main() {
         opaque: true,
         transitionDuration: Duration.zero,
         reverseTransitionDuration: Duration.zero,
-        pageBuilder: (_, __, ___) => const SizedBox.expand(),
+        pageBuilder: (_, _, _) => const SizedBox.expand(),
       ),
     );
     await tester.pump();

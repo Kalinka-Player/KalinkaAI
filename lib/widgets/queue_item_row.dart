@@ -128,7 +128,7 @@ class QueueItemRow extends ConsumerWidget {
                   ? Image.network(
                       resolvedImageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => ProceduralAlbumArt(
+                      errorBuilder: (_, _, _) => ProceduralAlbumArt(
                         trackId: track.id,
                         size: currentArtworkSize,
                       ),
@@ -168,7 +168,7 @@ class QueueItemRow extends ConsumerWidget {
                 width: 44,
                 height: 44,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
+                errorBuilder: (_, _, _) =>
                     ProceduralAlbumArt(trackId: track.id, size: 44),
               )
             : ProceduralAlbumArt(trackId: track.id, size: 44),
