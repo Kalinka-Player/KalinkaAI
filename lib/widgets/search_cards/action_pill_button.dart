@@ -59,6 +59,11 @@ class ActionPillButton extends StatelessWidget {
     final border =
         borderOverride ??
         (accent ? KalinkaColors.accentBorder : KalinkaColors.borderDefault);
+    final labelStyle = KalinkaFonts.sans(
+      fontSize: KalinkaTypography.baseSize + 1,
+      fontWeight: FontWeight.w600,
+      color: fg,
+    );
 
     Widget button = Material(
       color: bg,
@@ -72,23 +77,20 @@ class ActionPillButton extends StatelessWidget {
         mouseCursor: clickCursor(interactive: enabled && onTap != null),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (leading != null) leading!,
-              if (icon != null) Icon(icon, size: 16, color: fg),
-              if ((icon != null || leading != null) && label != null)
-                const SizedBox(width: 5),
-              if (label != null)
-                Text(
-                  label!,
-                  style: KalinkaFonts.sans(
-                    fontSize: KalinkaTypography.baseSize + 1,
-                    fontWeight: FontWeight.w600,
-                    color: fg,
-                  ),
-                ),
-            ],
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: _lineHeightOf(context, labelStyle),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (leading != null) leading!,
+                if (icon != null) Icon(icon, size: 16, color: fg),
+                if ((icon != null || leading != null) && label != null)
+                  const SizedBox(width: 5),
+                if (label != null) Text(label!, style: labelStyle),
+              ],
+            ),
           ),
         ),
       ),
@@ -104,5 +106,23 @@ class ActionPillButton extends StatelessWidget {
       selected: selected,
       child: button,
     );
+  }
+
+  /// How tall a line of label sets, so a pill without one is as tall as
+  /// those with.
+  static double _lineHeightOf(BuildContext context, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: ' ',
+        style: DefaultTextStyle.of(context).style.merge(style),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      textHeightBehavior: DefaultTextHeightBehavior.maybeOf(context),
+      maxLines: 1,
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return height;
   }
 }
