@@ -20,15 +20,13 @@ pluginManagement {
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "9.0.1" apply false
-    // Keep the compiler version aligned across AGP and the Flutter plugins.
+    // AGP's built-in Kotlin uses this compiler version.
     id("org.jetbrains.kotlin.android") version "2.4.0" apply false
 }
 
 include(":app")
 
-// nsd_android 2.2.0 still applies the legacy Kotlin plugin. Keep its published
-// sources, but use a build script compatible with AGP's built-in Kotlin.
-// Remove this adapter once nsd_android ships that migration upstream.
+// Use built-in Kotlin for nsd_android 2.2.0 until its build script is updated.
 findProject(":nsd_android")?.let { nsdAndroid ->
     val publishedProjectDir = nsdAndroid.projectDir
     val pubspec = publishedProjectDir.parentFile.resolve("pubspec.yaml")
