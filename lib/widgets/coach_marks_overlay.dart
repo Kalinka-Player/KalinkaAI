@@ -5,7 +5,7 @@ import 'kalinka_button.dart';
 /// One spotlight stop of the first-run tour.
 class CoachMarkStop {
   /// Key of the widget to spotlight. When the key can't be resolved
-  /// (widget not mounted), the tip card shows centered without a cutout.
+  /// (widget not mounted), the tip card shows over an unbroken scrim.
   final GlobalKey targetKey;
   final String title;
   final String body;
@@ -18,8 +18,9 @@ class CoachMarkStop {
 }
 
 /// One-time UI tour shown the first time the play queue appears: a dimmed
-/// scrim with a cutout spotlight around each target and a tip card beneath
-/// it. Tapping anywhere, or the Next button, advances; Skip ends the tour.
+/// scrim with a pulsing cutout around each target and the tip card centred
+/// on screen, where it stays from stop to stop. Tapping anywhere, or the Next
+/// button, advances; Skip ends the tour.
 class CoachMarksOverlay extends StatefulWidget {
   final List<CoachMarkStop> stops;
   final VoidCallback onDismiss;
@@ -34,17 +35,25 @@ class CoachMarksOverlay extends StatefulWidget {
   State<CoachMarksOverlay> createState() => _CoachMarksOverlayState();
 }
 
-class _CoachMarksOverlayState extends State<CoachMarksOverlay> {
+class _CoachMarksOverlayState extends State<CoachMarksOverlay>
+    with SingleTickerProviderStateMixin {
   int _index = 0;
   Rect? _targetRect;
-  // Overlay height captured post-frame (reading sizes during build is illegal),
-  // used to decide whether the tip card goes above or below the spotlight.
-  double? _overlayHeight;
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  )..repeat();
 
   @override
   void initState() {
     super.initState();
     _scheduleResolve();
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
   }
 
   /// The stops are derived from live state — the output switcher only exists
@@ -70,10 +79,6 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay> {
     final targetBox = targetContext?.findRenderObject() as RenderBox?;
     final overlayBox = context.findRenderObject() as RenderBox?;
     Rect? rect;
-    double? overlayHeight;
-    if (overlayBox != null && overlayBox.hasSize) {
-      overlayHeight = overlayBox.size.height;
-    }
     if (targetBox != null &&
         overlayBox != null &&
         targetBox.hasSize &&
@@ -85,16 +90,13 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay> {
       rect = topLeft & targetBox.size;
     }
     // A target that renders nothing resolves to a zero-size box; spotlighting
-    // that would ring an empty patch of screen, so treat it as absent and
-    // centre the card. Stops whose control is genuinely gone are better left
-    // out of the list — a centred card still describes a missing control.
+    // that would ring an empty patch of screen, so treat it as absent. Stops
+    // whose control is genuinely gone are better left out of the list — the
+    // card would still describe a missing control.
     if (rect != null && (rect.width < 4 || rect.height < 4)) rect = null;
 
-    if (rect == _targetRect && overlayHeight == _overlayHeight) return;
-    setState(() {
-      _targetRect = rect;
-      _overlayHeight = overlayHeight;
-    });
+    if (rect == _targetRect) return;
+    setState(() => _targetRect = rect);
   }
 
   void _next() {
@@ -129,11 +131,16 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay> {
           child: Stack(
             children: [
               Positioned.fill(
-                child: CustomPaint(
-                  painter: _SpotlightPainter(cutout: _targetRect),
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _SpotlightPainter(
+                      cutout: _targetRect,
+                      pulse: _pulse,
+                    ),
+                  ),
                 ),
               ),
-              _buildTipCard(stop, isLast),
+              Center(child: _buildTipCard(stop, isLast)),
             ],
           ),
         );
@@ -142,7 +149,7 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay> {
   }
 
   Widget _buildTipCard(CoachMarkStop stop, bool isLast) {
-    final card = Container(
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
       constraints: const BoxConstraints(maxWidth: 420),
@@ -202,65 +209,67 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay> {
         ],
       ),
     );
-
-    // Under the spotlight, or above it when the target sits low (e.g. the
-    // floating search button near the bottom), so the card stays on-screen.
-    // Centered when there is no target.
-    final rect = _targetRect;
-    if (rect == null) {
-      return Center(child: card);
-    }
-    final overlayHeight = _overlayHeight ?? MediaQuery.of(context).size.height;
-    if (rect.center.dy > overlayHeight * 0.6) {
-      return Positioned(
-        bottom: overlayHeight - rect.top + 20,
-        left: 0,
-        right: 0,
-        child: Align(alignment: Alignment.bottomCenter, child: card),
-      );
-    }
-    return Positioned(
-      top: rect.bottom + 20,
-      left: 0,
-      right: 0,
-      child: Align(alignment: Alignment.topCenter, child: card),
-    );
   }
 }
 
 class _SpotlightPainter extends CustomPainter {
   final Rect? cutout;
+  final Animation<double> pulse;
 
-  const _SpotlightPainter({this.cutout});
+  _SpotlightPainter({required this.cutout, required this.pulse})
+    : super(repaint: pulse);
 
   @override
   void paint(Canvas canvas, Size size) {
     final scrim = Path()..addRect(Offset.zero & size);
-    Path path = scrim;
+    final scrimPaint = Paint()..color = Colors.black.withValues(alpha: 0.72);
     final rect = cutout;
-    if (rect != null) {
-      final hole = Path()
-        ..addRRect(
-          RRect.fromRectAndRadius(rect.inflate(6), const Radius.circular(14)),
-        );
-      path = Path.combine(PathOperation.difference, scrim, hole);
+    if (rect == null) {
+      canvas.drawPath(scrim, scrimPaint);
+      return;
     }
-    canvas.drawPath(
-      path,
-      Paint()..color = Colors.black.withValues(alpha: 0.72),
+    final hole = RRect.fromRectAndRadius(
+      rect.inflate(6),
+      const Radius.circular(14),
     );
-    if (rect != null) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect.inflate(6), const Radius.circular(14)),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
-          ..color = KalinkaColors.accent.withValues(alpha: 0.8),
-      );
-    }
+    final outside = Path.combine(
+      PathOperation.difference,
+      scrim,
+      Path()..addRRect(hole),
+    );
+    canvas.drawPath(outside, scrimPaint);
+
+    final beat = Curves.easeOut.transform(pulse.value);
+    final fade = 1 - beat;
+    canvas.save();
+    // Glow and ring stay on the scrim so the control itself is never tinted.
+    canvas.clipPath(outside);
+    canvas.drawRRect(
+      hole,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
+        ..color = KalinkaColors.accent.withValues(alpha: 0.25 + 0.5 * fade),
+    );
+    canvas.drawRRect(
+      hole.inflate(22 * beat),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = KalinkaColors.accent.withValues(alpha: 0.8 * fade * fade),
+    );
+    canvas.restore();
+    canvas.drawRRect(
+      hole,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = KalinkaColors.accent.withValues(alpha: 0.55 + 0.45 * fade),
+    );
   }
 
   @override
   bool shouldRepaint(_SpotlightPainter oldDelegate) =>
-      oldDelegate.cutout != cutout;
+      oldDelegate.cutout != cutout || oldDelegate.pulse != pulse;
 }
