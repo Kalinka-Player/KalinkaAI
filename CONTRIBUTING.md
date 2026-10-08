@@ -12,7 +12,7 @@ If AI assistance played a significant part in a pull request you send, a note in
 
 ## Sending a change
 
-Use Flutter **3.47.6** (Dart **3.13**) to match the test and release workflows. The dependency constraints require at least these versions; see the [dependency upgrade audit](docs/dependency-upgrade-audit.md) for the remaining upstream constraints.
+Use Flutter **3.47.6** (Dart **3.13**) to match the test and release workflows. The dependency constraints require at least these versions.
 
 Android builds use AGP **9.0.1** with built-in Kotlin. Keep the checked-in Gradle **9.1.0** wrapper scripts and JAR together: the current wrapper declares native access for Java 24 and later. The temporary `android/compat/nsd_android` build configuration uses the published `nsd_android` 2.2.0 sources with built-in Kotlin; remove it when that package ships a compatible Android build script.
 
