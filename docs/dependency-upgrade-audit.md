@@ -37,6 +37,7 @@ constructs an `XFile` from ZIP bytes for the Android share sheet through
 | Platform plugins | `share_plus` 13.3.1; `package_info_plus` 10.2.2 | Raise major-version constraints; current application calls remain compatible |
 | Icons | `cupertino_icons` 2.0.0 | Retain the font dependency and verify release asset generation |
 | Lints | `flutter_lints` 6.0.0 | Use wildcard parameters, null-aware collection elements, and explicit public Riverpod `Override` return types |
+| Android build | AGP 8.13.0 → 9.0.1; regenerate the Gradle 9.1.0 wrapper | Enable built-in Kotlin and retain the current wrapper's Java native-access declaration |
 | Other direct dependencies | Raise constraints to the audited latest stable versions | Verify analysis, tests, and platform builds |
 
 Freezed 4's Dart requirement is why upgrading package constraints alone on the old
@@ -90,7 +91,9 @@ latest stable versions in this audit.
 - `flutter analyze` passed with no issues.
 - `flutter test` passed all **1,067 tests**, including all five catalog goldens
   and the assertion that the catalog title exposes heading level 1.
-- Android debug APK, web release, and Linux release builds succeeded.
+- Android debug and release APK, web release, and Linux release builds succeeded.
+- All **81 Android unit tests** and **8 Bonjour discovery tests** passed after
+  the Android build migration.
 - `flutter pub upgrade --dry-run` proposed no changes.
 - `flutter pub outdated --json` reported only the five transitive packages above.
 
@@ -100,10 +103,33 @@ The five golden baselines were visually reviewed and refreshed for Flutter
 was not relaxed. Failure PNGs from the earlier run are local diagnostic artifacts,
 not active test failures or files included in this change.
 
-Windows and Apple builds were not run on the Linux host. Android builds succeed
-with AGP 8.13.0 but Flutter warns that support will eventually require AGP 9.0.1
-or newer; that separate Gradle migration is not required for this dependency
-resolution.
+Windows and Apple builds were not run on the Linux host.
+
+## Android build compatibility
+
+AGP is now 9.0.1 with built-in Kotlin enabled, following the
+[Flutter migration guide](https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers).
+Flutter 3.47 still requires `android.newDsl=false`; its dependency validation
+remains enabled. The app no longer applies the legacy Kotlin Android plugin.
+
+The latest `nsd_android` release, 2.2.0, still applies that legacy plugin. The
+version-specific `android/compat/nsd_android` build configuration compiles its
+published Kotlin sources and manifest with AGP's built-in Kotlin. It does not
+modify the pub cache, fork the package, or override Dart dependency resolution.
+Only version 2.2.0 uses this adapter; newer versions use their own build scripts.
+Remove the adapter when the upstream package completes its migration.
+
+The Gradle 9.1.0 wrapper scripts and JAR are now checked in together. The old
+launcher used a classpath invocation; the current generated launcher uses the
+wrapper JAR's `Enable-Native-Access: ALL-UNNAMED` manifest declaration. This
+resolves the Java 25 native-library warning without changing the system JDK.
+The wrapper JAR was verified against Gradle's published SHA-256 checksum and the
+distribution checksum is pinned in `gradle-wrapper.properties`.
+
+AGP 9's unit-test APK packaging explicitly depends on Flutter's asset-copy task
+so Robolectric receives generated assets in the correct order. Its forked test
+JVM also enables native access for the Conscrypt provider. Both debug and release
+APK builds complete without the Java native-access or outdated-AGP warnings.
 
 The repository's existing policy ignores `pubspec.lock`. These results describe
 the audited resolution; future package releases can change the exact versions

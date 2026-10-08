@@ -3,8 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // AGP supplies built-in Kotlin; apply Flutter after the Android plugin.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -79,6 +78,10 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            // Robolectric's Conscrypt provider loads JNI in the test JVM.
+            it.jvmArgs("--enable-native-access=ALL-UNNAMED")
+        }
     }
 }
 
@@ -92,6 +95,16 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+// AGP 9 packages assets into the APK used by Robolectric. Flutter 3.47 only
+// wires its asset-copy task to app packaging, so host-test packaging needs the
+// same dependency to read fully generated Flutter assets.
+tasks.matching {
+    it.name.startsWith("package") && it.name.endsWith("UnitTestForUnitTest")
+}.configureEach {
+    val variant = name.removePrefix("package").removeSuffix("UnitTestForUnitTest")
+    dependsOn("copyFlutterAssets$variant")
 }
 
 dependencies {
