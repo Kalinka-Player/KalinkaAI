@@ -8,6 +8,24 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.18.0
+
+This release needs the Kalinka supervisor that comes with recent Kalinka Player images; against an older box or a server reached over the internet, the app works as before.
+
+### Added
+- "BOX" in the server's settings offers "Restart the box" and "Power off", each with its own confirmation, for a box whose supervisor can do it. "Box dashboard" opens the supervisor's own page in a browser for versions, memory and processor use, and reinstalling Kalinka.
+- My Library browses by folder: opening it shows its top-level folders, each one opens into the folders and tracks below it, and a breadcrumb along the top goes straight back to any of them. A folder too deep to fit folds the middle of the trail behind "…".
+
+### Changed
+- A server's refusal to queue past its limit is now shown in that server's own words instead of a fixed message.
+
+### Fixed
+- The on-device now-playing display, when it starts before its server does, keeps retrying instead of giving up and showing an error; a display opened from the app still falls back the way it always has.
+- Applying a setting that installs a system package or optional dependency no longer times out while the app waits for the server to come back.
+- A haptic the device cannot play (no vibration motor, or one Android refuses) is now dropped quietly instead of raising an error.
+- An icon-only pill button is as tall as a labelled one beside it.
+- The onboarding tour's tip card stays centred and its spotlight pulses, instead of drifting off during the tour.
+
 ## 0.17.1
 
 ### Fixed
