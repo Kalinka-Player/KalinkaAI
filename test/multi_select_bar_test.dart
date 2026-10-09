@@ -10,7 +10,10 @@ import 'package:kalinka/providers/collections_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/selection_state_provider.dart';
+import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/widgets/selection_overlay.dart';
+
+import 'support/queue_server.dart';
 
 const _t1 = 'kalinka:localfiles:track:t1';
 const _t2 = 'kalinka:localfiles:track:t2';
@@ -33,12 +36,26 @@ class _StillQueue extends PlayQueueStateStore {
 /// Takes what the bar sends and remembers it, so a test can tell what was
 /// asked for and where it was meant to land.
 class _QueueApi implements KalinkaPlayerProxy {
+  _QueueApi({this.refusal});
+
+  /// What replacing the queue throws, if it is refused.
+  final Exception? refusal;
+
   final List<(List<String>, int?)> added = [];
+  final List<List<String>> replaced = [];
+  final List<int?> played = [];
   int cleared = 0;
 
   @override
   Future<StatusMessage> add(List<String> items, {int? index}) async {
     added.add((items, index));
+    return StatusMessage(count: items.length);
+  }
+
+  @override
+  Future<StatusMessage> replace(List<String> items) async {
+    replaced.add(items);
+    if (refusal != null) throw refusal!;
     return StatusMessage(count: items.length);
   }
 
@@ -49,7 +66,10 @@ class _QueueApi implements KalinkaPlayerProxy {
   }
 
   @override
-  Future<StatusMessage> play([int? index]) async => StatusMessage();
+  Future<StatusMessage> play([int? index]) async {
+    played.add(index);
+    return StatusMessage();
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
@@ -183,6 +203,55 @@ void main() {
     expect(api.cleared, 0);
     await letToastsGo(tester);
   });
+
+  testWidgets('playing now replaces the queue in one request', (tester) async {
+    final api = _QueueApi();
+    final container = await openBar(tester, api);
+
+    await tap(tester, 'Play now');
+
+    expect(api.replaced.single, unorderedEquals([_t1, _t2]));
+    expect(api.cleared, 0);
+    expect(api.added, isEmpty);
+    expect(api.played, [0]);
+    expect(container.read(selectionStateProvider).isActive, isFalse);
+    await letToastsGo(tester);
+  });
+
+  testWidgets('a refused play neither clears the queue nor plays', (
+    tester,
+  ) async {
+    final api = _QueueApi(refusal: Exception('The queue is full.'));
+    final container = await openBar(tester, api);
+
+    await tap(tester, 'Play now');
+
+    expect(api.cleared, 0);
+    expect(api.played, isEmpty);
+    final toast = container.read(toastProvider).single;
+    expect(toast.isError, isTrue);
+    expect(toast.message, contains('The queue is full.'));
+    await letToastsGo(tester);
+  });
+
+  for (final (status, body, kind) in olderServers) {
+    testWidgets('playing now on an older server $kind clears then adds', (
+      tester,
+    ) async {
+      final server = QueueServer(status, body);
+      await openBar(tester, server.api());
+
+      await tap(tester, 'Play now');
+
+      expect(server.requests, [
+        'POST /queue/replace',
+        'PUT /queue/clear',
+        'POST /queue/add',
+        'PUT /queue/play',
+      ]);
+      await letToastsGo(tester);
+    });
+  }
 
   testWidgets('the collection button opens the destination sheet', (
     tester,

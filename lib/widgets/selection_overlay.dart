@@ -240,8 +240,7 @@ class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar> {
     selectionNotifier.exitSelectionMode();
     toast.beginQueueActivity('Starting playback…');
     try {
-      await api.clear();
-      final added = await api.add(ids);
+      final added = await api.replace(ids);
       // Explicit index 0: avoids a backend race where a stale FINISHED from the
       // cleared stream advances current_track_id, making play() skip track 0.
       await api.play(0);

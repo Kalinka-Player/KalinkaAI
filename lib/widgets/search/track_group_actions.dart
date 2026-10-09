@@ -68,8 +68,7 @@ class _PlayAllChipState extends ConsumerState<PlayAllChip> {
     await runQueueActivity(
       pending: 'Starting playback…',
       action: () async {
-        await api.clear();
-        final added = await api.add(widget.trackIds);
+        final added = await api.replace(widget.trackIds);
         await api.play(0);
         return added;
       },

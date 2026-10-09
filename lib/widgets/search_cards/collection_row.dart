@@ -258,8 +258,7 @@ class _CollectionShelfRowState extends ConsumerState<CollectionShelfRow> {
     await runQueueActivity(
       pending: 'Starting playback…',
       action: () async {
-        await api.clear();
-        final added = await api.add([widget.item.id]);
+        final added = await api.replace([widget.item.id]);
         await api.play(0);
         return added;
       },
