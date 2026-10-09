@@ -258,8 +258,7 @@ class _InlineContainerTrackState extends ConsumerState<_InlineContainerTrack>
     final toast = ref.read(toastProvider.notifier);
     toast.beginQueueActivity('Starting playback…');
     try {
-      await api.clear();
-      final added = await api.add([widget.containerId]);
+      final added = await api.replace([widget.containerId]);
       await api.play(widget.index - 1);
       final n = added.count ?? 0;
       toast.endQueueActivity('Playing $n ${n == 1 ? 'track' : 'tracks'}');

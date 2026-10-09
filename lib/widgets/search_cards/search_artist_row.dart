@@ -425,14 +425,13 @@ class _ArtistTrackRowState extends ConsumerState<_ArtistTrackRow>
 
     final api = ref.read(kalinkaProxyProvider);
     try {
-      await api.clear();
       if (widget.containerId.startsWith('singles_')) {
-        await api.add([widget.item.id]);
+        await api.replace([widget.item.id]);
         // Explicit index 0 avoids a backend race where a stale FINISHED event
         // from the just-cleared stream advances current_track_id before play().
         await api.play(0);
       } else {
-        await api.add([widget.containerId]);
+        await api.replace([widget.containerId]);
         await api.play(widget.index - 1);
       }
     } catch (e) {
