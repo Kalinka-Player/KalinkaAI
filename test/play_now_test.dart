@@ -11,6 +11,7 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/widgets/search/track_group_actions.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 
+import 'support/queue_api.dart';
 import 'support/queue_server.dart';
 
 const _a = 'kalinka:x:track:a';
@@ -33,38 +34,6 @@ class _EmptyQueue extends PlayQueueStateStore {
     playbackMode: PlaybackMode.empty,
     seq: 0,
   );
-}
-
-class _QueueApi implements KalinkaPlayerProxy {
-  final List<List<String>> replaced = [];
-  final List<int?> played = [];
-  int cleared = 0;
-  int added = 0;
-
-  @override
-  Future<StatusMessage> replace(List<String> items) async {
-    replaced.add(items);
-    return StatusMessage(count: items.length);
-  }
-
-  @override
-  Future<StatusMessage> add(List<String> items, {int? index}) async {
-    added++;
-    return StatusMessage(count: items.length);
-  }
-
-  @override
-  Future<void> clear() async => cleared++;
-
-  @override
-  Future<StatusMessage> play([int? index]) async {
-    played.add(index);
-    return StatusMessage();
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError('${invocation.memberName}');
 }
 
 void main() {
@@ -101,7 +70,7 @@ void main() {
   testWidgets('a search track plays its section as the new queue', (
     tester,
   ) async {
-    final api = _QueueApi();
+    final api = QueueApi();
 
     await tapIn(
       tester,
@@ -115,13 +84,13 @@ void main() {
     ]);
     expect(api.played, [1]);
     expect(api.cleared, 0);
-    expect(api.added, 0);
+    expect(api.added, isEmpty);
   });
 
   testWidgets('a search track on its own replaces the queue with itself', (
     tester,
   ) async {
-    final api = _QueueApi();
+    final api = QueueApi();
 
     await tapIn(
       tester,
@@ -138,7 +107,7 @@ void main() {
   });
 
   testWidgets('play all replaces the queue with the section', (tester) async {
-    final api = _QueueApi();
+    final api = QueueApi();
 
     await tapIn(
       tester,
