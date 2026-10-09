@@ -47,6 +47,11 @@ abstract class KalinkaPlayerProxy {
   Future<StatusMessage> next();
   Future<StatusMessage> previous();
   Future<StatusMessage> add(List<String> items, {int? index});
+
+  /// Makes [items], expanded as [add] expands them, the whole queue in one
+  /// request, so a refusal leaves the queue as it was. A server before API
+  /// 0.12 has no such request, and gets [clear] then [add] instead.
+  Future<StatusMessage> replace(List<String> items);
   Future<StatusMessage> remove(int index);
   Future<StatusMessage> move(int fromIndex, int toIndex);
   Future<StatusMessage> pause({bool paused = true});
@@ -355,6 +360,36 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
         .then((response) {
           return statusMessageFromResponse(response);
         });
+  }
+
+  @override
+  Future<StatusMessage> replace(List<String> items) async {
+    try {
+      final response = await client.post(
+        '/queue/replace',
+        data: items,
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      return statusMessageFromResponse(response);
+    } on DioException catch (e) {
+      if (!_noReplaceRoute(e.response)) rethrow;
+    }
+    await clear();
+    return add(items);
+  }
+
+  /// An older server's answer: its browser-player mount at "/" takes an
+  /// unknown POST and answers 405, and without that mount it is a bare 404.
+  /// The route's own 404s say what is missing; falling back on one would
+  /// clear the queue for an add that fails the same way.
+  static bool _noReplaceRoute(Response? response) {
+    final data = response?.data;
+    final detail = data is Map ? data['detail'] : null;
+    return switch (response?.statusCode) {
+      405 => true,
+      404 => detail == null || detail == 'Not Found',
+      _ => false,
+    };
   }
 
   @override
