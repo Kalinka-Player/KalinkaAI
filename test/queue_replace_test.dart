@@ -36,6 +36,27 @@ void main() {
     expect(server.requests, ['POST /queue/replace']);
   });
 
+  test(
+    'a replacement that comes to no tracks reads as the server put it',
+    () async {
+      final server = QueueServer(422, {
+        'detail': {'code': 'no_tracks', 'message': 'There are no tracks here.'},
+      });
+
+      await expectLater(
+        server.api().replace(_ids),
+        throwsA(
+          isA<ServerRefusalException>().having(
+            (e) => '$e',
+            'text',
+            'There are no tracks here.',
+          ),
+        ),
+      );
+      expect(server.requests, ['POST /queue/replace']);
+    },
+  );
+
   for (final (status, body, kind) in olderServers) {
     test('an older server $kind gets a clear then an add', () async {
       final server = QueueServer(status, body);

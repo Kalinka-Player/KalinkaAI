@@ -118,6 +118,21 @@ void main() {
     expect(api.played, [0]);
   });
 
+  testWidgets('a last tapped track the server left out plays the one before', (
+    tester,
+  ) async {
+    final api = QueueApi(unresolved: {_c});
+
+    await tapIn(
+      tester,
+      api,
+      SearchTrackRow(item: _track(_c), queueContextIds: const [_a, _b, _c]),
+      find.text('Track $_c'),
+    );
+
+    expect(api.played, [1]);
+  });
+
   testWidgets('a search track on its own replaces the queue with itself', (
     tester,
   ) async {
