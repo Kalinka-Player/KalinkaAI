@@ -13,6 +13,7 @@ import 'package:kalinka/providers/selection_state_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/widgets/selection_overlay.dart';
 
+import 'support/queue_api.dart';
 import 'support/queue_server.dart';
 
 const _t1 = 'kalinka:localfiles:track:t1';
@@ -31,49 +32,6 @@ class _StillQueue extends PlayQueueStateStore {
     playbackMode: PlaybackMode.empty,
     seq: 0,
   );
-}
-
-/// Takes what the bar sends and remembers it, so a test can tell what was
-/// asked for and where it was meant to land.
-class _QueueApi implements KalinkaPlayerProxy {
-  _QueueApi({this.refusal});
-
-  /// What replacing the queue throws, if it is refused.
-  final Exception? refusal;
-
-  final List<(List<String>, int?)> added = [];
-  final List<List<String>> replaced = [];
-  final List<int?> played = [];
-  int cleared = 0;
-
-  @override
-  Future<StatusMessage> add(List<String> items, {int? index}) async {
-    added.add((items, index));
-    return StatusMessage(count: items.length);
-  }
-
-  @override
-  Future<StatusMessage> replace(List<String> items) async {
-    replaced.add(items);
-    if (refusal != null) throw refusal!;
-    return StatusMessage(count: items.length);
-  }
-
-  @override
-  Future<StatusMessage> clear() async {
-    cleared++;
-    return StatusMessage();
-  }
-
-  @override
-  Future<StatusMessage> play([int? index]) async {
-    played.add(index);
-    return StatusMessage();
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError('${invocation.memberName}');
 }
 
 void main() {
@@ -140,7 +98,7 @@ void main() {
   testWidgets('the bar offers three things to do with a selection', (
     tester,
   ) async {
-    await openBar(tester, _QueueApi());
+    await openBar(tester, QueueApi());
 
     expect(find.text('2 selected'), findsOneWidget);
     expect(find.text('Play now'), findsOneWidget);
@@ -152,7 +110,7 @@ void main() {
   });
 
   testWidgets('queueing asks where before it queues anything', (tester) async {
-    final api = _QueueApi();
+    final api = QueueApi();
     await openBar(tester, api);
 
     await tap(tester, 'Queue…');
@@ -164,7 +122,7 @@ void main() {
   });
 
   testWidgets('the way back leaves the selection as it was', (tester) async {
-    final container = await openBar(tester, _QueueApi());
+    final container = await openBar(tester, QueueApi());
 
     await tap(tester, 'Queue…');
     await tester.tap(find.bySemanticsLabel('Back to actions'));
@@ -178,7 +136,7 @@ void main() {
   testWidgets('enqueueing sends the selection to the end of the queue', (
     tester,
   ) async {
-    final api = _QueueApi();
+    final api = QueueApi();
     final container = await openBar(tester, api);
 
     await tap(tester, 'Queue…');
@@ -193,7 +151,7 @@ void main() {
   testWidgets('playing next sends it in after the track playing', (
     tester,
   ) async {
-    final api = _QueueApi();
+    final api = QueueApi();
     await openBar(tester, api);
 
     await tap(tester, 'Queue…');
@@ -205,7 +163,7 @@ void main() {
   });
 
   testWidgets('playing now replaces the queue in one request', (tester) async {
-    final api = _QueueApi();
+    final api = QueueApi();
     final container = await openBar(tester, api);
 
     await tap(tester, 'Play now');
@@ -221,12 +179,13 @@ void main() {
   testWidgets('a refused play neither clears the queue nor plays', (
     tester,
   ) async {
-    final api = _QueueApi(refusal: Exception('The queue is full.'));
+    final api = QueueApi(refusal: Exception('The queue is full.'));
     final container = await openBar(tester, api);
 
     await tap(tester, 'Play now');
 
     expect(api.cleared, 0);
+    expect(api.added, isEmpty);
     expect(api.played, isEmpty);
     final toast = container.read(toastProvider).single;
     expect(toast.isError, isTrue);
@@ -256,7 +215,7 @@ void main() {
   testWidgets('the collection button opens the destination sheet', (
     tester,
   ) async {
-    final container = await openBar(tester, _QueueApi());
+    final container = await openBar(tester, QueueApi());
 
     await tap(tester, 'Collection');
 
@@ -270,7 +229,7 @@ void main() {
     tester,
   ) async {
     const folder = 'kalinka:localfiles:catalog:folder.L211c2lj';
-    final api = _QueueApi();
+    final api = QueueApi();
     final container = await openBar(tester, api);
     container.read(selectionStateProvider.notifier).toggleContainer(folder);
     await tester.pumpAndSettle();

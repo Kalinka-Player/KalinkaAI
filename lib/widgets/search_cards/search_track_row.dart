@@ -93,9 +93,10 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     if (useContext) toast.beginQueueActivity('Starting playback…');
     try {
       if (useContext) {
-        await api.replace(ctx);
+        final added = await api.replace(ctx);
         await api.play(ctxIndex);
-        toast.endQueueActivity('Playing ${ctx.length} tracks');
+        final n = added.count ?? ctx.length;
+        toast.endQueueActivity('Playing $n ${n == 1 ? 'track' : 'tracks'}');
       } else {
         await api.replace([widget.item.id]);
         // Explicit index 0 avoids a backend race where a stale FINISHED event

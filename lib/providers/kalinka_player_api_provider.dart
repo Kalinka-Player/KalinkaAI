@@ -50,7 +50,8 @@ abstract class KalinkaPlayerProxy {
 
   /// Makes [items], expanded as [add] expands them, the whole queue in one
   /// request, so a refusal leaves the queue as it was. A server before API
-  /// 0.12 has no such request, and gets [clear] then [add] instead.
+  /// 0.12 has no such request, and gets [clear] then [add] instead, where a
+  /// refused add leaves the queue empty.
   Future<StatusMessage> replace(List<String> items);
   Future<StatusMessage> remove(int index);
   Future<StatusMessage> move(int fromIndex, int toIndex);
@@ -378,10 +379,8 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
     return add(items);
   }
 
-  /// An older server's answer: its browser-player mount at "/" takes an
-  /// unknown POST and answers 405, and without that mount it is a bare 404.
-  /// The route's own 404s say what is missing; falling back on one would
-  /// clear the queue for an add that fails the same way.
+  // Pre-0.12 servers answer 405 (browser-player mount at "/") or a bare 404.
+  // The route's own 404s name what is missing and must not trigger a clear.
   static bool _noReplaceRoute(Response? response) {
     final data = response?.data;
     final detail = data is Map ? data['detail'] : null;
