@@ -94,7 +94,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     try {
       if (useContext) {
         final added = await api.replace(ctx);
-        await api.play(ctxIndex);
+        await api.play(await _queuedIndex(api, ctx, ctxIndex, added.count));
         final n = added.count ?? ctx.length;
         toast.endQueueActivity('Playing $n ${n == 1 ? 'track' : 'tracks'}');
       } else {
@@ -115,6 +115,26 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
         showSafeToast('Failed to play: $e', isError: true);
       }
     }
+  }
+
+  /// Where the tapped track stands in the queue [ctx] became. The server
+  /// leaves out tracks it can't resolve, which moves later ones forward; if
+  /// the tapped one went too, play the next one that stayed.
+  static Future<int> _queuedIndex(
+    KalinkaPlayerProxy api,
+    List<String> ctx,
+    int ctxIndex,
+    int? kept,
+  ) async {
+    if (kept == null || kept >= ctx.length) return ctxIndex;
+    final queued = (await api.listTracks(limit: kept)).items;
+    var at = 0;
+    for (var i = 0; i < ctx.length && at < queued.length; i++) {
+      if (ctx[i] != queued[at].id) continue;
+      if (i >= ctxIndex) return at;
+      at++;
+    }
+    return 0;
   }
 
   @override

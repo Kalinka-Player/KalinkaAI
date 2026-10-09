@@ -85,6 +85,37 @@ void main() {
     expect(api.played, [1]);
     expect(api.cleared, 0);
     expect(api.added, isEmpty);
+    expect(api.listed, 0);
+  });
+
+  testWidgets('a track the server left out before the tapped one is skipped', (
+    tester,
+  ) async {
+    final api = QueueApi(unresolved: {_b});
+
+    await tapIn(
+      tester,
+      api,
+      SearchTrackRow(item: _track(_c), queueContextIds: const [_a, _b, _c]),
+      find.text('Track $_c'),
+    );
+
+    expect(api.played, [1]);
+  });
+
+  testWidgets('a tapped track the server left out plays the next one', (
+    tester,
+  ) async {
+    final api = QueueApi(unresolved: {_a, _b});
+
+    await tapIn(
+      tester,
+      api,
+      SearchTrackRow(item: _track(_b), queueContextIds: const [_a, _b, _c]),
+      find.text('Track $_b'),
+    );
+
+    expect(api.played, [0]);
   });
 
   testWidgets('a search track on its own replaces the queue with itself', (
