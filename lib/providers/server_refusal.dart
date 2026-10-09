@@ -6,10 +6,14 @@ const _demoPrefix = 'demo_';
 /// Any server's refusal of an add past its queue limit.
 const _queueFull = 'queue_full';
 
+/// A queue replacement whose ids came to no tracks.
+const _noTracks = 'no_tracks';
+
 /// A request the server refused in words meant for the user: an add past its
-/// queue limit, or on a demo server a change it never allows or too many
-/// changes at once. [toString] is the server's own sentence, so a call site
-/// that reports `'Could not …: $e'` reads correctly unchanged.
+/// queue limit, a replacement with no tracks, or on a demo server a change it
+/// never allows or too many changes at once. [toString] is the server's own
+/// sentence, so a call site that reports `'Could not …: $e'` reads correctly
+/// unchanged.
 class ServerRefusalException extends DioException {
   ServerRefusalException(DioException cause, this.code, this.reason)
     : super(
@@ -55,7 +59,9 @@ class ServerRefusalInterceptor extends Interceptor {
     if (detail is! Map) return null;
     final code = detail['code'];
     if (code is! String ||
-        !(code.startsWith(_demoPrefix) || code == _queueFull)) {
+        !(code.startsWith(_demoPrefix) ||
+            code == _queueFull ||
+            code == _noTracks)) {
       return null;
     }
     final message = detail['message'];

@@ -117,9 +117,8 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     }
   }
 
-  /// Where the tapped track stands in the queue [ctx] became. The server
-  /// leaves out tracks it can't resolve, which moves later ones forward; if
-  /// the tapped one went too, play the next one that stayed.
+  // The server leaves out tracks it can't resolve. If the tapped one went,
+  // play the nearest kept track, after it if there is one.
   static Future<int> _queuedIndex(
     KalinkaPlayerProxy api,
     List<String> ctx,
@@ -127,14 +126,15 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     int? kept,
   ) async {
     if (kept == null || kept >= ctx.length) return ctxIndex;
-    final queued = (await api.listTracks(limit: kept)).items;
+    // Dropped tracks only move it up, so it is within the first ctxIndex + 1.
+    final queued = (await api.listTracks(limit: ctxIndex + 1)).items;
     var at = 0;
     for (var i = 0; i < ctx.length && at < queued.length; i++) {
       if (ctx[i] != queued[at].id) continue;
       if (i >= ctxIndex) return at;
       at++;
     }
-    return 0;
+    return at > 0 ? at - 1 : 0;
   }
 
   @override
