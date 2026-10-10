@@ -28,12 +28,13 @@ List<StreamInfoField> streamInfoFields(
   required int positionMs,
   required int queueLength,
   required bool bitPerfect,
+  bool exclusive = false,
 }) {
   // currentTrack is sticky by design — it survives Clear All so the transport
-  // has something to show — so the queue, not the track, says whether anything
-  // is loaded.
+  // has something to show. An empty queue has no loaded local stream, but an
+  // external source can play independently of the saved queue.
   final track = state.currentTrack;
-  if (track == null || queueLength == 0) return const [];
+  if (track == null || (queueLength == 0 && !exclusive)) return const [];
 
   final audio = state.audioInfo;
   final output = audio?.output;
@@ -49,7 +50,7 @@ List<StreamInfoField> streamInfoFields(
     if (track.album != null) (label: 'Album', value: _album(track.album!)),
     (label: 'ID', value: track.id),
     if (state.state != null) (label: 'State', value: state.state!.toValue()),
-    if (state.index != null)
+    if (state.index != null && !exclusive)
       (label: 'Index', value: '${state.index} / $queueLength'),
     (label: 'Position', value: formatClock(Duration(milliseconds: positionMs))),
     if (durationMs > 0)
@@ -105,6 +106,9 @@ class StreamInfoDialog extends ConsumerWidget {
         playQueueStateStoreProvider.select((s) => s.trackList.length),
       ),
       bitPerfect: ref.watch(bitPerfectProvider),
+      exclusive: ref.watch(
+        playbackControlProvider.select((c) => c.isExclusive),
+      ),
     );
 
     return KalinkaDialog(

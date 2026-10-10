@@ -27,6 +27,32 @@ Map<String, dynamic> _replayJson({Object? control}) => {
 };
 
 void main() {
+  test('source handover clears stale codec, format and message', () {
+    final local = PlaybackState(
+      state: PlayerStateType.playing,
+      mimeType: 'audio/flac',
+      audioInfo: AudioInfo(sampleRate: 192000, bitsPerSample: 24, channels: 2),
+      message: 'Local playback',
+      streamUrl: 'http://server/local.flac',
+    );
+    final roon = local.copyWith(
+      PlaybackState(
+        state: PlayerStateType.playing,
+        currentTrack: Track(
+          id: 'kalinka:roon:track:1',
+          title: 'Roon song',
+          duration: 240,
+        ),
+      ),
+    );
+    expect(roon.mimeType, isNull);
+    expect(roon.audioInfo, isNull);
+    expect(roon.message, isNull);
+    expect(roon.streamUrl, isNull);
+    final resumed = roon.copyWith(local);
+    expect(resumed.mimeType, 'audio/flac');
+    expect(resumed.audioInfo!.sampleRate, 192000);
+  });
   group('playback control', () {
     test('parses playback_control_changed for either mode', () {
       final taken = PlayQueueEvent.fromJson({
