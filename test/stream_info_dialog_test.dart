@@ -78,6 +78,36 @@ List<Override> _overrides(PlaybackState state) => [
 
 void main() {
   group('streamInfoFields', () {
+    test('external playback has stream info without a local queue', () {
+      final state = PlaybackState(
+        state: PlayerStateType.playing,
+        currentTrack: Track(
+          id: 'kalinka:roon:track:42',
+          title: 'Roon song',
+          duration: 240,
+        ),
+        index: 3,
+        audioInfo: AudioInfo(
+          sampleRate: 0,
+          bitsPerSample: 0,
+          channels: 0,
+          output: const OutputInfo(sampleRate: 44100, channels: 2),
+        ),
+      );
+      final fields = streamInfoFields(
+        state,
+        positionMs: 1000,
+        queueLength: 0,
+        bitPerfect: false,
+        exclusive: true,
+      );
+      expect(_valueOf(fields, 'Title'), 'Roon song');
+      expect(_valueOf(fields, 'Output'), '44.1 kHz · 2 ch · unknown');
+      expect(_valueOf(fields, 'Index'), isNull);
+      expect(_valueOf(fields, 'Format'), isNull);
+      expect(_valueOf(fields, 'Decoded'), isNull);
+    });
+
     test('reports what the state carries', () {
       final fields = streamInfoFields(
         _playing(streamUrl: 'http://10.0.0.1:8000/content/localfiles/42'),

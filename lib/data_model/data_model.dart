@@ -217,9 +217,11 @@ class PlaybackState {
       currentTrack: other.currentTrack ?? currentTrack,
       index: other.index ?? index,
       position: other.position ?? position,
-      message: other.message ?? message,
-      audioInfo: other.audioInfo ?? audioInfo,
-      mimeType: other.mimeType ?? mimeType,
+      // These describe the current stream. A null in the server's snapshot
+      // clears the old source's details (Roon does not expose source codec).
+      message: other.message,
+      audioInfo: other.audioInfo,
+      mimeType: other.mimeType,
       // Replaced, not merged: the URL is only true while the renderer holds
       // that stream, so a state reporting none must clear the last one rather
       // than leave a link to something that stopped playing.
