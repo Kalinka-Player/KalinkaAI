@@ -14,7 +14,9 @@ import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
 import '../utils/playback_utils.dart';
 
-/// Playback progress slider with optimistic seeking while dragging.
+/// Playback progress slider with optimistic seeking while dragging. While the
+/// playback cannot seek, the bar is drawn grey and without a thumb, and the
+/// times stay readable.
 class PlaybackProgressSlider extends ConsumerStatefulWidget {
   final int durationMs;
 
@@ -120,7 +122,9 @@ mixin OptimisticSeek<T extends ConsumerStatefulWidget> on ConsumerState<T> {
   }
 
   void beginSeek(double progress) {
-    if (seekDurationMs <= 0) return;
+    if (seekDurationMs <= 0 || !ref.read(playbackControlProvider).seekable) {
+      return;
+    }
     _seekTimeout?.cancel();
     _seekGeneration++;
     _context = _seekContext(ref.read(playQueueStateStoreProvider));
@@ -192,24 +196,30 @@ class _PlaybackProgressSliderState extends ConsumerState<PlaybackProgressSlider>
     final playbackTimeMs = ref.watch(playbackTimeMsProvider);
     final positionMs = seekAwarePositionMs(playbackTimeMs);
     final progress = seekAwareProgress(playbackTimeMs);
+    final seekable = ref.watch(
+      playbackControlProvider.select((c) => c.seekable),
+    );
+    final interactive = widget.enabled && seekable;
 
     return RepaintBoundary(
       child: Opacity(
         opacity: widget.enabled ? 1.0 : 0.4,
         child: IgnorePointer(
-          ignoring: !widget.enabled,
+          ignoring: !interactive,
           child: Column(
             children: [
               SliderTheme(
                 data: SliderThemeData(
                   trackHeight: 3,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 6,
-                  ),
+                  thumbShape: seekable
+                      ? const RoundSliderThumbShape(enabledThumbRadius: 6)
+                      : SliderComponentShape.noThumb,
                   overlayShape: const RoundSliderOverlayShape(
                     overlayRadius: 14,
                   ),
-                  activeTrackColor: KalinkaColors.accent,
+                  activeTrackColor: seekable
+                      ? KalinkaColors.accent
+                      : KalinkaColors.textMuted,
                   inactiveTrackColor: KalinkaColors.borderDefault,
                   thumbColor: Colors.white,
                   overlayColor: KalinkaColors.accent.withValues(alpha: 0.25),
@@ -220,13 +230,13 @@ class _PlaybackProgressSliderState extends ConsumerState<PlaybackProgressSlider>
                 child: Slider(
                   value: progress,
                   onChangeStart: (value) {
-                    if (widget.enabled) beginSeek(value);
+                    if (interactive) beginSeek(value);
                   },
                   onChanged: (value) {
-                    if (widget.enabled) seekTo(value);
+                    if (interactive) seekTo(value);
                   },
                   onChangeEnd: (value) {
-                    if (widget.enabled) commitSeek(value);
+                    if (interactive) commitSeek(value);
                   },
                 ),
               ),

@@ -1813,14 +1813,21 @@ class PlaybackControl {
   /// exclusive.
   final String? title;
 
+  /// False while the plugin's playback cannot seek, as AirPlay's cannot: the
+  /// position is still shown, but offers no control. Servers before API 0.14
+  /// do not say, and every plugin they run can seek.
+  final bool seekable;
+
   const PlaybackControl.queue()
     : mode = PlaybackControlMode.queue,
       pluginId = null,
-      title = null;
+      title = null,
+      seekable = true;
 
   const PlaybackControl.exclusive({
     required String this.pluginId,
     required String this.title,
+    this.seekable = true,
   }) : mode = PlaybackControlMode.exclusive;
 
   bool get isExclusive => mode == PlaybackControlMode.exclusive;
@@ -1834,6 +1841,7 @@ class PlaybackControl {
     return PlaybackControl.exclusive(
       pluginId: (json['plugin_id'] ?? '') as String,
       title: (json['title'] ?? '') as String,
+      seekable: json['seekable'] != false,
     );
   }
 
@@ -1842,10 +1850,11 @@ class PlaybackControl {
       other is PlaybackControl &&
       other.mode == mode &&
       other.pluginId == pluginId &&
-      other.title == title;
+      other.title == title &&
+      other.seekable == seekable;
 
   @override
-  int get hashCode => Object.hash(mode, pluginId, title);
+  int get hashCode => Object.hash(mode, pluginId, title, seekable);
 }
 
 /// One playback endpoint known to the server, from `/renderer/list`.

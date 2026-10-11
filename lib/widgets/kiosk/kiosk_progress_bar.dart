@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../providers/app_state_provider.dart';
 import '../../providers/playback_time_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/playback_utils.dart';
@@ -8,7 +9,8 @@ import '../playback_progress_slider.dart' show OptimisticSeek;
 
 /// Full-width progress for a screen read from across the room: the bar,
 /// elapsed and total time under it, and a touch zone taller than the bar so
-/// a fingertip finds it. Tap or drag anywhere along it to seek.
+/// a fingertip finds it. Tap or drag anywhere along it to seek, unless the
+/// playback cannot seek: the bar is then grey and has no knob.
 class KioskProgressBar extends ConsumerStatefulWidget {
   final int durationMs;
   final double scale;
@@ -40,7 +42,10 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
     final positionMs = seekAwarePositionMs(playbackTimeMs);
     final progress = seekAwareProgress(playbackTimeMs);
     final durationMs = widget.durationMs;
-    final canSeek = durationMs > 0;
+    final seekable = ref.watch(
+      playbackControlProvider.select((c) => c.seekable),
+    );
+    final canSeek = durationMs > 0 && seekable;
 
     final timeStyle = KalinkaFonts.sans(
       fontSize: s(16),
@@ -120,6 +125,7 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
                           progress: value,
                           thickness: s(isSeeking ? 9 : 5),
                           knobRadius: canSeek ? s(isSeeking ? 13 : 9) : 0,
+                          muted: !seekable,
                         ),
                       ),
                     ),
@@ -141,11 +147,13 @@ class _BarPainter extends CustomPainter {
   final double progress;
   final double thickness;
   final double knobRadius;
+  final bool muted;
 
   _BarPainter({
     required this.progress,
     required this.thickness,
     required this.knobRadius,
+    required this.muted,
   });
 
   @override
@@ -164,16 +172,20 @@ class _BarPainter extends CustomPainter {
         Rect.fromLTWH(0, track.top, head, thickness),
         radius,
       );
-      // Spans the whole track, so a colour marks a place in the song.
-      final shader = KalinkaColors.progressGradient.createShader(track);
-      canvas.drawRRect(
-        fill,
-        Paint()
-          ..shader = shader
-          ..color = Colors.white.withValues(alpha: 0.55)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, thickness),
-      );
-      canvas.drawRRect(fill, Paint()..shader = shader);
+      if (muted) {
+        canvas.drawRRect(fill, Paint()..color = KalinkaColors.textMuted);
+      } else {
+        // Spans the whole track, so a colour marks a place in the song.
+        final shader = KalinkaColors.progressGradient.createShader(track);
+        canvas.drawRRect(
+          fill,
+          Paint()
+            ..shader = shader
+            ..color = Colors.white.withValues(alpha: 0.55)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, thickness),
+        );
+        canvas.drawRRect(fill, Paint()..shader = shader);
+      }
     }
 
     if (knobRadius > 0) {
@@ -194,5 +206,6 @@ class _BarPainter extends CustomPainter {
   bool shouldRepaint(_BarPainter old) =>
       old.progress != progress ||
       old.thickness != thickness ||
-      old.knobRadius != knobRadius;
+      old.knobRadius != knobRadius ||
+      old.muted != muted;
 }

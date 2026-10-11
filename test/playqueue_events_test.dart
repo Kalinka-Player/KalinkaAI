@@ -85,6 +85,26 @@ void main() {
       expect(PlaybackControl.fromJson(null), const PlaybackControl.queue());
     });
 
+    test('a plugin that cannot seek says so', () {
+      final airplay = PlaybackControl.fromJson({
+        'mode': 'exclusive',
+        'plugin_id': 'airplay',
+        'title': 'AirPlay',
+        'seekable': false,
+      });
+
+      expect(airplay.seekable, isFalse);
+      expect(
+        airplay,
+        isNot(
+          const PlaybackControl.exclusive(
+            pluginId: 'airplay',
+            title: 'AirPlay',
+          ),
+        ),
+      );
+    });
+
     test('a plugin taking the output leaves the playback state as it was', () {
       final queued = Track(id: 'q', title: 'Queued', duration: 10);
       final state = _stateWith([queued]);

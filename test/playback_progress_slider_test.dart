@@ -9,6 +9,7 @@ import 'package:kalinka/data_model/playqueue_events.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/providers/monotonic_clock_provider.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_progress_bar.dart';
 import 'package:kalinka/widgets/playback_progress_slider.dart';
 
@@ -16,11 +17,18 @@ import 'support/haptic_recorder.dart';
 
 const _duration = 120000;
 
+const _airplay = PlaybackControl.exclusive(
+  pluginId: 'airplay',
+  title: 'AirPlay',
+  seekable: false,
+);
+
 PlayQueueState _queue({
   int position = 20000,
   int seq = 1,
   String track = 'one',
   PlayerStateType state = PlayerStateType.playing,
+  PlaybackControl control = const PlaybackControl.queue(),
 }) => PlayQueueState(
   playbackState: PlaybackState(
     currentTrack: Track(id: track, title: track, duration: 120),
@@ -30,6 +38,7 @@ PlayQueueState _queue({
   trackList: const [],
   playbackMode: PlaybackMode.empty,
   seq: seq,
+  playbackControl: control,
 );
 
 class _Queue extends PlayQueueStateStore {
@@ -251,6 +260,51 @@ void main() {
     slider.onChangeEnd!(start + 0.06);
     await tester.pump();
     expect(haptics.calls, ['selectionClick', 'lightImpact']);
+  });
+
+  testWidgets('playback that cannot seek shows a grey bar that does not seek', (
+    tester,
+  ) async {
+    final h = await _pump(tester);
+    h.queue.emit(_queue(control: _airplay));
+    await tester.pump();
+
+    final theme = tester
+        .widget<SliderTheme>(
+          find
+              .ancestor(
+                of: find.byType(Slider),
+                matching: find.byType(SliderTheme),
+              )
+              .first,
+        )
+        .data;
+    expect(theme.thumbShape, SliderComponentShape.noThumb);
+    expect(theme.activeTrackColor, KalinkaColors.textMuted);
+    expect(find.text('0:20'), findsOneWidget);
+
+    await tester.drag(
+      find.byType(Slider),
+      const Offset(80, 0),
+      warnIfMissed: false,
+    );
+    await _seek(tester, 0.75);
+    expect(h.api.commands, isEmpty);
+  });
+
+  testWidgets('the kiosk bar does not seek playback that cannot seek', (
+    tester,
+  ) async {
+    final h = await _pump(tester, kiosk: true);
+    h.queue.emit(_queue(control: _airplay));
+    await tester.pump();
+
+    final bar = tester.getRect(find.byType(KioskProgressBar));
+    await tester.tapAt(Offset(bar.left + bar.width * 0.75, bar.center.dy));
+    await tester.pump();
+
+    expect(h.api.commands, isEmpty);
+    expect(find.text('0:20'), findsOneWidget);
   });
 
   testWidgets(
