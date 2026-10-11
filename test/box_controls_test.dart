@@ -38,6 +38,12 @@ class _FakeBox implements SupervisorApi {
   }
 
   @override
+  Future<SoundcardReport?> soundcard() async => null;
+
+  @override
+  Future<bool> setSoundcard(String card, BoxIdentity identity) async => false;
+
+  @override
   Uri get page => Uri.parse('http://kalinka.local:8001/');
 }
 

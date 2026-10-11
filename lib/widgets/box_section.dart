@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/box_control_provider.dart';
+import '../providers/soundcard_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import 'box_actions.dart';
 import 'settings_controls/settings_action_row.dart';
 import 'settings_controls/settings_card.dart';
+import 'soundcard_row.dart';
 
 /// "BOX" on the General settings page: the player box the server runs on,
 /// through its supervisor. Absent when the box has none, or one that is not
@@ -35,6 +37,10 @@ class BoxSection extends ConsumerWidget {
     final control = ref.watch(boxControlProvider).value;
     final api = ref.watch(supervisorApiProvider);
     if (control == null || api == null) return const SizedBox.shrink();
+    final soundcardBox = ref.watch(serverSoundcardBoxProvider).value;
+    final soundcard = soundcardBox == null
+        ? null
+        : ref.watch(soundcardReportProvider(soundcardBox)).value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -44,6 +50,8 @@ class BoxSection extends ConsumerWidget {
         ),
         SettingsCard(
           children: [
+            if (soundcardBox != null && soundcard != null)
+              SoundcardRow(box: soundcardBox, report: soundcard, inPanel: true),
             SettingsActionRow(
               label: 'Box dashboard',
               sublabel:

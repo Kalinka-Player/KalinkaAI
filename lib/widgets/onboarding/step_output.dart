@@ -8,6 +8,7 @@ import '../kalinka_button.dart';
 import '../renderer_switcher.dart' show rendererDisplayName, rendererDetail;
 import '../settings_controls/settings_card.dart';
 import '../settings_controls/warning_note.dart';
+import '../soundcard_row.dart';
 import 'onboarding_fields.dart';
 import 'onboarding_step_scaffold.dart';
 import 'sound_widgets.dart';
@@ -128,6 +129,10 @@ class _OnboardingOutputStepState extends ConsumerState<OnboardingOutputStep> {
               ),
           ],
         ),
+        if (widget.onOpenSettings != null)
+          SoundcardHint(
+            rendererIds: [for (final r in renderers.renderers) r.rendererId],
+          ),
       ],
     );
   }
