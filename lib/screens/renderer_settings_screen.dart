@@ -18,6 +18,7 @@ import '../widgets/settings_controls/settings_binding.dart';
 import '../widgets/settings_controls/settings_card.dart';
 import '../widgets/settings_renderer.dart';
 import '../widgets/slide_in_panel.dart';
+import '../widgets/soundcard_row.dart';
 
 /// One renderer's own settings, drawn by the same schema renderer as the
 /// server's settings page.
@@ -158,6 +159,7 @@ class _RendererSettingsScreenState
         padding: const EdgeInsets.only(bottom: 32),
         children: [
           if (state.error != null) _ErrorNote(message: state.error!),
+          RendererSoundcardSection(rendererId: widget.rendererId),
           for (final section in state.sections)
             SchemaSectionRenderer(
               key: ValueKey(section.id),

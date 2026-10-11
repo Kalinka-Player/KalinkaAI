@@ -1898,6 +1898,10 @@ class RendererInfo {
   /// can install one — the two conditions for offering the upgrade button.
   final bool updateAvailable;
 
+  /// The IPv4 address it connected to the server from, where its box's
+  /// supervisor answers. Only `/renderer/list` carries it; null otherwise.
+  final String? address;
+
   const RendererInfo({
     required this.rendererId,
     required this.friendlyName,
@@ -1910,6 +1914,7 @@ class RendererInfo {
     this.kind = '',
     this.compatible = true,
     this.updateAvailable = false,
+    this.address,
   });
 
   bool get isConnected => status == 'connected';
@@ -1926,6 +1931,7 @@ class RendererInfo {
     kind: kind,
     compatible: compatible,
     updateAvailable: updateAvailable,
+    address: address,
   );
 
   factory RendererInfo.fromJson(Map<String, dynamic> json) {
@@ -1944,6 +1950,7 @@ class RendererInfo {
       kind: (json['kind'] ?? '') as String,
       compatible: (json['compatible'] ?? true) as bool,
       updateAvailable: (json['update_available'] ?? false) as bool,
+      address: json['address'] is String ? json['address'] as String : null,
     );
   }
 }
