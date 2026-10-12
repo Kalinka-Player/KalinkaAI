@@ -7,35 +7,48 @@ import '../providers/connection_settings_provider.dart';
 import '../providers/kalinka_player_api_provider.dart';
 import '../providers/onboarding_provider.dart';
 import '../providers/renderer_provider.dart';
+import '../providers/renderer_settings_provider.dart';
 import '../providers/restart_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/soundcard_provider.dart';
+import '../providers/supervisor_api.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/discovery_screen.dart';
 import '../widgets/kalinka_button.dart';
 import '../widgets/onboarding/onboarding_fields.dart';
 import '../widgets/onboarding/onboarding_step_scaffold.dart';
+import '../widgets/onboarding/resume_connect.dart';
+import '../widgets/onboarding/soundcard_restart_overlay.dart';
 import '../widgets/onboarding/step_amp_control.dart';
 import '../widgets/onboarding/step_music_sources.dart';
 import '../widgets/onboarding/step_output.dart';
 import '../widgets/onboarding/step_review.dart';
+import '../widgets/onboarding/step_sound.dart';
 import '../widgets/onboarding/step_source_setup.dart';
-import '../widgets/onboarding/step_test_sound.dart';
 import '../widgets/restart_overlay.dart';
-import 'renderer_settings_screen.dart';
+import '../widgets/soundcard_row.dart' show SoundcardHost, soundcardTrouble;
 
 /// First-run setup wizard (OOBE).
 ///
 /// Seven steps: find server → choose sources → set up sources → choose
-/// output → amplifier control → test sound → review & start. Only the
+/// output → amplifier control → sound → review & start. Only the
 /// source setup gates progress; the rest say in their own copy what
-/// leaving them alone means. The questions the config steps ask
+/// leaving them alone means, and leaving the sound step while a sound card
+/// it found does not play asks first. The questions the config steps ask
 /// come from the server's `setup` tags (see [Setup]); the connection is
 /// held in memory only and config changes are merely staged until the final
 /// step, so killing the app mid-setup restarts the wizard from the
 /// beginning; backgrounding keeps the current step (widget state stays
 /// alive). On success the server connection is persisted, the
 /// `oobeComplete` flag is set, and the wizard pops back to the play queue.
+///
+/// Setting a sound card up may restart the Pi the output plays on, which
+/// can be the server's own. The wizard follows it through the restart and
+/// stays on the step. Before it starts, it saves what is staged to the
+/// server and remembers the server and the step ([OobeResume]): a run the
+/// app lost meanwhile reconnects to that server on the next launch, or on
+/// the next page load on web, and carries on at the same step.
 ///
 /// Whether the *server* is set up is its own config flag
 /// (`base_config.server.oobe_complete`): the wizard reads it after
@@ -61,23 +74,47 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     'SETUP',
     'OUTPUT',
     'CONTROL',
-    'TEST',
+    'SOUND',
     'FINISH',
   ];
+  static const _soundStep = 5;
 
   /// Whether a sound test ran this session — flips the test step's Next
   /// from "Skip for now" to "Continue" and feeds the review row.
   bool _soundTested = false;
 
-  /// The output whose settings panel is up, if any. Hosted here rather than
-  /// pushed as a route: the panel is a [SlideInPanel], which animates itself
-  /// in over its host and needs the Material a Scaffold provides.
-  ({String id, String name})? _outputSettings;
+  /// A run the app lost while a Pi restarted, reconnecting to its server in
+  /// place of discovery until it is back or the person looks elsewhere.
+  late OobeResume? _resuming = widget.startAtSetup
+      ? null
+      : ref.read(oobeResumeProvider);
 
-  void _openOutputSettings(String rendererId, String rendererName) =>
-      setState(() => _outputSettings = (id: rendererId, name: rendererName));
+  late int _step = _initialStep();
 
-  late int _step = widget.startAtSetup ? 1 : 0;
+  /// Discovery, or the setup steps for a connection made outside the wizard
+  /// — at the step a lost run stood at when that connection is its server.
+  int _initialStep() {
+    if (!widget.startAtSetup) return 0;
+    final resume = ref.read(oobeResumeProvider);
+    if (resume == null ||
+        resume.address != ref.read(connectionSettingsProvider).address) {
+      return 1;
+    }
+    ref.read(oobeResumeProvider.notifier).forget().ignore();
+    return _resumedStep(resume);
+  }
+
+  static int _resumedStep(OobeResume resume) =>
+      resume.step.clamp(1, _stepCount - 1);
+
+  late final _soundcardHost = SoundcardHost(
+    setUp: _setUpSoundcard,
+    confirmNote: 'Setup carries on here.',
+  );
+
+  /// The sound card change the wizard follows, from the moment it starts
+  /// until the Pi is back or the person moves on without it.
+  ({SoundcardBox box, SoundcardOption card, bool notBack})? _soundcardRun;
 
   /// The lowest step the user can walk back to: discovery is not part of
   /// the flow when the connection came from outside the wizard.
@@ -99,7 +136,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   String _attachModuleTitle = '';
   String? _attachRendererId;
 
-  Future<void> _onConnected() async {
+  /// Moves on from discovery, or to the step a resumed run stood at.
+  Future<void> _onConnected({int step = 1}) async {
     // The discovery step keeps its "connecting" state up while this runs.
     await ref.read(settingsProvider.notifier).loadConfig();
     if (!mounted) return;
@@ -112,7 +150,124 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       if (mounted) Navigator.of(context).pop();
       return;
     }
-    setState(() => _step = 1);
+    await ref.read(oobeResumeProvider.notifier).forget();
+    if (!mounted) return;
+    setState(() {
+      _resuming = null;
+      _step = step;
+    });
+  }
+
+  /// Gives up on reconnecting a lost run, for discovery.
+  void _findAnotherServer() {
+    ref.read(oobeResumeProvider.notifier).forget().ignore();
+    setState(() => _resuming = null);
+  }
+
+  /// Leaves the sound step, asking first while a card the Pi found or is set
+  /// up for does not play; putting it right stays on the step.
+  Future<void> _leaveSoundStep() async {
+    final soundcard = ref.read(outputSoundcardProvider).value;
+    final trouble = soundcard == null
+        ? null
+        : soundcardTrouble(soundcard.report);
+    if (soundcard == null || trouble == null) return _goTo(_step + 1);
+    final leave = await askLeavingSilentSoundcard(
+      context,
+      trouble: trouble,
+      fixLabel: fixSoundcardLabel(soundcard.report),
+    );
+    if (!mounted || leave == null) return;
+    if (leave) return _goTo(_step + 1);
+    await fixSoundcard(
+      context,
+      soundcard.box,
+      soundcard.report,
+      _soundcardHost,
+    );
+  }
+
+  Future<void> _setUpSoundcard(SoundcardBox box, SoundcardOption card) async {
+    if (_soundcardRun != null) return;
+    setState(() => _soundcardRun = (box: box, card: card, notBack: false));
+    await _saveProgress();
+    final change = ref.read(soundcardChangeProvider(box).notifier);
+    try {
+      _settleSoundcard(await change.apply(card));
+    } on BoxActionException catch (e) {
+      ref.read(toastProvider.notifier).show(e.message, isError: true);
+      await _endSoundcardRun();
+    }
+  }
+
+  /// Saves what is staged and remembers the server and the step, so a run the
+  /// app loses while the Pi restarts can carry on. Whatever the server
+  /// refuses stays staged here, and is lost only with the app.
+  Future<void> _saveProgress() async {
+    final settings = ref.read(settingsProvider);
+    if (settings.stagedChanges.isNotEmpty && !settings.hasBlockingIssues) {
+      try {
+        await ref.read(settingsProvider.notifier).applyChanges();
+      } catch (e) {
+        debugPrint('Onboarding: could not save progress: $e');
+      }
+    }
+    final connection = ref.read(connectionSettingsProvider);
+    await ref
+        .read(oobeResumeProvider.notifier)
+        .remember(
+          OobeResume(
+            name: connection.name,
+            address: connection.address,
+            step: _step,
+          ),
+        );
+  }
+
+  Future<void> _keepWaiting() async {
+    final run = _soundcardRun;
+    if (run == null) return;
+    setState(
+      () => _soundcardRun = (box: run.box, card: run.card, notBack: false),
+    );
+    _settleSoundcard(
+      await ref
+          .read(soundcardChangeProvider(run.box).notifier)
+          .keepWaiting(run.card),
+    );
+  }
+
+  void _settleSoundcard(SoundcardOutcome outcome) {
+    final run = _soundcardRun;
+    if (!mounted || run == null) return;
+    if (outcome != SoundcardOutcome.notBack) {
+      _endSoundcardRun();
+      return;
+    }
+    setState(
+      () => _soundcardRun = (box: run.box, card: run.card, notBack: true),
+    );
+  }
+
+  /// Back on the step: what the restart may have changed is read again.
+  Future<void> _endSoundcardRun() async {
+    final run = _soundcardRun;
+    if (!mounted || run == null) return;
+    setState(() => _soundcardRun = null);
+    final restarted = ref
+        .read(soundcardChangeProvider(run.box).notifier)
+        .restarted;
+    await ref.read(oobeResumeProvider.notifier).forget();
+    if (!mounted || !restarted) return;
+    unawaited(ref.read(rendererListProvider.notifier).refresh());
+    if (run.box.rendererId case final id?) {
+      unawaited(ref.read(rendererSettingsProvider(id).notifier).load());
+    }
+    // The server restarted with what was saved; nothing staged is lost.
+    if (run.box.identity.serverId != null &&
+        ref.read(settingsProvider).stagedChanges.isEmpty) {
+      await ref.read(settingsProvider.notifier).loadConfig();
+    }
   }
 
   Future<void> _finish() async {
@@ -187,6 +342,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           scheme: connection.scheme,
         );
     await ref.read(onboardingStatusProvider.notifier).markOobeComplete();
+    await ref.read(oobeResumeProvider.notifier).forget();
 
     // Detached on purpose: the wizard pops right after this commit, and the
     // attach outlives it (the module loads and the renderer redials on its
@@ -219,6 +375,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final run = _soundcardRun;
+    // Rebuilt on every step, which is when the change records a restart.
+    final restarting =
+        run != null &&
+        ref.watch(soundcardChangeProvider(run.box)) != SoundcardStep.idle &&
+        ref.read(soundcardChangeProvider(run.box).notifier).restarted;
     ref.listen(restartProvider, (prev, next) {
       if (next.isDone && prev?.isDone != true && _commitFuture == null) {
         // A failed write is benign — the wizard would simply run again on
@@ -234,13 +396,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // System back walks one step backwards; never leaves the wizard.
-        // The settings panel registers its own PopScope and closes itself on
-        // the same press, so stepping back here too would consume one press
-        // for two moves.
         if (_step > _firstStep &&
             !_restartOverlayOpen &&
             !_starting &&
-            _outputSettings == null) {
+            _soundcardRun == null) {
           _goTo(_step - 1);
         }
       },
@@ -256,19 +415,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 child: _buildStep(),
               ),
             ),
-            if (_outputSettings case final settings?)
+            if (run != null && (run.notBack || restarting))
               Positioned.fill(
-                child: RendererSettingsScreen(
-                  // Keyed by renderer so opening another one rebuilds rather
-                  // than reusing the previous renderer's page.
-                  key: ValueKey(settings.id),
-                  rendererId: settings.id,
-                  rendererName: settings.name,
-                  // Same content column as the steps.
-                  maxContentWidth: onboardingContentMaxWidth(
-                    MediaQuery.sizeOf(context).width,
-                  ),
-                  onClose: () => setState(() => _outputSettings = null),
+                child: SoundcardRestartOverlay(
+                  box: run.box,
+                  card: run.card,
+                  notBack: run.notBack,
+                  onKeepWaiting: _keepWaiting,
+                  onContinue: _endSoundcardRun,
                 ),
               ),
             if (_restartOverlayOpen)
@@ -282,6 +436,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Widget _buildStep() {
+    if (_step == 0 && _resuming != null) {
+      final resume = _resuming!;
+      return ResumeConnect(
+        key: const ValueKey('oobe_resume'),
+        resume: resume,
+        onConnected: () => _onConnected(step: _resumedStep(resume)),
+        onFindAnother: _findAnotherServer,
+      );
+    }
     if (_step == 0) {
       final connection = ref.read(connectionSettingsProvider);
       return DiscoveryScreen(
@@ -318,7 +481,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         'Audio output',
         'Pick where the music comes out. You can switch outputs any time '
             'from the player.',
-        OnboardingOutputStep(onOpenSettings: _openOutputSettings) as Widget,
+        const OnboardingOutputStep() as Widget,
         'Continue',
       ),
       4 => (
@@ -328,26 +491,24 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         const OnboardingAmpControlStep() as Widget,
         'Continue',
       ),
-      5 => (
-        'Test sound',
-        'A short tone through the output you picked. You can skip it and '
-            'come back from the output picker if the sound doesn’t work.',
-        OnboardingTestSoundStep(
-              onTested: () => setState(() => _soundTested = true),
-              onOpenSettings: _openOutputSettings,
-            )
-            as Widget,
+      _soundStep => (
+        'Sound',
+        'Make sure the output you picked plays: its sound card, the device '
+            'it plays through, and a short test you can skip.',
+        OnboardingSoundStep(
+          onTested: () => setState(() => _soundTested = true),
+          soundcardHost: _soundcardHost,
+        ) as Widget,
         _soundTested ? 'Continue' : 'Skip for now',
       ),
       _ => (
         'Almost there',
         'Check your choices; starting restarts the server to apply them.',
         OnboardingReviewStep(
-              soundTested: _soundTested,
-              // Held while Start checks with the server.
-              onEdit: _starting ? null : _goTo,
-            )
-            as Widget,
+          soundTested: _soundTested,
+          // Held while Start checks with the server.
+          onEdit: _starting ? null : _goTo,
+        ) as Widget,
         'Start listening',
       ),
     };
@@ -359,6 +520,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       2 => setupStepReady(settings),
       _ when _step == _stepCount - 1 =>
         !settings.hasBlockingIssues && !_starting,
+      _soundStep => _soundcardRun == null,
       _ => true,
     };
 
@@ -368,8 +530,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       stepLabels: _stepLabels,
       title: title,
       subtitle: subtitle,
-      onBack: _step > _firstStep && !_starting ? () => _goTo(_step - 1) : null,
-      onNext: _step == _stepCount - 1 ? _finish : () => _goTo(_step + 1),
+      onBack: _step > _firstStep && !_starting && _soundcardRun == null
+          ? () => _goTo(_step - 1)
+          : null,
+      onNext: switch (_step) {
+        _ when _step == _stepCount - 1 => _finish,
+        _soundStep => _leaveSoundStep,
+        _ => () => _goTo(_step + 1),
+      },
       nextLabel: nextLabel,
       nextEnabled: nextEnabled,
       children: [_wrapSettingsState(body)],

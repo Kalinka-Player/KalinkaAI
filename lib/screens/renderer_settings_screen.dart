@@ -41,18 +41,12 @@ class RendererSettingsScreen extends ConsumerStatefulWidget {
   /// begins, so the host can stop painting what the panel covers.
   final ValueChanged<bool>? onCoverageChanged;
 
-  /// Caps and centres the content column while the panel itself stays
-  /// full-bleed over its host. Set by the setup wizard; null in the player,
-  /// where the panel already lives in one half of the window.
-  final double? maxContentWidth;
-
   const RendererSettingsScreen({
     super.key,
     required this.rendererId,
     required this.rendererName,
     this.onClose,
     this.onCoverageChanged,
-    this.maxContentWidth,
   });
 
   @override
@@ -78,7 +72,7 @@ class _RendererSettingsScreenState
     final state = ref.watch(rendererSettingsProvider(widget.rendererId));
     final expertMode = ref.watch(expertModeProvider);
 
-    Widget content = Column(
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildHeader(),
@@ -95,15 +89,6 @@ class _RendererSettingsScreenState
         Expanded(child: _buildBody(state, expertMode)),
       ],
     );
-    if (widget.maxContentWidth case final maxWidth?) {
-      content = Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          child: content,
-        ),
-      );
-    }
-
     return SlideInPanel(
       onClose: widget.onClose,
       onCoverageChanged: widget.onCoverageChanged,

@@ -13,6 +13,20 @@ import 'settings_controls/option_picker.dart';
 import 'settings_controls/settings_action_row.dart';
 import 'settings_controls/settings_card.dart';
 
+/// Sets a box up for the card the person picked and confirmed.
+typedef SetUpSoundcard = void Function(SoundcardBox box, SoundcardOption card);
+
+/// A host that runs sound card changes itself, as the setup wizard does,
+/// rather than leaving them to the row that was tapped.
+class SoundcardHost {
+  final SetUpSoundcard setUp;
+
+  /// Ends the confirmation, saying what the host does meanwhile.
+  final String? confirmNote;
+
+  const SoundcardHost({required this.setUp, this.confirmNote});
+}
+
 /// "Sound card" on a box: the DAC it has and how it stands, opening the
 /// picker. Its host shows it once [soundcardReportProvider] has a report.
 class SoundcardRow extends ConsumerWidget {
@@ -22,11 +36,15 @@ class SoundcardRow extends ConsumerWidget {
   /// Set when shown in the tablet layout's left panel.
   final bool inPanel;
 
+  /// Runs the change, when the row is hosted by one that does.
+  final SoundcardHost? host;
+
   const SoundcardRow({
     super.key,
     required this.box,
     required this.report,
     this.inPanel = false,
+    this.host,
   });
 
   @override
@@ -37,10 +55,14 @@ class SoundcardRow extends ConsumerWidget {
       sublabel: switch (step) {
         SoundcardStep.applying => 'Setting the sound card up…',
         SoundcardStep.restarting => 'Restarting to switch the card on…',
+        SoundcardStep.switching => 'Switching the output to the card…',
         SoundcardStep.idle => soundcardSummary(report),
       },
       onTap: () {
-        if (step == SoundcardStep.idle) {
+        if (step != SoundcardStep.idle) return;
+        if (host case final host?) {
+          chooseSoundcardFor(context, box, report, host);
+        } else {
           chooseSoundcard(context, ref, box, report, inPanel: inPanel);
         }
       },
@@ -67,6 +89,23 @@ String soundcardSummary(SoundcardReport report) {
   return 'No DAC HAT found';
 }
 
+/// Why the card a box found, or is set up for, does not play yet; null when
+/// nothing the box can tell is wrong.
+String? soundcardTrouble(SoundcardReport report) {
+  if (report.activePcm != null) return null;
+  if (report.option(report.configured) case final configured?) {
+    return '${configured.label} is set up but did not come up. Check that '
+        'the HAT sits firmly on the pins, or choose another card.';
+  }
+  final suggested = report.suggested;
+  if (suggested.isEmpty) return null;
+  final found = suggested.length == 1
+      ? report.name ?? report.option(suggested.first)?.label
+      : null;
+  return '${found ?? 'A DAC HAT'} was found but is not set up, so nothing '
+      'plays through it yet.';
+}
+
 /// Lets the person pick a card for [box], confirms it, and applies it. The
 /// card already set up needs nothing; a refusal is reported in a toast.
 Future<void> chooseSoundcard(
@@ -76,20 +115,8 @@ Future<void> chooseSoundcard(
   SoundcardReport report, {
   bool inPanel = false,
 }) async {
-  final picked = await showKalinkaBottomSheet<String>(
-    context: context,
-    mayFillScreen: true,
-    contentBuilder: (_) => SoundcardPicker(report: report),
-  );
-  final card = report.option(picked);
-  if (card == null || card.name == report.configured || !context.mounted) {
-    return;
-  }
-  final confirmed = await showKalinkaDialog<bool>(
-    context: context,
-    builder: (_) => _ConfirmSoundcard(card: card),
-  );
-  if (confirmed != true) return;
+  final card = await pickSoundcard(context, report);
+  if (card == null) return;
   try {
     await ref.read(soundcardChangeProvider(box).notifier).apply(card);
   } on BoxActionException catch (e) {
@@ -98,6 +125,55 @@ Future<void> chooseSoundcard(
         .show(e.message, isError: true, inPanel: inPanel);
   }
 }
+
+/// Lets the person pick and confirm a card for [box], for [host] to set up.
+Future<void> chooseSoundcardFor(
+  BuildContext context,
+  SoundcardBox box,
+  SoundcardReport report,
+  SoundcardHost host,
+) async {
+  final card = await pickSoundcard(
+    context,
+    report,
+    afterRestart: host.confirmNote,
+  );
+  if (card != null) host.setUp(box, card);
+}
+
+/// The card the person picked from [report]'s and confirmed; null when they
+/// backed out or picked the card already set up. [afterRestart] ends the
+/// confirmation.
+Future<SoundcardOption?> pickSoundcard(
+  BuildContext context,
+  SoundcardReport report, {
+  String? afterRestart,
+}) async {
+  final picked = await showKalinkaBottomSheet<String>(
+    context: context,
+    mayFillScreen: true,
+    contentBuilder: (_) => SoundcardPicker(report: report),
+  );
+  final card = report.option(picked);
+  if (card == null || card.name == report.configured || !context.mounted) {
+    return null;
+  }
+  return await confirmSoundcard(context, card, afterRestart: afterRestart)
+      ? card
+      : null;
+}
+
+/// Asks before [card] is set up, since the box may restart.
+Future<bool> confirmSoundcard(
+  BuildContext context,
+  SoundcardOption card, {
+  String? afterRestart,
+}) async =>
+    await showKalinkaDialog<bool>(
+      context: context,
+      builder: (_) => _ConfirmSoundcard(card: card, afterRestart: afterRestart),
+    ) ==
+    true;
 
 /// Every card a box can be set up for, the detected ones first, then by
 /// maker, the Pi's own outputs and no HAT; pops the name of the one tapped.
@@ -156,8 +232,9 @@ class SoundcardPicker extends StatelessWidget {
 
 class _ConfirmSoundcard extends StatelessWidget {
   final SoundcardOption card;
+  final String? afterRestart;
 
-  const _ConfirmSoundcard({required this.card});
+  const _ConfirmSoundcard({required this.card, this.afterRestart});
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +246,8 @@ class _ConfirmSoundcard extends StatelessWidget {
       title: 'Change the sound card?',
       message:
           'Sets this box up for ${card.label}. If its boot settings change, '
-          'it restarts once, which takes a minute or two.',
+          'it restarts once, which takes a minute or two.'
+          '${afterRestart == null ? '' : ' $afterRestart'}',
       actions: [
         KalinkaButton(
           label: 'Cancel',
@@ -216,37 +294,6 @@ class RendererSoundcardSection extends ConsumerWidget {
           children: [SoundcardRow(box: box, report: report)],
         ),
       ],
-    );
-  }
-}
-
-/// A pointer to an output's gear while the Raspberry Pi it runs on has no
-/// sound card up, not even over USB, so a DAC HAT is set up before setup
-/// finishes.
-class SoundcardHint extends ConsumerWidget {
-  final List<String> rendererIds;
-
-  const SoundcardHint({super.key, required this.rendererIds});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    var silent = false;
-    for (final id in rendererIds) {
-      final box = ref.watch(rendererSoundcardBoxProvider(id)).value;
-      final report = box == null
-          ? null
-          : ref.watch(soundcardReportProvider(box)).value;
-      silent |=
-          report != null && report.activePcm == null && report.usb.isEmpty;
-    }
-    if (!silent) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      child: Text(
-        'Using a DAC HAT? Open the output’s gear and choose it under '
-        'Sound card.',
-        style: KalinkaTextStyles.trayRowSublabel,
-      ),
     );
   }
 }
