@@ -10,12 +10,14 @@ import 'expert_field_list.dart';
 /// Reached via the EXPERT toggle in the settings header. All the rendering
 /// lives in [ExpertFieldList]; this only points it at `/server/config`.
 class ExpertSettingsScreen extends ConsumerWidget {
-  const ExpertSettingsScreen({super.key});
+  final Widget? heading;
+  const ExpertSettingsScreen({super.key, this.heading});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(settingsProvider);
     return ExpertFieldList(
+      heading: heading,
       fields: state.schema?.expertFields ?? const <FieldSpec>[],
       binding: ServerSettingsBinding(
         state,

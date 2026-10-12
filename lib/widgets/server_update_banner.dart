@@ -6,6 +6,7 @@ import '../providers/upgrade_provider.dart';
 import '../theme/app_theme.dart';
 import 'kalinka_dialog.dart' show showKalinkaDialog;
 import 'upgrade_confirm_dialog.dart';
+import 'configuration_appearance.dart';
 
 /// One-line server update status banner under the SERVER section header.
 ///
@@ -20,9 +21,14 @@ class ServerUpdateBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final update = ref.watch(serverUpdateProvider).value;
-    if (update == null || (update.updateAvailable && !update.upgradeSupported)) {
+    if (update == null ||
+        (update.updateAvailable && !update.upgradeSupported)) {
       return const SizedBox.shrink();
     }
+    final configuration = ConfigurationAppearance.active(context);
+    final gutter = configuration
+        ? ConfigurationAppearance.gutter(context)
+        : 16.0;
     final canUpgrade = update.canUpgrade;
     final version = update.latestVersion;
 
@@ -40,14 +46,16 @@ class ServerUpdateBanner extends ConsumerWidget {
           child: Text(
             canUpgrade
                 ? 'A new version $version is available'
+                : configuration
+                ? 'Your player is up to date'
                 : 'The server is up to date',
             style: canUpgrade
                 ? KalinkaTextStyles.trayRowLabel
                 : KalinkaTextStyles.trayRowLabel.copyWith(
                     color: KalinkaColors.textSecondary,
                   ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            maxLines: configuration ? null : 1,
+            overflow: configuration ? TextOverflow.clip : TextOverflow.ellipsis,
           ),
         ),
         if (canUpgrade)
@@ -59,8 +67,14 @@ class ServerUpdateBanner extends ConsumerWidget {
       ],
     );
 
+    if (configuration && !canUpgrade) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(gutter, 0, gutter, 12),
+        child: row,
+      );
+    }
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      margin: EdgeInsets.fromLTRB(gutter, 0, gutter, 12),
       decoration: BoxDecoration(
         color: KalinkaColors.surfaceRaised,
         borderRadius: BorderRadius.circular(14),

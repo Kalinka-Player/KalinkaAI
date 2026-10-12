@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
 
 /// Which panel of the tablet layout a dialog belongs to.
@@ -174,18 +175,21 @@ class KalinkaDialog extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        _slideIn(
-          context,
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: _cardMargin),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: _maxCardWidth),
-              // Absorb taps on the card so they don't reach the scrim behind
-              // it; the empty space above stays dismiss-on-tap.
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {},
-                child: card,
+        Flexible(
+          child: _slideIn(
+            context,
+            SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: _cardMargin),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: _maxCardWidth),
+                  // Absorb taps on the card so they don't reach the scrim.
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {},
+                    child: card,
+                  ),
+                ),
               ),
             ),
           ),

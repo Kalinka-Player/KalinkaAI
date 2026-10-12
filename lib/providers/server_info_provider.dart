@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'kalinka_player_api_provider.dart';
 import 'connection_state_provider.dart';
 import 'settings_provider.dart';
@@ -10,10 +11,18 @@ class ServerInfo {
   final int latencyMs;
   final bool pluginCatalogEnabled;
 
+  /// The server installs, removes and updates catalog plugins itself.
+  final bool pluginInstallation;
+
+  /// The server checks installed plugins for newer catalog releases.
+  final bool pluginUpdateChecks;
+
   const ServerInfo({
     required this.version,
     required this.latencyMs,
     this.pluginCatalogEnabled = false,
+    this.pluginInstallation = false,
+    this.pluginUpdateChecks = false,
   });
 }
 
@@ -29,13 +38,15 @@ final serverInfoProvider = FutureProvider.autoDispose<ServerInfo>((ref) async {
 
   final version = info['server_version']?.toString() ?? 'Unknown';
   final capabilities = info['plugin_management'];
+  bool can(String capability) =>
+      capabilities is Map && capabilities[capability] == true;
+  final browsing = can('enabled') && can('catalog_browsing');
   return ServerInfo(
     version: version,
     latencyMs: stopwatch.elapsedMilliseconds,
-    pluginCatalogEnabled:
-        capabilities is Map &&
-        capabilities['enabled'] == true &&
-        capabilities['catalog_browsing'] == true,
+    pluginCatalogEnabled: browsing,
+    pluginInstallation: browsing && can('installation'),
+    pluginUpdateChecks: browsing && can('update_checks'),
   );
 });
 
@@ -49,3 +60,17 @@ final pluginCatalogEnabledProvider = Provider<bool>((ref) {
       !info.hasError &&
       info.value?.pluginCatalogEnabled == true;
 });
+
+/// Whether Install, Uninstall and Update can be offered on this server.
+final pluginInstallationProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(pluginCatalogEnabledProvider) &&
+      ref.watch(serverInfoProvider).value?.pluginInstallation == true,
+);
+
+/// Whether this server reports newer releases of installed plugins.
+final pluginUpdateChecksProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(pluginCatalogEnabledProvider) &&
+      ref.watch(serverInfoProvider).value?.pluginUpdateChecks == true,
+);

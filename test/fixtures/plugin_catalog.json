@@ -51,6 +51,10 @@
       },
       "delivery": "bundle",
       "description": "Browse and play music from Jamendo, with optional mood and semantic search over its catalog.",
+      "summary": "Explore music from independent artists.",
+      "provides": [
+        "browse"
+      ],
       "distribution": "kalinka-plugin-jamendo",
       "entry_point": "kalinka_plugin_jamendo",
       "id": "jamendo",
@@ -82,6 +86,10 @@
       },
       "delivery": "bundle",
       "description": "Index a local or network music library, enrich its metadata, and optionally enable semantic music search.",
+      "summary": "Music from USB drives, this device or network storage.",
+      "provides": [
+        "browse"
+      ],
       "distribution": "kalinka-plugin-localfiles",
       "entry_point": "kalinka_plugin_localfiles",
       "id": "localfiles",
@@ -93,7 +101,7 @@
         }
       ],
       "maturity": "stable",
-      "name": "Local Files",
+      "name": "Folders & NAS",
       "releases": [],
       "schema_version": 1,
       "source": {
@@ -158,6 +166,11 @@
       },
       "delivery": "independent",
       "description": "Unofficial Qobuz browsing, playback, and Qobuz Connect input for Kalinka Player. Requires an active Qobuz subscription. Not affiliated with or endorsed by Qobuz.",
+      "summary": "Browse Qobuz and play through Qobuz Connect.",
+      "provides": [
+        "browse",
+        "direct_playback"
+      ],
       "distribution": "kalinka-plugin-qobuz",
       "entry_point": "kalinka_plugin_qobuz",
       "id": "qobuz",
@@ -252,6 +265,10 @@
       },
       "delivery": "independent",
       "description": "Unofficial Spotify Connect input for Kalinka Player. Requires Linux, Spotify Premium, the librespot bridge patched for Kalinka Player, and compatible server and renderer components.",
+      "summary": "Play music here from the Spotify app.",
+      "provides": [
+        "direct_playback"
+      ],
       "distribution": "kalinka-plugin-spotify",
       "entry_point": "kalinka_plugin_spotify",
       "id": "spotify",
@@ -423,6 +440,10 @@
       },
       "delivery": "bundle",
       "description": "Expose Kalinka Player as a UPnP MediaRenderer so network control apps can play through the selected Kalinka Player output.",
+      "summary": "Send music to {player} from compatible apps.",
+      "provides": [
+        "direct_playback"
+      ],
       "distribution": "kalinka-plugin-upnp",
       "entry_point": "kalinka_plugin_upnp",
       "id": "upnp",

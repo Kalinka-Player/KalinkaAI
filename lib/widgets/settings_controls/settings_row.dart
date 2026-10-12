@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+
 import '../../data_model/presentation_schema.dart' show ConfigIssue;
 import '../../theme/app_theme.dart';
 import 'inline_markdown.dart';
+import '../configuration_appearance.dart';
 import 'issue_notes.dart';
 
 /// Space either side of a settings card's rows.
@@ -65,7 +67,7 @@ class SettingsRow extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: _buildInfoBlock()),
+                    Expanded(child: _buildInfoBlock(context)),
                     if (action != null) ...[const SizedBox(width: 12), action!],
                   ],
                 ),
@@ -79,7 +81,7 @@ class SettingsRow extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Expanded(child: _buildInfoBlock()),
+                    Expanded(child: _buildInfoBlock(context)),
                     const SizedBox(width: 12),
                     control,
                   ],
@@ -90,12 +92,21 @@ class SettingsRow extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoBlock() {
+  Widget _buildInfoBlock(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: KalinkaTextStyles.trayRowLabel),
+        Wrap(
+          spacing: 8,
+          runSpacing: 2,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(label, style: KalinkaTextStyles.trayRowLabel),
+            if (isStaged && ConfigurationAppearance.active(context))
+              const ChangedSettingLabel(),
+          ],
+        ),
         if (sublabel != null) ...[
           const SizedBox(height: 2),
           InlineMarkdown(

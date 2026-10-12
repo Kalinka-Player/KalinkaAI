@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+
 import '../providers/connection_state_provider.dart';
 import '../providers/restart_provider.dart';
 import '../providers/server_update_provider.dart';
@@ -23,7 +24,6 @@ import '../widgets/expert_settings_screen.dart';
 import '../widgets/settings_controls/settings_binding.dart';
 import '../widgets/slide_in_panel.dart';
 import '../widgets/support_section.dart';
-import '../widgets/this_device_section.dart';
 import 'log_export_screen.dart';
 import '../widgets/settings_renderer.dart';
 
@@ -240,7 +240,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.stretch,
                                             children: [
-                                              const ThisDeviceSection(),
                                               const BoxSection(),
                                               SupportSection(
                                                 onDownloadLogs: () => setState(

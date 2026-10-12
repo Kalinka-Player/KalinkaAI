@@ -1,9 +1,20 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../data_model/data_model.dart' show ModuleState;
 import '../data_model/plugin_catalog.dart';
 import '../data_model/plugin_compatibility.dart';
+import '../providers/plugin_catalog_provider.dart'
+    show PluginFailure, PluginOperation;
+import '../providers/plugin_state.dart';
 import '../theme/app_theme.dart';
+import '../utils/schema_icons.dart';
+import 'configuration_appearance.dart';
+import 'settings_controls/module_header_row.dart';
+import 'kalinka_button.dart';
+import 'settings_controls/settings_toggle.dart';
 
 // Share settings typography; the catalog owns layout, not a separate type scale.
 InputDecoration catalogSearchDecoration(String hint) => InputDecoration(
@@ -31,170 +42,720 @@ InputDecoration catalogSearchDecoration(String hint) => InputDecoration(
   ),
 );
 
-/// Only the expanded row gains a bordered surface. The sliver group confines
-/// its pinned header to this entry; details share the catalog's single scroll.
-class PluginCatalogEntry extends StatelessWidget {
+/// What the overview and a plugin's pages do for it: open its pages, switch
+/// it on or off, and the server's install, uninstall and update.
+class PluginEntryActions {
+  /// Stages its switch, where the settings schema has one.
+  final ValueChanged<bool> onEnabledChanged;
+  final VoidCallback onOpenSettings;
+  final VoidCallback onOpenAbout;
+  final ValueChanged<PluginOperation> onOperation;
+
+  /// Puts away what went wrong with its last install, removal or update.
+  final VoidCallback onDismissFailure;
+
+  /// The server installs, removes and updates plugins itself.
+  final bool canManage;
+
+  const PluginEntryActions({
+    required this.onEnabledChanged,
+    required this.onOpenSettings,
+    required this.onOpenAbout,
+    required this.onOperation,
+    required this.onDismissFailure,
+    required this.canManage,
+  });
+}
+
+/// The icon its module declares, else one for what it is.
+IconData pluginIcon(CatalogPlugin plugin, PluginState state) =>
+    iconNamed(state.live?.icon) ??
+    switch (plugin.id) {
+      'localfiles' => Icons.folder_outlined,
+      'qobuz' => Icons.headphones_outlined,
+      'spotify' => Icons.speaker_phone_outlined,
+      'upnp' => Icons.cast,
+      _ => plugin.isDevice ? Icons.speaker_outlined : Icons.music_note_outlined,
+    };
+
+/// A plugin's state as Server settings words it — READY and the rest — or
+/// what the server is busy doing to it. Null for a plugin it lacks, unless
+/// [notInstalled] asks for that to be said too.
+ModuleStatusBadge? pluginBadge(PluginState state, {bool notInstalled = false}) {
+  const key = ValueKey('plugin-badge');
+  if (state.operation case final operation?) {
+    return ModuleStatusBadge(
+      key: key,
+      label: switch (operation) {
+        PluginOperation.install => 'INSTALLING',
+        PluginOperation.uninstall => 'UNINSTALLING',
+        PluginOperation.update => 'UPDATING',
+      },
+      color: KalinkaColors.statusPending,
+    );
+  }
+  final live = state.live;
+  if (live == null) {
+    return notInstalled
+        ? const ModuleStatusBadge(
+            key: key,
+            label: 'NOT INSTALLED',
+            color: KalinkaColors.textMuted,
+          )
+        : null;
+  }
+  // As it runs now; a switch waiting on the restart says so beside it.
+  return ModuleStatusBadge.of(
+    key: key,
+    !state.savedEnabled
+        ? ModuleStatus.disabled
+        : switch (live.state) {
+            ModuleState.ready => ModuleStatus.ready,
+            ModuleState.warning => ModuleStatus.warning,
+            ModuleState.error => ModuleStatus.error,
+            ModuleState.disabled => ModuleStatus.disabled,
+          },
+  );
+}
+
+/// A plugin's row on the overview, ruled off below, all of it one way in:
+/// an installed plugin's opens its configuration page, any other's its About
+/// page, with Install before the chevron.
+class PluginRow extends StatelessWidget {
   final CatalogPlugin plugin;
-  final bool expanded;
-  final VoidCallback onToggle;
-  const PluginCatalogEntry({
+  final PluginState state;
+  final String? summary;
+
+  final PluginEntryActions actions;
+
+  const PluginRow({
     super.key,
     required this.plugin,
-    required this.expanded,
-    required this.onToggle,
+    required this.state,
+    required this.actions,
+    this.summary,
   });
+
   @override
   Widget build(BuildContext context) {
-    final header = _PluginHeader(
-      plugin: plugin,
-      expanded: expanded,
-      onToggle: onToggle,
-    );
-    if (!expanded) return SliverToBoxAdapter(child: header);
-    return SliverPadding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      sliver: DecoratedSliver(
-        decoration: BoxDecoration(
-          color: KalinkaColors.surfaceRaised,
-          border: Border.all(color: KalinkaColors.borderDefault),
-          borderRadius: BorderRadius.circular(14),
+    final installed = state.installed;
+    final install = installed
+        ? null
+        : _primaryFor(plugin, state, actions.canManage);
+    final badge = pluginBadge(state);
+    // Group headings distinguish added plugins; rows explain any restrictions.
+    final detail = installed || state.operation != null
+        ? state.detail
+        : plugin.bundled
+        ? 'Included with Kalinka Player'
+        : actions.canManage
+        ? install?.reason
+        : null;
+    final badges = [
+      if (plugin.unofficial) const _Badge('Unofficial'),
+      if (plugin.maturity == 'experimental')
+        const _Badge('Experimental', warm: true),
+      if (plugin.maturity == 'deprecated') const _Badge('Deprecated'),
+    ];
+    final open = installed ? actions.onOpenSettings : actions.onOpenAbout;
+    final body = Row(
+      children: [
+        ConfigurationItemIcon(icon: pluginIcon(plugin, state)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(plugin.name, style: KalinkaTextStyles.trayRowLabel),
+                  ...badges,
+                ],
+              ),
+              if (summary != null && summary!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  summary!,
+                  key: const ValueKey('plugin-summary'),
+                  style: KalinkaTextStyles.trayRowSublabel,
+                  softWrap: true,
+                ),
+              ],
+              if (badge != null || detail != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: _StatusLine(
+                    badge: badge,
+                    detail: detail,
+                    detailColor: state.hasPendingChanges || state.staged
+                        ? KalinkaColors.statusPendingLight
+                        : installed || state.operation != null
+                        ? KalinkaColors.textSecondary
+                        : KalinkaColors.textMuted,
+                  ),
+                ),
+            ],
+          ),
         ),
-        sliver: SliverMainAxisGroup(
-          slivers: [
-            PinnedHeaderSliver(child: header),
-            SliverToBoxAdapter(
-              child: _PluginDetails(
-                key: ValueKey('plugin-details-${plugin.id}'),
-                plugin: plugin,
+      ],
+    );
+
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: KalinkaColors.borderSubtle)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // The row's own node, with Add inside it as a button of its
+          // own.
+          Semantics(
+            key: ValueKey('plugin-${plugin.id}'),
+            container: true,
+            button: true,
+            label: [
+              plugin.name,
+              for (final badge in badges) badge.label,
+              if (badge != null) _spoken(badge.label),
+              ?detail,
+            ].map(_unstopped).join('. '),
+            hint: installed ? 'Opens its settings' : 'Opens About',
+            value: summary,
+            onTap: open,
+            child: InkWell(
+              onTap: open,
+              excludeFromSemantics: true,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Beside the text where both fit; under it on a narrow
+                    // phone or at large text sizes.
+                    final beside =
+                        install == null ||
+                        _installFitsBeside(context, constraints.maxWidth);
+                    final button = install == null
+                        ? null
+                        : Semantics(
+                            container: true,
+                            button: true,
+                            child: SizedBox(
+                              height: 40,
+                              child: KalinkaButton(
+                                key: ValueKey('plugin-install-${plugin.id}'),
+                                label: install.label,
+                                size: KalinkaButtonSize.compact,
+                                // Under the text it takes the width there,
+                                // and cuts a long label short rather than
+                                // overflow.
+                                fullWidth: !beside,
+                                leading:
+                                    state.operation == PluginOperation.install
+                                    ? const SizedBox.square(
+                                        dimension: 12,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.6,
+                                          color: KalinkaColors.textPrimary,
+                                        ),
+                                      )
+                                    : null,
+                                // Busy rather than dimmed while it installs.
+                                enabled: install.reason == null,
+                                onTap: state.operation == null
+                                    ? () =>
+                                          actions.onOperation(install.operation)
+                                    : null,
+                              ),
+                            ),
+                          );
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: beside
+                              ? ExcludeSemantics(child: body)
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    ExcludeSemantics(child: body),
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        left: 52,
+                                        top: 12,
+                                      ),
+                                      child: button,
+                                    ),
+                                  ],
+                                ),
+                        ),
+                        if (beside && button != null)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 12),
+                            child: button,
+                          ),
+                        const SizedBox(width: 6),
+                        const ExcludeSemantics(
+                          child: Icon(
+                            Icons.chevron_right,
+                            key: ValueKey('plugin-chevron'),
+                            size: 24,
+                            color: KalinkaColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+          if (state.failure case final failure?)
+            Padding(
+              padding: const EdgeInsets.only(left: 52, bottom: 14),
+              child: PluginFailureNote(
+                failure: failure,
+                onDismiss: actions.onDismissFailure,
+              ),
+            ),
+        ],
       ),
     );
   }
 }
 
-class _PluginHeader extends StatelessWidget {
-  final CatalogPlugin plugin;
-  final bool expanded;
-  final VoidCallback onToggle;
-  const _PluginHeader({
-    required this.plugin,
-    required this.expanded,
-    required this.onToggle,
+/// Whether Add, at its widest, leaves the text beside it room to read.
+/// Measured at its widest so it stays put once installing starts.
+bool _installFitsBeside(BuildContext context, double width) {
+  final scaler = MediaQuery.textScalerOf(context);
+  // KalinkaButton's compact label.
+  final style = KalinkaTextStyles.trayRowLabel.copyWith(
+    fontSize: KalinkaTypography.baseSize + 2,
+  );
+  double widthOf(String text) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+
+  // Padding and border, and the spinner beside Installing….
+  final button = math.max(widthOf('Add'), widthOf('Adding…') + 20) + 30;
+  // The gap before it, the chevron after it, the icon tile before the text.
+  return width - 12 - button - 30 - 52 >= scaler.scale(100);
+}
+
+String _unstopped(String text) =>
+    text.endsWith('.') ? text.substring(0, text.length - 1) : text;
+
+/// A badge's word as it is said: NOT INSTALLED, "Not installed".
+String _spoken(String badge) => badge[0] + badge.substring(1).toLowerCase();
+
+/// The live status and any pending changes, wrapping where needed.
+class _StatusLine extends StatelessWidget {
+  final ModuleStatusBadge? badge;
+  final String? detail;
+  final Color detailColor;
+  const _StatusLine({
+    required this.badge,
+    required this.detail,
+    required this.detailColor,
   });
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 8,
+    runSpacing: 4,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      ?badge,
+      if (detail case final text?)
+        Text(
+          text,
+          key: const ValueKey('plugin-status'),
+          style: KalinkaTextStyles.trayRowSublabel.copyWith(color: detailColor),
+        ),
+    ],
+  );
+}
+
+/// Who made a plugin or how settled it is, beside its name.
+class _Badge extends StatelessWidget {
+  final String label;
+
+  /// Experimental: a caution in amber rather than a plain fact in grey.
+  final bool warm;
+  const _Badge(this.label, {this.warm = false});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      color: warm ? KalinkaColors.statusPendingSurface : null,
+      border: Border.all(
+        color: warm
+            ? KalinkaColors.statusPending.withValues(alpha: .6)
+            : KalinkaColors.textMuted.withValues(alpha: .6),
+      ),
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(
+      label,
+      style: KalinkaFonts.sans(
+        fontSize: KalinkaTypography.baseSize,
+        fontWeight: FontWeight.w500,
+        color: warm
+            ? KalinkaColors.statusPendingLight
+            : KalinkaColors.textSecondary,
+      ),
+    ),
+  );
+}
+
+/// A line on what the server or the catalog holds back, behind an info mark.
+class PluginNote extends StatelessWidget {
+  final String text;
+  const PluginNote(this.text, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Padding(
+        padding: EdgeInsets.only(top: 1),
+        child: Icon(
+          Icons.info_outline,
+          size: 16,
+          color: KalinkaColors.textMuted,
+        ),
+      ),
+      const SizedBox(width: 7),
+      Expanded(child: Text(text, style: KalinkaTextStyles.trayRowSublabel)),
+    ],
+  );
+}
+
+/// Install for a plugin the server does not have, Update where it has an
+/// older one, with why it is out of reach; null where neither applies.
+({PluginOperation operation, String label, String? reason})? _primaryFor(
+  CatalogPlugin plugin,
+  PluginState state,
+  bool canManage,
+) {
+  final PluginOperation operation;
+  final String label;
+  String? reason;
+  if (!state.installed) {
+    // Comes with the server, never as a package of its own.
+    if (plugin.bundled) return null;
+    operation = PluginOperation.install;
+    label = state.operation == operation ? 'Adding…' : 'Add';
+    if (plugin.compatibility?.status == 'blocked') {
+      reason = 'No release meets this server\'s requirements.';
+    }
+  } else if (state.update case final update?) {
+    operation = PluginOperation.update;
+    label = state.operation == operation
+        ? 'Updating…'
+        : 'Update to ${update.version}';
+  } else {
+    return null;
+  }
+  if (!canManage) reason = 'This server cannot install or update plugins yet.';
+  return (operation: operation, label: label, reason: reason);
+}
+
+/// What acts on an installed plugin, at the top of its configuration page:
+/// its switch with a grey Uninstall away from it, Update where the server has
+/// a newer release, why any of it is out of reach, and what went wrong.
+class PluginControls extends StatelessWidget {
+  final CatalogPlugin plugin;
+  final PluginState state;
+  final PluginEntryActions actions;
+  const PluginControls({
+    super.key,
+    required this.plugin,
+    required this.state,
+    required this.actions,
+  });
+
   @override
   Widget build(BuildContext context) {
-    final state = [
-      if (plugin.delivery == 'bundle') 'Included with Kalinka Player',
-      if (plugin.maturity != 'stable')
-        '${plugin.tierLabel} · ${plugin.maturityLabel}',
-      if (plugin.isDevice) 'Check your model',
-    ].join(' · ');
-    final icon = switch (plugin.id) {
-      'localfiles' => Icons.library_music_outlined,
-      'qobuz' || 'spotify' => Icons.headphones_outlined,
-      'upnp' => Icons.cast,
-      _ => plugin.isDevice ? Icons.speaker_outlined : Icons.music_note_outlined,
-    };
-    return Semantics(
-      key: ValueKey('plugin-${plugin.id}'),
-      button: true,
-      expanded: expanded,
-      label:
-          '${plugin.name}. ${plugin.description}${state.isEmpty ? '' : '. $state'}',
-      onTap: onToggle,
-      child: Material(
-        color: expanded
-            ? KalinkaColors.surfaceRaised
-            : KalinkaColors.background,
-        shape: RoundedRectangleBorder(
-          borderRadius: expanded
-              ? const BorderRadius.vertical(top: Radius.circular(14))
-              : BorderRadius.zero,
-        ),
-        child: InkWell(
-          onTap: onToggle,
-          excludeFromSemantics: true,
-          borderRadius: BorderRadius.circular(13),
-          child: ExcludeSemantics(
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 88),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-              decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: KalinkaColors.borderSubtle),
+    final onChanged = state.operation == null && state.enabledPath != null
+        ? actions.onEnabledChanged
+        : null;
+    final toggle = Semantics(
+      key: ValueKey('plugin-enabled-${plugin.id}'),
+      toggled: state.enabled,
+      enabled: onChanged != null,
+      label: '${plugin.name} enabled',
+      onTap: onChanged == null ? null : () => onChanged(!state.enabled),
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onChanged == null ? null : () => onChanged(!state.enabled),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Opacity(
+                  opacity: onChanged == null ? 0.45 : 1,
+                  child: IgnorePointer(
+                    child: SettingsToggle(
+                      value: state.enabled,
+                      onChanged: (_) {},
+                    ),
+                  ),
                 ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: KalinkaColors.surfaceElevated,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: KalinkaColors.borderSubtle),
-                    ),
-                    child: Icon(icon, size: 23, color: KalinkaColors.gold),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          plugin.name,
-                          style: KalinkaTextStyles.trayRowLabel,
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          plugin.description,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: KalinkaTextStyles.trayRowSublabel,
-                        ),
-                        if (state.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(state, style: KalinkaTextStyles.trayRowSublabel),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  AnimatedRotation(
-                    turns: expanded ? .5 : 0,
-                    duration: MediaQuery.disableAnimationsOf(context)
-                        ? Duration.zero
-                        : const Duration(milliseconds: 180),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down,
-                      color: KalinkaColors.textSecondary,
-                      size: 20,
-                    ),
-                  ),
-                ],
-              ),
+                const SizedBox(width: 10),
+                Text(
+                  state.enabled ? 'Enabled' : 'Disabled',
+                  style: KalinkaTextStyles.trayRowLabel,
+                ),
+              ],
             ),
           ),
         ),
       ),
     );
+    final primary = _primaryFor(plugin, state, actions.canManage);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Uninstall drops under the switch on a narrow phone.
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 16,
+          runSpacing: 8,
+          children: [
+            toggle,
+            // Part of the server install, so it goes with the server.
+            if (!plugin.bundled)
+              Tooltip(
+                message: actions.canManage
+                    ? 'Remove ${plugin.name} from the server'
+                    : 'This server cannot remove plugins yet',
+                child: KalinkaButton(
+                  key: ValueKey('plugin-uninstall-${plugin.id}'),
+                  label: state.operation == PluginOperation.uninstall
+                      ? 'Uninstalling…'
+                      : 'Uninstall',
+                  variant: KalinkaButtonVariant.neutral,
+                  size: KalinkaButtonSize.compact,
+                  enabled: actions.canManage && state.operation == null,
+                  onTap: () => actions.onOperation(PluginOperation.uninstall),
+                ),
+              ),
+          ],
+        ),
+        if (primary?.operation == PluginOperation.update)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: KalinkaButton(
+              key: ValueKey('plugin-update-${plugin.id}'),
+              label: primary!.label,
+              fullWidth: true,
+              enabled: primary.reason == null && state.operation == null,
+              onTap: () => actions.onOperation(PluginOperation.update),
+            ),
+          ),
+        if (!actions.canManage && !plugin.bundled)
+          const Padding(
+            padding: EdgeInsets.only(top: 10),
+            child: PluginNote(
+              'This server cannot install, remove or update plugins yet.',
+              key: ValueKey('plugin-manage-note'),
+            ),
+          ),
+        if (state.failure case final failure?)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: PluginFailureNote(
+              failure: failure,
+              onDismiss: actions.onDismissFailure,
+            ),
+          ),
+      ],
+    );
   }
 }
 
-class _PluginDetails extends StatelessWidget {
+/// Install or Uninstall, at the top right of the About page, as the row
+/// offers them; none for a plugin that comes with the server.
+Widget? pluginAboutAction(
+  CatalogPlugin plugin,
+  PluginState state,
+  PluginEntryActions actions,
+) {
+  if (plugin.bundled) return null;
+  if (state.installed) {
+    return Tooltip(
+      message: actions.canManage
+          ? 'Remove ${plugin.name} from the server'
+          : 'This server cannot remove plugins yet',
+      child: KalinkaButton(
+        key: ValueKey('about-uninstall-${plugin.id}'),
+        label: state.operation == PluginOperation.uninstall
+            ? 'Uninstalling…'
+            : 'Uninstall',
+        variant: KalinkaButtonVariant.neutral,
+        size: KalinkaButtonSize.compact,
+        enabled: actions.canManage && state.operation == null,
+        onTap: () => actions.onOperation(PluginOperation.uninstall),
+      ),
+    );
+  }
+  final primary = _primaryFor(plugin, state, actions.canManage)!;
+  return KalinkaButton(
+    key: ValueKey('about-install-${plugin.id}'),
+    label: primary.label,
+    size: KalinkaButtonSize.compact,
+    enabled: primary.reason == null && state.operation == null,
+    onTap: () => actions.onOperation(PluginOperation.install),
+  );
+}
+
+/// The foot of the About page: Update, where the server has a newer release.
+class _UpdateAction extends StatelessWidget {
   final CatalogPlugin plugin;
-  const _PluginDetails({super.key, required this.plugin});
+  final PluginState state;
+  final PluginEntryActions actions;
+  const _UpdateAction({
+    required this.plugin,
+    required this.state,
+    required this.actions,
+  });
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-    child: Column(
+  Widget build(BuildContext context) {
+    final primary = _primaryFor(plugin, state, actions.canManage);
+    if (primary?.operation != PluginOperation.update) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: KalinkaButton(
+        key: ValueKey('about-update-${plugin.id}'),
+        label: primary!.label,
+        fullWidth: true,
+        enabled: primary.reason == null && state.operation == null,
+        onTap: () => actions.onOperation(PluginOperation.update),
+      ),
+    );
+  }
+}
+
+/// Where an install, removal or update failed: the server's own words,
+/// shown where it was asked for.
+class PluginFailureNote extends StatelessWidget {
+  final PluginFailure failure;
+  final VoidCallback? onDismiss;
+  const PluginFailureNote({super.key, required this.failure, this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: EdgeInsets.fromLTRB(10, 9, onDismiss == null ? 12 : 2, 9),
+    decoration: BoxDecoration(
+      color: KalinkaColors.statusOfflineSurface,
+      border: Border.all(
+        color: KalinkaColors.actionDelete.withValues(alpha: .25),
+      ),
+      borderRadius: BorderRadius.circular(9),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(
+          Icons.error_outline,
+          size: 17,
+          color: KalinkaColors.actionDelete,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '${failure.title}. ',
+                  style: const TextStyle(color: KalinkaColors.textPrimary),
+                ),
+                TextSpan(text: failure.message),
+              ],
+            ),
+            key: const ValueKey('plugin-failure'),
+            style: KalinkaTextStyles.trayRowSublabel,
+          ),
+        ),
+        if (onDismiss != null)
+          IconButton(
+            key: const ValueKey('plugin-failure-dismiss'),
+            tooltip: 'Dismiss',
+            onPressed: onDismiss,
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            style: IconButton.styleFrom(
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            color: KalinkaColors.textSecondary,
+            icon: const Icon(Icons.close_rounded, size: 18),
+          ),
+      ],
+    ),
+  );
+}
+
+/// Everything the catalog says about a plugin, for its About page: what it
+/// does, who made it, what it needs, with Install or Update at the foot.
+class PluginAbout extends StatelessWidget {
+  final CatalogPlugin plugin;
+  final PluginState state;
+  final PluginEntryActions actions;
+  const PluginAbout({
+    super.key,
+    required this.plugin,
+    required this.state,
+    required this.actions,
+  });
+  @override
+  Widget build(BuildContext context) {
+    // Why the button at the top right is out of reach, and what went wrong
+    // with it, right under it.
+    final primary = _primaryFor(plugin, state, actions.canManage);
+    final reason = plugin.bundled
+        ? null
+        : !actions.canManage
+        ? 'This server cannot install, remove or update plugins yet.'
+        : state.installed
+        ? null
+        : primary?.reason;
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (reason != null)
+          Padding(
+            key: const ValueKey('about-reason'),
+            padding: const EdgeInsets.only(bottom: 14),
+            child: PluginNote(reason),
+          ),
+        if (state.failure case final failure?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: PluginFailureNote(
+              failure: failure,
+              onDismiss: actions.onDismissFailure,
+            ),
+          ),
         if (plugin.isDevice) ...[
-          Text('DEVICE CONTROL', style: KalinkaTextStyles.sectionHeaderMuted),
+          Text('HIFI CONTROL', style: KalinkaTextStyles.sectionHeaderMuted),
           const SizedBox(height: 8),
         ],
         Text(plugin.description, style: KalinkaTextStyles.trayRowSublabel),
@@ -346,12 +907,16 @@ class _PluginDetails extends StatelessWidget {
             ),
           ),
         Text(
-          'Read-only preview · Installation and updates are not available. Catalog signatures are not verified. Package dependencies and actual device support have not been checked.',
+          [
+            if (!actions.canManage) 'Catalog signatures are not verified.',
+            'Package dependencies and actual device support have not been checked.',
+          ].join(' '),
           style: KalinkaTextStyles.trayRowSublabel,
         ),
+        _UpdateAction(plugin: plugin, state: state, actions: actions),
       ],
-    ),
-  );
+    );
+  }
 }
 
 String _releaseCheck(PluginReleaseCompatibility? result) => [
@@ -429,9 +994,8 @@ class _Facts extends StatelessWidget {
     builder: (context, constraints) {
       final columns =
           constraints.maxWidth >= 280 &&
-              MediaQuery.textScalerOf(
-                    context,
-                  ).scale(KalinkaTextStyles.trayRowSublabel.fontSize!) <
+              MediaQuery.textScalerOf(context)
+                      .scale(KalinkaTextStyles.trayRowSublabel.fontSize!) <
                   KalinkaTextStyles.trayRowSublabel.fontSize! * 1.5
           ? 2
           : 1;

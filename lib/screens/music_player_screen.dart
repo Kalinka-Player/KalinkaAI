@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/data_model.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/connection_settings_provider.dart';
@@ -383,9 +384,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
             ),
             const SizedBox(height: 8),
             Text(
-              kIsWeb
-                  ? 'Reload the page to reconnect to the server.'
-                  : 'Scan your network to find a Kalinka server and start listening.',
+              kIsWeb ? 'Reload the page to reconnect to the server.' : 'Scan your network to find a Kalinka server and start listening.',
               style: KalinkaTextStyles.emptyQueueSubtitle,
               textAlign: TextAlign.center,
             ),
@@ -636,113 +635,151 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           rendererSettings == null,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // Settings is a full-screen overlay here; it owns its own back via an
-        // internal PopScope (animated close), so leave it alone — as does the
-        // renderer settings panel. Search owns its own layered back too
-        // (SearchSessionView's PopScope).
+        // Configuration, settings, renderer panels and search handle their
+        // own layered Back navigation.
         if (_settingsOpen || _pluginsOpen || rendererSettings != null) return;
       },
       child: Stack(
         children: [
-          // Main content: TopBar + Banner + Content + Escalation + Dock +
-          // MiniPlayer. When search is open the dock/escalation give way and the
-          // content becomes the chat session (whose composer is the sole bottom
-          // element); the miniplayer slides itself away.
-          Visibility(
-            visible: !_settingsCovering,
-            maintainState: true,
-            maintainAnimation: true,
-            maintainSize: true,
-            child: Column(
-              children: [
-                // The search session carries its own header (roundel + search
-                // bar + connection dot), so the shared top bar leaves with it.
-                if (!searchOpen) ...[
-                  RepaintBoundary(
-                    child: KalinkaTopBar(
-                      onServerChipTap: _showServerSheet,
-                      connectionKey: _connectionDotKey,
-                    ),
-                  ),
-                  // Find Music signals connection state via its header dot; the
-                  // banner would only push its content down.
-                  const ConnectionBanner(),
-                ],
-                Expanded(
-                  // The dock (and escalation card) float over the content, which
-                  // scrolls behind them and fades into the page; the mini-player
-                  // below stays solid.
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          layoutBuilder: _topmostScreenLayout,
-                          transitionBuilder: _screenSwitcherTransition,
-                          child: searchOpen
-                              ? SearchSessionView(
-                                  key: const ValueKey('search'),
-                                  onServerTap: _showServerSheet,
-                                )
-                              : KeyedSubtree(
-                                  key: const ValueKey('queue'),
-                                  child:
-                                      connectionState == ConnectionStatus.none
-                                      ? _buildDisconnectedState()
-                                      : RepaintBoundary(
-                                          child: QueueZone(
-                                            bottomPadding: _dockClusterHeight,
-                                            onOpenManagementTray:
-                                                _showQueueManagementTray,
-                                          ),
-                                        ),
-                                ),
-                        ),
-                      ),
-                      if (!searchOpen)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: MeasureSize(
-                            onChange: (size) =>
-                                _onDockClusterMeasured(size.height),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
+          Column(
+            children: [
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Visibility(
+                      visible: !_settingsCovering,
+                      maintainState: true,
+                      maintainAnimation: true,
+                      maintainSize: true,
+                      child: Column(
+                        children: [
+                          // The search session carries its own header (roundel + search
+                          // bar + connection dot), so the shared top bar leaves with it.
+                          if (!searchOpen) ...[
+                            RepaintBoundary(
+                              child: KalinkaTopBar(
+                                onServerChipTap: _showServerSheet,
+                                connectionKey: _connectionDotKey,
+                              ),
+                            ),
+                            // Find Music signals connection state via its header dot; the
+                            // banner would only push its content down.
+                            const ConnectionBanner(),
+                          ],
+                          Expanded(
+                            // The dock (and escalation card) float over the content, which
+                            // scrolls behind them and fades into the page; the mini-player
+                            // below stays solid.
+                            child: Stack(
                               children: [
-                                EscalationCard(
-                                  onScanForServers: () =>
-                                      setState(() => _discoveryOpen = true),
+                                Positioned.fill(
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 200),
+                                    layoutBuilder: _topmostScreenLayout,
+                                    transitionBuilder:
+                                        _screenSwitcherTransition,
+                                    child: searchOpen
+                                        ? SearchSessionView(
+                                            key: const ValueKey('search'),
+                                            onServerTap: _showServerSheet,
+                                          )
+                                        : KeyedSubtree(
+                                            key: const ValueKey('queue'),
+                                            child:
+                                                connectionState ==
+                                                    ConnectionStatus.none
+                                                ? _buildDisconnectedState()
+                                                : RepaintBoundary(
+                                                    child: QueueZone(
+                                                      bottomPadding:
+                                                          _dockClusterHeight,
+                                                      onOpenManagementTray:
+                                                          _showQueueManagementTray,
+                                                    ),
+                                                  ),
+                                          ),
+                                  ),
                                 ),
-                                SearchDock(
-                                  buttonKey: _searchDockKey,
-                                  onTap: () => ref
-                                      .read(searchSessionProvider.notifier)
-                                      .open(),
-                                ),
+                                if (!searchOpen)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    child: MeasureSize(
+                                      onChange: (size) =>
+                                          _onDockClusterMeasured(size.height),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          EscalationCard(
+                                            onScanForServers: () => setState(
+                                              () => _discoveryOpen = true,
+                                            ),
+                                          ),
+                                          SearchDock(
+                                            buttonKey: _searchDockKey,
+                                            onTap: () => ref
+                                                .read(
+                                                  searchSessionProvider
+                                                      .notifier,
+                                                )
+                                                .open(),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+                    // Configuration and every nested page share the space
+                    // above the mini-player, including its safe-area inset.
+                    if (_pluginsOpen)
+                      MediaQuery.removePadding(
+                        context: context,
+                        removeBottom: true,
+                        child: ClipRect(
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              _buildPlugins(
+                                handlesBack: rendererSettings == null,
+                              ),
+                              if (rendererSettings != null)
+                                _buildRendererSettings(rendererSettings),
+                            ],
+                          ),
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
-                // Always mounted so it can slide (not just vanish); the
-                // SizeTransition collapses its slot as it goes so the content
-                // above settles down with it.
-                SizeTransition(
-                  sizeFactor: _miniPlayerReveal,
+              ),
+              Visibility(
+                visible: !_settingsCovering || _pluginsOpen,
+                maintainState: true,
+                maintainAnimation: true,
+                maintainSize: true,
+                child: SizeTransition(
+                  sizeFactor: _pluginsOpen
+                      ? const AlwaysStoppedAnimation(1.0)
+                      : _miniPlayerReveal,
                   alignment: AlignmentDirectional.bottomStart,
                   child: SlideTransition(
-                    position: _miniPlayerSlide,
+                    position: _pluginsOpen
+                        ? const AlwaysStoppedAnimation(Offset.zero)
+                        : _miniPlayerSlide,
                     child: MiniPlayer(
                       onTap: _showExpandedPlayer,
                       outputSwitcherKey: _outputSwitcherKey,
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           // Settings — full-screen overlay on phone (slides in from the right).
           // The same flag renders it in the right panel on tablet, so resizing
@@ -760,12 +797,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                     setState(() => _settingsCovering = covering),
               ),
             ),
-          if (_pluginsOpen)
-            Positioned.fill(
-              child: _buildPlugins(handlesBack: rendererSettings == null),
-            ),
           // A renderer's own settings, hosted exactly like the server's.
-          if (rendererSettings != null)
+          if (rendererSettings != null && !_pluginsOpen)
             Positioned.fill(child: _buildRendererSettings(rendererSettings)),
           // One-time first-run tour
           if (showCoachMarks) _buildCoachMarks(),

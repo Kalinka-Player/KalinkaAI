@@ -170,7 +170,7 @@ void main() {
               .having(
                 (e) => e.message,
                 'message',
-                'The box could not do that.',
+                'The streamer could not do that.',
               ),
         ),
       );

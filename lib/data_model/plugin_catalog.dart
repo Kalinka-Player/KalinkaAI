@@ -41,6 +41,13 @@ class PluginCatalog {
 class CatalogPlugin {
   final String id, name, description, type, tier, maturity, delivery;
   final String creator, license, distribution;
+
+  /// One short line for its row, where the catalog has one. `{player}` stands
+  /// for the streamer it runs on.
+  final String? summary;
+
+  /// What it lets people do, by name: `browse`, `direct_playback`.
+  final List<String> provides;
   final Uri? source;
   final List<String> models, families, deviceNotes;
   final List<CatalogPluginRelease> releases;
@@ -57,6 +64,8 @@ class CatalogPlugin {
     required this.creator,
     required this.license,
     required this.distribution,
+    this.summary,
+    this.provides = const [],
     this.source,
     this.models = const [],
     this.families = const [],
@@ -78,6 +87,8 @@ class CatalogPlugin {
       creator: _map(json['creator'])['name'] as String? ?? 'Not supplied',
       license: json['license'] as String? ?? 'Not supplied',
       distribution: json['distribution'] as String? ?? '',
+      summary: json['summary'] as String?,
+      provides: _strings(json['provides']),
       source: _publicLink(_map(json['source'])['repository']),
       models: _strings(support['models']),
       families: _strings(support['families']),
@@ -92,35 +103,64 @@ class CatalogPlugin {
   }
 
   bool get isDevice => type == 'output_device';
-  String get typeLabel => isDevice ? 'Device control' : 'Input sources';
-  String get tierLabel => tier == 'official' ? 'Official' : 'Unofficial';
-  String get section => maturity == 'experimental'
-      ? 'Experimental'
-      : maturity == 'deprecated'
-      ? 'Deprecated'
-      : tierLabel;
+
+  /// The `kind` its module carries in `/server/modules` and the settings schema.
+  String get moduleKind => isDevice ? 'device' : 'input_module';
+
+  /// Part of the server install rather than a package of its own.
+  bool get bundled => delivery == 'bundle';
+  bool get unofficial => tier != 'official';
+
+  /// Official and stable first, then unofficial, experimental, deprecated.
+  int get rank => switch (maturity) {
+    'deprecated' => 3,
+    'experimental' => 2,
+    _ => unofficial ? 1 : 0,
+  };
+
+  String get tierLabel => unofficial ? 'Unofficial' : 'Official';
   String get maturityLabel => switch (maturity) {
     'experimental' => 'Experimental',
     'deprecated' => 'Deprecated',
     _ => 'Stable',
   };
 
-  bool matches(String query) {
-    final text = [
-      name,
-      description,
-      creator,
-      distribution,
-      ...models,
-      ...families,
-      ...deviceNotes,
-    ].join(' ').toLowerCase();
-    return query
-        .toLowerCase()
-        .trim()
-        .split(RegExp(r'\s+'))
-        .every(text.contains);
+  /// What its row says it does, naming the [player] it runs on.
+  String blurb(String player) {
+    final short = summary?.trim();
+    if (short != null && short.isNotEmpty) {
+      return short.replaceAll('{player}', player);
+    }
+    // Older catalogs only supply the full description. Keep its opening sentence.
+    final text = description.trim();
+    final sentence = RegExp(r'[.!?](?:\s|$)').firstMatch(text);
+    return sentence == null ? text : text.substring(0, sentence.start + 1);
   }
+
+  /// What it lets people do, in the words its row uses.
+  List<String> get uses => [
+    if (provides.contains('browse')) 'Browse in Kalinka',
+    if (provides.contains('direct_playback')) 'Play from another app',
+  ];
+}
+
+/// A newer release the server offers for a plugin it has installed. Only the
+/// server decides this; the app never compares version strings itself.
+class PluginUpdate {
+  final String pluginId, version;
+  final String? installedVersion;
+
+  const PluginUpdate({
+    required this.pluginId,
+    required this.version,
+    this.installedVersion,
+  });
+
+  factory PluginUpdate.fromJson(Map<String, dynamic> json) => PluginUpdate(
+    pluginId: json['plugin_id'] as String,
+    version: json['version'] as String,
+    installedVersion: json['installed_version'] as String?,
+  );
 }
 
 class CatalogPluginRelease {

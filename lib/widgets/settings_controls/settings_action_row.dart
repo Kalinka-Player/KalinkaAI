@@ -8,13 +8,15 @@ import '../../utils/click_cursor.dart';
 class SettingsActionRow extends StatelessWidget {
   final String label;
   final String? sublabel;
-  final IconData trailing;
+  final IconData? leading;
+  final IconData? trailing;
   final VoidCallback onTap;
 
   const SettingsActionRow({
     super.key,
     required this.label,
     this.sublabel,
+    this.leading,
     this.trailing = Icons.chevron_right,
     required this.onTap,
   });
@@ -32,6 +34,16 @@ class SettingsActionRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             children: [
+              if (leading case final icon?) ...[
+                ExcludeSemantics(
+                  child: Icon(
+                    icon,
+                    size: 24,
+                    color: KalinkaColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -44,8 +56,16 @@ class SettingsActionRow extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
-              Icon(trailing, size: 20, color: KalinkaColors.textSecondary),
+              if (trailing case final icon?) ...[
+                const SizedBox(width: 12),
+                ExcludeSemantics(
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: KalinkaColors.textSecondary,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

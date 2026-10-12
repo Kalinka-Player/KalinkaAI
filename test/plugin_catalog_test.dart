@@ -74,80 +74,72 @@ void main() {
     }
   });
 
-  test(
-    'preserves server checks and never infers them from raw catalog declarations',
-    () {
-      final json = _fixture();
-      expect(
-        PluginCatalog.fromJson(
-          json,
-        ).plugins.every((p) => p.compatibility == null),
-        true,
-      );
-      final blocked = {
-        'version': '6.0',
-        'channel': 'stable',
-        'status': 'blocked',
-        'reasons': [
-          {
-            'code': 'incompatible_server',
-            'installed': '5.5',
-            'required': '>=6',
-          },
-        ],
-      };
-      final qobuz = (json['plugins'] as List).singleWhere(
-        (p) => p['id'] == 'qobuz',
-      );
-      qobuz['compatibility'] = {
-        'status': 'metadata_compatible',
-        'channel': 'stable',
-        'latest_available_version': '6.0',
-        'latest_compatible_version': '5.0.1',
-        'newer_blocked_release': blocked,
-        'releases': [
-          blocked,
-          {
-            'version': '5.0.1',
-            'channel': 'stable',
-            'status': 'metadata_compatible',
-            'reasons': [],
-            'artifacts': [
-              {
-                'filename': 'qobuz.deb',
-                'status': 'metadata_compatible',
-                'reasons': [],
-              },
-              {
-                'filename': 'other-platform.rpm',
-                'status': 'blocked',
-                'reasons': [
-                  {'code': 'unsupported_package_format', 'format': 'rpm'},
-                ],
-              },
-            ],
-          },
-        ],
-        'installation_allowed': false,
-      };
-      final result = PluginCatalog.fromJson(
-        json,
-      ).plugins.singleWhere((p) => p.id == 'qobuz').compatibility!;
-      expect(result.status, 'metadata_compatible');
-      expect(result.latestAvailableVersion, '6.0');
-      expect(result.latestCompatibleVersion, '5.0.1');
-      expect(result.newerBlockedRelease!.explanations, [
-        'Server 5.5 does not meet >=6.',
-      ]);
-      expect(result.release('5.0.1', 'stable')!.explanations, isEmpty);
-      expect(result.release('5.0.1', 'beta'), isNull);
-      expect(result.release('unknown', 'stable'), isNull);
-      expect(
-        result.release('5.0.1', 'stable')!.artifacts.first.filename,
-        'qobuz.deb',
-      );
-    },
-  );
+  test('preserves server checks and never infers them from raw catalog declarations', () {
+    final json = _fixture();
+    expect(
+      PluginCatalog.fromJson(json).plugins
+          .every((p) => p.compatibility == null),
+      true,
+    );
+    final blocked = {
+      'version': '6.0',
+      'channel': 'stable',
+      'status': 'blocked',
+      'reasons': [
+        {'code': 'incompatible_server', 'installed': '5.5', 'required': '>=6'},
+      ],
+    };
+    final qobuz = (json['plugins'] as List).singleWhere(
+      (p) => p['id'] == 'qobuz',
+    );
+    qobuz['compatibility'] = {
+      'status': 'metadata_compatible',
+      'channel': 'stable',
+      'latest_available_version': '6.0',
+      'latest_compatible_version': '5.0.1',
+      'newer_blocked_release': blocked,
+      'releases': [
+        blocked,
+        {
+          'version': '5.0.1',
+          'channel': 'stable',
+          'status': 'metadata_compatible',
+          'reasons': [],
+          'artifacts': [
+            {
+              'filename': 'qobuz.deb',
+              'status': 'metadata_compatible',
+              'reasons': [],
+            },
+            {
+              'filename': 'other-platform.rpm',
+              'status': 'blocked',
+              'reasons': [
+                {'code': 'unsupported_package_format', 'format': 'rpm'},
+              ],
+            },
+          ],
+        },
+      ],
+      'installation_allowed': false,
+    };
+    final result = PluginCatalog.fromJson(json).plugins
+        .singleWhere((p) => p.id == 'qobuz')
+        .compatibility!;
+    expect(result.status, 'metadata_compatible');
+    expect(result.latestAvailableVersion, '6.0');
+    expect(result.latestCompatibleVersion, '5.0.1');
+    expect(result.newerBlockedRelease!.explanations, [
+      'Server 5.5 does not meet >=6.',
+    ]);
+    expect(result.release('5.0.1', 'stable')!.explanations, isEmpty);
+    expect(result.release('5.0.1', 'beta'), isNull);
+    expect(result.release('unknown', 'stable'), isNull);
+    expect(
+      result.release('5.0.1', 'stable')!.artifacts.first.filename,
+      'qobuz.deb',
+    );
+  });
 
   for (final component in ['server', 'sdk', 'python', 'renderer']) {
     test('explains $component versions and unknown versions', () {
@@ -217,12 +209,12 @@ void main() {
       );
       final musiccast = catalog.plugins.singleWhere((p) => p.id == 'musiccast');
       expect(musiccast.isDevice, true);
-      expect(musiccast.matches('yamaha extended'), true);
       expect(musiccast.models, isEmpty);
       expect(musiccast.deviceNotes.join(' '), contains('volume'));
       final spotify = catalog.plugins.singleWhere((p) => p.id == 'spotify');
       expect(spotify.isDevice, false);
-      expect(spotify.section, 'Experimental');
+      expect(spotify.unofficial, true);
+      expect(spotify.maturityLabel, 'Experimental');
       expect(spotify.releases.single.versions['renderer'], '>=0.5,<1');
       expect(spotify.releases.single.architectures.toSet(), {
         'x86_64',
@@ -236,17 +228,56 @@ void main() {
     },
   );
 
-  test('supported models and families participate in search', () {
-    final json = _fixture();
-    final musiccast = (json['plugins'] as List).singleWhere(
-      (p) => p['id'] == 'musiccast',
+  test('a row line names the streamer and falls back to the description', () {
+    final plugins = {
+      for (final plugin in PluginCatalog.fromJson(_fixture()).plugins)
+        plugin.id: plugin,
+    };
+    expect(
+      plugins['upnp']!.blurb('Living room'),
+      'Send music to Living room from compatible apps.',
     );
-    musiccast['device_support']['models'] = ['Example AVR 100'];
-    final plugin = PluginCatalog.fromJson(
-      json,
-    ).plugins.singleWhere((p) => p.id == 'musiccast');
-    expect(plugin.matches('avr 100'), true);
-    expect(plugin.matches('absent model'), false);
+    expect(
+      plugins['musiccast']!.blurb('Living room'),
+      plugins['musiccast']!.description,
+    );
+    expect(plugins['localfiles']!.name, 'Folders & NAS');
+  });
+
+  test('what a plugin lets people do comes from the catalog alone', () {
+    final json = _fixture();
+    final plugins = {
+      for (final plugin in PluginCatalog.fromJson(json).plugins)
+        plugin.id: plugin,
+    };
+    expect(plugins['qobuz']!.uses, [
+      'Browse in Kalinka',
+      'Play from another app',
+    ]);
+    expect(plugins['spotify']!.uses, ['Play from another app']);
+    expect(plugins['musiccast']!.uses, isEmpty);
+    // A name the app does not know says nothing rather than guessing.
+    (json['plugins'] as List).singleWhere(
+      (p) => p['id'] == 'musiccast',
+    )['provides'] = [
+      'teleport',
+    ];
+    expect(
+      PluginCatalog.fromJson(json).plugins
+          .singleWhere((p) => p.id == 'musiccast')
+          .uses,
+      isEmpty,
+    );
+  });
+
+  test('official and stable plugins rank before the rest', () {
+    final plugins = {
+      for (final plugin in PluginCatalog.fromJson(_fixture()).plugins)
+        plugin.id: plugin.rank,
+    };
+    expect(plugins['localfiles'], 0);
+    expect(plugins['upnp'], 1);
+    expect(plugins['qobuz'], 2);
   });
 
   for (final url in [
@@ -328,6 +359,87 @@ void main() {
           (e) => e.message,
           'message',
           contains('Check the server connection'),
+        ),
+      ),
+    );
+  });
+
+  test('updates come only from an available server check', () async {
+    final (api, adapter) = _api(
+      _json(200, {
+        'status': 'available',
+        'updates': [
+          {
+            'plugin_id': 'qobuz',
+            'version': '5.1.0',
+            'installed_version': '5.0.1',
+          },
+        ],
+      }),
+    );
+    final updates = await api.updates();
+    expect(adapter.requests.single.method, 'GET');
+    expect(
+      adapter.requests.single.uri.toString(),
+      'http://kalinka.local:8000/server/plugins/updates',
+    );
+    expect(updates.single.pluginId, 'qobuz');
+    expect(updates.single.version, '5.1.0');
+    expect(updates.single.installedVersion, '5.0.1');
+
+    // Today's servers answer with no verified updates at all.
+    final (unavailable, _) = _api(
+      _json(200, {
+        'status': 'unavailable',
+        'reason': 'signature_verification_not_configured',
+        'updates': [
+          {'plugin_id': 'qobuz', 'version': '5.1.0'},
+        ],
+      }),
+    );
+    expect(await unavailable.updates(), isEmpty);
+  });
+
+  for (final operation in PluginOperation.values) {
+    test('${operation.name} is a POST to the plugin\'s own route', () async {
+      final (api, adapter) = _api(_json(200, {}));
+      await api.run('qobuz', operation);
+      final request = adapter.requests.single;
+      expect(request.method, 'POST');
+      expect(
+        request.uri.toString(),
+        'http://kalinka.local:8000/server/plugins/qobuz/${operation.name}',
+      );
+    });
+  }
+
+  test('a refused operation carries the server\'s words', () async {
+    final (api, _) = _api(
+      _json(409, {
+        'detail': {
+          'code': 'plugin_in_use',
+          'message': 'Qobuz is playing. Stop playback first.',
+        },
+      }),
+    );
+    await expectLater(
+      api.run('qobuz', PluginOperation.uninstall),
+      throwsA(
+        isA<PluginCatalogException>().having(
+          (e) => e.message,
+          'message',
+          'Qobuz is playing. Stop playback first.',
+        ),
+      ),
+    );
+    final (old, _) = _api(_json(405, {'detail': 'Method Not Allowed'}));
+    await expectLater(
+      old.run('qobuz', PluginOperation.install),
+      throwsA(
+        isA<PluginCatalogException>().having(
+          (e) => e.message,
+          'message',
+          'This server cannot manage plugins yet.',
         ),
       ),
     );

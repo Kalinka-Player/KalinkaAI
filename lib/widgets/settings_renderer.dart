@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/collection_entry.dart';
 import '../data_model/data_model.dart' show ModuleInfo, ModuleState;
 import '../data_model/presentation_schema.dart';
@@ -9,6 +10,7 @@ import '../providers/server_info_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
 import 'server_update_banner.dart';
+import 'configuration_appearance.dart';
 import 'settings_controls/footer_note.dart';
 import 'settings_controls/inline_markdown.dart';
 import 'settings_controls/issue_notes.dart';
@@ -123,6 +125,9 @@ class SchemaFieldRenderer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final binding = SettingsScope.of(context);
+    final configuration = ConfigurationAppearance.active(context);
+    final label = field.label;
+    final help = field.help;
     final isStaged = binding.isStaged(field.path);
     final value = binding.effectiveValue(field.path) ?? field.defaultValue;
 
@@ -139,7 +144,7 @@ class SchemaFieldRenderer extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 4,
                 children: [
-                  Text(field.label, style: KalinkaTextStyles.trayRowSublabel),
+                  Text(label, style: KalinkaTextStyles.trayRowSublabel),
                   Text(
                     (value ?? '').toString(),
                     style: KalinkaTextStyles.trayRowSublabel.copyWith(
@@ -148,10 +153,10 @@ class SchemaFieldRenderer extends StatelessWidget {
                   ),
                 ],
               ),
-              if (field.help != null) ...[
+              if (help != null) ...[
                 const SizedBox(height: 2),
                 InlineMarkdown(
-                  text: field.help!,
+                  text: help,
                   style: KalinkaTextStyles.trayRowSublabel,
                 ),
               ],
@@ -160,8 +165,8 @@ class SchemaFieldRenderer extends StatelessWidget {
         );
       }
       return SettingsRow(
-        label: field.label,
-        sublabel: field.help,
+        label: label,
+        sublabel: help,
         isVertical: true,
         gutter: gutter,
         control: SettingsReadonlyCard(text: (value ?? '').toString()),
@@ -172,6 +177,22 @@ class SchemaFieldRenderer extends StatelessWidget {
     // render them bare (no SettingsRow wrapper — that would duplicate the
     // label).
     if (field.widget == WidgetKind.numberSlider) {
+      if (configuration) {
+        return SettingsRow(
+          label: label,
+          sublabel: help,
+          isStaged: isStaged,
+          isVertical: true,
+          gutter: gutter,
+          issues: binding.issuesFor(field.path),
+          control: buildSliderControl(
+            field: field,
+            value: value,
+            onChanged: (v) => binding.stage(field.path, v),
+            dense: true,
+          ),
+        );
+      }
       return buildSliderControl(
         field: field,
         value: value,
@@ -200,8 +221,8 @@ class SchemaFieldRenderer extends StatelessWidget {
         field.widget == WidgetKind.folderList;
 
     return SettingsRow(
-      label: field.label,
-      sublabel: field.help,
+      label: label,
+      sublabel: help,
       isStaged: isStaged,
       isVertical: vertical,
       gutter: gutter,
@@ -443,6 +464,7 @@ Widget _separated(List<Widget> rows) => Column(
 class SchemaSectionRenderer extends StatelessWidget {
   final SectionSpec section;
   final bool isTopLevel;
+  final bool showServerUpdate;
 
   /// Metadata line under a top-level section's label, e.g. the renderer
   /// page's host + version badge.
@@ -455,6 +477,7 @@ class SchemaSectionRenderer extends StatelessWidget {
     super.key,
     required this.section,
     this.isTopLevel = false,
+    this.showServerUpdate = true,
     this.subtitle,
     this.replaced = const {},
   });
@@ -491,6 +514,7 @@ class SchemaSectionRenderer extends StatelessWidget {
           key: ValueKey(s.id),
           section: s,
           replaced: replaced,
+          showServerUpdate: showServerUpdate,
         ),
     ];
 
@@ -505,7 +529,13 @@ class SchemaSectionRenderer extends StatelessWidget {
       );
     }
 
-    if (rows.isEmpty) return const SizedBox.shrink();
+    if (rows.isEmpty) {
+      return Column(
+        children: [
+          for (final banner in section.banners) SchemaBanner(banner: banner),
+        ],
+      );
+    }
     final body = _separated(rows);
 
     // Top-level section: label + card. (The legacy "advanced" branch
@@ -517,14 +547,18 @@ class SchemaSectionRenderer extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _sectionLabel(
+            context,
             section.title,
-            subtitle: section.id == 'base_config.server'
+            subtitle:
+                section.id == 'base_config.server' &&
+                    !ConfigurationAppearance.active(context)
                 ? const _ServerAddressBadge()
                 : subtitle,
           ),
           // "New version available ›" banner between the SERVER label
           // and the settings fields; hidden when there's no update.
-          if (section.id == 'base_config.server') const ServerUpdateBanner(),
+          if (showServerUpdate && section.id == 'base_config.server')
+            const ServerUpdateBanner(),
           ...section.banners.map((b) => SchemaBanner(banner: b)),
           SettingsCard(children: [body]),
         ],
@@ -588,9 +622,13 @@ class SchemaSectionRenderer extends StatelessWidget {
     );
   }
 
-  static Widget _sectionLabel(String label, {Widget? subtitle}) {
+  static Widget _sectionLabel(
+    BuildContext context,
+    String label, {
+    Widget? subtitle,
+  }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 28, 20, 10),
+      padding: ConfigurationAppearance.sectionPadding(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -675,7 +713,6 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
         : lookupModule(liveSnapshot, m.id, m.kind);
     final status = live == null ? null : _moduleStatusFor(live.state);
     final message = live?.message;
-    final isError = live?.state == ModuleState.error;
 
     // Preview subtitle from backend-declared preview_fields.
     final subtitle = _subtitleFor(m, binding);
@@ -684,7 +721,7 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
 
     // Hoist a module-level `.enabled` field into the header switch, mirroring
     // the toggleable-section pattern used for nested sub-features.
-    final enabledField = _firstFieldWithPathSuffix(m.fields, '.enabled');
+    final enabledField = m.enabledField;
     final bool? enabledValue = enabledField == null
         ? null
         : (binding.effectiveValue(enabledField.path) ??
@@ -692,30 +729,10 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
                   false)
               as bool;
 
-    // Backend prunes EXPERT content out of the simple page tree, so
-    // the only filter here is "drop the .enabled field we already
-    // hoisted into the header".
-    final replaced = {for (final c in m.allCollections) ...c.replaces};
-    final rows = [
-      ..._fieldRows(
-        m.fields,
-        m.collections,
-        hidden: {?enabledField},
-        replaced: replaced,
-      ),
-      for (final s in m.sections)
-        SchemaSectionRenderer(
-          key: ValueKey(s.id),
-          section: s,
-          replaced: replaced,
-        ),
-    ];
-
-    final bodyDimmed = enabledField != null && enabledValue == false;
     final hasBody =
         (message != null && message.isNotEmpty) ||
         m.banners.isNotEmpty ||
-        rows.isNotEmpty;
+        SchemaModuleBody.rowsOf(m).isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -747,41 +764,12 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
             curve: const Cubic(0.4, 0, 0.2, 1),
             alignment: Alignment.topCenter,
             child: _expanded
-                ? Opacity(
-                    opacity: bodyDimmed ? 0.45 : 1.0,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (message != null && message.isNotEmpty)
-                          WarningNote(
-                            message: message,
-                            severity: isError
-                                ? WarningNoteSeverity.error
-                                : WarningNoteSeverity.warning,
-                          ),
-                        for (final b in m.banners) SchemaBanner(banner: b),
-                        // Module content renders flat, with a divider above
-                        // each row so it reads as continuous content under
-                        // the header rather than floating.
-                        for (final row in rows) ...[_rowDivider, row],
-                      ],
-                    ),
-                  )
+                ? SchemaModuleBody(module: m)
                 : const SizedBox.shrink(),
           ),
         ],
       ),
     );
-  }
-
-  static FieldSpec? _firstFieldWithPathSuffix(
-    List<FieldSpec> fields,
-    String suffix,
-  ) {
-    for (final f in fields) {
-      if (f.path.endsWith(suffix)) return f;
-    }
-    return null;
   }
 
   ModuleStatus _moduleStatusFor(ModuleState state) => switch (state) {
@@ -824,6 +812,87 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
       return m.kind == 'device' ? 'Output device' : 'Input module';
     }
     return parts.join(' \u00b7 ');
+  }
+}
+
+/// What a module configures, below its header: its live message, banners and
+/// rows, dimmed while the module is switched off. [SchemaModuleCard] folds it
+/// away under its header; a plugin's settings page shows it whole.
+class SchemaModuleBody extends ConsumerWidget {
+  final ModuleSpec module;
+
+  /// Ruled off from a header above it; a page of its own starts unruled.
+  final bool underHeader;
+
+  const SchemaModuleBody({
+    super.key,
+    required this.module,
+    this.underHeader = true,
+  });
+
+  /// Backend prunes EXPERT content out of the simple page tree, so the only
+  /// filter here is "drop the .enabled field the header shows".
+  static List<Widget> rowsOf(ModuleSpec module) {
+    final enabledField = module.enabledField;
+    final replaced = {for (final c in module.allCollections) ...c.replaces};
+    return [
+      ..._fieldRows(
+        module.fields,
+        module.collections,
+        hidden: {?enabledField},
+        replaced: replaced,
+      ),
+      for (final s in module.sections)
+        SchemaSectionRenderer(
+          key: ValueKey(s.id),
+          section: s,
+          replaced: replaced,
+        ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final binding = SettingsScope.of(context);
+    final liveSnapshot = ref.watch(modulesStateProvider).value;
+    final ModuleInfo? live = liveSnapshot == null
+        ? null
+        : lookupModule(liveSnapshot, module.id, module.kind);
+    final message = live?.message;
+    final enabledField = module.enabledField;
+    final dimmed =
+        enabledField != null &&
+        (binding.effectiveValue(enabledField.path) ??
+                enabledField.defaultValue ??
+                false) ==
+            false;
+
+    return Opacity(
+      opacity: dimmed ? 0.45 : 1.0,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (message != null && message.isNotEmpty)
+            WarningNote(
+              message: message,
+              severity: live?.state == ModuleState.error
+                  ? WarningNoteSeverity.error
+                  : WarningNoteSeverity.warning,
+            ),
+          for (final b in module.banners) SchemaBanner(banner: b),
+          // Module content renders flat, with a divider above each row so it
+          // reads as continuous content under the header rather than floating.
+          for (final (i, row) in rowsOf(module).indexed) ...[
+            if (i > 0 ||
+                underHeader ||
+                module.banners.isNotEmpty ||
+                (message != null && message.isNotEmpty))
+              _rowDivider,
+            row,
+          ],
+        ],
+      ),
+    );
   }
 }
 

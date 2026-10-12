@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/app_version_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
@@ -42,22 +43,23 @@ class ServerSheetContent extends ConsumerWidget {
           const SizedBox(height: 4),
           // Separator
           const SheetDivider(),
-          // Server settings row
-          SheetRow(
-            icon: Icons.settings_outlined,
-            iconBackground: KalinkaColors.surfaceOverlay,
-            iconColor: KalinkaColors.textSecondary,
-            label: 'Server settings',
-            sublabel: 'Modules, audio, enrichment',
-            trailing: const SheetChevron(),
-            onTap: () {
-              Navigator.pop(context, ServerSheetAction.openSettings);
-            },
-          ),
+          // Configuration replaces Server settings once the server opts in.
           if (ref.watch(pluginCatalogEnabledProvider))
             _PluginsRow(
               onTap: () =>
                   Navigator.pop(context, ServerSheetAction.openPlugins),
+            )
+          else
+            SheetRow(
+              icon: Icons.settings_outlined,
+              iconBackground: KalinkaColors.surfaceOverlay,
+              iconColor: KalinkaColors.textSecondary,
+              label: 'Server settings',
+              sublabel: 'Modules, audio, enrichment',
+              trailing: const SheetChevron(),
+              onTap: () {
+                Navigator.pop(context, ServerSheetAction.openSettings);
+              },
             ),
           // Web is bound to its serving origin — no discovery, no disconnect.
           if (!kIsWeb) ...[
@@ -477,17 +479,19 @@ class _TabletServerSheetContent extends ConsumerWidget {
         ),
         const SizedBox(height: 4),
         const SheetDivider(),
-        SheetRow(
-          icon: Icons.settings_outlined,
-          iconBackground: KalinkaColors.surfaceOverlay,
-          iconColor: KalinkaColors.textSecondary,
-          label: 'Server settings',
-          sublabel: 'Modules, audio, enrichment',
-          trailing: const SheetChevron(),
-          onTap: onOpenSettings,
-        ),
+        // Configuration replaces Server settings once the server opts in.
         if (ref.watch(pluginCatalogEnabledProvider))
-          _PluginsRow(onTap: onOpenPlugins),
+          _PluginsRow(onTap: onOpenPlugins)
+        else
+          SheetRow(
+            icon: Icons.settings_outlined,
+            iconBackground: KalinkaColors.surfaceOverlay,
+            iconColor: KalinkaColors.textSecondary,
+            label: 'Server settings',
+            sublabel: 'Modules, audio, enrichment',
+            trailing: const SheetChevron(),
+            onTap: onOpenSettings,
+          ),
         // Web is bound to its serving origin — no discovery, no disconnect.
         if (!kIsWeb) ...[
           const SheetDivider(),
@@ -524,19 +528,13 @@ class _PluginsRow extends StatelessWidget {
   const _PluginsRow({required this.onTap});
 
   @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      const SheetDivider(),
-      SheetRow(
-        icon: Icons.extension_outlined,
-        iconBackground: KalinkaColors.surfaceOverlay,
-        iconColor: KalinkaColors.textSecondary,
-        label: 'Plugins',
-        sublabel: 'Browse sources and device controls · Preview',
-        trailing: const SheetChevron(),
-        onTap: onTap,
-      ),
-    ],
+  Widget build(BuildContext context) => SheetRow(
+    icon: Icons.settings_outlined,
+    iconBackground: KalinkaColors.surfaceOverlay,
+    iconColor: KalinkaColors.textSecondary,
+    label: 'Configuration',
+    sublabel: 'Music sources, your player and hi-fi controls',
+    trailing: const SheetChevron(),
+    onTap: onTap,
   );
 }
