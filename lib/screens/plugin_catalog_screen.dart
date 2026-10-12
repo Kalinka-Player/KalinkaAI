@@ -31,7 +31,7 @@ import '../widgets/upgrade_overlay.dart';
 import 'plugin_about_screen.dart';
 import 'plugin_settings_screen.dart';
 
-enum PluginTab { sources, server, devices, updates }
+enum PluginTab { sources, server, devices }
 
 /// Mono capitals for the tabs and section headings.
 final _label = KalinkaTextStyles.sectionHeaderMuted.copyWith(
@@ -264,23 +264,7 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     final catalog = enabled ? ref.watch(pluginCatalogProvider) : null;
     final settings = ref.watch(settingsProvider);
     final gutter = ConfigurationAppearance.gutter(context);
-    final updates = enabled ? ref.watch(pluginUpdatesProvider).value : null;
-    final modules = ref.watch(modulesStateProvider).value;
-    // Only installed plugins carry an update, as in [PluginState.of].
-    final updateCount = modules == null || updates == null
-        ? 0
-        : catalog?.value?.plugins
-                  .where(
-                    (p) =>
-                        updates.containsKey(p.id) &&
-                        lookupModule(modules, p.id, p.moduleKind) != null,
-                  )
-                  .length ??
-              0;
     final upgrading = ref.watch(upgradeProvider).isUpgrading;
-    final tab = _tab == PluginTab.updates && updateCount == 0
-        ? PluginTab.sources
-        : _tab;
 
     final issuePaths = settings.issues.entries
         .where((entry) => entry.value.any((issue) => issue.isBlocking))
@@ -401,11 +385,11 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                             controller: _scroll,
                             physics: const AlwaysScrollableScrollPhysics(),
                             slivers: [
-                              _tabs(tab, updateCount, gutter),
-                              if (_sectionDescription(tab, gutter)
+                              _tabs(_tab, gutter),
+                              if (_sectionDescription(_tab, gutter)
                                   case final description?)
                                 SliverToBoxAdapter(child: description),
-                              if (tab == PluginTab.server)
+                              if (_tab == PluginTab.server)
                                 ..._serverSlivers(gutter)
                               else if (info.isLoading)
                                 const SliverFillRemaining(
@@ -529,16 +513,10 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
           failure: failures[plugin.id],
         ),
     };
-    final updateCount = states.values.where((s) => s.update != null).length;
-    // The Updates tab goes once there is nothing left to update.
-    final tab = _tab == PluginTab.updates && updateCount == 0
-        ? PluginTab.sources
-        : _tab;
-    bool inTab(CatalogPlugin plugin) => switch (tab) {
+    bool inTab(CatalogPlugin plugin) => switch (_tab) {
       PluginTab.sources => !plugin.isDevice,
       PluginTab.server => false,
       PluginTab.devices => plugin.isDevice,
-      PluginTab.updates => states[plugin.id]!.update != null,
     };
     final order = {
       for (final (i, plugin) in catalog.plugins.indexed) plugin.id: i,
@@ -550,10 +528,15 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
             ? a.rank.compareTo(b.rank)
             : order[a.id]!.compareTo(order[b.id]!),
       );
+    // Listed once each: those with a newer release first, with Update.
+    final outdated = [
+      for (final p in listed)
+        if (states[p.id]!.update != null) p,
+    ];
     // Switched off is still installed.
     final installed = [
       for (final p in listed)
-        if (states[p.id]!.installed) p,
+        if (states[p.id]!.installed && states[p.id]!.update == null) p,
     ];
     final available = [
       for (final p in listed)
@@ -601,102 +584,99 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
             ),
           ),
         ),
-      if (installed.isNotEmpty) ...[
+      if (outdated.isNotEmpty) ...[
         _heading(
-          switch (tab) {
-            PluginTab.sources => 'Your sources',
-            PluginTab.devices => 'Your controls',
-            _ => 'Updates available',
-          },
-          installed.length,
+          outdated.length == 1 ? 'Update available' : 'Updates available',
+          outdated.length,
           gutter,
           first: true,
         ),
-        if (!canManage && tab == PluginTab.updates) note(manageNote),
+        if (!canManage) note(manageNote),
+        for (final plugin in outdated) row(plugin),
+      ],
+      if (installed.isNotEmpty) ...[
+        _heading(
+          _tab == PluginTab.devices ? 'Your controls' : 'Your sources',
+          installed.length,
+          gutter,
+          first: outdated.isEmpty,
+        ),
         for (final plugin in installed) row(plugin),
       ],
       if (available.isNotEmpty) ...[
         _heading(
-          tab == PluginTab.devices ? 'More controls' : 'More sources',
+          _tab == PluginTab.devices ? 'More controls' : 'More sources',
           available.length,
           gutter,
-          first: installed.isEmpty,
+          first: outdated.isEmpty && installed.isEmpty,
         ),
-        if (!canManage && available.any((p) => !p.bundled)) note(manageNote),
+        if (!canManage && outdated.isEmpty && available.any((p) => !p.bundled))
+          note(manageNote),
         for (final plugin in available) row(plugin),
       ],
       const SliverToBoxAdapter(child: SizedBox(height: 32)),
     ];
   }
 
-  Widget _tabs(PluginTab tab, int updateCount, double gutter) =>
-      PinnedHeaderSliver(
-        child: ColoredBox(
-          color: KalinkaColors.background,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: gutter),
-            child: Stack(
-              key: const ValueKey('catalog-tabs'),
-              children: [
-                // The grey rule the selected tab's berry line sits on.
-                const Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: SizedBox(
-                    height: 1,
-                    child: ColoredBox(color: KalinkaColors.borderDefault),
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => Row(
-                      children: [
-                        for (final (i, option) in [
-                          (PluginTab.sources, 'Music sources'),
-                          (PluginTab.devices, 'HiFi control'),
-                          (PluginTab.server, 'Streamer'),
-                          if (updateCount > 0) (PluginTab.updates, 'Updates'),
-                        ].indexed) ...[
-                          if (i > 0)
-                            SizedBox(
-                              width: constraints.maxWidth < 480 ? 16 : 32,
-                            ),
-                          Expanded(
-                            // The labels use a monospace font.
-                            flex: option.$2.length,
-                            child: _PluginTabButton(
-                              key: ValueKey('catalog-tab-${option.$1.name}'),
-                              label: option.$2,
-                              selected: tab == option.$1,
-                              count: option.$1 == PluginTab.updates
-                                  ? updateCount
-                                  : null,
-                              onTap: () {
-                                setState(() => _tab = option.$1);
-                                _scroll.jumpTo(0);
-                              },
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+  Widget _tabs(PluginTab tab, double gutter) => PinnedHeaderSliver(
+    child: ColoredBox(
+      color: KalinkaColors.background,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: gutter),
+        child: Stack(
+          key: const ValueKey('catalog-tabs'),
+          children: [
+            // The grey rule the selected tab's berry line sits on.
+            const Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SizedBox(
+                height: 1,
+                child: ColoredBox(color: KalinkaColors.borderDefault),
+              ),
             ),
-          ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: LayoutBuilder(
+                builder: (context, constraints) => Row(
+                  children: [
+                    for (final (i, option) in [
+                      (PluginTab.sources, 'Music sources'),
+                      (PluginTab.devices, 'HiFi control'),
+                      (PluginTab.server, 'Streamer'),
+                    ].indexed) ...[
+                      if (i > 0)
+                        SizedBox(width: constraints.maxWidth < 480 ? 16 : 32),
+                      Expanded(
+                        // The labels use a monospace font.
+                        flex: option.$2.length,
+                        child: _PluginTabButton(
+                          key: ValueKey('catalog-tab-${option.$1.name}'),
+                          label: option.$2,
+                          selected: tab == option.$1,
+                          onTap: () {
+                            setState(() => _tab = option.$1);
+                            _scroll.jumpTo(0);
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 
   Widget? _sectionDescription(PluginTab tab, double gutter) {
     final description = switch (tab) {
       PluginTab.sources || PluginTab.server => null,
       PluginTab.devices =>
         'Let Kalinka adjust your amplifier’s volume and switch inputs.',
-      PluginTab.updates =>
-        'Keep your music sources and hi-fi controls up to date.',
     };
     if (description == null) return null;
     return Padding(
@@ -798,14 +778,22 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         excludeSemantics: true,
         child: Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          // Wraps rather than overflows at large text sizes.
+          // Set as ShelfHeading sets tracks and albums; wraps rather than
+          // overflows at large text sizes.
           child: Text.rich(
             TextSpan(
               children: [
-                TextSpan(text: title, style: KalinkaTextStyles.trayRowSublabel),
+                TextSpan(
+                  text: title.toUpperCase(),
+                  style: KalinkaTextStyles.sectionLabel.copyWith(
+                    color: KalinkaColors.textPrimary,
+                  ),
+                ),
                 TextSpan(
                   text: ' · $count',
-                  style: KalinkaTextStyles.trayRowSublabel,
+                  style: KalinkaTextStyles.sectionLabel.copyWith(
+                    color: KalinkaColors.textMuted,
+                  ),
                 ),
               ],
             ),
@@ -816,12 +804,10 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   );
 }
 
-/// A mono label over a berry underline while selected. [count] marks the
-/// Updates tab, which is set in bold whether or not it is selected.
+/// A mono label over a berry underline while selected.
 class _PluginTabButton extends StatelessWidget {
   final String label;
   final bool selected;
-  final int? count;
   final VoidCallback onTap;
 
   const _PluginTabButton({
@@ -829,16 +815,14 @@ class _PluginTabButton extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
-    this.count,
   });
 
   @override
   Widget build(BuildContext context) {
-    final count = this.count;
     return Semantics(
       button: true,
       selected: selected,
-      label: count == null ? label : '$label, $count available',
+      label: label,
       excludeSemantics: true,
       child: Tooltip(
         message: label,
@@ -871,40 +855,12 @@ class _PluginTabButton extends StatelessWidget {
                       style: _label.copyWith(
                         fontSize: KalinkaTypography.baseSize + 1,
                         letterSpacing: 1,
-                        fontWeight: count == null ? null : FontWeight.w700,
-                        color: selected || count != null
+                        color: selected
                             ? KalinkaColors.textPrimary
                             : KalinkaColors.textSecondary,
                       ),
                     ),
                   ),
-                  if (count != null) ...[
-                    const SizedBox(width: 7),
-                    // A count is the one thing a tab may carry in berry.
-                    Container(
-                      constraints: const BoxConstraints(
-                        minWidth: 18,
-                        minHeight: 18,
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 2,
-                      ),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: KalinkaColors.accent,
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: Text(
-                        '$count',
-                        style: KalinkaFonts.sans(
-                          fontSize: KalinkaTypography.baseSize - 1,
-                          fontWeight: FontWeight.w700,
-                          color: KalinkaColors.frost,
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),

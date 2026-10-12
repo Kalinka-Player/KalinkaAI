@@ -248,11 +248,19 @@ class PluginOperationsNotifier extends Notifier<Map<String, PluginOperation>> {
       ref.invalidate(modulesStateProvider);
       ref.invalidate(pluginCatalogProvider);
       ref.invalidate(pluginUpdatesProvider);
-      // Stay busy until the module list shows the result, so the row never
-      // offers the same action again in between.
+      // Stay busy until the module and update lists show the result, so the
+      // row never offers the same action again in between. Listened to, so
+      // the update check is not dropped while it is waited on.
+      final updates = ref.listen(pluginUpdatesProvider.future, (_, _) {});
       try {
-        await ref.read(modulesStateProvider.future);
-      } catch (_) {}
+        await Future.wait([
+          ref.read(modulesStateProvider.future),
+          updates.read(),
+        ]);
+      } catch (_) {
+      } finally {
+        updates.close();
+      }
       if (!ref.mounted) return PluginOutcome.unknown;
       // A plugin brings settings of its own, or takes them away. Reading them
       // again drops staged edits, so leave those to the next restart.

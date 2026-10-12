@@ -119,7 +119,7 @@ ModuleStatusBadge? pluginBadge(PluginState state, {bool notInstalled = false}) {
 
 /// A plugin's row on the overview, ruled off below, all of it one way in:
 /// an installed plugin's opens its configuration page, any other's its About
-/// page, with Install before the chevron.
+/// page, with Add or Update before the chevron.
 class PluginRow extends StatelessWidget {
   final CatalogPlugin plugin;
   final PluginState state;
@@ -138,9 +138,7 @@ class PluginRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final installed = state.installed;
-    final install = installed
-        ? null
-        : _primaryFor(plugin, state, actions.canManage);
+    final primary = _primaryFor(plugin, state, actions.canManage, brief: true);
     final badge = pluginBadge(state);
     // Group headings distinguish added plugins; rows explain any restrictions.
     final detail = installed || state.operation != null
@@ -148,7 +146,7 @@ class PluginRow extends StatelessWidget {
         : plugin.bundled
         ? 'Included with Kalinka Player'
         : actions.canManage
-        ? install?.reason
+        ? primary?.reason
         : null;
     final badges = [
       if (plugin.unofficial) const _Badge('Unofficial'),
@@ -234,9 +232,13 @@ class PluginRow extends StatelessWidget {
                     // Beside the text where both fit; under it on a narrow
                     // phone or at large text sizes.
                     final beside =
-                        install == null ||
-                        _installFitsBeside(context, constraints.maxWidth);
-                    final button = install == null
+                        primary == null ||
+                        _buttonFitsBeside(
+                          context,
+                          constraints.maxWidth,
+                          primary.operation,
+                        );
+                    final button = primary == null
                         ? null
                         : Semantics(
                             container: true,
@@ -244,15 +246,18 @@ class PluginRow extends StatelessWidget {
                             child: SizedBox(
                               height: 40,
                               child: KalinkaButton(
-                                key: ValueKey('plugin-install-${plugin.id}'),
-                                label: install.label,
+                                key: ValueKey(
+                                  primary.operation == PluginOperation.update
+                                      ? 'plugin-row-update-${plugin.id}'
+                                      : 'plugin-install-${plugin.id}',
+                                ),
+                                label: primary.label,
                                 size: KalinkaButtonSize.compact,
                                 // Under the text it takes the width there,
                                 // and cuts a long label short rather than
                                 // overflow.
                                 fullWidth: !beside,
-                                leading:
-                                    state.operation == PluginOperation.install
+                                leading: state.operation == primary.operation
                                     ? const SizedBox.square(
                                         dimension: 12,
                                         child: CircularProgressIndicator(
@@ -261,11 +266,15 @@ class PluginRow extends StatelessWidget {
                                         ),
                                       )
                                     : null,
-                                // Busy rather than dimmed while it installs.
-                                enabled: install.reason == null,
+                                // Busy rather than dimmed while it runs;
+                                // dimmed while another operation does.
+                                enabled:
+                                    primary.reason == null &&
+                                    (state.operation == null ||
+                                        state.operation == primary.operation),
                                 onTap: state.operation == null
                                     ? () =>
-                                          actions.onOperation(install.operation)
+                                          actions.onOperation(primary.operation)
                                     : null,
                               ),
                             ),
@@ -324,9 +333,13 @@ class PluginRow extends StatelessWidget {
   }
 }
 
-/// Whether Add, at its widest, leaves the text beside it room to read.
-/// Measured at its widest so it stays put once installing starts.
-bool _installFitsBeside(BuildContext context, double width) {
+/// Whether Add or Update, at its widest, leaves the text beside it room to
+/// read. Measured at its widest so it stays put once the operation starts.
+bool _buttonFitsBeside(
+  BuildContext context,
+  double width,
+  PluginOperation operation,
+) {
   final scaler = MediaQuery.textScalerOf(context);
   // KalinkaButton's compact label.
   final style = KalinkaTextStyles.trayRowLabel.copyWith(
@@ -344,8 +357,11 @@ bool _installFitsBeside(BuildContext context, double width) {
     return width;
   }
 
-  // Padding and border, and the spinner beside Installing….
-  final button = math.max(widthOf('Add'), widthOf('Adding…') + 20) + 30;
+  final (idle, busy) = operation == PluginOperation.update
+      ? ('Update', 'Updating…')
+      : ('Add', 'Adding…');
+  // Padding and border, and the spinner beside the busy label.
+  final button = math.max(widthOf(idle), widthOf(busy) + 20) + 30;
   // The gap before it, the chevron after it, the icon tile before the text.
   return width - 12 - button - 30 - 52 >= scaler.scale(100);
 }
@@ -442,11 +458,13 @@ class PluginNote extends StatelessWidget {
 
 /// Install for a plugin the server does not have, Update where it has an
 /// older one, with why it is out of reach; null where neither applies.
+/// [brief] leaves the version to the row's status line.
 ({PluginOperation operation, String label, String? reason})? _primaryFor(
   CatalogPlugin plugin,
   PluginState state,
-  bool canManage,
-) {
+  bool canManage, {
+  bool brief = false,
+}) {
   final PluginOperation operation;
   final String label;
   String? reason;
@@ -462,6 +480,8 @@ class PluginNote extends StatelessWidget {
     operation = PluginOperation.update;
     label = state.operation == operation
         ? 'Updating…'
+        : brief
+        ? 'Update'
         : 'Update to ${update.version}';
   } else {
     return null;
@@ -471,8 +491,9 @@ class PluginNote extends StatelessWidget {
 }
 
 /// What acts on an installed plugin, at the top of its configuration page:
-/// its switch with a grey Uninstall away from it, Update where the server has
-/// a newer release, why any of it is out of reach, and what went wrong.
+/// its switch, and away from it Update where the server has a newer release
+/// before a grey Uninstall; why any of it is out of reach, and what went
+/// wrong.
 class PluginControls extends StatelessWidget {
   final CatalogPlugin plugin;
   final PluginState state;
@@ -524,11 +545,14 @@ class PluginControls extends StatelessWidget {
         ),
       ),
     );
-    final primary = _primaryFor(plugin, state, actions.canManage);
+    final primary = _primaryFor(plugin, state, actions.canManage, brief: true);
+    final update = primary?.operation == PluginOperation.update
+        ? primary
+        : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Uninstall drops under the switch on a narrow phone.
+        // The buttons drop under the switch on a narrow phone.
         Wrap(
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -536,37 +560,42 @@ class PluginControls extends StatelessWidget {
           runSpacing: 8,
           children: [
             toggle,
-            // Part of the server install, so it goes with the server.
-            if (!plugin.bundled)
-              Tooltip(
-                message: actions.canManage
-                    ? 'Remove ${plugin.name} from the server'
-                    : 'This server cannot remove plugins yet',
-                child: KalinkaButton(
-                  key: ValueKey('plugin-uninstall-${plugin.id}'),
-                  label: state.operation == PluginOperation.uninstall
-                      ? 'Uninstalling…'
-                      : 'Uninstall',
-                  variant: KalinkaButtonVariant.neutral,
-                  size: KalinkaButtonSize.compact,
-                  enabled: actions.canManage && state.operation == null,
-                  onTap: () => actions.onOperation(PluginOperation.uninstall),
-                ),
+            if (update != null || !plugin.bundled)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (update != null)
+                    KalinkaButton(
+                      key: ValueKey('plugin-update-${plugin.id}'),
+                      label: update.label,
+                      size: KalinkaButtonSize.compact,
+                      enabled: update.reason == null && state.operation == null,
+                      onTap: () => actions.onOperation(PluginOperation.update),
+                    ),
+                  // Part of the server install, so it goes with the server.
+                  if (!plugin.bundled)
+                    Tooltip(
+                      message: actions.canManage
+                          ? 'Remove ${plugin.name} from the server'
+                          : 'This server cannot remove plugins yet',
+                      child: KalinkaButton(
+                        key: ValueKey('plugin-uninstall-${plugin.id}'),
+                        label: state.operation == PluginOperation.uninstall
+                            ? 'Uninstalling…'
+                            : 'Uninstall',
+                        variant: KalinkaButtonVariant.neutral,
+                        size: KalinkaButtonSize.compact,
+                        enabled: actions.canManage && state.operation == null,
+                        onTap: () =>
+                            actions.onOperation(PluginOperation.uninstall),
+                      ),
+                    ),
+                ],
               ),
           ],
         ),
-        if (primary?.operation == PluginOperation.update)
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: KalinkaButton(
-              key: ValueKey('plugin-update-${plugin.id}'),
-              label: primary!.label,
-              fullWidth: true,
-              enabled: primary.reason == null && state.operation == null,
-              onTap: () => actions.onOperation(PluginOperation.update),
-            ),
-          ),
-        if (!actions.canManage && !plugin.bundled)
+        if (!actions.canManage && (update != null || !plugin.bundled))
           const Padding(
             padding: EdgeInsets.only(top: 10),
             child: PluginNote(
