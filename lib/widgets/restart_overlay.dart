@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/restart_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
@@ -134,7 +135,7 @@ class _RestartOverlayState extends ConsumerState<RestartOverlay>
             Text(
               restartState.isDone
                   ? 'All changes applied.'
-                  : 'Applying staged changes\u2026',
+                  : restartState.subtitle,
               style: KalinkaTextStyles.trayRowSublabel.copyWith(
                 fontSize: KalinkaTypography.baseSize + 1,
                 color: KalinkaColors.textSecondary,

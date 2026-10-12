@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/plugin_catalog.dart';
 import 'kalinka_player_api_provider.dart';
 import 'modules_state_provider.dart';
+import 'restart_provider.dart';
 import 'server_info_provider.dart';
 import 'settings_provider.dart';
 
@@ -16,13 +17,47 @@ class PluginCatalogException implements Exception {
 
 enum PluginOperation { install, uninstall, update }
 
+/// What the server's helper recorded about the last operation it carried out
+/// across a restart, as `GET /server/plugins` reports it.
+class PluginOperationRecord {
+  final String pluginId;
+  final PluginOperation? operation;
+  final String status;
+  final String? error;
+
+  const PluginOperationRecord({
+    required this.pluginId,
+    required this.status,
+    this.operation,
+    this.error,
+  });
+
+  bool get failed => status == 'failed';
+
+  factory PluginOperationRecord.fromJson(Map<String, dynamic> json) =>
+      PluginOperationRecord(
+        pluginId: json['plugin_id'] as String? ?? '',
+        operation: PluginOperation.values
+            .where((o) => o.name == json['action'])
+            .firstOrNull,
+        status: json['status'] as String? ?? '',
+        error: json['error'] as String?,
+      );
+}
+
 abstract class PluginCatalogApi {
   Future<PluginCatalog> read();
 
   /// Newer releases of installed plugins, as the server reports them.
   Future<List<PluginUpdate>> updates();
 
-  Future<void> run(String pluginId, PluginOperation operation);
+  /// True when the server restarts to carry the operation out, false once it
+  /// is done. A refusal throws, in the server's words.
+  Future<bool> run(String pluginId, PluginOperation operation);
+
+  /// The helper's record of the last operation, or null where the server
+  /// keeps none or cannot be read.
+  Future<PluginOperationRecord?> lastOperation();
 }
 
 /// Read the connected server's cache, never GitHub or package URLs directly.
@@ -74,11 +109,13 @@ class DioPluginCatalogApi implements PluginCatalogApi {
   }
 
   @override
-  Future<void> run(String pluginId, PluginOperation operation) async {
+  Future<bool> run(String pluginId, PluginOperation operation) async {
     try {
-      await client.post(
+      final response = await client.post(
         '/server/plugins/${Uri.encodeComponent(pluginId)}/${operation.name}',
       );
+      final data = response.data;
+      return data is Map && data['status'] == 'restarting';
     } on DioException catch (error) {
       final detail = error.response?.data is Map
           ? (error.response!.data as Map)['detail']
@@ -92,6 +129,19 @@ class DioPluginCatalogApi implements PluginCatalogApi {
                 _ => 'The server could not finish. Try again.',
               },
       );
+    }
+  }
+
+  @override
+  Future<PluginOperationRecord?> lastOperation() async {
+    try {
+      final data = (await client.get('/server/plugins')).data;
+      final record = data is Map ? data['last_operation'] : null;
+      return record is Map
+          ? PluginOperationRecord.fromJson(record.cast<String, dynamic>())
+          : null;
+    } on DioException {
+      return null;
     }
   }
 }
@@ -138,6 +188,11 @@ class PluginFailure {
   };
 }
 
+/// How an install, removal or update ended: done, failed where the failure
+/// is kept with the plugin, or unknown when the wait for the server's
+/// restart was given up.
+enum PluginOutcome { done, failed, unknown }
+
 /// The last failure of each plugin's install, removal or update, kept where
 /// it happened until it is tried again or put away.
 class PluginFailuresNotifier extends Notifier<Map<String, PluginFailure>> {
@@ -164,20 +219,32 @@ class PluginOperationsNotifier extends Notifier<Map<String, PluginOperation>> {
   @override
   Map<String, PluginOperation> build() => const {};
 
-  /// Null once done, else why it failed.
-  Future<String?> run(String pluginId, PluginOperation operation) async {
-    if (state.containsKey(pluginId)) return null;
-    final failures = ref.read(pluginFailuresProvider.notifier)
-      ..dismiss(pluginId);
+  /// Runs the operation to its end: through the server's restart where it
+  /// restarts to carry it out. [name] is the plugin's, for the restart's
+  /// subtitle.
+  Future<PluginOutcome> run(
+    String pluginId,
+    PluginOperation operation, {
+    String? name,
+  }) async {
+    if (state.containsKey(pluginId)) return PluginOutcome.unknown;
+    ref.read(pluginFailuresProvider.notifier).dismiss(pluginId);
     state = {...state, pluginId: operation};
     try {
+      final bool restarting;
       try {
-        await ref.read(pluginCatalogApiProvider).run(pluginId, operation);
+        restarting = await ref
+            .read(pluginCatalogApiProvider)
+            .run(pluginId, operation);
       } on PluginCatalogException catch (error) {
-        failures.record(pluginId, PluginFailure(operation, error.message));
-        return error.message;
+        return _fail(pluginId, operation, error.message);
       }
-      if (!ref.mounted) return null;
+      if (!ref.mounted) return PluginOutcome.unknown;
+      if (restarting) {
+        final outcome = await _followRestart(pluginId, operation, name);
+        if (!ref.mounted) return PluginOutcome.unknown;
+        if (outcome != PluginOutcome.done) return outcome;
+      }
       ref.invalidate(modulesStateProvider);
       ref.invalidate(pluginCatalogProvider);
       ref.invalidate(pluginUpdatesProvider);
@@ -186,16 +253,69 @@ class PluginOperationsNotifier extends Notifier<Map<String, PluginOperation>> {
       try {
         await ref.read(modulesStateProvider.future);
       } catch (_) {}
-      if (!ref.mounted) return null;
+      if (!ref.mounted) return PluginOutcome.unknown;
       // A plugin brings settings of its own, or takes them away. Reading them
       // again drops staged edits, so leave those to the next restart.
       if (!ref.read(settingsProvider).hasPendingChanges) {
         await ref.read(settingsProvider.notifier).loadConfig();
       }
-      return null;
+      return PluginOutcome.done;
     } finally {
       if (ref.mounted) state = {...state}..remove(pluginId);
     }
+  }
+
+  /// The server carries the operation out while it restarts; its helper
+  /// records how that went, for reading once the server is back.
+  Future<PluginOutcome> _followRestart(
+    String pluginId,
+    PluginOperation operation,
+    String? name,
+  ) async {
+    final what = name ?? 'the plugin';
+    await ref
+        .read(restartProvider.notifier)
+        .followRestart(
+          subtitle: switch (operation) {
+            PluginOperation.install => 'Adding $what\u2026',
+            PluginOperation.update => 'Updating $what\u2026',
+            PluginOperation.uninstall => 'Uninstalling $what\u2026',
+          },
+        );
+    if (!ref.mounted) return PluginOutcome.unknown;
+    final restart = ref.read(restartProvider);
+    if (restart.error != null) {
+      return _fail(
+        pluginId,
+        operation,
+        'The server did not come back after its restart, so how this ended '
+        'is not known.',
+      );
+    }
+    // The wait was given up; the server finishes on its own.
+    if (!restart.isDone) return PluginOutcome.unknown;
+    final record = await ref.read(pluginCatalogApiProvider).lastOperation();
+    if (!ref.mounted) return PluginOutcome.unknown;
+    if (record != null && record.pluginId == pluginId && record.failed) {
+      return _fail(
+        pluginId,
+        operation,
+        record.error ?? 'The server could not finish.',
+      );
+    }
+    return PluginOutcome.done;
+  }
+
+  /// Keeps why the operation failed with the plugin, where it was asked for.
+  PluginOutcome _fail(
+    String pluginId,
+    PluginOperation operation,
+    String message,
+  ) {
+    ref
+        .read(pluginFailuresProvider.notifier)
+        .record(pluginId, PluginFailure(operation, message));
+    return PluginOutcome.failed;
   }
 }
 

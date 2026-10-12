@@ -196,8 +196,8 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
           iconColor: KalinkaColors.actionDelete,
           title: 'Uninstall ${plugin.name}?',
           message:
-              'The server removes the plugin. You can install it again from '
-              'Configuration.',
+              'The server restarts without it, which stops playback for a '
+              'moment. You can add it again from Configuration.',
           actions: [
             KalinkaButton(
               label: 'Cancel',
@@ -217,11 +217,11 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     }
     // Already running: its own call reports how it ends.
     if (ref.read(pluginOperationsProvider).containsKey(plugin.id)) return;
-    final failure = await ref
+    final outcome = await ref
         .read(pluginOperationsProvider.notifier)
-        .run(plugin.id, operation);
+        .run(plugin.id, operation, name: plugin.name);
     // A failure stays with the plugin, where it was asked for.
-    if (failure != null || !mounted) return;
+    if (outcome != PluginOutcome.done || !mounted) return;
     // Its pages went with it.
     if (operation == PluginOperation.uninstall) {
       setState(() {
@@ -238,6 +238,13 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // The server restarts to carry a plugin operation out; that restart shows
+    // here as one started by Apply does.
+    ref.listen(restartProvider.select((s) => s.isRestarting), (_, restarting) {
+      if (restarting && !_restartOverlayOpen) {
+        setState(() => _restartOverlayOpen = true);
+      }
+    });
     ref.listen(connectionSettingsProvider.select((s) => (s.host, s.port)), (
       _,
       next,

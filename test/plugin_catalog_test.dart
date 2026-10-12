@@ -403,7 +403,7 @@ void main() {
   for (final operation in PluginOperation.values) {
     test('${operation.name} is a POST to the plugin\'s own route', () async {
       final (api, adapter) = _api(_json(200, {}));
-      await api.run('qobuz', operation);
+      expect(await api.run('qobuz', operation), isFalse);
       final request = adapter.requests.single;
       expect(request.method, 'POST');
       expect(
@@ -412,6 +412,68 @@ void main() {
       );
     });
   }
+
+  test(
+    'an accepted operation says whether the server restarts for it',
+    () async {
+      final (api, _) = _api(
+        _json(202, {
+          'status': 'restarting',
+          'operation': 'install',
+          'plugin_id': 'qobuz',
+          'version': '5.0.1',
+        }),
+      );
+      expect(await api.run('qobuz', PluginOperation.install), isTrue);
+    },
+  );
+
+  test(
+    'the last operation comes from the inventory, in the helper\'s words',
+    () async {
+      final (api, adapter) = _api(
+        _json(200, {
+          'plugins': [],
+          'last_operation': {
+            'status': 'failed',
+            'action': 'install',
+            'plugin_id': 'qobuz',
+            'error':
+                'apt-get did not complete; see the restart service\'s log.',
+          },
+        }),
+      );
+      final record = (await api.lastOperation())!;
+      expect(adapter.requests.single.method, 'GET');
+      expect(
+        adapter.requests.single.uri.toString(),
+        'http://kalinka.local:8000/server/plugins',
+      );
+      expect(record.pluginId, 'qobuz');
+      expect(record.operation, PluginOperation.install);
+      expect(record.failed, isTrue);
+      expect(record.error, contains('apt-get did not complete'));
+
+      final (none, _) = _api(
+        _json(200, {'plugins': [], 'last_operation': null}),
+      );
+      expect(await none.lastOperation(), isNull);
+      final (disabled, _) = _api(_json(403, {}));
+      expect(await disabled.lastOperation(), isNull);
+      final (unknownAction, _) = _api(
+        _json(200, {
+          'last_operation': {
+            'status': 'ok',
+            'action': 'purge',
+            'plugin_id': 'x',
+          },
+        }),
+      );
+      final ok = (await unknownAction.lastOperation())!;
+      expect(ok.operation, isNull);
+      expect(ok.failed, isFalse);
+    },
+  );
 
   test('a refused operation carries the server\'s words', () async {
     final (api, _) = _api(
