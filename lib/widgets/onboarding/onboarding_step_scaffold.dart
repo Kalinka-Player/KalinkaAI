@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../kalinka_button.dart';
 
-/// Width cap for the wizard's content column, shared by the steps and the
-/// output-settings panel: half the window on a tablet — the same split the
-/// discovery screen uses — 600 below the breakpoint.
+/// Width cap for the wizard's content column: half the window on a tablet —
+/// the same split the discovery screen uses — 600 below the breakpoint.
 double onboardingContentMaxWidth(double available) =>
     available >= kKalinkaTabletBreakpoint ? available / 2 : 600;
 

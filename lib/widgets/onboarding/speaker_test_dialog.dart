@@ -29,17 +29,7 @@ class SpeakerTestDialog extends ConsumerStatefulWidget {
   /// there is more than one possible target.
   final String? targetName;
 
-  /// When set, the done state and tone failures offer a jump into the
-  /// output's own settings — where the playback device can be changed and
-  /// the test rerun. The dialog closes itself before calling it.
-  final VoidCallback? onOpenSettings;
-
-  const SpeakerTestDialog({
-    super.key,
-    required this.playTone,
-    this.targetName,
-    this.onOpenSettings,
-  });
+  const SpeakerTestDialog({super.key, required this.playTone, this.targetName});
 
   @override
   ConsumerState<SpeakerTestDialog> createState() => _SpeakerTestDialogState();
@@ -137,11 +127,8 @@ class _SpeakerTestDialogState extends ConsumerState<SpeakerTestDialog>
                   _TestPhase.right =>
                     'You should hear a tone from the right speaker.',
                   _TestPhase.done =>
-                    widget.onOpenSettings != null
-                        ? 'Heard both sides? You’re set. If not, open the '
-                              'output’s settings and pick a different device.'
-                        : 'Heard both sides? You’re set. If not, pick a '
-                              'different output device and test again.',
+                    'Heard both sides? You’re set. If not, pick a different '
+                        'output device and test again.',
                 },
                 textAlign: TextAlign.center,
                 style: KalinkaTextStyles.dialogBody,
@@ -177,17 +164,6 @@ class _SpeakerTestDialogState extends ConsumerState<SpeakerTestDialog>
             variant: KalinkaButtonVariant.neutral,
             fullWidth: true,
             onTap: _start,
-          ),
-        if (widget.onOpenSettings != null &&
-            (_phase == _TestPhase.done || _toneFailed))
-          KalinkaButton(
-            label: 'Open output settings',
-            variant: KalinkaButtonVariant.neutral,
-            fullWidth: true,
-            onTap: () {
-              Navigator.of(context).pop();
-              widget.onOpenSettings!();
-            },
           ),
         KalinkaButton(
           label: 'Close',

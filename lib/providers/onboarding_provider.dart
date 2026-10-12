@@ -1,5 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'connection_settings_provider.dart';
+import 'server_address.dart';
 
 /// First-run state persisted across launches.
 ///
@@ -94,3 +98,75 @@ final onboardingStatusProvider =
     NotifierProvider<OnboardingStatusNotifier, OnboardingStatus>(
       OnboardingStatusNotifier.new,
     );
+
+/// Where a setup run stood when it restarted a box to set its sound card up,
+/// so a run the app lost meanwhile picks up there, on the same server. Holds
+/// no settings: the wizard saves what it collected to the server first.
+class OobeResume {
+  final String name;
+  final ServerAddress address;
+  final int step;
+
+  const OobeResume({
+    required this.name,
+    required this.address,
+    required this.step,
+  });
+
+  Map<String, Object> toJson() => {
+    'name': name,
+    'scheme': address.scheme,
+    'host': address.host,
+    'port': address.port,
+    'step': step,
+  };
+
+  /// Null for anything this build did not write.
+  static OobeResume? fromJson(Object? json) {
+    if (json case {
+      'name': final String name,
+      'scheme': final String scheme,
+      'host': final String host,
+      'port': final int port,
+      'step': final int step,
+    }) {
+      return OobeResume(
+        name: name,
+        address: (scheme: scheme, host: host, port: port),
+        step: step,
+      );
+    }
+    return null;
+  }
+}
+
+class OobeResumeNotifier extends Notifier<OobeResume?> {
+  static const String sharedPref = 'Kalinka.oobeResume';
+
+  @override
+  OobeResume? build() {
+    final raw = ref.read(sharedPrefsProvider).getString(sharedPref);
+    if (raw == null) return null;
+    try {
+      return OobeResume.fromJson(jsonDecode(raw));
+    } on FormatException {
+      return null;
+    }
+  }
+
+  Future<void> remember(OobeResume resume) async {
+    await ref
+        .read(sharedPrefsProvider)
+        .setString(sharedPref, jsonEncode(resume.toJson()));
+    state = resume;
+  }
+
+  Future<void> forget() async {
+    await ref.read(sharedPrefsProvider).remove(sharedPref);
+    state = null;
+  }
+}
+
+final oobeResumeProvider = NotifierProvider<OobeResumeNotifier, OobeResume?>(
+  OobeResumeNotifier.new,
+);

@@ -5,10 +5,12 @@ import '../../providers/renderer_host_provider.dart'
     show rendererIdentityProvider;
 import '../../providers/renderer_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/soundcard_provider.dart';
 import '../../theme/app_theme.dart';
 import '../renderer_switcher.dart' show rendererDisplayName;
 import '../settings_controls/settings_card.dart';
 import '../settings_controls/warning_note.dart';
+import '../soundcard_row.dart' show soundcardSummary, soundcardTrouble;
 import 'onboarding_fields.dart';
 import 'onboarding_step_scaffold.dart';
 
@@ -19,7 +21,7 @@ import 'onboarding_step_scaffold.dart';
 /// their step via [onEdit].
 class OnboardingReviewStep extends ConsumerWidget {
   /// Jumps the wizard to a step (1 = sources, 2 = source setup, 3 = output,
-  /// 4 = amplifier control, 5 = sound test).
+  /// 4 = amplifier control, 5 = sound).
   final void Function(int step)? onEdit;
 
   /// Whether a sound test was run this session — the test step reports it.
@@ -37,6 +39,10 @@ class OnboardingReviewStep extends ConsumerWidget {
     final connection = ref.watch(connectionSettingsProvider);
     final renderers = ref.watch(rendererListProvider);
     final ownId = ref.watch(rendererIdentityProvider).value?.rendererId;
+    final soundcard = ref.watch(outputSoundcardProvider).value?.report;
+    final soundcardWrong = soundcard == null
+        ? null
+        : soundcardTrouble(soundcard);
 
     final modules = schemaModulesOfKind(state.schema, 'input_module');
     final enabledModules = [
@@ -138,6 +144,12 @@ class OnboardingReviewStep extends ConsumerWidget {
               value: volumeValue,
               onChange: edit(4),
             ),
+            if (soundcard != null)
+              _SummaryRow(
+                label: 'Sound card',
+                value: soundcardSummary(soundcard),
+                onChange: edit(5),
+              ),
             _SummaryRow(
               label: 'Sound test',
               value: soundTested ? 'Played' : 'Skipped',
@@ -169,6 +181,11 @@ class OnboardingReviewStep extends ConsumerWidget {
             message:
                 'The server won’t accept this setup yet — '
                 '${refused.join('; ')}. Fix that before starting.',
+          ),
+        if (soundcardWrong != null)
+          WarningNote(
+            severity: WarningNoteSeverity.warning,
+            message: soundcardWrong,
           ),
         if (!soundTested && renderers.supported && activeRenderer != null)
           const WarningNote(

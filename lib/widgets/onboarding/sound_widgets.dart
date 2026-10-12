@@ -2,14 +2,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 
 /// Bits the three sound-related wizard steps (output, amplifier control,
-/// speaker test) share.
-
-/// Asks the wizard to open one output's own settings. The panel is hosted
-/// by [OnboardingScreen] over its own Stack rather than pushed as a route:
-/// it is a [SlideInPanel], which animates itself in and expects a host that
-/// supplies the Material its fields need.
-typedef OpenRendererSettings =
-    void Function(String rendererId, String rendererName);
+/// sound) share.
 
 /// The wizard's radio bullet.
 class RadioMark extends StatelessWidget {

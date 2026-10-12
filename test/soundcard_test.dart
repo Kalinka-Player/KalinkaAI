@@ -5,162 +5,27 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kalinka/data_model/data_model.dart' show RendererInfo;
-import 'package:kalinka/data_model/renderer_config.dart';
-import 'package:kalinka/providers/box_control_provider.dart';
-import 'package:kalinka/providers/connection_settings_provider.dart';
-import 'package:kalinka/providers/demo_mode.dart';
-import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/soundcard_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/widgets/box_section.dart';
 import 'package:kalinka/widgets/settings_controls/option_picker.dart';
 import 'package:kalinka/widgets/soundcard_row.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-const _options = [
-  SoundcardOption(
-    name: 'hifiberry-digi-pro',
-    label: 'HiFiBerry Digi+ Pro or Digi2 Pro',
-    vendor: 'HiFiBerry',
-    kind: 'digital',
-  ),
-  SoundcardOption(
-    name: 'justboom-dac',
-    label: 'JustBoom DAC HAT',
-    vendor: 'JustBoom',
-    kind: 'dac',
-  ),
-  SoundcardOption(
-    name: 'rpi-bcm2835-hdmi',
-    label: 'Raspberry Pi HDMI',
-    vendor: 'Raspberry Pi',
-    kind: 'onboard',
-  ),
-  SoundcardOption(name: 'none', label: 'No HAT', kind: 'none'),
-];
-
-SoundcardReport _report({
-  String? name,
-  String? configured,
-  String? pcm,
-  List<String> usb = const [],
-  List<String> suggested = const [],
-}) => SoundcardReport(
-  name: name,
-  configured: configured,
-  activePcm: pcm,
-  usb: usb,
-  suggested: suggested,
-  options: _options,
-);
-
-SupervisorInfo _info({String? serverId = 'box-1', String? rendererId}) =>
-    SupervisorInfo(
-      version: '0.3.0',
-      protocol: 1,
-      minProtocol: 1,
-      serverId: serverId,
-      rendererId: rendererId,
-      actions: const {'reboot', 'poweroff', setSoundcardAction},
-    );
-
-/// A box that answers [answers] to `/info` in turn, the last one for good, and
-/// [reports] to `/v1/soundcard` likewise.
-class _Box implements SupervisorApi {
-  _Box({
-    List<SupervisorInfo?>? answers,
-    List<SoundcardReport?>? reports,
-    this.restarts = false,
-  }) : answers = answers ?? [_info(rendererId: 'r-local')],
-       reports = reports ?? [_report()];
-
-  final List<SupervisorInfo?> answers;
-  final List<SoundcardReport?> reports;
-  final bool restarts;
-  BoxActionException? refusal;
-  final applied = <(String, BoxIdentity)>[];
-
-  T _next<T>(List<T> list) => list.length > 1 ? list.removeAt(0) : list.first;
-
-  @override
-  Future<SupervisorInfo?> info() async => _next(answers);
-
-  @override
-  Future<SoundcardReport?> soundcard() async => _next(reports);
-
-  @override
-  Future<bool> setSoundcard(String card, BoxIdentity identity) async {
-    applied.add((card, identity));
-    if (refusal != null) throw refusal!;
-    return restarts;
-  }
-
-  @override
-  Future<String?> serverState() async => 'active';
-
-  @override
-  Future<void> run(BoxAction action, {required String serverId}) async {}
-
-  @override
-  Uri get page => Uri.parse('http://kalinka.local:8001/');
-}
-
-class _Proxy implements KalinkaPlayerProxy {
-  _Proxy(this.renderers);
-
-  List<RendererInfo> renderers;
-  final updates = <(String, Map<String, String>)>[];
-
-  @override
-  Future<List<RendererInfo>> listRenderers() async => renderers;
-
-  @override
-  Future<RendererConfigResult> updateRendererConfig(
-    String rendererId,
-    Map<String, String> changes,
-  ) async {
-    updates.add((rendererId, changes));
-    return const RendererConfigResult();
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError(invocation.memberName.toString());
-}
-
-RendererInfo _renderer(
-  String id, {
-  String? address,
-  String status = 'connected',
-}) => RendererInfo(
-  rendererId: id,
-  friendlyName: id,
-  status: status,
-  address: address,
-);
+import 'support/soundcard_fakes.dart';
 
 Future<ProviderContainer> _container({
-  required _Box box,
-  _Proxy? proxy,
+  required FakeBox box,
+  FakeProxy? proxy,
   Map<String, SupervisorApi> others = const {},
 }) async {
-  SharedPreferences.setMockInitialValues({
-    'Kalinka.host': 'kalinka.local',
-    'Kalinka.port': 8000,
-  });
-  final prefs = await SharedPreferences.getInstance();
   final container = ProviderContainer(
-    overrides: [
-      sharedPrefsProvider.overrideWithValue(prefs),
-      supervisorApiProvider.overrideWithValue(box),
-      supervisorAtProvider.overrideWith((ref, host) => others[host]!),
-      serverIdentityProvider.overrideWith((ref) async => 'box-1'),
-      demoModeProvider.overrideWithValue(false),
-      kalinkaProxyProvider.overrideWithValue(proxy ?? _Proxy([])),
-      soundcardPollProvider.overrideWithValue(Duration.zero),
-    ],
+    overrides: soundcardOverrides(
+      await boxPrefs(),
+      box: box,
+      proxy: proxy,
+      others: others,
+    ),
   );
   addTearDown(container.dispose);
   return container;
@@ -325,7 +190,7 @@ void main() {
     test(
       'the server’s own box, with the renderer its supervisor names',
       () async {
-        final container = await _container(box: _Box());
+        final container = await _container(box: FakeBox());
         final box = (await container.read(serverSoundcardBoxProvider.future))!;
         expect(box.identity, const BoxIdentity(serverId: 'box-1'));
         expect(box.rendererId, 'r-local');
@@ -333,7 +198,7 @@ void main() {
     );
 
     test('a supervisor that cannot set a card up offers no box', () async {
-      final box = _Box(
+      final box = FakeBox(
         answers: [
           const SupervisorInfo(
             version: '0.2.0',
@@ -349,7 +214,7 @@ void main() {
     });
 
     test('the local renderer plays on the server’s box', () async {
-      final container = await _container(box: _Box());
+      final container = await _container(box: FakeBox());
       final box = await container.read(
         rendererSoundcardBoxProvider('r-local').future,
       );
@@ -357,12 +222,12 @@ void main() {
     });
 
     test('a renderer elsewhere plays on the box it connected from', () async {
-      final remote = _Box(
-        answers: [_info(serverId: null, rendererId: 'r-far')],
+      final remote = FakeBox(
+        answers: [supervisorInfo(serverId: null, rendererId: 'r-far')],
       );
       final container = await _container(
-        box: _Box(),
-        proxy: _Proxy([_renderer('r-far', address: '192.168.1.40')]),
+        box: FakeBox(),
+        proxy: FakeProxy([rendererRow('r-far', address: '192.168.1.40')]),
         others: {'192.168.1.40': remote},
       );
       final box = (await container.read(
@@ -376,10 +241,12 @@ void main() {
       'a box at that address that names another renderer is not it',
       () async {
         final container = await _container(
-          box: _Box(),
-          proxy: _Proxy([_renderer('r-far', address: '192.168.1.40')]),
+          box: FakeBox(),
+          proxy: FakeProxy([rendererRow('r-far', address: '192.168.1.40')]),
           others: {
-            '192.168.1.40': _Box(answers: [_info(rendererId: 'r-other')]),
+            '192.168.1.40': FakeBox(
+              answers: [supervisorInfo(rendererId: 'r-other')],
+            ),
           },
         );
         expect(
@@ -391,8 +258,8 @@ void main() {
 
     test('a renderer without an address has no box', () async {
       final container = await _container(
-        box: _Box(),
-        proxy: _Proxy([_renderer('r-far')]),
+        box: FakeBox(),
+        proxy: FakeProxy([rendererRow('r-far')]),
       );
       expect(
         await container.read(rendererSoundcardBoxProvider('r-far').future),
@@ -408,8 +275,10 @@ void main() {
       kind: 'dac',
     );
 
-    Future<(ProviderContainer, SoundcardBox, _Proxy)> start(_Box box) async {
-      final proxy = _Proxy([_renderer('r-local')]);
+    Future<(ProviderContainer, SoundcardBox, FakeProxy)> start(
+      FakeBox box,
+    ) async {
+      final proxy = FakeProxy([rendererRow('r-local')]);
       final container = await _container(box: box, proxy: proxy);
       final soundcardBox = SoundcardBox(
         api: box,
@@ -423,38 +292,78 @@ void main() {
       for (final t in c.read(toastProvider)) t.message,
     ];
 
-    test('a card that needs no restart is reported at once', () async {
-      final box = _Box();
-      final (container, target, proxy) = await start(box);
-
-      await container
-          .read(soundcardChangeProvider(target).notifier)
-          .apply(card);
-
-      expect(box.applied.single.$1, 'justboom-dac');
-      expect(
-        container.read(soundcardChangeProvider(target)),
-        SoundcardStep.idle,
-      );
-      expect(proxy.updates, isEmpty);
-      expect(toasts(container).last, contains('Nothing needed a restart'));
-    });
-
-    test('follows the restart and plays through the new card', () async {
-      final box = _Box(
-        restarts: true,
-        answers: [_info(), null, null, _info()],
+    test('a card that needs no restart plays at once', () async {
+      final box = FakeBox(
         reports: [
-          _report(),
-          _report(name: 'JustBoom DAC', pcm: 'hw:CARD=sndrpijustboomd,DEV=0'),
+          soundcardReport(name: 'JustBoom DAC', pcm: 'hw:CARD=Boom,DEV=0'),
         ],
       );
       final (container, target, proxy) = await start(box);
 
-      await container
+      final outcome = await container
           .read(soundcardChangeProvider(target).notifier)
           .apply(card);
 
+      expect(outcome, SoundcardOutcome.playing);
+      expect(
+        container.read(soundcardChangeProvider(target).notifier).restarted,
+        isFalse,
+      );
+      expect(box.applied.single.$1, 'justboom-dac');
+      expect(proxy.updates.single.$2, {'output.device': 'hw:CARD=Boom,DEV=0'});
+      expect(
+        container.read(soundcardChangeProvider(target)),
+        SoundcardStep.idle,
+      );
+      expect(toasts(container).last, 'Playing through JustBoom DAC.');
+    });
+
+    test('a card set up without a restart that is not up says so', () async {
+      final (container, target, proxy) = await start(FakeBox());
+
+      final outcome = await container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+
+      expect(outcome, SoundcardOutcome.silent);
+      expect(proxy.updates, isEmpty);
+      expect(toasts(container).last, contains('did not come up'));
+    });
+
+    test('follows the restart and plays through the new card', () async {
+      final box = FakeBox(
+        restarts: true,
+        answers: [supervisorInfo(), null, null, supervisorInfo()],
+        reports: [
+          soundcardReport(),
+          soundcardReport(
+            name: 'JustBoom DAC',
+            pcm: 'hw:CARD=sndrpijustboomd,DEV=0',
+          ),
+        ],
+      );
+      final (container, target, proxy) = await start(box);
+      final steps = <SoundcardStep>[];
+      container.listen(
+        soundcardChangeProvider(target),
+        (_, step) => steps.add(step),
+      );
+
+      final outcome = await container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+
+      expect(outcome, SoundcardOutcome.playing);
+      expect(
+        container.read(soundcardChangeProvider(target).notifier).restarted,
+        isTrue,
+      );
+      expect(steps, [
+        SoundcardStep.applying,
+        SoundcardStep.restarting,
+        SoundcardStep.switching,
+        SoundcardStep.idle,
+      ]);
       final (renderer, changes) = proxy.updates.single;
       expect(renderer, 'r-local');
       expect(changes, {'output.device': 'hw:CARD=sndrpijustboomd,DEV=0'});
@@ -469,17 +378,18 @@ void main() {
     });
 
     test('a card that does not come up is reported as such', () async {
-      final box = _Box(
+      final box = FakeBox(
         restarts: true,
-        answers: [null, _info()],
-        reports: [_report()],
+        answers: [null, supervisorInfo()],
+        reports: [soundcardReport()],
       );
       final (container, target, proxy) = await start(box);
 
-      await container
+      final outcome = await container
           .read(soundcardChangeProvider(target).notifier)
           .apply(card);
 
+      expect(outcome, SoundcardOutcome.silent);
       expect(proxy.updates, isEmpty);
       final toast = container.read(toastProvider).last;
       expect(toast.message, contains('did not come up'));
@@ -487,36 +397,55 @@ void main() {
     });
 
     test('a box that never comes back is reported as such', () async {
-      final box = _Box(restarts: true, answers: [null]);
+      final box = FakeBox(restarts: true, answers: [null]);
       final (container, target, _) = await start(box);
 
-      await container
+      final outcome = await container
           .read(soundcardChangeProvider(target).notifier)
           .apply(card);
 
+      expect(outcome, SoundcardOutcome.notBack);
       expect(toasts(container).last, contains('has not come back'));
     });
 
-    test('no HAT needs no card to come up', () async {
-      final box = _Box(
+    test('waiting on for a late box plays through its card', () async {
+      final box = FakeBox(
         restarts: true,
-        answers: [null, _info()],
-        reports: [_report()],
+        answers: [...List.filled(100, null), supervisorInfo()],
+        reports: [
+          soundcardReport(name: 'JustBoom DAC', pcm: 'hw:CARD=Boom,DEV=0'),
+        ],
+      );
+      final (container, target, proxy) = await start(box);
+      final change = container.read(soundcardChangeProvider(target).notifier);
+
+      expect(await change.apply(card), SoundcardOutcome.notBack);
+      expect(await change.keepWaiting(card), SoundcardOutcome.playing);
+      expect(proxy.updates.single.$2, {'output.device': 'hw:CARD=Boom,DEV=0'});
+    });
+
+    test('no HAT needs no card to come up', () async {
+      final box = FakeBox(
+        restarts: true,
+        answers: [null, supervisorInfo()],
+        reports: [soundcardReport()],
       );
       final (container, target, proxy) = await start(box);
 
-      await container
+      final outcome = await container
           .read(soundcardChangeProvider(target).notifier)
           .apply(
             const SoundcardOption(name: 'none', label: 'No HAT', kind: 'none'),
           );
 
+      expect(outcome, SoundcardOutcome.noHat);
       expect(proxy.updates, isEmpty);
       expect(toasts(container).last, 'The box is back, set up without a HAT.');
     });
 
     test('a refusal leaves nothing in progress', () async {
-      final box = _Box()..refusal = const BoxActionException('busy', 'Busy.');
+      final box = FakeBox()
+        ..refusal = const BoxActionException('busy', 'Busy.');
       final (container, target, _) = await start(box);
 
       await expectLater(
@@ -533,19 +462,21 @@ void main() {
   group('soundcardSummary', () {
     test('names the DAC that plays', () {
       expect(
-        soundcardSummary(_report(name: 'HiFiBerry Digi2 Pro', pcm: 'hw:0')),
+        soundcardSummary(
+          soundcardReport(name: 'HiFiBerry Digi2 Pro', pcm: 'hw:0'),
+        ),
         'HiFiBerry Digi2 Pro',
       );
     });
 
     test('says what was found and not yet switched on', () {
       expect(
-        soundcardSummary(_report(suggested: ['hifiberry-digi-pro'])),
+        soundcardSummary(soundcardReport(suggested: ['hifiberry-digi-pro'])),
         'HiFiBerry Digi+ Pro or Digi2 Pro found. Choose it to switch it on',
       );
       expect(
         soundcardSummary(
-          _report(suggested: ['hifiberry-digi-pro', 'justboom-dac']),
+          soundcardReport(suggested: ['hifiberry-digi-pro', 'justboom-dac']),
         ),
         'A DAC HAT found. Choose your board',
       );
@@ -553,31 +484,75 @@ void main() {
 
     test('says when the card set up did not come up', () {
       expect(
-        soundcardSummary(_report(configured: 'justboom-dac')),
+        soundcardSummary(soundcardReport(configured: 'justboom-dac')),
         'JustBoom DAC HAT, not detected',
       );
-      expect(soundcardSummary(_report()), 'No DAC HAT found');
+      expect(soundcardSummary(soundcardReport()), 'No DAC HAT found');
     });
 
     test('names a USB DAC on a box without a HAT', () {
       expect(
-        soundcardSummary(_report(usb: ['Topping D50s'])),
+        soundcardSummary(soundcardReport(usb: ['Topping D50s'])),
         'No DAC HAT. USB DAC: Topping D50s',
       );
       expect(
         soundcardSummary(
-          _report(usb: ['Topping D50s'], suggested: ['hifiberry-digi-pro']),
+          soundcardReport(
+            usb: ['Topping D50s'],
+            suggested: ['hifiberry-digi-pro'],
+          ),
         ),
         'HiFiBerry Digi+ Pro or Digi2 Pro found. Choose it to switch it on',
       );
     });
   });
 
+  group('soundcardTrouble', () {
+    test('has nothing to say while a card plays or none was found', () {
+      expect(
+        soundcardTrouble(soundcardReport(name: 'DAC', pcm: 'hw:0')),
+        isNull,
+      );
+      expect(soundcardTrouble(soundcardReport()), isNull);
+      expect(soundcardTrouble(soundcardReport(usb: ['Topping D50s'])), isNull);
+    });
+
+    test('names a card found and not set up', () {
+      expect(
+        soundcardTrouble(
+          soundcardReport(
+            name: 'HiFiBerry Digi2 Pro',
+            suggested: ['hifiberry-digi-pro'],
+          ),
+        ),
+        'HiFiBerry Digi2 Pro was found but is not set up, so nothing plays '
+        'through it yet.',
+      );
+      expect(
+        soundcardTrouble(
+          soundcardReport(suggested: ['hifiberry-digi-pro', 'justboom-dac']),
+        ),
+        startsWith('A DAC HAT was found'),
+      );
+    });
+
+    test('says a card set up that did not come up', () {
+      expect(
+        soundcardTrouble(soundcardReport(configured: 'justboom-dac')),
+        startsWith('JustBoom DAC HAT is set up but did not come up'),
+      );
+    });
+  });
+
   group('in settings', () {
-    Future<_Box> pump(WidgetTester tester, Widget child, {_Box? box}) async {
-      box ??= _Box(
+    Future<FakeBox> pump(
+      WidgetTester tester,
+      Widget child, {
+      FakeBox? box,
+    }) async {
+      box ??= FakeBox(
         reports: [
-          _report(
+          soundcardReport(
             name: 'HiFiBerry Digi2 Pro',
             suggested: ['hifiberry-digi-pro'],
           ),
@@ -645,9 +620,9 @@ void main() {
         final box = await pump(
           tester,
           const BoxSection(),
-          box: _Box(
+          box: FakeBox(
             reports: [
-              _report(
+              soundcardReport(
                 name: 'HiFiBerry Digi2 Pro',
                 configured: 'hifiberry-digi-pro',
                 pcm: 'hw:CARD=sndrpihifiberry,DEV=0',
@@ -679,39 +654,6 @@ void main() {
         const RendererSoundcardSection(rendererId: 'r-elsewhere'),
       );
       expect(find.text('SOUND CARD'), findsNothing);
-    });
-
-    testWidgets('setup points at the gear while the HAT is silent', (
-      tester,
-    ) async {
-      await pump(tester, const SoundcardHint(rendererIds: ['r-local']));
-      expect(find.textContaining('Using a DAC HAT?'), findsOneWidget);
-    });
-
-    testWidgets('setup says nothing while a USB DAC is plugged in', (
-      tester,
-    ) async {
-      await pump(
-        tester,
-        const SoundcardHint(rendererIds: ['r-local']),
-        box: _Box(
-          reports: [
-            _report(usb: ['Topping D50s']),
-          ],
-        ),
-      );
-      expect(find.textContaining('Using a DAC HAT?'), findsNothing);
-    });
-
-    testWidgets('setup says nothing once a card plays', (tester) async {
-      await pump(
-        tester,
-        const SoundcardHint(rendererIds: ['r-local', 'r-elsewhere']),
-        box: _Box(
-          reports: [_report(name: 'DAC', pcm: 'hw:CARD=DAC,DEV=0')],
-        ),
-      );
-      expect(find.textContaining('Using a DAC HAT?'), findsNothing);
     });
 
     testWidgets('the local output shows its box’s sound card', (tester) async {

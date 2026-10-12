@@ -529,19 +529,17 @@ void main() {
   group('RendererSettingsScreen', () {
     // The panel carries no Scaffold of its own — it is hosted inside
     // MusicPlayerScreen's, which is where Material comes from.
-    Widget wrap(KalinkaPlayerProxy api, {double? maxContentWidth}) =>
-        ProviderScope(
-          overrides: overrides(api),
-          child: MaterialApp(
-            home: Scaffold(
-              body: RendererSettingsScreen(
-                rendererId: rendererId,
-                rendererName: 'Living Room',
-                maxContentWidth: maxContentWidth,
-              ),
-            ),
+    Widget wrap(KalinkaPlayerProxy api) => ProviderScope(
+      overrides: overrides(api),
+      child: MaterialApp(
+        home: Scaffold(
+          body: RendererSettingsScreen(
+            rendererId: rendererId,
+            rendererName: 'Living Room',
           ),
-        );
+        ),
+      ),
+    );
 
     // As [wrap], with a known renderer list for the address badge to read.
     Widget wrapWithList(KalinkaPlayerProxy api, List<RendererInfo> rows) =>
@@ -576,29 +574,6 @@ void main() {
       expect(find.text('Reset'), findsNothing);
       expect(find.text('SPEAKER TEST'), findsOneWidget);
       expect(find.text('Test settings'), findsOneWidget);
-    });
-
-    testWidgets('a capped panel centres its column on a wide window', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1200, 900);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(wrap(_FakeApi()));
-      await tester.pumpAndSettle();
-      // Uncapped (the player): the panel fills what it is given.
-      expect(tester.getRect(find.byIcon(Icons.arrow_back)).left, lessThan(50));
-      expect(tester.getRect(find.text('EXPERT')).right, greaterThan(1000));
-
-      await tester.pumpWidget(wrap(_FakeApi(), maxContentWidth: 600));
-      await tester.pumpAndSettle();
-      final back = tester.getRect(find.byIcon(Icons.arrow_back));
-      final expert = tester.getRect(find.text('EXPERT'));
-      expect(back.left, greaterThan(300));
-      expect(back.left, lessThan(350));
-      expect(expert.right, greaterThan(780));
-      expect(expert.right, lessThan(900));
     });
 
     testWidgets('the page proper shows nothing the renderer marked expert', (
