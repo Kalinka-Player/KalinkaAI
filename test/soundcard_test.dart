@@ -15,6 +15,7 @@ import 'package:kalinka/providers/soundcard_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/widgets/box_section.dart';
+import 'package:kalinka/widgets/settings_controls/option_picker.dart';
 import 'package:kalinka/widgets/soundcard_row.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -44,11 +45,13 @@ SoundcardReport _report({
   String? name,
   String? configured,
   String? pcm,
+  List<String> usb = const [],
   List<String> suggested = const [],
 }) => SoundcardReport(
   name: name,
   configured: configured,
   activePcm: pcm,
+  usb: usb,
   suggested: suggested,
   options: _options,
 );
@@ -223,6 +226,10 @@ void main() {
           'id': 'sndrpihifiberry',
           'pcm': 'hw:CARD=sndrpihifiberry,DEV=0',
         },
+        'usb': [
+          {'id': 'D50s', 'name': 'Topping D50s', 'pcm': 'hw:CARD=D50s,DEV=0'},
+          {'id': 'broken'},
+        ],
         'suggested': ['hifiberry-digi-pro'],
         'options': [
           {
@@ -236,6 +243,7 @@ void main() {
       })!;
       expect(report.name, 'HiFiBerry Digi2 Pro');
       expect(report.activePcm, 'hw:CARD=sndrpihifiberry,DEV=0');
+      expect(report.usb, ['Topping D50s']);
       expect(report.options.single.label, 'HiFiBerry Digi+ Pro');
       expect(report.option('hifiberry-digi-pro')!.kind, 'digital');
     });
@@ -550,6 +558,19 @@ void main() {
       );
       expect(soundcardSummary(_report()), 'No DAC HAT found');
     });
+
+    test('names a USB DAC on a box without a HAT', () {
+      expect(
+        soundcardSummary(_report(usb: ['Topping D50s'])),
+        'No DAC HAT. USB DAC: Topping D50s',
+      );
+      expect(
+        soundcardSummary(
+          _report(usb: ['Topping D50s'], suggested: ['hifiberry-digi-pro']),
+        ),
+        'HiFiBerry Digi+ Pro or Digi2 Pro found. Choose it to switch it on',
+      );
+    });
   });
 
   group('in settings', () {
@@ -618,6 +639,38 @@ void main() {
       expect(box.applied, isEmpty);
     });
 
+    testWidgets(
+      'the card the HAT set up is chosen, and choosing it is no change',
+      (tester) async {
+        final box = await pump(
+          tester,
+          const BoxSection(),
+          box: _Box(
+            reports: [
+              _report(
+                name: 'HiFiBerry Digi2 Pro',
+                configured: 'hifiberry-digi-pro',
+                pcm: 'hw:CARD=sndrpihifiberry,DEV=0',
+              ),
+            ],
+          ),
+        );
+        expect(find.text('HiFiBerry Digi2 Pro'), findsOneWidget);
+
+        await tester.tap(find.text('Sound card'));
+        await tester.pumpAndSettle();
+        final chosen = tester
+            .widgetList<OptionRow>(find.byType(OptionRow))
+            .where((row) => row.selected);
+        expect(chosen.single.option.value, 'hifiberry-digi-pro');
+
+        await tester.tap(find.text('HiFiBerry Digi+ Pro or Digi2 Pro'));
+        await tester.pumpAndSettle();
+        expect(find.text('Change the sound card?'), findsNothing);
+        expect(box.applied, isEmpty);
+      },
+    );
+
     testWidgets('an output on a box that cannot set a card up has no section', (
       tester,
     ) async {
@@ -633,6 +686,21 @@ void main() {
     ) async {
       await pump(tester, const SoundcardHint(rendererIds: ['r-local']));
       expect(find.textContaining('Using a DAC HAT?'), findsOneWidget);
+    });
+
+    testWidgets('setup says nothing while a USB DAC is plugged in', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const SoundcardHint(rendererIds: ['r-local']),
+        box: _Box(
+          reports: [
+            _report(usb: ['Topping D50s']),
+          ],
+        ),
+      );
+      expect(find.textContaining('Using a DAC HAT?'), findsNothing);
     });
 
     testWidgets('setup says nothing once a card plays', (tester) async {
