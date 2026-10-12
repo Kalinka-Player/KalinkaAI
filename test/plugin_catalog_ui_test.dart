@@ -1180,7 +1180,11 @@ void main() {
     expect(tabStyle.fontFamily, KalinkaFonts.monoFamily);
     expect(tabStyle.letterSpacing, 1);
     expect(tabStyle.color, KalinkaColors.textPrimary);
-    expect(_headingSpans(tester, 'More sources').first.style, explanationStyle);
+    // Section names are set as the shelves over tracks and albums.
+    expect(
+      _headingSpans(tester, 'MORE SOURCES').first.style,
+      KalinkaTextStyles.sectionLabel.copyWith(color: KalinkaColors.textPrimary),
+    );
     final row = find.byKey(const ValueKey('plugin-jamendo'));
     final text = tester
         .widgetList<Text>(find.descendant(of: row, matching: find.byType(Text)))
@@ -1218,8 +1222,8 @@ void main() {
     );
     await _screen(tester, container);
     _expectTab(tester, PluginTab.sources);
-    // No Updates tab while the server reports none.
-    expect(find.byKey(const ValueKey('catalog-tab-updates')), findsNothing);
+    // Updates head each list rather than having a tab of their own.
+    expect(find.text('UPDATES'), findsNothing);
     expect(find.byType(ChoiceChip), findsNothing);
     // The berry line sits on the grey rule that runs the whole width.
     final tabs = tester.getRect(find.byKey(const ValueKey('catalog-tabs')));
@@ -1297,23 +1301,23 @@ void main() {
         'qobuz',
         'spotify',
       ]);
-      expect(find.text('Your sources · 3'), findsOneWidget);
-      expect(find.text('More sources · 2'), findsOneWidget);
+      expect(find.text('YOUR SOURCES · 3'), findsOneWidget);
+      expect(find.text('MORE SOURCES · 2'), findsOneWidget);
       expect(find.bySemanticsLabel('Your sources, 3'), findsOneWidget);
       expect(find.bySemanticsLabel('More sources, 2'), findsOneWidget);
       expect(
-        _headingSpans(tester, 'Your sources · 3').last.style!.color,
-        KalinkaColors.textSecondary,
+        _headingSpans(tester, 'YOUR SOURCES · 3').last.style!.color,
+        KalinkaColors.textMuted,
       );
       expect(
-        tester.getRect(find.textContaining('More sources')).top,
+        tester.getRect(find.textContaining('MORE SOURCES')).top,
         greaterThan(
           tester.getRect(find.byKey(const ValueKey('entry-upnp'))).bottom,
         ),
       );
       // The two sections stand further apart than rows do.
       final gap =
-          tester.getRect(find.textContaining('More sources')).top -
+          tester.getRect(find.textContaining('MORE SOURCES')).top -
           tester.getRect(find.byKey(const ValueKey('entry-upnp'))).bottom;
       expect(gap, greaterThanOrEqualTo(32));
       // Every row ends in one chevron, installed or not.
@@ -1535,7 +1539,7 @@ void main() {
         tester.getRect(bar).bottom,
       );
       expect(
-        tester.getRect(find.text('More sources · 5')).top -
+        tester.getRect(find.text('MORE SOURCES · 5')).top -
             tester.getRect(find.byKey(const ValueKey('catalog-tabs'))).bottom,
         24,
       );
@@ -1676,21 +1680,16 @@ void main() {
         final sources = tester.getRect(
           find.byKey(const ValueKey('catalog-tab-sources')),
         );
-        final updates = tester.getRect(
-          find.byKey(const ValueKey('catalog-tab-updates')),
-        );
         expect(sources.left, closeTo(resting.left, 0.1));
-        expect(updates.right, closeTo(resting.right, 0.1));
+        expect(streamer.right, closeTo(resting.right, 0.1));
         expect(sources.right, lessThan(hifi.left));
         expect(hifi.right, lessThan(streamer.left));
-        expect(streamer.right, lessThan(updates.left));
         expect(hifi.width / 12, closeTo(streamer.width / 8, 0.1));
         expect(sources.width / 13, closeTo(streamer.width / 8, 0.1));
         for (final (tab, name) in [
           (PluginTab.sources, 'Music sources'),
           (PluginTab.devices, 'HiFi control'),
           (PluginTab.server, 'Streamer'),
-          (PluginTab.updates, 'Updates'),
         ]) {
           final button = find.byKey(ValueKey('catalog-tab-${tab.name}'));
           final bounds = tester.getRect(button);
@@ -1706,12 +1705,7 @@ void main() {
           );
           expect(label.maxLines, 1);
           expect(label.overflow, TextOverflow.ellipsis);
-          expect(
-            tester.getSemantics(button),
-            isSemantics(
-              label: tab == PluginTab.updates ? '$name, 1 available' : name,
-            ),
-          );
+          expect(tester.getSemantics(button), isSemantics(label: name));
           await tester.tap(button);
           await tester.pumpAndSettle();
           expect(tester.getSemantics(button), isSemantics(isSelected: true));
@@ -3291,7 +3285,7 @@ void main() {
   });
 
   testWidgets(
-    'Updates tab shows only while the server reports updates, bold with its count',
+    'updates head each list, with Update beside the row until it is done',
     (tester) async {
       final api = _CatalogApi(_catalog())
         ..available = const [
@@ -3310,65 +3304,211 @@ void main() {
         api,
         live: _Live(
           ModulesAndDevices(
-            inputModules: [_module('spotify')],
+            inputModules: [_module('spotify'), _module('jamendo')],
             devices: [_module('musiccast')],
           ),
         ),
       );
-      await _screen(tester, container, size: const Size(400, 1400));
-      final tab = find.byKey(const ValueKey('catalog-tab-updates'));
-      expect(tab, findsOneWidget);
+      await _screen(tester, container, size: const Size(900, 1400));
+      expect(find.byKey(const ValueKey('catalog-tab-updates')), findsNothing);
+      // Listed once, above the plugins already up to date.
+      expect(_listed(tester).first, 'spotify');
+      expect(find.text('UPDATE AVAILABLE · 1'), findsOneWidget);
+      expect(find.bySemanticsLabel('Update available, 1'), findsOneWidget);
+      expect(find.text('YOUR SOURCES · 1'), findsOneWidget);
       expect(
-        tester.getSemantics(tab),
-        isSemantics(label: 'Updates, 2 available'),
+        tester.getRect(find.text('UPDATE AVAILABLE · 1')).bottom,
+        lessThan(
+          tester.getRect(find.byKey(const ValueKey('entry-spotify'))).top,
+        ),
       );
-      final label = tester.widget<Text>(
-        find.descendant(of: tab, matching: find.text('UPDATES')),
-      );
-      // Bold and bright even while another tab is selected.
-      expect(label.style!.fontWeight, FontWeight.w700);
-      expect(label.style!.color, KalinkaColors.textPrimary);
       expect(
-        find.descendant(of: tab, matching: find.text('2')),
-        findsOneWidget,
+        tester.getRect(find.byKey(const ValueKey('entry-spotify'))).bottom,
+        lessThan(tester.getRect(find.text('YOUR SOURCES · 1')).top),
       );
       expect(_statusOf(tester, 'spotify'), 'Update available · 0.4.0');
+      final update = find.byKey(const ValueKey('plugin-row-update-spotify'));
+      expect(tester.widget<KalinkaButton>(update).label, 'Update');
+      // Before the chevron, as Add is.
+      final row = find.byKey(const ValueKey('entry-spotify'));
+      expect(
+        tester.getRect(update).right,
+        lessThan(
+          tester
+              .getRect(
+                find.descendant(
+                  of: row,
+                  matching: find.byKey(const ValueKey('plugin-chevron')),
+                ),
+              )
+              .left,
+        ),
+      );
+      expect(
+        find.byKey(const ValueKey('plugin-row-update-jamendo')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('plugin-install-qobuz')),
+        findsOneWidget,
+      );
 
-      await _tapTab(tester, PluginTab.updates);
-      // Every kind of plugin together, all of them installed.
-      expect(_listed(tester).toSet(), {'spotify', 'musiccast'});
-      expect(find.textContaining('More sources'), findsNothing);
-
-      await _open(tester, 'spotify');
-      final update = find.byKey(const ValueKey('plugin-update-spotify'));
-      expect(tester.widget<KalinkaButton>(update).label, 'Update to 0.4.0');
+      api.running = Completer<void>();
       api.available = const [
         PluginUpdate(pluginId: 'musiccast', version: '1.1.0'),
       ];
       await tester.tap(update);
-      await tester.pumpAndSettle();
+      await tester.pump();
       expect(api.runs, [('spotify', PluginOperation.update)]);
-      expect(update, findsNothing);
-      expect(
-        find.descendant(of: tab, matching: find.text('1')),
-        findsOneWidget,
-      );
-      await tester.binding.handlePopRoute();
+      final busy = tester.widget<KalinkaButton>(update);
+      expect(busy.label, 'Updating…');
+      expect(busy.onTap, isNull);
+      expect(_badgeOf(tester, 'spotify')!.label, 'UPDATING');
+      api.running!.complete();
       await tester.pumpAndSettle();
+      // Done: back among the others, with nothing to offer.
+      expect(update, findsNothing);
+      expect(find.textContaining('UPDATE AVAILABLE'), findsNothing);
+      expect(find.text('YOUR SOURCES · 2'), findsOneWidget);
+      expect(_badgeOf(tester, 'spotify')!.label, 'READY');
 
-      // Nothing left to update: the tab goes and the catalog stays.
+      await _tapTab(tester, PluginTab.devices);
+      expect(_listed(tester).first, 'musiccast');
+      expect(find.text('UPDATE AVAILABLE · 1'), findsOneWidget);
+      expect(
+        tester
+            .widget<KalinkaButton>(
+              find.byKey(const ValueKey('plugin-row-update-musiccast')),
+            )
+            .label,
+        'Update',
+      );
+      // Nothing left to update: the section goes.
       api.available = const [];
       container.invalidate(pluginUpdatesProvider);
       await tester.pumpAndSettle();
-      expect(tab, findsNothing);
-      _expectTab(tester, PluginTab.sources);
+      expect(find.textContaining('UPDATE AVAILABLE'), findsNothing);
+      expect(find.text('YOUR CONTROLS · 1'), findsOneWidget);
       // Let the toast time out.
       await tester.pump(const Duration(seconds: 10));
       expect(tester.takeException(), isNull);
     },
   );
 
-  testWidgets('a server without update checks never shows the Updates tab', (
+  for (final (size, scale) in [
+    (const Size(900, 1400), 1.0),
+    (const Size(320, 900), 1.8),
+  ]) {
+    testWidgets('the configuration page offers a short Update before Uninstall '
+        'at ${size.width.round()} px, ${scale}x text', (tester) async {
+      final api = _CatalogApi(_catalog())
+        ..available = const [
+          PluginUpdate(pluginId: 'spotify', version: '0.4.0'),
+        ];
+      final container = await _container(
+        _Proxy({
+          'enabled': true,
+          'catalog_browsing': true,
+          'installation': true,
+          'update_checks': true,
+        }),
+        api,
+        live: _Live(
+          ModulesAndDevices(inputModules: [_module('spotify')], devices: []),
+        ),
+      );
+      await _screen(
+        tester,
+        container,
+        size: size,
+        scale: scale,
+        disableAnimations: scale > 1,
+      );
+      // By its name: on a narrow phone the row's own Update sits mid-row.
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('entry-spotify')),
+          matching: find.text('Spotify Connect'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(PluginSettingsScreen), findsOneWidget);
+      final update = find.byKey(const ValueKey('plugin-update-spotify'));
+      await tester.scrollUntilVisible(
+        update,
+        100,
+        scrollable: _onPage<PluginSettingsScreen>(find.byType(Scrollable))
+            .first,
+      );
+      await tester.pumpAndSettle();
+      final button = tester.widget<KalinkaButton>(update);
+      expect(button.label, 'Update');
+      expect(button.size, KalinkaButtonSize.compact);
+      expect(button.fullWidth, isFalse);
+      final updateRect = tester.getRect(update);
+      final uninstall = tester.getRect(
+        find.byKey(const ValueKey('plugin-uninstall-spotify')),
+      );
+      if (scale == 1) {
+        // Side by side, Update first.
+        expect(updateRect.right, lessThan(uninstall.left));
+        expect(updateRect.center.dy, closeTo(uninstall.center.dy, 0.5));
+      } else {
+        expect(updateRect.top, lessThanOrEqualTo(uninstall.top));
+      }
+      expect(updateRect.right, lessThanOrEqualTo(size.width));
+      expect(uninstall.right, lessThanOrEqualTo(size.width));
+
+      api.running = Completer<void>();
+      await tester.tap(update);
+      await tester.pump();
+      expect(api.runs, [('spotify', PluginOperation.update)]);
+      expect(tester.widget<KalinkaButton>(update).label, 'Updating…');
+      expect(tester.widget<KalinkaButton>(update).enabled, isFalse);
+      api.available = const [];
+      api.running!.complete();
+      await tester.pumpAndSettle();
+      expect(update, findsNothing);
+      await tester.pump(const Duration(seconds: 10));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('a server that checks but cannot update says so once', (
+    tester,
+  ) async {
+    final api = _CatalogApi(_catalog())
+      ..available = const [PluginUpdate(pluginId: 'spotify', version: '0.4.0')];
+    final container = await _container(
+      _Proxy({
+        'enabled': true,
+        'catalog_browsing': true,
+        'update_checks': true,
+      }),
+      api,
+      live: _Live(
+        ModulesAndDevices(inputModules: [_module('spotify')], devices: []),
+      ),
+    );
+    await _screen(tester, container, size: const Size(400, 1400));
+    final update = tester.widget<KalinkaButton>(
+      find.byKey(const ValueKey('plugin-row-update-spotify')),
+    );
+    expect(update.enabled, isFalse);
+    final note = find.byKey(const ValueKey('catalog-manage-note'));
+    expect(note, findsOneWidget);
+    expect(
+      tester.getRect(note).top,
+      greaterThan(tester.getRect(find.text('UPDATE AVAILABLE · 1')).bottom),
+    );
+    expect(
+      tester.getRect(note).bottom,
+      lessThan(tester.getRect(find.byKey(const ValueKey('entry-spotify'))).top),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a server without update checks never offers an update', (
     tester,
   ) async {
     final api = _CatalogApi(_catalog())
@@ -3381,7 +3521,11 @@ void main() {
       ),
     );
     await _screen(tester, container, size: const Size(400, 1400));
-    expect(find.byKey(const ValueKey('catalog-tab-updates')), findsNothing);
+    expect(find.textContaining('UPDATE AVAILABLE'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('plugin-row-update-spotify')),
+      findsNothing,
+    );
     expect(_badgeOf(tester, 'spotify')!.label, 'READY');
     await _open(tester, 'spotify');
     expect(find.byKey(const ValueKey('plugin-update-spotify')), findsNothing);
@@ -3420,7 +3564,7 @@ void main() {
     // Under the heading it holds back, not under each plugin.
     expect(
       tester.getRect(note).top,
-      greaterThan(tester.getRect(find.textContaining('More sources')).bottom),
+      greaterThan(tester.getRect(find.textContaining('MORE SOURCES')).bottom),
     );
     expect(
       tester.getRect(note).bottom,
