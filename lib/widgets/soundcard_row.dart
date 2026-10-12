@@ -61,11 +61,14 @@ String soundcardSummary(SoundcardReport report) {
     return '$found found. Choose it to switch it on';
   }
   if (suggested.isNotEmpty) return 'A DAC HAT found. Choose your board';
+  if (report.usb.isNotEmpty) {
+    return 'No DAC HAT. USB DAC: ${report.usb.join(', ')}';
+  }
   return 'No DAC HAT found';
 }
 
-/// Lets the person pick a card for [box], confirms it, and applies it. A
-/// refusal is reported in a toast.
+/// Lets the person pick a card for [box], confirms it, and applies it. The
+/// card already set up needs nothing; a refusal is reported in a toast.
 Future<void> chooseSoundcard(
   BuildContext context,
   WidgetRef ref,
@@ -79,7 +82,9 @@ Future<void> chooseSoundcard(
     contentBuilder: (_) => SoundcardPicker(report: report),
   );
   final card = report.option(picked);
-  if (card == null || !context.mounted) return;
+  if (card == null || card.name == report.configured || !context.mounted) {
+    return;
+  }
   final confirmed = await showKalinkaDialog<bool>(
     context: context,
     builder: (_) => _ConfirmSoundcard(card: card),
@@ -216,7 +221,8 @@ class RendererSoundcardSection extends ConsumerWidget {
 }
 
 /// A pointer to an output's gear while the Raspberry Pi it runs on has no
-/// sound card up, so a DAC HAT is set up before setup finishes.
+/// sound card up, not even over USB, so a DAC HAT is set up before setup
+/// finishes.
 class SoundcardHint extends ConsumerWidget {
   final List<String> rendererIds;
 
@@ -230,7 +236,8 @@ class SoundcardHint extends ConsumerWidget {
       final report = box == null
           ? null
           : ref.watch(soundcardReportProvider(box)).value;
-      silent |= report != null && report.activePcm == null;
+      silent |=
+          report != null && report.activePcm == null && report.usb.isEmpty;
     }
     if (!silent) return const SizedBox.shrink();
     return Padding(

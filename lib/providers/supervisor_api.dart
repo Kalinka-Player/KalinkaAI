@@ -145,12 +145,16 @@ class SoundcardReport {
   /// The DAC as a person would call it, or null when the box knows none.
   final String? name;
 
-  /// The card the boot configuration sets up, or null.
+  /// The card the boot configuration sets up, else the one the firmware sets
+  /// up from the HAT's ID chip, or null.
   final String? configured;
 
   /// The ALSA device the renderer opens the card that came up by, or null
   /// while none is up.
   final String? activePcm;
+
+  /// The USB DACs plugged in, by name; they play with nothing set up here.
+  final List<String> usb;
 
   /// The cards the hardware points to, most likely first.
   final List<String> suggested;
@@ -161,6 +165,7 @@ class SoundcardReport {
     this.name,
     this.configured,
     this.activePcm,
+    this.usb = const [],
     this.suggested = const [],
     required this.options,
   });
@@ -174,6 +179,7 @@ class SoundcardReport {
     final options = json['options'];
     if (options is! List) return null;
     final active = json['active'];
+    final usb = json['usb'];
     final suggested = json['suggested'];
     return SoundcardReport(
       name: json['name'] is String ? json['name'] as String : null,
@@ -183,6 +189,11 @@ class SoundcardReport {
       activePcm: active is Map && active['pcm'] is String
           ? active['pcm'] as String
           : null,
+      usb: [
+        if (usb is List)
+          for (final card in usb)
+            if (card is Map && card['name'] is String) card['name'] as String,
+      ],
       suggested: suggested is List
           ? suggested.whereType<String>().toList()
           : const [],
