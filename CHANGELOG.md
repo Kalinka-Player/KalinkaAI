@@ -8,6 +8,25 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.19.0
+
+Configuration replaces Server settings as the one place to add, set up, update and remove plugins and to look after the streamer, and a Raspberry Pi's DAC HAT can be set up from the app. Configuration's plugin operations, the sound card picker and the greyed-out progress bar need server 5.9.0 and supervisor 0.4.0; against older ones the app looks and behaves as before in those places.
+
+### Added
+- Configuration, in the server menu in place of Server settings. Music sources and HiFi control list the plugins your server has and then those it can add; a row opens the plugin's own page with its on/off switch, its settings, About, Update and Uninstall. Add, Update and Uninstall run on the server, which restarts to carry them out: the app follows the restart with the plugin named, then reports how it went on the plugin's row, in the server's words. Each list starts with the installed plugins that have a newer release, with Update right on the row. Streamer edits the server's own settings and leads to Maintenance: restart, system details, server logs, advanced settings and the streamer's restart and power controls. Edits made anywhere in Configuration are applied together from one bar, which names a setting that fails validation and leads to it; leaving with changes not applied asks first.
+- Sound card for a Raspberry Pi streamer. Settings › General › Streamer gains a Sound card row on a Pi whose supervisor can set its card up. It names the DAC the Pi found and whether it plays, and opens a picker: the cards detected on the Pi first, then every other by maker, the Pi's own outputs and no HAT. Applying asks first, since the Pi may restart; the app then follows the Pi back and points its output at the new card. An output's own settings show the same row for the Pi it runs on, including a Pi that runs only a renderer. The setup wizard's speaker test becomes a Sound step that shows the card first, applies the output's playback device on the spot, and carries on at the same step after a restart, even when the app was closed in the meantime.
+
+### Changed
+- The progress bar is grey, without a thumb, while the source playing cannot be seeked, such as an AirPlay stream, and ignores taps and drags. The streamer's display does the same.
+- Play now replaces the queue in one request. A play the server refuses, past the queue limit or on the demo server, leaves your queue as it was instead of empty. Playing a track from a search section starts on that track even when the server leaves out tracks it cannot resolve, and the toast counts the tracks actually queued.
+- "Box" is now "streamer" throughout the app.
+- The settings switch that kept this device on the now-playing display at every start is gone; the Now-playing display button still opens it.
+- Dialogs taller than the screen scroll, and the pending-changes bar wraps its buttons on narrow screens and at large text sizes.
+
+### Fixed
+- Stream details no longer show the previous track's codec after an external source such as Roon takes over, and they open for an external source playing with an empty queue.
+- A replacement whose tracks the server could not resolve shows the server's own message instead of a raw error.
+
 ## 0.18.0
 
 This release needs no server update. Folder browsing, the box controls and the full-queue message come alive with the next server and supervisor releases; until then the app looks and behaves as before in those places.

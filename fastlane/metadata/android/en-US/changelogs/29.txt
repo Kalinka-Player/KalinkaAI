@@ -1,0 +1,5 @@
+- Configuration: add, set up, update and remove plugins, and look after the streamer, in one place (with server 5.9.0)
+- Set up a Raspberry Pi's DAC HAT from the app (with supervisor 0.4.0)
+- Progress bar greys out while the source cannot seek
+- Play now keeps your queue when the server refuses the play
+- "Box" is now "streamer"
