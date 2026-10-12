@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data_model/data_model.dart' show ModuleState;
 import '../data_model/plugin_catalog.dart';
-import '../data_model/plugin_compatibility.dart';
 import '../providers/plugin_catalog_provider.dart'
     show PluginFailure, PluginOperation;
 import '../providers/plugin_state.dart';
@@ -727,31 +726,29 @@ class PluginAbout extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    // Why the button at the top right is out of reach, and what went wrong
-    // with it, right under it.
-    final primary = _primaryFor(plugin, state, actions.canManage);
-    final reason = plugin.bundled
-        ? null
-        : !actions.canManage
-        ? 'This server cannot install, remove or update plugins yet.'
-        : state.installed
-        ? null
-        : primary?.reason;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (reason != null)
-          Padding(
-            key: const ValueKey('about-reason'),
-            padding: const EdgeInsets.only(bottom: 14),
-            child: PluginNote(reason),
-          ),
+        // Whether this server meets the plugin's requirements, said once, at
+        // the top, with the server's reasons where it does not.
+        Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: _CompatibilityBanner(plugin: plugin),
+        ),
         if (state.failure case final failure?)
           Padding(
             padding: const EdgeInsets.only(bottom: 14),
             child: PluginFailureNote(
               failure: failure,
               onDismiss: actions.onDismissFailure,
+            ),
+          ),
+        if (!plugin.bundled && !actions.canManage)
+          const Padding(
+            key: ValueKey('about-reason'),
+            padding: EdgeInsets.only(bottom: 14),
+            child: PluginNote(
+              'This server cannot install, remove or update plugins yet.',
             ),
           ),
         if (plugin.isDevice) ...[
@@ -810,7 +807,6 @@ class PluginAbout extends StatelessWidget {
             ),
           ],
         ),
-        _CompatibilityNotice(plugin: plugin),
         for (final release in plugin.releases) ...[
           _Facts(
             facts: [
@@ -818,6 +814,7 @@ class PluginAbout extends StatelessWidget {
                 'Release',
                 '${release.version} · ${release.channel}${release.withdrawn ? ' · Withdrawn' : ''}',
               ),
+              ('Requires', _requires(release)),
               (
                 'Server platforms',
                 release.platforms
@@ -833,29 +830,6 @@ class PluginAbout extends StatelessWidget {
                     .join(', '),
               ),
             ],
-          ),
-          _RequirementsNotice(
-            warning:
-                plugin.compatibility
-                    ?.release(release.version, release.channel)
-                    ?.status !=
-                'metadata_compatible',
-            text: [
-              [
-                for (final version in release.versions.entries)
-                  '${switch (version.key) {
-                    'sdk' => 'SDK',
-                    'server' => 'Server',
-                    'python' => 'Python',
-                    _ => 'Renderer',
-                  }} ${version.value}',
-                if (release.capabilities.isNotEmpty)
-                  'Required capabilities: ${release.capabilities.join(', ')}',
-              ].join(' · '),
-              _releaseCheck(
-                plugin.compatibility?.release(release.version, release.channel),
-              ),
-            ].where((text) => text.isNotEmpty).join('\n\n'),
           ),
           if (release.withdrawn)
             Padding(
@@ -919,19 +893,28 @@ class PluginAbout extends StatelessWidget {
   }
 }
 
-String _releaseCheck(PluginReleaseCompatibility? result) => [
-  switch (result?.status) {
-    'metadata_compatible' => 'Server check: declared requirements match.',
-    'blocked' => 'Server check: requirements not met.',
-    _ => 'Server check: result unavailable.',
-  },
-  if (result != null)
-    ...result.explanations.map((explanation) => '• $explanation'),
-].join('\n');
+/// What a release declares it needs, as one line of its facts.
+String _requires(CatalogPluginRelease release) => [
+  for (final version in release.versions.entries)
+    '${switch (version.key) {
+      'sdk' => 'SDK',
+      'server' => 'Server',
+      'python' => 'Python',
+      _ => 'Renderer',
+    }} ${version.value}',
+  if (release.capabilities.isNotEmpty)
+    'Capabilities: ${release.capabilities.join(', ')}',
+].join(' · ');
 
-class _CompatibilityNotice extends StatelessWidget {
+String _bullets(Iterable<String> lines) =>
+    lines.map((line) => '• $line').join('\n');
+
+/// Whether this server meets the plugin's requirements, in the server's own
+/// result: met, with the version that matches; not met, with its reasons for
+/// the newest release; or not checked at all.
+class _CompatibilityBanner extends StatelessWidget {
   final CatalogPlugin plugin;
-  const _CompatibilityNotice({required this.plugin});
+  const _CompatibilityBanner({required this.plugin});
 
   @override
   Widget build(BuildContext context) {
@@ -945,44 +928,45 @@ class _CompatibilityNotice extends StatelessWidget {
             : plugin.releases.isEmpty
             ? 'no_releases'
             : 'unknown');
-    final (title, text) = switch (status) {
+    final blocked = result?.newerBlockedRelease ?? result?.releases.firstOrNull;
+    final (title, text, met) = switch (status) {
       'bundle_managed' => (
         'Managed with Kalinka Player',
         'Requirements and updates follow the server bundle. This plugin is not checked as a separate package.',
+        true,
       ),
       'no_releases' => (
         'No release available',
         'No independent catalog release has been published to check.',
+        true,
       ),
       'metadata_compatible' => (
-        'Declared requirements match',
-        result?.latestCompatibleVersion != null
-            ? 'The server reports a requirements match for version ${result!.latestCompatibleVersion} (${result.channel} channel).'
-            : 'The server reports a match for the declared requirements.',
+        'Requirements met',
+        [
+          result?.latestCompatibleVersion != null
+              ? 'Version ${result!.latestCompatibleVersion} (${result.channel}) matches this server.'
+              : 'The declared requirements match this server.',
+          if (result?.newerBlockedRelease case final newer?)
+            newer.explanations.isEmpty
+                ? 'Version ${newer.version} does not.'
+                : 'Version ${newer.version} does not:\n${_bullets(newer.explanations)}',
+        ].join('\n\n'),
+        true,
       ),
       'blocked' => (
         'Requirements not met',
-        'No release in the ${result!.channel} channel matches all declared requirements. See the release checks below.',
+        blocked != null && blocked.explanations.isNotEmpty
+            ? _bullets(blocked.explanations)
+            : 'No ${result!.channel} release matches this server.',
+        false,
       ),
       _ => (
-        'Compatibility unavailable',
-        'This server has not supplied a compatibility result the app can display.',
+        'Requirements not checked',
+        'This server has not reported a compatibility check for this plugin.',
+        false,
       ),
     };
-    return _RequirementsNotice(
-      title: title,
-      warning: !const [
-        'bundle_managed',
-        'no_releases',
-        'metadata_compatible',
-      ].contains(status),
-      text: [
-        text,
-        if (status == 'metadata_compatible' &&
-            result?.newerBlockedRelease != null)
-          'Newer version ${result!.newerBlockedRelease!.version} does not meet the requirements. See its release check below.',
-      ].join('\n\n'),
-    );
+    return _RequirementsBanner(title: title, text: text, warning: !met);
   }
 }
 
@@ -1029,13 +1013,13 @@ class _Facts extends StatelessWidget {
   );
 }
 
-class _RequirementsNotice extends StatelessWidget {
+class _RequirementsBanner extends StatelessWidget {
   final String title, text;
   final bool warning;
-  const _RequirementsNotice({
-    this.title = 'Declared requirements',
+  const _RequirementsBanner({
+    required this.title,
     required this.text,
-    this.warning = true,
+    required this.warning,
   });
   @override
   Widget build(BuildContext context) => Container(

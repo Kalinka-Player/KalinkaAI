@@ -51,6 +51,7 @@ import 'package:kalinka/screens/configuration_review_screen.dart';
 import 'package:kalinka/widgets/plugin_top_bar.dart';
 import 'package:kalinka/widgets/server_chip.dart';
 import 'package:kalinka/widgets/plugin_catalog_entry.dart';
+import 'package:kalinka/widgets/restart_overlay.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/queue_zone.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
@@ -112,6 +113,10 @@ class _Restart extends RestartNotifier {
   final bool fail;
   _Restart({this.fail = false});
   int calls = 0;
+  final followed = <String>[];
+
+  /// What the next followed restart ends in: done, abandoned or an error.
+  String follow = 'done';
   @override
   RestartState build() => const RestartState();
   @override
@@ -126,6 +131,35 @@ class _Restart extends RestartNotifier {
     }
     await ref.read(settingsProvider.notifier).applyChanges();
     state = const RestartState(isRestarting: true, isDone: true);
+  }
+
+  @override
+  Future<void> followRestart({String subtitle = ''}) async {
+    followed.add(subtitle);
+    // Each restart begins afresh, as the real one does once dismissed, and
+    // takes a moment, as the real one does.
+    state = const RestartState();
+    state = RestartState(
+      isRestarting: true,
+      currentStep: RestartStep.starting,
+      subtitle: subtitle,
+    );
+    await Future<void>.delayed(const Duration(seconds: 1));
+    state = switch (follow) {
+      'error' => RestartState(
+        isRestarting: true,
+        error: 'Server did not come back after restart.',
+        subtitle: subtitle,
+      ),
+      'abandoned' => const RestartState(),
+      _ => RestartState(isRestarting: true, isDone: true, subtitle: subtitle),
+    };
+    // Done puts itself away a moment later, as the real one does.
+    if (state.isDone) {
+      Timer(const Duration(milliseconds: 2200), () {
+        if (ref.mounted) state = const RestartState();
+      });
+    }
   }
 }
 
@@ -174,14 +208,27 @@ class _CatalogApi implements PluginCatalogApi {
   Completer<void>? running;
   String? refusal;
 
+  /// Whether the server restarts to carry an accepted operation out, and
+  /// what its helper then has to say about it.
+  bool restarts = false;
+  PluginOperationRecord? record;
+  int recordReads = 0;
+
   @override
   Future<List<PluginUpdate>> updates() async => available;
 
   @override
-  Future<void> run(String pluginId, PluginOperation operation) async {
+  Future<bool> run(String pluginId, PluginOperation operation) async {
     runs.add((pluginId, operation));
     await running?.future;
     if (refusal case final refusal?) throw PluginCatalogException(refusal);
+    return restarts;
+  }
+
+  @override
+  Future<PluginOperationRecord?> lastOperation() async {
+    recordReads++;
+    return record;
   }
 }
 
@@ -2159,22 +2206,22 @@ void main() {
     expect(find.byKey(const ValueKey('plugin-jamendo')), findsOneWidget);
   });
 
-  for (final (status, heading, releaseText) in [
+  for (final (status, heading, detail) in [
     (
       'metadata_compatible',
-      'Declared requirements match',
-      'Server check: declared requirements match.',
+      'Requirements met',
+      'Version 5.0.1 (stable) matches this server.',
     ),
-    ('blocked', 'Requirements not met', 'Server check: requirements not met.'),
+    ('blocked', 'Requirements not met', 'SDK 1.0 does not meet >=2.'),
     (
       'unknown_future_status',
-      'Compatibility unavailable',
-      'Server check: result unavailable.',
+      'Requirements not checked',
+      'has not reported a compatibility check',
     ),
     (
       'missing',
-      'Compatibility unavailable',
-      'Server check: result unavailable.',
+      'Requirements not checked',
+      'has not reported a compatibility check',
     ),
   ]) {
     testWidgets(
@@ -2252,11 +2299,29 @@ void main() {
             .map((text) => text.data ?? '')
             .join('\n');
         expect(text, contains(heading));
-        expect(text, contains(releaseText));
+        expect(text, contains(detail));
+        // Said once, at the top, with its reasons; nothing below repeats it,
+        // and each release states what it requires as a plain fact.
+        expect('\n$text\n'.split('\n$heading\n'), hasLength(2));
+        for (final repeat in [
+          'Server check',
+          'Declared requirements',
+          'No release meets',
+          'Compatibility with this server has not been checked',
+        ]) {
+          expect(text, isNot(contains(repeat)));
+        }
         expect(
           text,
-          isNot(
-            contains('Compatibility with this server has not been checked'),
+          contains('Server >=5.2,<6 · SDK >=3.4,<4 · Python >=3.10'),
+        );
+        final qobuz = api.result.plugins.singleWhere((p) => p.id == 'qobuz');
+        expect(
+          tester.getRect(find.text(heading, skipOffstage: false)).top,
+          lessThan(
+            tester
+                .getRect(find.text(qobuz.description, skipOffstage: false))
+                .top,
           ),
         );
         if (status == 'blocked') {
@@ -2271,9 +2336,6 @@ void main() {
               'qobuz.deb: Server distribution debian 12 is not supported.',
             ),
           );
-        }
-        if (status == 'metadata_compatible') {
-          expect(text, contains('version 5.0.1 (stable channel)'));
         }
         expect(text, contains('Catalog signatures are not verified'));
         expect(
@@ -2323,20 +2385,13 @@ void main() {
     );
     await _screen(tester, container);
     await _about(tester, 'qobuz');
-    expect(
-      find.textContaining(
-        'version 5.0.1 (stable channel)',
-        skipOffstage: false,
-      ),
-      findsOneWidget,
+    // Both in the one banner, the match and what it leaves out.
+    final banner = find.textContaining(
+      'Version 5.0.1 (stable) matches this server.',
+      skipOffstage: false,
     );
-    expect(
-      find.textContaining(
-        'Newer version 6.0 does not meet the requirements',
-        skipOffstage: false,
-      ),
-      findsOneWidget,
-    );
+    expect(banner, findsOneWidget);
+    expect(tester.widget<Text>(banner).data, contains('Version 6.0 does not.'));
   });
 
   testWidgets(
@@ -3447,6 +3502,134 @@ void main() {
       await _about(tester, 'qobuz');
       expect(find.text(qobuz.description), findsOneWidget);
       expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'an accepted operation follows the server\'s restart and reports what the helper left behind',
+    (tester) async {
+      final api = _CatalogApi(_catalog())..restarts = true;
+      final live = _Live(
+        ModulesAndDevices(
+          inputModules: [_module('localfiles'), _module('spotify')],
+          devices: [],
+        ),
+      );
+      final restart = _Restart();
+      final container = await _container(
+        _Proxy({
+          'enabled': true,
+          'catalog_browsing': true,
+          'installation': true,
+        }),
+        api,
+        live: live,
+        restart: restart,
+      );
+      await _screen(tester, container);
+      List<String> toasts() =>
+          container.read(toastProvider).map((t) => t.message).toList();
+
+      final install = find.byKey(const ValueKey('plugin-install-qobuz'));
+      await tester.scrollUntilVisible(install, 150, scrollable: _scrollable);
+      await tester.pumpAndSettle();
+      api.running = Completer<void>();
+      await tester.tap(install);
+      await tester.pump();
+      expect(restart.followed, isEmpty);
+      expect(find.byType(RestartOverlay), findsNothing);
+
+      // Accepted: the server restarts, and that shows here as Apply's does,
+      // naming the plugin. Nothing is claimed until it is back.
+      live.value = ModulesAndDevices(
+        inputModules: [..._liveInputs(live), _module('qobuz')],
+        devices: [],
+      );
+      api.running!.complete();
+      api.running = null;
+      await tester.pump();
+      await tester.pump();
+      expect(restart.followed, ['Adding Qobuz\u2026']);
+      expect(find.byType(RestartOverlay), findsOneWidget);
+      expect(find.text('Adding Qobuz\u2026'), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(toasts(), contains('Qobuz installed'));
+      // The overlay puts itself away a moment after the server is back.
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      expect(find.byType(RestartOverlay), findsNothing);
+      expect(api.recordReads, 1);
+      expect(_badgeOf(tester, 'qobuz')!.label, 'READY');
+
+      // The helper's failure is the plugin's, in the server's words, and
+      // nothing is toasted as done.
+      api.record = const PluginOperationRecord(
+        pluginId: 'spotify',
+        operation: PluginOperation.uninstall,
+        status: 'failed',
+        error: 'apt-get did not complete; see the restart service\'s log.',
+      );
+      Future<void> confirmUninstall() async {
+        await tester.tap(
+          find.byKey(const ValueKey('plugin-uninstall-spotify')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('The server restarts without it'),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.descendant(
+            of: find.byType(KalinkaDialog),
+            matching: find.text('Uninstall'),
+          ),
+        );
+        // Through the followed restart, which takes a moment, and the overlay
+        // putting itself away a moment after; one left showing an error stays
+        // until dismissed, spinner and all.
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pump(const Duration(seconds: 3));
+        final dismiss = find.descendant(
+          of: find.byType(RestartOverlay),
+          matching: find.text('Dismiss'),
+        );
+        if (dismiss.evaluate().isNotEmpty) await tester.tap(dismiss);
+        await tester.pumpAndSettle();
+      }
+
+      await _open(tester, 'spotify');
+      await confirmUninstall();
+      expect(restart.followed.last, 'Uninstalling Spotify Connect\u2026');
+      expect(toasts(), isNot(contains('Spotify Connect uninstalled')));
+      Finder failure() => _onPage<PluginSettingsScreen>(
+        find.byKey(const ValueKey('plugin-failure')),
+      );
+      expect(
+        tester.widget<Text>(failure()).textSpan!.toPlainText(),
+        'Uninstall failed. ${api.record!.error}',
+      );
+
+      // A record about another plugin says nothing about this one, and a
+      // wait given up claims nothing either way.
+      api.record = const PluginOperationRecord(
+        pluginId: 'other',
+        status: 'failed',
+        error: 'Unrelated.',
+      );
+      restart.follow = 'abandoned';
+      await confirmUninstall();
+      expect(toasts(), isNot(contains('Spotify Connect uninstalled')));
+      expect(failure(), findsNothing);
+      expect(api.recordReads, 2);
+
+      // A server that never came back leaves the outcome unknown, and says so.
+      restart.follow = 'error';
+      await confirmUninstall();
+      expect(
+        tester.widget<Text>(failure()).textSpan!.toPlainText(),
+        contains('did not come back'),
+      );
+      expect(api.recordReads, 2);
     },
   );
 }

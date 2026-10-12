@@ -110,6 +110,99 @@ void main() {
     );
   }
 
+  test('follows a restart the server began on its own', () {
+    fakeAsync((clock) {
+      final api = _Api();
+      final container = ProviderContainer(
+        overrides: [
+          sharedPrefsProvider.overrideWithValue(prefs),
+          kalinkaProxyProvider.overrideWithValue(api),
+          boxControlProvider.overrideWith((ref) async => null),
+        ],
+      );
+      container
+          .read(restartProvider.notifier)
+          .followRestart(subtitle: 'Adding Qobuz\u2026');
+      clock.flushMicrotasks();
+      final started = container.read(restartProvider);
+      expect(started.isRestarting, isTrue);
+      expect(started.subtitle, 'Adding Qobuz\u2026');
+      // The server saved nothing and was told nothing: that was its own doing.
+      expect(started.completedSteps, {RestartStep.saving});
+      expect(started.currentStep, RestartStep.stopping);
+      clock.elapse(const Duration(minutes: 2));
+      expect(api.restarts, 0);
+      expect(container.read(restartProvider).isDone, isFalse);
+
+      api.online = true;
+      clock.elapse(const Duration(seconds: 2));
+      clock.flushMicrotasks();
+      expect(container.read(restartProvider).isDone, isTrue);
+      expect(api.reads, 1);
+      container.dispose();
+    });
+  });
+
+  test('a followed restart counts the server back only once it has gone', () {
+    fakeAsync((clock) {
+      final api = _Api()..online = true;
+      final container = ProviderContainer(
+        overrides: [
+          sharedPrefsProvider.overrideWithValue(prefs),
+          kalinkaProxyProvider.overrideWithValue(api),
+          boxControlProvider.overrideWith((ref) async => null),
+        ],
+      );
+      container.read(restartProvider.notifier).followRestart();
+      clock.flushMicrotasks();
+      // The server answers for as long as its helper downloads the package.
+      clock.elapse(const Duration(seconds: 30));
+      final waiting = container.read(restartProvider);
+      expect(waiting.isDone, isFalse);
+      expect(waiting.currentStep, RestartStep.stopping);
+      expect(waiting.completedSteps, {RestartStep.saving});
+      expect(api.probes, greaterThan(20));
+
+      api.online = false;
+      clock.elapse(const Duration(seconds: 5));
+      expect(
+        container.read(restartProvider).currentStep,
+        RestartStep.reconnecting,
+      );
+      expect(container.read(restartProvider).isDone, isFalse);
+
+      api.online = true;
+      clock.elapse(const Duration(seconds: 3));
+      clock.flushMicrotasks();
+      expect(container.read(restartProvider).isDone, isTrue);
+      expect(api.restarts, 0);
+      container.dispose();
+    });
+  });
+
+  test('a restart asked for here waits briefly for the server to go', () {
+    fakeAsync((clock) {
+      final api = _Api()..online = true;
+      final container = ProviderContainer(
+        overrides: [
+          sharedPrefsProvider.overrideWithValue(prefs),
+          kalinkaProxyProvider.overrideWithValue(api),
+          boxControlProvider.overrideWith((ref) async => null),
+        ],
+      );
+      container.read(restartProvider.notifier).executeRestart();
+      clock.flushMicrotasks();
+      clock.elapse(const Duration(seconds: 5));
+      expect(api.restarts, 1);
+      expect(container.read(restartProvider).currentStep, RestartStep.stopping);
+      // One that restarted between two probes is not waited for forever.
+      clock.elapse(const Duration(seconds: 10));
+      clock.flushMicrotasks();
+      expect(container.read(restartProvider).isDone, isTrue);
+      container.dispose();
+    });
+  });
+
   for (final exit in ['dismiss', 'switch server', 'dispose']) {
     test('stops the long wait on $exit without undoing the server request', () {
       fakeAsync((clock) {
