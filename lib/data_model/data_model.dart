@@ -1595,6 +1595,10 @@ class ModuleInfo {
   /// the inline-markdown helpers in `widgets/inline_markdown.dart`.
   final String? message;
 
+  /// What it has to show for itself while ready — "2 folders connected" — in
+  /// its own words.
+  final String? summary;
+
   /// Optional-package keys this module would benefit from but cannot
   /// currently import. Pass these straight to `restartServer(install: …)`
   /// to queue a bootstrap-time install on next restart.
@@ -1618,6 +1622,7 @@ class ModuleInfo {
     required this.enabled,
     required this.state,
     this.message,
+    this.summary,
     this.missingPackages = const [],
     this.builtin = false,
     this.capabilities = const [],
@@ -1632,6 +1637,7 @@ class ModuleInfo {
     enabled: json["enabled"],
     state: ModuleStateExtension.fromValue(json["state"]),
     message: json["error_message"] as String?,
+    summary: json["summary"] as String?,
     missingPackages:
         (json["missing_packages"] as List?)
             ?.map((e) => e.toString())
@@ -1650,6 +1656,7 @@ class ModuleInfo {
     "enabled": enabled,
     "state": ModuleStateExtension.toValue(state),
     if (message != null) "error_message": message,
+    if (summary != null) "summary": summary,
     "missing_packages": missingPackages,
     "builtin": builtin,
     "capabilities": capabilities,
@@ -1692,6 +1699,7 @@ class ModulesAndDevices {
       enabled: m.enabled,
       state: m.state,
       message: m.message,
+      summary: m.summary,
       missingPackages: List<String>.from(m.missingPackages),
       builtin: m.builtin,
       capabilities: List<String>.from(m.capabilities),

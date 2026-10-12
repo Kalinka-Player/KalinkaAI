@@ -1,20 +1,45 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/plugin_catalog.dart';
 import '../providers/connection_settings_provider.dart';
-import '../providers/connection_state_provider.dart';
+import '../providers/modules_state_provider.dart';
 import '../providers/plugin_catalog_provider.dart';
+import '../providers/plugin_state.dart';
+import '../providers/restart_provider.dart';
 import '../providers/server_info_provider.dart';
+import '../providers/settings_provider.dart';
+import '../providers/server_update_provider.dart';
+import '../providers/upgrade_provider.dart';
+import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/click_cursor.dart';
 import '../widgets/connection_banner.dart';
+import '../widgets/demo_read_only_dialog.dart';
+import '../widgets/kalinka_button.dart';
+import '../widgets/kalinka_dialog.dart';
+import '../widgets/configuration_appearance.dart';
+import '../widgets/configuration_changes_bar.dart';
+import 'configuration_review_screen.dart';
 import '../widgets/plugin_catalog_entry.dart';
-import '../widgets/plugin_catalog_header.dart';
+import '../widgets/plugin_top_bar.dart';
+import '../widgets/restart_overlay.dart';
+import '../widgets/restart_confirm_dialog.dart';
+import 'server_configuration_screen.dart';
 import '../widgets/slide_in_panel.dart';
+import '../widgets/upgrade_overlay.dart';
+import 'plugin_about_screen.dart';
+import 'plugin_settings_screen.dart';
 
-/// A collapsing header and inline details share one scrolling catalog.
+enum PluginTab { sources, server, devices, updates }
+
+/// Mono capitals for the tabs and section headings.
+final _label = KalinkaTextStyles.sectionHeaderMuted.copyWith(
+  fontSize: KalinkaTypography.baseSize + 2,
+  letterSpacing: 1.4,
+);
+
+/// Configuration for music sources, the server and hi-fi controls.
 class PluginCatalogScreen extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
   final ValueChanged<bool>? onCoverageChanged;
@@ -31,17 +56,36 @@ class PluginCatalogScreen extends ConsumerStatefulWidget {
 }
 
 class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
-  final _search = TextEditingController();
   final _scroll = ScrollController();
-  final _headingKey = GlobalKey();
-  final _browseKey = GlobalKey();
-  final _entryKeys = <String, GlobalKey>{};
-  String _type = 'input_module';
-  String? _expandedId;
+  PluginTab _tab = PluginTab.sources;
+  CatalogPlugin? _settingsFor;
+  CatalogPlugin? _aboutFor;
+  ServerSettingsGroup? _serverGroup;
+  bool _restartOverlayOpen = false;
+  List<String>? _reviewPaths;
+  // The check before the restart is a round trip, and the banner stays up
+  // for it; without this a second restart could start in the gap.
+  bool _applying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.invalidate(modulesStateProvider);
+      ref.invalidate(serverUpdateProvider);
+      // What went wrong on an earlier visit is old news.
+      ref.read(pluginFailuresProvider.notifier).clear();
+      // Normally read on connect. Never reread over staged edits.
+      final settings = ref.read(settingsProvider);
+      if (settings.schema == null && !settings.isLoading) {
+        ref.read(settingsProvider.notifier).loadConfig();
+      }
+    });
+  }
 
   @override
   void dispose() {
-    _search.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -50,47 +94,145 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     // Only reread the server cache, never an installation/update-check call.
     ref.invalidate(serverInfoProvider);
     ref.invalidate(pluginCatalogProvider);
+    ref.invalidate(pluginUpdatesProvider);
+    ref.invalidate(modulesStateProvider);
   }
 
-  double get _pinnedExtent =>
-      [_headingKey, _browseKey].fold(0.0, (extent, key) {
-        final sliver = key.currentContext?.findRenderObject();
-        return extent +
-            (sliver is RenderSliver
-                ? sliver.geometry?.maxScrollObstructionExtent ?? 0
-                : 0);
-      });
+  Future<void> _refresh() async {
+    _reload();
+    try {
+      await ref.read(pluginCatalogProvider.future);
+    } catch (_) {
+      // Said on the page.
+    }
+  }
 
-  void _toggle(String id) {
-    final key = _entryKeys[id];
-    final entry = key?.currentContext?.findRenderObject();
-    final opening = _expandedId != id;
-    // These keyed slivers are direct viewport children. Their scroll extent
-    // locates the entry's real start even when its header is pinned elsewhere.
-    final before = entry is RenderSliver && _scroll.hasClients
-        ? (entry.constraints.precedingScrollExtent -
-                  _scroll.offset -
-                  _pinnedExtent)
-              .clamp(0.0, _scroll.position.viewportDimension)
-        : 0.0;
-    final expandedId = opening ? id : null;
-    setState(() => _expandedId = expandedId);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients || _expandedId != expandedId) return;
-      final entry = key?.currentContext?.findRenderObject();
-      if (entry is! RenderSliver || !entry.attached) return;
-      // Reveal the beginning of newly opened details after the old entry has
-      // collapsed. On collapse, keep the row at its previous visible position.
-      final offset =
-          entry.constraints.precedingScrollExtent -
-          _pinnedExtent -
-          (opening ? 0.0 : before);
-      _scroll.jumpTo(
-        offset.clamp(
-          _scroll.position.minScrollExtent,
-          _scroll.position.maxScrollExtent,
+  Future<bool> _onApply() async {
+    if (_applying ||
+        _restartOverlayOpen ||
+        await refusedAsDemo(context, ref) ||
+        !mounted) {
+      return false;
+    }
+    setState(() => _applying = true);
+    try {
+      final ready = await ref.read(settingsProvider.notifier).readyToApply();
+      if (!mounted || !ready) return false;
+      setState(() => _restartOverlayOpen = true);
+      await ref.read(restartProvider.notifier).executeRestart();
+      return mounted &&
+          ref.read(restartProvider).isDone &&
+          !ref.read(settingsProvider).hasPendingChanges;
+    } finally {
+      if (mounted) setState(() => _applying = false);
+    }
+  }
+
+  Future<bool> _beforeClose() async {
+    if (_applying ||
+        _restartOverlayOpen ||
+        ref.read(upgradeProvider).isUpgrading) {
+      return false;
+    }
+    if (!ref.read(settingsProvider).hasPendingChanges) return true;
+    final choice = await showKalinkaDialog<String>(
+      context: context,
+      builder: (context) => KalinkaDialog(
+        side: KalinkaDialogSide.right,
+        icon: Icons.tune,
+        title: 'Apply your changes?',
+        message: 'You have changes that have not been applied. Applying them restarts Kalinka and briefly stops the music.',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 10,
+          children: [
+            KalinkaButton(
+              label: 'Cancel',
+              variant: KalinkaButtonVariant.neutral,
+              fullWidth: true,
+              onTap: () => Navigator.pop(context),
+            ),
+            KalinkaButton(
+              key: const ValueKey('configuration-discard'),
+              label: 'Discard',
+              variant: KalinkaButtonVariant.neutral,
+              fullWidth: true,
+              onTap: () => Navigator.pop(context, 'discard'),
+            ),
+            KalinkaButton(
+              key: const ValueKey('configuration-apply'),
+              label: 'Apply & restart',
+              fullWidth: true,
+              onTap: () => Navigator.pop(context, 'apply'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return false;
+    if (choice == 'discard') {
+      ref.read(settingsProvider.notifier).discardAll();
+      return true;
+    }
+    return choice == 'apply' ? _onApply() : false;
+  }
+
+  Future<void> _onRestart() async {
+    final confirmed = await showKalinkaDialog<bool>(
+      context: context,
+      builder: (_) => const RestartConfirmDialog(),
+    );
+    if (mounted && confirmed == true) await _onApply();
+  }
+
+  Future<void> _run(CatalogPlugin plugin, PluginOperation operation) async {
+    if (await refusedAsDemo(context, ref) || !mounted) return;
+    if (operation == PluginOperation.uninstall) {
+      final confirmed = await showKalinkaDialog<bool>(
+        context: context,
+        builder: (context) => KalinkaDialog(
+          side: KalinkaDialogSide.right,
+          icon: Icons.delete_outline,
+          iconColor: KalinkaColors.actionDelete,
+          title: 'Uninstall ${plugin.name}?',
+          message:
+              'The server removes the plugin. You can install it again from '
+              'Configuration.',
+          actions: [
+            KalinkaButton(
+              label: 'Cancel',
+              variant: KalinkaButtonVariant.neutral,
+              fullWidth: true,
+              onTap: () => Navigator.pop(context, false),
+            ),
+            KalinkaButton(
+              label: 'Uninstall',
+              fullWidth: true,
+              onTap: () => Navigator.pop(context, true),
+            ),
+          ],
         ),
       );
+      if (confirmed != true || !mounted) return;
+    }
+    // Already running: its own call reports how it ends.
+    if (ref.read(pluginOperationsProvider).containsKey(plugin.id)) return;
+    final failure = await ref
+        .read(pluginOperationsProvider.notifier)
+        .run(plugin.id, operation);
+    // A failure stays with the plugin, where it was asked for.
+    if (failure != null || !mounted) return;
+    // Its pages went with it.
+    if (operation == PluginOperation.uninstall) {
+      setState(() {
+        _settingsFor = null;
+        _aboutFor = null;
+      });
+    }
+    showSafeToast(switch (operation) {
+      PluginOperation.install => '${plugin.name} installed',
+      PluginOperation.uninstall => '${plugin.name} uninstalled',
+      PluginOperation.update => '${plugin.name} updated',
     });
   }
 
@@ -101,190 +243,240 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       next,
     ) {
       setState(() {
-        _search.clear();
-        _expandedId = null;
-        _type = 'input_module';
-        _entryKeys.clear();
+        _settingsFor = null;
+        _aboutFor = null;
+        _tab = PluginTab.sources;
+        _serverGroup = null;
+        _reviewPaths = null;
       });
+      ref.read(pluginFailuresProvider.notifier).clear();
       if (_scroll.hasClients) _scroll.jumpTo(0);
     });
     final enabled = ref.watch(pluginCatalogEnabledProvider);
     final info = ref.watch(serverInfoProvider);
     final catalog = enabled ? ref.watch(pluginCatalogProvider) : null;
-    final phone = MediaQuery.sizeOf(context).width < kKalinkaTabletBreakpoint;
-    final gutter = phone ? 20.0 : 25.0;
-    final name = ref.watch(connectionSettingsProvider.select((s) => s.name));
-    final (connectionColor, connectionLabel) = switch (ref.watch(
-      connectionStateProvider,
-    )) {
-      ConnectionStatus.connected => (
-        KalinkaColors.statusOnline,
-        'Server online',
-      ),
-      ConnectionStatus.connecting => (
-        KalinkaColors.statusPending,
-        'Connecting',
-      ),
-      ConnectionStatus.reconnecting => (
-        KalinkaColors.statusPending,
-        'Reconnecting',
-      ),
-      ConnectionStatus.offline => (
-        KalinkaColors.statusOffline,
-        'Server offline',
-      ),
-      ConnectionStatus.none => (KalinkaColors.textMuted, 'Not connected'),
-    };
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): () {
-          if (_expandedId != null) _toggle(_expandedId!);
-        },
-      },
-      child: SlideInPanel(
-        onClose: widget.onClose,
-        onCoverageChanged: widget.onCoverageChanged,
-        handlesBack: widget.handlesBack,
-        child: Material(
-          color: KalinkaColors.background,
-          child: SafeArea(
-            child: CustomScrollView(
-              key: const ValueKey('catalog-scroll'),
-              controller: _scroll,
-              slivers: [
-                PluginCatalogHeader(
-                  key: _headingKey,
-                  serverName: name.isEmpty || name == 'Unknown'
-                      ? 'Kalinka Player server'
-                      : name,
-                  connectionLabel: connectionLabel,
-                  connectionColor: connectionColor,
-                  phone: phone,
-                  gutter: gutter,
-                ),
-                PinnedHeaderSliver(
-                  key: _browseKey,
-                  child: ColoredBox(
-                    color: KalinkaColors.background,
-                    child: Column(
-                      children: [
-                        const ConnectionBanner(),
-                        Container(
-                          key: const ValueKey('catalog-browse-bar'),
-                          margin: EdgeInsets.symmetric(horizontal: gutter),
-                          decoration: const BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: KalinkaColors.borderDefault,
-                              ),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                constraints: const BoxConstraints(
-                                  minHeight: 48,
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                decoration: const BoxDecoration(
-                                  border: Border(
-                                    bottom: BorderSide(
-                                      color: KalinkaColors.accent,
-                                      width: 2,
-                                    ),
+    final settings = ref.watch(settingsProvider);
+    final gutter = ConfigurationAppearance.gutter(context);
+    final updates = enabled ? ref.watch(pluginUpdatesProvider).value : null;
+    final modules = ref.watch(modulesStateProvider).value;
+    // Only installed plugins carry an update, as in [PluginState.of].
+    final updateCount = modules == null || updates == null
+        ? 0
+        : catalog?.value?.plugins
+                  .where(
+                    (p) =>
+                        updates.containsKey(p.id) &&
+                        lookupModule(modules, p.id, p.moduleKind) != null,
+                  )
+                  .length ??
+              0;
+    final upgrading = ref.watch(upgradeProvider).isUpgrading;
+    final tab = _tab == PluginTab.updates && updateCount == 0
+        ? PluginTab.sources
+        : _tab;
+
+    final issuePaths = settings.issues.entries
+        .where((entry) => entry.value.any((issue) => issue.isBlocking))
+        .map((entry) => entry.key)
+        .toList();
+    final issueLabel = issuePaths.isEmpty
+        ? null
+        : '${configurationIssueLabel(settings.schema, issuePaths.first)}'
+              '${issuePaths.length > 1 ? ' and ${issuePaths.length - 1} more' : ''}';
+    return ConfigurationAppearance(
+      child: Column(
+        children: [
+          Expanded(
+            child: SlideInPanel(
+              onClose: widget.onClose,
+              beforeClose: _beforeClose,
+              onCoverageChanged: widget.onCoverageChanged,
+              handlesBack:
+                  widget.handlesBack &&
+                  _settingsFor == null &&
+                  _aboutFor == null &&
+                  _serverGroup == null &&
+                  _reviewPaths == null &&
+                  !_restartOverlayOpen &&
+                  !upgrading,
+              overlays: [
+                if (_settingsFor case final plugin?)
+                  PluginSettingsScreen(
+                    key: ValueKey('plugin-settings-${plugin.id}'),
+                    plugin: plugin,
+                    actions: _actionsFor(plugin),
+                    // About, over it, owns Back while open.
+                    handlesBack:
+                        widget.handlesBack &&
+                        _aboutFor == null &&
+                        _reviewPaths == null &&
+                        !_restartOverlayOpen &&
+                        !upgrading,
+                    onClose: () => setState(() => _settingsFor = null),
+                  ),
+                if (_aboutFor case final plugin?)
+                  PluginAboutScreen(
+                    key: ValueKey('plugin-about-${plugin.id}'),
+                    plugin: plugin,
+                    actions: _actionsFor(plugin),
+                    handlesBack:
+                        widget.handlesBack &&
+                        _reviewPaths == null &&
+                        !_restartOverlayOpen &&
+                        !upgrading,
+                    onHome: () => setState(() => _settingsFor = null),
+                    onClose: () => setState(() => _aboutFor = null),
+                  ),
+                if (_serverGroup case final group?)
+                  ServerConfigurationScreen(
+                    key: ValueKey('server-settings-${group.name}'),
+                    group: group,
+                    onRestart: _onRestart,
+                    handlesBack:
+                        widget.handlesBack &&
+                        _reviewPaths == null &&
+                        !_restartOverlayOpen &&
+                        !upgrading,
+                    onClose: () => setState(() => _serverGroup = null),
+                  ),
+                if (_reviewPaths case final paths?)
+                  ConfigurationReviewScreen(
+                    key: const ValueKey('configuration-review'),
+                    paths: paths,
+                    onClose: () => setState(() => _reviewPaths = null),
+                    handlesBack:
+                        widget.handlesBack &&
+                        !_restartOverlayOpen &&
+                        !upgrading,
+                  ),
+                if (_restartOverlayOpen)
+                  RestartOverlay(
+                    onDismiss: () {
+                      setState(() => _restartOverlayOpen = false);
+                      ref.invalidate(modulesStateProvider);
+                      ref.invalidate(pluginUpdatesProvider);
+                    },
+                  ),
+                if (upgrading)
+                  UpgradeOverlay(
+                    onDismiss: () {
+                      if (!ref.read(settingsProvider).hasPendingChanges) {
+                        ref.read(settingsProvider.notifier).loadConfig();
+                      }
+                    },
+                  ),
+              ],
+              child: Material(
+                color: KalinkaColors.background,
+                child: SafeArea(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      PluginTopBar(
+                        trail: const ['Configuration'],
+                        onNavigate: (_) {},
+                        transparent: true,
+                      ),
+                      ColoredBox(
+                        color: KalinkaColors.background,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [const ConnectionBanner()],
+                        ),
+                      ),
+                      Expanded(
+                        child: RefreshIndicator(
+                          onRefresh: _refresh,
+                          color: KalinkaColors.accent,
+                          backgroundColor: KalinkaColors.surfaceRaised,
+                          child: CustomScrollView(
+                            key: const ValueKey('catalog-scroll'),
+                            controller: _scroll,
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            slivers: [
+                              _tabs(tab, updateCount, gutter),
+                              if (_sectionDescription(tab, gutter)
+                                  case final description?)
+                                SliverToBoxAdapter(child: description),
+                              if (tab == PluginTab.server)
+                                ..._serverSlivers(gutter)
+                              else if (info.isLoading)
+                                const SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
                                   ),
-                                ),
-                                child: Text(
-                                  'BROWSE',
-                                  style: KalinkaTextStyles.sectionHeaderMuted
-                                      .copyWith(
-                                        letterSpacing: 1.0,
-                                        color: KalinkaColors.textPrimary,
-                                      ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Tooltip(
-                                    message: 'Reload catalog',
-                                    child: TextButton.icon(
-                                      key: const ValueKey('catalog-reload'),
-                                      onPressed:
-                                          info.isLoading ||
-                                              (catalog?.isLoading ?? false)
-                                          ? null
-                                          : _reload,
-                                      style: TextButton.styleFrom(
-                                        foregroundColor:
-                                            KalinkaColors.textSecondary,
-                                        minimumSize: const Size(48, 48),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 4,
-                                        ),
-                                        textStyle:
-                                            KalinkaTextStyles.trayRowSublabel,
-                                      ),
-                                      icon: const Icon(Icons.sync, size: 15),
-                                      label: const Text(
-                                        'Reload',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                )
+                              else if (!enabled)
+                                const SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: _Notice(
+                                    'Plugin catalog preview is off or unavailable on this server. Enable it in Streamer → Maintenance → Advanced settings.',
+                                  ),
+                                )
+                              else
+                                ...catalog!.when<List<Widget>>(
+                                  skipLoadingOnRefresh: false,
+                                  data: (data) => _catalogSlivers(data, gutter),
+                                  loading: () => const [
+                                    SliverFillRemaining(
+                                      hasScrollBody: false,
+                                      child: Center(
+                                        child: CircularProgressIndicator(),
                                       ),
                                     ),
-                                  ),
+                                  ],
+                                  error: (error, _) => [
+                                    SliverFillRemaining(
+                                      hasScrollBody: false,
+                                      child: _Notice(
+                                        error is PluginCatalogException
+                                            ? error.message
+                                            : 'Could not read the plugin catalog. Try again.',
+                                        onRetry: _reload,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-                if (info.isLoading)
-                  const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (!enabled)
-                  const SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: _Notice(
-                      'Plugin catalog preview is off or unavailable on this server. Enable it in Server settings → General, using expert mode.',
-                    ),
-                  )
-                else
-                  ...catalog!.when<List<Widget>>(
-                    skipLoadingOnRefresh: false,
-                    data: (data) => _catalogSlivers(data, gutter),
-                    loading: () => const [
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                    ],
-                    error: (error, _) => [
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: _Notice(
-                          error is PluginCatalogException
-                              ? error.message
-                              : 'Could not read the plugin catalog. Try reloading.',
-                        ),
-                      ),
-                    ],
-                  ),
-              ],
+              ),
             ),
           ),
-        ),
+          ConfigurationChangesBar(
+            key: const ValueKey('configuration-changes'),
+            count: settings.pendingCount,
+            busy: _applying || _restartOverlayOpen || upgrading,
+            issueLabel: issueLabel,
+            onReview: () => setState(() => _reviewPaths = issuePaths),
+            onDiscard: ref.read(settingsProvider.notifier).discardAll,
+            onApply: _onApply,
+          ),
+        ],
       ),
     );
   }
+
+  /// Called while building.
+  PluginEntryActions _actionsFor(CatalogPlugin plugin) => PluginEntryActions(
+    onEnabledChanged: (value) {
+      final path = ref.read(pluginStateProvider(plugin)).enabledPath;
+      if (path != null) {
+        ref.read(settingsProvider.notifier).stageChange(path, value);
+      }
+    },
+    onOpenSettings: () => setState(() => _settingsFor = plugin),
+    onOpenAbout: () => setState(() => _aboutFor = plugin),
+    onOperation: (operation) => _run(plugin, operation),
+    onDismissFailure: () =>
+        ref.read(pluginFailuresProvider.notifier).dismiss(plugin.id),
+    canManage: ref.watch(pluginInstallationProvider),
+  );
 
   List<Widget> _catalogSlivers(PluginCatalog catalog, double gutter) {
     if (catalog.status == 'disabled') {
@@ -296,205 +488,448 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       ];
     }
     if (catalog.status == 'unavailable') {
-      return const [
+      return [
         SliverFillRemaining(
           hasScrollBody: false,
           child: _Notice(
             'The public catalog is not available yet. '
-            'The server may be fetching it or unable to reach the feed. Try reloading shortly.',
+            'The server may be fetching it or unable to reach the feed. Try again shortly.',
+            onRetry: _reload,
           ),
         ),
       ];
     }
-    final filtered = catalog.plugins
-        .where(
-          (p) => (_type == 'all' || p.type == _type) && p.matches(_search.text),
-        )
-        .toList();
-    return [
-      SliverPadding(
-        padding: EdgeInsets.symmetric(horizontal: gutter),
-        sliver: SliverToBoxAdapter(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (catalog.status == 'stale')
-                Padding(
-                  padding: EdgeInsets.only(top: 12),
-                  child: Text(
-                    'Showing a cached catalog. The latest refresh failed or the data is old.',
-                    style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                      color: KalinkaColors.statusPendingLight,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final choice in const {
-                    'all': 'All',
-                    'input_module': 'Input sources',
-                    'output_device': 'Device control',
-                  }.entries)
-                    ChoiceChip(
-                      label: Text(choice.value),
-                      selected: _type == choice.key,
-                      avatar: choice.key == 'all'
-                          ? null
-                          : Icon(
-                              choice.key == 'input_module'
-                                  ? Icons.music_note_outlined
-                                  : Icons.speaker_outlined,
-                              size: 17,
-                            ),
-                      showCheckmark: false,
-                      labelStyle: _type == choice.key
-                          ? KalinkaTextStyles.filterPillActive.copyWith(
-                              color: KalinkaColors.textPrimary,
-                            )
-                          : KalinkaTextStyles.filterPillInactive,
-                      iconTheme: IconThemeData(
-                        color: _type == choice.key
-                            ? KalinkaColors.textPrimary
-                            : KalinkaColors.textSecondary,
-                      ),
-                      backgroundColor: KalinkaColors.surfaceElevated,
-                      selectedColor: KalinkaColors.accent,
-                      color: WidgetStateProperty.resolveWith(
-                        (states) => states.contains(WidgetState.selected)
-                            ? KalinkaColors.accent
-                            : KalinkaColors.surfaceElevated,
-                      ),
-                      side: BorderSide(
-                        color: _type == choice.key
-                            ? KalinkaColors.accent
-                            : KalinkaColors.borderDefault,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 12,
-                      ),
-                      materialTapTargetSize: MaterialTapTargetSize.padded,
-                      onSelected: (_) => setState(() {
-                        _type = choice.key;
-                        _expandedId = null;
-                      }),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(switch (_type) {
-                'input_module' =>
-                  'Music services and libraries, independent of your amplifier.',
-                'output_device' =>
-                  'Optional controls for your amplifier or AVR. Check your model.',
-                _ => 'Music sources and optional controls for your hi-fi.',
-              }, style: KalinkaTextStyles.trayRowSublabel),
-              const SizedBox(height: 18),
-              TextField(
-                key: const ValueKey('plugin-search'),
-                controller: _search,
-                style: KalinkaTextStyles.textFieldInput,
-                decoration:
-                    catalogSearchDecoration(
-                      _type == 'output_device'
-                          ? 'Search plugins, models or families'
-                          : 'Search plugins',
-                    ).copyWith(
-                      suffixIcon: _search.text.isEmpty
-                          ? null
-                          : IconButton(
-                              key: const ValueKey('plugin-search-clear'),
-                              tooltip: 'Clear search',
-                              onPressed: () => setState(_search.clear),
-                              constraints: const BoxConstraints(
-                                minWidth: 48,
-                                minHeight: 48,
-                              ),
-                              color: KalinkaColors.textSecondary,
-                              icon: const Icon(Icons.close_rounded, size: 20),
-                            ),
-                    ),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 9),
-              Text(
-                'Tap a plugin to see details',
-                style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                  color: KalinkaColors.textMuted,
-                ),
-              ),
-              if (filtered.isEmpty)
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Text(
-                    'No matching plugins. Try another search or type filter.',
-                    style: KalinkaTextStyles.trayRowSublabel,
-                  ),
-                ),
-            ],
-          ),
+    final modules = ref.watch(modulesStateProvider).value;
+    final settings = ref.watch(settingsProvider);
+    final updates = ref.watch(pluginUpdatesProvider).value ?? const {};
+    final operations = ref.watch(pluginOperationsProvider);
+    final failures = ref.watch(pluginFailuresProvider);
+    final canManage = ref.watch(pluginInstallationProvider);
+    final playerName = ref.watch(
+      connectionSettingsProvider.select((s) => s.name),
+    );
+    final player = playerName.trim().isEmpty || playerName == 'Unknown'
+        ? 'your player'
+        : playerName;
+    final states = {
+      for (final plugin in catalog.plugins)
+        plugin.id: PluginState.of(
+          plugin,
+          modules: modules,
+          settings: settings,
+          update: updates[plugin.id],
+          operation: operations[plugin.id],
+          failure: failures[plugin.id],
+        ),
+    };
+    final updateCount = states.values.where((s) => s.update != null).length;
+    // The Updates tab goes once there is nothing left to update.
+    final tab = _tab == PluginTab.updates && updateCount == 0
+        ? PluginTab.sources
+        : _tab;
+    bool inTab(CatalogPlugin plugin) => switch (tab) {
+      PluginTab.sources => !plugin.isDevice,
+      PluginTab.server => false,
+      PluginTab.devices => plugin.isDevice,
+      PluginTab.updates => states[plugin.id]!.update != null,
+    };
+    final order = {
+      for (final (i, plugin) in catalog.plugins.indexed) plugin.id: i,
+    };
+    // Official and stable first, else as the catalog lists them.
+    final listed = catalog.plugins.where(inTab).toList()
+      ..sort(
+        (a, b) => a.rank != b.rank
+            ? a.rank.compareTo(b.rank)
+            : order[a.id]!.compareTo(order[b.id]!),
+      );
+    // Switched off is still installed.
+    final installed = [
+      for (final p in listed)
+        if (states[p.id]!.installed) p,
+    ];
+    final available = [
+      for (final p in listed)
+        if (!states[p.id]!.installed) p,
+    ];
+    // Said once, under the heading it holds back, not on every row.
+    const manageNote = PluginNote(
+      'This server cannot install, remove or update plugins yet.',
+      key: ValueKey('catalog-manage-note'),
+    );
+    Widget row(CatalogPlugin plugin) => SliverPadding(
+      padding: EdgeInsets.symmetric(horizontal: gutter),
+      sliver: SliverToBoxAdapter(
+        child: PluginRow(
+          key: ValueKey('entry-${plugin.id}'),
+          plugin: plugin,
+          state: states[plugin.id]!,
+          summary: plugin.blurb(player),
+          actions: _actionsFor(plugin),
         ),
       ),
-      for (final type
-          in _type == 'all' ? ['input_module', 'output_device'] : [_type]) ...[
-        if (_type == 'all' && filtered.any((p) => p.type == type))
-          _heading(
-            type == 'input_module' ? 'Input sources' : 'Device control',
-            gutter,
-          ),
-        for (final section in [
-          'Official',
-          'Unofficial',
-          'Experimental',
-          'Deprecated',
-        ])
-          if (filtered.any((p) => p.type == type && p.section == section)) ...[
-            _heading(
-              '$section  ${filtered.where((p) => p.type == type && p.section == section).length}',
-              gutter,
+    );
+    Widget note(Widget child) => SliverPadding(
+      padding: EdgeInsets.fromLTRB(gutter, 12, gutter, 4),
+      sliver: SliverToBoxAdapter(child: child),
+    );
+
+    return [
+      if (catalog.status == 'stale')
+        note(
+          Text(
+            'Showing a cached catalog. The latest refresh failed or the data is old.',
+            style: KalinkaTextStyles.trayRowSublabel.copyWith(
+              color: KalinkaColors.statusPendingLight,
             ),
-            for (final plugin in filtered.where(
-              (p) => p.type == type && p.section == section,
-            ))
-              SliverPadding(
-                key: _entryKeys.putIfAbsent(plugin.id, GlobalKey.new),
-                padding: EdgeInsets.symmetric(horizontal: gutter),
-                sliver: PluginCatalogEntry(
-                  key: ValueKey('entry-${plugin.id}'),
-                  plugin: plugin,
-                  expanded: _expandedId == plugin.id,
-                  onToggle: () => _toggle(plugin.id),
-                ),
-              ),
-          ],
+          ),
+        ),
+      if (listed.isEmpty)
+        note(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'The catalog lists no plugins of this kind yet.',
+              style: KalinkaTextStyles.trayRowSublabel,
+            ),
+          ),
+        ),
+      if (installed.isNotEmpty) ...[
+        _heading(
+          switch (tab) {
+            PluginTab.sources => 'Your sources',
+            PluginTab.devices => 'Your controls',
+            _ => 'Updates available',
+          },
+          installed.length,
+          gutter,
+          first: true,
+        ),
+        if (!canManage && tab == PluginTab.updates) note(manageNote),
+        for (final plugin in installed) row(plugin),
       ],
-      const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      if (available.isNotEmpty) ...[
+        _heading(
+          tab == PluginTab.devices ? 'More controls' : 'More sources',
+          available.length,
+          gutter,
+          first: installed.isEmpty,
+        ),
+        if (!canManage && available.any((p) => !p.bundled)) note(manageNote),
+        for (final plugin in available) row(plugin),
+      ],
+      const SliverToBoxAdapter(child: SizedBox(height: 32)),
     ];
   }
 
-  Widget _heading(String title, double gutter) => SliverToBoxAdapter(
-    child: Padding(
-      padding: EdgeInsets.fromLTRB(gutter, 22, gutter, 8),
+  Widget _tabs(PluginTab tab, int updateCount, double gutter) =>
+      PinnedHeaderSliver(
+        child: ColoredBox(
+          color: KalinkaColors.background,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: gutter),
+            child: Stack(
+              key: const ValueKey('catalog-tabs'),
+              children: [
+                // The grey rule the selected tab's berry line sits on.
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: SizedBox(
+                    height: 1,
+                    child: ColoredBox(color: KalinkaColors.borderDefault),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => Row(
+                      children: [
+                        for (final (i, option) in [
+                          (PluginTab.sources, 'Music sources'),
+                          (PluginTab.devices, 'HiFi control'),
+                          (PluginTab.server, 'Streamer'),
+                          if (updateCount > 0) (PluginTab.updates, 'Updates'),
+                        ].indexed) ...[
+                          if (i > 0)
+                            SizedBox(
+                              width: constraints.maxWidth < 480 ? 16 : 32,
+                            ),
+                          Expanded(
+                            // The labels use a monospace font.
+                            flex: option.$2.length,
+                            child: _PluginTabButton(
+                              key: ValueKey('catalog-tab-${option.$1.name}'),
+                              label: option.$2,
+                              selected: tab == option.$1,
+                              count: option.$1 == PluginTab.updates
+                                  ? updateCount
+                                  : null,
+                              onTap: () {
+                                setState(() => _tab = option.$1);
+                                _scroll.jumpTo(0);
+                              },
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  Widget? _sectionDescription(PluginTab tab, double gutter) {
+    final description = switch (tab) {
+      PluginTab.sources || PluginTab.server => null,
+      PluginTab.devices =>
+        'Let Kalinka adjust your amplifier’s volume and switch inputs.',
+      PluginTab.updates =>
+        'Keep your music sources and hi-fi controls up to date.',
+    };
+    if (description == null) return null;
+    return Padding(
+      key: const ValueKey('catalog-description'),
+      padding: EdgeInsets.fromLTRB(gutter, 16, gutter, 0),
       child: Text(
-        title.toUpperCase(),
-        style: KalinkaTextStyles.sectionHeaderMuted,
+        description,
+        style: KalinkaTextStyles.trayRowSublabel,
+        softWrap: true,
+        overflow: TextOverflow.clip,
+      ),
+    );
+  }
+
+  List<Widget> _serverSlivers(double gutter) {
+    final settings = ref.watch(settingsProvider);
+    if (settings.isLoading) {
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+    if (settings.schema == null) {
+      return [
+        SliverToBoxAdapter(
+          child: _Notice(
+            'Could not load the player settings. Check that your player is connected and try again.',
+            onRetry: () => ref.read(settingsProvider.notifier).loadConfig(),
+          ),
+        ),
+      ];
+    }
+    return [
+      const SliverToBoxAdapter(child: ServerSettingsBody()),
+      _serverNavigation(ServerSettingsGroup.maintenance, gutter),
+      const SliverToBoxAdapter(child: SizedBox(height: 32)),
+    ];
+  }
+
+  Widget _serverNavigation(ServerSettingsGroup group, double gutter) {
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(gutter, 16, gutter, 0),
+      sliver: SliverToBoxAdapter(
+        child: InkWell(
+          key: ValueKey('server-group-${group.name}'),
+          onTap: () => setState(() => _serverGroup = group),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: KalinkaColors.borderSubtle),
+              ),
+            ),
+            child: Row(
+              children: [
+                ConfigurationItemIcon(icon: group.icon),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(group.title, style: KalinkaTextStyles.trayRowLabel),
+                      const SizedBox(height: 4),
+                      Text(
+                        group.description,
+                        style: KalinkaTextStyles.trayRowSublabel,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.chevron_right,
+                  color: KalinkaColors.textMuted,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The two sections stand further apart than the rows within them.
+  Widget _heading(
+    String title,
+    int count,
+    double gutter, {
+    required bool first,
+  }) => SliverPadding(
+    padding: EdgeInsets.fromLTRB(gutter, first ? 24 : 36, gutter, 0),
+    sliver: SliverToBoxAdapter(
+      child: Semantics(
+        header: true,
+        label: '$title, $count',
+        excludeSemantics: true,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          // Wraps rather than overflows at large text sizes.
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: title, style: KalinkaTextStyles.trayRowSublabel),
+                TextSpan(
+                  text: ' · $count',
+                  style: KalinkaTextStyles.trayRowSublabel,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     ),
   );
 }
 
+/// A mono label over a berry underline while selected. [count] marks the
+/// Updates tab, which is set in bold whether or not it is selected.
+class _PluginTabButton extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final int? count;
+  final VoidCallback onTap;
+
+  const _PluginTabButton({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.count,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final count = this.count;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: count == null ? label : '$label, $count available',
+      excludeSemantics: true,
+      child: Tooltip(
+        message: label,
+        excludeFromSemantics: true,
+        child: MouseRegion(
+          cursor: clickCursor(interactive: true),
+          child: GestureDetector(
+            onTap: onTap,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 44),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: selected ? KalinkaColors.accent : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      label.toUpperCase(),
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: _label.copyWith(
+                        fontSize: KalinkaTypography.baseSize + 1,
+                        letterSpacing: 1,
+                        fontWeight: count == null ? null : FontWeight.w700,
+                        color: selected || count != null
+                            ? KalinkaColors.textPrimary
+                            : KalinkaColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  if (count != null) ...[
+                    const SizedBox(width: 7),
+                    // A count is the one thing a tab may carry in berry.
+                    Container(
+                      constraints: const BoxConstraints(
+                        minWidth: 18,
+                        minHeight: 18,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: KalinkaColors.accent,
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Text(
+                        '$count',
+                        style: KalinkaFonts.sans(
+                          fontSize: KalinkaTypography.baseSize - 1,
+                          fontWeight: FontWeight.w700,
+                          color: KalinkaColors.frost,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Notice extends StatelessWidget {
   final String message;
-  const _Notice(this.message);
+  final VoidCallback? onRetry;
+  const _Notice(this.message, {this.onRetry});
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.all(24),
-    child: Text(message, style: KalinkaTextStyles.trayRowSublabel),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(message, style: KalinkaTextStyles.trayRowSublabel),
+        if (onRetry != null) ...[
+          const SizedBox(height: 14),
+          KalinkaButton(
+            key: const ValueKey('catalog-retry'),
+            label: 'Try again',
+            variant: KalinkaButtonVariant.neutral,
+            size: KalinkaButtonSize.compact,
+            onTap: onRetry,
+          ),
+        ],
+      ],
+    ),
   );
 }

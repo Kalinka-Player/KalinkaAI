@@ -20,6 +20,9 @@ class SlideInPanel extends StatefulWidget {
   final List<Widget> overlays;
   final VoidCallback? onClose;
 
+  /// Return false to keep the panel open before its exit animation starts.
+  final Future<bool> Function()? beforeClose;
+
   /// Fires `true` once the slide-in finishes (the panel now fully covers what
   /// is behind it) and `false` the moment the slide-out begins. Lets the host
   /// stop painting the occluded content without flashing mid-animation.
@@ -34,6 +37,7 @@ class SlideInPanel extends StatefulWidget {
     required this.child,
     this.overlays = const [],
     this.onClose,
+    this.beforeClose,
     this.onCoverageChanged,
     this.handlesBack = true,
   });
@@ -54,6 +58,8 @@ class _SlideInPanelState extends State<SlideInPanel>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<Offset> _slide;
+  bool _closing = false;
+  bool _allowPop = false;
 
   @override
   void initState() {
@@ -77,8 +83,20 @@ class _SlideInPanelState extends State<SlideInPanel>
   }
 
   Future<void> _close() async {
+    if (_closing) return;
+    _closing = true;
+    var proceed = false;
+    try {
+      proceed = widget.beforeClose == null || await widget.beforeClose!();
+    } finally {
+      if (!proceed) _closing = false;
+    }
+    if (!proceed || !mounted) return;
     final onClose = widget.onClose;
     if (onClose == null) {
+      setState(() => _allowPop = true);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
       // Route mode — the route transition animates the exit.
       Navigator.pop(context);
       return;
@@ -96,17 +114,19 @@ class _SlideInPanelState extends State<SlideInPanel>
       child: Stack(
         children: [
           SlideTransition(position: _slide, child: widget.child),
+          // Keyed by what they hold, so one closing beneath another leaves
+          // the other's state, and its animation, alone.
           for (final overlay in widget.overlays)
-            Positioned.fill(child: overlay),
+            Positioned.fill(key: overlay.key, child: overlay),
         ],
       ),
     );
 
     // As an overlay there is no route to pop, so intercept the system back to
     // animate out the same way the panel's own back control does.
-    if (widget.onClose == null) return content;
+    if (widget.onClose == null && widget.beforeClose == null) return content;
     return PopScope(
-      canPop: false,
+      canPop: widget.onClose == null && _allowPop,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && widget.handlesBack) _close();
       },

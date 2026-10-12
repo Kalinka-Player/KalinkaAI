@@ -220,9 +220,8 @@ class _LogExportScreenState extends ConsumerState<LogExportScreen> {
 
   Widget _ready(LogExportView view, LogExportStatus status) {
     final download = status.download!;
-    final until = TimeOfDay.fromDateTime(
-      download.expiresAt.toLocal(),
-    ).format(context);
+    final until = TimeOfDay.fromDateTime(download.expiresAt.toLocal())
+        .format(context);
     final transfer = view.transfer;
     return SettingsCard(
       children: [
@@ -313,21 +312,11 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Download server logs',
-                      style: KalinkaTextStyles.cardTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      'SUPPORT',
-                      style: KalinkaTextStyles.sectionHeaderMuted,
-                    ),
-                  ],
+                child: Text(
+                  'Download server logs',
+                  style: KalinkaTextStyles.cardTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],

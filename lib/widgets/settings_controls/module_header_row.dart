@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
 import 'settings_toggle.dart';
 
@@ -9,6 +10,63 @@ import 'settings_toggle.dart';
 /// is missing). The badge tints amber/gold; the message goes on a
 /// `WarningNote` inside the expanded module body.
 enum ModuleStatus { ready, warning, error, disabled }
+
+/// A module's state in a word, in its colour, as its settings card shows it.
+class ModuleStatusBadge extends StatelessWidget {
+  static final style = KalinkaTextStyles.tagPill.copyWith(
+    fontSize: KalinkaTypography.baseSize,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.8,
+  );
+
+  /// Padding and border either side of the label.
+  static const inset = 18.0;
+
+  final String label;
+  final Color color;
+
+  const ModuleStatusBadge({
+    super.key,
+    required this.label,
+    required this.color,
+  });
+
+  /// The word and colour for [status].
+  ModuleStatusBadge.of(ModuleStatus status, {Key? key})
+    : this(
+        key: key,
+        label: switch (status) {
+          ModuleStatus.ready => 'READY',
+          ModuleStatus.warning => 'WARNING',
+          ModuleStatus.error => 'ERROR',
+          ModuleStatus.disabled => 'DISABLED',
+        },
+        color: switch (status) {
+          ModuleStatus.ready => KalinkaColors.statusOnline,
+          ModuleStatus.warning => KalinkaColors.statusPending,
+          ModuleStatus.error => KalinkaColors.statusOffline,
+          ModuleStatus.disabled => KalinkaColors.textMuted,
+        },
+      );
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: color.withValues(alpha: 0.25)),
+    ),
+    child: Text(
+      label,
+      style: style.copyWith(
+        color: color == KalinkaColors.statusOnline
+            ? KalinkaColors.statusOnlineLight
+            : color,
+      ),
+    ),
+  );
+}
 
 /// Rich header row for module/device cards with icon tile, status badge, and chevron.
 class ModuleHeaderRow extends StatelessWidget {
@@ -113,26 +171,10 @@ class ModuleHeaderRow extends StatelessWidget {
             ),
           ),
           // Status badge
-          if (status != null && status != ModuleStatus.disabled)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              margin: EdgeInsets.only(right: hasBody ? 10 : 0),
-              decoration: BoxDecoration(
-                color: _badgeColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: _badgeColor.withValues(alpha: 0.25),
-                ),
-              ),
-              child: Text(
-                _badgeLabel,
-                style: KalinkaTextStyles.tagPill.copyWith(
-                  fontSize: KalinkaTypography.baseSize - 2,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.8,
-                  color: _badgeColor,
-                ),
-              ),
+          if (status case final status? when status != ModuleStatus.disabled)
+            Padding(
+              padding: EdgeInsets.only(right: hasBody ? 10 : 0),
+              child: ModuleStatusBadge.of(status),
             ),
           // Chevron — only shown when there's something to expand.
           if (hasBody)
@@ -195,18 +237,4 @@ class ModuleHeaderRow extends StatelessWidget {
       ),
     );
   }
-
-  Color get _badgeColor => switch (status) {
-    ModuleStatus.ready => KalinkaColors.statusOnline,
-    ModuleStatus.warning => KalinkaColors.statusPending,
-    ModuleStatus.error => KalinkaColors.statusOffline,
-    _ => KalinkaColors.textMuted,
-  };
-
-  String get _badgeLabel => switch (status) {
-    ModuleStatus.ready => 'READY',
-    ModuleStatus.warning => 'WARNING',
-    ModuleStatus.error => 'ERROR',
-    _ => '',
-  };
 }

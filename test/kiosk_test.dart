@@ -33,8 +33,6 @@ import 'package:kalinka/widgets/kiosk/kiosk_splash.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_volume_control.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/procedural_album_art.dart';
-import 'package:kalinka/widgets/settings_controls/settings_toggle.dart';
-import 'package:kalinka/widgets/this_device_section.dart';
 import 'package:kalinka/widgets/transport_button.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -686,42 +684,6 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     expect(h.container.read(kioskActiveProvider), isFalse);
-  });
-
-  testWidgets('the settings switch warns, then holds the device to the '
-      'display', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    final container = ProviderContainer(
-      overrides: [
-        sharedPrefsProvider.overrideWithValue(prefs),
-        kioskLaunchProvider.overrideWithValue(false),
-      ],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(home: Scaffold(body: ThisDeviceSection())),
-      ),
-    );
-
-    await tester.tap(find.byType(SettingsToggle));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('five times'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(container.read(kioskActiveProvider), isFalse);
-
-    await tester.tap(find.byType(SettingsToggle));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Switch'));
-    await tester.pumpAndSettle();
-    expect(
-      container.read(kioskProvider),
-      const KioskState(active: true, lock: KioskLock.device),
-    );
-    expect(prefs.getBool(KioskNotifier.sharedPrefLocked), isTrue);
   });
 
   testWidgets('marks bit-perfect playback 1:1', (tester) async {

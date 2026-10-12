@@ -8,6 +8,8 @@ import '../data_model/presentation_schema.dart';
 import '../theme/app_theme.dart';
 import 'settings_controls/settings_binding.dart';
 import 'settings_renderer.dart' show buildFieldControl;
+import 'configuration_appearance.dart';
+import 'settings_controls/issue_notes.dart';
 
 /// About:config-style flat search across every settable field of one store.
 ///
@@ -27,11 +29,13 @@ class ExpertFieldList extends StatefulWidget {
   /// The store the rows read and stage against. A new instance means the rows
   /// below should rebuild.
   final SettingsBinding binding;
+  final Widget? heading;
 
   const ExpertFieldList({
     super.key,
     required this.fields,
     required this.binding,
+    this.heading,
   });
 
   @override
@@ -98,18 +102,46 @@ class _ExpertFieldListState extends State<ExpertFieldList> {
         ? all
         : all.where((f) => _matches(f, terms)).toList();
 
+    final searchBar = _SearchBar(
+      controller: _searchController,
+      focusNode: _searchFocusNode,
+      // Tiny match counter inside the search field only when the
+      // query is actually narrowing things — avoids permanent
+      // chrome that adds visual noise the rest of the time.
+      matchCount: _query.trim().isEmpty
+          ? null
+          : '${filtered.length} / ${all.length}',
+    );
+    if (widget.heading != null) {
+      return CustomScrollView(
+        scrollCacheExtent: const ScrollCacheExtent.pixels(600),
+        slivers: [
+          SliverToBoxAdapter(child: widget.heading!),
+          PinnedHeaderSliver(child: searchBar),
+          if (filtered.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _EmptyState(query: _query),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.only(top: 12, bottom: 32),
+              sliver: SliverList.separated(
+                itemCount: filtered.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (_, i) => _ExpertRow(
+                  key: ValueKey(filtered[i].path),
+                  field: filtered[i],
+                  binding: widget.binding,
+                ),
+              ),
+            ),
+        ],
+      );
+    }
     return Column(
       children: [
-        _SearchBar(
-          controller: _searchController,
-          focusNode: _searchFocusNode,
-          // Tiny match counter inside the search field only when the
-          // query is actually narrowing things — avoids permanent
-          // chrome that adds visual noise the rest of the time.
-          matchCount: _query.trim().isEmpty
-              ? null
-              : '${filtered.length} / ${all.length}',
-        ),
+        searchBar,
         Expanded(
           child: filtered.isEmpty
               ? _EmptyState(query: _query)
@@ -157,7 +189,12 @@ class _SearchBar extends StatelessWidget {
         color: KalinkaColors.surfaceBase,
         border: Border(bottom: BorderSide(color: KalinkaColors.borderSubtle)),
       ),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: EdgeInsets.symmetric(
+        vertical: 12,
+        horizontal: ConfigurationAppearance.active(context)
+            ? ConfigurationAppearance.gutter(context)
+            : 16,
+      ),
       child: Container(
         decoration: BoxDecoration(
           color: KalinkaColors.surfaceElevated,
@@ -327,7 +364,11 @@ class _ExpertRow extends StatelessWidget {
       // Horizontal margin + rounded corners mirror the simple-page
       // cards' shape so each row reads as a discrete tile rather
       // than a slab spanning the full viewport edge to edge.
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      margin: EdgeInsets.symmetric(
+        horizontal: ConfigurationAppearance.active(context)
+            ? ConfigurationAppearance.gutter(context)
+            : 16,
+      ),
       decoration: BoxDecoration(
         color: isStaged
             ? KalinkaColors.statusPending.withValues(alpha: 0.06)
@@ -348,13 +389,22 @@ class _ExpertRow extends StatelessWidget {
         children: [
           SelectableText(field.path, style: pathStyle),
           const SizedBox(height: 4),
-          Text(field.label, style: labelStyle),
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(field.label, style: labelStyle),
+              if (isStaged && ConfigurationAppearance.active(context))
+                const ChangedSettingLabel(),
+            ],
+          ),
           if (field.help != null && field.help!.isNotEmpty) ...[
             const SizedBox(height: 3),
             Text(field.help!, style: helpStyle),
           ],
           const SizedBox(height: 12),
           control,
+          IssueNotes(issues: binding.issuesFor(field.path)),
         ],
       ),
     );

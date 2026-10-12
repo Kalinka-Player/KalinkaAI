@@ -17,8 +17,8 @@ import '../browse_filters/active_filter_chips.dart';
 import '../browse_filters/browse_filter_form.dart' show filterTypeLabel;
 import '../browse_filters/filters_match_nothing.dart';
 import '../browse_rows_shimmer.dart';
-import '../fitted_title.dart';
 import '../infinite_list_view.dart';
+import '../page_banner.dart';
 import '../search_cards/action_pill_button.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../shelf_heading.dart';
@@ -593,22 +593,13 @@ Widget _onTheRight(Widget art) => FractionallySizedBox(
 /// The scrolling page banner: the Playfair title + attribution over the
 /// left half of [CatalogArtBackdrop]'s art zone (the art itself is fixed at
 /// the surface level and does not scroll with this header).
-class _CatalogBanner extends StatelessWidget {
+class _CatalogBanner extends ConsumerWidget {
   final CatalogPage page;
 
   const _CatalogBanner({required this.page});
 
   @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Type scales with width, gently.
-        return _buildBanner((constraints.maxWidth / 420).clamp(1.0, 1.25));
-      },
-    );
-  }
-
-  Widget _buildBanner(double scale) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // One attribution line, not two: the provider name and the description
     // said much the same thing ("Local Library" over "Recently added
     // tracks"). The badge keeps the attribution; the description carries the
@@ -618,58 +609,18 @@ class _CatalogBanner extends StatelessWidget {
         ? description
         : (page.provider ?? '');
 
-    return Consumer(
-      builder: (context, ref, _) {
-        return Container(
-          // The text block is content-sized — no zone to be centred in, so
-          // these insets are the whole vertical spacing and nothing drifts
-          // with window width.
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          child: FractionallySizedBox(
-            // Wide enough that ordinary category names ("Recently Added")
-            // stay on one line; longer ones still wrap rather than shrink.
-            widthFactor: 0.82,
-            // The box defaults to centring its child — the text column hugs
-            // the left edge, whatever fraction of the width it takes.
-            alignment: Alignment.centerLeft,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return PageBanner(
+      title: page.title ?? '',
+      subtitle: subtitle,
+      subtitleLeading: subtitle.isEmpty
+          ? null
+          : Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                FittedTitle(
-                  page.title ?? '',
-                  style: KalinkaFonts.display(
-                    fontSize: (KalinkaTypography.baseSize + 21) * scale,
-                    fontWeight: FontWeight.w600,
-                    color: KalinkaColors.textPrimary,
-                  ),
-                  minFontSize: (KalinkaTypography.baseSize + 7) * scale,
-                ),
-                if (subtitle.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 5),
-                    child: Row(
-                      children: [
-                        SourceBadge(entityId: page.id!),
-                        if (sourceBadgeVisible(ref, page.id!))
-                          const SizedBox(width: 7),
-                        Flexible(
-                          child: Text(
-                            subtitle,
-                            style: KalinkaTextStyles.trackRowSubtitle
-                                .copyWith(color: KalinkaColors.textSecondary)
-                                .apply(fontSizeFactor: scale),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                SourceBadge(entityId: page.id!),
+                if (sourceBadgeVisible(ref, page.id!)) const SizedBox(width: 7),
               ],
             ),
-          ),
-        );
-      },
     );
   }
 }

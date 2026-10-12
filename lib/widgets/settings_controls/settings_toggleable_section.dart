@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
+import '../configuration_appearance.dart';
 import 'inline_markdown.dart';
 import 'settings_toggle.dart';
 
@@ -149,16 +151,27 @@ class _SettingsToggleableSectionState extends State<SettingsToggleableSection>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                widget.title,
-                                style: KalinkaTextStyles.trayRowLabel.copyWith(
-                                  // Slightly muted when disabled, to
-                                  // reinforce the off state without
-                                  // hiding the title.
-                                  color: widget.enabled
-                                      ? KalinkaColors.textPrimary
-                                      : KalinkaColors.textSecondary,
-                                ),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 2,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Text(
+                                    widget.title,
+                                    style: KalinkaTextStyles.trayRowLabel
+                                        .copyWith(
+                                          // Slightly muted when disabled, to
+                                          // reinforce the off state without
+                                          // hiding the title.
+                                          color: widget.enabled
+                                              ? KalinkaColors.textPrimary
+                                              : KalinkaColors.textSecondary,
+                                        ),
+                                  ),
+                                  if (widget.isStaged &&
+                                      ConfigurationAppearance.active(context))
+                                    const ChangedSettingLabel(),
+                                ],
                               ),
                               if (hasStatus) ...[
                                 const SizedBox(height: 3),

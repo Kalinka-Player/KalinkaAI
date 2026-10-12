@@ -13,6 +13,8 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/widgets/box_section.dart';
+import 'package:kalinka/widgets/configuration_appearance.dart';
+import 'package:kalinka/widgets/settings_controls/settings_action_row.dart';
 import 'package:kalinka/widgets/escalation_card.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -261,14 +263,21 @@ void main() {
     Future<(ProviderContainer, _FakeBox)> pump(
       WidgetTester tester, {
       SupervisorInfo? answer,
+      bool configuration = false,
     }) async {
       final box = _FakeBox(answer: answer);
       final container = await _container(box: box, identity: 'box-1');
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(
-            home: Scaffold(body: SingleChildScrollView(child: BoxSection())),
+          child: MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: configuration
+                    ? const ConfigurationAppearance(child: BoxSection())
+                    : const BoxSection(),
+              ),
+            ),
           ),
         ),
       );
@@ -277,36 +286,60 @@ void main() {
     }
 
     testWidgets('offers the dashboard and the box actions', (tester) async {
-      await pump(tester, answer: _info());
+      await pump(tester, answer: _info(), configuration: true);
 
-      expect(find.text('BOX'), findsOneWidget);
-      expect(find.text('Box dashboard'), findsOneWidget);
-      expect(find.text('Restart the box'), findsOneWidget);
-      expect(find.text('Power off'), findsOneWidget);
+      expect(find.text('STREAMER'), findsOneWidget);
+      expect(find.text('Streamer dashboard'), findsOneWidget);
+      expect(find.text('Restart streamer'), findsOneWidget);
+      expect(find.text('Power off streamer'), findsOneWidget);
+      for (final (label, icon) in [
+        ('Streamer dashboard', Icons.dashboard_outlined),
+        ('Restart streamer', Icons.autorenew),
+        ('Power off streamer', Icons.power_settings_new),
+      ]) {
+        final text = find.text(label);
+        final row = find.ancestor(
+          of: text,
+          matching: find.byType(SettingsActionRow),
+        );
+        final leading = find.descendant(of: row, matching: find.byIcon(icon));
+        expect(
+          tester.getRect(leading).right,
+          lessThan(tester.getRect(text).left),
+        );
+        expect(
+          find.descendant(of: row, matching: find.byIcon(Icons.chevron_right)),
+          findsNothing,
+        );
+      }
+      expect(
+        tester.getRect(find.byIcon(Icons.open_in_new)).left,
+        greaterThan(tester.getRect(find.text('Streamer dashboard')).right),
+      );
     });
 
     testWidgets('is absent without a supervisor', (tester) async {
       await pump(tester);
-      expect(find.text('BOX'), findsNothing);
+      expect(find.text('STREAMER'), findsNothing);
     });
 
     testWidgets('leaves out what the box does not offer', (tester) async {
       await pump(tester, answer: _info(actions: {'poweroff'}));
-      expect(find.text('Restart the box'), findsNothing);
-      expect(find.text('Power off'), findsOneWidget);
+      expect(find.text('Restart streamer'), findsNothing);
+      expect(find.text('Power off streamer'), findsOneWidget);
     });
 
     testWidgets('powers off only once confirmed', (tester) async {
-      final (_, box) = await pump(tester, answer: _info());
+      final (_, box) = await pump(tester, answer: _info(), configuration: true);
 
-      await tester.tap(find.text('Power off'));
+      await tester.tap(find.text('Power off streamer'));
       await tester.pumpAndSettle();
-      expect(find.text('Power off the box?'), findsOneWidget);
+      expect(find.text('Power off streamer?'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(box.runs, isEmpty);
 
-      await tester.tap(find.text('Power off'));
+      await tester.tap(find.text('Power off streamer'));
       await tester.pumpAndSettle();
       await tester.tap(
         find.descendant(
@@ -323,7 +356,7 @@ void main() {
       final (container, box) = await pump(tester, answer: _info());
       box.refusal = const BoxActionException('busy', 'The box is busy.');
 
-      await tester.tap(find.text('Restart the box'));
+      await tester.tap(find.text('Restart streamer'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Restart'));
       await tester.pumpAndSettle();

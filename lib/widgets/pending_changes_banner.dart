@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
 
 /// Amber banner that appears when settings changes are staged but not yet applied.
@@ -61,70 +62,98 @@ class PendingChangesBanner extends StatelessWidget {
                 ),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: const BoxDecoration(
-                      color: KalinkaColors.statusPending,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '$pendingCount change${pendingCount == 1 ? '' : 's'} '
-                      'staged${_trailingClause()}',
-                      style: KalinkaTextStyles.bannerText.copyWith(
-                        color: blocked
-                            ? KalinkaColors.actionDeleteLight
-                            : KalinkaColors.statusPendingLight,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: busy ? null : onDiscard,
-                    child: Text(
-                      'Discard',
-                      style: KalinkaTextStyles.cancelButton,
-                    ),
-                  ),
-                  const SizedBox(width: 15),
-                  GestureDetector(
-                    onTap: busy || blocked ? null : onApply,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: KalinkaColors.statusPending.withValues(
-                          alpha: blocked ? 0.04 : 0.1,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final stacked =
+                      constraints.maxWidth < 420 ||
+                      MediaQuery.textScalerOf(context).scale(1) > 1.3;
+                  final summary = Row(
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                          color: KalinkaColors.statusPending,
+                          shape: BoxShape.circle,
                         ),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: KalinkaColors.statusPending.withValues(
-                            alpha: blocked ? 0.15 : 0.4,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '$pendingCount change${pendingCount == 1 ? '' : 's'} '
+                          'staged${_trailingClause()}',
+                          style: KalinkaTextStyles.bannerText.copyWith(
+                            color: blocked
+                                ? KalinkaColors.actionDeleteLight
+                                : KalinkaColors.statusPendingLight,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  );
+                  final actions = Wrap(
+                    spacing: 15,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.end,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      GestureDetector(
+                        onTap: busy ? null : onDiscard,
+                        child: Text(
+                          'Discard',
+                          style: KalinkaTextStyles.cancelButton,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: busy || blocked ? null : onApply,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: KalinkaColors.statusPending.withValues(
+                              alpha: blocked ? 0.04 : 0.1,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: KalinkaColors.statusPending.withValues(
+                                alpha: blocked ? 0.15 : 0.4,
+                              ),
+                            ),
+                          ),
+                          child: Text(
+                            busy ? 'APPLYING…' : 'APPLY',
+                            style: KalinkaTextStyles.bannerText.copyWith(
+                              color: KalinkaColors.statusPendingLight
+                                  .withValues(alpha: blocked ? 0.4 : 1),
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.0,
+                            ),
                           ),
                         ),
                       ),
-                      child: Text(
-                        busy ? 'APPLYING…' : 'APPLY',
-                        style: KalinkaTextStyles.bannerText.copyWith(
-                          color: KalinkaColors.statusPendingLight.withValues(
-                            alpha: blocked ? 0.4 : 1,
-                          ),
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                    ],
+                  );
+                  return stacked
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            summary,
+                            const SizedBox(height: 8),
+                            actions,
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Expanded(child: summary),
+                            const SizedBox(width: 8),
+                            actions,
+                          ],
+                        );
+                },
               ),
             )
           : const SizedBox.shrink(),

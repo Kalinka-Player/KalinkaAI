@@ -3,30 +3,52 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/plugin_catalog.dart';
+import 'package:kalinka/data_model/presentation_schema.dart';
+import 'package:kalinka/data_model/configuration_sections.dart';
+import 'package:kalinka/widgets/settings_controls/settings_toggle.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/log_export_provider.dart';
+import 'package:kalinka/providers/modules_state_provider.dart';
 import 'package:kalinka/providers/plugin_catalog_provider.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
 import 'package:kalinka/providers/renderer_settings_route_provider.dart';
 import 'package:kalinka/providers/server_info_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
+import 'package:kalinka/providers/restart_provider.dart';
+import 'package:kalinka/providers/plugin_state.dart';
+import 'package:kalinka/screens/server_configuration_screen.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
+import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
 import 'package:kalinka/screens/music_player_screen.dart';
+import 'package:kalinka/screens/log_export_screen.dart';
+import 'package:kalinka/screens/plugin_about_screen.dart';
 import 'package:kalinka/screens/plugin_catalog_screen.dart';
+import 'package:kalinka/screens/plugin_settings_screen.dart';
 import 'package:kalinka/screens/settings_screen.dart';
 import 'package:kalinka/screens/renderer_settings_screen.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/server_sheet.dart';
+import 'package:kalinka/widgets/breadcrumb_crumb.dart';
 import 'package:kalinka/widgets/kalinka_bottom_sheet.dart';
+import 'package:kalinka/widgets/kalinka_button.dart';
+import 'package:kalinka/widgets/kalinka_dialog.dart';
+import 'package:kalinka/widgets/mini_player.dart';
+import 'package:kalinka/widgets/page_banner.dart';
+import 'package:kalinka/widgets/configuration_changes_bar.dart';
+import 'package:kalinka/widgets/configuration_appearance.dart';
+import 'package:kalinka/widgets/settings_controls/settings_card.dart';
+import 'package:kalinka/widgets/settings_controls/settings_action_row.dart';
+import 'package:kalinka/screens/configuration_review_screen.dart';
+import 'package:kalinka/widgets/plugin_top_bar.dart';
 import 'package:kalinka/widgets/server_chip.dart';
 import 'package:kalinka/widgets/plugin_catalog_entry.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
@@ -34,6 +56,8 @@ import 'package:kalinka/widgets/queue_zone.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/sheet_anchor.dart';
 import 'package:kalinka/widgets/settings_controls/inline_markdown.dart';
+import 'package:kalinka/widgets/expert_settings_screen.dart';
+import 'package:kalinka/widgets/settings_controls/module_header_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
 
@@ -41,9 +65,9 @@ PluginCatalog _catalog({
   String status = 'available',
   Map<String, dynamic>? qobuzCompatibility,
 }) {
-  final json =
-      jsonDecode(File('test/fixtures/plugin_catalog.json').readAsStringSync())
-          as Map<String, dynamic>;
+  final json = jsonDecode(
+    File('test/fixtures/plugin_catalog.json').readAsStringSync(),
+  ) as Map<String, dynamic>;
   json['status'] = status;
   if (qobuzCompatibility != null) {
     (json['plugins'] as List).singleWhere(
@@ -60,9 +84,21 @@ class _Connected extends ConnectionStateNotifier {
 }
 
 class _Settings extends SettingsNotifier {
+  final SettingsState initial;
+  _Settings([this.initial = const SettingsState()]);
   int loads = 0;
+  int saves = 0;
   @override
-  SettingsState build() => const SettingsState();
+  Future<void> applyChanges() async {
+    saves++;
+    state = state.copyWith(
+      values: {...state.values, ...state.stagedChanges},
+      stagedChanges: {},
+    );
+  }
+
+  @override
+  SettingsState build() => initial;
   @override
   Future<void> loadConfig() async {
     loads++;
@@ -70,6 +106,27 @@ class _Settings extends SettingsNotifier {
 
   void saved(bool enabled) =>
       state = state.copyWith(values: {pluginCatalogSettingPath: enabled});
+}
+
+class _Restart extends RestartNotifier {
+  final bool fail;
+  _Restart({this.fail = false});
+  int calls = 0;
+  @override
+  RestartState build() => const RestartState();
+  @override
+  Future<void> executeRestart() async {
+    calls++;
+    if (fail) {
+      state = const RestartState(
+        isRestarting: true,
+        error: 'Could not save settings',
+      );
+      return;
+    }
+    await ref.read(settingsProvider.notifier).applyChanges();
+    state = const RestartState(isRestarting: true, isDone: true);
+  }
 }
 
 class _Proxy implements KalinkaPlayerProxy {
@@ -91,16 +148,203 @@ class _Proxy implements KalinkaPlayerProxy {
       throw UnimplementedError('${invocation.memberName}');
 }
 
+class _Logs extends LogExportController {
+  @override
+  LogExportView build() => const LogExportView(unsupported: true);
+}
+
 class _CatalogApi implements PluginCatalogApi {
   PluginCatalog result;
   int reads = 0;
   Completer<PluginCatalog>? pending;
   _CatalogApi(this.result);
+
+  /// Thrown by the next reads, as a server that cannot answer would.
+  PluginCatalogException? failure;
+
   @override
   Future<PluginCatalog> read() async {
     reads++;
+    if (failure case final failure?) throw failure;
     return pending == null ? result : pending!.future;
   }
+
+  List<PluginUpdate> available = const [];
+  final runs = <(String, PluginOperation)>[];
+  Completer<void>? running;
+  String? refusal;
+
+  @override
+  Future<List<PluginUpdate>> updates() async => available;
+
+  @override
+  Future<void> run(String pluginId, PluginOperation operation) async {
+    runs.add((pluginId, operation));
+    await running?.future;
+    if (refusal case final refusal?) throw PluginCatalogException(refusal);
+  }
+}
+
+/// What `/server/modules` answers; tests change it as the server would.
+class _Live {
+  ModulesAndDevices value;
+  _Live([ModulesAndDevices? value])
+    : value = value ?? ModulesAndDevices(inputModules: [], devices: []);
+}
+
+ModuleInfo _module(
+  String name, {
+  bool enabled = true,
+  String state = 'ready',
+  String? summary,
+}) => ModuleInfo.fromJson({
+  'name': name,
+  'title': name,
+  'enabled': enabled,
+  'state': state,
+  'summary': ?summary,
+});
+
+Map<String, dynamic> _moduleSpec(String id, {bool device = false}) {
+  final prefix = device ? 'devices' : 'input_modules';
+  return {
+    'id': id,
+    'kind': device ? 'device' : 'input_module',
+    'title': id,
+    'fields': [
+      {
+        'path': '$prefix.$id.enabled',
+        'label': 'Module enabled',
+        'widget': 'toggle',
+        'type': 'bool',
+        'default': true,
+      },
+      {
+        'path': '$prefix.$id.region',
+        'label': 'Store region',
+        'widget': 'text_input',
+        'type': 'str',
+      },
+    ],
+  };
+}
+
+/// Settings whose schema carries a switch and one field for each plugin.
+SettingsState _settingsWith(Map<String, bool> enabled) => SettingsState(
+  schema: PresentationSchema.fromJson({
+    'schema_version': '1',
+    'pages': [
+      {
+        'id': 'input_modules',
+        'title': 'Modules',
+        'modules': [
+          for (final id in enabled.keys)
+            if (id != 'musiccast') _moduleSpec(id),
+        ],
+      },
+      {
+        'id': 'devices',
+        'title': 'Devices',
+        'modules': [
+          if (enabled.containsKey('musiccast'))
+            _moduleSpec('musiccast', device: true),
+        ],
+      },
+    ],
+  }),
+  values: {
+    for (final MapEntry(key: id, value: on) in enabled.entries)
+      '${id == 'musiccast' ? 'devices' : 'input_modules'}.$id.enabled': on,
+  },
+);
+
+SettingsState _serverSettings({bool details = false}) {
+  final plugins = _settingsWith({'localfiles': true});
+  return plugins.copyWith(
+    schema: PresentationSchema(
+      schemaVersion: '1',
+      pages: [
+        PageSpec(
+          id: 'base_config',
+          title: 'Server',
+          sections: [
+            SectionSpec(
+              id: 'base_config.server',
+              title: 'Server',
+              fields: [
+                FieldSpec(
+                  path: 'base_config.server.service_name',
+                  label: 'Service name',
+                  help: 'How this server appears in the app when found on your network',
+                  widget: WidgetKind.text,
+                  type: 'str',
+                ),
+                if (details) ...const [
+                  FieldSpec(
+                    path: 'base_config.server.auto_upgrade',
+                    label: 'Auto upgrade',
+                    widget: WidgetKind.toggle,
+                    type: 'bool',
+                    defaultValue: false,
+                  ),
+                  FieldSpec(
+                    path: 'base_config.server.supervisor_status',
+                    label: 'Supervisor status',
+                    widget: WidgetKind.text,
+                    type: 'str',
+                    readonly: true,
+                    defaultValue: 'Not installed',
+                    help: 'Detailed service information.',
+                  ),
+                ],
+              ],
+            ),
+            SectionSpec(
+              id: 'base_config.device_automation',
+              title: 'Device automation',
+              fields: [
+                FieldSpec(
+                  path: 'base_config.device_automation.auto_power_on',
+                  label: 'Auto power on',
+                  widget: WidgetKind.toggle,
+                  type: 'bool',
+                  defaultValue: false,
+                ),
+                FieldSpec(
+                  path: 'base_config.device_automation.auto_power_off',
+                  label: 'Auto power off',
+                  widget: WidgetKind.toggle,
+                  type: 'bool',
+                  defaultValue: false,
+                ),
+                FieldSpec(
+                  path: ConfigurationSections.timeoutPath,
+                  label: 'Pause timeout',
+                  widget: WidgetKind.numberInput,
+                  type: 'int',
+                  defaultValue: 0,
+                  constraints: Constraints(ge: 0),
+                ),
+              ],
+            ),
+            SectionSpec(
+              id: 'base_config.new_feature',
+              title: 'Future feature',
+              fields: [
+                FieldSpec(
+                  path: 'base_config.new_feature.value',
+                  label: 'Future setting',
+                  widget: WidgetKind.text,
+                  type: 'str',
+                ),
+              ],
+            ),
+          ],
+        ),
+        ...plugins.schema!.pages,
+      ],
+    ),
+  );
 }
 
 Future<ProviderContainer> _container(
@@ -108,8 +352,14 @@ Future<ProviderContainer> _container(
   _CatalogApi api, {
   bool player = false,
   _Proxy? otherServer,
+  _Live? live,
+  SettingsState settings = const SettingsState(),
+  String? name,
+  _Restart? restart,
 }) async {
+  live ??= _Live();
   SharedPreferences.setMockInitialValues({
+    'Kalinka.name': ?name,
     if (player) ...{
       'Kalinka.host': 'localhost',
       'Kalinka.port': 8080,
@@ -122,8 +372,10 @@ Future<ProviderContainer> _container(
   final container = ProviderContainer(
     overrides: [
       sharedPrefsProvider.overrideWithValue(prefs),
+      if (restart != null) restartProvider.overrideWith(() => restart),
       connectionStateProvider.overrideWith(_Connected.new),
-      settingsProvider.overrideWith(_Settings.new),
+      settingsProvider.overrideWith(() => _Settings(settings)),
+      modulesStateProvider.overrideWith((ref) async => live!.value),
       kalinkaProxyProvider.overrideWith(
         (ref) =>
             ref.watch(connectionSettingsProvider).host == 'other' &&
@@ -133,6 +385,7 @@ Future<ProviderContainer> _container(
       ),
       pluginCatalogApiProvider.overrideWithValue(api),
       if (player) ...[
+        logExportProvider.overrideWith(_Logs.new),
         sourceModulesProvider.overrideWith((ref) => <ModuleInfo>[]),
         sourceCountProvider.overrideWithValue(1),
         webSocketProvider.overrideWith(
@@ -152,6 +405,7 @@ Future<void> _screen(
   double scale = 1,
   double? appWidth,
   bool disableAnimations = false,
+  VoidCallback? onClose,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -166,7 +420,7 @@ Future<void> _screen(
             textScaler: TextScaler.linear(scale),
             disableAnimations: disableAnimations,
           ),
-          child: const Scaffold(body: PluginCatalogScreen()),
+          child: Scaffold(body: PluginCatalogScreen(onClose: onClose)),
         ),
       ),
     ),
@@ -174,27 +428,678 @@ Future<void> _screen(
   await tester.pumpAndSettle();
 }
 
-Future<void> _expand(WidgetTester tester, String id) async {
-  final header = find.byKey(ValueKey('plugin-$id'));
-  final title = find.descendant(of: header, matching: find.byType(Text)).first;
-  await tester.scrollUntilVisible(
-    header,
-    150,
-    scrollable: find
-        .descendant(
-          of: find.byType(CustomScrollView),
-          matching: find.byType(Scrollable),
-        )
-        .first,
-  );
-  await Scrollable.ensureVisible(tester.element(title), alignment: 0.5);
+Finder get _scrollable => find
+    .descendant(
+      of: find.byKey(const ValueKey('catalog-scroll')),
+      matching: find.byType(Scrollable),
+    )
+    .first;
+
+/// Taps a plugin's row: an installed one opens its configuration page, one
+/// the server lacks its About page.
+Future<void> _open(WidgetTester tester, String id) async {
+  final row = find.byKey(ValueKey('plugin-$id'));
+  // From the top, so a row scrolled past is found too.
+  tester
+      .widget<CustomScrollView>(find.byKey(const ValueKey('catalog-scroll')))
+      .controller!
+      .jumpTo(0);
+  await tester.pump();
+  await tester.scrollUntilVisible(row, 150, scrollable: _scrollable);
+  await Scrollable.ensureVisible(tester.element(row), alignment: 0.5);
   await tester.pumpAndSettle();
-  expect(title.hitTestable(), findsOneWidget);
-  await tester.tap(title);
+  expect(row.hitTestable(), findsOneWidget);
+  await tester.tap(row);
   await tester.pumpAndSettle();
 }
 
+/// Opens a plugin's About page, from its configuration page where it has one.
+Future<void> _about(WidgetTester tester, String id) async {
+  final about = find.byKey(ValueKey('plugin-about-$id'));
+  if (about.evaluate().isEmpty) await _open(tester, id);
+  if (find.byType(PluginAboutScreen).evaluate().isEmpty) {
+    await tester.tap(about);
+    await tester.pumpAndSettle();
+  }
+  expect(find.byType(PluginAboutScreen), findsOneWidget);
+}
+
+Future<void> _tapTab(WidgetTester tester, PluginTab tab) async {
+  final button = find.byKey(ValueKey('catalog-tab-${tab.name}'));
+  await tester.ensureVisible(button);
+  await tester.pumpAndSettle();
+  await tester.tap(button);
+  await tester.pumpAndSettle();
+}
+
+void _expectTab(WidgetTester tester, PluginTab selected) {
+  for (final tab in [PluginTab.sources, PluginTab.server, PluginTab.devices]) {
+    final button = find.byKey(ValueKey('catalog-tab-${tab.name}'));
+    final box = tester.widget<Container>(
+      find.descendant(of: button, matching: find.byType(Container)).first,
+    );
+    final underline = (box.decoration! as BoxDecoration).border!.bottom;
+    final label = tester.widget<Text>(
+      find.descendant(of: button, matching: find.byType(Text)),
+    );
+    expect(
+      underline.color,
+      tab == selected ? KalinkaColors.accent : Colors.transparent,
+    );
+    expect(underline.width, 2);
+    expect(
+      label.style!.color,
+      tab == selected ? KalinkaColors.textPrimary : KalinkaColors.textSecondary,
+    );
+    expect(
+      tester.getSemantics(button),
+      isSemantics(isSelected: tab == selected, isButton: true),
+    );
+  }
+}
+
+/// The plugins listed, top to bottom, built or not.
+List<String> _listed(WidgetTester tester) => tester
+    .widgetList<PluginRow>(find.byType(PluginRow, skipOffstage: false))
+    .map((row) => row.plugin.id)
+    .toList();
+
+String _statusOf(WidgetTester tester, String id) => tester
+    .widget<Text>(
+      find.descendant(
+        of: find.byKey(ValueKey('plugin-$id')),
+        matching: find.byKey(const ValueKey('plugin-status')),
+      ),
+    )
+    .data!;
+
+/// The word a row's badge says, as Server settings says it.
+ModuleStatusBadge? _badgeOf(WidgetTester tester, String id) {
+  final badge = find.descendant(
+    of: find.byKey(ValueKey('plugin-$id')),
+    matching: find.byKey(const ValueKey('plugin-badge')),
+  );
+  return badge.evaluate().isEmpty
+      ? null
+      : tester.widget<ModuleStatusBadge>(badge);
+}
+
+List<double> _opacitiesOf(WidgetTester tester, String id) => tester
+    .widgetList<Opacity>(
+      find.descendant(
+        of: find.byKey(ValueKey('plugin-$id')),
+        matching: find.byType(Opacity),
+      ),
+    )
+    .map((o) => o.opacity)
+    .toList();
+
+/// A section heading's spans: its name, then its count.
+List<InlineSpan> _headingSpans(WidgetTester tester, String text) =>
+    (tester.widget<Text>(find.textContaining(text).first).textSpan! as TextSpan)
+        .children!;
+
+Finder _onPage<T>(Finder matching) =>
+    find.descendant(of: find.byType(T), matching: matching);
+
 void main() {
+  testWidgets(
+    'server headings scroll, cards align, and technical details live in Maintenance',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        settings: _serverSettings(details: true),
+      );
+      await _screen(tester, container, size: const Size(400, 700));
+      await _tapTab(tester, PluginTab.server);
+      expect(find.text('Service name'), findsOneWidget);
+      expect(find.text('Player name'), findsNothing);
+      expect(
+        find.text(
+          'How this server appears in the app when found on your network',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Auto upgrade'), findsOneWidget);
+      expect(find.text('Supervisor status'), findsNothing);
+      final heading = find.descendant(
+        of: find.byType(ServerSettingsBody),
+        matching: find.text('SERVER'),
+      );
+      final headingRect = tester.getRect(heading);
+      final titleBar = find.byType(PluginTopBar).last;
+      final barRect = tester.getRect(titleBar);
+      final card = find.byType(SettingsCard).first;
+      final containerWidget = tester.widget<Container>(
+        find.descendant(of: card, matching: find.byType(Container)).first,
+      );
+      expect(containerWidget.margin, const EdgeInsets.fromLTRB(20, 0, 20, 12));
+      final list = find.byKey(const ValueKey('catalog-scroll'));
+      await tester.drag(list, const Offset(0, -180));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(heading).top, lessThan(headingRect.top));
+      expect(tester.getRect(titleBar), barRect);
+      final maintenance = find.byKey(
+        const ValueKey('server-group-maintenance'),
+      );
+      await tester.scrollUntilVisible(
+        maintenance,
+        200,
+        scrollable: _scrollable,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(maintenance);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('System details'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('server-system-details')), findsWidgets);
+      expect(find.text('Player address'), findsOneWidget);
+      expect(find.text('Software version'), findsOneWidget);
+      expect(find.text('Supervisor status'), findsOneWidget);
+      expect(find.text('Not installed'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'review opens the named invalid settings and preserves edits on Back',
+    (tester) async {
+      const path = 'base_config.server.service_name';
+      final settings = _serverSettings().copyWith(
+        stagedChanges: {path: ''},
+        issues: {
+          path: [
+            const ConfigIssue(path: path, message: 'Enter a player name.'),
+          ],
+        },
+      );
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        settings: settings,
+      );
+      await _screen(tester, container);
+      expect(
+        find.text('Check Service name before applying your changes.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Review changes'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ConfigurationReviewScreen), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('review-base_config.server.service_name')),
+        findsOneWidget,
+      );
+      expect(find.text('Enter a player name.'), findsOneWidget);
+      expect(find.byType(ChangedSettingLabel), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'Listening room');
+      await tester.pumpAndSettle();
+      expect(
+        container.read(settingsProvider).stagedChanges[path],
+        'Listening room',
+      );
+      expect(find.byType(TextField), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(ConfigurationReviewScreen), findsNothing);
+      expect(container.read(settingsProvider).hasPendingChanges, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'changes bar wraps at large text and retains generous action targets',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        settings: _serverSettings().copyWith(
+          stagedChanges: {'base_config.server.service_name': 'Room'},
+        ),
+      );
+      await _screen(tester, container, size: const Size(320, 640), scale: 1.8);
+      expect(find.text('1 change not applied'), findsOneWidget);
+      final explanation = tester.widget<Text>(
+        find.text(
+          'Applying them will restart your player and briefly stop music.',
+        ),
+      );
+      expect(explanation.maxLines, isNull);
+      for (final key in [
+        'configuration-bar-discard',
+        'configuration-bar-apply',
+      ]) {
+        expect(
+          tester.getSize(find.byKey(ValueKey(key))).height,
+          greaterThanOrEqualTo(48),
+        );
+        expect(find.byKey(ValueKey(key)).hitTestable(), findsOneWidget);
+      }
+      expect(tester.getRect(find.byType(ConfigurationChangesBar)).bottom, 640);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'ready status uses the brighter text without changing its subtle fill',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: const Scaffold(
+            body: ModuleStatusBadge(
+              label: 'READY',
+              color: KalinkaColors.statusOnline,
+            ),
+          ),
+        ),
+      );
+      final text = tester.widget<Text>(find.text('READY'));
+      expect(text.style!.color, KalinkaColors.statusOnlineLight);
+      expect(text.style!.fontSize, greaterThanOrEqualTo(12));
+      final badge = tester.widget<Container>(
+        find.descendant(
+          of: find.byType(ModuleStatusBadge),
+          matching: find.byType(Container),
+        ),
+      );
+      expect(
+        (badge.decoration as BoxDecoration).color,
+        KalinkaColors.statusOnline.withValues(alpha: .1),
+      );
+    },
+  );
+
+  testWidgets(
+    'plugin descriptions sit below the settings title and ordinary edits stay pending on return',
+    (tester) async {
+      final catalog = _catalog();
+      final plugin = catalog.plugins.singleWhere((p) => p.id == 'localfiles');
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(catalog),
+        settings: _settingsWith({'localfiles': true}),
+        live: _Live(
+          ModulesAndDevices(inputModules: [_module('localfiles')], devices: []),
+        ),
+      );
+      await _screen(tester, container);
+      expect(find.text(plugin.description), findsNothing);
+      await _open(tester, 'localfiles');
+      final banner = _onPage<PluginSettingsScreen>(find.byType(PageBanner));
+      final description = find.descendant(
+        of: banner,
+        matching: find.text(plugin.description),
+      );
+      expect(description, findsOneWidget);
+      expect(tester.widget<Text>(description).maxLines, isNull);
+      expect(
+        tester.getRect(description).top,
+        greaterThan(
+          tester
+              .getRect(
+                find.descendant(
+                  of: banner,
+                  matching: find.text('Folders & NAS settings'),
+                ),
+              )
+              .bottom,
+        ),
+      );
+      final field = _onPage<PluginSettingsScreen>(find.byType(TextField));
+      await tester.ensureVisible(field);
+      await tester.enterText(field, 'GB');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(KalinkaDialog), findsNothing);
+      expect(container.read(settingsProvider).stagedChanges, {
+        'input_modules.localfiles.region': 'GB',
+      });
+      expect(_statusOf(tester, 'localfiles'), 'Changes pending');
+      expect(_badgeOf(tester, 'localfiles')!.label, 'READY');
+      container.read(settingsProvider.notifier).discardAll();
+      await tester.pumpAndSettle();
+      expect(find.text('Changes pending'), findsNothing);
+    },
+  );
+
+  test('pending changes include nested and collection settings, and stay with their plugin', () {
+    final settings = _settingsWith({'localfiles': true, 'qobuz': true})
+        .copyWith(
+          stagedChanges: {
+            'input_modules.localfiles.folders': [
+              {'path': '/music'},
+            ],
+            'input_modules.localfiles.indexer.enabled': true,
+          },
+        );
+    final modules = ModulesAndDevices(
+      inputModules: [_module('localfiles'), _module('qobuz')],
+      devices: [],
+    );
+    PluginState state(String id) => PluginState.of(
+      _catalog().plugins.singleWhere((p) => p.id == id),
+      modules: modules,
+      settings: settings,
+    );
+    expect(state('localfiles').hasPendingChanges, isTrue);
+    expect(state('qobuz').hasPendingChanges, isFalse);
+  });
+
+  for (final systemBack in [false, true]) {
+    testWidgets(
+      'leaving Configuration asks before discarding, system back: $systemBack',
+      (tester) async {
+        var closes = 0;
+        final container = await _container(
+          _Proxy({'enabled': true, 'catalog_browsing': true}),
+          _CatalogApi(_catalog()),
+          settings: _serverSettings(),
+        );
+        await _screen(tester, container, onClose: () => closes++);
+        container
+            .read(settingsProvider.notifier)
+            .stageChange('base_config.server.service_name', 'Listening room');
+        await tester.pumpAndSettle();
+        Future<void> back() async {
+          if (systemBack) {
+            await tester.binding.handlePopRoute();
+          } else {
+            await tester.tap(find.byKey(const ValueKey('catalog-back')));
+          }
+          await tester.pumpAndSettle();
+        }
+
+        await back();
+        expect(find.text('Apply your changes?'), findsOneWidget);
+        expect(closes, 0);
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+        expect(container.read(settingsProvider).hasPendingChanges, isTrue);
+        await back();
+        await tester.tap(find.byKey(const ValueKey('configuration-discard')));
+        await tester.pumpAndSettle();
+        expect(closes, 1);
+        expect(container.read(settingsProvider).hasPendingChanges, isFalse);
+      },
+    );
+  }
+
+  for (final result in ['success', 'validation', 'failure']) {
+    testWidgets('apply on exit handles $result without losing changes', (
+      tester,
+    ) async {
+      var closes = 0;
+      final restart = _Restart(fail: result == 'failure');
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        restart: restart,
+        settings: _serverSettings().copyWith(
+          stagedChanges: {'base_config.server.service_name': 'Listening room'},
+          issues: result == 'validation'
+              ? {
+                  'base_config.server.service_name': [
+                    const ConfigIssue(
+                      path: 'base_config.server.service_name',
+                      message: 'Choose a name',
+                      severity: IssueSeverity.error,
+                    ),
+                  ],
+                }
+              : {},
+        ),
+      );
+      await _screen(tester, container, onClose: () => closes++);
+      await tester.tap(find.byKey(const ValueKey('catalog-back')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('configuration-apply')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      if (result == 'failure') {
+        expect(find.text('Could not save settings'), findsOneWidget);
+        await tester.tap(find.text('Dismiss'));
+      }
+      await tester.pumpAndSettle();
+      expect(closes, result == 'success' ? 1 : 0);
+      expect(
+        container.read(settingsProvider).hasPendingChanges,
+        result != 'success',
+      );
+      expect(restart.calls, result == 'validation' ? 0 : 1);
+      expect(
+        (container.read(settingsProvider.notifier) as _Settings).saves,
+        result == 'success' ? 1 : 0,
+      );
+    });
+  }
+
+  testWidgets(
+    'Streamer edits include power controls and do not depend on plugins',
+    (tester) async {
+      final api = _CatalogApi(_catalog())
+        ..failure = const PluginCatalogException('Catalog unavailable');
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        api,
+        settings: _serverSettings(),
+      );
+      await _screen(tester, container);
+      await _tapTab(tester, PluginTab.server);
+      expect(find.byType(ServerConfigurationScreen), findsNothing);
+      expect(find.text('Service name'), findsOneWidget);
+      expect(find.text('Pause timeout'), findsOneWidget);
+      expect(find.text('Future setting'), findsOneWidget);
+      expect(find.text('DEVICE AUTOMATION'), findsOneWidget);
+      expect(find.text('Auto power on'), findsOneWidget);
+      final name = find.descendant(
+        of: find.ancestor(
+          of: find.text('Service name'),
+          matching: find.byType(SettingsRow),
+        ),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(name, 'Listening room');
+      await tester.pumpAndSettle();
+      expect(
+        container
+            .read(settingsProvider)
+            .stagedChanges['base_config.server.service_name'],
+        'Listening room',
+      );
+      final power = find.ancestor(
+        of: find.text('Auto power on'),
+        matching: find.byType(SettingsRow),
+      );
+      await Scrollable.ensureVisible(tester.element(power), alignment: 0.5);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(of: power, matching: find.byType(SettingsToggle)),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        container
+            .read(settingsProvider)
+            .stagedChanges['base_config.device_automation.auto_power_on'],
+        true,
+      );
+      expect(
+        find.descendant(of: power, matching: find.byType(ChangedSettingLabel)),
+        findsOneWidget,
+      );
+      await _tapTab(tester, PluginTab.devices);
+      expect(find.text('Auto power on'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('server-group-automaticPower')),
+        findsNothing,
+      );
+      await _tapTab(tester, PluginTab.server);
+      expect(
+        find.descendant(of: power, matching: find.byType(ChangedSettingLabel)),
+        findsOneWidget,
+      );
+      final timeout = find.descendant(
+        of: find.ancestor(
+          of: find.text('Pause timeout'),
+          matching: find.byType(SettingsRow),
+        ),
+        matching: find.byType(TextField),
+      );
+      await Scrollable.ensureVisible(tester.element(timeout), alignment: 0.5);
+      await tester.pumpAndSettle();
+      await tester.enterText(timeout, '60');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(
+        container
+            .read(settingsProvider)
+            .stagedChanges[ConfigurationSections.timeoutPath],
+        60,
+      );
+      expect(container.read(settingsProvider).pendingCount, 3);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Apply your changes?'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('configuration-discard')));
+      await tester.pumpAndSettle();
+      expect(container.read(settingsProvider).hasPendingChanges, false);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('server pages fit a narrow screen with large text', (
+    tester,
+  ) async {
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true}),
+      _CatalogApi(_catalog()),
+      settings: _serverSettings(),
+    );
+    await _screen(tester, container, size: const Size(320, 850), scale: 1.8);
+    await _tapTab(tester, PluginTab.server);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('server-group-maintenance')),
+      250,
+      scrollable: _scrollable,
+    );
+    await Scrollable.ensureVisible(
+      tester.element(find.byKey(const ValueKey('server-group-maintenance'))),
+      alignment: 0.5,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('server-group-maintenance')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ServerConfigurationScreen), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await _tapTab(tester, PluginTab.server);
+    final power = find.text('Auto power off');
+    await Scrollable.ensureVisible(tester.element(power), alignment: 0.5);
+    await tester.pumpAndSettle();
+    expect(power.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Maintenance opens advanced settings and Back returns one level',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        settings: _serverSettings(),
+      );
+      await _screen(tester, container);
+      await _tapTab(tester, PluginTab.server);
+      final maintenance = find.byKey(
+        const ValueKey('server-group-maintenance'),
+      );
+      await tester.scrollUntilVisible(
+        maintenance,
+        200,
+        scrollable: _scrollable,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(maintenance);
+      await tester.pumpAndSettle();
+      expect(find.text('Restart Kalinka'), findsOneWidget);
+      expect(find.text('Now-playing display'), findsNothing);
+      expect(find.text('Download server logs'), findsOneWidget);
+      for (final (label, icon, navigates) in [
+        ('Restart Kalinka', Icons.restart_alt, false),
+        ('System details', Icons.info_outline, true),
+        ('Advanced settings', Icons.tune, true),
+        ('Download server logs', Icons.description_outlined, true),
+      ]) {
+        final text = find.text(label);
+        final row = find.ancestor(
+          of: text,
+          matching: find.byType(SettingsActionRow),
+        );
+        final leading = find.descendant(of: row, matching: find.byIcon(icon));
+        expect(
+          tester.getRect(leading).right,
+          lessThan(tester.getRect(text).left),
+        );
+        final chevron = find.descendant(
+          of: row,
+          matching: find.byIcon(Icons.chevron_right),
+        );
+        if (navigates) {
+          expect(
+            tester.getRect(chevron).left,
+            greaterThan(tester.getRect(text).right),
+          );
+        } else {
+          expect(chevron, findsNothing);
+        }
+      }
+      await tester.tap(find.text('Advanced settings'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ExpertSettingsScreen), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(ExpertSettingsScreen), findsNothing);
+      expect(find.byType(ServerConfigurationScreen), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(ServerConfigurationScreen), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'the exit question stays usable with large text on a narrow screen',
+    (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.8;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        settings: _serverSettings(),
+      );
+      await _screen(
+        tester,
+        container,
+        size: const Size(320, 850),
+        scale: 1.8,
+        onClose: () {},
+      );
+      container
+          .read(settingsProvider.notifier)
+          .stageChange('base_config.server.service_name', 'Listening room');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('catalog-back')));
+      await tester.pumpAndSettle();
+      expect(find.text('Apply your changes?'), findsOneWidget);
+      await tester.ensureVisible(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(container.read(settingsProvider).hasPendingChanges, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('catalog uses the actual settings row and input typography', (
     tester,
   ) async {
@@ -218,40 +1123,28 @@ void main() {
     final explanationStyle = tester
         .widget<InlineMarkdown>(find.byType(InlineMarkdown))
         .style;
-    final inputStyle = tester.widget<TextField>(find.byType(TextField)).style;
-    final hintStyle = tester
-        .widget<TextField>(find.byType(TextField))
-        .decoration!
-        .hintStyle;
 
     final container = await _container(
       _Proxy({'enabled': true, 'catalog_browsing': true}),
       _CatalogApi(_catalog()),
     );
     await _screen(tester, container);
-    expect(
-      tester.widget<Text>(find.text('OFFICIAL  2')).style,
-      KalinkaTextStyles.sectionHeaderMuted,
-    );
-    expect(
-      tester.widget<Text>(find.text('BROWSE')).style,
-      KalinkaTextStyles.sectionHeaderMuted.copyWith(
-        letterSpacing: 1,
-        color: KalinkaColors.textPrimary,
-      ),
-    );
+    final tabStyle = tester.widget<Text>(find.text('MUSIC SOURCES')).style!;
+    expect(tabStyle.fontFamily, KalinkaFonts.monoFamily);
+    expect(tabStyle.letterSpacing, 1);
+    expect(tabStyle.color, KalinkaColors.textPrimary);
+    expect(_headingSpans(tester, 'More sources').first.style, explanationStyle);
     final row = find.byKey(const ValueKey('plugin-jamendo'));
     final text = tester
         .widgetList<Text>(find.descendant(of: row, matching: find.byType(Text)))
         .toList();
     expect(text[0].style, labelStyle);
     expect(text[1].style, explanationStyle);
-    final search = tester.widget<TextField>(
-      find.byKey(const ValueKey('plugin-search')),
+    expect(
+      text[2].style,
+      explanationStyle!.copyWith(color: KalinkaColors.textMuted),
     );
-    expect(search.style, inputStyle);
-    expect(search.decoration!.hintStyle, hintStyle);
-    await _expand(tester, 'jamendo');
+    await _about(tester, 'jamendo');
     expect(
       tester.widget<Text>(find.text('Created by')).style,
       explanationStyle,
@@ -260,13 +1153,16 @@ void main() {
       tester.widget<Text>(find.text('Managed with Kalinka Player')).style,
       labelStyle!.copyWith(color: KalinkaColors.textPrimary),
     );
-    expect(find.text('Included with Kalinka Player'), findsNWidgets(2));
+    expect(
+      _onPage<PluginAboutScreen>(find.text('Included with Kalinka Player')),
+      findsOneWidget,
+    );
     expect(find.text('Included with Kalinka'), findsNothing);
     expect(find.text('Managed with Kalinka'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('type chips use berry only for the selected choice', (
+  testWidgets('tabs underline only the selected section in berry', (
     tester,
   ) async {
     final container = await _container(
@@ -274,212 +1170,372 @@ void main() {
       _CatalogApi(_catalog()),
     );
     await _screen(tester, container);
-
-    void expectSelection(String selectedLabel) {
-      final chips = tester.widgetList<ChoiceChip>(find.byType(ChoiceChip));
-      expect(chips.where((chip) => chip.selected), hasLength(1));
-      for (final label in ['All', 'Input sources', 'Device control']) {
-        final finder = find.widgetWithText(ChoiceChip, label);
-        final chip = tester.widget<ChoiceChip>(finder);
-        final selected = label == selectedLabel;
-        final foreground = selected
-            ? KalinkaColors.textPrimary
-            : KalinkaColors.textSecondary;
-        expect(chip.selected, selected);
-        expect(
-          chip.color!.resolve({if (selected) WidgetState.selected}),
-          selected ? KalinkaColors.accent : KalinkaColors.surfaceElevated,
-        );
-        expect(
-          chip.side!.color,
-          selected ? KalinkaColors.accent : KalinkaColors.borderDefault,
-        );
-        expect(chip.labelStyle!.color, foreground);
-        if (chip.avatar != null) {
-          final icon = find.descendant(of: finder, matching: find.byType(Icon));
-          expect(IconTheme.of(tester.element(icon)).color, foreground);
-        }
-      }
-    }
-
-    expectSelection('Input sources');
-    for (final label in [
-      'Device control',
-      'All',
-      'Input sources',
-      'Input sources',
+    _expectTab(tester, PluginTab.sources);
+    // No Updates tab while the server reports none.
+    expect(find.byKey(const ValueKey('catalog-tab-updates')), findsNothing);
+    expect(find.byType(ChoiceChip), findsNothing);
+    // The berry line sits on the grey rule that runs the whole width.
+    final tabs = tester.getRect(find.byKey(const ValueKey('catalog-tabs')));
+    expect(tabs.height, 44);
+    final hifi = tester.getRect(
+      find.byKey(const ValueKey('catalog-tab-devices')),
+    );
+    final sources = tester.getRect(
+      find.byKey(const ValueKey('catalog-tab-sources')),
+    );
+    expect(sources.left, closeTo(tabs.left, 0.1));
+    expect(
+      tester.getRect(find.byKey(const ValueKey('catalog-tab-server'))).right,
+      closeTo(tabs.right, 0.1),
+    );
+    expect(hifi.width / 12, closeTo(sources.width / 13, 0.1));
+    expect(
+      tester.getRect(find.byKey(const ValueKey('catalog-tab-sources'))).bottom,
+      tabs.bottom,
+    );
+    for (final tab in [
+      PluginTab.devices,
+      PluginTab.server,
+      PluginTab.sources,
+      PluginTab.sources,
     ]) {
-      await tester.tap(find.widgetWithText(ChoiceChip, label));
-      await tester.pumpAndSettle();
-      expectSelection(label);
+      await _tapTab(tester, tab);
+      _expectTab(tester, tab);
+      final description = find.byKey(const ValueKey('catalog-description'));
+      if (tab == PluginTab.devices) {
+        expect(
+          tester
+              .widget<Text>(
+                find.descendant(of: description, matching: find.byType(Text)),
+              )
+              .data,
+          'Let Kalinka adjust your amplifier’s volume and switch inputs.',
+        );
+      } else {
+        expect(description, findsNothing);
+      }
+      expect(find.byType(PageBanner), findsNothing);
+      expect(find.text('HIFI CONTROL'), findsOneWidget);
+      expect(find.text('Configuration'), findsOneWidget);
     }
     expect(tester.takeException(), isNull);
   });
 
-  for (final (label, type) in [
-    ('All', 'all'),
-    ('Input sources', 'input_module'),
-    ('Device control', 'output_device'),
-  ]) {
-    testWidgets(
-      'clear search restores all $label without changing the type filter',
-      (tester) async {
-        final catalog = _catalog();
-        final api = _CatalogApi(catalog);
-        final container = await _container(
-          _Proxy({'enabled': true, 'catalog_browsing': true}),
-          api,
-        );
-        await _screen(
-          tester,
-          container,
-          size: const Size(320, 640),
-          scale: 1.8,
-        );
-        await tester.tap(find.widgetWithText(ChoiceChip, label));
-        await tester.pumpAndSettle();
-        final search = find.byKey(const ValueKey('plugin-search'));
-        final clear = find.byKey(const ValueKey('plugin-search-clear'));
-        expect(clear, findsNothing);
-        await tester.ensureVisible(search);
-        await tester.enterText(search, 'no plugin matches this');
-        await tester.pumpAndSettle();
-        expect(find.textContaining('No matching plugins'), findsOneWidget);
-        expect(find.byTooltip('Clear search'), findsOneWidget);
-        expect(find.descendant(of: search, matching: clear), findsOneWidget);
-        expect(tester.getSize(clear).width, greaterThanOrEqualTo(48));
-        expect(tester.getSize(clear).height, greaterThanOrEqualTo(48));
-
-        await tester.tap(clear);
-        await tester.pumpAndSettle();
-        expect(tester.widget<TextField>(search).controller!.text, isEmpty);
-        expect(clear, findsNothing);
-        expect(find.textContaining('No matching plugins'), findsNothing);
+  testWidgets(
+    'installed plugins come first, then the rest, counted, in either tab',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        live: _Live(
+          ModulesAndDevices(
+            inputModules: [
+              _module('upnp'),
+              // Switched off is still installed.
+              _module('jamendo', enabled: false, state: 'disabled'),
+              _module('localfiles'),
+            ],
+            devices: [_module('musiccast')],
+          ),
+        ),
+        settings: _settingsWith({'jamendo': false}),
+      );
+      await _screen(tester, container, size: const Size(400, 1400));
+      // Official and stable first within each, else as the catalog lists
+      // them.
+      expect(_listed(tester), [
+        'jamendo',
+        'localfiles',
+        'upnp',
+        'qobuz',
+        'spotify',
+      ]);
+      expect(find.text('Your sources · 3'), findsOneWidget);
+      expect(find.text('More sources · 2'), findsOneWidget);
+      expect(find.bySemanticsLabel('Your sources, 3'), findsOneWidget);
+      expect(find.bySemanticsLabel('More sources, 2'), findsOneWidget);
+      expect(
+        _headingSpans(tester, 'Your sources · 3').last.style!.color,
+        KalinkaColors.textSecondary,
+      );
+      expect(
+        tester.getRect(find.textContaining('More sources')).top,
+        greaterThan(
+          tester.getRect(find.byKey(const ValueKey('entry-upnp'))).bottom,
+        ),
+      );
+      // The two sections stand further apart than rows do.
+      final gap =
+          tester.getRect(find.textContaining('More sources')).top -
+          tester.getRect(find.byKey(const ValueKey('entry-upnp'))).bottom;
+      expect(gap, greaterThanOrEqualTo(32));
+      // Every row ends in one chevron, installed or not.
+      for (final id in ['jamendo', 'localfiles', 'upnp', 'qobuz', 'spotify']) {
         expect(
-          tester
-              .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, label))
-              .selected,
-          isTrue,
+          find.descendant(
+            of: find.byKey(ValueKey('entry-$id')),
+            matching: find.byIcon(Icons.chevron_right),
+          ),
+          findsOneWidget,
         );
-        expect(
-          tester
-              .widgetList<PluginCatalogEntry>(
-                find.byType(PluginCatalogEntry, skipOffstage: false),
-              )
-              .map((entry) => entry.plugin.id)
-              .toSet(),
-          catalog.plugins
-              .where((plugin) => type == 'all' || plugin.type == type)
-              .map((plugin) => plugin.id)
-              .toSet(),
-        );
-        expect(api.reads, 1);
-        expect(tester.takeException(), isNull);
-      },
-    );
-  }
+      }
 
-  testWidgets('Reload sits to the right of Browse and disables while reading', (
+      await _tapTab(tester, PluginTab.devices);
+      expect(_listed(tester), ['musiccast', 'dummydevice']);
+      expect(find.bySemanticsLabel('Your controls, 1'), findsOneWidget);
+      expect(find.bySemanticsLabel('More controls, 1'), findsOneWidget);
+      // It comes with the server, so there is nothing to install.
+      expect(_statusOf(tester, 'dummydevice'), 'Included with Kalinka Player');
+      expect(
+        find.byKey(const ValueKey('plugin-install-dummydevice')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('badges and what a plugin does come from the catalog', (
     tester,
   ) async {
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true}),
+      _CatalogApi(_catalog()),
+      live: _Live(
+        ModulesAndDevices(
+          inputModules: [_module('localfiles', summary: '2 folders connected')],
+          devices: [],
+        ),
+      ),
+      name: 'Living room',
+    );
+    // Wide enough for the test font to set a status and pill on one line.
+    await _screen(tester, container, size: const Size(900, 1400));
+    Finder inRow(String id, Finder matching) => find.descendant(
+      of: find.byKey(ValueKey('plugin-$id')),
+      matching: matching,
+    );
+
+    expect(inRow('localfiles', find.text('Folders & NAS')), findsOneWidget);
+    expect(
+      inRow(
+        'localfiles',
+        find.text('Music from USB drives, this device or network storage.'),
+      ),
+      findsOneWidget,
+    );
+    // Its state as Server settings words it, then the module's own words.
+    expect(_badgeOf(tester, 'localfiles')!.label, 'READY');
+    expect(_badgeOf(tester, 'localfiles')!.color, KalinkaColors.statusOnline);
+    expect(_statusOf(tester, 'localfiles'), '2 folders connected');
+    expect(
+      find.bySemanticsLabel(
+        RegExp(r'^Folders & NAS\. Ready\. 2 folders connected$'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      inRow(
+        'upnp',
+        find.text('Send music to Living room from compatible apps.'),
+      ),
+      findsOneWidget,
+    );
+    // Publisher and maturity are separate facts; a plugin may carry both.
+    expect(inRow('qobuz', find.text('Unofficial')), findsOneWidget);
+    expect(inRow('qobuz', find.text('Experimental')), findsOneWidget);
+    expect(inRow('upnp', find.text('Unofficial')), findsOneWidget);
+    expect(inRow('upnp', find.text('Experimental')), findsNothing);
+    expect(inRow('jamendo', find.text('Unofficial')), findsNothing);
+    final experimental = tester.widget<Text>(
+      inRow('qobuz', find.text('Experimental')),
+    );
+    expect(experimental.style!.color, KalinkaColors.statusPendingLight);
+    final unofficial = tester.widget<Text>(
+      inRow('qobuz', find.text('Unofficial')),
+    );
+    expect(unofficial.style!.color, KalinkaColors.textSecondary);
+
+    expect(inRow('qobuz', find.text('Browse in Kalinka')), findsNothing);
+    expect(inRow('qobuz', find.text('Play from another app')), findsNothing);
+    expect(
+      find.bySemanticsLabel('Qobuz. Unofficial. Experimental'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a row not yet installed is one target, Install apart', (
+    tester,
+  ) async {
+    final api = _CatalogApi(_catalog());
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true, 'installation': true}),
+      api,
+    );
+    await _screen(tester, container, size: const Size(400, 1400));
+    final row = find.byKey(const ValueKey('entry-qobuz'));
+    final chevron = find.descendant(
+      of: row,
+      matching: find.byIcon(Icons.chevron_right),
+    );
+    final install = find.byKey(const ValueKey('plugin-install-qobuz'));
+    // The highlight takes in the whole row: the tile, Install and the
+    // chevron.
+    final ink = tester.getRect(
+      find.ancestor(of: chevron, matching: find.byType(InkWell)).first,
+    );
+    expect(ink.left, tester.getRect(row).left);
+    expect(ink.right, tester.getRect(row).right);
+    expect(ink.contains(tester.getRect(install).center), isTrue);
+    // The chevron opens About, like the rest of the row.
+    await tester.tap(chevron);
+    await tester.pumpAndSettle();
+    expect(find.byType(PluginAboutScreen), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    // Install installs, and opens nothing.
+    await tester.tap(install);
+    await tester.pumpAndSettle();
+    expect(api.runs, [('qobuz', PluginOperation.install)]);
+    expect(find.byType(PluginAboutScreen), findsNothing);
+    // Its own button, within the row's.
+    expect(
+      tester.getSemantics(install),
+      isSemantics(isButton: true, label: 'Add'),
+    );
+    await tester.pump(const Duration(seconds: 10));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pulling the list down rereads the catalog', (tester) async {
     final api = _CatalogApi(_catalog());
     final container = await _container(
       _Proxy({'enabled': true, 'catalog_browsing': true}),
       api,
     );
-    await _screen(tester, container, size: const Size(320, 640), scale: 1.8);
-    final browseBar = find.byKey(const ValueKey('catalog-browse-bar'));
-    final reload = find.byKey(const ValueKey('catalog-reload'));
-    expect(find.descendant(of: browseBar, matching: reload), findsOneWidget);
-    // The Browse bar's outer bounds include its 20px phone gutters.
-    expect(tester.getRect(reload).right, tester.getRect(browseBar).right - 20);
-    expect(
-      tester.getRect(reload).left,
-      greaterThan(tester.getRect(find.text('BROWSE')).right),
+    await _screen(tester, container);
+    expect(find.byKey(const ValueKey('catalog-reload')), findsNothing);
+    await tester.fling(
+      find.byKey(const ValueKey('catalog-scroll')),
+      const Offset(0, 400),
+      1000,
     );
-    expect(
-      tester.getRect(reload).center.dy,
-      closeTo(tester.getRect(browseBar).center.dy, 1),
-    );
-    expect(find.byKey(const ValueKey('catalog-footer')), findsNothing);
-    expect(
-      tester.getRect(find.byKey(const ValueKey('catalog-scroll'))).bottom,
-      640,
-    );
-
-    final pending = api.pending = Completer<PluginCatalog>();
-    await tester.tap(reload);
-    await tester.pump();
-    await tester.pump();
-    expect(api.reads, 2);
-    expect(tester.widget<TextButton>(reload).onPressed, isNull);
-    pending.complete(_catalog(status: 'stale'));
     await tester.pumpAndSettle();
-    expect(tester.widget<TextButton>(reload).onPressed, isNotNull);
-    expect(find.textContaining('Showing a cached catalog'), findsOneWidget);
+    expect(api.reads, 2);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('catalog header shows live connection status without a menu', (
+  testWidgets('a catalog the server cannot read offers Try again', (
     tester,
   ) async {
+    final api = _CatalogApi(_catalog())
+      ..failure = const PluginCatalogException('The feed is down.');
     final container = await _container(
       _Proxy({'enabled': true, 'catalog_browsing': true}),
-      _CatalogApi(_catalog()),
+      api,
     );
     await _screen(tester, container);
-    expect(find.text('ON THIS SERVER'), findsNothing);
-    expect(find.byIcon(Icons.more_vert), findsNothing);
-    expect(find.byTooltip('Catalog options'), findsNothing);
-    expect(find.text('Reload'), findsOneWidget);
-    final back = tester.widget<Icon>(find.byIcon(Icons.arrow_back));
-    expect(back.size, 22);
-    expect(back.color, KalinkaColors.textPrimary);
-    expect(
-      tester.getSize(find.byKey(const ValueKey('catalog-back'))),
-      const Size(42, 42),
-    );
-    final heading = find.byKey(const ValueKey('catalog-heading'));
-    expect(
-      find.descendant(
-        of: heading,
-        matching: find.text('Kalinka Player server'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: heading, matching: find.text('Plugins')),
-      findsOneWidget,
-    );
-    expect(
-      tester.getSemantics(find.text('Plugins')).getSemanticsData().headingLevel,
-      1,
-    );
-    for (final (status, color, label) in [
-      (ConnectionStatus.connected, KalinkaColors.statusOnline, 'Server online'),
-      (
-        ConnectionStatus.reconnecting,
-        KalinkaColors.statusPending,
-        'Reconnecting',
-      ),
-      (ConnectionStatus.offline, KalinkaColors.statusOffline, 'Server offline'),
-      (ConnectionStatus.connecting, KalinkaColors.statusPending, 'Connecting'),
-      (ConnectionStatus.none, KalinkaColors.textMuted, 'Not connected'),
-      (ConnectionStatus.connected, KalinkaColors.statusOnline, 'Server online'),
-    ]) {
-      (container.read(connectionStateProvider.notifier) as _Connected)
-          .setStatus(status);
-      // Reconnecting deliberately has a continuously pulsing banner.
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      final dot = tester.widget<DecoratedBox>(
-        find.byKey(const ValueKey('catalog-connection-status')),
-      );
-      expect((dot.decoration as BoxDecoration).color, color);
-      expect(find.byTooltip(label), findsOneWidget);
-    }
+    expect(find.text('The feed is down.'), findsOneWidget);
+    api.failure = null;
+    await tester.tap(find.byKey(const ValueKey('catalog-retry')));
+    await tester.pumpAndSettle();
+    expect(api.reads, 2);
+    expect(find.text('The feed is down.'), findsNothing);
+    expect(find.byKey(const ValueKey('plugin-jamendo')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'title bar shows Configuration, the streamer and its connection',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        name: 'Living room',
+      );
+      await _screen(tester, container);
+      expect(find.byIcon(Icons.more_vert), findsNothing);
+      expect(find.byTooltip('Catalog options'), findsNothing);
+      final back = tester.widget<Icon>(find.byIcon(Icons.arrow_back));
+      expect(back.size, 22);
+      expect(back.color, KalinkaColors.textPrimary);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('catalog-back'))),
+        const Size(48, 48),
+      );
+      // A quiet sans-serif title above the uppercase tab navigation.
+      final bar = find.byType(PluginTopBar);
+      final title = tester.widget<Text>(
+        find.descendant(of: bar, matching: find.text('Configuration')),
+      );
+      expect(title.style!.fontFamily, KalinkaFonts.sansFamily);
+      expect(title.style!.fontSize, greaterThan(13));
+      expect(find.byType(BreadcrumbCrumb), findsNothing);
+      expect(
+        find.descendant(of: bar, matching: find.text('Living room')),
+        findsNothing,
+      );
+      expect(
+        tester.getSize(find.byKey(const ValueKey('catalog-connection-status'))),
+        const Size(8, 8),
+      );
+      expect(find.byKey(const ValueKey('catalog-description')), findsNothing);
+      expect(find.byType(PageBanner), findsNothing);
+      expect(find.text('Music sources'), findsNothing);
+      expect(find.text('Configuration'), findsOneWidget);
+      expect(
+        tester.getRect(find.byKey(const ValueKey('catalog-tabs'))).top,
+        tester.getRect(bar).bottom,
+      );
+      expect(
+        tester.getRect(find.text('More sources · 5')).top -
+            tester.getRect(find.byKey(const ValueKey('catalog-tabs'))).bottom,
+        24,
+      );
+      expect(find.byKey(const ValueKey('catalog-art')), findsNothing);
+      for (final (status, color, label) in [
+        (
+          ConnectionStatus.connected,
+          KalinkaColors.statusOnline,
+          'Server online',
+        ),
+        (
+          ConnectionStatus.reconnecting,
+          KalinkaColors.statusPending,
+          'Reconnecting',
+        ),
+        (
+          ConnectionStatus.offline,
+          KalinkaColors.statusOffline,
+          'Server offline',
+        ),
+        (
+          ConnectionStatus.connecting,
+          KalinkaColors.statusPending,
+          'Connecting',
+        ),
+        (ConnectionStatus.none, KalinkaColors.textMuted, 'Not connected'),
+        (
+          ConnectionStatus.connected,
+          KalinkaColors.statusOnline,
+          'Server online',
+        ),
+      ]) {
+        (container.read(connectionStateProvider.notifier) as _Connected)
+            .setStatus(status);
+        // Reconnecting deliberately has a continuously pulsing banner.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        final dot = tester.widget<DecoratedBox>(
+          find.byKey(const ValueKey('catalog-connection-status')),
+        );
+        expect((dot.decoration as BoxDecoration).color, color);
+        expect(find.byTooltip(label), findsOneWidget);
+        expect(find.bySemanticsLabel('Living room, $label'), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   for (final (size, appWidth, scale) in [
     (const Size(390, 730), 390.0, 1.0),
@@ -488,11 +1544,40 @@ void main() {
     (const Size(483, 619), 1024.0, 1.8),
   ]) {
     testWidgets(
-      'header shrinks, fades and restores at $size with text scale $scale',
+      'description scrolls away under a fixed title bar and pinned tabs at $size, '
+      'text scale $scale',
       (tester) async {
+        final catalog = PluginCatalog(
+          status: 'available',
+          plugins: [
+            ..._catalog().plugins,
+            // Enough controls to exercise scrolling even on the wider panel.
+            for (var i = 0; i < 4; i++)
+              CatalogPlugin.fromJson({
+                'id': 'amplifier_$i',
+                'name': 'Amplifier $i',
+                'description': 'Control a compatible amplifier.',
+                'type': 'output_device',
+                'tier': 'official',
+                'maturity': 'stable',
+                'delivery': 'bundle',
+              }),
+          ],
+        );
         final container = await _container(
-          _Proxy({'enabled': true, 'catalog_browsing': true}),
-          _CatalogApi(_catalog()),
+          _Proxy({
+            'enabled': true,
+            'catalog_browsing': true,
+            'update_checks': true,
+          }),
+          _CatalogApi(catalog)
+            ..available = const [
+              PluginUpdate(pluginId: 'spotify', version: '0.4.0'),
+            ],
+          live: _Live(
+            ModulesAndDevices(inputModules: [_module('spotify')], devices: []),
+          ),
+          name: 'A streamer with a long name',
         );
         await _screen(
           tester,
@@ -502,84 +1587,105 @@ void main() {
           scale: scale,
           disableAnimations: scale > 1,
         );
-        final heading = find.byKey(const ValueKey('catalog-heading'));
-        final details = find.byKey(const ValueKey('catalog-heading-details'));
-        final browse = find.byKey(const ValueKey('catalog-browse-bar'));
+        expect(find.byKey(const ValueKey('catalog-description')), findsNothing);
+        await _tapTab(tester, PluginTab.devices);
+        final description = find.byKey(const ValueKey('catalog-description'));
+        final tabs = find.byKey(const ValueKey('catalog-tabs'));
+        final viewport = tester.getRect(
+          find.byKey(const ValueKey('catalog-scroll')),
+        );
+        final bar = tester.getRect(find.byType(PluginTopBar));
         final scroll = tester
             .widget<CustomScrollView>(
               find.byKey(const ValueKey('catalog-scroll')),
             )
             .controller!;
-        final delegate = tester
-            .widget<SliverPersistentHeader>(find.byType(SliverPersistentHeader))
-            .delegate;
-        final range = delegate.maxExtent - delegate.minExtent;
-        final expandedHeight = tester.getSize(heading).height;
-        final expandedFont = tester
-            .widget<Text>(find.text('Plugins'))
-            .style!
-            .fontSize!;
-        expect(expandedFont, appWidth < kKalinkaTabletBreakpoint ? 29 : 35);
-        expect(tester.widget<Opacity>(details).opacity, 1);
-        expect(find.semantics.byLabel(RegExp('Read-only preview')), findsOne);
-
-        // Repeated passes must be deterministic, including reduced-motion mode.
+        expect(bar.bottom, viewport.top);
+        expect(tester.getRect(tabs).top, viewport.top);
+        expect(tester.getRect(description).top, tester.getRect(tabs).bottom);
+        expect(find.byType(PageBanner), findsNothing);
+        final descriptionText = tester.widget<Text>(
+          find.descendant(of: description, matching: find.byType(Text)),
+        );
+        expect(descriptionText.maxLines, isNull);
+        expect(descriptionText.softWrap, isTrue);
+        expect(descriptionText.overflow, TextOverflow.clip);
+        expect(
+          tester.getSize(description).width,
+          lessThanOrEqualTo(size.width),
+        );
+        final resting = tester.getRect(tabs);
+        final tabScroll = find.descendant(
+          of: tabs,
+          matching: find.byType(SingleChildScrollView),
+        );
+        expect(tabScroll, findsNothing);
+        final hifi = tester.getRect(
+          find.byKey(const ValueKey('catalog-tab-devices')),
+        );
+        final streamer = tester.getRect(
+          find.byKey(const ValueKey('catalog-tab-server')),
+        );
+        final sources = tester.getRect(
+          find.byKey(const ValueKey('catalog-tab-sources')),
+        );
+        final updates = tester.getRect(
+          find.byKey(const ValueKey('catalog-tab-updates')),
+        );
+        expect(sources.left, closeTo(resting.left, 0.1));
+        expect(updates.right, closeTo(resting.right, 0.1));
+        expect(sources.right, lessThan(hifi.left));
+        expect(hifi.right, lessThan(streamer.left));
+        expect(streamer.right, lessThan(updates.left));
+        expect(hifi.width / 12, closeTo(streamer.width / 8, 0.1));
+        expect(sources.width / 13, closeTo(streamer.width / 8, 0.1));
+        for (final (tab, name) in [
+          (PluginTab.sources, 'Music sources'),
+          (PluginTab.devices, 'HiFi control'),
+          (PluginTab.server, 'Streamer'),
+          (PluginTab.updates, 'Updates'),
+        ]) {
+          final button = find.byKey(ValueKey('catalog-tab-${tab.name}'));
+          final bounds = tester.getRect(button);
+          expect(bounds.left, greaterThanOrEqualTo(resting.left));
+          expect(bounds.right, lessThanOrEqualTo(resting.right));
+          expect(button.hitTestable(), findsOneWidget);
+          expect(find.byTooltip(name), findsOneWidget);
+          final label = tester.widget<Text>(
+            find.descendant(
+              of: button,
+              matching: find.text(name.toUpperCase()),
+            ),
+          );
+          expect(label.maxLines, 1);
+          expect(label.overflow, TextOverflow.ellipsis);
+          expect(
+            tester.getSemantics(button),
+            isSemantics(
+              label: tab == PluginTab.updates ? '$name, 1 available' : name,
+            ),
+          );
+          await tester.tap(button);
+          await tester.pumpAndSettle();
+          expect(tester.getSemantics(button), isSemantics(isSelected: true));
+          expect(tester.takeException(), isNull);
+        }
+        await tester.tap(find.byKey(const ValueKey('catalog-tab-devices')));
+        await tester.pumpAndSettle();
         for (var pass = 0; pass < 2; pass++) {
-          scroll.jumpTo(range / 4);
+          scroll.jumpTo(tester.getSize(description).height + 200);
           await tester.pumpAndSettle();
-          expect(
-            tester.getSize(heading).height,
-            closeTo(expandedHeight - range / 4, 0.1),
-          );
-          expect(tester.widget<Opacity>(details).opacity, closeTo(0.5, 0.01));
-          expect(
-            tester.widget<Text>(find.text('Plugins')).style!.fontSize!,
-            lessThan(expandedFont),
-          );
-          expect(
-            tester.getTopLeft(browse).dy,
-            closeTo(tester.getBottomLeft(heading).dy, 0.1),
-          );
-
-          scroll.jumpTo(range + 30);
-          await tester.pumpAndSettle();
-          expect(
-            tester.getSize(heading).height,
-            closeTo(delegate.minExtent, 0.1),
-          );
-          expect(
-            tester.widget<Text>(find.text('Plugins')).style!.fontSize,
-            appWidth < kKalinkaTabletBreakpoint ? 20 : 22,
-          );
-          expect(tester.widget<Opacity>(details).opacity, 0);
-          expect(
-            find.semantics.byLabel(RegExp('Read-only preview')),
-            findsNothing,
-          );
-          expect(find.text('Plugins').hitTestable(), findsOneWidget);
-          expect(
-            find.byKey(const ValueKey('catalog-back')).hitTestable(),
-            findsOneWidget,
-          );
-          expect(
-            find.byKey(const ValueKey('catalog-reload')).hitTestable(),
-            findsOneWidget,
-          );
+          expect(description.hitTestable(), findsNothing);
+          expect(tester.getRect(tabs).top, viewport.top);
+          expect(tester.getRect(find.byType(PluginTopBar)), bar);
+          for (final key in ['catalog-back', 'catalog-tab-sources']) {
+            expect(find.byKey(ValueKey(key)).hitTestable(), findsOneWidget);
+          }
           expect(find.byTooltip('Server online').hitTestable(), findsOneWidget);
-          final compactBrowse = tester.getRect(browse);
-          scroll.jumpTo(range + 100);
-          await tester.pumpAndSettle();
-          expect(tester.getRect(browse), compactBrowse);
-
           scroll.jumpTo(0);
           await tester.pumpAndSettle();
-          expect(tester.getSize(heading).height, expandedHeight);
-          expect(tester.widget<Opacity>(details).opacity, 1);
-          expect(
-            tester.widget<Text>(find.text('Plugins')).style!.fontSize,
-            expandedFont,
-          );
-          expect(find.semantics.byLabel(RegExp('Read-only preview')), findsOne);
+          expect(tester.getRect(tabs), resting);
+          expect(find.byKey(const ValueKey('catalog-art')), findsNothing);
           expect(
             find.byWidgetPredicate(
               (widget) =>
@@ -616,27 +1722,24 @@ void main() {
     );
   }
 
-  test(
-    'staged settings never enable the feature; a saved flag refreshes capabilities',
-    () async {
-      final proxy = _Proxy({'enabled': false, 'catalog_browsing': true});
-      final container = await _container(proxy, _CatalogApi(_catalog()));
-      final subscription = container.listen(serverInfoProvider, (_, next) {});
-      addTearDown(subscription.close);
-      await container.read(serverInfoProvider.future);
-      expect(container.read(pluginCatalogEnabledProvider), false);
-      container
-          .read(settingsProvider.notifier)
-          .stageChange(pluginCatalogSettingPath, true);
-      expect(container.read(pluginCatalogEnabledProvider), false);
-      expect(proxy.reads, 1);
-      proxy.capabilities = {'enabled': true, 'catalog_browsing': true};
-      (container.read(settingsProvider.notifier) as _Settings).saved(true);
-      await container.read(serverInfoProvider.future);
-      expect(container.read(pluginCatalogEnabledProvider), true);
-      expect(proxy.reads, 2);
-    },
-  );
+  test('staged settings never enable the feature; a saved flag refreshes capabilities', () async {
+    final proxy = _Proxy({'enabled': false, 'catalog_browsing': true});
+    final container = await _container(proxy, _CatalogApi(_catalog()));
+    final subscription = container.listen(serverInfoProvider, (_, next) {});
+    addTearDown(subscription.close);
+    await container.read(serverInfoProvider.future);
+    expect(container.read(pluginCatalogEnabledProvider), false);
+    container
+        .read(settingsProvider.notifier)
+        .stageChange(pluginCatalogSettingPath, true);
+    expect(container.read(pluginCatalogEnabledProvider), false);
+    expect(proxy.reads, 1);
+    proxy.capabilities = {'enabled': true, 'catalog_browsing': true};
+    (container.read(settingsProvider.notifier) as _Settings).saved(true);
+    await container.read(serverInfoProvider.future);
+    expect(container.read(pluginCatalogEnabledProvider), true);
+    expect(proxy.reads, 2);
+  });
 
   test(
     'disconnect revokes access and a late catalog response cannot reopen it',
@@ -665,26 +1768,29 @@ void main() {
   );
 
   testWidgets(
-    'inline expansion keeps one entry open and exposes no installation controls',
+    'a row opens a page rather than unfolding, and nothing installs from a URL',
     (tester) async {
       final api = _CatalogApi(_catalog());
       final container = await _container(
         _Proxy({'enabled': true, 'catalog_browsing': true}),
         api,
+        live: _Live(
+          ModulesAndDevices(inputModules: [_module('localfiles')], devices: []),
+        ),
+        settings: _settingsWith({'localfiles': true}),
       );
       await _screen(tester, container);
-      await _expand(tester, 'jamendo');
-      int expanded() => tester
-          .widgetList<PluginCatalogEntry>(find.byType(PluginCatalogEntry))
-          .where((panel) => panel.expanded)
-          .length;
-      expect(expanded(), 1);
-      await _expand(tester, 'localfiles');
-      expect(expanded(), 1);
-      await _expand(tester, 'localfiles');
-      expect(expanded(), 0);
-      expect(find.text('Install'), findsNothing);
-      expect(find.text('Update'), findsNothing);
+      expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
+      expect(find.text('Manage folders'), findsNothing);
+      expect(find.text('Configuration'), findsWidgets);
+      expect(find.text('Browse other plugins'), findsNothing);
+      await _open(tester, 'localfiles');
+      expect(find.byType(PluginSettingsScreen), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await _open(tester, 'qobuz');
+      expect(find.byType(PluginAboutScreen), findsOneWidget);
+      expect(find.byType(PluginSettingsScreen), findsNothing);
       expect(find.text('Install from URL'), findsNothing);
       expect(api.reads, 1);
       expect(tester.takeException(), isNull);
@@ -703,7 +1809,7 @@ void main() {
     (container.read(settingsProvider.notifier) as _Settings).saved(false);
     await tester.pumpAndSettle();
     expect(find.textContaining('preview is off'), findsOneWidget);
-    expect(find.byType(PluginCatalogEntry), findsNothing);
+    expect(find.byType(PluginRow), findsNothing);
     expect(api.reads, 1);
   });
 
@@ -724,14 +1830,177 @@ void main() {
     expect(container.read(pluginCatalogEnabledProvider), false);
     await tester.pumpAndSettle();
     expect(find.textContaining('preview is off'), findsOneWidget);
-    expect(find.byType(PluginCatalogEntry), findsNothing);
+    expect(find.byType(PluginRow), findsNothing);
+    // The new streamer's name, at once.
+    expect(
+      find.descendant(
+        of: find.byType(PluginTopBar),
+        matching: find.text('Other server'),
+      ),
+      findsNothing,
+    );
     expect(other.reads, 1);
     expect(api.reads, 1);
     expect(tester.takeException(), isNull);
   });
 
+  for (final bottomInset in [0.0, 34.0]) {
+    testWidgets(
+      'Configuration pages leave the mini-player usable with inset $bottomInset',
+      (tester) async {
+        final container = await _container(
+          _Proxy({'enabled': true, 'catalog_browsing': true}),
+          _CatalogApi(_catalog()),
+          player: true,
+          settings: _serverSettings(),
+          live: _Live(
+            ModulesAndDevices(
+              inputModules: [_module('localfiles')],
+              devices: [],
+            ),
+          ),
+        );
+        await tester.binding.setSurfaceSize(const Size(480, 850));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: AppTheme.dark(),
+              home: MediaQuery(
+                data: MediaQueryData(
+                  size: const Size(480, 850),
+                  padding: EdgeInsets.only(top: 24, bottom: bottomInset),
+                  viewPadding: EdgeInsets.only(top: 24, bottom: bottomInset),
+                ),
+                child: const MusicPlayerScreen(),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final miniPlayer = find.byType(MiniPlayer);
+        final playerRect = tester.getRect(miniPlayer);
+        final playerState = tester.state(miniPlayer);
+        expect(playerRect.bottom, 850);
+
+        void expectAbovePlayer(Finder page) {
+          expect(tester.getRect(page).bottom, playerRect.top);
+          expect(tester.getRect(miniPlayer), playerRect);
+          expect(tester.state(miniPlayer), same(playerState));
+          expect(miniPlayer.hitTestable(), findsOneWidget);
+          expect(MediaQuery.of(tester.element(page)).padding.bottom, 0);
+          expect(tester.takeException(), isNull);
+        }
+
+        await tester.tap(find.byType(ServerChip));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Configuration'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 160));
+        expectAbovePlayer(find.byType(PluginCatalogScreen));
+        await tester.pumpAndSettle();
+        expectAbovePlayer(find.byType(PluginCatalogScreen));
+
+        await _open(tester, 'localfiles');
+        expectAbovePlayer(find.byType(PluginSettingsScreen));
+        container
+            .read(settingsProvider.notifier)
+            .stageChange('input_modules.localfiles.region', 'gb');
+        await tester.pumpAndSettle();
+        final changes = find.byType(ConfigurationChangesBar);
+        final footerRect = tester.getRect(changes);
+        expect(footerRect.bottom, playerRect.top);
+        expect(
+          tester.getRect(find.byType(PluginSettingsScreen)).bottom,
+          footerRect.top,
+        );
+        await _about(tester, 'localfiles');
+        expect(changes, findsOneWidget);
+        expect(
+          tester.getRect(find.byType(PluginAboutScreen)).bottom,
+          footerRect.top,
+        );
+        expect(tester.getRect(miniPlayer), playerRect);
+        await tester.tap(
+          find.byKey(const ValueKey('configuration-bar-discard')),
+        );
+        await tester.pumpAndSettle();
+        expect(container.read(settingsProvider).hasPendingChanges, isFalse);
+        expectAbovePlayer(find.byType(PluginAboutScreen));
+
+        // Playback can be opened without losing the current configuration page.
+        await tester.tap(miniPlayer);
+        await tester.pumpAndSettle();
+        expect(find.byType(NowPlayingContent), findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byType(NowPlayingContent), findsNothing);
+        expectAbovePlayer(find.byType(PluginAboutScreen));
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
+        await _tapTab(tester, PluginTab.server);
+        for (final group in ServerSettingsGroup.values) {
+          await _tapTab(tester, PluginTab.server);
+          final row = find.byKey(ValueKey('server-group-${group.name}'));
+          await tester.scrollUntilVisible(row, 200, scrollable: _scrollable);
+          await tester.pumpAndSettle();
+          await tester.tap(row);
+          await tester.pumpAndSettle();
+          expectAbovePlayer(find.byType(ServerConfigurationScreen));
+          if (group == ServerSettingsGroup.maintenance) {
+            await tester.tap(find.text('Advanced settings'));
+            await tester.pumpAndSettle();
+            expectAbovePlayer(find.byKey(const ValueKey('server-expert')).last);
+            await tester.binding.handlePopRoute();
+            await tester.pumpAndSettle();
+            final logs = find.text('Download server logs');
+            await tester.scrollUntilVisible(
+              logs,
+              150,
+              scrollable: find
+                  .descendant(
+                    of: find.byKey(
+                      const ValueKey('server-group-maintenance-settings'),
+                    ),
+                    matching: find.byType(Scrollable),
+                  )
+                  .first,
+            );
+            await tester.pumpAndSettle();
+            await tester.tap(logs);
+            await tester.pumpAndSettle();
+            expectAbovePlayer(find.byType(LogExportScreen));
+            await tester.binding.handlePopRoute();
+            await tester.pumpAndSettle();
+          }
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+        }
+
+        container
+            .read(rendererSettingsRouteProvider.notifier)
+            .open('living-room', 'Living Room');
+        await tester.pumpAndSettle();
+        expectAbovePlayer(find.byType(RendererSettingsScreen));
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expectAbovePlayer(find.byType(PluginCatalogScreen));
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byType(PluginCatalogScreen), findsNothing);
+        expect(tester.getRect(miniPlayer), playerRect);
+        expect(miniPlayer.hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
-    'player catalog preserves inline details across resize and owns Back',
+    'player catalog keeps an open page across resize and Back closes it first',
     (tester) async {
       final api = _CatalogApi(_catalog());
       final container = await _container(
@@ -753,14 +2022,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byType(ServerChip));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Plugins'));
+      await tester.tap(find.text('Configuration'));
       await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('plugin-search')),
-        'Jamendo',
-      );
-      await tester.pumpAndSettle();
-      await _expand(tester, 'jamendo');
+      await _open(tester, 'jamendo');
       final panel = tester.state(find.byType(PluginCatalogScreen));
       for (final size in [const Size(1280, 850), const Size(400, 850)]) {
         await tester.binding.setSurfaceSize(size);
@@ -773,27 +2037,22 @@ void main() {
         }
         await tester.pumpAndSettle();
         expect(tester.state(find.byType(PluginCatalogScreen)), same(panel));
-        expect(
-          tester
-              .widget<TextField>(
-                find.byKey(
-                  const ValueKey('plugin-search'),
-                  skipOffstage: false,
-                ),
-              )
-              .controller!
-              .text,
-          'Jamendo',
-        );
-        expect(
-          tester
-              .widget<PluginCatalogEntry>(find.byType(PluginCatalogEntry))
-              .expanded,
-          true,
-        );
+        expect(find.byType(PluginAboutScreen), findsOneWidget);
+        if (size.width == 400) {
+          final miniPlayer = find.byType(MiniPlayer);
+          expect(miniPlayer.hitTestable(), findsOneWidget);
+          expect(
+            tester.getRect(find.byType(PluginAboutScreen)).bottom,
+            tester.getRect(miniPlayer).top,
+          );
+        }
         expect(tester.takeException(), isNull);
       }
       expect(api.reads, 1);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(PluginAboutScreen), findsNothing);
+      expect(find.byType(PluginCatalogScreen), findsOneWidget);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byType(PluginCatalogScreen), findsNothing);
@@ -801,44 +2060,38 @@ void main() {
       // The Settings-style arrow must dismiss the same panel as system Back.
       await tester.tap(find.byType(ServerChip));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Plugins'));
+      await tester.tap(find.text('Configuration'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('catalog-back')));
       await tester.pumpAndSettle();
       expect(find.byType(PluginCatalogScreen), findsNothing);
       expect(find.byType(MusicPlayerScreen), findsOneWidget);
       expect(tester.takeException(), isNull);
-      expect(tester.takeException(), isNull);
     },
   );
 
-  testWidgets(
-    'device filter and family search show readable controls and model scope',
-    (tester) async {
-      final container = await _container(
-        _Proxy({'enabled': true, 'catalog_browsing': true}),
-        _CatalogApi(_catalog()),
-      );
-      await _screen(tester, container);
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Device control'));
-      await tester.enterText(
-        find.byKey(const ValueKey('plugin-search')),
-        'Yamaha',
-      );
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('plugin-jamendo')), findsNothing);
-      expect(find.byKey(const ValueKey('plugin-dummydevice')), findsNothing);
-      await _expand(tester, 'musiccast');
-      expect(find.text('Supported models'), findsOneWidget);
-      expect(find.text('Supported families'), findsOneWidget);
-      expect(find.text('Controls and limitations'), findsOneWidget);
-      expect(
-        find.text('Yamaha MusicCast / Yamaha Extended Control'),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('device control lists device plugins with their model scope', (
+    tester,
+  ) async {
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true}),
+      _CatalogApi(_catalog()),
+    );
+    await _screen(tester, container);
+    await _tapTab(tester, PluginTab.devices);
+    expect(find.byKey(const ValueKey('plugin-jamendo')), findsNothing);
+    expect(find.byKey(const ValueKey('plugin-musiccast')), findsOneWidget);
+    expect(find.byKey(const ValueKey('plugin-dummydevice')), findsOneWidget);
+    await _about(tester, 'musiccast');
+    expect(find.text('Supported models'), findsOneWidget);
+    expect(find.text('Supported families'), findsOneWidget);
+    expect(find.text('Controls and limitations'), findsOneWidget);
+    expect(
+      find.text('Yamaha MusicCast / Yamaha Extended Control'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   for (final size in [const Size(320, 640), const Size(640, 800)]) {
     testWidgets('narrow and tablet panes handle large text at $size', (
@@ -847,17 +2100,44 @@ void main() {
       final container = await _container(
         _Proxy({'enabled': true, 'catalog_browsing': true}),
         _CatalogApi(_catalog()),
+        live: _Live(
+          ModulesAndDevices(
+            inputModules: [
+              _module('localfiles', summary: '2 folders connected'),
+              _module('upnp'),
+            ],
+            devices: [],
+          ),
+        ),
+        settings: _settingsWith({'localfiles': true, 'upnp': true}),
+        name: 'Living room',
       );
       await _screen(tester, container, size: size, scale: 1.8);
-      await _expand(tester, 'jamendo');
-      expect(
-        tester
-            .widget<PluginCatalogEntry>(
-              find.byKey(const ValueKey('entry-jamendo')),
-            )
-            .expanded,
-        isTrue,
-      );
+      // Chevrons line up at the edge; Install stays on screen and easy to
+      // hit.
+      final chevrons = <Rect>[];
+      for (final id in ['localfiles', 'upnp', 'qobuz']) {
+        final chevron = find.descendant(
+          of: find.byKey(ValueKey('entry-$id')),
+          matching: find.byIcon(Icons.chevron_right),
+        );
+        await tester.scrollUntilVisible(chevron, 150, scrollable: _scrollable);
+        await tester.pumpAndSettle();
+        chevrons.add(tester.getRect(chevron));
+      }
+      expect(chevrons[0].right, chevrons[1].right);
+      expect(chevrons[0].right, chevrons[2].right);
+      expect(chevrons[0].right, lessThanOrEqualTo(size.width));
+      final install = find.byKey(const ValueKey('plugin-install-qobuz'));
+      await tester.scrollUntilVisible(install, 150, scrollable: _scrollable);
+      await tester.pumpAndSettle();
+      expect(tester.getRect(install).right, lessThanOrEqualTo(size.width));
+      expect(tester.getSize(install).height, greaterThanOrEqualTo(40));
+      await _open(tester, 'localfiles');
+      expect(find.byType(PluginSettingsScreen), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await _about(tester, 'jamendo');
       expect(
         find.byKey(
           const ValueKey('plugin-details-jamendo'),
@@ -897,108 +2177,127 @@ void main() {
       'Server check: result unavailable.',
     ),
   ]) {
-    testWidgets('shows server compatibility $status without install permission', (
-      tester,
-    ) async {
-      final result = status == 'missing'
-          ? null
-          : <String, dynamic>{
-              'status': status,
-              'channel': 'stable',
-              'latest_compatible_version': status == 'metadata_compatible'
-                  ? '5.0.1'
-                  : null,
-              'installation_allowed': false,
-              'releases': [
-                {
-                  'version': '5.0.1',
-                  'channel': 'stable',
-                  'status': status,
-                  'reasons': status == 'blocked'
-                      ? [
-                          {
-                            'code': 'incompatible_sdk',
-                            'installed': '1.0',
-                            'required': '>=2',
-                          },
-                          {
-                            'code': 'renderer_unavailable',
-                            'renderer_id': 'living-room',
-                          },
-                          {'code': 'no_compatible_artifact'},
-                        ]
-                      : [],
-                  'artifacts': status == 'blocked'
-                      ? [
-                          {
-                            'filename': 'qobuz.deb',
-                            'status': 'blocked',
-                            'reasons': [
-                              {
-                                'code': 'unsupported_distribution',
-                                'id': 'debian',
-                                'version': '12',
-                              },
-                            ],
-                          },
-                        ]
-                      : [],
-                },
-              ],
-            };
-      final api = _CatalogApi(_catalog(qobuzCompatibility: result));
-      final container = await _container(
-        _Proxy({'enabled': true, 'catalog_browsing': true}),
-        api,
-      );
-      await _screen(tester, container, size: const Size(320, 640), scale: 1.8);
-      await _expand(tester, 'qobuz');
-      final details = find.byKey(
-        const ValueKey('plugin-details-qobuz'),
-        skipOffstage: false,
-      );
-      final text = tester
-          .widgetList<Text>(
-            find.descendant(
-              of: details,
-              matching: find.byType(Text, skipOffstage: false),
-            ),
-          )
-          .map((text) => text.data ?? '')
-          .join('\n');
-      expect(text, contains(heading));
-      expect(text, contains(releaseText));
-      expect(
-        text,
-        isNot(contains('Compatibility with this server has not been checked')),
-      );
-      if (status == 'blocked') {
-        expect(text, contains('SDK 1.0 does not meet >=2.'));
+    testWidgets(
+      'shows server compatibility $status without install permission',
+      (tester) async {
+        final result = status == 'missing'
+            ? null
+            : <String, dynamic>{
+                'status': status,
+                'channel': 'stable',
+                'latest_compatible_version': status == 'metadata_compatible'
+                    ? '5.0.1'
+                    : null,
+                'installation_allowed': false,
+                'releases': [
+                  {
+                    'version': '5.0.1',
+                    'channel': 'stable',
+                    'status': status,
+                    'reasons': status == 'blocked'
+                        ? [
+                            {
+                              'code': 'incompatible_sdk',
+                              'installed': '1.0',
+                              'required': '>=2',
+                            },
+                            {
+                              'code': 'renderer_unavailable',
+                              'renderer_id': 'living-room',
+                            },
+                            {'code': 'no_compatible_artifact'},
+                          ]
+                        : [],
+                    'artifacts': status == 'blocked'
+                        ? [
+                            {
+                              'filename': 'qobuz.deb',
+                              'status': 'blocked',
+                              'reasons': [
+                                {
+                                  'code': 'unsupported_distribution',
+                                  'id': 'debian',
+                                  'version': '12',
+                                },
+                              ],
+                            },
+                          ]
+                        : [],
+                  },
+                ],
+              };
+        final api = _CatalogApi(_catalog(qobuzCompatibility: result));
+        final container = await _container(
+          _Proxy({'enabled': true, 'catalog_browsing': true}),
+          api,
+        );
+        await _screen(
+          tester,
+          container,
+          size: const Size(320, 640),
+          scale: 1.8,
+        );
+        await _about(tester, 'qobuz');
+        final details = find.byKey(
+          const ValueKey('plugin-details-qobuz'),
+          skipOffstage: false,
+        );
+        final text = tester
+            .widgetList<Text>(
+              find.descendant(
+                of: details,
+                matching: find.byType(Text, skipOffstage: false),
+              ),
+            )
+            .map((text) => text.data ?? '')
+            .join('\n');
+        expect(text, contains(heading));
+        expect(text, contains(releaseText));
         expect(
           text,
-          contains('Renderer is not connected. (renderer living-room)'),
+          isNot(
+            contains('Compatibility with this server has not been checked'),
+          ),
         );
+        if (status == 'blocked') {
+          expect(text, contains('SDK 1.0 does not meet >=2.'));
+          expect(
+            text,
+            contains('Renderer is not connected. (renderer living-room)'),
+          );
+          expect(
+            text,
+            contains(
+              'qobuz.deb: Server distribution debian 12 is not supported.',
+            ),
+          );
+        }
+        if (status == 'metadata_compatible') {
+          expect(text, contains('version 5.0.1 (stable channel)'));
+        }
+        expect(text, contains('Catalog signatures are not verified'));
         expect(
           text,
           contains(
-            'qobuz.deb: Server distribution debian 12 is not supported.',
+            'Package dependencies and actual device support have not been checked',
           ),
         );
-      }
-      if (status == 'metadata_compatible') {
-        expect(text, contains('version 5.0.1 (stable channel)'));
-      }
-      expect(text, contains('Catalog signatures are not verified'));
-      expect(
-        text,
-        contains(
-          'Package dependencies and actual device support have not been checked',
-        ),
-      );
-      expect(find.text('Install'), findsNothing);
-      expect(api.reads, 1);
-      expect(tester.takeException(), isNull);
-    });
+        for (final key in ['plugin-install-qobuz', 'about-install-qobuz']) {
+          final install = tester.widget<KalinkaButton>(
+            find.byKey(ValueKey(key), skipOffstage: false),
+          );
+          expect(install.label, 'Add');
+          expect(install.enabled, isFalse);
+        }
+        expect(
+          text,
+          contains('This server cannot install, remove or update plugins yet.'),
+        );
+        expect(api.runs, isEmpty);
+        expect(api.reads, 1);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets('older matching release does not hide a newer blocked version', (
@@ -1023,7 +2322,7 @@ void main() {
       ),
     );
     await _screen(tester, container);
-    await _expand(tester, 'qobuz');
+    await _about(tester, 'qobuz');
     expect(
       find.textContaining(
         'version 5.0.1 (stable channel)',
@@ -1041,123 +2340,100 @@ void main() {
   });
 
   testWidgets(
-    'opening another entry reveals its beginning after the old header scrolls away',
+    'an installed row opens its page: the switch, About and upkeep at the top',
     (tester) async {
       final container = await _container(
         _Proxy({'enabled': true, 'catalog_browsing': true}),
         _CatalogApi(_catalog()),
-      );
-      await _screen(tester, container, size: const Size(483, 619));
-      await _expand(tester, 'jamendo');
-      for (final id in ['localfiles', 'qobuz', 'spotify', 'jamendo']) {
-        final row = find.byKey(ValueKey('plugin-$id'), skipOffstage: false);
-        await Scrollable.ensureVisible(tester.element(row), alignment: 0);
-        await tester.pumpAndSettle();
-        if (id == 'localfiles') {
-          expect(
-            find.byKey(const ValueKey('plugin-jamendo')).hitTestable(),
-            findsNothing,
-          );
-        }
-        await tester.tap(
-          find.descendant(of: row, matching: find.byType(Text)).first,
-        );
-        await tester.pumpAndSettle();
-        final viewport = tester.getRect(
-          find.byKey(const ValueKey('catalog-scroll')),
-        );
-        final header = tester.getRect(row);
-        final details = tester.getRect(
-          find.byKey(ValueKey('plugin-details-$id')),
-        );
-        final browseBottom = tester
-            .getBottomLeft(find.byKey(const ValueKey('catalog-browse-bar')))
-            .dy;
-        expect(header.top, inInclusiveRange(browseBottom, browseBottom + 5));
-        expect(details.top, closeTo(header.bottom, 1));
-        expect(details.top, lessThan(viewport.bottom));
-        expect(
-          find.descendant(
-            of: find.byType(PluginCatalogEntry),
-            matching: find.byType(PinnedHeaderSliver),
+        live: _Live(
+          ModulesAndDevices(
+            inputModules: [
+              _module('jamendo', enabled: false, state: 'disabled'),
+              _module('spotify'),
+            ],
+            devices: [],
           ),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
-      }
-    },
-  );
-
-  testWidgets(
-    'expanded identity pins below the compact heading and Browse bar',
-    (tester) async {
-      final container = await _container(
-        _Proxy({'enabled': true, 'catalog_browsing': true}),
-        _CatalogApi(_catalog()),
+        ),
+        settings: _settingsWith({'jamendo': false, 'spotify': true}),
       );
       await _screen(tester, container, size: const Size(483, 619));
-      final expandedHeading = tester.getRect(
-        find.byKey(const ValueKey('catalog-heading')),
-      );
+      // Nothing on the overview acts on an installed plugin.
+      for (final key in [
+        'plugin-enabled-jamendo',
+        'plugin-about-jamendo',
+        'plugin-uninstall-spotify',
+        'plugin-settings-jamendo',
+      ]) {
+        expect(find.byKey(ValueKey(key)), findsNothing);
+      }
+      expect(find.text('Configuration'), findsWidgets);
+
+      await _open(tester, 'jamendo');
+      final page = find.byType(PluginSettingsScreen);
+      expect(page, findsOneWidget);
       expect(
-        tester.widget<Text>(find.text('Plugins')).style!.fontFamily,
-        KalinkaFonts.displayFamily,
-      );
-      await _expand(tester, 'jamendo');
-      final row = find.byKey(const ValueKey('plugin-jamendo'));
-      await tester.ensureVisible(row);
-      await tester.pumpAndSettle();
-      final heading = tester.getRect(
-        find.byKey(const ValueKey('catalog-heading')),
-      );
-      final browseBar = tester.getRect(
-        find.byKey(const ValueKey('catalog-browse-bar')),
-      );
-      expect(heading.height, lessThan(expandedHeading.height));
-      final scroll = tester
-          .widget<CustomScrollView>(find.byType(CustomScrollView))
-          .controller!;
-      scroll.jumpTo(scroll.offset + 100);
-      await tester.pumpAndSettle();
-      final viewport = tester.getRect(
-        find.byKey(const ValueKey('catalog-scroll')),
-      );
-      expect(tester.getTopLeft(row).dy, closeTo(browseBar.bottom, 1));
-      expect(
-        tester.getRect(find.byKey(const ValueKey('catalog-heading'))),
-        heading,
-      );
-      expect(
-        tester.getRect(find.byKey(const ValueKey('catalog-browse-bar'))),
-        browseBar,
-      );
-      expect(viewport.bottom, 619);
-      expect(find.byKey(const ValueKey('catalog-footer')), findsNothing);
-      expect(
-        find.byKey(const ValueKey('catalog-reload')).hitTestable(),
+        _onPage<PluginSettingsScreen>(
+          find.byKey(const ValueKey('plugin-enabled-jamendo')),
+        ),
         findsOneWidget,
       );
-      expect(find.byType(PinnedHeaderSliver), findsNWidgets(2));
-      expect(find.byType(Scrollable), findsOneWidget);
-      // Its collapse control is still hit-testable, not merely painted on top.
-      await tester.tap(
-        find.descendant(of: row, matching: find.byType(InkWell)),
+      // Bundled with the server, so nothing to uninstall; and what the
+      // catalog says waits behind About.
+      expect(
+        find.byKey(const ValueKey('plugin-uninstall-jamendo')),
+        findsNothing,
       );
+      expect(find.text('Created by'), findsNothing);
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      expect(find.byType(PinnedHeaderSliver), findsOneWidget);
+
+      await _open(tester, 'spotify');
+      final about = find.byKey(const ValueKey('plugin-about-spotify'));
+      expect(
+        find.descendant(of: about, matching: find.byIcon(Icons.info_outline)),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('About Spotify Connect'), findsOneWidget);
+      expect(tester.getSize(about), const Size(48, 48));
+      // At the top right, level with the title, never beside Uninstall.
+      final title = tester.getRect(
+        _onPage<PluginSettingsScreen>(
+          find.descendant(
+            of: find.byType(PageBanner),
+            matching: find.text('Spotify Connect settings'),
+          ),
+        ),
+      );
+      final aboutRect = tester.getRect(about);
+      expect(aboutRect.top, lessThan(title.bottom));
+      expect(aboutRect.right, 483 - 20);
+      final uninstall = tester.getRect(
+        find.byKey(const ValueKey('plugin-uninstall-spotify')),
+      );
+      expect(uninstall.top, greaterThan(aboutRect.bottom));
+      expect(
+        tester
+            .widget<KalinkaButton>(
+              find.byKey(const ValueKey('plugin-uninstall-spotify')),
+            )
+            .variant,
+        KalinkaButtonVariant.neutral,
+      );
+      expect(find.text('About'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
 
-  for (final (label, panelType) in [
-    ('Server settings', SettingsScreen),
-    ('Plugins', PluginCatalogScreen),
+  // Each is offered only on its side of the server's catalog opt-in.
+  for (final (label, panelType, catalog) in [
+    ('Server settings', SettingsScreen, false),
+    ('Configuration', PluginCatalogScreen, true),
   ]) {
     testWidgets(
       '$label covers only the tablet queue and preserves state across resize',
       (tester) async {
         final container = await _container(
-          _Proxy({'enabled': true, 'catalog_browsing': true}),
+          _Proxy({'enabled': catalog, 'catalog_browsing': true}),
           _CatalogApi(_catalog()),
           player: true,
         );
@@ -1250,6 +2526,10 @@ void main() {
 
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
+        if (panelType == PluginCatalogScreen) {
+          await tester.tap(find.byKey(const ValueKey('configuration-discard')));
+          await tester.pumpAndSettle();
+        }
         expect(panel, findsNothing);
         expect(find.byType(ServerChip).hitTestable(), findsOneWidget);
         expect(
@@ -1270,9 +2550,8 @@ void main() {
       _CatalogApi(_catalog()),
     );
     await _screen(tester, container);
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Device control'));
-    await tester.pumpAndSettle();
-    await _expand(tester, 'musiccast');
+    await _tapTab(tester, PluginTab.devices);
+    await _about(tester, 'musiccast');
     final search = find.byKey(const ValueKey('model-search-musiccast'));
     await tester.ensureVisible(search);
     await tester.enterText(search, 'nonexistent model');
@@ -1280,23 +2559,27 @@ void main() {
     expect(find.text('No catalog match · Not verified'), findsOneWidget);
     expect(find.byType(PluginCatalogScreen), findsOneWidget);
     expect(find.text('Check connected device'), findsNothing);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    // System Back closes only the About page.
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(
-      find.descendant(
-        of: find.byType(PluginCatalogEntry),
-        matching: find.byType(PinnedHeaderSliver),
-      ),
-      findsNothing,
-    );
+    expect(find.byType(PluginAboutScreen), findsNothing);
+    expect(find.byKey(const ValueKey('plugin-musiccast')), findsOneWidget);
+    _expectTab(tester, PluginTab.devices);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets(
-    'phone sheet shows Plugins only after opt-in and returns its action',
+    'phone sheet swaps Server settings for Configuration after opt-in',
     (tester) async {
       final proxy = _Proxy({'enabled': false, 'catalog_browsing': true});
-      final container = await _container(proxy, _CatalogApi(_catalog()));
+      final container = await _container(
+        proxy,
+        _CatalogApi(_catalog()),
+        settings: const SettingsState(
+          values: {pluginCatalogSettingPath: false},
+        ),
+      );
+      final settings = container.read(settingsProvider.notifier) as _Settings;
       ServerSheetAction? action;
       await tester.binding.setSurfaceSize(const Size(320, 640));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -1306,9 +2589,8 @@ void main() {
           child: MaterialApp(
             theme: AppTheme.dark(),
             builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: TextScaler.linear(1.8)),
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: TextScaler.linear(1.8)),
               child: child!,
             ),
             home: Scaffold(
@@ -1329,21 +2611,43 @@ void main() {
       );
       await tester.tap(find.text('Open menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Plugins'), findsNothing);
+      expect(find.text('Configuration'), findsNothing);
+      expect(find.text('Server settings'), findsOneWidget);
+      expect(find.text('Now-playing display'), findsNothing);
+      expect(find.text('THIS APP'), findsNothing);
+      settings.stageChange(pluginCatalogSettingPath, true);
+      await tester.pumpAndSettle();
+      expect(find.text('Configuration'), findsNothing);
+      expect(find.text('Server settings'), findsOneWidget);
       proxy.capabilities['enabled'] = true;
-      container.invalidate(serverInfoProvider);
+      await settings.applyChanges();
       await tester.pumpAndSettle();
-      expect(find.text('Plugins'), findsOneWidget);
-      await tester.ensureVisible(find.text('Plugins'));
+      expect(find.text('Configuration'), findsWidgets);
+      expect(find.text('Server settings'), findsNothing);
+      expect(find.text('Now-playing display'), findsNothing);
+      expect(find.text('THIS APP'), findsNothing);
+      await tester.ensureVisible(find.text('Configuration'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Plugins'));
+      await tester.tap(find.text('Configuration'));
       await tester.pumpAndSettle();
       expect(action, ServerSheetAction.openPlugins);
+
+      proxy.capabilities['enabled'] = false;
+      settings.saved(false);
+      await tester.tap(find.text('Open menu'));
+      await tester.pumpAndSettle();
+      expect(find.text('Configuration'), findsNothing);
+      expect(find.text('Server settings'), findsOneWidget);
+      await tester.tap(find.text('Server settings'));
+      await tester.pumpAndSettle();
+      expect(action, ServerSheetAction.openSettings);
       expect(tester.takeException(), isNull);
     },
   );
 
-  testWidgets('tablet sheet closes before opening Plugins', (tester) async {
+  testWidgets('tablet sheet closes before opening Configuration', (
+    tester,
+  ) async {
     final container = await _container(
       _Proxy({'enabled': true, 'catalog_browsing': true}),
       _CatalogApi(_catalog()),
@@ -1357,9 +2661,8 @@ void main() {
         child: MaterialApp(
           theme: AppTheme.dark(),
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(1.8)),
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(1.8)),
             child: child!,
           ),
           home: Scaffold(
@@ -1374,11 +2677,778 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Plugins'));
+    expect(find.text('Server settings'), findsNothing);
+    await tester.ensureVisible(find.text('Configuration'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Plugins'));
+    await tester.tap(find.text('Configuration'));
     await tester.pumpAndSettle();
     expect(actions, ['close', 'plugins']);
     expect(tester.takeException(), isNull);
   });
+
+  test(
+    'installing and update checks need browsing and their own flags',
+    () async {
+      for (final (capabilities, installs, checks) in [
+        (
+          <String, dynamic>{'enabled': true, 'catalog_browsing': true},
+          false,
+          false,
+        ),
+        (
+          {
+            'enabled': true,
+            'catalog_browsing': true,
+            'installation': true,
+            'update_checks': true,
+          },
+          true,
+          true,
+        ),
+        (
+          {
+            'enabled': false,
+            'catalog_browsing': true,
+            'installation': true,
+            'update_checks': true,
+          },
+          false,
+          false,
+        ),
+      ]) {
+        final container = await _container(
+          _Proxy(capabilities),
+          _CatalogApi(_catalog()),
+        );
+        final subscription = container.listen(serverInfoProvider, (_, _) {});
+        await container.read(serverInfoProvider.future);
+        expect(container.read(pluginInstallationProvider), installs);
+        expect(container.read(pluginUpdateChecksProvider), checks);
+        subscription.close();
+      }
+    },
+  );
+
+  testWidgets(
+    'each row says how its plugin stands and switched-off ones stay readable',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        live: _Live(
+          ModulesAndDevices(
+            inputModules: [
+              _module('localfiles'),
+              _module('jamendo', enabled: false, state: 'disabled'),
+              _module('upnp', state: 'warning'),
+              _module('spotify', state: 'error'),
+            ],
+            devices: [],
+          ),
+        ),
+        settings: _settingsWith({
+          'localfiles': true,
+          'jamendo': false,
+          'upnp': true,
+          'spotify': true,
+        }),
+      );
+      await _screen(tester, container, size: const Size(400, 1400));
+      // The words and colours of Server settings' cards.
+      for (final (id, label, color) in [
+        ('localfiles', 'READY', KalinkaColors.statusOnline),
+        ('jamendo', 'DISABLED', KalinkaColors.textMuted),
+        ('upnp', 'WARNING', KalinkaColors.statusPending),
+        ('spotify', 'ERROR', KalinkaColors.statusOffline),
+      ]) {
+        expect(_badgeOf(tester, id)!.label, label);
+        expect(_badgeOf(tester, id)!.color, color);
+      }
+      // Ready, with nothing of its own to say.
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('plugin-localfiles')),
+          matching: find.byKey(const ValueKey('plugin-status')),
+        ),
+        findsNothing,
+      );
+      // Not installed says itself in the heading above.
+      expect(_badgeOf(tester, 'qobuz'), isNull);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('plugin-qobuz')),
+          matching: find.byKey(const ValueKey('plugin-status')),
+        ),
+        findsNothing,
+      );
+      expect(_opacitiesOf(tester, 'jamendo'), isEmpty);
+      expect(_opacitiesOf(tester, 'localfiles'), isEmpty);
+      expect(_opacitiesOf(tester, 'qobuz'), isEmpty);
+      expect(find.bySemanticsLabel('Jamendo. Disabled'), findsOneWidget);
+      await _open(tester, 'jamendo');
+      expect(find.byType(PluginSettingsScreen), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'the switch on its page stages a plugin on or off for the restart',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        live: _Live(
+          ModulesAndDevices(
+            inputModules: [
+              _module('localfiles'),
+              _module('jamendo', enabled: false, state: 'disabled'),
+            ],
+            devices: [],
+          ),
+        ),
+        settings: _settingsWith({'localfiles': true, 'jamendo': false}),
+      );
+      await _screen(tester, container);
+      int pending() => tester
+          .widget<ConfigurationChangesBar>(find.byType(ConfigurationChangesBar))
+          .count;
+      expect(pending(), 0);
+
+      await _open(tester, 'jamendo');
+      final toggle = find.byKey(const ValueKey('plugin-enabled-jamendo'));
+      expect(tester.getSemantics(toggle), isSemantics(isToggled: false));
+      expect(tester.getSize(toggle).height, greaterThanOrEqualTo(48));
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(container.read(settingsProvider).stagedChanges, {
+        'input_modules.jamendo.enabled': true,
+      });
+      expect(
+        _onPage<PluginSettingsScreen>(find.text('Turns on after restart')),
+        findsOneWidget,
+      );
+      final banner = tester.widget<ConfigurationChangesBar>(
+        find.byType(ConfigurationChangesBar),
+      );
+      expect(banner.count, 1);
+      expect(find.text('Apply & restart'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      // Off as it runs now, on once restarted.
+      expect(_badgeOf(tester, 'jamendo')!.label, 'DISABLED');
+      expect(_statusOf(tester, 'jamendo'), 'Turns on after restart');
+      expect(_opacitiesOf(tester, 'jamendo'), isEmpty);
+      expect(pending(), 1);
+
+      await _open(tester, 'jamendo');
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(container.read(settingsProvider).stagedChanges, isEmpty);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(_badgeOf(tester, 'jamendo')!.label, 'DISABLED');
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('plugin-jamendo')),
+          matching: find.byKey(const ValueKey('plugin-status')),
+        ),
+        findsNothing,
+      );
+      expect(pending(), 0);
+
+      // A plugin the server does not have has nothing to switch.
+      await _open(tester, 'qobuz');
+      expect(find.byType(PluginAboutScreen), findsOneWidget);
+      expect(find.byKey(const ValueKey('plugin-enabled-qobuz')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('plugin-uninstall-qobuz')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'an installed row opens its settings under the Configuration trail',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        live: _Live(
+          ModulesAndDevices(
+            inputModules: [_module('localfiles'), _module('upnp')],
+            devices: [],
+          ),
+        ),
+        settings: _settingsWith({'localfiles': true}),
+      );
+      await _screen(tester, container);
+
+      await _open(tester, 'localfiles');
+      final page = find.byType(PluginSettingsScreen);
+      final crumbs = tester
+          .widgetList<BreadcrumbCrumb>(
+            find.descendant(of: page, matching: find.byType(BreadcrumbCrumb)),
+          )
+          .toList();
+      // Two steps, the page named with its plugin, as the title repeats.
+      expect(crumbs.map((c) => c.label), [
+        'Configuration',
+        'Folders & NAS settings',
+      ]);
+      expect(crumbs.first.onTap, isNotNull);
+      expect(crumbs.last.onTap, isNull);
+      final title = find.descendant(
+        of: find.descendant(of: page, matching: find.byType(PageBanner)),
+        matching: find.text('Folders & NAS settings'),
+      );
+      expect(
+        tester.widget<Text>(title).style!.fontFamily,
+        KalinkaFonts.displayFamily,
+      );
+      // The badge its row shows, under the title.
+      expect(
+        tester
+            .widget<ModuleStatusBadge>(
+              find.descendant(
+                of: page,
+                matching: find.byKey(const ValueKey('plugin-badge')),
+              ),
+            )
+            .label,
+        'READY',
+      );
+      // The page's own switch stands in for the schema's.
+      expect(find.text('Module enabled'), findsNothing);
+      expect(
+        find.descendant(of: page, matching: find.text('Store region')),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        find.descendant(of: page, matching: find.byType(TextField)),
+        'nl',
+      );
+      await tester.pumpAndSettle();
+      expect(container.read(settingsProvider).stagedChanges, {
+        'input_modules.localfiles.region': 'nl',
+      });
+      expect(
+        tester
+            .widget<ConfigurationChangesBar>(
+              find.byType(ConfigurationChangesBar),
+            )
+            .count,
+        1,
+      );
+
+      // The first crumb goes back to the overview, as Back does.
+      await tester.tap(find.bySemanticsLabel('Back to Configuration'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PluginSettingsScreen), findsNothing);
+
+      // System Back closes only the settings page.
+      await _open(tester, 'localfiles');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(PluginSettingsScreen), findsNothing);
+      expect(find.byType(PluginCatalogScreen), findsOneWidget);
+      expect(container.read(settingsProvider).stagedChanges, {
+        'input_modules.localfiles.region': 'nl',
+      });
+
+      // UPnP is installed, but the settings schema has nothing for it: its
+      // page says so, and has no switch to offer.
+      await _open(tester, 'upnp');
+      expect(
+        find.text('The server lists no other settings for this plugin.'),
+        findsOneWidget,
+      );
+      expect(
+        tester.getSemantics(find.byKey(const ValueKey('plugin-enabled-upnp'))),
+        isSemantics(isEnabled: false),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'About from a plugin\'s page goes back to it; its first crumb to the overview',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        live: _Live(
+          ModulesAndDevices(inputModules: [_module('localfiles')], devices: []),
+        ),
+        settings: _settingsWith({'localfiles': true}),
+      );
+      await _screen(tester, container);
+      await _about(tester, 'localfiles');
+      final crumbs = tester
+          .widgetList<BreadcrumbCrumb>(
+            find.descendant(
+              of: find.byType(PluginAboutScreen),
+              matching: find.byType(BreadcrumbCrumb),
+            ),
+          )
+          .map((c) => c.label);
+      expect(crumbs, ['Configuration', 'About Folders & NAS']);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(PluginAboutScreen), findsNothing);
+      expect(find.byType(PluginSettingsScreen), findsOneWidget);
+
+      await _about(tester, 'localfiles');
+      await tester.tap(
+        find.descendant(
+          of: find.byType(PluginAboutScreen),
+          matching: find.bySemanticsLabel('Back to Configuration'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(PluginAboutScreen), findsNothing);
+      expect(find.byType(PluginSettingsScreen), findsNothing);
+      expect(find.byType(PluginCatalogScreen), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Install and Uninstall run on a server that manages its plugins',
+    (tester) async {
+      final api = _CatalogApi(_catalog());
+      final live = _Live(
+        ModulesAndDevices(
+          inputModules: [_module('localfiles'), _module('spotify')],
+          devices: [],
+        ),
+      );
+      final container = await _container(
+        _Proxy({
+          'enabled': true,
+          'catalog_browsing': true,
+          'installation': true,
+        }),
+        api,
+        live: live,
+      );
+      await _screen(tester, container);
+      List<String> toasts() =>
+          container.read(toastProvider).map((t) => t.message).toList();
+
+      // Part of the server install, so nothing to remove on its own.
+      await _open(tester, 'localfiles');
+      expect(
+        find.byKey(const ValueKey('plugin-uninstall-localfiles')),
+        findsNothing,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      // Solid berry, at the row's right edge.
+      final install = find.byKey(const ValueKey('plugin-install-qobuz'));
+      await tester.scrollUntilVisible(install, 150, scrollable: _scrollable);
+      await tester.pumpAndSettle();
+      expect(tester.widget<KalinkaButton>(install).enabled, isTrue);
+      expect(
+        tester.widget<KalinkaButton>(install).variant,
+        KalinkaButtonVariant.accent,
+      );
+      // Before the chevron every row ends in.
+      final chevron = tester.getRect(
+        find.descendant(
+          of: find.byKey(const ValueKey('entry-qobuz')),
+          matching: find.byIcon(Icons.chevron_right),
+        ),
+      );
+      expect(chevron.right, 400 - 20);
+      expect(tester.getRect(install).right, lessThan(chevron.left));
+      // About carries it too, at the top right, level with its title and
+      // above what the catalog says.
+      await _about(tester, 'qobuz');
+      final top = tester.getRect(
+        find.byKey(const ValueKey('about-install-qobuz')),
+      );
+      final title = tester.getRect(
+        find.descendant(
+          of: find.descendant(
+            of: find.byType(PluginAboutScreen),
+            matching: find.byType(PageBanner),
+          ),
+          matching: find.text('About Qobuz'),
+        ),
+      );
+      expect(top.right, 400 - 20);
+      expect(top.left, greaterThan(title.right));
+      expect(top.top, lessThan(title.bottom));
+      expect(top.bottom, lessThan(tester.getRect(find.text('Created by')).top));
+      // No second Install at the foot.
+      expect(find.text('Add'), findsNWidgets(2));
+      await tester.tap(find.bySemanticsLabel('Back to Configuration'));
+      await tester.pumpAndSettle();
+
+      api.running = Completer<void>();
+      await tester.tap(install);
+      await tester.pump();
+      expect(api.runs, [('qobuz', PluginOperation.install)]);
+      // Busy, not dimmed, and deaf to a second tap.
+      expect(tester.widget<KalinkaButton>(install).label, 'Adding…');
+      expect(tester.widget<KalinkaButton>(install).onTap, isNull);
+      expect(tester.widget<KalinkaButton>(install).leading, isNotNull);
+      expect(_badgeOf(tester, 'qobuz')!.label, 'INSTALLING');
+      live.value = ModulesAndDevices(
+        inputModules: [..._liveInputs(live), _module('qobuz')],
+        devices: [],
+      );
+      api.running!.complete();
+      api.running = null;
+      await tester.pumpAndSettle();
+      expect(toasts(), contains('Qobuz installed'));
+      // Moved up among the installed, opening its configuration.
+      expect(install, findsNothing);
+      expect(
+        _listed(tester).indexOf('qobuz'),
+        lessThan(_listed(tester).indexOf('jamendo')),
+      );
+      expect(_badgeOf(tester, 'qobuz')!.label, 'READY');
+      await _open(tester, 'qobuz');
+      expect(find.byType(PluginSettingsScreen), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      // Uninstall is grey, on the plugin's page, and asks first.
+      await _open(tester, 'spotify');
+      final uninstall = find.byKey(const ValueKey('plugin-uninstall-spotify'));
+      expect(
+        tester.widget<KalinkaButton>(uninstall).variant,
+        KalinkaButtonVariant.neutral,
+      );
+      await tester.tap(uninstall);
+      await tester.pumpAndSettle();
+      expect(find.text('Uninstall Spotify Connect?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(api.runs, hasLength(1));
+
+      Future<void> confirmUninstall() async {
+        await tester.tap(uninstall);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(KalinkaDialog),
+            matching: find.text('Uninstall'),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      api.refusal = 'Spotify Connect is playing. Stop playback first.';
+      await confirmUninstall();
+      expect(api.runs.last, ('spotify', PluginOperation.uninstall));
+      // The refusal stays on the plugin's page, in the server's words.
+      expect(container.read(toastProvider).where((t) => t.isError), isEmpty);
+      final note = _onPage<PluginSettingsScreen>(
+        find.byKey(const ValueKey('plugin-failure')),
+      );
+      expect(
+        tester.widget<Text>(note).textSpan!.toPlainText(),
+        'Uninstall failed. ${api.refusal}',
+      );
+      expect(find.byType(PluginSettingsScreen), findsOneWidget);
+      // About shows it too, under the Uninstall it carries.
+      await _about(tester, 'spotify');
+      final failed = _onPage<PluginAboutScreen>(
+        find.byKey(const ValueKey('plugin-failure')),
+      );
+      expect(failed, findsOneWidget);
+      final aboutUninstall = find.byKey(
+        const ValueKey('about-uninstall-spotify'),
+      );
+      expect(
+        tester.getRect(failed).top,
+        greaterThan(tester.getRect(aboutUninstall).bottom),
+      );
+      expect(
+        tester.getRect(failed).bottom,
+        lessThan(tester.getRect(find.text('Created by')).top),
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      // Put away by hand.
+      await tester.tap(
+        _onPage<PluginSettingsScreen>(
+          find.byKey(const ValueKey('plugin-failure-dismiss')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('plugin-failure')), findsNothing);
+
+      // Done: its page goes with it, and it waits among the rest.
+      api.refusal = null;
+      live.value = ModulesAndDevices(
+        inputModules: [
+          for (final m in _liveInputs(live))
+            if (m.name != 'spotify') m,
+        ],
+        devices: [],
+      );
+      await confirmUninstall();
+      expect(find.byType(PluginSettingsScreen), findsNothing);
+      expect(toasts(), contains('Spotify Connect uninstalled'));
+      expect(
+        find.byKey(const ValueKey('plugin-install-spotify')),
+        findsOneWidget,
+      );
+      // Let the toasts time out.
+      await tester.pump(const Duration(seconds: 10));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('a failed install stays in its row until put away', (
+    tester,
+  ) async {
+    final api = _CatalogApi(_catalog())
+      ..refusal = 'No space left on the server for this package.';
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true, 'installation': true}),
+      api,
+    );
+    await _screen(tester, container, size: const Size(400, 1400));
+    await tester.tap(find.byKey(const ValueKey('plugin-install-qobuz')));
+    await tester.pumpAndSettle();
+    final note = find.descendant(
+      of: find.byKey(const ValueKey('entry-qobuz')),
+      matching: find.byKey(const ValueKey('plugin-failure')),
+    );
+    expect(
+      tester.widget<Text>(note).textSpan!.toPlainText(),
+      'Install failed. ${api.refusal}',
+    );
+    expect(container.read(toastProvider), isEmpty);
+    // Never claimed: it stays among those not installed.
+    expect(find.byKey(const ValueKey('plugin-install-qobuz')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('plugin-failure-dismiss')));
+    await tester.pumpAndSettle();
+    expect(note, findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Updates tab shows only while the server reports updates, bold with its count',
+    (tester) async {
+      final api = _CatalogApi(_catalog())
+        ..available = const [
+          PluginUpdate(pluginId: 'spotify', version: '0.4.0'),
+          PluginUpdate(pluginId: 'musiccast', version: '1.1.0'),
+          // Not installed here: nothing to update.
+          PluginUpdate(pluginId: 'qobuz', version: '6.0.0'),
+        ];
+      final container = await _container(
+        _Proxy({
+          'enabled': true,
+          'catalog_browsing': true,
+          'installation': true,
+          'update_checks': true,
+        }),
+        api,
+        live: _Live(
+          ModulesAndDevices(
+            inputModules: [_module('spotify')],
+            devices: [_module('musiccast')],
+          ),
+        ),
+      );
+      await _screen(tester, container, size: const Size(400, 1400));
+      final tab = find.byKey(const ValueKey('catalog-tab-updates'));
+      expect(tab, findsOneWidget);
+      expect(
+        tester.getSemantics(tab),
+        isSemantics(label: 'Updates, 2 available'),
+      );
+      final label = tester.widget<Text>(
+        find.descendant(of: tab, matching: find.text('UPDATES')),
+      );
+      // Bold and bright even while another tab is selected.
+      expect(label.style!.fontWeight, FontWeight.w700);
+      expect(label.style!.color, KalinkaColors.textPrimary);
+      expect(
+        find.descendant(of: tab, matching: find.text('2')),
+        findsOneWidget,
+      );
+      expect(_statusOf(tester, 'spotify'), 'Update available · 0.4.0');
+
+      await _tapTab(tester, PluginTab.updates);
+      // Every kind of plugin together, all of them installed.
+      expect(_listed(tester).toSet(), {'spotify', 'musiccast'});
+      expect(find.textContaining('More sources'), findsNothing);
+
+      await _open(tester, 'spotify');
+      final update = find.byKey(const ValueKey('plugin-update-spotify'));
+      expect(tester.widget<KalinkaButton>(update).label, 'Update to 0.4.0');
+      api.available = const [
+        PluginUpdate(pluginId: 'musiccast', version: '1.1.0'),
+      ];
+      await tester.tap(update);
+      await tester.pumpAndSettle();
+      expect(api.runs, [('spotify', PluginOperation.update)]);
+      expect(update, findsNothing);
+      expect(
+        find.descendant(of: tab, matching: find.text('1')),
+        findsOneWidget,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      // Nothing left to update: the tab goes and the catalog stays.
+      api.available = const [];
+      container.invalidate(pluginUpdatesProvider);
+      await tester.pumpAndSettle();
+      expect(tab, findsNothing);
+      _expectTab(tester, PluginTab.sources);
+      // Let the toast time out.
+      await tester.pump(const Duration(seconds: 10));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('a server without update checks never shows the Updates tab', (
+    tester,
+  ) async {
+    final api = _CatalogApi(_catalog())
+      ..available = const [PluginUpdate(pluginId: 'spotify', version: '0.4.0')];
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true}),
+      api,
+      live: _Live(
+        ModulesAndDevices(inputModules: [_module('spotify')], devices: []),
+      ),
+    );
+    await _screen(tester, container, size: const Size(400, 1400));
+    expect(find.byKey(const ValueKey('catalog-tab-updates')), findsNothing);
+    expect(_badgeOf(tester, 'spotify')!.label, 'READY');
+    await _open(tester, 'spotify');
+    expect(find.byKey(const ValueKey('plugin-update-spotify')), findsNothing);
+    // Uninstall is offered, but out of reach on this server, which says so.
+    final uninstall = tester.widget<KalinkaButton>(
+      find.byKey(const ValueKey('plugin-uninstall-spotify')),
+    );
+    expect(uninstall.enabled, isFalse);
+    expect(
+      find.byTooltip('This server cannot remove plugins yet'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('plugin-manage-note')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a server that cannot install says so once, under More sources', (
+    tester,
+  ) async {
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true}),
+      _CatalogApi(_catalog()),
+    );
+    await _screen(tester, container, size: const Size(400, 1400));
+    final note = find.byKey(const ValueKey('catalog-manage-note'));
+    expect(note, findsOneWidget);
+    expect(
+      find.descendant(
+        of: note,
+        matching: find.text(
+          'This server cannot install, remove or update plugins yet.',
+        ),
+      ),
+      findsOneWidget,
+    );
+    // Under the heading it holds back, not under each plugin.
+    expect(
+      tester.getRect(note).top,
+      greaterThan(tester.getRect(find.textContaining('More sources')).bottom),
+    );
+    expect(
+      tester.getRect(note).bottom,
+      lessThan(tester.getRect(find.byKey(const ValueKey('entry-jamendo'))).top),
+    );
+    // Out of reach, and looks it.
+    final install = tester.widget<KalinkaButton>(
+      find.byKey(const ValueKey('plugin-install-qobuz')),
+    );
+    expect(install.enabled, isFalse);
+    expect(find.textContaining('cannot install or update'), findsNothing);
+    // Every device plugin here comes with the server: nothing to say.
+    await _tapTab(tester, PluginTab.devices);
+    expect(note, findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a server that installs says nothing over the list', (
+    tester,
+  ) async {
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true, 'installation': true}),
+      _CatalogApi(_catalog()),
+    );
+    await _screen(tester, container);
+    expect(find.byKey(const ValueKey('catalog-manage-note')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'plugin summaries wrap on tiles and full descriptions appear on About',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+      );
+      await _screen(tester, container, size: const Size(320, 1400));
+      final qobuz = _catalog().plugins.singleWhere((p) => p.id == 'qobuz');
+      final short = find.descendant(
+        of: find.byKey(const ValueKey('plugin-qobuz')),
+        matching: find.text(qobuz.summary!),
+      );
+      expect(short, findsOneWidget);
+      expect(tester.widget<Text>(short).maxLines, isNull);
+      expect(tester.widget<Text>(short).softWrap, isTrue);
+      expect(
+        tester.getSemantics(find.byKey(const ValueKey('plugin-qobuz'))).value,
+        qobuz.summary,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('plugin-qobuz')),
+          matching: find.text(qobuz.description),
+        ),
+        findsNothing,
+      );
+      // HiFi controls use the same catalog summary and description fallback.
+      await _tapTab(tester, PluginTab.devices);
+      final musiccast = _catalog().plugins.singleWhere(
+        (p) => p.id == 'musiccast',
+      );
+      final deviceSummary = find.descendant(
+        of: find.byKey(const ValueKey('plugin-musiccast')),
+        matching: find.byKey(const ValueKey('plugin-summary')),
+      );
+      expect(
+        tester.widget<Text>(deviceSummary).data,
+        musiccast.blurb('your player'),
+      );
+      expect(tester.widget<Text>(deviceSummary).maxLines, isNull);
+      expect(tester.widget<Text>(deviceSummary).softWrap, isTrue);
+      expect(
+        tester
+            .getSemantics(find.byKey(const ValueKey('plugin-musiccast')))
+            .value,
+        musiccast.blurb('your player'),
+      );
+      await _tapTab(tester, PluginTab.sources);
+      await _about(tester, 'qobuz');
+      expect(find.text(qobuz.description), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
+
+List<ModuleInfo> _liveInputs(_Live live) => live.value.inputModules;

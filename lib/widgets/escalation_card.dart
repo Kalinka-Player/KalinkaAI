@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../theme/app_theme.dart';
@@ -118,7 +119,7 @@ class _EscalationCardState extends ConsumerState<EscalationCard>
               Text(
                 boxAnswers
                     ? 'The server hasn\'t responded for over 30 seconds, but '
-                          'its box is still on the network. Restarting the '
+                          'its streamer is still on the network. Restarting the '
                           'server may bring it back.'
                     : 'The server hasn\'t responded for over 30 seconds. '
                           'It may be offline or unreachable on the network.',

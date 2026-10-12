@@ -23,7 +23,7 @@ _Wording _wording(BoxAction action) => switch (action) {
     icon: Icons.restart_alt,
     title: 'Restart the server?',
     message:
-        "Kalinka's server is not answering. The box starts it again; playback "
+        "Kalinka's server is not answering. The streamer starts it again; playback "
         'stops until it is back.',
     confirm: 'Restart',
     accepted: 'Restarting the server…',
@@ -31,22 +31,22 @@ _Wording _wording(BoxAction action) => switch (action) {
   ),
   BoxAction.reboot => (
     icon: Icons.autorenew,
-    title: 'Restart the box?',
+    title: 'Restart streamer?',
     message:
-        'The whole player restarts. Playback stops, and the box is back in a '
+        'The whole player restarts. Playback stops, and the streamer is back in a '
         'minute or two.',
     confirm: 'Restart',
-    accepted: 'Restarting the box. The app reconnects when it is back.',
+    accepted: 'Restarting the streamer. The app reconnects when it is back.',
     destructive: false,
   ),
   BoxAction.powerOff => (
     icon: Icons.power_settings_new,
-    title: 'Power off the box?',
+    title: 'Power off streamer?',
     message:
         'The player shuts down safely. To start it again, unplug it and plug '
         'it back in.',
     confirm: 'Power off',
-    accepted: 'Powering off. Unplug the box once its lights stop.',
+    accepted: 'Powering off. Unplug the streamer once its lights stop.',
     destructive: true,
   ),
 };
@@ -89,7 +89,7 @@ class BoxActionDialog extends StatelessWidget {
 }
 
 /// Confirms [action], then asks the connected server's box to carry it out.
-/// Returns whether the box accepted it; a refusal is reported in a toast.
+/// Returns whether the streamer accepted it; a refusal is reported in a toast.
 ///
 /// Set [inPanel] when called from the tablet layout's left panel.
 Future<bool> runBoxAction(

@@ -311,7 +311,7 @@ class DioSupervisorApi implements SupervisorApi {
       if (response == null) {
         throw const BoxActionException(
           'unreachable',
-          'The box did not answer. Check that it is on and connected.',
+          'The streamer did not answer. Check that it is on and connected.',
         );
       }
       final detail = response.data is Map ? response.data['detail'] : null;
@@ -320,18 +320,18 @@ class DioSupervisorApi implements SupervisorApi {
     }
   }
 
-  static const _refused = 'The box could not do that.';
+  static const _refused = 'The streamer could not do that.';
 
   static const _refusals = {
-    'busy': 'The box is busy with another action. Try again in a moment.',
-    'shutting_down': 'The box is already restarting or powering off.',
+    'busy': 'The streamer is busy with another action. Try again in a moment.',
+    'shutting_down': 'The streamer is already restarting or powering off.',
     'upgrade_in_progress':
         'Kalinka is being updated. Try again when the update finishes.',
     'network_change_in_progress':
-        'The box is changing its network. Try again when it finishes.',
+        'The streamer is changing its network. Try again when it finishes.',
     'too_soon': 'The server was restarted moments ago. Give it a little time.',
     'wrong_server':
-        'A different Kalinka box now answers at this address. Reconnect to '
+        'A different Kalinka streamer now answers at this address. Reconnect to '
         'your server first.',
     'unknown_soundcard': 'This box cannot be set up for that sound card.',
     'soundcard_failed':

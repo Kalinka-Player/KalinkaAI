@@ -492,9 +492,26 @@ class ModuleSpec {
     yield* _collectionsWithin(sections);
   }
 
+  Iterable<String> get settingPaths sync* {
+    yield* fields.map((f) => f.path);
+    yield* allCollections.map((c) => c.path);
+    Iterable<String> within(List<SectionSpec> sections) sync* {
+      for (final section in sections) {
+        yield* section.fields.map((f) => f.path);
+        yield* within(section.sections);
+      }
+    }
+
+    yield* within(sections);
+  }
+
   /// The collection shown in place of the field at [path], or null.
   CollectionSpec? collectionReplacing(String path) =>
       allCollections.where((c) => c.replaces.contains(path)).firstOrNull;
+
+  /// The module's own on/off field, which its header shows as a switch.
+  FieldSpec? get enabledField =>
+      fields.where((f) => f.path.endsWith('.enabled')).firstOrNull;
 }
 
 Iterable<CollectionSpec> _collectionsWithin(List<SectionSpec> sections) sync* {

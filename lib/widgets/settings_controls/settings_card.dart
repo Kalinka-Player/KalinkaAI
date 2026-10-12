@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
+import '../configuration_appearance.dart';
 
 /// Card container for groups of setting rows.
 ///
@@ -11,8 +13,11 @@ class SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final gutter = ConfigurationAppearance.active(context)
+        ? ConfigurationAppearance.gutter(context)
+        : 16.0;
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      margin: EdgeInsets.fromLTRB(gutter, 0, gutter, 12),
       decoration: BoxDecoration(
         color: KalinkaColors.surfaceRaised,
         borderRadius: BorderRadius.circular(14),

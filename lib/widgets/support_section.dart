@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'configuration_appearance.dart';
 import 'settings_controls/settings_action_row.dart';
 import 'settings_controls/settings_card.dart';
 
@@ -17,7 +18,7 @@ class SupportSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 28, 20, 10),
+          padding: ConfigurationAppearance.sectionPadding(context),
           child: Text('SUPPORT', style: KalinkaTextStyles.sectionHeaderMuted),
         ),
         SettingsCard(
@@ -25,6 +26,9 @@ class SupportSection extends StatelessWidget {
             SettingsActionRow(
               label: 'Download server logs',
               sublabel: 'An archive of recent logs to attach to a bug report.',
+              leading: ConfigurationAppearance.active(context)
+                  ? Icons.description_outlined
+                  : null,
               onTap: onDownloadLogs,
             ),
           ],
