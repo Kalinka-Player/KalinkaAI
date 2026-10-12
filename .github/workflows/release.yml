@@ -230,8 +230,9 @@ jobs:
           cache: true
       - run: flutter pub get
       # Pinned: each flutterpi_tool release supports a narrow range of
-      # Flutter versions. 0.12 is the 3.44 line.
-      - run: flutter pub global activate flutterpi_tool 0.12.0
+      # Flutter versions. 0.12.0, the newest on pub.dev, stops at 3.44; this
+      # commit of its main is the first that builds against 3.47.
+      - run: flutter pub global activate -sgit https://github.com/ardera/flutterpi_tool.git --git-ref 248d79914b84ce89b44435ad8f104e81a37e1ffc
       - name: Build kiosk .deb
         run: |
           set -euo pipefail
