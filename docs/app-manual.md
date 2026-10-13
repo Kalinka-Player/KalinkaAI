@@ -49,6 +49,8 @@ latency, and reach:
 - **Server settings** — all configuration (see next section)
 - **Connect to different server** — rescan the network and switch
 - **Disconnect**
+- **Power off** — asks for confirmation, then safely shuts down the server
+  when its streamer supports power control
 
 The chip's dot also tells you the connection state at a glance: green —
 online, amber — connecting/reconnecting, grey — offline.

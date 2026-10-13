@@ -3,15 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/app_version_provider.dart';
+import '../providers/box_control_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/demo_mode.dart';
 import '../providers/server_info_provider.dart';
+import '../providers/supervisor_api.dart';
 import '../theme/app_theme.dart';
 import 'kalinka_bottom_sheet.dart';
 
 /// Actions that can be returned from the server sheet.
-enum ServerSheetAction { openSettings, openDiscovery, openPlugins }
+enum ServerSheetAction { openSettings, openDiscovery, openPlugins, powerOff }
 
 /// Content body for the server sheet — used directly by [showKalinkaBottomSheet]
 /// on phone, and wrapped by [ServerSheet] (with animation/scrim) on tablet.
@@ -92,6 +94,9 @@ class ServerSheetContent extends ConsumerWidget {
               },
             ),
           ],
+          _PowerOffRow(
+            onTap: () => Navigator.pop(context, ServerSheetAction.powerOff),
+          ),
           const _AppVersionFooter(),
         ],
       ),
@@ -299,6 +304,7 @@ class ServerSheet extends ConsumerStatefulWidget {
   final VoidCallback onOpenDiscovery;
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenPlugins;
+  final VoidCallback onPowerOff;
 
   const ServerSheet({
     super.key,
@@ -306,6 +312,7 @@ class ServerSheet extends ConsumerStatefulWidget {
     required this.onOpenDiscovery,
     required this.onOpenSettings,
     required this.onOpenPlugins,
+    required this.onPowerOff,
   });
 
   @override
@@ -421,6 +428,10 @@ class _ServerSheetState extends ConsumerState<ServerSheet>
                                       await _animateClose();
                                       widget.onOpenDiscovery();
                                     },
+                                    onPowerOff: () async {
+                                      await _animateClose();
+                                      widget.onPowerOff();
+                                    },
                                   ),
                                 ),
                               ),
@@ -448,12 +459,14 @@ class _TabletServerSheetContent extends ConsumerWidget {
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenDiscovery;
   final VoidCallback onOpenPlugins;
+  final VoidCallback onPowerOff;
 
   const _TabletServerSheetContent({
     required this.onClose,
     required this.onOpenSettings,
     required this.onOpenDiscovery,
     required this.onOpenPlugins,
+    required this.onPowerOff,
   });
 
   @override
@@ -517,7 +530,37 @@ class _TabletServerSheetContent extends ConsumerWidget {
             },
           ),
         ],
+        _PowerOffRow(onTap: onPowerOff),
         const _AppVersionFooter(),
+      ],
+    );
+  }
+}
+
+/// The same capability-gated shutdown action on phone, tablet and web.
+class _PowerOffRow extends ConsumerWidget {
+  final VoidCallback onTap;
+
+  const _PowerOffRow({required this.onTap});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final control = ref.watch(boxControlProvider);
+    if (control.isLoading ||
+        control.hasError ||
+        control.value?.offers(BoxAction.powerOff) != true) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      children: [
+        const SheetDivider(),
+        SheetRow(
+          icon: Icons.power_settings_new,
+          iconBackground: KalinkaColors.actionDelete.withValues(alpha: 0.14),
+          iconColor: KalinkaColors.actionDelete,
+          label: 'Power off',
+          onTap: onTap,
+        ),
       ],
     );
   }
