@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/providers/box_control_provider.dart';
+import 'package:kalinka/providers/box_power_off_timer_provider.dart';
+import 'package:kalinka/providers/settings_provider.dart';
+import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/demo_mode.dart';
@@ -13,6 +16,7 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/widgets/box_section.dart';
+import 'package:kalinka/widgets/expert_settings_screen.dart';
 import 'package:kalinka/widgets/configuration_appearance.dart';
 import 'package:kalinka/widgets/settings_controls/settings_action_row.dart';
 import 'package:kalinka/widgets/escalation_card.dart';
@@ -54,12 +58,49 @@ SupervisorInfo _info({
   int protocol = 1,
   int minProtocol = 1,
   Set<String> actions = const {'restart_core', 'reboot', 'poweroff'},
+  bool timer = false,
 }) => SupervisorInfo(
   version: '0.2.0',
   protocol: protocol,
   minProtocol: minProtocol,
   serverId: serverId,
   actions: actions,
+  supportsPowerOffTimer: timer,
+);
+
+class _Settings extends SettingsNotifier {
+  _Settings(this.seed);
+  final SettingsState seed;
+  @override
+  SettingsState build() => seed;
+}
+
+const _timerSettings = SettingsState(
+  schema: PresentationSchema(
+    schemaVersion: 'timer',
+    pages: [],
+    expertFields: [
+      FieldSpec(
+        path: boxPowerOffEnabledPath,
+        label: 'Power-off timer',
+        help: 'Power off the streamer after playback stays paused or stopped for the set time.',
+        widget: WidgetKind.toggle,
+        type: 'bool',
+        defaultValue: false,
+        importance: Importance.expert,
+      ),
+      FieldSpec(
+        path: boxPowerOffMinutesPath,
+        label: 'Power off after',
+        widget: WidgetKind.numberInput,
+        type: 'int',
+        defaultValue: 30,
+        importance: Importance.expert,
+        constraints: Constraints(ge: 1, le: 1440, step: 1, unit: 'min'),
+      ),
+    ],
+  ),
+  values: {boxPowerOffEnabledPath: false, boxPowerOffMinutesPath: 30},
 );
 
 /// Connection held at [initial], escalated, counting manual retries.
@@ -264,19 +305,35 @@ void main() {
       WidgetTester tester, {
       SupervisorInfo? answer,
       bool configuration = false,
+      SettingsState settings = const SettingsState(),
+      bool expert = false,
+      double textScale = 1,
     }) async {
       final box = _FakeBox(answer: answer);
-      final container = await _container(box: box, identity: 'box-1');
+      final container = await _container(
+        box: box,
+        identity: 'box-1',
+        overrides: [settingsProvider.overrideWith(() => _Settings(settings))],
+      );
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
           child: MaterialApp(
-            home: Scaffold(
-              body: SingleChildScrollView(
-                child: configuration
-                    ? const ConfigurationAppearance(child: BoxSection())
-                    : const BoxSection(),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(textScale),
+                disableAnimations: true,
               ),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: expert
+                  ? const ExpertSettingsScreen()
+                  : SingleChildScrollView(
+                      child: configuration
+                          ? const ConfigurationAppearance(child: BoxSection())
+                          : const BoxSection(),
+                    ),
             ),
           ),
         ),
@@ -322,6 +379,93 @@ void main() {
       await pump(tester);
       expect(find.text('STREAMER'), findsNothing);
     });
+
+    testWidgets('stages the timer and minutes beside power off', (
+      tester,
+    ) async {
+      final (container, box) = await pump(
+        tester,
+        answer: _info(timer: true),
+        settings: _timerSettings,
+        configuration: true,
+      );
+      expect(find.text('Power-off timer'), findsOneWidget);
+      expect(find.text('Power off after'), findsNothing);
+      expect(
+        tester.getTopLeft(find.text('Power-off timer')).dy,
+        greaterThan(tester.getTopLeft(find.text('Power off streamer')).dy),
+      );
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(find.text('Power off after'), findsOneWidget);
+      expect(find.text('min'), findsOneWidget);
+      expect(find.text('30'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), '45');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(container.read(settingsProvider).stagedChanges, {
+        boxPowerOffEnabledPath: true,
+        boxPowerOffMinutesPath: 45,
+      });
+      await tester.enterText(find.byType(TextField), '60');
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Power off after'), findsNothing);
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(find.text('60'), findsOneWidget);
+      container.read(settingsProvider.notifier).discardAll();
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(box.runs, isEmpty);
+    });
+
+    for (final (name, info, settings) in [
+      ('absent supervisor', null, _timerSettings),
+      ('older supervisor', _info(), _timerSettings),
+      ('older Core', _info(timer: true), const SettingsState()),
+      ('wrong box', _info(serverId: 'box-2', timer: true), _timerSettings),
+      (
+        'no power-off action',
+        _info(timer: true, actions: {'reboot'}),
+        _timerSettings,
+      ),
+    ]) {
+      testWidgets('hides timer for $name', (tester) async {
+        await pump(tester, answer: info, settings: settings);
+        expect(find.text('Power-off timer'), findsNothing);
+        expect(find.byType(Switch), findsNothing);
+      });
+    }
+
+    testWidgets('advanced settings also hide an unsupported timer', (
+      tester,
+    ) async {
+      await pump(tester, settings: _timerSettings, expert: true);
+      expect(find.text('Power-off timer'), findsNothing);
+      expect(find.text('Power off after'), findsNothing);
+    });
+
+    for (final size in [const Size(375, 812), const Size(812, 375)]) {
+      testWidgets('timer fits $size with large text', (tester) async {
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await pump(
+          tester,
+          answer: _info(timer: true),
+          settings: _timerSettings.copyWith(
+            values: {boxPowerOffEnabledPath: true, boxPowerOffMinutesPath: 30},
+          ),
+          configuration: true,
+          textScale: 2,
+        );
+        await tester.ensureVisible(find.byType(TextField));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('Power off after'), findsOneWidget);
+      });
+    }
 
     testWidgets('leaves out what the box does not offer', (tester) async {
       await pump(tester, answer: _info(actions: {'poweroff'}));

@@ -79,6 +79,14 @@ void main() {
       expect(info.compatible, isTrue);
       expect(info.offers(BoxAction.powerOff), isTrue);
       expect(info.offers(BoxAction.restartServer), isTrue);
+      expect(info.supportsPowerOffTimer, isFalse);
+    });
+
+    test('reads inactivity timer support when advertised', () async {
+      final (api, _) = _api(
+        (_) => _json(200, {..._info, 'poweroff_timer': true}),
+      );
+      expect((await api.info())!.supportsPowerOffTimer, isTrue);
     });
 
     test('is absent when nothing answers', () async {

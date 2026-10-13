@@ -44,6 +44,7 @@ class SupervisorInfo {
   final String? rendererId;
 
   final Set<String> actions;
+  final bool supportsPowerOffTimer;
 
   const SupervisorInfo({
     required this.version,
@@ -52,6 +53,7 @@ class SupervisorInfo {
     required this.serverId,
     this.rendererId,
     required this.actions,
+    this.supportsPowerOffTimer = false,
   });
 
   /// Whether this app and the supervisor share a protocol version.
@@ -80,6 +82,7 @@ class SupervisorInfo {
       serverId: id(json['server_id']),
       rendererId: id(json['renderer_id']),
       actions: actions.whereType<String>().toSet(),
+      supportsPowerOffTimer: json['poweroff_timer'] == true,
     );
   }
 }
