@@ -619,6 +619,22 @@ void main() {
       expect(page.staged, {'output.exclusive': true});
     });
 
+    test('drops a staged device the change has since replaced', () async {
+      final (container, target, proxy) = await start(restartsPlaying());
+      proxy.rendererConfig = _outputConfig('default');
+      (await openSettings(container)).stage(outputDevicePath, 'hw:CARD=Old');
+      proxy.rendererConfig = _outputConfig('hw:CARD=Boom,DEV=0');
+
+      await container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+      await pumpEventQueue();
+
+      final page = container.read(rendererSettingsProvider('r-local'));
+      expect(page.values[outputDevicePath], 'hw:CARD=Boom,DEV=0');
+      expect(page.staged, isEmpty);
+    });
+
     test('leaves the reload to a save under way', () async {
       final box = FakeBox(
         restarts: true,

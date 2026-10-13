@@ -136,11 +136,14 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
     }
   }
 
-  /// The staged edits [values] still has a field for and does not already
-  /// hold.
+  /// The staged edits to fields [values] holds unchanged; applying one the
+  /// renderer has since moved, like a card change's device, would undo it.
   Map<String, dynamic> _stillStaged(Map<String, dynamic> values) => {
     for (final MapEntry(:key, :value) in state.staged.entries)
-      if (values.containsKey(key) && values[key] != value) key: value,
+      if (values.containsKey(key) &&
+          values[key] == state.values[key] &&
+          values[key] != value)
+        key: value,
   };
 
   /// Record an edit. Staging back to the stored value unstages instead, so
