@@ -81,6 +81,7 @@ class _LogExportScreenState extends ConsumerState<LogExportScreen> {
         color: KalinkaColors.background,
         child: ConfigurationAppearance(
           child: SafeArea(
+            top: false,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

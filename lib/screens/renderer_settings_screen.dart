@@ -104,7 +104,9 @@ class _RendererSettingsScreenState
       // one, and a host that isn't a Scaffold — a bare route — supplies none.
       child: Material(
         color: KalinkaColors.background,
-        child: ConfigurationAppearance(child: SafeArea(child: content)),
+        child: ConfigurationAppearance(
+          child: SafeArea(top: false, child: content),
+        ),
       ),
     );
   }

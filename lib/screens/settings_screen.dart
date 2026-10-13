@@ -141,6 +141,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         color: KalinkaColors.background,
         child: ConfigurationAppearance(
           child: SafeArea(
+            top: false,
             child: Column(
               children: [
                 const SettingsTopBar(title: 'Server settings'),

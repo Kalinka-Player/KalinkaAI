@@ -14,7 +14,7 @@ This is the settings specification. The branded player/search bars and editorial
 
 ## Page structure and navigation
 
-1. Safe area, then `SettingsTopBar`: Back, current page name, optionally one icon action, connection dot.
+1. `SettingsTopBar`, including the top safe area: Back, current page name, optionally one icon action, connection dot. The page's outer `SafeArea` uses `top: false`; the header applies the top inset inside its opaque background so the Android status-bar area matches the header. Controls remain below the system icons. Keep the page's side and bottom safe insets.
 2. Optional secondary toolbar for page-specific controls, then connection/pending-change notices.
 3. Optional pinned tabs on an overview. Other pages start with an introduction or their first controls.
 4. Independently scrolling content, ending with 32dp breathing room. The host reserves space for the mini-player; content must not render underneath it.
