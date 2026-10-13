@@ -8,6 +8,16 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.19.1
+
+This release needs no server update.
+
+### Changed
+- Configuration's Streamer tab shows everything on one page instead of behind Maintenance and System details: the server's name, address, version and supervisor status, then software updates and automatic updates, then Restart Kalinka, the dashboard and the streamer's restart and power controls, then Download server logs and Advanced settings. The pencil beside the name renames the server, and the app's saved server picks up a new name without reconnecting.
+- Software updates name each part that will change, such as "Renderer: 0.8.0 → 0.9.0", and show a renderer or supervisor update even when the server itself is current. The update confirmation lists the same parts.
+- Settings pages share one title bar with Back, the page name and the connection dot, without a second large heading. A plugin's About opens from a button in its title bar.
+- Plugin statuses show as text with an icon instead of a boxed tag, and a plugin in error is marked in red.
+
 ## 0.19.0
 
 Configuration replaces Server settings as the one place to add, set up, update and remove plugins and to look after the streamer, and a Raspberry Pi's DAC HAT can be set up from the app. Configuration's plugin operations, the sound card picker and the greyed-out progress bar need server 5.9.0 and supervisor 0.4.0; against older ones the app looks and behaves as before in those places.

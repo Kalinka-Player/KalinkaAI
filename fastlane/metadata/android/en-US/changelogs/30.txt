@@ -1,0 +1,3 @@
+- Streamer settings on one page: name, updates, restart and power, logs
+- Software updates name each part that will change
+- One title bar across settings pages
