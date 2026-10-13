@@ -13,7 +13,9 @@ import 'kalinka_player_api_provider.dart';
 /// current state. They're decoupled so transient state changes don't
 /// invalidate the cached schema version.
 final modulesStateProvider = FutureProvider<ModulesAndDevices>((ref) async {
-  final settings = ref.watch(connectionSettingsProvider);
+  // A server-side rename refreshes the name; only the address matters here.
+  ref.watch(connectionSettingsProvider.select((s) => s.address));
+  final settings = ref.read(connectionSettingsProvider);
   if (!settings.isSet) {
     return ModulesAndDevices(inputModules: const [], devices: const []);
   }

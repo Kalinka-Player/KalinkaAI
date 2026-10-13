@@ -5,12 +5,12 @@ import '../data_model/plugin_catalog.dart';
 import '../providers/plugin_state.dart';
 import '../theme/app_theme.dart';
 import 'configuration_appearance.dart';
-import 'page_banner.dart';
 import 'plugin_catalog_entry.dart';
-import 'plugin_top_bar.dart';
+import 'settings_page_intro.dart';
+import 'settings_top_bar.dart';
 import 'slide_in_panel.dart';
 
-/// A plugin's settings or About page, under the Configuration breadcrumb.
+/// A plugin's settings or About page, with Back returning to its opener.
 class PluginPage extends ConsumerWidget {
   final CatalogPlugin plugin;
 
@@ -22,18 +22,18 @@ class PluginPage extends ConsumerWidget {
   final String? description;
   final VoidCallback onClose;
 
-  /// Called as the trail's first crumb takes the page back to the overview,
-  /// to put away any page under this one.
-  final VoidCallback? onHome;
   final bool handlesBack;
 
   /// Held under the title bar, outside the scroll.
   final Widget? notice;
 
-  /// The page's content under its banner, inset by the page gutter.
+  /// The page's content under its introduction, inset by the page gutter.
   final List<Widget> Function(PluginState state, double gutter) builder;
 
-  /// Drawn at the top right, level with the title.
+  /// A single icon action in the fixed title bar, such as About.
+  final Widget? headerAction;
+
+  /// An action alongside the plugin's status in the scrolling introduction.
   final Widget? Function(PluginState state)? trailing;
 
   const PluginPage({
@@ -43,10 +43,10 @@ class PluginPage extends ConsumerWidget {
     required this.id,
     required this.onClose,
     required this.builder,
-    this.onHome,
     this.description,
     this.notice,
     this.trailing,
+    this.headerAction,
     this.handlesBack = true,
   });
 
@@ -55,77 +55,32 @@ class PluginPage extends ConsumerWidget {
     final state = ref.watch(pluginStateProvider(plugin));
     final gutter = ConfigurationAppearance.gutter(context);
     final trailing = this.trailing?.call(state);
-    final banner = PageBanner(
-      title: title,
-      subtitle: description ?? state.detail ?? '',
-      // The word its settings card shows, as on its row.
-      subtitleLeading: description == null
-          ? pluginBadge(state, notInstalled: true)
-          : null,
-      subtitleLines: description == null ? 1 : null,
-      subtitleWraps: true,
-      padding: EdgeInsets.fromLTRB(
-        gutter,
-        18,
-        trailing == null ? gutter : 12,
-        20,
-      ),
-    );
     return SlideInPanel(
       onClose: onClose,
       handlesBack: handlesBack,
       child: Material(
         color: KalinkaColors.background,
         child: SafeArea(
-          // Below the panel, which the crumbs close.
+          // Below the panel, which the Back button closes.
           child: Builder(
             builder: (context) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                PluginTopBar(
-                  trail: ['Configuration', title],
-                  onNavigate: (_) {
-                    onHome?.call();
-                    SlideInPanel.closeOf(context);
-                  },
-                ),
+                SettingsTopBar(title: title, action: headerAction),
                 ?notice,
                 Expanded(
                   child: ListView(
                     key: ValueKey('plugin-page-$id'),
                     padding: const EdgeInsets.only(bottom: 32),
                     children: [
-                      if (trailing == null)
-                        banner
-                      else
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: banner),
-                            Padding(
-                              // Level with the title's first line.
-                              padding: EdgeInsets.only(top: 24, right: gutter),
-                              child: trailing,
-                            ),
-                          ],
+                      SettingsPageIntro(
+                        description: description,
+                        action: trailing,
+                        status: PluginStatusSummary(
+                          pluginName: plugin.name,
+                          state: state,
                         ),
-                      if (description != null)
-                        Padding(
-                          padding: EdgeInsets.fromLTRB(gutter, 0, gutter, 16),
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              ?pluginBadge(state, notInstalled: true),
-                              if (state.detail case final detail?)
-                                Text(
-                                  detail,
-                                  style: KalinkaTextStyles.trayRowSublabel,
-                                ),
-                            ],
-                          ),
-                        ),
+                      ),
                       ...builder(state, gutter),
                     ],
                   ),

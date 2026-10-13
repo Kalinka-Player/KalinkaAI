@@ -565,7 +565,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Living Room'), findsOneWidget);
-      expect(find.text('OUTPUT SETTINGS'), findsOneWidget);
+      expect(find.text('Output settings'), findsOneWidget);
       // Section label, then the fields the renderer declared.
       expect(find.text('OUTPUT'), findsOneWidget);
       expect(find.text('Device'), findsOneWidget);
@@ -607,7 +607,12 @@ void main() {
       await tester.scrollUntilVisible(
         find.text('output.latency_ms'),
         200,
-        scrollable: find.byType(Scrollable).last,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       expect(find.text('output.latency_ms'), findsOneWidget);
     });

@@ -4,6 +4,7 @@ import 'dart:convert' show jsonEncode;
 import 'package:dio/dio.dart'
     show BaseOptions, Dio, DioException, Headers, Options, Response;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/connection_settings_provider.dart'
     show connectionSettingsProvider;
 import '../data_model/data_model.dart'
@@ -857,10 +858,7 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
     return client
         .post(
           '/playlist/create',
-          queryParameters: {
-            'name': name,
-            'description': ?description,
-          },
+          queryParameters: {'name': name, 'description': ?description},
         )
         .then((response) {
           if (response.statusCode != 200) {
@@ -1269,10 +1267,13 @@ Dio kalinkaHttpClient(String baseUrl) {
 }
 
 final httpClientProvider = Provider<Dio>((ref) {
-  final settings = ref.watch(connectionSettingsProvider);
-  return kalinkaHttpClient(
-    settings.isSet ? settings.baseUrl.toString() : 'http://127.0.0.1:0',
+  final baseUrl = ref.watch(
+    connectionSettingsProvider.select(
+      (settings) =>
+          settings.isSet ? settings.baseUrl.toString() : 'http://127.0.0.1:0',
+    ),
   );
+  return kalinkaHttpClient(baseUrl);
 });
 
 // The proxy instance itself (constructed once, disposed automatically)

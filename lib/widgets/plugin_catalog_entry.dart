@@ -14,6 +14,7 @@ import 'configuration_appearance.dart';
 import 'settings_controls/module_header_row.dart';
 import 'kalinka_button.dart';
 import 'settings_controls/settings_toggle.dart';
+import 'settings_controls/inline_markdown.dart';
 
 // Share settings typography; the catalog owns layout, not a separate type scale.
 InputDecoration catalogSearchDecoration(String hint) => InputDecoration(
@@ -85,6 +86,7 @@ ModuleStatusBadge? pluginBadge(PluginState state, {bool notInstalled = false}) {
   if (state.operation case final operation?) {
     return ModuleStatusBadge(
       key: key,
+      inline: true,
       label: switch (operation) {
         PluginOperation.install => 'INSTALLING',
         PluginOperation.uninstall => 'UNINSTALLING',
@@ -98,6 +100,7 @@ ModuleStatusBadge? pluginBadge(PluginState state, {bool notInstalled = false}) {
     return notInstalled
         ? const ModuleStatusBadge(
             key: key,
+            inline: true,
             label: 'NOT INSTALLED',
             color: KalinkaColors.textMuted,
           )
@@ -106,6 +109,7 @@ ModuleStatusBadge? pluginBadge(PluginState state, {bool notInstalled = false}) {
   // As it runs now; a switch waiting on the restart says so beside it.
   return ModuleStatusBadge.of(
     key: key,
+    inline: true,
     !state.savedEnabled
         ? ModuleStatus.disabled
         : switch (live.state) {
@@ -156,6 +160,7 @@ class PluginRow extends StatelessWidget {
     ];
     final open = installed ? actions.onOpenSettings : actions.onOpenAbout;
     final body = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ConfigurationItemIcon(icon: pluginIcon(plugin, state)),
         const SizedBox(width: 12),
@@ -169,7 +174,7 @@ class PluginRow extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(plugin.name, style: KalinkaTextStyles.trayRowLabel),
-                  ...badges,
+                  ?badge,
                 ],
               ),
               if (summary != null && summary!.isNotEmpty) ...[
@@ -181,11 +186,15 @@ class PluginRow extends StatelessWidget {
                   softWrap: true,
                 ),
               ],
-              if (badge != null || detail != null)
+              if (badges.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Wrap(spacing: 8, runSpacing: 4, children: badges),
+              ],
+              if (detail != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: _StatusLine(
-                    badge: badge,
+                    badge: null,
                     detail: detail,
                     detailColor: state.hasPendingChanges || state.staged
                         ? KalinkaColors.statusPendingLight
@@ -400,7 +409,64 @@ class _StatusLine extends StatelessWidget {
   );
 }
 
-/// Who made a plugin or how settled it is, beside its name.
+/// The plugin's current state and its explanation, kept together on its page.
+class PluginStatusSummary extends StatelessWidget {
+  final String pluginName;
+  final PluginState state;
+  const PluginStatusSummary({
+    super.key,
+    required this.pluginName,
+    required this.state,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final badge = pluginBadge(state, notInstalled: true)!;
+    final detail = state.detail;
+    final message = state.live?.message;
+    final hasMessage = message != null && message.trim().isNotEmpty;
+    final alert = badge.label == 'ERROR' || badge.label == 'WARNING';
+    return Semantics(
+      container: true,
+      liveRegion: alert || state.operation != null,
+      label: '$pluginName status',
+      child: Container(
+        padding: alert && hasMessage
+            ? const EdgeInsets.all(12)
+            : EdgeInsets.zero,
+        decoration: alert && hasMessage
+            ? BoxDecoration(
+                color: badge.color.withValues(alpha: .07),
+                border: Border(left: BorderSide(color: badge.color, width: 2)),
+              )
+            : null,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _StatusLine(
+              badge: badge,
+              detail: detail,
+              detailColor: state.hasPendingChanges || state.staged
+                  ? KalinkaColors.statusPendingLight
+                  : KalinkaColors.textSecondary,
+            ),
+            if (hasMessage) ...[
+              const SizedBox(height: 8),
+              InlineMarkdown(
+                text: message,
+                style: KalinkaTextStyles.settingsDescription.copyWith(
+                  color: KalinkaColors.textPrimary,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Publisher and maturity metadata, below what a plugin does.
 class _Badge extends StatelessWidget {
   final String label;
 
@@ -784,8 +850,6 @@ class PluginAbout extends StatelessWidget {
           Text('HIFI CONTROL', style: KalinkaTextStyles.sectionHeaderMuted),
           const SizedBox(height: 8),
         ],
-        Text(plugin.description, style: KalinkaTextStyles.trayRowSublabel),
-        const SizedBox(height: 9),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

@@ -5,9 +5,10 @@ import '../data_model/log_export.dart';
 import '../providers/log_export_provider.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
-import '../utils/click_cursor.dart';
 import '../utils/log_export_saver.dart';
 import '../widgets/connection_banner.dart';
+import '../widgets/configuration_appearance.dart';
+import '../widgets/settings_top_bar.dart';
 import '../widgets/kalinka_button.dart';
 import '../widgets/settings_controls/footer_note.dart';
 import '../widgets/settings_controls/settings_card.dart';
@@ -78,19 +79,21 @@ class _LogExportScreenState extends ConsumerState<LogExportScreen> {
       onClose: widget.onClose,
       child: Material(
         color: KalinkaColors.background,
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _Header(),
-              const ConnectionBanner(),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.only(top: 16, bottom: 32),
-                  children: [..._notes(view), ..._body(view)],
+        child: ConfigurationAppearance(
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SettingsTopBar(title: 'Download server logs'),
+                const ConnectionBanner(),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.only(top: 20, bottom: 32),
+                    children: [..._notes(view), ..._body(view)],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -277,54 +280,6 @@ String formatByteSize(int bytes) {
   if (bytes < 1024) return '$bytes B';
   if (bytes < 1024 * 1024) return '${(bytes / 1024).round()} KB';
   return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-}
-
-class _Header extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: kKalinkaTopBarDecoration,
-      child: SizedBox(
-        height: kKalinkaTopBarHeight,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 6, right: 20),
-          child: Row(
-            children: [
-              Semantics(
-                label: 'Back',
-                button: true,
-                child: MouseRegion(
-                  cursor: clickCursor(interactive: true),
-                  child: GestureDetector(
-                    onTap: () => SlideInPanel.closeOf(context),
-                    behavior: HitTestBehavior.opaque,
-                    child: const SizedBox(
-                      width: 42,
-                      height: 42,
-                      child: Icon(
-                        Icons.arrow_back,
-                        size: 22,
-                        color: KalinkaColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Download server logs',
-                  style: KalinkaTextStyles.cardTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// A line of status, an optional progress bar, and the buttons that act on it.

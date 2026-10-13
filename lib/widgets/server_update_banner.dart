@@ -8,15 +8,11 @@ import 'kalinka_dialog.dart' show showKalinkaDialog;
 import 'upgrade_confirm_dialog.dart';
 import 'configuration_appearance.dart';
 
-/// One-line server update status banner under the SERVER section header.
-///
-/// Update available → "A new version X is available ›" with an amber
-/// exclamation; tapping opens the update confirmation dialog and, on
-/// confirm, starts the upgrade (the overlay follows via upgradeProvider).
-/// Up to date → green tick with dim "The server is up to date" text.
-/// Hidden while the update state is unknown (old server, check failed).
+/// Update status, optionally embedded in the Streamer's software settings card.
+/// Package updates name their own versions, even when the server is current.
 class ServerUpdateBanner extends ConsumerWidget {
-  const ServerUpdateBanner({super.key});
+  final bool embedded;
+  const ServerUpdateBanner({super.key, this.embedded = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,32 +26,37 @@ class ServerUpdateBanner extends ConsumerWidget {
         ? ConfigurationAppearance.gutter(context)
         : 16.0;
     final canUpgrade = update.canUpgrade;
-    final version = update.latestVersion;
 
     final row = Row(
       children: [
         Icon(
-          canUpgrade ? Icons.warning_amber_rounded : Icons.check_circle,
-          size: 18,
-          color: canUpgrade
+          update.updateAvailable
+              ? Icons.system_update_alt
+              : Icons.check_circle_outline,
+          size: 22,
+          color: update.updateAvailable
               ? KalinkaColors.statusPending
               : KalinkaColors.statusOnline,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Expanded(
-          child: Text(
-            canUpgrade
-                ? 'A new version $version is available'
-                : configuration
-                ? 'Your player is up to date'
-                : 'The server is up to date',
-            style: canUpgrade
-                ? KalinkaTextStyles.trayRowLabel
-                : KalinkaTextStyles.trayRowLabel.copyWith(
-                    color: KalinkaColors.textSecondary,
-                  ),
-            maxLines: configuration ? null : 1,
-            overflow: configuration ? TextOverflow.clip : TextOverflow.ellipsis,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                update.updateAvailable
+                    ? 'Software updates available'
+                    : embedded
+                    ? 'Up to date'
+                    : 'Your player is up to date',
+                style: KalinkaTextStyles.trayRowLabel,
+              ),
+              for (final change in update.changes)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(change, style: KalinkaTextStyles.trayRowSublabel),
+                ),
+            ],
           ),
         ),
         if (canUpgrade)
@@ -67,12 +68,22 @@ class ServerUpdateBanner extends ConsumerWidget {
       ],
     );
 
-    if (configuration && !canUpgrade) {
-      return Padding(
-        padding: EdgeInsets.fromLTRB(gutter, 0, gutter, 12),
-        child: row,
-      );
-    }
+    final content = Padding(padding: const EdgeInsets.all(16), child: row);
+    final body = canUpgrade
+        ? Semantics(
+            button: true,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _confirmUpgrade(context, ref, update),
+                hoverColor: KalinkaColors.surfaceOverlay,
+                highlightColor: KalinkaColors.surfaceOverlay,
+                child: content,
+              ),
+            ),
+          )
+        : content;
+    if (embedded) return body;
     return Container(
       margin: EdgeInsets.fromLTRB(gutter, 0, gutter, 12),
       decoration: BoxDecoration(
@@ -81,37 +92,20 @@ class ServerUpdateBanner extends ConsumerWidget {
         border: Border.all(color: KalinkaColors.borderSubtle),
       ),
       clipBehavior: Clip.antiAlias,
-      child: canUpgrade
-          ? Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => _confirmUpgrade(context, ref, version!),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 13,
-                  ),
-                  child: row,
-                ),
-              ),
-            )
-          : Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-              child: row,
-            ),
+      child: body,
     );
   }
 
   Future<void> _confirmUpgrade(
     BuildContext context,
     WidgetRef ref,
-    String version,
+    ServerUpdateInfo update,
   ) async {
     final confirmed = await showKalinkaDialog<bool>(
       context: context,
-      builder: (_) => UpgradeConfirmDialog(version: version),
+      builder: (_) => UpgradeConfirmDialog(update: update),
     );
     if (confirmed != true) return;
-    ref.read(upgradeProvider.notifier).executeUpgrade(version);
+    ref.read(upgradeProvider.notifier).executeUpgrade(update.latestVersion!);
   }
 }

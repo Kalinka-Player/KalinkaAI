@@ -37,7 +37,7 @@ class PluginSettingsScreen extends ConsumerWidget {
       id: 'settings',
       onClose: onClose,
       handlesBack: handlesBack,
-      trailing: (_) => IconButton(
+      headerAction: IconButton(
         key: ValueKey('plugin-about-${plugin.id}'),
         tooltip: 'About ${plugin.name}',
         onPressed: actions.onOpenAbout,
@@ -62,7 +62,11 @@ class PluginSettingsScreen extends ConsumerWidget {
             clipBehavior: Clip.antiAlias,
             child: SettingsScope(
               binding: ServerSettingsBinding(settings, notifier),
-              child: SchemaModuleBody(module: module, underHeader: false),
+              child: SchemaModuleBody(
+                module: module,
+                underHeader: false,
+                showLiveMessage: false,
+              ),
             ),
           )
         else

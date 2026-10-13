@@ -13,6 +13,7 @@ import 'package:kalinka/providers/restart_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 
 const _status = 'base_config.server.supervisor_status';
+const _name = 'base_config.server.service_name';
 
 class _Api implements KalinkaPlayerProxy {
   bool online = false;
@@ -44,7 +45,7 @@ class _Api implements KalinkaPlayerProxy {
     reads++;
     return {
       'schema_version': 'v1',
-      'values': {_status: status},
+      'values': {_status: status, _name: 'Renamed server'},
     };
   }
 
@@ -60,7 +61,11 @@ void main() {
     final level = Logger.level;
     Logger.level = Level.off;
     addTearDown(() => Logger.level = level);
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({
+      'Kalinka.name': 'Old server name',
+      'Kalinka.host': 'kalinka.local',
+      'Kalinka.port': 8000,
+    });
     prefs = await SharedPreferences.getInstance();
   });
 
@@ -100,6 +105,11 @@ void main() {
           clock.flushMicrotasks();
           expect(container.read(restartProvider).isDone, isTrue);
           expect(container.read(settingsProvider).values[_status], status);
+          expect(
+            container.read(connectionSettingsProvider).name,
+            'Renamed server',
+          );
+          expect(prefs.getString('Kalinka.name'), 'Renamed server');
           expect(api.reads, 1);
           expect(probes, 2);
 

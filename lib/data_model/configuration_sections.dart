@@ -2,6 +2,7 @@ import 'presentation_schema.dart';
 
 /// Presentation only: fields retain their backend paths, types and constraints.
 class ConfigurationSections {
+  static const namePath = 'base_config.server.service_name';
   static const timeoutPath =
       'base_config.device_automation.auto_off_timeout_seconds';
   static const updatePath = 'base_config.server.auto_upgrade';
@@ -9,8 +10,9 @@ class ConfigurationSections {
 
   final List<BannerSpec> banners = [];
   final List<SectionSpec> server = [];
-  final List<FieldSpec> playback = [];
+  final List<FieldSpec> details = [];
   final List<FieldSpec> updates = [];
+  FieldSpec? serviceName;
 
   ConfigurationSections(PresentationSchema? schema) {
     for (final page in schema?.pages ?? const <PageSpec>[]) {
@@ -29,13 +31,19 @@ class ConfigurationSections {
   }
 
   SectionSpec? _partition(SectionSpec section) {
+    // Automation stays in the server's complete expert field list. Hide the
+    // whole section here, including any nested settings added by the server.
+    if (section.id == 'base_config.device_automation') return null;
+
     final fields = <FieldSpec>[];
     for (final field in section.fields) {
-      if (field.path == timeoutPath) {
-        playback.add(field);
+      if (field.path == namePath) {
+        serviceName = field;
       } else if (field.path == updatePath) {
         updates.add(field);
-      } else if (field.path != supervisorPath) {
+      } else if (field.path == supervisorPath) {
+        details.add(field);
+      } else {
         fields.add(field);
       }
     }

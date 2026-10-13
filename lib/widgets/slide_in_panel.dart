@@ -60,6 +60,7 @@ class _SlideInPanelState extends State<SlideInPanel>
   late final Animation<Offset> _slide;
   bool _closing = false;
   bool _allowPop = false;
+  bool _started = false;
 
   @override
   void initState() {
@@ -71,9 +72,20 @@ class _SlideInPanelState extends State<SlideInPanel>
     _slide = Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero).animate(
       CurvedAnimation(parent: _controller, curve: const Cubic(0.4, 0, 0.2, 1)),
     );
-    _controller.forward().whenComplete(() {
-      if (mounted) widget.onCoverageChanged?.call(true);
-    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _controller.duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : kSlideInPanelDuration;
+    if (!_started) {
+      _started = true;
+      _controller.forward().whenComplete(() {
+        if (mounted) widget.onCoverageChanged?.call(true);
+      });
+    }
   }
 
   @override

@@ -13,6 +13,8 @@ import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/data_model/configuration_sections.dart';
 import 'package:kalinka/widgets/settings_controls/settings_toggle.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
+import 'package:kalinka/providers/box_control_provider.dart';
+import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/log_export_provider.dart';
@@ -21,6 +23,7 @@ import 'package:kalinka/providers/plugin_catalog_provider.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
 import 'package:kalinka/providers/renderer_settings_route_provider.dart';
 import 'package:kalinka/providers/server_info_provider.dart';
+import 'package:kalinka/providers/server_update_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/providers/restart_provider.dart';
 import 'package:kalinka/providers/plugin_state.dart';
@@ -45,10 +48,10 @@ import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/page_banner.dart';
 import 'package:kalinka/widgets/configuration_changes_bar.dart';
 import 'package:kalinka/widgets/configuration_appearance.dart';
-import 'package:kalinka/widgets/settings_controls/settings_card.dart';
 import 'package:kalinka/widgets/settings_controls/settings_action_row.dart';
 import 'package:kalinka/screens/configuration_review_screen.dart';
-import 'package:kalinka/widgets/plugin_top_bar.dart';
+import 'package:kalinka/widgets/settings_top_bar.dart';
+import 'package:kalinka/widgets/settings_page_intro.dart';
 import 'package:kalinka/widgets/server_chip.dart';
 import 'package:kalinka/widgets/plugin_catalog_entry.dart';
 import 'package:kalinka/widgets/restart_overlay.dart';
@@ -61,6 +64,8 @@ import 'package:kalinka/widgets/expert_settings_screen.dart';
 import 'package:kalinka/widgets/settings_controls/module_header_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
+
+import 'support/soundcard_fakes.dart' show FakeBox;
 
 PluginCatalog _catalog({
   String status = 'available',
@@ -165,12 +170,13 @@ class _Restart extends RestartNotifier {
 
 class _Proxy implements KalinkaPlayerProxy {
   Map<String, dynamic> capabilities;
+  Map<String, dynamic>? updateInfo;
   int reads = 0;
   _Proxy(this.capabilities);
   @override
   Future<List<RendererInfo>> listRenderers() async => [];
   @override
-  Future<Map<String, dynamic>?> getServerUpdateInfo() async => null;
+  Future<Map<String, dynamic>?> getServerUpdateInfo() async => updateInfo;
   @override
   Future<Map<String, dynamic>> getServerVersion() async {
     reads++;
@@ -244,12 +250,14 @@ ModuleInfo _module(
   bool enabled = true,
   String state = 'ready',
   String? summary,
+  String? message,
 }) => ModuleInfo.fromJson({
   'name': name,
   'title': name,
   'enabled': enabled,
   'state': state,
   'summary': ?summary,
+  'error_message': ?message,
 });
 
 Map<String, dynamic> _moduleSpec(String id, {bool device = false}) {
@@ -403,6 +411,7 @@ Future<ProviderContainer> _container(
   SettingsState settings = const SettingsState(),
   String? name,
   _Restart? restart,
+  FakeBox? box,
 }) async {
   live ??= _Live();
   SharedPreferences.setMockInitialValues({
@@ -419,6 +428,10 @@ Future<ProviderContainer> _container(
   final container = ProviderContainer(
     overrides: [
       sharedPrefsProvider.overrideWithValue(prefs),
+      if (box != null) ...[
+        supervisorApiProvider.overrideWithValue(box),
+        serverIdentityProvider.overrideWith((ref) async => 'box-1'),
+      ],
       if (restart != null) restartProvider.overrideWith(() => restart),
       connectionStateProvider.overrideWith(_Connected.new),
       settingsProvider.overrideWith(() => _Settings(settings)),
@@ -590,64 +603,305 @@ Finder _onPage<T>(Finder matching) =>
     find.descendant(of: find.byType(T), matching: matching);
 
 void main() {
+  for (final withSettings in [true, false]) {
+    testWidgets(
+      'live plugin errors stay with status and appear once, settings: $withSettings',
+      (tester) async {
+        final live = _Live(
+          ModulesAndDevices(inputModules: [_module('localfiles')], devices: []),
+        );
+        final container = await _container(
+          _Proxy({'enabled': true, 'catalog_browsing': true}),
+          _CatalogApi(_catalog()),
+          live: live,
+          settings: withSettings
+              ? _settingsWith({'localfiles': true})
+              : const SettingsState(),
+        );
+        await _screen(
+          tester,
+          container,
+          size: withSettings ? const Size(375, 812) : const Size(320, 850),
+          scale: withSettings ? 1 : 2,
+          disableAnimations: true,
+        );
+        await _open(tester, 'localfiles');
+        final status = _onPage<PluginSettingsScreen>(
+          find.byType(PluginStatusSummary),
+        );
+        expect(
+          find.descendant(of: status, matching: find.text('Ready')),
+          findsOneWidget,
+        );
+        const message =
+            'Cannot open **Music library**. Check the server folder permissions.';
+        live.value = ModulesAndDevices(
+          inputModules: [
+            _module('localfiles', state: 'error', message: message),
+          ],
+          devices: [],
+        );
+        container.invalidate(modulesStateProvider);
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(of: status, matching: find.text('Error')),
+          findsOneWidget,
+        );
+        final messages = _onPage<PluginSettingsScreen>(
+          find.byWidgetPredicate(
+            (w) => w is InlineMarkdown && w.text == message,
+          ),
+        );
+        expect(messages, findsOneWidget);
+        expect(find.descendant(of: status, matching: messages), findsOneWidget);
+        expect(
+          tester
+              .widget<Text>(
+                find.descendant(of: status, matching: find.text('Error')),
+              )
+              .style!
+              .color,
+          KalinkaColors.statusError,
+        );
+        live.value = ModulesAndDevices(
+          inputModules: [_module('localfiles', summary: '2 folders connected')],
+          devices: [],
+        );
+        container.invalidate(modulesStateProvider);
+        await tester.pumpAndSettle();
+        expect(messages, findsNothing);
+        expect(
+          find.descendant(of: status, matching: find.text('Ready')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: status,
+            matching: find.text('2 folders connected'),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
-    'server headings scroll, cards align, and technical details live in Maintenance',
+    'software status and automatic updates share one card and stage edits',
+    (tester) async {
+      final proxy = _Proxy({'enabled': true, 'catalog_browsing': true})
+        ..updateInfo = {
+          'current_version': '5.5.0',
+          'latest_version': '5.5.0',
+          'update_available': false,
+          'upgrade_supported': true,
+        };
+      final container = await _container(
+        proxy,
+        _CatalogApi(_catalog()),
+        settings: _serverSettings(details: true),
+      );
+      await _screen(tester, container);
+      await _tapTab(tester, PluginTab.server);
+      await container.read(serverUpdateProvider.future);
+      await tester.pumpAndSettle();
+      final card = find.byKey(const ValueKey('server-software-updates'));
+      expect(
+        find.descendant(of: card, matching: find.text('Up to date')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: card, matching: find.text('Automatic updates')),
+        findsOneWidget,
+      );
+      final toggle = find.descendant(of: card, matching: find.byType(Switch));
+      await tester.ensureVisible(toggle);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(toggle).height, greaterThanOrEqualTo(48));
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(container.read(settingsProvider).stagedChanges, {
+        ConfigurationSections.updatePath: true,
+      });
+      expect(
+        find.descendant(of: card, matching: find.text('Changed')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Streamer orders sections and edits the name from the server card',
     (tester) async {
       final container = await _container(
         _Proxy({'enabled': true, 'catalog_browsing': true}),
         _CatalogApi(_catalog()),
         settings: _serverSettings(details: true),
+        box: FakeBox(),
       );
+      await container
+          .read(connectionSettingsProvider.notifier)
+          .setDevice('RPi 4B', '192.168.1.42', 8000);
       await _screen(tester, container, size: const Size(400, 700));
       await _tapTab(tester, PluginTab.server);
-      expect(find.text('Service name'), findsOneWidget);
-      expect(find.text('Player name'), findsNothing);
+      expect(find.text('Server address').hitTestable(), findsOneWidget);
       expect(
-        find.text(
-          'How this server appears in the app when found on your network',
-        ),
+        find.text('http://192.168.1.42:8000').hitTestable(),
         findsOneWidget,
       );
-      expect(find.text('Auto upgrade'), findsOneWidget);
-      expect(find.text('Supervisor status'), findsNothing);
-      final heading = find.descendant(
-        of: find.byType(ServerSettingsBody),
-        matching: find.text('SERVER'),
-      );
-      final headingRect = tester.getRect(heading);
-      final titleBar = find.byType(PluginTopBar).last;
-      final barRect = tester.getRect(titleBar);
-      final card = find.byType(SettingsCard).first;
-      final containerWidget = tester.widget<Container>(
-        find.descendant(of: card, matching: find.byType(Container)).first,
-      );
-      expect(containerWidget.margin, const EdgeInsets.fromLTRB(20, 0, 20, 12));
-      final list = find.byKey(const ValueKey('catalog-scroll'));
-      await tester.drag(list, const Offset(0, -180));
-      await tester.pumpAndSettle();
-      expect(tester.getRect(heading).top, lessThan(headingRect.top));
-      expect(tester.getRect(titleBar), barRect);
-      final maintenance = find.byKey(
-        const ValueKey('server-group-maintenance'),
-      );
-      await tester.scrollUntilVisible(
-        maintenance,
-        200,
-        scrollable: _scrollable,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(maintenance);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('System details'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('server-system-details')), findsWidgets);
-      expect(find.text('Player address'), findsOneWidget);
-      expect(find.text('Software version'), findsOneWidget);
+      expect(find.text('Server version').hitTestable(), findsOneWidget);
+      expect(find.text('5.5.0').hitTestable(), findsOneWidget);
       expect(find.text('Supervisor status'), findsOneWidget);
       expect(find.text('Not installed'), findsOneWidget);
+      expect(find.text('RPi 4B'), findsOneWidget);
+      expect(find.byTooltip('Edit server name'), findsOneWidget);
+      expect(find.text('Service name'), findsNothing);
+      expect(find.text('Automatic updates'), findsOneWidget);
+      expect(find.text('Detailed service information.'), findsNothing);
+      expect(find.text('Maintenance'), findsNothing);
+      expect(find.text('System details'), findsNothing);
+      expect(find.text('Sound card'), findsNothing);
+      expect(find.byType(BreadcrumbCrumb), findsNothing);
+      for (final label in [
+        'Restart Kalinka',
+        'Streamer dashboard',
+        'Restart streamer',
+        'Power off streamer',
+        'Download server logs',
+        'Advanced settings',
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+      final summary = find.byKey(const ValueKey('server-summary'));
+      final summaryRect = tester.getRect(summary);
+      expect(
+        summaryRect.bottom,
+        lessThan(tester.getRect(find.text('MANAGEMENT')).top),
+      );
+      final headings = ['SERVER', 'SOFTWARE UPDATES', 'MANAGEMENT', 'SUPPORT'];
+      for (var i = 1; i < headings.length; i++) {
+        expect(
+          tester.getRect(find.text(headings[i - 1])).bottom,
+          lessThan(tester.getRect(find.text(headings[i])).top),
+        );
+      }
+      expect(
+        find.descendant(of: summary, matching: find.text('RPi 4B')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: summary, matching: find.byType(TextField)),
+        findsNothing,
+      );
+      final titleBar = find.byType(SettingsTopBar).last;
+      final barRect = tester.getRect(titleBar);
+      final card = tester.widget<Container>(
+        find.descendant(of: summary, matching: find.byType(Container)).first,
+      );
+      expect(card.margin, const EdgeInsets.fromLTRB(20, 0, 20, 12));
+      await tester.drag(
+        find.byKey(const ValueKey('catalog-scroll')),
+        const Offset(0, -180),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getRect(summary).top, lessThan(summaryRect.top));
+      expect(tester.getRect(titleBar), barRect);
+      await tester.ensureVisible(find.text('Restart streamer'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Restart streamer'));
+      await tester.pumpAndSettle();
+      expect(find.text('Restart streamer?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byTooltip('Edit server name'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Edit server name'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(
+        find.descendant(of: summary, matching: find.byType(TextField)),
+        findsNothing,
+      );
+      final nameInput = find.byKey(const ValueKey('server-name-input'));
+      expect(tester.widget<TextField>(nameInput).controller!.text, 'RPi 4B');
+      expect(tester.widget<TextField>(nameInput).focusNode!.hasFocus, isTrue);
+      await tester.enterText(nameInput, 'Cancelled name');
+      await tester.pumpAndSettle();
+      expect(container.read(settingsProvider).hasPendingChanges, isFalse);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.text('RPi 4B'), findsOneWidget);
+      await tester.tap(find.byTooltip('Edit server name'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(nameInput).controller!.text, 'RPi 4B');
+      await tester.enterText(nameInput, '   ');
+      await tester.pumpAndSettle();
+      final done = find.widgetWithText(KalinkaButton, 'Done');
+      expect(tester.widget<KalinkaButton>(done).enabled, isFalse);
+      await tester.enterText(nameInput, 'Living room');
+      await tester.pumpAndSettle();
+      expect(container.read(settingsProvider).hasPendingChanges, isFalse);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.text('Living room'), findsOneWidget);
+      expect(nameInput, findsNothing);
+      expect(container.read(settingsProvider).stagedChanges, {
+        ConfigurationSections.namePath: 'Living room',
+      });
+      await tester.tap(find.byTooltip('Edit server name'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(nameInput).controller!.text,
+        'Living room',
+      );
+      await tester.enterText(nameInput, 'Abandoned edit');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.byType(ServerSettingsBody), findsOneWidget);
+      expect(container.read(settingsProvider).stagedChanges, {
+        ConfigurationSections.namePath: 'Living room',
+      });
+      await tester.tap(find.byKey(const ValueKey('configuration-bar-discard')));
+      await tester.pumpAndSettle();
+      expect(find.text('RPi 4B'), findsOneWidget);
+      expect(container.read(settingsProvider).hasPendingChanges, isFalse);
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final loading in [true, false]) {
+    testWidgets(
+      'server summary and management survive missing schema, loading: $loading',
+      (tester) async {
+        final container = await _container(
+          _Proxy({'enabled': true, 'catalog_browsing': true}),
+          _CatalogApi(_catalog()),
+          settings: SettingsState(
+            isLoading: loading,
+            error: loading ? null : 'Unavailable',
+          ),
+          box: FakeBox(),
+        );
+        await _screen(tester, container);
+        // A loading spinner never settles, so only advance frames for this case.
+        final tab = find.byKey(const ValueKey('catalog-tab-server'));
+        await tester.tap(tab);
+        await tester.pump();
+        await container.read(boxControlProvider.future);
+        await tester.pump();
+        expect(find.text('Server address'), findsOneWidget);
+        expect(find.text('Server version'), findsOneWidget);
+        expect(find.text('Restart Kalinka'), findsOneWidget);
+        expect(find.text('Power off streamer'), findsOneWidget);
+        expect(find.text('Retry'), loading ? findsNothing : findsOneWidget);
+        expect(find.byTooltip('Edit server name'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets(
     'review opens the named invalid settings and preserves edits on Back',
@@ -773,9 +1027,11 @@ void main() {
       await _screen(tester, container);
       expect(find.text(plugin.description), findsNothing);
       await _open(tester, 'localfiles');
-      final banner = _onPage<PluginSettingsScreen>(find.byType(PageBanner));
+      final intro = _onPage<PluginSettingsScreen>(
+        find.byType(SettingsPageIntro),
+      );
       final description = find.descendant(
-        of: banner,
+        of: intro,
         matching: find.text(plugin.description),
       );
       expect(description, findsOneWidget);
@@ -786,7 +1042,9 @@ void main() {
           tester
               .getRect(
                 find.descendant(
-                  of: banner,
+                  of: _onPage<PluginSettingsScreen>(
+                    find.byType(SettingsTopBar),
+                  ),
                   matching: find.text('Folders & NAS settings'),
                 ),
               )
@@ -852,7 +1110,7 @@ void main() {
           if (systemBack) {
             await tester.binding.handlePopRoute();
           } else {
-            await tester.tap(find.byKey(const ValueKey('catalog-back')));
+            await tester.tap(find.byKey(const ValueKey('settings-back')));
           }
           await tester.pumpAndSettle();
         }
@@ -898,7 +1156,7 @@ void main() {
         ),
       );
       await _screen(tester, container, onClose: () => closes++);
-      await tester.tap(find.byKey(const ValueKey('catalog-back')));
+      await tester.tap(find.byKey(const ValueKey('settings-back')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('configuration-apply')));
       await tester.pump();
@@ -921,134 +1179,170 @@ void main() {
     });
   }
 
-  testWidgets(
-    'Streamer edits include power controls and do not depend on plugins',
-    (tester) async {
-      final api = _CatalogApi(_catalog())
-        ..failure = const PluginCatalogException('Catalog unavailable');
-      final container = await _container(
-        _Proxy({'enabled': true, 'catalog_browsing': true}),
-        api,
-        settings: _serverSettings(),
-      );
-      await _screen(tester, container);
-      await _tapTab(tester, PluginTab.server);
-      expect(find.byType(ServerConfigurationScreen), findsNothing);
-      expect(find.text('Service name'), findsOneWidget);
-      expect(find.text('Pause timeout'), findsOneWidget);
-      expect(find.text('Future setting'), findsOneWidget);
-      expect(find.text('DEVICE AUTOMATION'), findsOneWidget);
-      expect(find.text('Auto power on'), findsOneWidget);
-      final name = find.descendant(
-        of: find.ancestor(
-          of: find.text('Service name'),
-          matching: find.byType(SettingsRow),
-        ),
-        matching: find.byType(TextField),
-      );
-      await tester.enterText(name, 'Listening room');
-      await tester.pumpAndSettle();
-      expect(
-        container
-            .read(settingsProvider)
-            .stagedChanges['base_config.server.service_name'],
-        'Listening room',
-      );
-      final power = find.ancestor(
-        of: find.text('Auto power on'),
-        matching: find.byType(SettingsRow),
-      );
-      await Scrollable.ensureVisible(tester.element(power), alignment: 0.5);
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.descendant(of: power, matching: find.byType(SettingsToggle)),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        container
-            .read(settingsProvider)
-            .stagedChanges['base_config.device_automation.auto_power_on'],
-        true,
-      );
-      expect(
-        find.descendant(of: power, matching: find.byType(ChangedSettingLabel)),
-        findsOneWidget,
-      );
-      await _tapTab(tester, PluginTab.devices);
-      expect(find.text('Auto power on'), findsNothing);
-      expect(
-        find.byKey(const ValueKey('server-group-automaticPower')),
-        findsNothing,
-      );
-      await _tapTab(tester, PluginTab.server);
-      expect(
-        find.descendant(of: power, matching: find.byType(ChangedSettingLabel)),
-        findsOneWidget,
-      );
-      final timeout = find.descendant(
-        of: find.ancestor(
-          of: find.text('Pause timeout'),
-          matching: find.byType(SettingsRow),
-        ),
-        matching: find.byType(TextField),
-      );
-      await Scrollable.ensureVisible(tester.element(timeout), alignment: 0.5);
-      await tester.pumpAndSettle();
-      await tester.enterText(timeout, '60');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      expect(
-        container
-            .read(settingsProvider)
-            .stagedChanges[ConfigurationSections.timeoutPath],
-        60,
-      );
-      expect(container.read(settingsProvider).pendingCount, 3);
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.text('Apply your changes?'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('configuration-discard')));
-      await tester.pumpAndSettle();
-      expect(container.read(settingsProvider).hasPendingChanges, false);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('server pages fit a narrow screen with large text', (
+  testWidgets('device automation is editable only in Advanced settings', (
     tester,
   ) async {
+    final api = _CatalogApi(_catalog())
+      ..failure = const PluginCatalogException('Catalog unavailable');
+    final settings = _serverSettings();
     final container = await _container(
       _Proxy({'enabled': true, 'catalog_browsing': true}),
-      _CatalogApi(_catalog()),
-      settings: _serverSettings(),
+      api,
+      settings: settings.copyWith(
+        schema: PresentationSchema(
+          schemaVersion: settings.schema!.schemaVersion,
+          pages: settings.schema!.pages,
+          expertFields: configurationFields(settings.schema).toList(),
+        ),
+      ),
     );
-    await _screen(tester, container, size: const Size(320, 850), scale: 1.8);
+    await _screen(tester, container);
     await _tapTab(tester, PluginTab.server);
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('server-group-maintenance')),
-      250,
-      scrollable: _scrollable,
+    expect(find.byTooltip('Edit server name'), findsOneWidget);
+    expect(find.text('Future setting'), findsOneWidget);
+    for (final label in [
+      'DEVICE AUTOMATION',
+      'Auto power on',
+      'Auto power off',
+      'Pause timeout',
+    ]) {
+      expect(find.text(label), findsNothing);
+    }
+    await tester.tap(find.byTooltip('Edit server name'));
+    await tester.pumpAndSettle();
+    final name = find.byKey(const ValueKey('server-name-input'));
+    await tester.enterText(name, 'Listening room');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Advanced settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Advanced settings'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      _onPage<ExpertSettingsScreen>(find.byType(TextField)).first,
+      'device_automation',
     );
-    await Scrollable.ensureVisible(
-      tester.element(find.byKey(const ValueKey('server-group-maintenance'))),
-      alignment: 0.5,
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    for (final label in ['Auto power on', 'Auto power off', 'Pause timeout']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    final power = find.byKey(
+      const ValueKey('base_config.device_automation.auto_power_on'),
+    );
+    await tester.ensureVisible(power);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(of: power, matching: find.byType(SettingsToggle)),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('server-group-maintenance')));
+    final timeout = find.descendant(
+      of: find.byKey(const ValueKey(ConfigurationSections.timeoutPath)),
+      matching: find.byType(TextField),
+    );
+    await tester.ensureVisible(timeout);
     await tester.pumpAndSettle();
-    expect(find.byType(ServerConfigurationScreen), findsOneWidget);
+    await tester.enterText(timeout, '60');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings-back')).last);
+    await tester.pumpAndSettle();
+    expect(find.byType(ExpertSettingsScreen), findsNothing);
+    expect(find.text('Auto power on'), findsNothing);
+    expect(find.text('Pause timeout'), findsNothing);
+    await _tapTab(tester, PluginTab.devices);
+    await _tapTab(tester, PluginTab.server);
+    expect(container.read(settingsProvider).stagedChanges, {
+      'base_config.server.service_name': 'Listening room',
+      'base_config.device_automation.auto_power_on': true,
+      ConfigurationSections.timeoutPath: 60,
+    });
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    await _tapTab(tester, PluginTab.server);
-    final power = find.text('Auto power off');
-    await Scrollable.ensureVisible(tester.element(power), alignment: 0.5);
+    expect(find.text('Apply your changes?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('configuration-discard')));
     await tester.pumpAndSettle();
-    expect(power.hitTestable(), findsOneWidget);
+    expect(container.read(settingsProvider).hasPendingChanges, false);
     expect(tester.takeException(), isNull);
   });
 
+  for (final (size, scale) in [
+    (const Size(375, 812), 1.0),
+    (const Size(320, 850), 2.0),
+    (const Size(812, 375), 1.0),
+    (const Size(1024, 768), 1.0),
+  ]) {
+    testWidgets('Streamer fits $size at text scale $scale', (tester) async {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        settings: _serverSettings(details: true),
+        box: FakeBox(),
+      );
+      await container
+          .read(connectionSettingsProvider.notifier)
+          .setDevice(
+            'Listening room',
+            'kalinka-long-server-address.local',
+            8000,
+          );
+      await _screen(
+        tester,
+        container,
+        size: size,
+        scale: scale,
+        disableAnimations: true,
+      );
+      await _tapTab(tester, PluginTab.server);
+      for (final label in [
+        'Server address',
+        'Server version',
+        'Power off streamer',
+        'Listening room',
+        'Automatic updates',
+        'Advanced settings',
+      ]) {
+        await tester.ensureVisible(find.text(label));
+        await tester.pumpAndSettle();
+        expect(find.text(label).hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+      await tester.ensureVisible(find.byTooltip('Edit server name'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Edit server name'));
+      await tester.pumpAndSettle();
+      tester.view.viewInsets = FakeViewPadding(
+        bottom: size.height < 500 ? 140 : 300,
+      );
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+      final nameInput = find.byKey(const ValueKey('server-name-input'));
+      await tester.ensureVisible(nameInput);
+      await tester.pumpAndSettle();
+      expect(nameInput.hitTestable(), findsOneWidget);
+      await tester.enterText(nameInput, 'Living room');
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.text('Done').hitTestable(), findsOneWidget);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(
+        container
+            .read(settingsProvider)
+            .stagedChanges[ConfigurationSections.namePath],
+        'Living room',
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
-    'Maintenance opens advanced settings and Back returns one level',
+    'Streamer opens support pages directly and Back retains the tab and scroll',
     (tester) async {
       final container = await _container(
         _Proxy({'enabled': true, 'catalog_browsing': true}),
@@ -1057,23 +1351,10 @@ void main() {
       );
       await _screen(tester, container);
       await _tapTab(tester, PluginTab.server);
-      final maintenance = find.byKey(
-        const ValueKey('server-group-maintenance'),
-      );
-      await tester.scrollUntilVisible(
-        maintenance,
-        200,
-        scrollable: _scrollable,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(maintenance);
-      await tester.pumpAndSettle();
       expect(find.text('Restart Kalinka'), findsOneWidget);
       expect(find.text('Now-playing display'), findsNothing);
-      expect(find.text('Download server logs'), findsOneWidget);
       for (final (label, icon, navigates) in [
         ('Restart Kalinka', Icons.restart_alt, false),
-        ('System details', Icons.info_outline, true),
         ('Advanced settings', Icons.tune, true),
         ('Download server logs', Icons.description_outlined, true),
       ]) {
@@ -1087,29 +1368,39 @@ void main() {
           tester.getRect(leading).right,
           lessThan(tester.getRect(text).left),
         );
-        final chevron = find.descendant(
-          of: row,
-          matching: find.byIcon(Icons.chevron_right),
+        expect(
+          find.descendant(of: row, matching: find.byIcon(Icons.chevron_right)),
+          navigates ? findsOneWidget : findsNothing,
         );
-        if (navigates) {
-          expect(
-            tester.getRect(chevron).left,
-            greaterThan(tester.getRect(text).right),
-          );
-        } else {
-          expect(chevron, findsNothing);
-        }
       }
+      await tester.ensureVisible(find.text('Advanced settings'));
+      await tester.pumpAndSettle();
+      final scroll = tester
+          .widget<CustomScrollView>(
+            find.byKey(const ValueKey('catalog-scroll')),
+          )
+          .controller!;
+      final offset = scroll.offset;
       await tester.tap(find.text('Advanced settings'));
       await tester.pumpAndSettle();
       expect(find.byType(ExpertSettingsScreen), findsOneWidget);
+      expect(
+        tester.widget<SettingsTopBar>(find.byType(SettingsTopBar).last).title,
+        'Advanced settings',
+      );
+      expect(find.byType(BreadcrumbCrumb), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('settings-back')).last);
+      await tester.pumpAndSettle();
+      expect(find.byType(ExpertSettingsScreen), findsNothing);
+      expect(find.byType(ServerSettingsBody), findsOneWidget);
+      expect(scroll.offset, offset);
+      await tester.tap(find.text('Advanced settings'));
+      await tester.pumpAndSettle();
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byType(ExpertSettingsScreen), findsNothing);
-      expect(find.byType(ServerConfigurationScreen), findsOneWidget);
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.byType(ServerConfigurationScreen), findsNothing);
+      expect(find.byType(ServerSettingsBody), findsOneWidget);
+      expect(scroll.offset, offset);
       expect(tester.takeException(), isNull);
     },
   );
@@ -1135,7 +1426,7 @@ void main() {
           .read(settingsProvider.notifier)
           .stageChange('base_config.server.service_name', 'Listening room');
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('catalog-back')));
+      await tester.tap(find.byKey(const ValueKey('settings-back')));
       await tester.pumpAndSettle();
       expect(find.text('Apply your changes?'), findsOneWidget);
       await tester.ensureVisible(find.text('Cancel'));
@@ -1511,11 +1802,11 @@ void main() {
       expect(back.size, 22);
       expect(back.color, KalinkaColors.textPrimary);
       expect(
-        tester.getSize(find.byKey(const ValueKey('catalog-back'))),
+        tester.getSize(find.byKey(const ValueKey('settings-back'))),
         const Size(48, 48),
       );
       // A quiet sans-serif title above the uppercase tab navigation.
-      final bar = find.byType(PluginTopBar);
+      final bar = find.byType(SettingsTopBar);
       final title = tester.widget<Text>(
         find.descendant(of: bar, matching: find.text('Configuration')),
       );
@@ -1527,7 +1818,9 @@ void main() {
         findsNothing,
       );
       expect(
-        tester.getSize(find.byKey(const ValueKey('catalog-connection-status'))),
+        tester.getSize(
+          find.byKey(const ValueKey('settings-connection-status')),
+        ),
         const Size(8, 8),
       );
       expect(find.byKey(const ValueKey('catalog-description')), findsNothing);
@@ -1578,7 +1871,7 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         final dot = tester.widget<DecoratedBox>(
-          find.byKey(const ValueKey('catalog-connection-status')),
+          find.byKey(const ValueKey('settings-connection-status')),
         );
         expect((dot.decoration as BoxDecoration).color, color);
         expect(find.byTooltip(label), findsOneWidget);
@@ -1645,7 +1938,7 @@ void main() {
         final viewport = tester.getRect(
           find.byKey(const ValueKey('catalog-scroll')),
         );
-        final bar = tester.getRect(find.byType(PluginTopBar));
+        final bar = tester.getRect(find.byType(SettingsTopBar));
         final scroll = tester
             .widget<CustomScrollView>(
               find.byKey(const ValueKey('catalog-scroll')),
@@ -1718,8 +2011,8 @@ void main() {
           await tester.pumpAndSettle();
           expect(description.hitTestable(), findsNothing);
           expect(tester.getRect(tabs).top, viewport.top);
-          expect(tester.getRect(find.byType(PluginTopBar)), bar);
-          for (final key in ['catalog-back', 'catalog-tab-sources']) {
+          expect(tester.getRect(find.byType(SettingsTopBar)), bar);
+          for (final key in ['settings-back', 'catalog-tab-sources']) {
             expect(find.byKey(ValueKey(key)).hitTestable(), findsOneWidget);
           }
           expect(find.byTooltip('Server online').hitTestable(), findsOneWidget);
@@ -1875,7 +2168,7 @@ void main() {
     // The new streamer's name, at once.
     expect(
       find.descendant(
-        of: find.byType(PluginTopBar),
+        of: find.byType(SettingsTopBar),
         matching: find.text('Other server'),
       ),
       findsNothing,
@@ -1984,42 +2277,20 @@ void main() {
         await tester.pumpAndSettle();
 
         await _tapTab(tester, PluginTab.server);
-        for (final group in ServerSettingsGroup.values) {
-          await _tapTab(tester, PluginTab.server);
-          final row = find.byKey(ValueKey('server-group-${group.name}'));
-          await tester.scrollUntilVisible(row, 200, scrollable: _scrollable);
+        for (final label in ['Advanced settings', 'Download server logs']) {
+          final row = find.text(label);
+          await tester.ensureVisible(row);
           await tester.pumpAndSettle();
           await tester.tap(row);
           await tester.pumpAndSettle();
-          expectAbovePlayer(find.byType(ServerConfigurationScreen));
-          if (group == ServerSettingsGroup.maintenance) {
-            await tester.tap(find.text('Advanced settings'));
-            await tester.pumpAndSettle();
-            expectAbovePlayer(find.byKey(const ValueKey('server-expert')).last);
-            await tester.binding.handlePopRoute();
-            await tester.pumpAndSettle();
-            final logs = find.text('Download server logs');
-            await tester.scrollUntilVisible(
-              logs,
-              150,
-              scrollable: find
-                  .descendant(
-                    of: find.byKey(
-                      const ValueKey('server-group-maintenance-settings'),
-                    ),
-                    matching: find.byType(Scrollable),
-                  )
-                  .first,
-            );
-            await tester.pumpAndSettle();
-            await tester.tap(logs);
-            await tester.pumpAndSettle();
-            expectAbovePlayer(find.byType(LogExportScreen));
-            await tester.binding.handlePopRoute();
-            await tester.pumpAndSettle();
-          }
+          expectAbovePlayer(
+            label == 'Advanced settings'
+                ? find.byKey(const ValueKey('server-expert')).last
+                : find.byType(LogExportScreen),
+          );
           await tester.binding.handlePopRoute();
           await tester.pumpAndSettle();
+          expect(find.byType(ServerSettingsBody), findsOneWidget);
         }
 
         container
@@ -2103,7 +2374,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Configuration'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('catalog-back')));
+      await tester.tap(find.byKey(const ValueKey('settings-back')));
       await tester.pumpAndSettle();
       expect(find.byType(PluginCatalogScreen), findsNothing);
       expect(find.byType(MusicPlayerScreen), findsOneWidget);
@@ -2283,6 +2554,19 @@ void main() {
           const ValueKey('plugin-details-qobuz'),
           skipOffstage: false,
         );
+        // Long descriptions remain fully readable at large text sizes; the
+        // requirements follow them in the same scroll.
+        await tester.scrollUntilVisible(
+          details,
+          160,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('plugin-page-about')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
         final text = tester
             .widgetList<Text>(
               find.descendant(
@@ -2312,10 +2596,10 @@ void main() {
         final qobuz = api.result.plugins.singleWhere((p) => p.id == 'qobuz');
         expect(
           tester.getRect(find.text(heading, skipOffstage: false)).top,
-          lessThan(
+          greaterThan(
             tester
                 .getRect(find.text(qobuz.description, skipOffstage: false))
-                .top,
+                .bottom,
           ),
         );
         if (status == 'blocked') {
@@ -2448,14 +2732,14 @@ void main() {
       final title = tester.getRect(
         _onPage<PluginSettingsScreen>(
           find.descendant(
-            of: find.byType(PageBanner),
+            of: find.byType(SettingsTopBar),
             matching: find.text('Spotify Connect settings'),
           ),
         ),
       );
       final aboutRect = tester.getRect(about);
       expect(aboutRect.top, lessThan(title.bottom));
-      expect(aboutRect.right, 483 - 20);
+      expect(aboutRect.right, 483 - 16 - 8 - 12);
       final uninstall = tester.getRect(
         find.byKey(const ValueKey('plugin-uninstall-spotify')),
       );
@@ -2808,7 +3092,7 @@ void main() {
         ('localfiles', 'READY', KalinkaColors.statusOnline),
         ('jamendo', 'DISABLED', KalinkaColors.textMuted),
         ('upnp', 'WARNING', KalinkaColors.statusPending),
-        ('spotify', 'ERROR', KalinkaColors.statusOffline),
+        ('spotify', 'ERROR', KalinkaColors.statusError),
       ]) {
         expect(_badgeOf(tester, id)!.label, label);
         expect(_badgeOf(tester, id)!.color, color);
@@ -2919,7 +3203,7 @@ void main() {
   );
 
   testWidgets(
-    'an installed row opens its settings under the Configuration trail',
+    'an installed row opens its settings with a page title and Back',
     (tester) async {
       final container = await _container(
         _Proxy({'enabled': true, 'catalog_browsing': true}),
@@ -2936,25 +3220,33 @@ void main() {
 
       await _open(tester, 'localfiles');
       final page = find.byType(PluginSettingsScreen);
-      final crumbs = tester
-          .widgetList<BreadcrumbCrumb>(
-            find.descendant(of: page, matching: find.byType(BreadcrumbCrumb)),
-          )
-          .toList();
-      // Two steps, the page named with its plugin, as the title repeats.
-      expect(crumbs.map((c) => c.label), [
-        'Configuration',
+      expect(find.byType(BreadcrumbCrumb), findsNothing);
+      expect(
+        tester
+            .widget<SettingsTopBar>(
+              find.descendant(of: page, matching: find.byType(SettingsTopBar)),
+            )
+            .title,
         'Folders & NAS settings',
-      ]);
-      expect(crumbs.first.onTap, isNotNull);
-      expect(crumbs.last.onTap, isNull);
+      );
       final title = find.descendant(
-        of: find.descendant(of: page, matching: find.byType(PageBanner)),
+        of: find.descendant(of: page, matching: find.byType(SettingsTopBar)),
         matching: find.text('Folders & NAS settings'),
       );
       expect(
         tester.widget<Text>(title).style!.fontFamily,
-        KalinkaFonts.displayFamily,
+        KalinkaFonts.sansFamily,
+      );
+      expect(
+        find.descendant(of: page, matching: find.byType(PageBanner)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: page,
+          matching: find.text('Folders & NAS settings'),
+        ),
+        findsOneWidget,
       );
       // The badge its row shows, under the title.
       expect(
@@ -2991,8 +3283,8 @@ void main() {
         1,
       );
 
-      // The first crumb goes back to the overview, as Back does.
-      await tester.tap(find.bySemanticsLabel('Back to Configuration'));
+      // The Back button returns to the overview and keeps staged edits.
+      await tester.tap(find.byKey(const ValueKey('settings-back')).last);
       await tester.pumpAndSettle();
       expect(find.byType(PluginSettingsScreen), findsNothing);
 
@@ -3022,7 +3314,7 @@ void main() {
   );
 
   testWidgets(
-    'About from a plugin\'s page goes back to it; its first crumb to the overview',
+    'About returns to the plugin settings with both system and button Back',
     (tester) async {
       final container = await _container(
         _Proxy({'enabled': true, 'catalog_browsing': true}),
@@ -3034,15 +3326,11 @@ void main() {
       );
       await _screen(tester, container);
       await _about(tester, 'localfiles');
-      final crumbs = tester
-          .widgetList<BreadcrumbCrumb>(
-            find.descendant(
-              of: find.byType(PluginAboutScreen),
-              matching: find.byType(BreadcrumbCrumb),
-            ),
-          )
-          .map((c) => c.label);
-      expect(crumbs, ['Configuration', 'About Folders & NAS']);
+      expect(find.byType(BreadcrumbCrumb), findsNothing);
+      expect(
+        tester.widget<SettingsTopBar>(find.byType(SettingsTopBar).last).title,
+        'About Folders & NAS',
+      );
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byType(PluginAboutScreen), findsNothing);
@@ -3052,11 +3340,14 @@ void main() {
       await tester.tap(
         find.descendant(
           of: find.byType(PluginAboutScreen),
-          matching: find.bySemanticsLabel('Back to Configuration'),
+          matching: find.byKey(const ValueKey('settings-back')),
         ),
       );
       await tester.pumpAndSettle();
       expect(find.byType(PluginAboutScreen), findsNothing);
+      expect(find.byType(PluginSettingsScreen), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('settings-back')).last);
+      await tester.pumpAndSettle();
       expect(find.byType(PluginSettingsScreen), findsNothing);
       expect(find.byType(PluginCatalogScreen), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -3113,8 +3404,8 @@ void main() {
       );
       expect(chevron.right, 400 - 20);
       expect(tester.getRect(install).right, lessThan(chevron.left));
-      // About carries it too, at the top right, level with its title and
-      // above what the catalog says.
+      // About keeps its action beside the status, below the fixed title
+      // and above what the catalog says.
       await _about(tester, 'qobuz');
       final top = tester.getRect(
         find.byKey(const ValueKey('about-install-qobuz')),
@@ -3123,18 +3414,17 @@ void main() {
         find.descendant(
           of: find.descendant(
             of: find.byType(PluginAboutScreen),
-            matching: find.byType(PageBanner),
+            matching: find.byType(SettingsTopBar),
           ),
           matching: find.text('About Qobuz'),
         ),
       );
       expect(top.right, 400 - 20);
-      expect(top.left, greaterThan(title.right));
-      expect(top.top, lessThan(title.bottom));
+      expect(top.top, greaterThan(title.bottom));
       expect(top.bottom, lessThan(tester.getRect(find.text('Created by')).top));
       // No second Install at the foot.
       expect(find.text('Add'), findsNWidgets(2));
-      await tester.tap(find.bySemanticsLabel('Back to Configuration'));
+      await tester.tap(find.byKey(const ValueKey('settings-back')).last);
       await tester.pumpAndSettle();
 
       api.running = Completer<void>();

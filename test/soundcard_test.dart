@@ -571,10 +571,19 @@ void main() {
       return box;
     }
 
-    testWidgets('the box shows its DAC and sets up the card chosen', (
+    testWidgets('Streamer has no sound card controls', (tester) async {
+      await pump(tester, const BoxSection());
+      expect(find.text('Streamer dashboard'), findsOneWidget);
+      expect(find.text('Sound card'), findsNothing);
+    });
+
+    testWidgets('the renderer shows its DAC and sets up the card chosen', (
       tester,
     ) async {
-      final box = await pump(tester, const BoxSection());
+      final box = await pump(
+        tester,
+        const RendererSoundcardSection(rendererId: 'r-local'),
+      );
 
       expect(find.text('Sound card'), findsOneWidget);
       expect(
@@ -596,13 +605,19 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(box.applied, [
-        ('hifiberry-digi-pro', const BoxIdentity(serverId: 'box-1')),
+        (
+          'hifiberry-digi-pro',
+          const BoxIdentity(serverId: 'box-1'),
+        ),
       ]);
       await tester.pump(const Duration(seconds: 6));
     });
 
     testWidgets('cancelling changes nothing', (tester) async {
-      final box = await pump(tester, const BoxSection());
+      final box = await pump(
+        tester,
+        const RendererSoundcardSection(rendererId: 'r-local'),
+      );
 
       await tester.tap(find.text('Sound card'));
       await tester.pumpAndSettle();
@@ -619,7 +634,7 @@ void main() {
       (tester) async {
         final box = await pump(
           tester,
-          const BoxSection(),
+          const RendererSoundcardSection(rendererId: 'r-local'),
           box: FakeBox(
             reports: [
               soundcardReport(

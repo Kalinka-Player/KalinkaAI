@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// Presentation changes for Configuration, leaving the comparison menu intact.
+/// Shared spacing for Configuration, logs and server/output settings.
 class ConfigurationAppearance extends InheritedWidget {
   const ConfigurationAppearance({super.key, required super.child});
 

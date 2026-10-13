@@ -6,6 +6,14 @@ void main() {
   test(
     'moves only known fields and preserves backend definitions and new content',
     () {
+      const name = FieldSpec(
+        path: ConfigurationSections.namePath,
+        label: 'Service name',
+        widget: WidgetKind.text,
+        type: 'str',
+        help: 'The server-provided name hint',
+        constraints: Constraints(minLength: 1, maxLength: 80),
+      );
       const power = FieldSpec(
         path: 'base_config.device_automation.auto_power_on',
         label: 'Backend power label',
@@ -43,6 +51,14 @@ void main() {
         widget: WidgetKind.toggle,
         type: 'bool',
       );
+      const status = FieldSpec(
+        path: ConfigurationSections.supervisorPath,
+        label: 'Supervisor status',
+        widget: WidgetKind.text,
+        type: 'str',
+        readonly: true,
+        help: 'Server-provided status help',
+      );
       const plugin = FieldSpec(
         path: 'input_modules.localfiles.enabled',
         label: 'Library plugin',
@@ -60,7 +76,7 @@ void main() {
               SectionSpec(
                 id: 'base_config.server',
                 title: 'Server',
-                fields: [update],
+                fields: [name, update, status],
               ),
               SectionSpec(
                 id: 'base_config.device_automation',
@@ -75,6 +91,13 @@ void main() {
                     collections: [collection],
                   ),
                 ],
+              ),
+              SectionSpec(
+                id: 'base_config.future',
+                title: 'Future settings',
+                fields: [future],
+                collections: [collection],
+                banners: [banner],
               ),
             ],
           ),
@@ -91,18 +114,20 @@ void main() {
             ],
           ),
         ],
+        expertFields: [power, timeout, future],
       );
       final result = ConfigurationSections(schema);
-      expect(result.playback.single, same(timeout));
+      expect(result.serviceName, same(name));
       expect(result.updates.single, same(update));
+      expect(result.details.single, same(status));
       expect(result.banners.single, same(banner));
       final remaining = result.server.single;
-      expect(remaining.id, 'base_config.device_automation');
-      expect(remaining.fields.single, same(power));
-      expect(remaining.sections.single.fields.single, same(future));
-      expect(remaining.sections.single.collections.single, same(collection));
-      expect(remaining.sections.single.banners.single, same(banner));
+      expect(remaining.id, 'base_config.future');
+      expect(remaining.fields.single, same(future));
+      expect(remaining.collections.single, same(collection));
+      expect(remaining.banners.single, same(banner));
       expect(schema.pages.first.sections[1].fields, [power, timeout]);
+      expect(schema.expertFields, [same(power), same(timeout), same(future)]);
     },
   );
 }

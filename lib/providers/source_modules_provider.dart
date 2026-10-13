@@ -75,7 +75,9 @@ Color colorForSourceName(String name) {
 
 /// Fetches enabled input modules from the backend.
 final sourceModulesProvider = FutureProvider<List<ModuleInfo>>((ref) async {
-  final settings = ref.watch(connectionSettingsProvider);
+  // A server-side rename refreshes the name; only the address matters here.
+  ref.watch(connectionSettingsProvider.select((s) => s.address));
+  final settings = ref.read(connectionSettingsProvider);
   if (!settings.isSet) return <ModuleInfo>[];
   final api = ref.read(kalinkaProxyProvider);
   final modulesAndDevices = await api.listModules();

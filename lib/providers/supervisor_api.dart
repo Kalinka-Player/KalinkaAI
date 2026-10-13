@@ -343,7 +343,9 @@ class DioSupervisorApi implements SupervisorApi {
 /// reached over TLS: that is a server on the internet, not a box on this
 /// network.
 final supervisorApiProvider = Provider<SupervisorApi?>((ref) {
-  final settings = ref.watch(connectionSettingsProvider);
+  // A server-side rename refreshes the name; only the address matters here.
+  ref.watch(connectionSettingsProvider.select((s) => s.address));
+  final settings = ref.read(connectionSettingsProvider);
   if (!settings.isSet || settings.scheme != 'http') return null;
   return ref.watch(supervisorAtProvider(settings.host));
 });
