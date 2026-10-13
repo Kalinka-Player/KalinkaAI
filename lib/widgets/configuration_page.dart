@@ -33,6 +33,7 @@ class ConfigurationPage extends StatelessWidget {
       child: Material(
         color: KalinkaColors.background,
         child: SafeArea(
+          top: false,
           child: Builder(
             builder: (context) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

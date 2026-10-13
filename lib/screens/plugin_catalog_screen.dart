@@ -378,6 +378,7 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
               child: Material(
                 color: KalinkaColors.background,
                 child: SafeArea(
+                  top: false,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [

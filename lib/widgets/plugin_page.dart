@@ -61,6 +61,7 @@ class PluginPage extends ConsumerWidget {
       child: Material(
         color: KalinkaColors.background,
         child: SafeArea(
+          top: false,
           // Below the panel, which the Back button closes.
           child: Builder(
             builder: (context) => Column(
