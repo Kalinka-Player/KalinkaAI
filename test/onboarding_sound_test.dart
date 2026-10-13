@@ -306,6 +306,7 @@ void main() {
       container
           .read(settingsProvider.notifier)
           .stageChange('base_config.server.service_name', 'Den');
+      final reads = proxy.configReads.length;
 
       await tester.tap(find.text('Set it up'));
       await tester.pumpAndSettle();
@@ -316,6 +317,7 @@ void main() {
       expect(proxy.saved.single, {'base_config.server.service_name': 'Den'});
       expect(container.read(oobeResumeProvider)?.step, 5);
       expect(find.text('The Pi is not back yet'), findsOne);
+      expect(proxy.configReads, hasLength(reads));
 
       box.answers
         ..clear()
@@ -331,6 +333,7 @@ void main() {
       expect(proxy.updates.single.$2, {
         'output.device': 'hw:CARD=sndrpihifiberry,DEV=0',
       });
+      expect(proxy.configReads, hasLength(reads + 1));
       expect(container.read(oobeResumeProvider), isNull);
       expect(
         container.read(toastProvider).last.message,
@@ -377,7 +380,9 @@ void main() {
     ) async {
       final box = FakeBox(reports: [_found], restarts: true)
         ..answersAfterApply = [null];
-      final container = await atSoundStep(tester, box);
+      final proxy = FakeProxy([]);
+      final container = await atSoundStep(tester, box, proxy: proxy);
+      final reads = proxy.configReads.length;
 
       await tester.tap(find.text('Set it up'));
       await tester.pumpAndSettle();
@@ -388,6 +393,7 @@ void main() {
 
       expect(find.text('The Pi is not back yet'), findsNothing);
       expect(find.text('Sound'), findsOne);
+      expect(proxy.configReads, hasLength(reads + 1));
       expect(container.read(oobeResumeProvider), isNull);
       await _drain(tester);
     });
