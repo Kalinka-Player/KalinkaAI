@@ -133,6 +133,9 @@ class FakeProxy implements KalinkaPlayerProxy {
   /// What every renderer reports of its own settings.
   RendererConfigSnapshot rendererConfig = const RendererConfigSnapshot();
 
+  /// The renderers whose settings were read, in order.
+  final configReads = <String>[];
+
   @override
   Future<PresentationSchema> getSettingsSchema() async =>
       const PresentationSchema(schemaVersion: 'v1', pages: []);
@@ -159,8 +162,10 @@ class FakeProxy implements KalinkaPlayerProxy {
   }
 
   @override
-  Future<RendererConfigSnapshot> getRendererConfig(String rendererId) async =>
-      rendererConfig;
+  Future<RendererConfigSnapshot> getRendererConfig(String rendererId) async {
+    configReads.add(rendererId);
+    return rendererConfig;
+  }
 
   @override
   Future<ModulesAndDevices> listModules() async =>

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'box_control_provider.dart';
@@ -5,6 +7,7 @@ import 'connection_settings_provider.dart';
 import 'demo_mode.dart';
 import 'kalinka_player_api_provider.dart';
 import 'renderer_provider.dart';
+import 'renderer_settings_provider.dart';
 import 'supervisor_api.dart';
 import 'toast_provider.dart';
 
@@ -218,6 +221,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
         restarted
             ? 'The box is back, set up without a HAT.'
             : 'The box is set up without a HAT.',
+        reloadSettings: restarted,
       );
       return SoundcardOutcome.noHat;
     }
@@ -229,6 +233,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
             : '${card.label} is set up, but did not come up. Check that the '
                   'HAT sits firmly on the pins.',
         isError: true,
+        reloadSettings: restarted,
       );
       return SoundcardOutcome.silent;
     }
@@ -237,6 +242,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
       _finish(
         '$name is up. Choose it in the output’s settings once the output is '
         'back.',
+        reloadSettings: restarted,
       );
       return SoundcardOutcome.up;
     }
@@ -244,6 +250,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
       restarted
           ? 'The box is back, playing through $name.'
           : 'Playing through $name.',
+      reloadSettings: true,
     );
     return SoundcardOutcome.playing;
   }
@@ -294,11 +301,25 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     return false;
   }
 
-  void _finish(String message, {bool isError = false}) {
+  void _finish(
+    String message, {
+    bool isError = false,
+    bool reloadSettings = false,
+  }) {
     if (!ref.mounted) return;
     state = SoundcardStep.idle;
     ref.invalidate(soundcardReportProvider(box));
+    if (reloadSettings) _reloadRendererSettings();
     _toast(message, isError: isError);
+  }
+
+  /// A settings page loaded before the change would still show the old card
+  /// as not detected. Only after a restart or a switch of the output, since a
+  /// reload drops the page's staged edits.
+  void _reloadRendererSettings() {
+    final id = box.rendererId;
+    if (id == null || !ref.exists(rendererSettingsProvider(id))) return;
+    unawaited(ref.read(rendererSettingsProvider(id).notifier).load());
   }
 
   void _toast(String message, {bool isError = false}) =>

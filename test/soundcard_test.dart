@@ -5,9 +5,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalinka/data_model/renderer_config.dart';
+import 'package:kalinka/providers/connection_state_provider.dart';
+import 'package:kalinka/providers/renderer_settings_provider.dart';
 import 'package:kalinka/providers/soundcard_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/toast_provider.dart';
+import 'package:kalinka/screens/renderer_settings_screen.dart';
 import 'package:kalinka/widgets/box_section.dart';
 import 'package:kalinka/widgets/settings_controls/option_picker.dart';
 import 'package:kalinka/widgets/soundcard_row.dart';
@@ -63,6 +67,39 @@ class _Adapter implements HttpClientAdapter {
   final dio = Dio(BaseOptions(baseUrl: 'http://192.168.1.30:8001'))
     ..httpClientAdapter = adapter;
   return (DioSupervisorApi(dio), adapter);
+}
+
+const _hifiberryPcm = 'hw:CARD=sndrpihifiberry,DEV=0';
+
+/// The output's settings with the device set to the HiFiBerry, listed as
+/// [label].
+RendererConfigSnapshot _deviceConfig(String label) => RendererConfigSnapshot(
+  sections: [
+    RendererConfigSection(
+      path: 'output',
+      title: 'Output',
+      fields: [
+        RendererConfigField(
+          path: outputDevicePath,
+          title: 'Device',
+          type: RendererFieldType.enumeration,
+          value: _hifiberryPcm,
+          options: [
+            const RendererConfigOption(
+              value: 'default',
+              label: 'System default',
+            ),
+            RendererConfigOption(value: _hifiberryPcm, label: label),
+          ],
+        ),
+      ],
+    ),
+  ],
+);
+
+class _Connected extends ConnectionStateNotifier {
+  @override
+  ConnectionStatus build() => ConnectionStatus.connected;
 }
 
 void main() {
@@ -443,6 +480,67 @@ void main() {
       expect(toasts(container).last, 'The box is back, set up without a HAT.');
     });
 
+    test(
+      'reloads the settings of the renderer it pointed at the card',
+      () async {
+        final box = FakeBox(
+          restarts: true,
+          answers: [null, supervisorInfo()],
+          reports: [
+            soundcardReport(name: 'JustBoom DAC', pcm: 'hw:CARD=Boom,DEV=0'),
+          ],
+        );
+        final (container, target, proxy) = await start(box);
+        await container
+            .read(rendererSettingsProvider('r-local').notifier)
+            .load();
+
+        final outcome = await container
+            .read(soundcardChangeProvider(target).notifier)
+            .apply(card);
+
+        expect(outcome, SoundcardOutcome.playing);
+        expect(proxy.configReads, ['r-local', 'r-local']);
+      },
+    );
+
+    test('reads no settings a page has not loaded', () async {
+      final box = FakeBox(
+        restarts: true,
+        answers: [null, supervisorInfo()],
+        reports: [
+          soundcardReport(name: 'JustBoom DAC', pcm: 'hw:CARD=Boom,DEV=0'),
+        ],
+      );
+      final (container, target, proxy) = await start(box);
+
+      await container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+
+      expect(proxy.configReads, isEmpty);
+    });
+
+    test('keeps staged settings when neither the box nor the output '
+        'changed', () async {
+      final (container, target, proxy) = await start(FakeBox());
+      final settings = container.read(
+        rendererSettingsProvider('r-local').notifier,
+      );
+      await settings.load();
+      settings.stage('output.exclusive', true);
+
+      final outcome = await container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+
+      expect(outcome, SoundcardOutcome.silent);
+      expect(proxy.configReads, ['r-local']);
+      expect(container.read(rendererSettingsProvider('r-local')).staged, {
+        'output.exclusive': true,
+      });
+    });
+
     test('a refusal leaves nothing in progress', () async {
       final box = FakeBox()
         ..refusal = const BoxActionException('busy', 'Busy.');
@@ -675,6 +773,61 @@ void main() {
       await pump(tester, const RendererSoundcardSection(rendererId: 'r-local'));
       expect(find.text('SOUND CARD'), findsOneWidget);
       expect(find.text('Sound card'), findsOneWidget);
+    });
+
+    testWidgets('the output’s device is named again once its card is back', (
+      tester,
+    ) async {
+      final box = FakeBox(
+        restarts: true,
+        reports: [soundcardReport(configured: 'justboom-dac')],
+      )..answersAfterApply = [null, supervisorInfo(rendererId: 'r-local')];
+      final proxy = FakeProxy([rendererRow('r-local')])
+        ..rendererConfig = _deviceConfig('$_hifiberryPcm (not detected)');
+      final container = ProviderContainer(
+        overrides: [
+          ...soundcardOverrides(await boxPrefs(), box: box, proxy: proxy),
+          connectionStateProvider.overrideWith(_Connected.new),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: RendererSettingsScreen(
+                rendererId: 'r-local',
+                rendererName: 'Living room',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('$_hifiberryPcm (not detected)'), findsOneWidget);
+
+      box.reports
+        ..clear()
+        ..add(
+          soundcardReport(
+            name: 'HiFiBerry Digi2 Pro',
+            configured: 'hifiberry-digi-pro',
+            pcm: _hifiberryPcm,
+          ),
+        );
+      proxy.rendererConfig = _deviceConfig('HiFiBerry Digi+ Pro');
+      await tester.tap(find.text('Sound card'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('HiFiBerry Digi+ Pro or Digi2 Pro'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+
+      expect(proxy.updates.single.$2, {outputDevicePath: _hifiberryPcm});
+      expect(find.text('HiFiBerry Digi+ Pro'), findsOneWidget);
+      expect(find.textContaining('not detected'), findsNothing);
+      await tester.pump(const Duration(seconds: 6));
     });
   });
 }
