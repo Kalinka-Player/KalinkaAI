@@ -499,10 +499,36 @@ void main() {
             .read(soundcardChangeProvider(target).notifier)
             .apply(card);
 
+        await Future<void>.delayed(Duration.zero);
+
         expect(outcome, SoundcardOutcome.playing);
         expect(proxy.configReads, ['r-local', 'r-local']);
       },
     );
+
+    test('reloads the settings only once the renderer is back', () async {
+      final box = FakeBox(
+        restarts: true,
+        answers: [null, supervisorInfo()],
+        reports: [soundcardReport()],
+      );
+      final (container, target, proxy) = await start(box);
+      await container.read(rendererSettingsProvider('r-local').notifier).load();
+      proxy.renderers = [];
+
+      final outcome = await container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(outcome, SoundcardOutcome.silent);
+      expect(proxy.configReads, ['r-local']);
+
+      proxy.renderers = [rendererRow('r-local')];
+      await pumpEventQueue();
+
+      expect(proxy.configReads, ['r-local', 'r-local']);
+    });
 
     test('reads no settings a page has not loaded', () async {
       final box = FakeBox(
