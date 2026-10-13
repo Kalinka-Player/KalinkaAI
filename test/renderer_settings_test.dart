@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -112,9 +113,14 @@ class _FakeApi implements KalinkaPlayerProxy {
   final List<String> tones = [];
   String? toneRendererId;
 
+  /// While set, a read or a write answers only once it completes.
+  Completer<void>? holdLoad;
+  Completer<void>? holdWrite;
+
   @override
   Future<RendererConfigSnapshot> getRendererConfig(String rendererId) async {
     loadCalls++;
+    await holdLoad?.future;
     if (loadError != null) throw loadError!;
     return _snapshot(payload);
   }
@@ -125,6 +131,7 @@ class _FakeApi implements KalinkaPlayerProxy {
     Map<String, String> changes,
   ) async {
     writes.add(changes);
+    await holdWrite?.future;
     return RendererConfigResult.fromJson({
       'config_version': 'v2',
       'effect': 'interrupts_playback',
@@ -202,9 +209,11 @@ void main() {
     connectionStateProvider.overrideWith(_FakeConnectionNotifier.new),
   ];
 
+  /// Holds the settings open, as their page does.
   ProviderContainer makeContainer(KalinkaPlayerProxy api) {
     final container = ProviderContainer(overrides: overrides(api));
     addTearDown(container.dispose);
+    container.listen(rendererSettingsProvider(rendererId), (_, _) {});
     return container;
   }
 
@@ -482,6 +491,35 @@ void main() {
       final state = container.read(rendererSettingsProvider(rendererId));
       expect(state.hasPendingChanges, isFalse);
       expect(state.error, isNull);
+    });
+
+    test('a load under way when a save starts does not end it', () async {
+      final api = _FakeApi();
+      final container = makeContainer(api);
+      final notifier = container.read(
+        rendererSettingsProvider(rendererId).notifier,
+      );
+      await notifier.load();
+      notifier.stage('output.exclusive', true);
+
+      final read = api.holdLoad = Completer<void>();
+      final load = notifier.load(keepStaged: true);
+      api.holdLoad = null;
+      final write = api.holdWrite = Completer<void>();
+      final save = notifier.save();
+      read.complete();
+      await load;
+
+      var state = container.read(rendererSettingsProvider(rendererId));
+      expect(state.saving, isTrue);
+      expect(state.loading, isFalse);
+      expect(state.staged, {'output.exclusive': true});
+
+      write.complete();
+      await save;
+      state = container.read(rendererSettingsProvider(rendererId));
+      expect(state.saving, isFalse);
+      expect(state.hasPendingChanges, isFalse);
     });
 
     test('a refused setting is reported and survives the reload', () async {

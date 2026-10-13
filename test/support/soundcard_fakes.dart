@@ -136,6 +136,9 @@ class FakeProxy implements KalinkaPlayerProxy {
   /// The renderers whose settings were read, in order.
   final configReads = <String>[];
 
+  /// While set, a renderer settings write answers only once it completes.
+  Completer<void>? holdUpdate;
+
   @override
   Future<PresentationSchema> getSettingsSchema() async =>
       const PresentationSchema(schemaVersion: 'v1', pages: []);
@@ -180,6 +183,7 @@ class FakeProxy implements KalinkaPlayerProxy {
     Map<String, String> changes,
   ) async {
     updates.add((rendererId, changes));
+    await holdUpdate?.future;
     return const RendererConfigResult();
   }
 
