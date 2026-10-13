@@ -309,17 +309,35 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     if (!ref.mounted) return;
     state = SoundcardStep.idle;
     ref.invalidate(soundcardReportProvider(box));
-    if (reloadSettings) _reloadRendererSettings();
+    if (reloadSettings) unawaited(_reloadRendererSettings());
     _toast(message, isError: isError);
   }
 
   /// A settings page loaded before the change would still show the old card
   /// as not detected. Only after a restart or a switch of the output, since a
-  /// reload drops the page's staged edits.
-  void _reloadRendererSettings() {
+  /// reload drops the page's staged edits. Waits for the renderer, which a
+  /// restarted box brings back after its supervisor.
+  Future<void> _reloadRendererSettings() async {
     final id = box.rendererId;
     if (id == null || !ref.exists(rendererSettingsProvider(id))) return;
-    unawaited(ref.read(rendererSettingsProvider(id).notifier).load());
+    if (!await _rendererBack(id) || !ref.mounted) return;
+    await ref.read(rendererSettingsProvider(id).notifier).load();
+  }
+
+  Future<bool> _rendererBack(String rendererId) async {
+    for (var i = 0; i < _rendererPolls; i++) {
+      if (!ref.mounted) return false;
+      try {
+        final renderers = await ref.read(kalinkaProxyProvider).listRenderers();
+        if (renderers.any((r) => r.rendererId == rendererId && r.isConnected)) {
+          return true;
+        }
+      } catch (_) {
+        // The server may still be starting on the same box.
+      }
+      await Future<void>.delayed(ref.read(soundcardPollProvider));
+    }
+    return false;
   }
 
   void _toast(String message, {bool isError = false}) =>
