@@ -3004,6 +3004,7 @@ void main() {
               onOpenSettings: () {},
               onOpenDiscovery: () {},
               onOpenPlugins: () => actions.add('plugins'),
+              onPowerOff: () {},
             ),
           ),
         ),

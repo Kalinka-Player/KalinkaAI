@@ -17,9 +17,11 @@ import '../providers/search_session_provider.dart';
 import '../providers/server_connect.dart';
 import '../providers/settings_provider.dart';
 import '../providers/server_info_provider.dart';
+import '../providers/supervisor_api.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/renderer_fault_text.dart';
+import '../widgets/box_actions.dart';
 import '../widgets/clear_all_confirm_dialog.dart';
 import '../widgets/coach_marks_overlay.dart';
 import '../widgets/connection_banner.dart';
@@ -236,9 +238,21 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         setState(() => _discoveryOpen = true);
       case ServerSheetAction.openPlugins:
         _openPlugins();
+      case ServerSheetAction.powerOff:
+        await _powerOffServer();
       case null:
         break;
     }
+  }
+
+  Future<void> _powerOffServer() async {
+    if (!mounted) return;
+    await runBoxAction(
+      context,
+      ref,
+      BoxAction.powerOff,
+      dialogSide: KalinkaDialogSide.right,
+    );
   }
 
   void _openSettings() => setState(() {
@@ -1087,6 +1101,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                                         setState(() => _discoveryOpen = true),
                                     onOpenSettings: _openSettings,
                                     onOpenPlugins: _openPlugins,
+                                    onPowerOff: _powerOffServer,
                                   ),
                                 ),
                               // Queue management tray — same panel-level overlay

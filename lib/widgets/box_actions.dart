@@ -55,14 +55,19 @@ _Wording _wording(BoxAction action) => switch (action) {
 /// carries the action out. Show via [showKalinkaDialog].
 class BoxActionDialog extends StatelessWidget {
   final BoxAction action;
+  final KalinkaDialogSide side;
 
-  const BoxActionDialog({super.key, required this.action});
+  const BoxActionDialog({
+    super.key,
+    required this.action,
+    this.side = KalinkaDialogSide.left,
+  });
 
   @override
   Widget build(BuildContext context) {
     final wording = _wording(action);
     return KalinkaDialog(
-      side: KalinkaDialogSide.left,
+      side: side,
       icon: wording.icon,
       iconColor: wording.destructive
           ? KalinkaColors.actionDelete
@@ -92,11 +97,13 @@ class BoxActionDialog extends StatelessWidget {
 /// Returns whether the streamer accepted it; a refusal is reported in a toast.
 ///
 /// Set [inPanel] when called from the tablet layout's left panel.
+/// [dialogSide] keeps the confirmation over the panel that opened it.
 Future<bool> runBoxAction(
   BuildContext context,
   WidgetRef ref,
   BoxAction action, {
   bool inPanel = false,
+  KalinkaDialogSide dialogSide = KalinkaDialogSide.left,
 }) async {
   final control = ref.read(boxControlProvider).value;
   final api = ref.read(supervisorApiProvider);
@@ -104,7 +111,7 @@ Future<bool> runBoxAction(
   final toast = ref.read(toastProvider.notifier);
   final confirmed = await showKalinkaDialog<bool>(
     context: context,
-    builder: (_) => BoxActionDialog(action: action),
+    builder: (_) => BoxActionDialog(action: action, side: dialogSide),
   );
   if (confirmed != true) return false;
   try {
