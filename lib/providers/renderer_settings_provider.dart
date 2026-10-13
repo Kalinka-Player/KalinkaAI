@@ -101,7 +101,9 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
   @override
   RendererSettingsState build() => const RendererSettingsState();
 
-  Future<void> load() async {
+  /// [keepStaged] carries edits not yet applied over to the new snapshot, for
+  /// a reload the user did not ask for.
+  Future<void> load({bool keepStaged = false}) async {
     final generation = ++_generation;
     state = state.copyWith(loading: true, clearError: true);
     try {
@@ -117,8 +119,8 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
         options: view.options,
         applyCosts: view.applyCosts,
         // A reload is the renderer's word on what is in effect; edits that
-        // were never applied do not survive it.
-        staged: const {},
+        // were never applied do not survive one the user asked for.
+        staged: keepStaged ? _stillStaged(view.values) : const {},
         loaded: true,
       );
     } on RendererConfigException catch (e) {
@@ -133,6 +135,13 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
       );
     }
   }
+
+  /// The staged edits [values] still has a field for and does not already
+  /// hold.
+  Map<String, dynamic> _stillStaged(Map<String, dynamic> values) => {
+    for (final MapEntry(:key, :value) in state.staged.entries)
+      if (values.containsKey(key) && values[key] != value) key: value,
+  };
 
   /// Record an edit. Staging back to the stored value unstages instead, so
   /// typing your way back to the original clears the pending count.
@@ -166,7 +175,10 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
       for (final entry in state.staged.entries)
         entry.key: encodeRendererValue(entry.value),
     };
-    state = state.copyWith(saving: true, clearError: true);
+    // A load already under way would land with the edits gone and Apply on
+    // again; the save reloads once it is done.
+    _generation++;
+    state = state.copyWith(saving: true, loading: false, clearError: true);
     final List<RendererConfigOutcome> rejected;
     try {
       final result = await ref
@@ -174,12 +186,15 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
           .updateRendererConfig(rendererId, changes);
       rejected = result.rejected.toList();
     } on RendererConfigException catch (e) {
+      if (!ref.mounted) return;
       state = state.copyWith(saving: false, error: e.message);
       return;
     } catch (e) {
+      if (!ref.mounted) return;
       state = state.copyWith(saving: false, error: 'Couldn’t save: $e');
       return;
     }
+    if (!ref.mounted) return;
     await load();
     if (!ref.mounted || rejected.isEmpty) return;
     // Reported after the reload, which clears the error it would otherwise
@@ -199,12 +214,12 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
   bool _stale(int generation) => !ref.mounted || generation != _generation;
 }
 
-final rendererSettingsProvider =
-    NotifierProvider.family<
-      RendererSettingsNotifier,
-      RendererSettingsState,
-      String
-    >(RendererSettingsNotifier.new);
+/// Kept only while a page shows it, so a sound card change reloads only
+/// settings on screen.
+final rendererSettingsProvider = NotifierProvider.autoDispose
+    .family<RendererSettingsNotifier, RendererSettingsState, String>(
+      RendererSettingsNotifier.new,
+    );
 
 /// A renderer's settings as a [SettingsBinding], so the schema widgets render
 /// them without knowing where they came from.

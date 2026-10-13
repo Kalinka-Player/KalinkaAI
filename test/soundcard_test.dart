@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -92,6 +93,34 @@ RendererConfigSnapshot _deviceConfig(String label) => RendererConfigSnapshot(
             RendererConfigOption(value: _hifiberryPcm, label: label),
           ],
         ),
+      ],
+    ),
+  ],
+);
+
+/// The output's settings: its device, and a switch at each of [switches].
+RendererConfigSnapshot _outputConfig(
+  String device, [
+  List<String> switches = const [],
+]) => RendererConfigSnapshot(
+  sections: [
+    RendererConfigSection(
+      path: 'output',
+      title: 'Output',
+      fields: [
+        RendererConfigField(
+          path: outputDevicePath,
+          title: 'Device',
+          type: RendererFieldType.string,
+          value: device,
+        ),
+        for (final path in switches)
+          RendererConfigField(
+            path: path,
+            title: path,
+            type: RendererFieldType.boolean,
+            value: 'false',
+          ),
       ],
     ),
   ],
@@ -480,20 +509,27 @@ void main() {
       expect(toasts(container).last, 'The box is back, set up without a HAT.');
     });
 
+    /// The output's settings as an open settings page holds them.
+    Future<RendererSettingsNotifier> openSettings(ProviderContainer c) async {
+      c.listen(rendererSettingsProvider('r-local'), (_, _) {});
+      final settings = c.read(rendererSettingsProvider('r-local').notifier);
+      await settings.load();
+      return settings;
+    }
+
+    FakeBox restartsPlaying() => FakeBox(
+      restarts: true,
+      answers: [null, supervisorInfo()],
+      reports: [
+        soundcardReport(name: 'JustBoom DAC', pcm: 'hw:CARD=Boom,DEV=0'),
+      ],
+    );
+
     test(
       'reloads the settings of the renderer it pointed at the card',
       () async {
-        final box = FakeBox(
-          restarts: true,
-          answers: [null, supervisorInfo()],
-          reports: [
-            soundcardReport(name: 'JustBoom DAC', pcm: 'hw:CARD=Boom,DEV=0'),
-          ],
-        );
-        final (container, target, proxy) = await start(box);
-        await container
-            .read(rendererSettingsProvider('r-local').notifier)
-            .load();
+        final (container, target, proxy) = await start(restartsPlaying());
+        await openSettings(container);
 
         final outcome = await container
             .read(soundcardChangeProvider(target).notifier)
@@ -513,7 +549,7 @@ void main() {
         reports: [soundcardReport()],
       );
       final (container, target, proxy) = await start(box);
-      await container.read(rendererSettingsProvider('r-local').notifier).load();
+      await openSettings(container);
       proxy.renderers = [];
 
       final outcome = await container
@@ -531,14 +567,7 @@ void main() {
     });
 
     test('reads no settings a page has not loaded', () async {
-      final box = FakeBox(
-        restarts: true,
-        answers: [null, supervisorInfo()],
-        reports: [
-          soundcardReport(name: 'JustBoom DAC', pcm: 'hw:CARD=Boom,DEV=0'),
-        ],
-      );
-      final (container, target, proxy) = await start(box);
+      final (container, target, proxy) = await start(restartsPlaying());
 
       await container
           .read(soundcardChangeProvider(target).notifier)
@@ -547,13 +576,82 @@ void main() {
       expect(proxy.configReads, isEmpty);
     });
 
+    test('reads no settings of a page since closed', () async {
+      final (container, target, proxy) = await start(restartsPlaying());
+      final page = container.listen(
+        rendererSettingsProvider('r-local'),
+        (_, _) {},
+      );
+      await container.read(rendererSettingsProvider('r-local').notifier).load();
+      page.close();
+      await Future<void>.delayed(Duration.zero);
+
+      await container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+      await pumpEventQueue();
+
+      expect(proxy.configReads, ['r-local']);
+    });
+
+    test('keeps what the page staged through the reload', () async {
+      final (container, target, proxy) = await start(restartsPlaying());
+      proxy.rendererConfig = _outputConfig('default', [
+        'output.exclusive',
+        'output.dither',
+      ]);
+      (await openSettings(container))
+        ..stage('output.exclusive', true)
+        ..stage('output.dither', true)
+        ..stage(outputDevicePath, 'hw:CARD=Boom,DEV=0');
+      proxy.rendererConfig = _outputConfig('hw:CARD=Boom,DEV=0', [
+        'output.exclusive',
+      ]);
+
+      await container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+      await pumpEventQueue();
+
+      final page = container.read(rendererSettingsProvider('r-local'));
+      expect(proxy.configReads, hasLength(2));
+      expect(page.values[outputDevicePath], 'hw:CARD=Boom,DEV=0');
+      expect(page.staged, {'output.exclusive': true});
+    });
+
+    test('leaves the reload to a save under way', () async {
+      final box = FakeBox(
+        restarts: true,
+        answers: [null, supervisorInfo()],
+        reports: [soundcardReport()],
+      );
+      final (container, target, proxy) = await start(box);
+      final settings = await openSettings(container)
+        ..stage('output.exclusive', true);
+      final write = proxy.holdUpdate = Completer<void>();
+      final save = settings.save();
+
+      final outcome = await container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+      await pumpEventQueue();
+
+      expect(outcome, SoundcardOutcome.silent);
+      expect(proxy.configReads, ['r-local']);
+      expect(
+        container.read(rendererSettingsProvider('r-local')).saving,
+        isTrue,
+      );
+
+      write.complete();
+      await save;
+      expect(proxy.configReads, ['r-local', 'r-local']);
+    });
+
     test('keeps staged settings when neither the box nor the output '
         'changed', () async {
       final (container, target, proxy) = await start(FakeBox());
-      final settings = container.read(
-        rendererSettingsProvider('r-local').notifier,
-      );
-      await settings.load();
+      final settings = await openSettings(container);
       settings.stage('output.exclusive', true);
 
       final outcome = await container

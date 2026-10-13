@@ -313,15 +313,20 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     _toast(message, isError: isError);
   }
 
-  /// A settings page loaded before the change would still show the old card
-  /// as not detected. Only after a restart or a switch of the output, since a
-  /// reload drops the page's staged edits. Waits for the renderer, which a
-  /// restarted box brings back after its supervisor.
+  /// A settings page open since before the change would still show the old
+  /// card as not detected. Waits for the renderer, which a restarted box
+  /// brings back after its supervisor, and keeps what the page has staged.
   Future<void> _reloadRendererSettings() async {
     final id = box.rendererId;
-    if (id == null || !ref.exists(rendererSettingsProvider(id))) return;
-    if (!await _rendererBack(id) || !ref.mounted) return;
-    await ref.read(rendererSettingsProvider(id).notifier).load();
+    if (id == null) return;
+    final settings = rendererSettingsProvider(id);
+    if (!ref.exists(settings)) return;
+    if (!await _rendererBack(id) || !ref.mounted || !ref.exists(settings)) {
+      return;
+    }
+    // A save under way reads the settings again itself once it is done.
+    if (ref.read(settings).saving) return;
+    await ref.read(settings.notifier).load(keepStaged: true);
   }
 
   Future<bool> _rendererBack(String rendererId) async {
