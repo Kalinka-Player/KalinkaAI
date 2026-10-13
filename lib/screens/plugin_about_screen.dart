@@ -12,9 +12,6 @@ class PluginAboutScreen extends StatelessWidget {
   final PluginEntryActions actions;
   final VoidCallback onClose;
 
-  /// Puts away the configuration page under this one, where there is one,
-  /// as the trail goes back to the overview.
-  final VoidCallback? onHome;
   final bool handlesBack;
 
   const PluginAboutScreen({
@@ -22,7 +19,6 @@ class PluginAboutScreen extends StatelessWidget {
     required this.plugin,
     required this.actions,
     required this.onClose,
-    this.onHome,
     this.handlesBack = true,
   });
 
@@ -30,9 +26,9 @@ class PluginAboutScreen extends StatelessWidget {
   Widget build(BuildContext context) => PluginPage(
     plugin: plugin,
     title: 'About ${plugin.name}',
+    description: plugin.description,
     id: 'about',
     onClose: onClose,
-    onHome: onHome,
     handlesBack: handlesBack,
     trailing: (state) => pluginAboutAction(plugin, state, actions),
     builder: (state, gutter) => [

@@ -77,8 +77,6 @@ class ConfigurationReviewScreen extends ConsumerWidget {
     return ConfigurationPage(
       title: 'Check your changes',
       description: 'Correct the settings below, then apply your changes.',
-      icon: Icons.edit_note,
-      parent: 'Configuration',
       onClose: onClose,
       handlesBack: handlesBack,
       bodyBuilder: (heading) => SettingsScope(

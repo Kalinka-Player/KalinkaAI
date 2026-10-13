@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/box_control_provider.dart';
-import '../providers/soundcard_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
@@ -11,13 +10,18 @@ import 'configuration_appearance.dart';
 import 'box_actions.dart';
 import 'settings_controls/settings_action_row.dart';
 import 'settings_controls/settings_card.dart';
-import 'soundcard_row.dart';
 
-/// "STREAMER": the hardware the server runs on,
-/// through its supervisor. Absent when the box has none, or one that is not
-/// this server's.
+/// Management actions for the server's hardware, through its supervisor.
+/// Optional server actions remain available without a matching supervisor.
 class BoxSection extends ConsumerWidget {
-  const BoxSection({super.key});
+  final String title;
+  final List<Widget> leadingActions;
+
+  const BoxSection({
+    super.key,
+    this.title = 'STREAMER',
+    this.leadingActions = const [],
+  });
 
   Future<void> _openDashboard(WidgetRef ref, Uri page) async {
     final toast = ref.read(toastProvider.notifier);
@@ -37,58 +41,60 @@ class BoxSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final control = ref.watch(boxControlProvider).value;
     final api = ref.watch(supervisorApiProvider);
-    if (control == null || api == null) return const SizedBox.shrink();
+    final hasBox = control != null && api != null;
+    if (!hasBox && leadingActions.isEmpty) return const SizedBox.shrink();
     final configured = ConfigurationAppearance.active(context);
-    final soundcardBox = ref.watch(serverSoundcardBoxProvider).value;
-    final soundcard = soundcardBox == null
-        ? null
-        : ref.watch(soundcardReportProvider(soundcardBox)).value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: ConfigurationAppearance.sectionPadding(context),
-          child: Text('STREAMER', style: KalinkaTextStyles.sectionHeaderMuted),
+          child: Text(title, style: KalinkaTextStyles.sectionHeaderMuted),
         ),
         SettingsCard(
           children: [
-            if (soundcardBox != null && soundcard != null)
-              SoundcardRow(box: soundcardBox, report: soundcard, inPanel: true),
-            SettingsActionRow(
-              label: 'Streamer dashboard',
-              sublabel:
-                  'Versions, memory and processor use, and reinstalling '
-                  'Kalinka, in the browser',
-              trailing: Icons.open_in_new,
-              leading: configured ? Icons.dashboard_outlined : null,
-              onTap: () => _openDashboard(ref, api.page),
-            ),
-            if (control.offers(BoxAction.reboot))
+            ...leadingActions,
+            if (hasBox) ...[
               SettingsActionRow(
-                label: 'Restart streamer',
+                label: 'Streamer dashboard',
                 sublabel:
-                    'Restarts the whole player. It is back in a minute '
-                    'or two',
-                leading: configured ? Icons.autorenew : null,
-                trailing: configured ? null : Icons.autorenew,
-                onTap: () =>
-                    runBoxAction(context, ref, BoxAction.reboot, inPanel: true),
+                    'Versions, memory and processor use, and reinstalling '
+                    'Kalinka, in the browser',
+                trailing: Icons.open_in_new,
+                leading: configured ? Icons.dashboard_outlined : null,
+                onTap: () => _openDashboard(ref, api.page),
               ),
-            if (control.offers(BoxAction.powerOff))
-              SettingsActionRow(
-                label: 'Power off streamer',
-                sublabel:
-                    'Shuts the player down safely, so it can be '
-                    'unplugged',
-                leading: configured ? Icons.power_settings_new : null,
-                trailing: configured ? null : Icons.power_settings_new,
-                onTap: () => runBoxAction(
-                  context,
-                  ref,
-                  BoxAction.powerOff,
-                  inPanel: true,
+              if (control.offers(BoxAction.reboot))
+                SettingsActionRow(
+                  label: 'Restart streamer',
+                  sublabel:
+                      'Restarts the whole player. It is back in a minute '
+                      'or two',
+                  leading: configured ? Icons.autorenew : null,
+                  trailing: configured ? null : Icons.autorenew,
+                  onTap: () => runBoxAction(
+                    context,
+                    ref,
+                    BoxAction.reboot,
+                    inPanel: true,
+                  ),
                 ),
-              ),
+              if (control.offers(BoxAction.powerOff))
+                SettingsActionRow(
+                  label: 'Power off streamer',
+                  sublabel:
+                      'Shuts the player down safely, so it can be '
+                      'unplugged',
+                  leading: configured ? Icons.power_settings_new : null,
+                  trailing: configured ? null : Icons.power_settings_new,
+                  onTap: () => runBoxAction(
+                    context,
+                    ref,
+                    BoxAction.powerOff,
+                    inPanel: true,
+                  ),
+                ),
+            ],
           ],
         ),
       ],

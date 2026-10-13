@@ -5,7 +5,7 @@ import '../configuration_appearance.dart';
 
 /// Card container for groups of setting rows.
 ///
-/// Background: #16161B, border-radius 14px, auto-inserts dividers between children.
+/// Background: surfaceRaised (#151513), border-radius 14dp, auto-inserts dividers between children.
 class SettingsCard extends StatelessWidget {
   final List<Widget> children;
 

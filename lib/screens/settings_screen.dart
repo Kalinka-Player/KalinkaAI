@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../providers/connection_state_provider.dart';
 import '../providers/restart_provider.dart';
@@ -12,6 +11,8 @@ import '../theme/app_theme.dart';
 import '../widgets/box_actions.dart';
 import '../widgets/box_section.dart';
 import '../widgets/connection_banner.dart';
+import '../widgets/configuration_appearance.dart';
+import '../widgets/settings_top_bar.dart';
 import '../widgets/demo_read_only_dialog.dart';
 import '../widgets/kalinka_dialog.dart' show showKalinkaDialog;
 import '../widgets/kalinka_button.dart';
@@ -136,215 +137,142 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             },
           ),
       ],
-      child: Container(
+      child: Material(
         color: KalinkaColors.background,
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Header (carries the Expert mode toggle on the right)
-              _buildHeader(),
-              // Reconnecting / offline indicator — the same banner the
-              // queue screen shows. Self-hides when connected.
-              const ConnectionBanner(),
-              if (disconnected)
-                // Server unreachable: replace the apply bar, tab bar and
-                // settings body with a placeholder. Settings reload
-                // automatically once the connection returns (the
-                // ref.listen above), swapping this back for the apply bar.
-                _buildDisconnectedPlaceholder()
-              else ...[
-                // Pending changes banner — only actionable while
-                // connected, since applying restarts the server.
-                PendingChangesBanner(
-                  pendingCount: settingsState.pendingCount,
-                  consequence: 'restart required',
-                  blocked: settingsState.hasBlockingIssues,
-                  busy: _applying,
-                  onDiscard: () =>
-                      ref.read(settingsProvider.notifier).discardAll(),
-                  onApply: _onApply,
+        child: ConfigurationAppearance(
+          child: SafeArea(
+            child: Column(
+              children: [
+                const SettingsTopBar(title: 'Server settings'),
+                SettingsToolbar(
+                  children: [
+                    IconButton(
+                      tooltip: 'Restart Kalinka',
+                      style: settingsIconButtonStyle,
+                      icon: const Icon(Icons.restart_alt, size: 22),
+                      onPressed: _onRestart,
+                    ),
+                    const ExpertModeToggle(),
+                  ],
                 ),
-                // Tab bar — only meaningful in simple mode; expert is
-                // a single flat about:config-style screen.
-                if (!expertMode) _buildTabBar(settingsState.schema?.pages),
-                // Loading / error state
-                if (settingsState.isLoading)
-                  const Expanded(
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(
-                          KalinkaColors.accent,
+                // Reconnecting / offline indicator — the same banner the
+                // queue screen shows. Self-hides when connected.
+                const ConnectionBanner(),
+                if (disconnected)
+                  // Server unreachable: replace the apply bar, tab bar and
+                  // settings body with a placeholder. Settings reload
+                  // automatically once the connection returns (the
+                  // ref.listen above), swapping this back for the apply bar.
+                  _buildDisconnectedPlaceholder()
+                else ...[
+                  // Pending changes banner — only actionable while
+                  // connected, since applying restarts the server.
+                  PendingChangesBanner(
+                    pendingCount: settingsState.pendingCount,
+                    consequence: 'restart required',
+                    blocked: settingsState.hasBlockingIssues,
+                    busy: _applying,
+                    onDiscard: () =>
+                        ref.read(settingsProvider.notifier).discardAll(),
+                    onApply: _onApply,
+                  ),
+                  // Tab bar — only meaningful in simple mode; expert is
+                  // a single flat about:config-style screen.
+                  if (!expertMode) _buildTabBar(settingsState.schema?.pages),
+                  // Loading / error state
+                  if (settingsState.isLoading)
+                    const Expanded(
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(
+                            KalinkaColors.accent,
+                          ),
                         ),
                       ),
-                    ),
-                  )
-                else if (settingsState.error != null &&
-                    settingsState.schema == null)
-                  Expanded(
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            color: KalinkaColors.statusOffline,
-                            size: 32,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Could not load settings',
-                            style: KalinkaTextStyles.cardTitle,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            settingsState.error!,
-                            textAlign: TextAlign.center,
-                            style: KalinkaTextStyles.trayRowSublabel,
-                          ),
-                          const SizedBox(height: 16),
-                          KalinkaButton(
-                            label: 'Retry',
-                            variant: KalinkaButtonVariant.accent,
-                            size: KalinkaButtonSize.compact,
-                            onTap: () => ref
-                                .read(settingsProvider.notifier)
-                                .loadConfig(),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else if (settingsState.schema != null)
-                  Expanded(
-                    child: expertMode
-                        ? const ExpertSettingsScreen()
-                        : SettingsScope(
-                            binding: ServerSettingsBinding(
-                              settingsState,
-                              ref.read(settingsProvider.notifier),
+                    )
+                  else if (settingsState.error != null &&
+                      settingsState.schema == null)
+                    Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: KalinkaColors.statusOffline,
+                              size: 32,
                             ),
-                            child: IndexedStack(
-                              index: _tabIndex.clamp(
-                                0,
-                                settingsState.schema!.pages.length - 1,
+                            const SizedBox(height: 12),
+                            Text(
+                              'Could not load settings',
+                              style: KalinkaTextStyles.cardTitle,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              settingsState.error!,
+                              textAlign: TextAlign.center,
+                              style: KalinkaTextStyles.trayRowSublabel,
+                            ),
+                            const SizedBox(height: 16),
+                            KalinkaButton(
+                              label: 'Retry',
+                              variant: KalinkaButtonVariant.accent,
+                              size: KalinkaButtonSize.compact,
+                              onTap: () => ref
+                                  .read(settingsProvider.notifier)
+                                  .loadConfig(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (settingsState.schema != null)
+                    Expanded(
+                      child: expertMode
+                          ? const ExpertSettingsScreen()
+                          : SettingsScope(
+                              binding: ServerSettingsBinding(
+                                settingsState,
+                                ref.read(settingsProvider.notifier),
                               ),
-                              children: [
-                                for (final (i, page)
-                                    in settingsState.schema!.pages.indexed)
-                                  SchemaPageRenderer(
-                                    key: ValueKey('page_${page.id}'),
-                                    page: page,
-                                    footer: i == 0
-                                        ? Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              const BoxSection(),
-                                              SupportSection(
-                                                onDownloadLogs: () => setState(
-                                                  () => _logExportOpen = true,
+                              child: IndexedStack(
+                                index: _tabIndex.clamp(
+                                  0,
+                                  settingsState.schema!.pages.length - 1,
+                                ),
+                                children: [
+                                  for (final (i, page)
+                                      in settingsState.schema!.pages.indexed)
+                                    SchemaPageRenderer(
+                                      key: ValueKey('page_${page.id}'),
+                                      page: page,
+                                      footer: i == 0
+                                          ? Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                const BoxSection(),
+                                                SupportSection(
+                                                  onDownloadLogs: () =>
+                                                      setState(
+                                                        () => _logExportOpen =
+                                                            true,
+                                                      ),
                                                 ),
-                                              ),
-                                            ],
-                                          )
-                                        : null,
-                                  ),
-                              ],
+                                              ],
+                                            )
+                                          : null,
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
-                  )
-                else
-                  const Expanded(child: SizedBox.shrink()),
+                    )
+                  else
+                    const Expanded(child: SizedBox.shrink()),
+                ],
               ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      decoration: kKalinkaTopBarDecoration,
-      // Shared top-bar height so this lines up with the queue and search bars.
-      child: SizedBox(
-        height: kKalinkaTopBarHeight,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 6, right: 20),
-          child: Row(
-            children: [
-              // Back — same plain, borderless style as the Find Music close.
-              // Builder: the panel scope is *below* this State's context.
-              Semantics(
-                label: 'Back',
-                button: true,
-                child: Builder(
-                  builder: (context) => GestureDetector(
-                    onTap: () => SlideInPanel.closeOf(context),
-                    behavior: HitTestBehavior.opaque,
-                    child: const SizedBox(
-                      width: 42,
-                      height: 42,
-                      child: Icon(
-                        Icons.arrow_back,
-                        size: 22,
-                        color: KalinkaColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Kalinka logo
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: SvgPicture.asset(
-                    'assets/images/kalinka_logo.svg',
-                    height: kKalinkaWordmarkHeight,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
-              // Restart the server. Available even with no pending changes
-              // (the pending-changes banner only restarts when applying), so
-              // there's always a way to reboot — e.g. to fire an armed
-              // "Rebuild library on next restart" toggle.
-              Material(
-                color: KalinkaColors.surfaceInput,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(9),
-                  side: const BorderSide(color: KalinkaColors.borderDefault),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: _onRestart,
-                  overlayColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.pressed)) {
-                      return Colors.white.withValues(alpha: 0.08);
-                    }
-                    return null;
-                  }),
-                  child: const SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: Icon(
-                      Icons.restart_alt,
-                      size: 16,
-                      color: KalinkaColors.textSecondary,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              // View-mode switch: simple ↔ expert (about:config-style).
-              // Sits where the connection status pill used to live —
-              // connection state surfaces clearly enough through the
-              // loading/error UI below, so the prime header slot is better
-              // spent on a control the user actually interacts with.
-              const ExpertModeToggle(),
-            ],
+            ),
           ),
         ),
       ),

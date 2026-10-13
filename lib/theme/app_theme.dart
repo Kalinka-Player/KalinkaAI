@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// Fixed height of the top-bar / header strip. Shared by the queue, search,
-/// and settings screens so their bars — and the dividers under them — line up.
+/// Height of the player/search bar; minimum for settings bars, which grow
+/// when titles wrap or the user increases the system text size.
 const double kKalinkaTopBarHeight = 52;
 
 /// Wordmark height inside the top bar, shared by every screen that shows it.
@@ -13,7 +13,7 @@ const double kKalinkaWordmarkHeight = 30;
 /// the same number, so it lives here rather than in each screen.
 const double kKalinkaTabletBreakpoint = 900;
 
-/// Decoration shared by the queue, search, and settings top bars so all three
+/// Decoration shared by the queue and search top bars so both
 /// read identically — solid surface, a hairline bottom rule, and a soft drop
 /// shadow. Applied via [Container] (not DecoratedBox) so the border also insets
 /// the content by the same 1px on every screen.
@@ -111,9 +111,7 @@ class KalinkaColors {
   // Secondary signal for streaming/external content — gold-plated connector
   // warmth. Appears on module tiles and progress gradient terminus.
 
-  static const gold = Color(
-    0xFFCDC9BE,
-  ); // Tinted ivory · streaming module · progress end — not a distinct accent, reads as warm white
+  static const gold = Color(0xFFCDC9BE); // Tinted ivory · streaming module · progress end — not a distinct accent, reads as warm white
   static const goldSubtle = Color(
     0x18CDC9BE,
   ); // 0.09 alpha · Streaming module tile bg
@@ -133,6 +131,7 @@ class KalinkaColors {
     0xFFC8943A,
   ); // Amber · Staged · reconnecting
   static const statusOffline = Color(0xFF858585); // Offline
+  static const statusError = Color(0xFFE86A6A); // Plugin error text and icons
 
   static const statusOnlineSurface = Color(
     0x1A3D8A58,
@@ -293,6 +292,23 @@ class KalinkaTypography {
 
 /// Kalinka text styles using centralized font roles.
 class KalinkaTextStyles {
+  /// Settings use one sans-serif page title in SettingsTopBar, never a second
+  /// display heading in the content. See docs/settings-design-guide.md.
+  static final settingsPageTitle = KalinkaFonts.sans(
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+    height: 24 / 18,
+    letterSpacing: -0.1,
+    color: KalinkaColors.textPrimary,
+  );
+
+  static final settingsDescription = KalinkaFonts.sans(
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    height: 1.5,
+    color: KalinkaColors.textSecondary,
+  );
+
   KalinkaTextStyles._();
 
   // Queue items

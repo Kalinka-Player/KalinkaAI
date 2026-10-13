@@ -883,7 +883,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.selected, isEmpty, reason: 'configuring is not switching');
-    expect(find.text('OUTPUT SETTINGS'), findsOneWidget);
+    expect(find.text('Output settings'), findsOneWidget);
     expect(find.text('Living Room'), findsOneWidget);
     expect(api.configuredRenderer, 'r-living');
   });
@@ -917,17 +917,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(_gearOf('Living Room'));
     await tester.pumpAndSettle();
-    expect(find.text('OUTPUT SETTINGS'), findsOneWidget);
+    expect(find.text('Output settings'), findsOneWidget);
 
-    await tester.tap(find.bySemanticsLabel('Back'));
+    await tester.tap(find.byTooltip('Back'));
     // Mid-slide the panel is still there; only the host removes it, and only
     // once the animation has run.
     await tester.pump();
     await tester.pump(kSlideInPanelDuration ~/ 2);
-    expect(find.text('OUTPUT SETTINGS'), findsOneWidget);
+    expect(find.text('Output settings'), findsOneWidget);
 
     await tester.pumpAndSettle();
-    expect(find.text('OUTPUT SETTINGS'), findsNothing);
+    expect(find.text('Output settings'), findsNothing);
     expect(find.byType(RendererSwitcherButton), findsOneWidget);
   });
 
@@ -941,7 +941,7 @@ void main() {
     await tester.tap(_gearOf('Study'));
     await tester.pumpAndSettle();
 
-    expect(find.text('OUTPUT SETTINGS'), findsNothing);
+    expect(find.text('Output settings'), findsNothing);
     expect(api.configuredRenderer, isNull);
   });
 

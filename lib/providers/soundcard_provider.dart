@@ -56,7 +56,8 @@ final rendererSoundcardBoxProvider = FutureProvider.autoDispose
     .family<SoundcardBox?, String>((ref, rendererId) async {
       final own = await ref.watch(serverSoundcardBoxProvider.future);
       if (own != null && own.rendererId == rendererId) return own;
-      final settings = ref.watch(connectionSettingsProvider);
+      ref.watch(connectionSettingsProvider.select((s) => s.address));
+      final settings = ref.read(connectionSettingsProvider);
       if (ref.watch(demoModeProvider) ||
           !settings.isSet ||
           settings.scheme != 'http') {

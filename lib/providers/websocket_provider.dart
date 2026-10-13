@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart'
     show ConnectionStatus, connectionStateProvider, retryEpochProvider;
 import 'ws_connect.dart' show connectWs;
+
 import 'package:logger/logger.dart';
 
 final logger = Logger();
@@ -55,12 +57,16 @@ final webSocketProvider = FutureProvider.family<WebSocketChannel, String>((
   ref,
   path,
 ) async {
-  final settings = ref.watch(connectionSettingsProvider);
+  // A settings reload can refresh the server's display name. Only an address
+  // change should replace healthy sockets (including the renderer's stream).
+  final address = ref.watch(
+    connectionSettingsProvider.select((settings) => settings.address),
+  );
   final connection = ref.read(connectionStateProvider.notifier);
 
-  if (!settings.isSet) {
+  if (address.host.isEmpty || address.port <= 0) {
     // Stay in loading state rather than entering error state.
-    // Riverpod rebuilds this provider when connectionSettingsProvider changes,
+    // Riverpod rebuilds this provider when the connection address changes,
     // so the loading future is abandoned and a fresh connection is attempted.
     await Completer<void>().future; // never completes
     throw StateError('unreachable');
@@ -97,9 +103,9 @@ final webSocketProvider = FutureProvider.family<WebSocketChannel, String>((
   }
 
   final uri = Uri(
-    scheme: settings.wsScheme,
-    host: settings.host,
-    port: settings.port,
+    scheme: address.scheme == 'https' ? 'wss' : 'ws',
+    host: address.host,
+    port: address.port,
     path: path.startsWith('/') ? path.substring(1) : path,
   );
 

@@ -7,6 +7,8 @@ import '../providers/renderer_settings_provider.dart';
 import '../providers/settings_provider.dart' show expertModeProvider;
 import '../theme/app_theme.dart';
 import '../widgets/connection_banner.dart';
+import '../widgets/configuration_appearance.dart';
+import '../widgets/settings_top_bar.dart';
 import '../widgets/expert_field_list.dart';
 import '../widgets/demo_read_only_dialog.dart';
 import '../widgets/expert_mode_toggle.dart';
@@ -75,7 +77,13 @@ class _RendererSettingsScreenState
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildHeader(),
+        const SettingsTopBar(title: 'Output settings'),
+        SettingsToolbar(
+          children: [
+            Text(widget.rendererName, style: KalinkaTextStyles.trayRowLabel),
+            const ExpertModeToggle(),
+          ],
+        ),
         const ConnectionBanner(),
         PendingChangesBanner(
           pendingCount: state.pendingCount,
@@ -96,7 +104,7 @@ class _RendererSettingsScreenState
       // one, and a host that isn't a Scaffold — a bare route — supplies none.
       child: Material(
         color: KalinkaColors.background,
-        child: SafeArea(child: content),
+        child: ConfigurationAppearance(child: SafeArea(child: content)),
       ),
     );
   }
@@ -226,67 +234,6 @@ class _RendererSettingsScreenState
               ),
             ],
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      decoration: kKalinkaTopBarDecoration,
-      child: SizedBox(
-        height: kKalinkaTopBarHeight,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 6, right: 20),
-          child: Row(
-            children: [
-              // Plain, borderless back — the same control settings and Find
-              // Music use. Builder: the panel scope is below this State's
-              // context.
-              Semantics(
-                label: 'Back',
-                button: true,
-                child: Builder(
-                  builder: (context) => GestureDetector(
-                    onTap: () => SlideInPanel.closeOf(context),
-                    behavior: HitTestBehavior.opaque,
-                    child: const SizedBox(
-                      width: 42,
-                      height: 42,
-                      child: Icon(
-                        Icons.arrow_back,
-                        size: 22,
-                        color: KalinkaColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      widget.rendererName,
-                      style: KalinkaTextStyles.cardTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      'OUTPUT SETTINGS',
-                      style: KalinkaTextStyles.sectionHeaderMuted,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Same switch, same place as the server's settings header — one
-              // expert mode across both pages.
-              const ExpertModeToggle(),
-            ],
-          ),
         ),
       ),
     );

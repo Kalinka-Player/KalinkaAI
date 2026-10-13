@@ -25,16 +25,21 @@ class ModuleStatusBadge extends StatelessWidget {
   final String label;
   final Color color;
 
+  /// Quiet text and an icon for a plugin identity, rather than a boxed tag.
+  final bool inline;
+
   const ModuleStatusBadge({
     super.key,
     required this.label,
     required this.color,
+    this.inline = false,
   });
 
   /// The word and colour for [status].
-  ModuleStatusBadge.of(ModuleStatus status, {Key? key})
+  ModuleStatusBadge.of(ModuleStatus status, {Key? key, bool inline = false})
     : this(
         key: key,
+        inline: inline,
         label: switch (status) {
           ModuleStatus.ready => 'READY',
           ModuleStatus.warning => 'WARNING',
@@ -44,28 +49,64 @@ class ModuleStatusBadge extends StatelessWidget {
         color: switch (status) {
           ModuleStatus.ready => KalinkaColors.statusOnline,
           ModuleStatus.warning => KalinkaColors.statusPending,
-          ModuleStatus.error => KalinkaColors.statusOffline,
+          ModuleStatus.error => KalinkaColors.statusError,
           ModuleStatus.disabled => KalinkaColors.textMuted,
         },
       );
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.1),
-      borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: color.withValues(alpha: 0.25)),
-    ),
-    child: Text(
-      label,
-      style: style.copyWith(
-        color: color == KalinkaColors.statusOnline
-            ? KalinkaColors.statusOnlineLight
-            : color,
+  Widget build(BuildContext context) {
+    if (inline) {
+      final textColor = switch (color) {
+        KalinkaColors.statusOnline => KalinkaColors.statusOnlineLight,
+        KalinkaColors.statusPending => KalinkaColors.statusPendingLight,
+        KalinkaColors.textMuted => KalinkaColors.textSecondary,
+        _ => color,
+      };
+      final icon = switch (label) {
+        'READY' => Icons.check_circle_outline,
+        'ERROR' => Icons.error_outline,
+        'WARNING' => Icons.warning_amber_rounded,
+        'DISABLED' => Icons.pause_circle_outline,
+        'INSTALLING' || 'UPDATING' || 'UNINSTALLING' => Icons.sync,
+        _ => Icons.radio_button_unchecked,
+      };
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ExcludeSemantics(child: Icon(icon, size: 16, color: textColor)),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label.isEmpty
+                  ? label
+                  : label[0] + label.substring(1).toLowerCase(),
+              style: KalinkaTextStyles.trayRowSublabel.copyWith(
+                color: textColor,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
-    ),
-  );
+      child: Text(
+        label,
+        style: style.copyWith(
+          color: color == KalinkaColors.statusOnline
+              ? KalinkaColors.statusOnlineLight
+              : color,
+        ),
+      ),
+    );
+  }
 }
 
 /// Rich header row for module/device cards with icon tile, status badge, and chevron.

@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'fitted_title.dart';
 
-/// The head of a page under its breadcrumb: a Playfair title over one line
+/// A display heading for music browsing pages: a Playfair title over one line
 /// that says what the page holds. Type scales gently with width.
+/// Settings use SettingsTopBar and SettingsPageIntro instead.
 class PageBanner extends StatelessWidget {
   final String title;
   final String subtitle;

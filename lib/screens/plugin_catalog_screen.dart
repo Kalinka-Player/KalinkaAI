@@ -20,9 +20,12 @@ import '../widgets/kalinka_button.dart';
 import '../widgets/kalinka_dialog.dart';
 import '../widgets/configuration_appearance.dart';
 import '../widgets/configuration_changes_bar.dart';
+import '../widgets/configuration_page.dart';
+import '../widgets/expert_settings_screen.dart';
+import 'log_export_screen.dart';
 import 'configuration_review_screen.dart';
 import '../widgets/plugin_catalog_entry.dart';
-import '../widgets/plugin_top_bar.dart';
+import '../widgets/settings_top_bar.dart';
 import '../widgets/restart_overlay.dart';
 import '../widgets/restart_confirm_dialog.dart';
 import 'server_configuration_screen.dart';
@@ -60,7 +63,8 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   PluginTab _tab = PluginTab.sources;
   CatalogPlugin? _settingsFor;
   CatalogPlugin? _aboutFor;
-  ServerSettingsGroup? _serverGroup;
+  bool _advancedOpen = false;
+  bool _logsOpen = false;
   bool _restartOverlayOpen = false;
   List<String>? _reviewPaths;
   // The check before the restart is a round trip, and the banner stays up
@@ -253,7 +257,8 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         _settingsFor = null;
         _aboutFor = null;
         _tab = PluginTab.sources;
-        _serverGroup = null;
+        _advancedOpen = false;
+        _logsOpen = false;
         _reviewPaths = null;
       });
       ref.read(pluginFailuresProvider.notifier).clear();
@@ -286,7 +291,8 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                   widget.handlesBack &&
                   _settingsFor == null &&
                   _aboutFor == null &&
-                  _serverGroup == null &&
+                  !_advancedOpen &&
+                  !_logsOpen &&
                   _reviewPaths == null &&
                   !_restartOverlayOpen &&
                   !upgrading,
@@ -315,20 +321,32 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                         _reviewPaths == null &&
                         !_restartOverlayOpen &&
                         !upgrading,
-                    onHome: () => setState(() => _settingsFor = null),
                     onClose: () => setState(() => _aboutFor = null),
                   ),
-                if (_serverGroup case final group?)
-                  ServerConfigurationScreen(
-                    key: ValueKey('server-settings-${group.name}'),
-                    group: group,
-                    onRestart: _onRestart,
+                if (_advancedOpen)
+                  ConfigurationPage(
+                    key: const ValueKey('server-expert'),
+                    title: 'Advanced settings',
+                    description:
+                        'All player settings. Search for the setting you need.',
+                    onClose: () => setState(() => _advancedOpen = false),
                     handlesBack:
                         widget.handlesBack &&
                         _reviewPaths == null &&
                         !_restartOverlayOpen &&
                         !upgrading,
-                    onClose: () => setState(() => _serverGroup = null),
+                    bodyBuilder: (heading) =>
+                        ExpertSettingsScreen(heading: heading),
+                  ),
+                if (_logsOpen)
+                  LogExportScreen(
+                    key: const ValueKey('server-logs'),
+                    onClose: () => setState(() => _logsOpen = false),
+                    handlesBack:
+                        widget.handlesBack &&
+                        _reviewPaths == null &&
+                        !_restartOverlayOpen &&
+                        !upgrading,
                   ),
                 if (_reviewPaths case final paths?)
                   ConfigurationReviewScreen(
@@ -363,11 +381,7 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      PluginTopBar(
-                        trail: const ['Configuration'],
-                        onNavigate: (_) {},
-                        transparent: true,
-                      ),
+                      SettingsTopBar(title: 'Configuration'),
                       ColoredBox(
                         color: KalinkaColors.background,
                         child: Column(
@@ -390,7 +404,7 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                                   case final description?)
                                 SliverToBoxAdapter(child: description),
                               if (_tab == PluginTab.server)
-                                ..._serverSlivers(gutter)
+                                ..._serverSlivers()
                               else if (info.isLoading)
                                 const SliverFillRemaining(
                                   hasScrollBody: false,
@@ -402,7 +416,7 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                                 const SliverFillRemaining(
                                   hasScrollBody: false,
                                   child: _Notice(
-                                    'Plugin catalog preview is off or unavailable on this server. Enable it in Streamer → Maintenance → Advanced settings.',
+                                    'Plugin catalog preview is off or unavailable on this server. Enable it in Streamer → Advanced settings.',
                                   ),
                                 )
                               else
@@ -691,77 +705,16 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     );
   }
 
-  List<Widget> _serverSlivers(double gutter) {
-    final settings = ref.watch(settingsProvider);
-    if (settings.isLoading) {
-      return const [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      ];
-    }
-    if (settings.schema == null) {
-      return [
-        SliverToBoxAdapter(
-          child: _Notice(
-            'Could not load the player settings. Check that your player is connected and try again.',
-            onRetry: () => ref.read(settingsProvider.notifier).loadConfig(),
-          ),
-        ),
-      ];
-    }
-    return [
-      const SliverToBoxAdapter(child: ServerSettingsBody()),
-      _serverNavigation(ServerSettingsGroup.maintenance, gutter),
-      const SliverToBoxAdapter(child: SizedBox(height: 32)),
-    ];
-  }
-
-  Widget _serverNavigation(ServerSettingsGroup group, double gutter) {
-    return SliverPadding(
-      padding: EdgeInsets.fromLTRB(gutter, 16, gutter, 0),
-      sliver: SliverToBoxAdapter(
-        child: InkWell(
-          key: ValueKey('server-group-${group.name}'),
-          onTap: () => setState(() => _serverGroup = group),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: KalinkaColors.borderSubtle),
-              ),
-            ),
-            child: Row(
-              children: [
-                ConfigurationItemIcon(icon: group.icon),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(group.title, style: KalinkaTextStyles.trayRowLabel),
-                      const SizedBox(height: 4),
-                      Text(
-                        group.description,
-                        style: KalinkaTextStyles.trayRowSublabel,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(
-                  Icons.chevron_right,
-                  color: KalinkaColors.textMuted,
-                  size: 20,
-                ),
-              ],
-            ),
-          ),
-        ),
+  List<Widget> _serverSlivers() => [
+    SliverToBoxAdapter(
+      child: ServerSettingsBody(
+        onRestart: _onRestart,
+        onDownloadLogs: () => setState(() => _logsOpen = true),
+        onAdvanced: () => setState(() => _advancedOpen = true),
       ),
-    );
-  }
+    ),
+    const SliverToBoxAdapter(child: SizedBox(height: 32)),
+  ];
 
   /// The two sections stand further apart than the rows within them.
   Widget _heading(

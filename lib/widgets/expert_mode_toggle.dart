@@ -4,16 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import 'settings_controls/settings_toggle.dart';
+import 'settings_top_bar.dart';
 
-/// Compact "EXPERT" label + toggle that sits at the right of a settings header.
+/// Expert view control in the secondary settings toolbar.
 /// Off = the structured page, on = the flat about:config-style list.
 ///
 /// One switch for the whole app: expert is a disposition the user is in, not a
 /// per-page mode, so the server's settings and a renderer's follow each other.
 ///
-/// The label is muted-uppercase to match other meta chrome in the header; the
-/// toggle is scaled slightly down so it sits proportional to the back button
-/// and title rather than dominating the row.
+/// One native button supplies keyboard activation, focus and a 48dp target;
+/// the switch inside is its visual state, not a second interactive control.
 class ExpertModeToggle extends ConsumerWidget {
   const ExpertModeToggle({super.key});
 
@@ -21,34 +21,36 @@ class ExpertModeToggle extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final expert = ref.watch(expertModeProvider);
     final notifier = ref.read(expertModeProvider.notifier);
-    return Semantics(
-      label: 'Expert settings',
-      toggled: expert,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: notifier.toggle,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'EXPERT',
-              style: KalinkaTextStyles.sectionHeaderMuted.copyWith(
-                letterSpacing: 1.0,
-                color: expert
-                    ? KalinkaColors.accent
-                    : KalinkaColors.textSecondary,
-              ),
+    // Merged: the button is its own semantics container, so the label and
+    // toggled state would otherwise sit on a node that cannot be activated.
+    return MergeSemantics(
+      child: Semantics(
+        label: 'Expert settings',
+        toggled: expert,
+        child: TextButton(
+          style: settingsIconButtonStyle,
+          onPressed: notifier.toggle,
+          child: ExcludeSemantics(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'EXPERT',
+                  style: KalinkaTextStyles.sectionHeaderMuted.copyWith(
+                    letterSpacing: 1.0,
+                    color: KalinkaColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                IgnorePointer(
+                  child: SettingsToggle(
+                    value: expert,
+                    onChanged: (_) => notifier.toggle(),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Transform.scale(
-              scale: 0.82,
-              alignment: Alignment.centerRight,
-              child: SettingsToggle(
-                value: expert,
-                onChanged: (_) => notifier.toggle(),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

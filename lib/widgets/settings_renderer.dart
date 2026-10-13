@@ -824,10 +824,14 @@ class SchemaModuleBody extends ConsumerWidget {
   /// Ruled off from a header above it; a page of its own starts unruled.
   final bool underHeader;
 
+  /// Plugin pages put this message beside their status, above the controls.
+  final bool showLiveMessage;
+
   const SchemaModuleBody({
     super.key,
     required this.module,
     this.underHeader = true,
+    this.showLiveMessage = true,
   });
 
   /// Backend prunes EXPERT content out of the simple page tree, so the only
@@ -858,7 +862,7 @@ class SchemaModuleBody extends ConsumerWidget {
     final ModuleInfo? live = liveSnapshot == null
         ? null
         : lookupModule(liveSnapshot, module.id, module.kind);
-    final message = live?.message;
+    final message = showLiveMessage ? live?.message : null;
     final enabledField = module.enabledField;
     final dimmed =
         enabledField != null &&

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart' show Logger;
+
 import '../data_model/collection_entry.dart';
 import '../data_model/presentation_schema.dart';
 import '../utils/json_equality.dart';
@@ -203,15 +204,16 @@ class SettingsNotifier extends Notifier<SettingsState> {
         issues: {},
         isLoading: false,
       );
+      await _refreshServerName(values);
     } catch (e) {
       if (_stale(server)) return;
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
-  /// Reads the suggestions again, and nothing else: what the user has staged
-  /// and what the server said about it stay as they are. A read still out is
-  /// joined rather than raced.
+  /// Reads the suggestions again and refreshes the connection's name. What
+  /// the user has staged and what the server said about it stay as they are.
+  /// A read still out is joined rather than raced.
   Future<void> refreshOptions() => _refreshingOptions ??= _readOptions()
       .whenComplete(() => _refreshingOptions = null);
 
@@ -224,10 +226,27 @@ class SettingsNotifier extends Notifier<SettingsState> {
       if (_stale(server)) return;
       final options = _optionsFromEnvelope(envelope);
       // Unchanged is the usual answer; it should not rebuild the page.
-      if (jsonEquals(options, state.enumOptions)) return;
-      state = state.copyWith(enumOptions: options);
+      if (!jsonEquals(options, state.enumOptions)) {
+        state = state.copyWith(enumOptions: options);
+      }
+      await _refreshServerName(
+        (envelope['values'] as Map? ?? {}).cast<String, dynamic>(),
+      );
     } catch (_) {
       // Suggestions are a convenience; the ones already shown still stand.
+    }
+  }
+
+  Future<void> _refreshServerName(Map<String, dynamic> values) async {
+    // Only the server's confirmed value is authoritative, never a local draft
+    // or a schema default. Older servers may omit the field altogether.
+    final name = values['base_config.server.service_name'];
+    if (name is! String || name.trim().isEmpty) return;
+    try {
+      await ref.read(connectionSettingsProvider.notifier).updateName(name);
+    } catch (e) {
+      // Remembering the label must not make a successful config read fail.
+      _logger.w('Could not remember the server name', error: e);
     }
   }
 

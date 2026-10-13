@@ -63,7 +63,8 @@ final boxControlProvider = FutureProvider<BoxControl?>((ref) async {
   final api = ref.watch(supervisorApiProvider);
   if (api == null || ref.watch(demoModeProvider)) return null;
   final prefs = ref.watch(sharedPrefsProvider);
-  final key = _knownServerKey(ref.watch(connectionSettingsProvider));
+  ref.watch(connectionSettingsProvider.select((s) => s.address));
+  final key = _knownServerKey(ref.read(connectionSettingsProvider));
   final current = await ref.watch(serverIdentityProvider.future);
   final known = current ?? prefs.getString(key);
   if (known == null) return null;
