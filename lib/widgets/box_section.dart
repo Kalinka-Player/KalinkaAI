@@ -8,6 +8,7 @@ import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import 'configuration_appearance.dart';
 import 'box_actions.dart';
+import 'box_power_off_timer.dart';
 import 'settings_controls/settings_action_row.dart';
 import 'settings_controls/settings_card.dart';
 
@@ -79,7 +80,7 @@ class BoxSection extends ConsumerWidget {
                     inPanel: true,
                   ),
                 ),
-              if (control.offers(BoxAction.powerOff))
+              if (control.offers(BoxAction.powerOff)) ...[
                 SettingsActionRow(
                   label: 'Power off streamer',
                   sublabel:
@@ -94,6 +95,8 @@ class BoxSection extends ConsumerWidget {
                     inPanel: true,
                   ),
                 ),
+                const BoxPowerOffTimer(),
+              ],
             ],
           ],
         ),
