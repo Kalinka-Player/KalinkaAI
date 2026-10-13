@@ -260,7 +260,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     await ref.read(oobeResumeProvider.notifier).forget();
     if (!mounted || !restarted) return;
     unawaited(ref.read(rendererListProvider.notifier).refresh());
-    if (run.box.rendererId case final id?) {
+    // A change that settled reloaded these itself; this one stopped waiting.
+    if (run.box.rendererId case final id? when run.notBack) {
       unawaited(ref.read(rendererSettingsProvider(id).notifier).load());
     }
     // The server restarted with what was saved; nothing staged is lost.
