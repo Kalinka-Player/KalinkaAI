@@ -1,11 +1,11 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
-import 'package:kalinka/screens/queue_page.dart';
 import 'package:kalinka/widgets/coach_marks_overlay.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
+import 'package:kalinka/widgets/player_queue_view.dart';
 import 'package:kalinka/widgets/queue_zone.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 
@@ -26,8 +26,12 @@ List<String> _recordSystemCalls() {
   return calls;
 }
 
+final _queueView = find.byType(PlayerQueueView);
+
 void main() {
-  testWidgets('the app opens on Home, the queue a page away', (tester) async {
+  testWidgets('the app opens on Home, the queue in the player', (
+    tester,
+  ) async {
     await pumpHomeShell(tester, queue: SettableQueue(queueOf(4)));
 
     expect(find.byType(SearchSessionView), findsOneWidget);
@@ -42,7 +46,7 @@ void main() {
     expect(find.text('UP NEXT'), findsNothing);
   });
 
-  testWidgets('Up next opens the queue, and back returns to Home', (
+  testWidgets('Up next opens the player on its queue; back closes it', (
     tester,
   ) async {
     final calls = _recordSystemCalls();
@@ -50,27 +54,22 @@ void main() {
 
     await tester.tap(find.text('QUEUE'));
     await tester.pumpAndSettle();
-    expect(find.byType(QueuePage), findsOneWidget);
-    expect(find.text('Your queue'), findsOneWidget);
+    expect(_queueView, findsOneWidget);
     // From the playing track on.
     expect(
-      find.descendant(
-        of: find.byType(QueuePage),
-        matching: find.text('3 tracks · 10 min'),
-      ),
+      find.descendant(of: _queueView, matching: find.text('3 tracks · 10 min')),
       findsOneWidget,
     );
-    // The page's header carries the menu; the list's own stays away.
+    // The view's own row carries the menu; the list's stays away.
     expect(find.byTooltip('Queue options'), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.byType(QueuePage), findsNothing);
-    expect(find.byType(SearchSessionView).hitTestable(), findsOneWidget);
+    expect(find.byType(NowPlayingContent), findsNothing);
     expect(calls, isNot(contains('SystemNavigator.pop')));
   });
 
-  testWidgets('the queue page\'s menu holds the queue actions', (tester) async {
+  testWidgets('the queue\'s menu holds the queue actions', (tester) async {
     await pumpHomeShell(tester, queue: SettableQueue(queueOf(3, index: 1)));
     await tester.tap(find.text('QUEUE'));
     await tester.pumpAndSettle();
@@ -79,6 +78,41 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Clear queue'), findsOneWidget);
     expect(find.text('Clear played'), findsOneWidget);
+  });
+
+  testWidgets('the player switches between the track and its queue', (
+    tester,
+  ) async {
+    await pumpHomeShell(tester, queue: SettableQueue(queueOf(3)));
+
+    await tester.tap(find.byType(MiniPlayer));
+    await tester.pumpAndSettle();
+    expect(find.text('NOW PLAYING'), findsOneWidget);
+    expect(_queueView, findsNothing);
+
+    await tester.tap(find.byTooltip('Queue'));
+    await tester.pumpAndSettle();
+    expect(_queueView, findsOneWidget);
+
+    await tester.tap(find.byTooltip('Queue'));
+    await tester.pumpAndSettle();
+    expect(_queueView, findsNothing);
+    expect(find.text('NOW PLAYING'), findsOneWidget);
+  });
+
+  testWidgets('the mini-player opens on the track, whatever was shown last', (
+    tester,
+  ) async {
+    await pumpHomeShell(tester, queue: SettableQueue(queueOf(3)));
+    await tester.tap(find.text('QUEUE'));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(MiniPlayer));
+    await tester.pumpAndSettle();
+    expect(find.byType(NowPlayingContent), findsOneWidget);
+    expect(_queueView, findsNothing);
   });
 
   testWidgets('back at Home\'s top level leaves the app', (tester) async {
@@ -107,19 +141,6 @@ void main() {
     expect(calls, isNot(contains('SystemNavigator.pop')));
   });
 
-  testWidgets('the Now Playing sheet opens the queue', (tester) async {
-    await pumpHomeShell(tester, queue: SettableQueue(queueOf(3)));
-
-    await tester.tap(find.byType(MiniPlayer));
-    await tester.pumpAndSettle();
-    expect(find.byType(NowPlayingContent), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Queue'));
-    await tester.pumpAndSettle();
-    expect(find.byType(NowPlayingContent), findsNothing);
-    expect(find.byType(QueuePage), findsOneWidget);
-  });
-
   testWidgets('the empty queue leads back to search', (tester) async {
     final container = await pumpHomeShell(
       tester,
@@ -132,12 +153,12 @@ void main() {
 
     await tester.tap(find.text('Find music'));
     await tester.pumpAndSettle();
-    expect(find.byType(QueuePage), findsNothing);
+    expect(find.byType(NowPlayingContent), findsNothing);
     expect(find.text('SMART SEARCH'), findsOneWidget);
     expect(container.read(searchEntryModeProvider), isTrue);
   });
 
-  testWidgets('on a wide window the queue opens beside Now Playing', (
+  testWidgets('on a wide window the queue takes the player panel', (
     tester,
   ) async {
     await pumpHomeShell(
@@ -145,13 +166,16 @@ void main() {
       queue: SettableQueue(queueOf(3)),
       size: const Size(1280, 800),
     );
-    final nowPlaying = tester.getRect(find.byType(NowPlayingContent));
 
-    await tester.tap(find.byTooltip('Queue'));
+    await tester.tap(find.text('QUEUE'));
     await tester.pumpAndSettle();
-    final page = tester.getRect(find.byType(QueuePage));
-    expect(page.left, greaterThan(nowPlaying.right));
-    expect(find.byType(NowPlayingContent).hitTestable(), findsOneWidget);
+    expect(_queueView, findsOneWidget);
+    expect(
+      tester.getRect(_queueView).right,
+      lessThanOrEqualTo(tester.getRect(find.byType(SearchSessionView)).left),
+    );
+    // A panel, not a sheet: Home stays usable beside it.
+    expect(find.byType(SearchSessionView).hitTestable(), findsOneWidget);
   });
 
   testWidgets('the first-run tour starts at the search entry', (tester) async {

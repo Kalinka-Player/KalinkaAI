@@ -33,13 +33,10 @@ import '../widgets/measure_size.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/now_playing_content.dart';
 import '../widgets/playback_error_dialog.dart';
-import '../widgets/queue_actions.dart';
-import '../widgets/queue_management_tray.dart';
 import '../widgets/renderer_switcher.dart' show rendererDisplayName;
 import '../widgets/search/search_session_view.dart';
 import '../widgets/server_sheet.dart';
 import 'onboarding_screen.dart';
-import 'queue_page.dart';
 import 'renderer_settings_screen.dart';
 import 'settings_screen.dart';
 import 'plugin_catalog_screen.dart';
@@ -66,7 +63,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // remounting it (which would reload config and drop staged edits).
   final _settingsKey = GlobalKey();
   final _pluginsKey = GlobalKey();
-  final _queueKey = GlobalKey();
 
   // Drives the mini-player sliding down out of view while the search entry
   // overlay is up (0 = shown, 1 = hidden). The keyboard is held back until
@@ -84,12 +80,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // slide-in). Used to Offstage the occluded content so it isn't painted while
   // hidden — but only after the animation, so the slide-in still shows it.
   bool _settingsCovering = false;
-  // The same for the queue page over Home.
-  bool _queueCovering = false;
   bool _discoveryOpen = false;
-  // Tablet-only: the queue management tray, hosted here (not inside QueueZone)
-  // so its overlay covers the whole panel like the connection sheet.
-  bool _queueTrayOpen = false;
 
   // The wizard connects, which fires `connected` — these keep the
   // connected-listener from stacking a second wizard or racing itself.
@@ -104,8 +95,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   String? _playbackErrorMessage;
   int _playbackErrorShowToken = 0;
 
-  // Live height of the escalation card, when shown, so the queue behind it
-  // can reserve matching bottom space.
+  // Live height of the escalation card, when shown, so toasts clear it.
   double _escalationHeight = 0;
 
   double? _publishedToastInset;
@@ -282,27 +272,19 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         setState(() => _settingsCovering = covering),
   );
 
-  Future<void> _showQueueManagementTray() =>
-      showQueueManagementTray(context, ref);
-
-  /// Tablet: act on the panel-level queue management tray's selection.
-  Future<void> _onTabletTrayAction(TrayAction action) =>
-      runQueueTrayAction(context, ref, action);
-
-  void _openQueue() => ref.read(queuePageProvider.notifier).open();
-
-  void _closeQueue() {
-    ref.read(queuePageProvider.notifier).close();
-    setState(() => _queueCovering = false);
+  /// The player, on the queue: the phone's sheet, or the tablet's panel.
+  void _openQueue() {
+    ref.read(playerViewProvider.notifier).show(PlayerView.queue);
+    if (MediaQuery.sizeOf(context).width < kKalinkaTabletBreakpoint) {
+      _showExpandedPlayer(view: PlayerView.queue);
+    }
   }
 
-  /// The empty queue's way out: back to Home with the search overlay up.
-  void _findMusicFromQueue() {
-    _closeQueue();
-    ref.read(homeSearchRequestProvider.notifier).request();
-  }
+  void _requestHomeSearch() =>
+      ref.read(homeSearchRequestProvider.notifier).request();
 
-  void _showExpandedPlayer() {
+  void _showExpandedPlayer({PlayerView view = PlayerView.nowPlaying}) {
+    ref.read(playerViewProvider.notifier).show(view);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -314,9 +296,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       // resizes smoothly instead of centering with the layout poking out.
       constraints: const BoxConstraints(maxWidth: double.infinity),
       builder: (sheetContext) => _ExpandedPlayerSheet(
-        onOpenQueue: () {
+        // The empty queue's way out: back to Home with search up.
+        onFindMusic: () {
           Navigator.of(sheetContext).pop();
-          _openQueue();
+          _requestHomeSearch();
         },
       ),
     );
@@ -576,19 +559,14 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
   Widget _buildPhoneLayout(BuildContext context) {
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
-    final queueOpen = ref.watch(queuePageProvider);
     final showCoachMarks = _showCoachMarks;
     // Clear the mini-player, and the escalation card when it is up.
     _publishToastInset(kMiniPlayerHeight + _escalationHeight);
 
-    // The queue page, settings, configuration and renderer panels handle
-    // their own layered Back navigation; Home its own at its top level.
+    // Settings, configuration and renderer panels handle their own layered
+    // Back navigation; Home its own at its top level.
     return PopScope(
-      canPop:
-          !queueOpen &&
-          !_settingsOpen &&
-          !_pluginsOpen &&
-          rendererSettings == null,
+      canPop: !_settingsOpen && !_pluginsOpen && rendererSettings == null,
       child: Stack(
         children: [
           Column(
@@ -598,20 +576,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   fit: StackFit.expand,
                   children: [
                     Visibility(
-                      visible: !_settingsCovering && !_queueCovering,
+                      visible: !_settingsCovering,
                       maintainState: true,
                       maintainAnimation: true,
                       maintainSize: true,
                       child: _buildHome(isTablet: false),
                     ),
-                    if (queueOpen)
-                      MediaQuery.removePadding(
-                        context: context,
-                        removeBottom: true,
-                        child: ClipRect(
-                          child: _buildQueuePage(isTablet: false),
-                        ),
-                      ),
                     _buildEscalation(isTablet: false),
                     // Configuration and every nested page share the space
                     // above the mini-player, including its safe-area inset.
@@ -695,7 +665,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     return onboarding.oobeComplete &&
         !onboarding.coachMarksShown &&
         ref.watch(connectionStateProvider) == ConnectionStatus.connected &&
-        !ref.watch(queuePageProvider) &&
         !ref.watch(searchEntryModeProvider) &&
         ref.watch(
           searchSessionProvider.select(
@@ -758,12 +727,11 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         : _showServerSheet;
     // Whatever is open over Home takes the back press instead.
     final covered =
-        ref.watch(queuePageProvider) ||
         _settingsOpen ||
         _pluginsOpen ||
         _discoveryOpen ||
         rendererSettings != null ||
-        (isTablet && (_serverSheetOpen || _queueTrayOpen));
+        (isTablet && _serverSheetOpen);
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 200),
       layoutBuilder: _topmostScreenLayout,
@@ -792,29 +760,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
   }
 
-  Widget _buildQueuePage({required bool isTablet}) {
-    final rendererSettings = ref.watch(rendererSettingsRouteProvider);
-    return QueuePage(
-      key: _queueKey,
-      isTablet: isTablet,
-      handlesBack:
-          !_settingsOpen &&
-          !_pluginsOpen &&
-          !_discoveryOpen &&
-          rendererSettings == null &&
-          !(isTablet && (_serverSheetOpen || _queueTrayOpen)),
-      bottomPadding: _escalationHeight + 16,
-      onOpenMenu: isTablet
-          ? () => setState(() => _queueTrayOpen = true)
-          : _showQueueManagementTray,
-      onFindMusic: _findMusicFromQueue,
-      onClose: _closeQueue,
-      onCoverageChanged: (covering) =>
-          setState(() => _queueCovering = covering),
-    );
-  }
-
-  /// The escalation card, floating over the foot of Home and the queue page.
+  /// The escalation card, floating over the foot of Home.
   Widget _buildEscalation({required bool isTablet}) {
     return Positioned(
       left: 0,
@@ -854,25 +800,18 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
   Widget _buildTabletLayout(BuildContext context) {
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
-    final queueOpen = ref.watch(queuePageProvider);
     _publishToastInset(24 + _escalationHeight);
     return PopScope(
       canPop:
-          !queueOpen &&
           !_settingsOpen &&
           !_pluginsOpen &&
           !_serverSheetOpen &&
-          !_queueTrayOpen &&
           rendererSettings == null,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // Settings, renderer settings, the queue page and Home own their
-        // back via internal PopScopes.
+        // Settings, renderer settings and Home own their back via internal
+        // PopScopes.
         if (_settingsOpen || _pluginsOpen || rendererSettings != null) return;
-        if (_queueTrayOpen) {
-          setState(() => _queueTrayOpen = false);
-          return;
-        }
         if (_serverSheetOpen) {
           setState(() => _serverSheetOpen = false);
           return;
@@ -902,7 +841,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                             child: NowPlayingContent(
                               isTablet: true,
                               outputSwitcherKey: _outputSwitcherKey,
-                              onOpenQueue: _openQueue,
+                              onFindMusic: _requestHomeSearch,
                             ),
                           ),
                           // Sheets opened here are anchored to this panel,
@@ -926,30 +865,21 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               ),
               // Divider
               Container(width: 1, color: KalinkaColors.borderSubtle),
-              // Right panel — Home, with the queue page and the management
-              // panels opening over it. SizedBox.expand() gives RepaintBoundary
-              // tight constraints so its layout invalidations don't cross into
-              // the left panel.
+              // Right panel — Home, with the management panels opening over
+              // it. SizedBox.expand() gives RepaintBoundary tight constraints
+              // so its layout invalidations don't cross into the left panel.
               Expanded(
                 child: SizedBox.expand(
                   child: RepaintBoundary(
                     child: Stack(
                       children: [
                         Visibility(
-                          visible: !_settingsCovering && !_queueCovering,
+                          visible: !_settingsCovering,
                           maintainState: true,
                           maintainAnimation: true,
                           maintainSize: true,
                           child: _buildHome(isTablet: true),
                         ),
-                        if (queueOpen)
-                          Positioned.fill(
-                            child: SheetAnchor(
-                              child: ClipRect(
-                                child: _buildQueuePage(isTablet: true),
-                              ),
-                            ),
-                          ),
                         _buildEscalation(isTablet: true),
                         if (_serverSheetOpen)
                           Positioned.fill(
@@ -961,15 +891,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                               onOpenSettings: _openSettings,
                               onOpenPlugins: _openPlugins,
                               onPowerOff: _powerOffServer,
-                            ),
-                          ),
-                        // Queue management tray — same panel-level overlay.
-                        if (_queueTrayOpen)
-                          Positioned.fill(
-                            child: TabletQueueManagementTray(
-                              onClose: () =>
-                                  setState(() => _queueTrayOpen = false),
-                              onAction: _onTabletTrayAction,
                             ),
                           ),
                         // Management overlays share the right-hand bounds,
@@ -1031,9 +952,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 /// player instead lives permanently in the left panel — otherwise the sheet
 /// would float on top of the tablet layout.
 class _ExpandedPlayerSheet extends StatefulWidget {
-  final VoidCallback onOpenQueue;
+  final VoidCallback onFindMusic;
 
-  const _ExpandedPlayerSheet({required this.onOpenQueue});
+  const _ExpandedPlayerSheet({required this.onFindMusic});
 
   @override
   State<_ExpandedPlayerSheet> createState() => _ExpandedPlayerSheetState();
@@ -1060,7 +981,7 @@ class _ExpandedPlayerSheetState extends State<_ExpandedPlayerSheet> {
       child: NowPlayingContent(
         showOverlayHeader: true,
         onClose: () => Navigator.of(context).pop(),
-        onOpenQueue: widget.onOpenQueue,
+        onFindMusic: widget.onFindMusic,
       ),
     );
   }

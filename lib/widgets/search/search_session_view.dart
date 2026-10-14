@@ -68,7 +68,8 @@ class SearchSessionView extends ConsumerStatefulWidget {
   /// Opens the server sheet — the connection chip's tap target.
   final VoidCallback? onServerTap;
 
-  /// Opens the queue page from the Up next card; no card without it.
+  /// Opens the player on its queue from the Up next card; no card without
+  /// it.
   final VoidCallback? onOpenQueue;
 
   /// The resting search entry, for the first-run tour to point at.

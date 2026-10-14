@@ -15,7 +15,7 @@ import '../shelf_heading.dart';
 const _kPeekRows = 3;
 
 /// Home's view of the queue: what plays now and what follows, each opening
-/// the queue page. Absent while the queue is empty.
+/// the player on its queue. Absent while the queue is empty.
 class UpNextCard extends ConsumerWidget {
   final VoidCallback onOpenQueue;
 

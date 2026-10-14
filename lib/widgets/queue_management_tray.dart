@@ -11,9 +11,8 @@ import 'tap_highlight.dart';
 /// Actions that can be returned from the queue management tray.
 enum TrayAction { saveToCollection, clearPlayed, clearAll }
 
-/// Content body for the queue management tray — used directly by
-/// [showKalinkaBottomSheet] on phone, and by [TabletQueueManagementTray]
-/// on tablet.
+/// Content body for the queue management tray, shown with
+/// [showKalinkaBottomSheet].
 class QueueManagementTrayContent extends ConsumerWidget {
   final ValueChanged<TrayAction>? onAction;
 
@@ -169,141 +168,6 @@ class QueueManagementTrayContent extends ConsumerWidget {
               shape: BoxShape.circle,
               color: value ? Colors.white : KalinkaColors.textSecondary,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Tablet-only queue tray with panel-local scrim and slide animation.
-///
-/// On phone, use [showKalinkaBottomSheet] with [QueueManagementTrayContent]
-/// instead.
-class TabletQueueManagementTray extends StatefulWidget {
-  final VoidCallback onClose;
-  final ValueChanged<TrayAction> onAction;
-
-  const TabletQueueManagementTray({
-    super.key,
-    required this.onClose,
-    required this.onAction,
-  });
-
-  @override
-  State<TabletQueueManagementTray> createState() =>
-      _TabletQueueManagementTrayState();
-}
-
-class _TabletQueueManagementTrayState extends State<TabletQueueManagementTray>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<Offset> _slide;
-  late final Animation<double> _fade;
-  bool _closing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 320),
-    );
-    _slide = Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(
-      CurvedAnimation(parent: _controller, curve: const Cubic(0.4, 0, 0.2, 1)),
-    );
-    _fade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.0, 0.75, curve: Curves.easeOut),
-      ),
-    );
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _animateClose() async {
-    if (_closing) return;
-    _closing = true;
-    await _controller.reverse();
-    widget.onClose();
-  }
-
-  Future<void> _handleAction(TrayAction action) async {
-    if (_closing) return;
-    await _animateClose();
-    widget.onAction(action);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fade,
-      child: GestureDetector(
-        onTap: _animateClose,
-        child: Container(
-          color: Colors.black.withValues(alpha: 0.60),
-          child: Column(
-            children: [
-              const Spacer(),
-              SlideTransition(
-                position: _slide,
-                child: GestureDetector(
-                  onTap: () {},
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: KalinkaColors.surfaceRaised,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(24),
-                      ),
-                      border: const Border(
-                        top: BorderSide(color: KalinkaColors.borderDefault),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.7),
-                          blurRadius: 60,
-                          offset: const Offset(0, -20),
-                        ),
-                      ],
-                    ),
-                    child: SafeArea(
-                      top: false,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Center(
-                              child: Container(
-                                width: 36,
-                                height: 4,
-                                margin: const EdgeInsets.only(top: 12),
-                                decoration: BoxDecoration(
-                                  color: KalinkaColors.surfaceOverlay,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                            ),
-                            QueueManagementTrayContent(
-                              onAction: (action) {
-                                _handleAction(action);
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ),

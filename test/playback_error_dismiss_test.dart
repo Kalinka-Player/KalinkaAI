@@ -177,7 +177,7 @@ void main() {
     final queue = await _pumpScreen(tester);
     ProviderScope.containerOf(
       tester.element(find.byType(MusicPlayerScreen)),
-    ).read(queuePageProvider.notifier).open();
+    ).read(playerViewProvider.notifier).show(PlayerView.queue);
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.error_outline), findsNothing);
 
