@@ -121,7 +121,7 @@ void main() {
     await tester.pumpAndSettle();
     ProviderScope.containerOf(
       tester.element(find.byType(MusicPlayerScreen)),
-    ).read(queuePageProvider.notifier).open();
+    ).read(playerViewProvider.notifier).show(PlayerView.queue);
     await tester.pumpAndSettle();
 
     // Open the queue management tray.

@@ -8,8 +8,8 @@ import 'kalinka_dialog.dart';
 /// Confirmation dialog for clearing the entire queue.
 ///
 /// Returns `true` if the user confirmed and the clear succeeded,
-/// `false` or `null` if cancelled. Shows on the queue side of the tablet
-/// layout. Show via [showKalinkaDialog].
+/// `false` or `null` if cancelled. Shows over the player panel of the tablet
+/// layout, where the queue lives. Show via [showKalinkaDialog].
 class ClearAllConfirmDialog extends ConsumerWidget {
   final Future<void> Function() onConfirmClearAll;
 
@@ -18,7 +18,7 @@ class ClearAllConfirmDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return KalinkaDialog(
-      side: KalinkaDialogSide.right,
+      side: KalinkaDialogSide.left,
       icon: Icons.delete_outline,
       iconColor: KalinkaColors.actionDelete,
       title: 'Clear entire queue?',

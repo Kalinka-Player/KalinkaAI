@@ -1,18 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Whether the queue page is open over Home. Anything can open it — Home's
-/// Up next card, the Now Playing sheet — and the main screen hosts it.
-class QueuePageNotifier extends Notifier<bool> {
+/// What the player shows: the playing track, or the queue around it.
+enum PlayerView { nowPlaying, queue }
+
+class PlayerViewNotifier extends Notifier<PlayerView> {
   @override
-  bool build() => false;
+  PlayerView build() => PlayerView.nowPlaying;
 
-  void open() => state = true;
+  void show(PlayerView view) => state = view;
 
-  void close() => state = false;
+  void toggle() => state = state == PlayerView.queue
+      ? PlayerView.nowPlaying
+      : PlayerView.queue;
 }
 
-final queuePageProvider = NotifierProvider<QueuePageNotifier, bool>(
-  QueuePageNotifier.new,
+final playerViewProvider = NotifierProvider<PlayerViewNotifier, PlayerView>(
+  PlayerViewNotifier.new,
 );
 
 /// Ticks when something outside Home asks it to lift its search overlay, such

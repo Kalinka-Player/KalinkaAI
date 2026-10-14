@@ -5,6 +5,7 @@ import '../data_model/kalinka_ws_api.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/kalinka_ws_api_provider.dart';
 import '../providers/now_playing_provider.dart';
+import '../providers/shell_nav_provider.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
@@ -15,6 +16,7 @@ import 'kalinka_dialog.dart';
 import 'kiosk/kiosk_enter_button.dart';
 import 'play_pause_glyph.dart';
 import 'playback_progress_slider.dart';
+import 'player_queue_view.dart';
 import 'renderer_switcher.dart';
 import 'transport_button.dart';
 import 'procedural_album_art.dart';
@@ -38,8 +40,8 @@ class NowPlayingContent extends ConsumerStatefulWidget {
   /// layout, where this header carries the only switcher on screen.
   final Key? outputSwitcherKey;
 
-  /// Opens the queue page; the header shows no queue button without it.
-  final VoidCallback? onOpenQueue;
+  /// Offered by the queue view while the queue is empty.
+  final VoidCallback? onFindMusic;
 
   const NowPlayingContent({
     super.key,
@@ -47,7 +49,7 @@ class NowPlayingContent extends ConsumerStatefulWidget {
     this.showOverlayHeader = false,
     this.onClose,
     this.outputSwitcherKey,
-    this.onOpenQueue,
+    this.onFindMusic,
   });
 
   @override
@@ -111,13 +113,41 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     })();
     final sourceInfo = currentSource != null ? sourceMap[currentSource] : null;
 
+    // The embedded player has no header to switch from, so no queue view.
+    final showingQueue =
+        (widget.showOverlayHeader || widget.isTablet) &&
+        ref.watch(playerViewProvider) == PlayerView.queue;
+    if (showingQueue) {
+      return Container(
+        color: KalinkaColors.background,
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(showingQueue: true),
+              Expanded(
+                child: PlayerQueueView(
+                  onFindMusic: widget.onFindMusic,
+                  isTablet: widget.isTablet,
+                ),
+              ),
+              // The queue is no reason to lose the transport.
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: _TransportControls(),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Container(
       color: KalinkaColors.background,
       child: SafeArea(
         child: Column(
           children: [
             // Header
-            _buildHeader(),
+            _buildHeader(showingQueue: false),
             // Content — fills remaining space with controls pinned to bottom
             _buildBodyContent(
               currentTrack: currentTrack,
@@ -283,21 +313,33 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     );
   }
 
-  Widget? _queueButton() {
-    final onOpenQueue = widget.onOpenQueue;
-    if (onOpenQueue == null) return null;
-    return IconButton(
-      tooltip: 'Queue',
-      onPressed: onOpenQueue,
-      icon: const Icon(
-        Icons.queue_music_rounded,
-        size: 22,
-        color: KalinkaColors.textSecondary,
+  /// Switches the player between the playing track and the queue.
+  Widget _queueToggle({required bool showingQueue}) {
+    return Semantics(
+      label: 'Queue',
+      button: true,
+      toggled: showingQueue,
+      child: Tooltip(
+        message: 'Queue',
+        excludeFromSemantics: true,
+        child: TransportButton(
+          hitDiameter: 36,
+          background: showingQueue ? KalinkaColors.surfaceInput : null,
+          onTap: () => ref.read(playerViewProvider.notifier).toggle(),
+          child: Icon(
+            Icons.queue_music_rounded,
+            size: 22,
+            color: showingQueue
+                ? KalinkaColors.textPrimary
+                : KalinkaColors.textSecondary,
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader({required bool showingQueue}) {
+    final label = showingQueue ? 'QUEUE' : 'NOW PLAYING';
     if (widget.showOverlayHeader) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -315,25 +357,33 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
               ),
             ),
             const SizedBox(height: 12),
-            // Minimise on the left, output switch on the right, NOW PLAYING
-            // centred. A Stack, not a spaceBetween Row: the switcher hides
-            // itself until a renderer list is read (and always on servers
-            // without /renderer/*), and the label must stay centred either
-            // way. The switcher stays icon-only here — a phone header hasn't
-            // the width the tablet's name enjoys.
+            // Minimise and the display on the left, output switch and the
+            // queue on the right, the label centred. A Stack, not a
+            // spaceBetween Row: the switcher hides itself until a renderer
+            // list is read (and always on servers without /renderer/*), and
+            // the label must stay centred either way. The switcher stays
+            // icon-only here — a phone header hasn't the width the tablet's
+            // name enjoys.
             Stack(
               alignment: Alignment.center,
               children: [
-                Text('NOW PLAYING', style: KalinkaTextStyles.nowPlayingLabel),
+                Text(label, style: KalinkaTextStyles.nowPlayingLabel),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: GestureDetector(
-                    onTap: widget.onClose,
-                    child: const Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 28,
-                      color: KalinkaColors.textSecondary,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: widget.onClose,
+                        child: const Icon(
+                          Icons.keyboard_arrow_down,
+                          size: 28,
+                          color: KalinkaColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const KioskEnterButton(),
+                    ],
                   ),
                 ),
                 Align(
@@ -341,12 +391,11 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      ?_queueButton(),
-                      const KioskEnterButton(),
                       const RendererSwitcherButton(
                         hitDiameter: 36,
                         iconSize: 20,
                       ),
+                      _queueToggle(showingQueue: showingQueue),
                     ],
                   ),
                 ),
@@ -364,14 +413,11 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                'NOW PLAYING',
-                style: KalinkaTextStyles.nowPlayingLabel,
-              ),
+              child: Text(label, style: KalinkaTextStyles.nowPlayingLabel),
             ),
-            ?_queueButton(),
             const KioskEnterButton(),
             RendererSwitcherDropdown(key: widget.outputSwitcherKey),
+            _queueToggle(showingQueue: showingQueue),
           ],
         ),
       );
