@@ -35,7 +35,8 @@ class RecentlyAddedSection extends ConsumerWidget {
               id: item.id,
               title: item.name ?? '',
               sourceName: shelf.plan.sourceName,
-              description: item.subname,
+              // An album's page names its artist under the title.
+              description: item.album?.artist?.name ?? item.subname,
               artPath: item.image?.large ?? item.image?.small,
               sections: item.sections ?? const [],
               canAdd: item.canAdd,

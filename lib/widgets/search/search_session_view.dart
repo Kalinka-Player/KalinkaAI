@@ -540,9 +540,11 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                 child: IgnorePointer(
                   child: CatalogArtBackdrop(
                     artPath: session.shownListing.artPath!,
-                    // Only a folder's art is a cover; the page's own is
-                    // card art like any catalog's.
-                    fromCover: session.folderPath.isNotEmpty,
+                    // A folder's or an album's art is a cover; any other
+                    // page's is card art like any catalog's.
+                    fromCover:
+                        session.folderPath.isNotEmpty ||
+                        session.shownListing.isAlbum,
                   ),
                 ),
               ),
