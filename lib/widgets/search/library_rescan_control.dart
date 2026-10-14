@@ -32,48 +32,98 @@ class _LibraryRescanControlState extends ConsumerState<LibraryRescanControl>
         ? 'Checking folders…'
         : 'Rescan library';
     final last = scan!.lastScanAt;
+    final details = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Tooltip(
+          message: last == null
+              ? 'No completed check yet'
+              : last.toLocal().toString(),
+          child: Text(
+            _lastChecked(last),
+            style: KalinkaTextStyles.trackRowSubtitle,
+          ),
+        ),
+        if (status.caption case final caption?)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(caption, style: KalinkaTextStyles.trackRowSubtitle),
+          ),
+      ],
+    );
+    final action = TextButton.icon(
+      onPressed: scan.indexerAvailable && !status.scanBusy
+          ? () => ref.read(indexerStatusProvider.notifier).rescan()
+          : null,
+      style:
+          TextButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            foregroundColor: KalinkaColors.textPrimary,
+            disabledForegroundColor: KalinkaColors.textMuted,
+            backgroundColor: Colors.transparent,
+            textStyle: KalinkaFonts.sans(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ).copyWith(
+            side: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.focused)
+                  ? const BorderSide(color: KalinkaColors.textPrimary, width: 2)
+                  : BorderSide.none,
+            ),
+            overlayColor: WidgetStateProperty.resolveWith(
+              (states) =>
+                  states.any(
+                    {
+                      WidgetState.hovered,
+                      WidgetState.pressed,
+                      WidgetState.focused,
+                    }.contains,
+                  )
+                  ? KalinkaColors.surfaceOverlay
+                  : null,
+            ),
+          ),
+      icon: const ExcludeSemantics(child: Icon(Icons.refresh, size: 18)),
+      label: Text(label),
+    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              OutlinedButton.icon(
-                onPressed: scan.indexerAvailable && !status.scanBusy
-                    ? () => ref.read(indexerStatusProvider.notifier).rescan()
-                    : null,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(48, 48),
-                  foregroundColor: KalinkaColors.textPrimary,
-                  backgroundColor: KalinkaColors.surfaceElevated,
-                  side: const BorderSide(color: KalinkaColors.borderDefault),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                icon: const Icon(Icons.refresh, size: 18),
-                label: Text(label),
-              ),
-              Tooltip(
-                message: last == null
-                    ? 'No completed check yet'
-                    : last.toLocal().toString(),
-                child: Text(
-                  _lastChecked(last),
-                  style: KalinkaTextStyles.trackRowSubtitle,
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+              if (constraints.maxWidth < 320 * textScale) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    details,
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: action,
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: details),
+                  const SizedBox(width: 12),
+                  action,
+                ],
+              );
+            },
           ),
-          if (status.caption case final caption?)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(caption, style: KalinkaTextStyles.trackRowSubtitle),
-            ),
           if (!scan.indexerAvailable || status.requestError != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
