@@ -649,32 +649,34 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
               child: ColoredBox(color: KalinkaColors.borderDefault),
             ),
           ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: LayoutBuilder(
-              builder: (context, constraints) => Row(
+          // Each tab as wide as its label, an even gap apart, from the
+          // content's inset. Short of room, all three truncate alike: the
+          // labels are monospace, so their shares follow their lengths.
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: gutter),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: 24,
                 children: [
-                  for (final (i, option) in [
+                  for (final (option, label) in [
                     (PluginTab.sources, 'Music sources'),
                     (PluginTab.devices, 'HiFi control'),
                     (PluginTab.server, 'Streamer'),
-                  ].indexed) ...[
-                    if (i > 0)
-                      SizedBox(width: constraints.maxWidth < 480 ? 16 : 32),
-                    Expanded(
-                      // The labels use a monospace font.
-                      flex: option.$2.length,
+                  ])
+                    Flexible(
+                      flex: label.length,
                       child: _PluginTabButton(
-                        key: ValueKey('catalog-tab-${option.$1.name}'),
-                        label: option.$2,
-                        selected: tab == option.$1,
+                        key: ValueKey('catalog-tab-${option.name}'),
+                        label: label,
+                        selected: tab == option,
                         onTap: () {
-                          setState(() => _tab = option.$1);
+                          setState(() => _tab = option);
                           _scroll.jumpTo(0);
                         },
                       ),
                     ),
-                  ],
                 ],
               ),
             ),
@@ -794,8 +796,9 @@ class _PluginTabButton extends StatelessWidget {
                   ),
                 ),
               ),
+              // As wide as the label, so the underline is too.
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Flexible(
                     child: Text(

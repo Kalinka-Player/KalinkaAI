@@ -1525,11 +1525,13 @@ void main() {
     final sources = tester.getRect(
       find.byKey(const ValueKey('catalog-tab-sources')),
     );
-    expect(sources.left, closeTo(tabs.left, 0.1));
-    expect(
-      tester.getRect(find.byKey(const ValueKey('catalog-tab-server'))).right,
-      closeTo(tabs.right, 0.1),
+    // From the content's inset, an even gap apart.
+    final server = tester.getRect(
+      find.byKey(const ValueKey('catalog-tab-server')),
     );
+    expect(sources.left, closeTo(tabs.left + 20, 0.1));
+    expect(server.left - hifi.right, closeTo(hifi.left - sources.right, 0.1));
+    expect(server.right, lessThanOrEqualTo(tabs.right - 20 + 0.1));
     expect(hifi.width / 12, closeTo(sources.width / 13, 0.1));
     expect(
       tester.getRect(find.byKey(const ValueKey('catalog-tab-sources'))).bottom,
@@ -1973,8 +1975,10 @@ void main() {
         final sources = tester.getRect(
           find.byKey(const ValueKey('catalog-tab-sources')),
         );
-        expect(sources.left, closeTo(resting.left, 0.1));
-        expect(streamer.right, closeTo(resting.right, 0.1));
+        // The content's inset: wider from the tablet breakpoint.
+        final inset = appWidth < 900 ? 20.0 : 25.0;
+        expect(sources.left, closeTo(resting.left + inset, 0.1));
+        expect(streamer.right, lessThanOrEqualTo(resting.right - inset + 0.1));
         expect(sources.right, lessThan(hifi.left));
         expect(hifi.right, lessThan(streamer.left));
         expect(hifi.width / 12, closeTo(streamer.width / 8, 0.1));
