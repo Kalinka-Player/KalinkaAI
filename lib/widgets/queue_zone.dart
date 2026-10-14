@@ -294,6 +294,10 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
   }
 
   Widget _buildMenuButton() {
+    return Tooltip(message: 'Queue options', child: _menuButtonFace());
+  }
+
+  Widget _menuButtonFace() {
     return Material(
       color: KalinkaColors.surfaceInput,
       shape: RoundedRectangleBorder(

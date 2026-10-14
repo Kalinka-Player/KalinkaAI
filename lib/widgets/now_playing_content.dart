@@ -132,8 +132,8 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
               ),
               // The queue is no reason to lose the transport.
               const Padding(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: _TransportControls(),
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: _TransportControls(compact: true),
               ),
             ],
           ),
@@ -363,7 +363,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
             // list is read (and always on servers without /renderer/*), and
             // the label must stay centred either way. The switcher stays
             // icon-only here — a phone header hasn't the width the tablet's
-            // name enjoys.
+            // name enjoys. The queue keeps only the way out and the way back.
             Stack(
               alignment: Alignment.center,
               children: [
@@ -381,8 +381,10 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                           color: KalinkaColors.textSecondary,
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      const KioskEnterButton(),
+                      if (!showingQueue) ...[
+                        const SizedBox(width: 4),
+                        const KioskEnterButton(),
+                      ],
                     ],
                   ),
                 ),
@@ -391,10 +393,11 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const RendererSwitcherButton(
-                        hitDiameter: 36,
-                        iconSize: 20,
-                      ),
+                      if (!showingQueue)
+                        const RendererSwitcherButton(
+                          hitDiameter: 36,
+                          iconSize: 20,
+                        ),
                       _queueToggle(showingQueue: showingQueue),
                     ],
                   ),
@@ -523,7 +526,11 @@ class _ExclusivePlaybackNote extends ConsumerWidget {
 /// Extracted so only this widget rebuilds on playerState / playbackMode changes,
 /// leaving the rest of NowPlayingContent (album art, metadata) untouched.
 class _TransportControls extends ConsumerWidget {
-  const _TransportControls();
+  /// Previous, play/pause and next only, smaller: under the queue, whose
+  /// menu has shuffle and repeat.
+  final bool compact;
+
+  const _TransportControls({this.compact = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -545,12 +552,18 @@ class _TransportControls extends ConsumerWidget {
     final playPauseDisabled = transport.playPauseDisabled;
     final canPrev = transport.canPrev;
     final canNext = transport.canNext;
+    final skipHit = compact ? 44.0 : 52.0;
+    final skipIcon = compact ? 30.0 : 36.0;
+    final modes = !exclusive && !compact;
 
     return RepaintBoundary(
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        mainAxisAlignment: compact
+            ? MainAxisAlignment.center
+            : MainAxisAlignment.spaceEvenly,
+        spacing: compact ? 28 : 0,
         children: [
-          if (!exclusive)
+          if (modes)
             TransportButton(
               hitDiameter: 44,
               onTap: () {
@@ -573,13 +586,13 @@ class _TransportControls extends ConsumerWidget {
           Opacity(
             opacity: canPrev ? 1.0 : 0.4,
             child: TransportButton(
-              hitDiameter: 52,
+              hitDiameter: skipHit,
               onTap: canPrev
                   ? () => api.sendQueueCommand(const QueueCommand.prev())
                   : null,
-              child: const Icon(
+              child: Icon(
                 Icons.skip_previous_rounded,
-                size: 36,
+                size: skipIcon,
                 color: KalinkaColors.textPrimary,
               ),
             ),
@@ -587,7 +600,7 @@ class _TransportControls extends ConsumerWidget {
           Opacity(
             opacity: hasTrack ? 1.0 : 0.4,
             child: TransportButton(
-              hitDiameter: 68,
+              hitDiameter: compact ? 52 : 68,
               background: Colors.white,
               // Ripple has to read against the white face of the play/pause
               // disc, so use a dark tint instead of the default white-on-dark.
@@ -602,27 +615,27 @@ class _TransportControls extends ConsumerWidget {
                     ),
               child: PlayPauseGlyph(
                 playerState: playerState,
-                iconSize: 38,
-                spinnerSize: 30,
-                spinnerStrokeWidth: 3,
+                iconSize: compact ? 28 : 38,
+                spinnerSize: compact ? 22 : 30,
+                spinnerStrokeWidth: compact ? 2.5 : 3,
               ),
             ),
           ),
           Opacity(
             opacity: canNext ? 1.0 : 0.4,
             child: TransportButton(
-              hitDiameter: 52,
+              hitDiameter: skipHit,
               onTap: canNext
                   ? () => api.sendQueueCommand(const QueueCommand.next())
                   : null,
-              child: const Icon(
+              child: Icon(
                 Icons.skip_next_rounded,
-                size: 36,
+                size: skipIcon,
                 color: KalinkaColors.textPrimary,
               ),
             ),
           ),
-          if (!exclusive)
+          if (modes)
             TransportButton(
               hitDiameter: 44,
               onTap: () {

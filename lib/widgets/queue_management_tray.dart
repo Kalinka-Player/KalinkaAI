@@ -69,9 +69,15 @@ class QueueManagementTrayContent extends ConsumerWidget {
           trailing: _buildToggleSwitch(
             value: isShuffle,
             activeColor: KalinkaColors.accent,
-            onTap: () {
-              // Shuffle not yet wired to API
-            },
+            onTap: () => ref
+                .read(kalinkaWsApiProvider)
+                .sendQueueCommand(
+                  QueueCommand.setPlaybackMode(
+                    shuffle: !isShuffle,
+                    repeatAll: isRepeatAll,
+                    repeatSingle: isRepeatOne,
+                  ),
+                ),
           ),
         ),
         const SheetDivider(),

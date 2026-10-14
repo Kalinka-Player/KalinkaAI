@@ -2,6 +2,7 @@ import 'dart:async' show Completer;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/playqueue_events.dart';
@@ -103,13 +104,14 @@ PlayQueueState queueOf(int count, {int index = 0}) => PlayQueueState(
 );
 
 /// The main screen, connected, with the queue as [queue] and Home's sections
-/// quiet. The window is [size].
+/// quiet. The window is [size]; [overrides] go after the harness's own.
 Future<ProviderContainer> pumpHomeShell(
   WidgetTester tester, {
   required SettableQueue queue,
   HomeApi? api,
   Size size = const Size(400, 800),
   bool coachMarksShown = true,
+  List<Override> overrides = const [],
 }) async {
   SharedPreferences.setMockInitialValues({
     'Kalinka.host': 'localhost',
@@ -143,6 +145,7 @@ Future<ProviderContainer> pumpHomeShell(
         (ref, path) => Completer<WebSocketChannel>().future,
       ),
       urlResolverProvider.overrideWithValue(UrlResolver('')),
+      ...overrides,
     ],
   );
   addTearDown(container.dispose);
