@@ -456,15 +456,16 @@ class _PlayCircleButtonState extends State<_PlayCircleButton> {
                 duration: const Duration(milliseconds: 120),
                 width: 32,
                 height: 32,
+                // Grey: a shortcut on a row, not the screen's one decision.
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: hot
-                      ? KalinkaColors.accentBorder
-                      : KalinkaColors.accentSubtle,
+                      ? KalinkaColors.surfaceOverlay
+                      : KalinkaColors.surfaceElevated,
                   border: Border.all(
                     color: hot
-                        ? KalinkaColors.accent
-                        : KalinkaColors.accentBorder,
+                        ? KalinkaColors.textMuted
+                        : KalinkaColors.borderDefault,
                   ),
                 ),
                 child: Icon(
@@ -472,7 +473,7 @@ class _PlayCircleButtonState extends State<_PlayCircleButton> {
                       ? Icons.hourglass_empty_rounded
                       : Icons.play_arrow_rounded,
                   size: 18,
-                  color: KalinkaColors.accentTint,
+                  color: KalinkaColors.textPrimary,
                 ),
               ),
             ),

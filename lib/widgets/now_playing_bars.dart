@@ -66,7 +66,7 @@ class _NowPlayingBarsState extends ConsumerState<NowPlayingBars> {
           painter: NowPlayingBarsPainter(
             step: _step,
             moving: moving,
-            color: KalinkaColors.accentTint,
+            color: KalinkaColors.textSecondary,
           ),
         ),
       ),
