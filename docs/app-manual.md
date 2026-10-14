@@ -71,7 +71,13 @@ it later. From the server sheet tap **Server settings**:
    for where the folder should live and the permissions it needs).
 
 The indexer picks the folder up automatically (every 15 minutes, plus a
-file watcher for instant changes). While you're in settings, the
+file watcher for instant changes). To check sooner, open **My Library** or
+**Recently added** and tap **Rescan library**. The page shows when the last
+check finished and updates when the new check completes. Files that are still
+being copied wait until they stop changing. This action requires a server
+and localfiles plugin that support manual scans.
+
+While you're in settings, the
 **General** tab has the other first-run essentials: the service name shown
 in discovery, the ALSA **audio output** device, and **device automation**
 (auto power on/off). The **EXPERT** toggle at the top reveals the advanced

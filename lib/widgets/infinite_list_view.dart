@@ -180,7 +180,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
       return;
     }
     final gen = ++_generation;
-    final loaded = _items.length;
+    final loaded = _items.isEmpty ? 1 : _items.length;
     final fresh = <T>[];
     var total = _total;
     var short = false;

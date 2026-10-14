@@ -1718,6 +1718,11 @@ class StageStatus {
   final int inProgress;
   final int failed;
   final double coveragePct;
+  final bool rescanSupported;
+  final bool indexerAvailable;
+  final bool scanPending;
+  final bool scanning;
+  final DateTime? lastScanAt;
 
   const StageStatus({
     required this.total,
@@ -1726,6 +1731,11 @@ class StageStatus {
     required this.inProgress,
     required this.failed,
     required this.coveragePct,
+    this.rescanSupported = false,
+    this.indexerAvailable = false,
+    this.scanPending = false,
+    this.scanning = false,
+    this.lastScanAt,
   });
 
   factory StageStatus.fromJson(Map<String, dynamic> json) => StageStatus(
@@ -1735,6 +1745,16 @@ class StageStatus {
     inProgress: (json['in_progress'] ?? 0) as int,
     failed: (json['failed'] ?? 0) as int,
     coveragePct: ((json['coverage_pct'] ?? 0) as num).toDouble(),
+    rescanSupported: json['rescan_supported'] == true,
+    indexerAvailable: json['available'] == true,
+    scanPending: json['scan_pending'] == true,
+    scanning: json['scanning'] == true,
+    lastScanAt: json['last_scan_at'] is num
+        ? DateTime.fromMillisecondsSinceEpoch(
+            ((json['last_scan_at'] as num) * 1000).round(),
+            isUtc: true,
+          )
+        : null,
   );
 }
 

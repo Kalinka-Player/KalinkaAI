@@ -8,6 +8,7 @@ import '../../data_model/browse_filters.dart';
 import '../../data_model/data_model.dart';
 import '../../providers/catalog_cards_provider.dart';
 import '../../providers/collections_provider.dart';
+import '../../providers/indexer_status_provider.dart';
 import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/source_modules_provider.dart';
@@ -27,6 +28,7 @@ import 'catalog_sections_view.dart';
 import 'collections_edit_bar.dart';
 import 'collections_section.dart';
 import 'folder_trail.dart';
+import 'library_rescan_control.dart';
 import 'track_group_actions.dart';
 
 /// One selected catalog page — the single navigation level below the
@@ -140,6 +142,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     // A listing the server takes writes for can change under the page, so a
     // write restarts it the way a filter does.
     final revision = ref.watch(collectionsRevisionProvider);
+    final libraryRevision = sourceOfId(page.id ?? '') == 'localfiles'
+        ? ref.watch(indexerStatusProvider.select((s) => s.libraryRevision))
+        : 0;
     ref.listen(collectionsRevisionProvider, (_, _) => _artPolls = 0);
     // Recomputed per chunk, not per row (O(n²) otherwise).
     final trackIdsMemo = _TrackIdsMemo();
@@ -180,7 +185,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       return CatalogSectionsView(
         page: page,
         query: query,
-        revision: revision,
+        revision: revision + libraryRevision,
         header: header,
         empty: _emptyState(page, filter, onReset: setQuery),
         onViewAll: notifier.expandShelf,
@@ -192,7 +197,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       // Only the facets the server honours restart the list, so touching an
       // inert placeholder never costs a refetch.
       reloadKey: '${listing.id}|${query.serverKey(capabilities)}|$revision',
-      refreshKey: _artRefresh,
+      refreshKey: (_artRefresh, libraryRevision),
       onLoadedCount: _countRows,
       // No horizontal list padding — the banner bleeds edge to edge; rows and
       // separators carry their own 16px inset instead.
@@ -385,6 +390,8 @@ class _CatalogHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _CatalogBanner(page: page),
+        if (LibraryRescanControl.isLibraryPage(page.id))
+          const LibraryRescanControl(),
         if (page.canEdit) CollectionsActions(hasRows: hasRows),
         ActiveFilterChips(
           capabilities: capabilities,
@@ -427,6 +434,9 @@ class _FolderHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _CatalogBanner(page: listing),
+        if (identical(page, listing) &&
+            LibraryRescanControl.isLibraryPage(page.id))
+          const LibraryRescanControl(),
         if (_FolderActions.anyFor(page, listing))
           Padding(
             key: actionsKey,

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
+import 'catalog_cards_provider.dart';
 import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
 
@@ -35,7 +36,32 @@ class IndexerStatusState {
   /// mid-run. Resets when the displayed stage changes.
   final double? progressPct;
 
-  const IndexerStatusState({this.stage, this.progressPct});
+  final StageStatus? scan;
+  final bool requesting;
+  final String? requestError;
+  final int libraryRevision;
+
+  const IndexerStatusState({
+    this.stage,
+    this.progressPct,
+    this.scan,
+    this.requesting = false,
+    this.requestError,
+    this.libraryRevision = 0,
+  });
+
+  bool get scanBusy =>
+      requesting || scan?.scanPending == true || scan?.scanning == true;
+
+  IndexerStatusState withRequest({required bool requesting, String? error}) =>
+      IndexerStatusState(
+        stage: stage,
+        progressPct: progressPct,
+        scan: scan,
+        requesting: requesting,
+        requestError: error,
+        libraryRevision: libraryRevision,
+      );
 
   /// Shared caption for progress surfaces: "Indexing · 45%", or "Indexing…"
   /// while the percentage is unknown. Null when the pipeline is idle.
@@ -50,6 +76,9 @@ class IndexerStatusState {
 
 class IndexerStatusNotifier extends Notifier<IndexerStatusState> {
   Timer? _pollTimer;
+  int _serverGeneration = 0;
+  bool _posting = false;
+  bool _awaitingScan = false;
 
   /// Surfaces that want the poll running (search banner, empty-queue status)
   /// pair [acquire] with [release]. A count, not a flag: screen transitions
@@ -68,16 +97,26 @@ class IndexerStatusNotifier extends Notifier<IndexerStatusState> {
 
   @override
   IndexerStatusState build() {
-    ref.onDispose(() => _pollTimer?.cancel());
+    ref.onDispose(() {
+      _generation++;
+      _pollTimer?.cancel();
+    });
+    ref.listen(connectionSettingsProvider, (previous, next) {
+      if (previous?.baseUrl == next.baseUrl) return;
+      _generation++;
+      _serverGeneration++;
+      _posting = _awaitingScan = false;
+      _pollTimer?.cancel();
+      state = const IndexerStatusState();
+      if (_holders > 0) unawaited(refresh());
+    });
     return const IndexerStatusState();
   }
 
   void acquire() {
     _holders++;
     if (_holders > 1) return; // poll already running
-    // Fresh session: don't flash the previous session's stale progress.
-    state = const IndexerStatusState();
-    _refresh();
+    unawaited(refresh());
   }
 
   void release() {
@@ -92,35 +131,79 @@ class IndexerStatusNotifier extends Notifier<IndexerStatusState> {
   /// the pipeline works, every 30s while it is idle, unreachable, or awaiting
   /// connection settings. A failed poll keeps the last state — the pipeline
   /// is likely still running, and the retry self-heals.
-  Future<void> _refresh() async {
+  Future<void> refresh() async {
     _pollTimer?.cancel();
     final generation = ++_generation;
     final settings = ref.read(connectionSettingsProvider);
     if (!settings.isSet) {
       // No server yet (fresh install mid-OOBE): keep the chain alive so the
       // poll starts once settings appear, without touching the network.
-      _pollTimer = Timer(_idlePollInterval, _refresh);
+      if (_holders > 0) _pollTimer = Timer(_idlePollInterval, refresh);
       return;
     }
     var polled = false;
     try {
       final api = ref.read(kalinkaProxyProvider);
       final status = await api.getIndexerStatus();
-      if (generation != _generation) return; // stopped while in flight
+      if (!ref.mounted || generation != _generation) return;
       _apply(status);
       polled = true;
     } catch (_) {
-      if (generation != _generation) return;
+      if (!ref.mounted || generation != _generation) return;
       // Non-critical (server briefly unreachable) — keep the last state
       // rather than flashing "done", and let the next poll correct it.
     }
-    _pollTimer = Timer(
-      polled && state.stage != null ? _activePollInterval : _idlePollInterval,
-      _refresh,
-    );
+    if (_holders > 0) {
+      _pollTimer = Timer(
+        polled && (state.stage != null || state.scanBusy)
+            ? _activePollInterval
+            : _idlePollInterval,
+        refresh,
+      );
+    }
+  }
+
+  Future<void> rescan() async {
+    if (state.scanBusy || state.scan?.indexerAvailable != true) return;
+    final serverGeneration = _serverGeneration;
+    _generation++;
+    _pollTimer?.cancel();
+    _posting = _awaitingScan = true;
+    final api = ref.read(kalinkaProxyProvider);
+    state = state.withRequest(requesting: true);
+    try {
+      await api.rescanLibrary();
+    } catch (_) {
+      if (!ref.mounted || serverGeneration != _serverGeneration) return;
+      _posting = _awaitingScan = false;
+      state = state.withRequest(
+        requesting: false,
+        error: 'Couldn’t request a scan. Please try again.',
+      );
+      if (_holders > 0) _pollTimer = Timer(_idlePollInterval, refresh);
+      return;
+    }
+    if (!ref.mounted || serverGeneration != _serverGeneration) return;
+    _posting = false;
+    // The server queues the request before acknowledging it, so the next
+    // status may already be idle after a short successful or failed check.
+    await refresh();
   }
 
   void _apply(IndexerStatus status) {
+    final scan = status.modules['localfiles']?['indexing'];
+    final previousScan = state.scan;
+    if (!_posting) {
+      _awaitingScan = false;
+    }
+    final completed =
+        scan?.lastScanAt != null &&
+        scan!.lastScanAt != previousScan?.lastScanAt &&
+        (previousScan != null || state.requesting);
+    final revision = state.libraryRevision + (completed ? 1 : 0);
+    if (completed) ref.invalidate(catalogCardGroupsProvider);
+    IndexerDisplayStage? displayedStage;
+    double? progress;
     for (final stage in IndexerDisplayStage.values) {
       var total = 0;
       var outstanding = 0;
@@ -132,21 +215,24 @@ class IndexerStatusNotifier extends Notifier<IndexerStatusState> {
         }
       }
       if (outstanding == 0) continue;
-
-      // Clamp: a malformed payload (total 0 or < outstanding) must not render
-      // "-Infinity%", and 99.5+ must not round up to a false "100%".
       final raw = total == 0
           ? 0.0
           : (100.0 * (total - outstanding) / total).clamp(0.0, 99.0).toDouble();
-      // Monotonic within a stage; a stage change starts fresh.
-      final prev = state.stage == stage ? state.progressPct : null;
-      state = IndexerStatusState(
-        stage: stage,
-        progressPct: prev == null ? raw : math.max(prev, raw),
-      );
-      return;
+      final prev = !completed && state.stage == stage
+          ? state.progressPct
+          : null;
+      displayedStage = stage;
+      progress = prev == null ? raw : math.max(prev, raw);
+      break;
     }
-    state = const IndexerStatusState();
+    state = IndexerStatusState(
+      stage: displayedStage,
+      progressPct: progress,
+      scan: scan,
+      libraryRevision: revision,
+      requestError: state.requestError,
+      requesting: _awaitingScan,
+    );
   }
 
   IndexerDisplayStage _displayStageFor(String serverStage) {
