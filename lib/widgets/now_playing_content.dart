@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/data_model.dart';
 import '../data_model/kalinka_ws_api.dart';
 import '../providers/app_state_provider.dart';
@@ -14,11 +15,12 @@ import '../providers/source_modules_provider.dart';
 import 'bit_perfect_badge.dart';
 import 'kalinka_dialog.dart';
 import 'kiosk/kiosk_enter_button.dart';
-import 'mini_player.dart';
+import 'kalinka_toast_overlay.dart' show kMiniPlayerHeight;
 import 'play_pause_glyph.dart';
 import 'playback_progress_slider.dart';
 import 'player_queue_view.dart';
-import 'player_view_switch.dart';
+import 'player_sheet.dart';
+import 'player_header.dart';
 import 'renderer_switcher.dart';
 import 'transport_button.dart';
 import 'procedural_album_art.dart';
@@ -39,8 +41,8 @@ class NowPlayingContent extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
 
   /// Marks the output switcher for the first-run tour. Used by the tablet
-  /// layout, where this panel carries the only switcher on screen: the
-  /// header's, or in the queue view the mini-player's.
+  /// layout, where the header's is the only one on screen while the track
+  /// shows; the queue's [QueueMiniPlayer] takes the key while the queue does.
   final Key? outputSwitcherKey;
 
   /// Offered by the queue view while the queue is empty.
@@ -123,24 +125,20 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     if (showingQueue) {
       return Container(
         color: KalinkaColors.background,
-        // The mini-player pads its own raised surface past the bottom inset.
+        // The list runs on under the host's QueueMiniPlayer.
         child: SafeArea(
           bottom: false,
           child: Column(
             children: [
-              _buildHeader(showingQueue: true),
+              // Only the top drags the phone sheet, so the list scrolls.
+              SheetDragArea(child: _buildHeader(showingQueue: true)),
               Expanded(
                 child: PlayerQueueView(
                   onFindMusic: widget.onFindMusic,
                   isTablet: widget.isTablet,
+                  bottomPadding:
+                      kMiniPlayerHeight + MediaQuery.paddingOf(context).bottom,
                 ),
-              ),
-              // The way back to the track.
-              MiniPlayer(
-                onTap: () => ref
-                    .read(playerViewProvider.notifier)
-                    .show(PlayerView.nowPlaying),
-                outputSwitcherKey: widget.outputSwitcherKey,
               ),
             ],
           ),
@@ -148,23 +146,26 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
       );
     }
 
-    return Container(
-      color: KalinkaColors.background,
-      child: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            _buildHeader(showingQueue: false),
-            // Content — fills remaining space with controls pinned to bottom
-            _buildBodyContent(
-              currentTrack: currentTrack,
-              resolvedImageUrl: resolvedImageUrl,
-              sourceInfo: sourceInfo,
-              mimeLabel: mimeLabel,
-              qualityLabel: qualityLabel,
-              durationMs: durationMs,
-            ),
-          ],
+    // All of it drags the phone sheet but what scrolls at large text.
+    return SheetDragArea(
+      child: Container(
+        color: KalinkaColors.background,
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Header
+              _buildHeader(showingQueue: false),
+              // Content — fills remaining space with controls pinned to bottom
+              _buildBodyContent(
+                currentTrack: currentTrack,
+                resolvedImageUrl: resolvedImageUrl,
+                sourceInfo: sourceInfo,
+                mimeLabel: mimeLabel,
+                qualityLabel: qualityLabel,
+                durationMs: durationMs,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -181,31 +182,51 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-            _AlbumArtSection(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // A taller header or enlarged metadata must not push controls past
+            // the window. Normal portrait layouts retain flexible artwork;
+            // short windows and large text get a scrollable content column.
+            final scroll =
+                constraints.maxHeight < 440 ||
+                MediaQuery.textScalerOf(context)
+                        .scale(KalinkaTypography.baseSize) >
+                    KalinkaTypography.baseSize * 1.3;
+            final artwork = _AlbumArtSection(
               trackId: currentTrack?.id,
               resolvedImageUrl: resolvedImageUrl,
-            ),
-            const SizedBox(height: 20),
-            _buildTrackMetadataSection(
-              currentTrack: currentTrack,
-              sourceInfo: sourceInfo,
-              mimeLabel: mimeLabel,
-              qualityLabel: qualityLabel,
-            ),
-            const SizedBox(height: 24),
-            PlaybackProgressSlider(
-              durationMs: durationMs,
-              enabled: currentTrack != null,
-            ),
-            const SizedBox(height: 20),
-            const _TransportControls(),
-            const SizedBox(height: 16),
-            const NowPlayingVolumeControl(),
-            const SizedBox(height: 24),
-          ],
+            );
+            final content = Column(
+              children: [
+                const SizedBox(height: 8),
+                if (scroll)
+                  SizedBox(
+                    height: (constraints.maxWidth * 0.72).clamp(0.0, 240.0),
+                    child: Column(children: [artwork]),
+                  )
+                else
+                  artwork,
+                const SizedBox(height: 20),
+                _buildTrackMetadataSection(
+                  currentTrack: currentTrack,
+                  sourceInfo: sourceInfo,
+                  mimeLabel: mimeLabel,
+                  qualityLabel: qualityLabel,
+                ),
+                const SizedBox(height: 24),
+                PlaybackProgressSlider(
+                  durationMs: durationMs,
+                  enabled: currentTrack != null,
+                ),
+                const SizedBox(height: 20),
+                const _TransportControls(),
+                const SizedBox(height: 16),
+                const NowPlayingVolumeControl(),
+                const SizedBox(height: 24),
+              ],
+            );
+            return scroll ? SingleChildScrollView(child: content) : content;
+          },
         ),
       ),
     );
@@ -321,112 +342,12 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
   }
 
   Widget _buildHeader({required bool showingQueue}) {
-    if (widget.showOverlayHeader) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Column(
-          children: [
-            // Drag handle pill
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Minimise and the display on the left, the output switch on the
-            // right, the view switch centred. A Stack, not a spaceBetween
-            // Row: the output switch hides itself until a renderer list is
-            // read (and always on servers without /renderer/*), and the view
-            // switch must stay centred either way. The output switch stays
-            // icon-only here — a phone header hasn't the width the tablet's
-            // name enjoys. The queue keeps only the way out; its mini-player
-            // has the rest. The floor keeps both views' headers level.
-            LayoutBuilder(
-              builder: (context, constraints) => ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 36),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Clear of the side buttons, shrinking at large text.
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: (constraints.maxWidth - 2 * 76).clamp(
-                          0,
-                          double.infinity,
-                        ),
-                      ),
-                      child: const FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: PlayerViewSwitch(),
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          GestureDetector(
-                            onTap: widget.onClose,
-                            child: const Icon(
-                              Icons.keyboard_arrow_down,
-                              size: 28,
-                              color: KalinkaColors.textSecondary,
-                            ),
-                          ),
-                          if (!showingQueue) ...[
-                            const SizedBox(width: 4),
-                            const KioskEnterButton(),
-                          ],
-                        ],
-                      ),
-                    ),
-                    if (!showingQueue)
-                      const Align(
-                        alignment: Alignment.centerRight,
-                        child: RendererSwitcherButton(
-                          hitDiameter: 36,
-                          iconSize: 20,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (widget.isTablet) {
-      // Connection status lives in the right-panel top bar, not here.
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 36),
-          child: Row(
-            children: [
-              const Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: PlayerViewSwitch(),
-                  ),
-                ),
-              ),
-              // In the queue the mini-player carries the switcher, key and all.
-              if (!showingQueue) ...[
-                const KioskEnterButton(),
-                RendererSwitcherDropdown(key: widget.outputSwitcherKey),
-              ],
-            ],
-          ),
-        ),
+    if (widget.showOverlayHeader || widget.isTablet) {
+      return PlayerHeader(
+        isTablet: widget.isTablet && !widget.showOverlayHeader,
+        showingQueue: showingQueue,
+        onClose: widget.onClose,
+        outputSwitcherKey: widget.outputSwitcherKey,
       );
     }
 

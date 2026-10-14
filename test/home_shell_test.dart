@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
@@ -39,9 +40,9 @@ Finder _side(String label) => find.descendant(
   matching: find.text(label),
 );
 
-/// The mini-player under the player's queue, not the one under Home.
+/// The mini-player over the player's queue, not the one under Home.
 final _queueMiniPlayer = find.descendant(
-  of: find.byType(NowPlayingContent),
+  of: find.byType(QueueMiniPlayer),
   matching: find.byType(MiniPlayer),
 );
 
@@ -148,7 +149,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PlayerViewSwitch), findsOneWidget);
     expect(_queueView, findsNothing);
-    expect(_queueMiniPlayer, findsNothing);
+    expect(_queueMiniPlayer.hitTestable(), findsNothing);
 
     await tester.tap(_side('QUEUE'));
     await tester.pumpAndSettle();
@@ -184,6 +185,53 @@ void main() {
       isSemantics(isButton: true, isSelected: false),
     );
     semantics.dispose();
+  });
+
+  testWidgets('player and queue fit a short landscape window', (tester) async {
+    await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(3)),
+      size: const Size(812, 375),
+    );
+    await tester.tap(find.byType(MiniPlayer));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tap(_side('QUEUE'));
+    await tester.pumpAndSettle();
+    expect(_queueView, findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('enlarged player keeps its playback controls reachable', (
+    tester,
+  ) async {
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(3)),
+      size: const Size(375, 812),
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: NowPlayingContent(showOverlayHeader: true, onClose: () {}),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(
+      find.byIcon(Icons.skip_next_rounded),
+      200,
+      scrollable: find.byType(Scrollable),
+    );
+    expect(find.byIcon(Icons.skip_next_rounded).hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('the mini-player opens on the track, whatever was shown last', (

@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
 import 'empty_queue_state.dart';
 import 'exclusive_queue_card.dart';
+import 'player_sheet.dart';
 import 'queue_item_row.dart';
 import 'queue_section_header.dart';
 import 'search_cards/action_pill_button.dart';
@@ -35,10 +36,6 @@ const double _kNotPlayingOpacity = 0.6;
 class QueueZone extends ConsumerStatefulWidget {
   final double bottomPadding;
   final bool isTablet;
-  final VoidCallback? onOpenManagementTray;
-
-  /// False where the host's header carries the queue menu.
-  final bool showMenuButton;
 
   /// Offered by the empty queue; see [EmptyQueueState.onFindMusic].
   final VoidCallback? onFindMusic;
@@ -47,8 +44,6 @@ class QueueZone extends ConsumerStatefulWidget {
     super.key,
     this.bottomPadding = 72,
     this.isTablet = false,
-    this.onOpenManagementTray,
-    this.showMenuButton = true,
     this.onFindMusic,
   });
 
@@ -71,13 +66,6 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
     _scrollController.dispose();
     super.dispose();
   }
-
-  // ── Management tray ───────────────────────────────────────────────────────
-
-  /// The tray is a bottom sheet on phone and a panel overlay on tablet; both
-  /// are hosted by the screen (the tablet overlay must cover the search dock),
-  /// so this just forwards to it.
-  void _openManagementTray() => widget.onOpenManagementTray?.call();
 
   // ── Reorder ───────────────────────────────────────────────────────────────
 
@@ -210,14 +198,6 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
             currentIndex,
             shuffleEnabled,
           ),
-
-        // Floating menu button — always sits in the pinned header area.
-        if (!isOffline && widget.showMenuButton)
-          Positioned(
-            top: (_kHeaderHeight - 36) / 2,
-            right: 20,
-            child: _buildMenuButton(),
-          ),
       ],
     );
   }
@@ -251,9 +231,6 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
         _SavedQueueHeader(
           trackCount: trackList.length,
           onPlay: trackList.isEmpty || isOffline ? null : _playQueue,
-          menuButton: isOffline || !widget.showMenuButton
-              ? null
-              : _buildMenuButton(),
         ),
         Expanded(child: list),
       ],
@@ -290,39 +267,6 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
           padding: EdgeInsets.only(bottom: widget.bottomPadding + 16),
         ),
       ],
-    );
-  }
-
-  Widget _buildMenuButton() {
-    return Tooltip(message: 'Queue options', child: _menuButtonFace());
-  }
-
-  Widget _menuButtonFace() {
-    return Material(
-      color: KalinkaColors.surfaceInput,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(9),
-        side: const BorderSide(color: KalinkaColors.borderDefault),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: _openManagementTray,
-        overlayColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.pressed)) {
-            return Colors.white.withValues(alpha: 0.08);
-          }
-          return null;
-        }),
-        child: const SizedBox(
-          width: 36,
-          height: 36,
-          child: Icon(
-            Icons.more_vert,
-            size: 16,
-            color: KalinkaColors.textSecondary,
-          ),
-        ),
-      ),
     );
   }
 
@@ -456,13 +400,8 @@ class _SavedQueueHeader extends StatelessWidget {
 
   /// Plays the queue; null when there is nothing to play or no connection.
   final VoidCallback? onPlay;
-  final Widget? menuButton;
 
-  const _SavedQueueHeader({
-    required this.trackCount,
-    required this.onPlay,
-    required this.menuButton,
-  });
+  const _SavedQueueHeader({required this.trackCount, required this.onPlay});
 
   @override
   Widget build(BuildContext context) {
@@ -472,7 +411,6 @@ class _SavedQueueHeader extends StatelessWidget {
       _ => '$trackCount tracks',
     };
     final onPlay = this.onPlay;
-    final menuButton = this.menuButton;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
       child: Row(
@@ -507,7 +445,6 @@ class _SavedQueueHeader extends StatelessWidget {
               onTap: onPlay,
             ),
           ],
-          if (menuButton != null) ...[const SizedBox(width: 8), menuButton],
         ],
       ),
     );
@@ -611,11 +548,14 @@ class _NowPlayingHeaderDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    return const SizedBox(
-      height: _kHeaderHeight,
-      child: ColoredBox(
-        color: KalinkaColors.background,
-        child: _NowPlayingHeaderContent(),
+    // The top of the queue drags the phone sheet; the list below scrolls.
+    return const SheetDragArea(
+      child: SizedBox(
+        height: _kHeaderHeight,
+        child: ColoredBox(
+          color: KalinkaColors.background,
+          child: _NowPlayingHeaderContent(),
+        ),
       ),
     );
   }

@@ -2,13 +2,60 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/app_state_provider.dart';
+import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_player_api_provider.dart';
 import '../providers/toast_provider.dart';
+import '../theme/app_theme.dart';
 import 'clear_all_confirm_dialog.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'kalinka_dialog.dart';
 import 'queue_management_tray.dart';
 import 'search/add_to_collection_sheet.dart';
+
+/// The queue's ⋮, in the player's header: there while the queue has tracks
+/// and the server is reachable.
+class QueueMenuButton extends ConsumerWidget {
+  const QueueMenuButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasTracks = ref.watch(
+      playQueueStateStoreProvider.select((s) => s.trackList.isNotEmpty),
+    );
+    final connected =
+        ref.watch(connectionStateProvider) == ConnectionStatus.connected;
+    if (!hasTracks || !connected) return const SizedBox.shrink();
+    return Tooltip(
+      message: 'Queue options',
+      child: Material(
+        color: KalinkaColors.surfaceInput,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(9),
+          side: const BorderSide(color: KalinkaColors.borderDefault),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => showQueueManagementTray(context, ref),
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return Colors.white.withValues(alpha: 0.08);
+            }
+            return null;
+          }),
+          child: const SizedBox(
+            width: 36,
+            height: 36,
+            child: Icon(
+              Icons.more_vert,
+              size: 16,
+              color: KalinkaColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// Opens the queue menu as a bottom sheet and acts on the choice.
 Future<void> showQueueManagementTray(
@@ -23,7 +70,7 @@ Future<void> showQueueManagementTray(
   await runQueueTrayAction(context, ref, action);
 }
 
-/// Carries out a queue menu choice, from the sheet or the tablet tray.
+/// Carries out a queue menu choice.
 Future<void> runQueueTrayAction(
   BuildContext context,
   WidgetRef ref,
