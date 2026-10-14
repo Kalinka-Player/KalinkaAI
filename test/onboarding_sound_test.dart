@@ -257,7 +257,7 @@ void main() {
         }),
       );
 
-      expect(find.text('Music sources'), findsOne);
+      expect(find.text('Network'), findsOne);
     });
 
     testWidgets('asks before leaving a card it found silent', (tester) async {
@@ -315,7 +315,7 @@ void main() {
 
       // Saved and remembered before the Pi went down, which it stays.
       expect(proxy.saved.single, {'base_config.server.service_name': 'Den'});
-      expect(container.read(oobeResumeProvider)?.step, 5);
+      expect(container.read(oobeResumeProvider)?.step, 6);
       expect(find.text('The Pi is not back yet'), findsOne);
       expect(proxy.configReads, hasLength(reads));
 

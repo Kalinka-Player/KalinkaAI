@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'screens/kiosk_screen.dart';
+import 'screens/network_setup_screen.dart';
 import 'screens/music_player_screen.dart';
 import 'theme/app_theme.dart';
 import 'providers/box_control_provider.dart';
@@ -15,6 +17,9 @@ import 'providers/media_notification_provider.dart';
 import 'providers/pinned_server.dart';
 import 'widgets/kalinka_toast_overlay.dart';
 import 'widgets/foreground_volume_overlay.dart';
+
+bool get networkActivation =>
+    kIsWeb && Uri.base.queryParameters['setup'] == 'network';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,7 +41,7 @@ void main() async {
   // first-run done, there is nothing to discover. That does not skip setup:
   // MusicPlayerScreen still runs the wizard, minus discovery, when the
   // server reports itself unconfigured.
-  final server = pinnedServer();
+  final server = networkActivation ? null : pinnedServer();
   if (server != null) {
     await prefs.setString(ConnectionSettingsNotifier.sharedPrefName, 'Kalinka');
     await prefs.setString(
@@ -64,6 +69,21 @@ class KalinkaApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (networkActivation) {
+      final base = Uri.base;
+      final endpoint = base.replace(
+        port: base.host == '192.168.4.1' ? base.port : 8001,
+        path: '/',
+        query: null,
+        fragment: null,
+      );
+      return MaterialApp(
+        title: 'Kalinka setup',
+        theme: AppTheme.dark(),
+        debugShowCheckedModeBanner: false,
+        home: NetworkSetupScreen(endpoint: endpoint),
+      );
+    }
     ref.watch(rendererHostProvider);
     ref.watch(mediaNotificationProvider);
     ref.watch(rememberServerIdentityProvider);

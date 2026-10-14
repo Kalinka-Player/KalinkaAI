@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../providers/connection_settings_provider.dart';
 import '../../providers/renderer_host_provider.dart'
     show rendererIdentityProvider;
@@ -20,8 +21,8 @@ import 'onboarding_step_scaffold.dart';
 /// the summary cannot drift from the flow; rows carry a Change link back to
 /// their step via [onEdit].
 class OnboardingReviewStep extends ConsumerWidget {
-  /// Jumps the wizard to a step (1 = sources, 2 = source setup, 3 = output,
-  /// 4 = amplifier control, 5 = sound).
+  /// Jumps the wizard to a step (2 = sources, 3 = source setup, 4 = output,
+  /// 5 = amplifier control, 6 = sound).
   final void Function(int step)? onEdit;
 
   /// Whether a sound test was run this session — the test step reports it.
@@ -130,30 +131,35 @@ class OnboardingReviewStep extends ConsumerWidget {
                   ' · ${connection.displayAddress}',
             ),
             _SummaryRow(
+              label: 'Network',
+              value: connection.displayAddress,
+              onChange: onEdit == null ? null : () => onEdit!(1),
+            ),
+            _SummaryRow(
               label: 'Music sources',
               value: sourcesValue,
-              onChange: edit(notReady.isEmpty ? 1 : 2),
+              onChange: edit(notReady.isEmpty ? 2 : 3),
             ),
             _SummaryRow(
               label: 'Audio output',
               value: outputValue,
-              onChange: edit(3),
+              onChange: edit(4),
             ),
             _SummaryRow(
               label: 'Volume & power',
               value: volumeValue,
-              onChange: edit(4),
+              onChange: edit(5),
             ),
             if (soundcard != null)
               _SummaryRow(
                 label: 'Sound card',
                 value: soundcardSummary(soundcard),
-                onChange: edit(5),
+                onChange: edit(6),
               ),
             _SummaryRow(
               label: 'Sound test',
               value: soundTested ? 'Played' : 'Skipped',
-              onChange: edit(5),
+              onChange: edit(6),
             ),
           ],
         ),

@@ -1,7 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/presentation_schema.dart' show ModuleSpec;
 import '../providers/connection_settings_provider.dart';
 import '../providers/kalinka_player_api_provider.dart';
@@ -22,6 +25,7 @@ import '../widgets/onboarding/resume_connect.dart';
 import '../widgets/onboarding/soundcard_restart_overlay.dart';
 import '../widgets/onboarding/step_amp_control.dart';
 import '../widgets/onboarding/step_music_sources.dart';
+import '../widgets/onboarding/step_network.dart';
 import '../widgets/onboarding/step_output.dart';
 import '../widgets/onboarding/step_review.dart';
 import '../widgets/onboarding/step_sound.dart';
@@ -31,7 +35,7 @@ import '../widgets/soundcard_row.dart' show SoundcardHost, soundcardTrouble;
 
 /// First-run setup wizard (OOBE).
 ///
-/// Seven steps: find server → choose sources → set up sources → choose
+/// Eight steps: find server → review network → choose sources → set up sources → choose
 /// output → amplifier control → sound → review & start. Only the
 /// source setup gates progress; the rest say in their own copy what
 /// leaving them alone means, and leaving the sound step while a sound card
@@ -52,7 +56,7 @@ import '../widgets/soundcard_row.dart' show SoundcardHost, soundcardTrouble;
 ///
 /// Whether the *server* is set up is its own config flag
 /// (`base_config.server.oobe_complete`): the wizard reads it after
-/// connecting and skips straight to the app when another client already
+/// connecting and, after Network, skips the remaining steps if another client
 /// completed setup. With [startAtSetup] the discovery step is skipped
 /// instead — for an already-connected server that reports the flag false:
 /// an existing install pointing at a fresh server, or the web UI, whose
@@ -67,9 +71,10 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  static const _stepCount = 7;
+  static const _stepCount = 8;
   static const _stepLabels = [
     'SERVER',
+    'NETWORK',
     'SOURCES',
     'SETUP',
     'OUTPUT',
@@ -77,7 +82,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     'SOUND',
     'FINISH',
   ];
-  static const _soundStep = 5;
+  static const _soundStep = 6;
+  bool _networkBusy = false;
+  bool _alreadySetUp = false;
 
   /// Whether a sound test ran this session — flips the test step's Next
   /// from "Skip for now" to "Continue" and feeds the review row.
@@ -141,20 +148,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     // The discovery step keeps its "connecting" state up while this runs.
     await ref.read(settingsProvider.notifier).loadConfig();
     if (!mounted) return;
-    // Another client already set up the server: just persist the
-    // connection. The coach-mark tour still runs once per install.
+    // Already configured servers still show Network before saving the connection.
     final values = ref.read(settingsProvider).values;
-    if (!OnboardingStatusNotifier.forceOobe &&
-        values[OnboardingStatusNotifier.serverOobeFlagPath] == true) {
-      await _commitSetup();
-      if (mounted) Navigator.of(context).pop();
-      return;
-    }
+    _alreadySetUp =
+        !OnboardingStatusNotifier.forceOobe &&
+        values[OnboardingStatusNotifier.serverOobeFlagPath] == true;
     await ref.read(oobeResumeProvider.notifier).forget();
     if (!mounted) return;
     setState(() {
       _resuming = null;
-      _step = step;
+      _networkBusy = false;
+      _step = _alreadySetUp ? 1 : step;
     });
   }
 
@@ -465,27 +469,57 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     // if you leave it alone tells the user more than a label does.
     final (title, subtitle, body, nextLabel) = switch (_step) {
       1 => (
+        'Network',
+        'Use Ethernet or Wi-Fi to connect your box. Keep the current connection or choose another network.',
+        NetworkSetupPanel(
+          endpoint: ref
+              .read(connectionSettingsProvider)
+              .baseUrl
+              .replace(port: supervisorPort),
+          onReconnect: () async {
+            if (kIsWeb) {
+              await launchUrl(
+                Uri(
+                  scheme: 'http',
+                  host: 'kalinka.local',
+                  port: ref.read(connectionSettingsProvider).port,
+                ),
+                webOnlyWindowName: '_self',
+              );
+            } else {
+              _goTo(0);
+            }
+          },
+          onBusy: (busy) {
+            if (mounted && busy != _networkBusy) {
+              setState(() => _networkBusy = busy);
+            }
+          },
+        ) as Widget,
+        'Keep this connection',
+      ),
+      2 => (
         'Music sources',
         'Choose what feeds your library — at least one. More can be '
             'connected later in Settings.',
         const OnboardingMusicSourcesStep() as Widget,
         'Continue',
       ),
-      2 => (
+      3 => (
         'Set up your sources',
         'Each source asks only for what it needs; the rest lives in '
             'Settings.',
         const OnboardingSourceSetupStep() as Widget,
         'Continue',
       ),
-      3 => (
+      4 => (
         'Audio output',
         'Pick where the music comes out. You can switch outputs any time '
             'from the player.',
         const OnboardingOutputStep() as Widget,
         'Continue',
       ),
-      4 => (
+      5 => (
         'Amplifier or receiver',
         'Hand volume and power to an amplifier the music plays into, or '
             'leave them with the output. You can change this later.',
@@ -518,7 +552,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     // waits for everything staged to be accepted; the review says what is
     // not.
     final nextEnabled = switch (_step) {
-      2 => setupStepReady(settings),
+      1 => !_networkBusy,
+      3 => setupStepReady(settings),
       _ when _step == _stepCount - 1 =>
         !settings.hasBlockingIssues && !_starting,
       _soundStep => _soundcardRun == null,
@@ -535,6 +570,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           ? () => _goTo(_step - 1)
           : null,
       onNext: switch (_step) {
+        1 when _alreadySetUp => () async {
+          await _commitSetup();
+          if (mounted) Navigator.of(context).pop();
+        },
         _ when _step == _stepCount - 1 => _finish,
         _soundStep => _leaveSoundStep,
         _ => () => _goTo(_step + 1),

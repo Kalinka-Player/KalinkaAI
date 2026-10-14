@@ -1,8 +1,11 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import '../screens/provisioning_screen.dart';
+
+import '../screens/setup_method_screen.dart';
 import '../providers/provisioning_controller.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/connection_settings_provider.dart';
 import '../providers/demo_mode.dart';
 import '../providers/discovery_provider.dart';
@@ -226,7 +229,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          if (!kIsWeb && !_isConnecting)
+          if (!_isConnecting)
             Flexible(
               child: TextButton.icon(
                 style: TextButton.styleFrom(
@@ -247,7 +250,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
                   ),
                 ),
                 icon: const Icon(
-                  Icons.bluetooth,
+                  Icons.settings_input_antenna,
                   size: 20,
                   color: KalinkaColors.accentTint,
                 ),
@@ -256,7 +259,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
                   final endpoint = await Navigator.of(context)
                       .push<ProvisionedEndpoint>(
                         MaterialPageRoute(
-                          builder: (_) => const ProvisioningScreen(),
+                          builder: (_) => const SetupMethodScreen(),
                         ),
                       );
                   if (mounted && endpoint != null) {
@@ -265,6 +268,8 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
                       endpoint.host,
                       endpoint.port,
                     );
+                  } else if (mounted && !kIsWeb) {
+                    _rescan();
                   }
                 },
               ),
