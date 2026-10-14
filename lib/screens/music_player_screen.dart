@@ -33,6 +33,8 @@ import '../widgets/measure_size.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/now_playing_content.dart';
 import '../widgets/playback_error_dialog.dart';
+import '../widgets/player_queue_view.dart';
+import '../widgets/player_sheet.dart';
 import '../widgets/renderer_switcher.dart' show rendererDisplayName;
 import '../widgets/search/search_session_view.dart';
 import '../widgets/server_sheet.dart';
@@ -285,22 +287,17 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
   void _showExpandedPlayer({PlayerView view = PlayerView.nowPlaying}) {
     ref.read(playerViewProvider.notifier).show(view);
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      enableDrag: true,
-      backgroundColor: KalinkaColors.background,
-      barrierColor: Colors.transparent,
-      useSafeArea: true,
-      // Override the M3 default 640px cap so the sheet fills the window and
-      // resizes smoothly instead of centering with the layout poking out.
-      constraints: const BoxConstraints(maxWidth: double.infinity),
-      builder: (sheetContext) => _ExpandedPlayerSheet(
-        // The empty queue's way out: back to Home with search up.
-        onFindMusic: () {
-          Navigator.of(sheetContext).pop();
-          _requestHomeSearch();
-        },
+    final navigator = Navigator.of(context);
+    navigator.push(
+      PlayerSheetRoute(
+        themes: InheritedTheme.capture(from: context, to: navigator.context),
+        builder: (sheetContext) => _ExpandedPlayerSheet(
+          // The empty queue's way out: back to Home with search up.
+          onFindMusic: () {
+            Navigator.of(sheetContext).pop();
+            _requestHomeSearch();
+          },
+        ),
       ),
     );
   }
@@ -842,6 +839,14 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                               isTablet: true,
                               outputSwitcherKey: _outputSwitcherKey,
                               onFindMusic: _requestHomeSearch,
+                            ),
+                          ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: QueueMiniPlayer(
+                              outputSwitcherKey: _outputSwitcherKey,
                             ),
                           ),
                           // Sheets opened here are anchored to this panel,
