@@ -14,13 +14,10 @@ import '../widgets/connection_banner.dart';
 import '../widgets/configuration_appearance.dart';
 import '../widgets/settings_top_bar.dart';
 import '../widgets/demo_read_only_dialog.dart';
-import '../widgets/kalinka_dialog.dart' show showKalinkaDialog;
 import '../widgets/kalinka_button.dart';
 import '../widgets/pending_changes_banner.dart';
-import '../widgets/restart_confirm_dialog.dart';
 import '../widgets/restart_overlay.dart';
 import '../widgets/upgrade_overlay.dart';
-import '../widgets/expert_mode_toggle.dart';
 import '../widgets/expert_settings_screen.dart';
 import '../widgets/settings_controls/settings_binding.dart';
 import '../widgets/slide_in_panel.dart';
@@ -267,17 +264,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _onRestart() async {
-    if (await refusedAsDemo(context, ref) || !mounted) return;
-    final confirmed = await showKalinkaDialog<bool>(
-      context: context,
-      builder: (_) => const RestartConfirmDialog(),
-    );
-    if (confirmed != true || !mounted) return;
-    setState(() => _restartOverlayOpen = true);
-    ref.read(restartProvider.notifier).executeRestart();
   }
 
   /// Shown in place of the settings body while the server is unreachable.

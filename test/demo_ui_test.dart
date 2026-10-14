@@ -16,8 +16,6 @@ import 'package:kalinka/providers/discovery_types.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/server_connect.dart';
 import 'package:kalinka/providers/settings_provider.dart';
-import 'package:kalinka/screens/settings_screen.dart';
-import 'package:kalinka/widgets/demo_read_only_dialog.dart';
 import 'package:kalinka/widgets/discovery_screen.dart';
 import 'package:kalinka/widgets/server_sheet.dart';
 
@@ -33,8 +31,6 @@ class _FakeApi implements KalinkaPlayerProxy {
   final bool demo;
   final bool olderThanDemoMode;
   final bool unreachable;
-  int restarts = 0;
-  int saves = 0;
   int modulesListed = 0;
 
   @override
@@ -49,38 +45,10 @@ class _FakeApi implements KalinkaPlayerProxy {
     };
   }
 
-  // What the demo server's General page carries; an ordinary server, nothing.
+  // Read alongside the values to tell whether this is a demo.
   @override
-  Future<PresentationSchema> getSettingsSchema() async => PresentationSchema(
-    schemaVersion: 'v1',
-    pages: [
-      PageSpec(
-        id: 'general',
-        title: 'General',
-        banners: [
-          if (demo)
-            const BannerSpec(
-              title: 'Demo server',
-              text: 'Settings can be explored but not saved.',
-              severity: Severity.info,
-            ),
-        ],
-      ),
-    ],
-    expertFields: const [],
-  );
-
-  @override
-  Future<Set<String>?> saveSettings({
-    required String schemaVersion,
-    required Map<String, dynamic> changes,
-  }) async {
-    saves++;
-    return null;
-  }
-
-  @override
-  Future<void> restartServer() async => restarts++;
+  Future<PresentationSchema> getSettingsSchema() async =>
+      PresentationSchema(schemaVersion: 'v1', pages: [], expertFields: []);
 
   @override
   Future<ModulesAndDevices> listModules() async {
@@ -184,52 +152,7 @@ Future<void> _pumpDiscovery(
   await tester.pump(const Duration(milliseconds: 500));
 }
 
-Future<void> _pumpSettings(WidgetTester tester, _FakeApi api) async {
-  await tester.binding.setSurfaceSize(const Size(400, 800));
-  addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(
-    ProviderScope(
-      overrides: [
-        sharedPrefsProvider.overrideWithValue(await _prefs()),
-        kalinkaProxyProvider.overrideWithValue(api),
-        connectionStateProvider.overrideWith(_Connection.new),
-      ],
-      child: MaterialApp(home: SettingsScreen(onClose: () {})),
-    ),
-  );
-  await tester.pump(const Duration(milliseconds: 500));
-}
-
 void main() {
-  group('Settings on the demo server', () {
-    testWidgets('restarting explains the demo instead', (tester) async {
-      final api = _FakeApi(demo: true);
-      await _pumpSettings(tester, api);
-
-      expect(find.text('Demo server'), findsOneWidget);
-      await tester.tap(find.byIcon(Icons.restart_alt));
-      await tester.pump(const Duration(milliseconds: 500));
-
-      expect(find.byType(DemoReadOnlyDialog), findsOneWidget);
-      expect(find.text('Restart server?'), findsNothing);
-      await tester.tap(find.text('Got it'));
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byType(DemoReadOnlyDialog), findsNothing);
-      expect(api.restarts, 0);
-      expect(api.saves, 0);
-    });
-
-    testWidgets('an ordinary server still asks to restart', (tester) async {
-      await _pumpSettings(tester, _FakeApi());
-
-      await tester.tap(find.byIcon(Icons.restart_alt));
-      await tester.pump(const Duration(milliseconds: 500));
-
-      expect(find.text('Restart server?'), findsOneWidget);
-      expect(find.byType(DemoReadOnlyDialog), findsNothing);
-    });
-  });
-
   for (final demo in [true, false]) {
     testWidgets('the server sheet marks a demo server: $demo', (tester) async {
       final prefs = await _prefs({
