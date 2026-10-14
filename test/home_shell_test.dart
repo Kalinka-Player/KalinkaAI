@@ -5,10 +5,12 @@ import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/widgets/coach_marks_overlay.dart';
+import 'package:kalinka/widgets/home/up_next_card.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/player_queue_view.dart';
+import 'package:kalinka/widgets/player_view_switch.dart';
 import 'package:kalinka/widgets/queue_zone.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 
@@ -30,6 +32,12 @@ List<String> _recordSystemCalls() {
 }
 
 final _queueView = find.byType(PlayerQueueView);
+
+/// One side of the player's view switch.
+Finder _side(String label) => find.descendant(
+  of: find.byType(PlayerViewSwitch),
+  matching: find.text(label),
+);
 
 /// The mini-player under the player's queue, not the one under Home.
 final _queueMiniPlayer = find.descendant(
@@ -75,9 +83,9 @@ void main() {
     expect(_queueView, findsOneWidget);
     expect(find.byTooltip('Queue options'), findsOneWidget);
     expect(_queueMiniPlayer, findsOneWidget);
-    // The queue keeps only the way out; its mini-player has the rest.
+    // The queue keeps only the way out and the switch back.
     expect(find.byIcon(Icons.fullscreen_rounded), findsNothing);
-    expect(find.byTooltip('Queue'), findsNothing);
+    expect(_side('PLAYING'), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -138,18 +146,44 @@ void main() {
 
     await tester.tap(find.byType(MiniPlayer));
     await tester.pumpAndSettle();
-    expect(find.text('NOW PLAYING'), findsOneWidget);
+    expect(find.byType(PlayerViewSwitch), findsOneWidget);
     expect(_queueView, findsNothing);
     expect(_queueMiniPlayer, findsNothing);
 
-    await tester.tap(find.byTooltip('Queue'));
+    await tester.tap(_side('QUEUE'));
     await tester.pumpAndSettle();
     expect(_queueView, findsOneWidget);
 
+    await tester.tap(_side('PLAYING'));
+    await tester.pumpAndSettle();
+    expect(_queueView, findsNothing);
+    expect(find.byType(PlayerViewSwitch), findsOneWidget);
+
+    // The queue's mini-player is a way back too.
+    await tester.tap(_side('QUEUE'));
+    await tester.pumpAndSettle();
     await tester.tap(_queueMiniPlayer);
     await tester.pumpAndSettle();
     expect(_queueView, findsNothing);
-    expect(find.text('NOW PLAYING'), findsOneWidget);
+  });
+
+  testWidgets('the view switch says which side is on', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await pumpHomeShell(tester, queue: SettableQueue(queueOf(3)));
+    await tester.tap(find.byType(MiniPlayer));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Now playing')),
+      isSemantics(isButton: true, isSelected: true),
+    );
+    await tester.tap(_side('QUEUE'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Now playing')),
+      isSemantics(isButton: true, isSelected: false),
+    );
+    semantics.dispose();
   });
 
   testWidgets('the mini-player opens on the track, whatever was shown last', (
@@ -200,7 +234,7 @@ void main() {
     );
     await tester.tap(find.byType(MiniPlayer));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Queue'));
+    await tester.tap(_side('QUEUE'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Find music'));
@@ -219,7 +253,12 @@ void main() {
       size: const Size(1280, 800),
     );
 
-    await tester.tap(find.text('QUEUE'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(UpNextCard),
+        matching: find.text('QUEUE'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(_queueView, findsOneWidget);
     expect(
@@ -229,10 +268,10 @@ void main() {
     // A panel, not a sheet: Home stays usable beside it.
     expect(find.byType(SearchSessionView).hitTestable(), findsOneWidget);
 
-    await tester.tap(_queueMiniPlayer);
+    await tester.tap(_side('PLAYING'));
     await tester.pumpAndSettle();
     expect(_queueView, findsNothing);
-    expect(find.text('NOW PLAYING'), findsOneWidget);
+    expect(find.byType(PlayerViewSwitch), findsOneWidget);
   });
 
   testWidgets('the first-run tour starts at the search entry', (tester) async {
