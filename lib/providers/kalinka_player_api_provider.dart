@@ -85,6 +85,7 @@ abstract class KalinkaPlayerProxy {
     int? tzOffsetMin,
   });
   Future<IndexerStatus> getIndexerStatus({List<String>? sources});
+  Future<void> rescanLibrary();
   Future<BrowseItemsList> browse(
     String id, {
     int offset = 0,
@@ -563,6 +564,14 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
             Map<String, dynamic>.from(response.data as Map),
           );
         });
+  }
+
+  @override
+  Future<void> rescanLibrary() async {
+    final response = await client.post('/indexer/rescan');
+    if (response.statusCode != 202) {
+      throw Exception('Could not request a library scan');
+    }
   }
 
   @override
