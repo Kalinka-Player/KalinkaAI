@@ -1,5 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalinka/data_model/kalinka_ws_api.dart';
+import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/widgets/coach_marks_overlay.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
@@ -28,10 +31,19 @@ List<String> _recordSystemCalls() {
 
 final _queueView = find.byType(PlayerQueueView);
 
+class _RecordingWsApi extends KalinkaWsApi {
+  _RecordingWsApi(super.ref);
+
+  final List<QueueCommand> sent = [];
+
+  @override
+  Future<void> sendQueueCommand(QueueCommand command) async {
+    sent.add(command);
+  }
+}
+
 void main() {
-  testWidgets('the app opens on Home, the queue in the player', (
-    tester,
-  ) async {
+  testWidgets('the app opens on Home, the queue in the player', (tester) async {
     await pumpHomeShell(tester, queue: SettableQueue(queueOf(4)));
 
     expect(find.byType(SearchSessionView), findsOneWidget);
@@ -55,13 +67,9 @@ void main() {
     await tester.tap(find.text('QUEUE'));
     await tester.pumpAndSettle();
     expect(_queueView, findsOneWidget);
-    // From the playing track on.
-    expect(
-      find.descendant(of: _queueView, matching: find.text('3 tracks · 10 min')),
-      findsOneWidget,
-    );
-    // The view's own row carries the menu; the list's stays away.
     expect(find.byTooltip('Queue options'), findsOneWidget);
+    // The queue keeps only the way out and the way back to the track.
+    expect(find.byIcon(Icons.fullscreen_rounded), findsNothing);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -78,6 +86,41 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Clear queue'), findsOneWidget);
     expect(find.text('Clear played'), findsOneWidget);
+  });
+
+  testWidgets('the queue\'s menu turns shuffle on', (tester) async {
+    late _RecordingWsApi ws;
+    await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(3)),
+      overrides: [
+        kalinkaWsApiProvider.overrideWith((ref) => ws = _RecordingWsApi(ref)),
+      ],
+    );
+    await tester.tap(find.text('QUEUE'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Queue options'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) =>
+            w is AnimatedContainer &&
+            w.constraints ==
+                const BoxConstraints.tightFor(width: 42, height: 24),
+      ),
+    );
+    await tester.pump();
+    expect(
+      ws.sent,
+      contains(
+        const QueueCommand.setPlaybackMode(
+          shuffle: true,
+          repeatAll: false,
+          repeatSingle: false,
+        ),
+      ),
+    );
   });
 
   testWidgets('the player switches between the track and its queue', (
