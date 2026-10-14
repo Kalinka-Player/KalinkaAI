@@ -18,6 +18,7 @@ import 'mini_player.dart';
 import 'play_pause_glyph.dart';
 import 'playback_progress_slider.dart';
 import 'player_queue_view.dart';
+import 'player_view_switch.dart';
 import 'renderer_switcher.dart';
 import 'transport_button.dart';
 import 'procedural_album_art.dart';
@@ -319,25 +320,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     );
   }
 
-  /// Turns the player to the queue; the queue's mini-player turns it back.
-  Widget _queueButton() {
-    return Tooltip(
-      message: 'Queue',
-      child: TransportButton(
-        hitDiameter: 36,
-        onTap: () =>
-            ref.read(playerViewProvider.notifier).show(PlayerView.queue),
-        child: const Icon(
-          Icons.queue_music_rounded,
-          size: 22,
-          color: KalinkaColors.textSecondary,
-        ),
-      ),
-    );
-  }
-
   Widget _buildHeader({required bool showingQueue}) {
-    final label = showingQueue ? 'QUEUE' : 'NOW PLAYING';
     if (widget.showOverlayHeader) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -355,55 +338,63 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
               ),
             ),
             const SizedBox(height: 12),
-            // Minimise and the display on the left, output switch and the
-            // queue on the right, the label centred. A Stack, not a
-            // spaceBetween Row: the switcher hides itself until a renderer
-            // list is read (and always on servers without /renderer/*), and
-            // the label must stay centred either way. The switcher stays
+            // Minimise and the display on the left, the output switch on the
+            // right, the view switch centred. A Stack, not a spaceBetween
+            // Row: the output switch hides itself until a renderer list is
+            // read (and always on servers without /renderer/*), and the view
+            // switch must stay centred either way. The output switch stays
             // icon-only here — a phone header hasn't the width the tablet's
             // name enjoys. The queue keeps only the way out; its mini-player
             // has the rest. The floor keeps both views' headers level.
-            ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 36),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Text(label, style: KalinkaTextStyles.nowPlayingLabel),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        GestureDetector(
-                          onTap: widget.onClose,
-                          child: const Icon(
-                            Icons.keyboard_arrow_down,
-                            size: 28,
-                            color: KalinkaColors.textSecondary,
-                          ),
+            LayoutBuilder(
+              builder: (context, constraints) => ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 36),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Clear of the side buttons, shrinking at large text.
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: (constraints.maxWidth - 2 * 76).clamp(
+                          0,
+                          double.infinity,
                         ),
-                        if (!showingQueue) ...[
-                          const SizedBox(width: 4),
-                          const KioskEnterButton(),
-                        ],
-                      ],
+                      ),
+                      child: const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: PlayerViewSwitch(),
+                      ),
                     ),
-                  ),
-                  if (!showingQueue)
                     Align(
-                      alignment: Alignment.centerRight,
+                      alignment: Alignment.centerLeft,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const RendererSwitcherButton(
-                            hitDiameter: 36,
-                            iconSize: 20,
+                          GestureDetector(
+                            onTap: widget.onClose,
+                            child: const Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 28,
+                              color: KalinkaColors.textSecondary,
+                            ),
                           ),
-                          _queueButton(),
+                          if (!showingQueue) ...[
+                            const SizedBox(width: 4),
+                            const KioskEnterButton(),
+                          ],
                         ],
                       ),
                     ),
-                ],
+                    if (!showingQueue)
+                      const Align(
+                        alignment: Alignment.centerRight,
+                        child: RendererSwitcherButton(
+                          hitDiameter: 36,
+                          iconSize: 20,
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -419,14 +410,19 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           constraints: const BoxConstraints(minHeight: 36),
           child: Row(
             children: [
-              Expanded(
-                child: Text(label, style: KalinkaTextStyles.nowPlayingLabel),
+              const Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: PlayerViewSwitch(),
+                  ),
+                ),
               ),
               // In the queue the mini-player carries the switcher, key and all.
               if (!showingQueue) ...[
                 const KioskEnterButton(),
                 RendererSwitcherDropdown(key: widget.outputSwitcherKey),
-                _queueButton(),
               ],
             ],
           ),
