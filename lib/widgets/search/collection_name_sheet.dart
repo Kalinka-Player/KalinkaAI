@@ -178,15 +178,17 @@ class _NameFormState extends State<_NameForm> {
               decoration: kalinkaFieldDecoration(hint: 'Name it'),
             ),
             const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            OverflowBar(
+              alignment: MainAxisAlignment.end,
+              overflowAlignment: OverflowBarAlignment.end,
+              spacing: 12,
+              overflowSpacing: 12,
               children: [
                 KalinkaButton(
                   label: 'CANCEL',
                   variant: KalinkaButtonVariant.neutral,
                   onTap: () => Navigator.of(context).pop(),
                 ),
-                const SizedBox(width: 12),
                 KalinkaButton(
                   label: widget.action,
                   enabled: _name.isNotEmpty,

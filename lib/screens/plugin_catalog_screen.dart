@@ -636,53 +636,50 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   Widget _tabs(PluginTab tab, double gutter) => PinnedHeaderSliver(
     child: ColoredBox(
       color: KalinkaColors.background,
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: gutter),
-        child: Stack(
-          key: const ValueKey('catalog-tabs'),
-          children: [
-            // The grey rule the selected tab's berry line sits on.
-            const Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: SizedBox(
-                height: 1,
-                child: ColoredBox(color: KalinkaColors.borderDefault),
-              ),
+      child: Stack(
+        key: const ValueKey('catalog-tabs'),
+        children: [
+          // The grey rule the selected tab's berry line sits on.
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SizedBox(
+              height: 1,
+              child: ColoredBox(color: KalinkaColors.borderDefault),
             ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: LayoutBuilder(
-                builder: (context, constraints) => Row(
-                  children: [
-                    for (final (i, option) in [
-                      (PluginTab.sources, 'Music sources'),
-                      (PluginTab.devices, 'HiFi control'),
-                      (PluginTab.server, 'Streamer'),
-                    ].indexed) ...[
-                      if (i > 0)
-                        SizedBox(width: constraints.maxWidth < 480 ? 16 : 32),
-                      Expanded(
-                        // The labels use a monospace font.
-                        flex: option.$2.length,
-                        child: _PluginTabButton(
-                          key: ValueKey('catalog-tab-${option.$1.name}'),
-                          label: option.$2,
-                          selected: tab == option.$1,
-                          onTap: () {
-                            setState(() => _tab = option.$1);
-                            _scroll.jumpTo(0);
-                          },
-                        ),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: LayoutBuilder(
+              builder: (context, constraints) => Row(
+                children: [
+                  for (final (i, option) in [
+                    (PluginTab.sources, 'Music sources'),
+                    (PluginTab.devices, 'HiFi control'),
+                    (PluginTab.server, 'Streamer'),
+                  ].indexed) ...[
+                    if (i > 0)
+                      SizedBox(width: constraints.maxWidth < 480 ? 16 : 32),
+                    Expanded(
+                      // The labels use a monospace font.
+                      flex: option.$2.length,
+                      child: _PluginTabButton(
+                        key: ValueKey('catalog-tab-${option.$1.name}'),
+                        label: option.$2,
+                        selected: tab == option.$1,
+                        onTap: () {
+                          setState(() => _tab = option.$1);
+                          _scroll.jumpTo(0);
+                        },
                       ),
-                    ],
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     ),
   );

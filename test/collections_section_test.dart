@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,7 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/collection_art_tile.dart';
 import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/search/collections_section.dart';
@@ -77,7 +79,8 @@ final _collections = [
 class _Api implements KalinkaPlayerProxy {
   final List<BrowseItem> roots;
   final Map<String, List<BrowseItem>> children;
-  final int shelfTotal;
+  int shelfTotal;
+  final createdNames = <String>[];
 
   _Api({required this.roots, required this.children, this.shelfTotal = 0});
 
@@ -92,6 +95,18 @@ class _Api implements KalinkaPlayerProxy {
     final items = children[id] ?? const <BrowseItem>[];
     final total = id == _shelfId ? shelfTotal : items.length;
     return BrowseItemsList(offset, limit, total, items.take(limit).toList());
+  }
+
+  @override
+  Future<String> createCollection(
+    String name, {
+    String description = '',
+  }) async {
+    createdNames.add(name);
+    final item = _collection('new', name, 0, const []);
+    children[_shelfId] = [item, ...?children[_shelfId]];
+    shelfTotal++;
+    return item.id;
   }
 
   @override
@@ -133,6 +148,13 @@ _Api _serverWith(List<BrowseItem> collections, {int total = 0}) => _Api(
 );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    final loader = FontLoader(KalinkaFonts.sansFamily)
+      ..addFont(rootBundle.load('assets/fonts/IBMPlexSans-Medium.ttf'));
+    await loader.load();
+  });
+
   late SharedPreferences prefs;
   final opened = <CatalogCardPlan>[];
   final focused = <String?>[];
@@ -152,6 +174,7 @@ void main() {
     WidgetTester tester, {
     required KalinkaPlayerProxy api,
     required List<ModuleInfo> modules,
+    double textScale = 1,
   }) async {
     final container = ProviderContainer(
       overrides: [
@@ -167,7 +190,13 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
           home: Scaffold(
+            backgroundColor: KalinkaColors.background,
             body: ListView(
               children: [
                 CollectionsSection(
@@ -265,57 +294,86 @@ void main() {
     expect(focused, ['kalinka:collections:playlist:c3']);
   });
 
-  testWidgets('with none yet, the invitation stands in and can be taken', (
+  testWidgets('the whole empty row creates a collection and refreshes Home', (
     tester,
   ) async {
-    await pump(tester, api: _serverWith(const []), modules: _withCollections);
+    final api = _serverWith(const []);
+    await pump(tester, api: api, modules: _withCollections);
 
     expect(find.text('YOUR COLLECTIONS'), findsOneWidget);
-    expect(find.text('No collections yet'), findsOneWidget);
+    expect(find.text('Create your first collection'), findsOneWidget);
     expect(find.text('VIEW ALL'), findsNothing);
-    final button = tester.widget<KalinkaButton>(find.byType(KalinkaButton));
-    expect(button.label, 'CREATE COLLECTION');
-    expect(button.enabled, isTrue);
+    expect(find.byType(CollectionsEmptyCard), findsNothing);
+    expect(find.byType(KalinkaButton), findsNothing);
+
+    // Open from padding, away from either the icon or text.
+    final row = tester.getRect(find.byType(CollectionsEmptyRow));
+    await tester.tapAt(row.bottomRight + const Offset(-2, -2));
+    await tester.pumpAndSettle();
+    expect(find.text('NEW COLLECTION'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Evening listening');
+    await tester.pump();
+    await tester.tap(find.text('CREATE'));
+    await tester.pumpAndSettle();
+
+    expect(api.createdNames, ['Evening listening']);
+    expect(find.byType(CollectionsEmptyRow), findsNothing);
+    expect(
+      find.widgetWithText(CollectionShelfRow, 'Evening listening'),
+      findsOneWidget,
+    );
+    // Let the creation confirmation retire its display timer.
+    await tester.pump(const Duration(seconds: 30));
   });
 
-  testWidgets('the invitation stays a row on a phone, button under it', (
+  testWidgets('the empty row stays compact on phone and desktop', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(360, 800);
-    tester.view.devicePixelRatio = 1.0;
+    tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-
-    await pump(tester, api: _serverWith(const []), modules: _withCollections);
-
-    final tile = tester.getRect(find.byType(CollectionArtTile));
-    final title = tester.getRect(find.text('No collections yet'));
-    final button = tester.getRect(find.byType(KalinkaButton));
-
-    // Tile beside the words, never over them — stacked, the card owns the
-    // screen. The button is what gives way, to its own line under the row.
-    expect(tile.right, lessThanOrEqualTo(title.left));
-    expect(tile.width, lessThan(CollectionsEmptyCard.tileSize));
-    expect(button.top, greaterThan(tile.bottom));
-    expect(button.width, greaterThan(title.width));
+    for (final width in [375.0, 1200.0]) {
+      tester.view.physicalSize = Size(width, 800);
+      await pump(tester, api: _serverWith(const []), modules: _withCollections);
+      final row = tester.getRect(find.byType(CollectionsEmptyRow));
+      expect(row.height, inInclusiveRange(68, 76));
+      expect(find.byType(CollectionArtTile), findsNothing);
+      expect(tester.takeException(), isNull);
+    }
   });
 
-  testWidgets('with room, the button sits beside the tile and stays bounded', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1200, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    await pump(tester, api: _serverWith(const []), modules: _withCollections);
-
-    final tile = tester.getRect(find.byType(CollectionArtTile));
-    final button = tester.getRect(find.byType(KalinkaButton));
-
-    expect(tile.width, CollectionsEmptyCard.tileSize);
-    expect(button.left, greaterThan(tile.right));
-    // A CTA stretched across the card would read as a banner.
-    expect(button.width, lessThanOrEqualTo(260.0));
-  });
+  testWidgets(
+    'large text wraps and the creation row supports keyboard activation',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final semantics = tester.ensureSemantics();
+      await pump(
+        tester,
+        api: _serverWith(const []),
+        modules: _withCollections,
+        textScale: 2,
+      );
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byType(CollectionsEmptyRow)).height,
+        greaterThan(76),
+      );
+      expect(
+        tester.getSemantics(
+          find.bySemanticsLabel('Create your first collection'),
+        ),
+        isSemantics(isButton: true, hasTapAction: true),
+      );
+      Focus.of(tester.element(find.text('Create your first collection')))
+          .requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(find.text('NEW COLLECTION'), findsOneWidget);
+      semantics.dispose();
+    },
+  );
 
   testWidgets('a collection shows its collage; an empty one the tile', (
     tester,

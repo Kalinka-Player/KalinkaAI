@@ -1,6 +1,8 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,6 +15,7 @@ import 'package:kalinka/providers/indexer_status_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_button.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
 import 'package:kalinka/widgets/overlay_card.dart';
@@ -23,13 +26,35 @@ import 'package:kalinka/widgets/search/search_session_view.dart';
 /// `initState` — where a second AnimationController on a
 /// SingleTickerProviderStateMixin threw on the first build.
 class _FakeApi implements KalinkaPlayerProxy {
+  final bool withHomeContent;
+  _FakeApi({this.withHomeContent = false});
+
   @override
   Future<BrowseItemsList> getFavorite(
     SearchType queryType, {
     int offset = 0,
     int limit = 10,
     String filter = '',
-  }) async => BrowseItemsList(0, limit, 0, const []);
+  }) async => BrowseItemsList(
+    0,
+    limit,
+    withHomeContent && queryType == SearchType.track ? 6 : 0,
+    [
+      if (withHomeContent && queryType == SearchType.track)
+        for (var i = 0; i < 6; i++)
+          BrowseItem(
+            id: 'kalinka:localfiles:track:$i',
+            canBrowse: false,
+            canAdd: true,
+            track: Track(
+              id: '$i',
+              title: 'Favourite $i',
+              duration: 200,
+              performer: Artist(id: 'artist', name: 'Artist'),
+            ),
+          ),
+    ],
+  );
 
   @override
   Future<BrowseItemsList> browse(
@@ -82,6 +107,19 @@ class _IdleIndexer extends IndexerStatusNotifier {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    for (final (family, file) in [
+      (KalinkaFonts.sansFamily, 'IBMPlexSans-Regular.ttf'),
+      (KalinkaFonts.monoFamily, 'IBMPlexMono-Regular.ttf'),
+      (KalinkaFonts.displayFamily, 'PlayfairDisplay-Regular.ttf'),
+    ]) {
+      final loader = FontLoader(family)
+        ..addFont(rootBundle.load('assets/fonts/$file'));
+      await loader.load();
+    }
+  });
+
   late SharedPreferences prefs;
 
   setUp(() async {
@@ -93,16 +131,35 @@ void main() {
     prefs = await SharedPreferences.getInstance();
   });
 
-  ProviderContainer makeContainer({List<ModuleInfo> modules = const []}) {
+  ProviderContainer makeContainer({
+    List<ModuleInfo> modules = const [],
+    bool withHomeContent = false,
+  }) {
     final container = ProviderContainer(
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
-        kalinkaProxyProvider.overrideWithValue(_FakeApi()),
+        kalinkaProxyProvider.overrideWithValue(
+          _FakeApi(withHomeContent: withHomeContent),
+        ),
         sourceModulesProvider.overrideWith((ref) => modules),
         connectionStateProvider.overrideWith(_FixedConnection.new),
         playerStateProvider.overrideWithValue(PlaybackState.empty),
         catalogCardGroupsProvider.overrideWith(
-          (ref) => Future.value(const <CatalogCardGroup>[]),
+          (ref) async => [
+            if (withHomeContent)
+              CatalogCardGroup(
+                sourceName: 'localfiles',
+                sourceTitle: 'My music',
+                cards: [
+                  for (var i = 0; i < 6; i++)
+                    CatalogCardPlan(
+                      id: 'kalinka:localfiles:catalog:$i',
+                      title: 'Catalog $i',
+                      sourceName: 'localfiles',
+                    ),
+                ],
+              ),
+          ],
         ),
         indexerStatusProvider.overrideWith(_IdleIndexer.new),
       ],
@@ -114,14 +171,31 @@ void main() {
   Future<ProviderContainer> pumpSurface(
     WidgetTester tester, {
     List<ModuleInfo> modules = const [],
+    bool withHomeContent = false,
+    double textScale = 1,
+    bool reduceMotion = false,
+    double topInset = 0,
   }) async {
-    final container = makeContainer(modules: modules);
+    final container = makeContainer(
+      modules: modules,
+      withHomeContent: withHomeContent,
+    );
     container.read(searchSessionProvider.notifier).refresh();
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: SearchSessionView())),
+        child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(textScale),
+              disableAnimations: reduceMotion,
+              padding: EdgeInsets.only(top: topInset),
+            ),
+            child: child!,
+          ),
+          home: const Scaffold(body: SearchSessionView()),
+        ),
       ),
     );
     await tester.pump(const Duration(milliseconds: 50));
@@ -140,6 +214,119 @@ void main() {
     await pumpSurface(tester);
     // Nothing to narrow at the root — the button would be a dead affordance.
     expect(find.byType(SearchFilterButton), findsNothing);
+  });
+
+  final rootList = find.byKey(const PageStorageKey('discoverRoot'));
+  final backdrop = find.byKey(const ValueKey('discover-backdrop'));
+  final headerSurface = find.byKey(const ValueKey('discover-header-surface'));
+  final artwork = find.byWidgetPredicate(
+    (widget) =>
+        widget is SvgPicture &&
+        widget.bytesLoader is SvgAssetLoader &&
+        (widget.bytesLoader as SvgAssetLoader).assetName ==
+            'assets/images/header_artwork.svg',
+  );
+
+  ScrollPosition rootPosition(WidgetTester tester) => tester
+      .state<ScrollableState>(
+        find.descendant(of: rootList, matching: find.byType(Scrollable)).first,
+      )
+      .position;
+
+  for (final (size, scale, reduceMotion) in [
+    (const Size(375, 812), 1.0, false),
+    (const Size(812, 375), 1.0, false),
+    (const Size(1200, 800), 1.0, false),
+    (const Size(375, 812), 2.0, true),
+  ]) {
+    testWidgets('Home backdrop follows content at $size, ${scale}x text', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await pumpSurface(
+        tester,
+        withHomeContent: true,
+        textScale: scale,
+        reduceMotion: reduceMotion,
+        topInset: 24,
+      );
+      await tester.pumpAndSettle();
+
+      final headerRect = tester.getRect(find.byType(KalinkaTopBar));
+      final backdropRect = tester.getRect(backdrop);
+      final artRect = tester.getRect(artwork);
+      final titleRect = tester.getRect(find.text('What shall we play?'));
+      expect(headerRect.height, kKalinkaTopBarHeight + 24);
+      expect(tester.widget<ColoredBox>(headerSurface).color.a, 0);
+
+      // One frame is enough: decoration moves with the list without easing.
+      rootPosition(tester).jumpTo(80);
+      await tester.pump();
+      expect(
+        tester.getRect(backdrop),
+        backdropRect.shift(const Offset(0, -80)),
+      );
+      expect(tester.getRect(artwork), artRect.shift(const Offset(0, -80)));
+      expect(
+        tester.getRect(find.text('What shall we play?')),
+        titleRect.shift(const Offset(0, -80)),
+      );
+      expect(tester.getRect(find.byType(KalinkaTopBar)), headerRect);
+      expect(
+        tester.widget<ColoredBox>(headerSurface).color,
+        KalinkaColors.background,
+      );
+
+      expect(
+        rootPosition(tester).maxScrollExtent,
+        greaterThanOrEqualTo(backdropRect.height),
+      );
+      rootPosition(tester).jumpTo(backdropRect.height);
+      await tester.pump();
+      expect(tester.getRect(backdrop).bottom, lessThanOrEqualTo(0));
+      expect(tester.takeException(), isNull);
+
+      rootPosition(tester).jumpTo(0);
+      await tester.pump();
+      expect(tester.getRect(backdrop), backdropRect);
+      expect(tester.widget<ColoredBox>(headerSurface).color.a, 0);
+    });
+  }
+
+  testWidgets('returning from a catalog restores the backdrop with the list', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final container = await pumpSurface(tester, withHomeContent: true);
+    await tester.pumpAndSettle();
+    await tester.drag(rootList, const Offset(0, -160));
+    await tester.pumpAndSettle();
+    final offset = rootPosition(tester).pixels;
+    final rect = tester.getRect(backdrop);
+    expect(offset, greaterThan(52));
+
+    container
+        .read(searchSessionProvider.notifier)
+        .openCatalog(
+          id: 'kalinka:localfiles:catalog:albums',
+          title: 'My Albums',
+        );
+    await tester.pumpAndSettle();
+    expect(backdrop, findsNothing);
+    await tester.tap(find.text('HOME'));
+    await tester.pumpAndSettle();
+
+    expect(rootPosition(tester).pixels, offset);
+    expect(tester.getRect(backdrop), rect);
+    expect(
+      tester.widget<ColoredBox>(headerSurface).color,
+      KalinkaColors.background,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a catalog page carries the filter control, and it opens', (
@@ -268,9 +455,7 @@ void main() {
     expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
   });
 
-  testWidgets('the HOME crumb highlights under the pointer', (
-    tester,
-  ) async {
+  testWidgets('the HOME crumb highlights under the pointer', (tester) async {
     final container = await pumpSurface(tester);
     container
         .read(searchSessionProvider.notifier)

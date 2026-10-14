@@ -1,7 +1,9 @@
+import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../data_model/browse_filters.dart';
 import '../../providers/catalog_cards_provider.dart';
@@ -104,6 +106,12 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   final _composerController = TextEditingController();
   final _composerFocus = FocusNode();
 
+  // The backdrop spans the pinned header and the list, so it is painted at
+  // surface level but follows the list's exact offset. Retain that offset
+  // while a catalog replaces the root, just as PageStorage retains the list.
+  final _discoverOffset = ValueNotifier<double>(0);
+  late final ScrollController _discoverScroll;
+
   // Whether the animated search overlay is up. Driven by _openSearch /
   // _closeSearch (not by raw focus), so dismissing the keyboard alone keeps
   // the overlay open, like Material's search view.
@@ -151,6 +159,15 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   @override
   void initState() {
     super.initState();
+    _discoverScroll = ScrollController(
+      onAttach: (_) {
+        // PageStorage restores the position during attachment. Synchronise
+        // after layout too, in case the viewport has changed while away.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _syncDiscoverOffset();
+        });
+      },
+    )..addListener(_syncDiscoverOffset);
     _entryMode = ref.read(searchEntryModeProvider.notifier);
     _overlayCtrl = AnimationController(
       vsync: this,
@@ -175,6 +192,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _discoverScroll.dispose();
+    _discoverOffset.dispose();
     _composerController.removeListener(_onTextChange);
     _overlayCtrl.dispose();
     _filtersCtrl.dispose();
@@ -189,6 +208,12 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
       WidgetsBinding.instance.addPostFrameCallback((_) => notifier.set(false));
     }
     super.dispose();
+  }
+
+  void _syncDiscoverOffset() {
+    if (_discoverScroll.hasClients) {
+      _discoverOffset.value = _discoverScroll.offset;
+    }
   }
 
   @override
@@ -461,8 +486,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           children: [
             // The backdrop behind the Discover root, full surface width and
             // rising behind the bar and the status-bar inset so the two read
-            // as one surface: the bloom, and over it the ground colour that
-            // ends it under the search entry.
+            // as one surface. It moves one-for-one with the introduction,
+            // including overscroll, without rebuilding the content below.
             if (session.activeView == FindMusicView.catalogs &&
                 session.catalogPage.isRoot)
               Positioned(
@@ -473,16 +498,30 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                     MediaQuery.paddingOf(context).top +
                     _kDiscoverBackdropHeight,
                 child: IgnorePointer(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      DecoratedBox(
-                        decoration: BoxDecoration(gradient: _kDiscoverBloom),
+                  child: ValueListenableBuilder<double>(
+                    valueListenable: _discoverOffset,
+                    builder: (context, offset, child) => Transform.translate(
+                      offset: Offset(0, -offset),
+                      child: child,
+                    ),
+                    child: RepaintBoundary(
+                      key: const ValueKey('discover-backdrop'),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: _kDiscoverBloom,
+                            ),
+                          ),
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: _kDiscoverFadeOut,
+                            ),
+                          ),
+                        ],
                       ),
-                      DecoratedBox(
-                        decoration: BoxDecoration(gradient: _kDiscoverFadeOut),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -563,16 +602,27 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   Widget _buildHeader(SearchSessionState session) {
     final onResults = session.activeView == FindMusicView.results;
     if (!onResults && session.catalogPage.isRoot) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          KalinkaTopBar(
-            transparent: true,
-            onServerChipTap: widget.onServerTap,
-            connectionKey: widget.connectionKey,
+      return ValueListenableBuilder<double>(
+        valueListenable: _discoverOffset,
+        builder: (context, offset, child) => ColoredBox(
+          key: const ValueKey('discover-header-surface'),
+          // Directly tied to scroll, with no delayed animation or parallax.
+          color: KalinkaColors.background.withValues(
+            alpha: (offset / kKalinkaTopBarHeight).clamp(0.0, 1.0),
           ),
-          const ConnectionBanner(),
-        ],
+          child: child,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            KalinkaTopBar(
+              transparent: true,
+              onServerChipTap: widget.onServerTap,
+              connectionKey: widget.connectionKey,
+            ),
+            const ConnectionBanner(),
+          ],
+        ),
       );
     }
 
@@ -677,6 +727,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// entry lifts the overlay.
   Widget _buildCatalogsRoot(SearchSessionState session) {
     return SearchZeroState(
+      controller: _discoverScroll,
       onOpenCatalog: _openCatalog,
       leading: [
         // Only present while the library pipeline is still running.
@@ -982,8 +1033,9 @@ class _ResultsReturnPill extends StatelessWidget {
 }
 
 /// The Discover hero: the Playfair question, its description, and the resting
-/// search entry. The text keeps to the left half (wrapping as needed); the
-/// crimson bloom behind it is painted once at the surface level, not here.
+/// search entry, over the tinted header artwork on the right. The text keeps
+/// to the left half (wrapping as needed); the crimson bloom behind it is
+/// painted once at the surface level, not here.
 class _DiscoverHero extends StatelessWidget {
   final Key entryKey;
   final String hint;
@@ -995,37 +1047,94 @@ class _DiscoverHero extends StatelessWidget {
     required this.onOpenSearch,
   });
 
+  /// Past the list's side inset, so the artwork reaches the window edge.
+  static const _bleed = 16.0;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          FractionallySizedBox(
-            widthFactor: 0.55,
-            child: Text(
-              'What shall we play?',
-              style: KalinkaFonts.display(
-                fontSize: KalinkaTypography.baseSize + 17,
-                fontWeight: FontWeight.w600,
-                color: KalinkaColors.textPrimary,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final artWidth = math.min(
+            (constraints.maxWidth + _bleed) * 0.64,
+            440.0,
+          );
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Right of the question; it fades out leftwards and downwards,
+              // so the text and the entry read over it.
+              Positioned(
+                top: -8,
+                right: -_bleed,
+                width: artWidth,
+                height: artWidth * 9 / 16,
+                child: IgnorePointer(
+                  child: ExcludeSemantics(
+                    child: RepaintBoundary(
+                      // Toned in the bloom's family: deep berry where it fades
+                      // in, warming to blush on the bright threads.
+                      child: ShaderMask(
+                        blendMode: BlendMode.srcIn,
+                        shaderCallback: (bounds) => LinearGradient(
+                          begin: Alignment.bottomLeft,
+                          end: Alignment.topRight,
+                          colors: [
+                            KalinkaColors.accent.withValues(alpha: 0.7),
+                            KalinkaColors.accentTint.withValues(alpha: 0.75),
+                            Color.lerp(
+                              KalinkaColors.accentTint,
+                              KalinkaColors.textPrimary,
+                              0.6,
+                            )!.withValues(alpha: 0.8),
+                          ],
+                          stops: const [0, 0.5, 1],
+                        ).createShader(bounds),
+                        child: SvgPicture.asset(
+                          'assets/images/header_artwork.svg',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          FractionallySizedBox(
-            widthFactor: 0.55,
-            child: Text(
-              'Describe a mood, activity, genre, or anything else you '
-              'would like to hear.',
-              style: KalinkaTextStyles.trackRowSubtitle,
-            ),
-          ),
-          const SizedBox(height: 34),
-          _SearchEntryButton(key: entryKey, hint: hint, onTap: onOpenSearch),
-        ],
+              _heroText(),
+            ],
+          );
+        },
       ),
+    );
+  }
+
+  Widget _heroText() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FractionallySizedBox(
+          widthFactor: 0.55,
+          child: Text(
+            'What shall we play?',
+            style: KalinkaFonts.display(
+              fontSize: KalinkaTypography.baseSize + 17,
+              fontWeight: FontWeight.w600,
+              color: KalinkaColors.textPrimary,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        FractionallySizedBox(
+          widthFactor: 0.55,
+          child: Text(
+            'Describe a mood, activity, genre, or anything else you '
+            'would like to hear.',
+            style: KalinkaTextStyles.trackRowSubtitle,
+          ),
+        ),
+        const SizedBox(height: 34),
+        _SearchEntryButton(key: entryKey, hint: hint, onTap: onOpenSearch),
+      ],
     );
   }
 }

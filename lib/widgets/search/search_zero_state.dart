@@ -18,6 +18,9 @@ class SearchZeroState extends ConsumerWidget {
   /// Opens a catalog page directly (browse id + resolved provider label).
   final OpenCatalog onOpenCatalog;
 
+  /// Shares the root's scroll position with Home's backdrop and pinned bar.
+  final ScrollController? controller;
+
   /// Widgets pinned to the top of the scroll — the "What shall we play?"
   /// heading, description and the search entry — so they scroll with the
   /// content rather than sitting sticky above it.
@@ -26,6 +29,7 @@ class SearchZeroState extends ConsumerWidget {
   const SearchZeroState({
     super.key,
     required this.onOpenCatalog,
+    this.controller,
     this.leading = const [],
   });
 
@@ -39,6 +43,7 @@ class SearchZeroState extends ConsumerWidget {
       // Coming back from a catalog returns to where the root was left, not
       // to its top — the shelf you came from is where you look next.
       key: const PageStorageKey('discoverRoot'),
+      controller: controller,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
         ...leading,
