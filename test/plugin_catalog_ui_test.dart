@@ -56,7 +56,7 @@ import 'package:kalinka/widgets/server_chip.dart';
 import 'package:kalinka/widgets/plugin_catalog_entry.dart';
 import 'package:kalinka/widgets/restart_overlay.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
-import 'package:kalinka/widgets/queue_zone.dart';
+import 'package:kalinka/widgets/search/search_session_view.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/sheet_anchor.dart';
 import 'package:kalinka/widgets/settings_controls/inline_markdown.dart';
@@ -2763,7 +2763,7 @@ void main() {
     ('Configuration', PluginCatalogScreen, true),
   ]) {
     testWidgets(
-      '$label covers only the tablet queue and preserves state across resize',
+      '$label covers only the tablet content pane and preserves state across resize',
       (tester) async {
         final container = await _container(
           _Proxy({'enabled': catalog, 'catalog_browsing': true}),
@@ -2782,7 +2782,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        final queue = tester.getRect(find.byType(QueueZone));
+        final queue = tester.getRect(find.byType(SearchSessionView));
         final nowPlaying = tester.getRect(find.byType(NowPlayingContent));
         await tester.tap(find.byType(ServerChip));
         await tester.pumpAndSettle();
@@ -2869,7 +2869,7 @@ void main() {
           find.byType(RendererSwitcherDropdown).hitTestable(),
           findsOneWidget,
         );
-        expect(tester.getRect(find.byType(QueueZone)), queue);
+        expect(tester.getRect(find.byType(SearchSessionView)), queue);
         expect(tester.takeException(), isNull);
       },
     );

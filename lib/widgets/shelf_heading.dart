@@ -32,6 +32,14 @@ class ShelfHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Large type leaves no room for the rule; the title takes it, wrapping.
+    final roomy = !hasLargeType(context);
+    final heading = Text(
+      title,
+      style: KalinkaTextStyles.sectionLabel.copyWith(
+        color: KalinkaColors.textPrimary,
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -41,24 +49,21 @@ class ShelfHeading extends StatelessWidget {
               Icon(icon, size: 15, color: KalinkaColors.accentTint),
               const SizedBox(width: 8),
             ],
-            Text(
-              title,
-              style: KalinkaTextStyles.sectionLabel.copyWith(
-                color: KalinkaColors.textPrimary,
-              ),
-            ),
+            if (roomy) heading else Expanded(child: heading),
             if (count != null) ...[
               const SizedBox(width: 8),
               ShelfTally(count!),
             ],
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Divider(
-                color: KalinkaColors.borderSubtle,
-                thickness: 1,
-                height: 1,
+            if (roomy) ...[
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Divider(
+                  color: KalinkaColors.borderSubtle,
+                  thickness: 1,
+                  height: 1,
+                ),
               ),
-            ),
+            ],
             if (onViewAll != null) ...[
               const SizedBox(width: 12),
               ViewAllAction(label: viewAllLabel, onTap: onViewAll!),
@@ -78,6 +83,11 @@ class ShelfHeading extends StatelessWidget {
     );
   }
 }
+
+/// Text scaled past one and a half times, where a heading's rule no longer
+/// fits beside it.
+bool hasLargeType(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(18) > 27;
 
 /// How many a shelf or a group holds, after its name: muted, so the name
 /// stays the heading.

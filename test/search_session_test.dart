@@ -346,16 +346,15 @@ void main() {
   }
 
   group('SearchSessionNotifier', () {
-    test('opening loads favourites but fires no search', () async {
+    test('refreshing loads favourites but fires no search', () async {
       final api = _FakeApi();
       final container = makeContainer(api);
       final notifier = container.read(searchSessionProvider.notifier);
 
-      notifier.open();
+      notifier.refresh();
       await Future.delayed(const Duration(milliseconds: 50));
 
       final state = container.read(searchSessionProvider);
-      expect(state.isOpen, isTrue);
       expect(state.activeView, FindMusicView.catalogs);
       expect(state.resultsAvailable, isFalse);
       expect(state.recentFavourites, isNotEmpty);
@@ -368,7 +367,7 @@ void main() {
         final api = _FakeApi();
         final container = makeContainer(api);
         final notifier = container.read(searchSessionProvider.notifier);
-        notifier.open();
+        notifier.refresh();
 
         notifier.submit('jazz for a rainy night');
         var state = container.read(searchSessionProvider);
@@ -393,7 +392,7 @@ void main() {
       final api = _FakeApi();
       final container = makeContainer(api, modules: _nameOnlyModules);
       final notifier = container.read(searchSessionProvider.notifier);
-      notifier.open();
+      notifier.refresh();
 
       notifier.submit('night');
       await Future.delayed(const Duration(milliseconds: 900));
@@ -409,7 +408,7 @@ void main() {
       final api = _FakeApi();
       final container = makeContainer(api);
       final notifier = container.read(searchSessionProvider.notifier);
-      notifier.open();
+      notifier.refresh();
 
       notifier.submit('one');
       notifier.submit('two');
@@ -430,7 +429,7 @@ void main() {
         final api = _HangingApi();
         final container = makeContainer(api);
         final notifier = container.read(searchSessionProvider.notifier);
-        notifier.open();
+        notifier.refresh();
         notifier.submit('jazz');
         async.flushMicrotasks();
         var results = container.read(searchSessionProvider).results!;
@@ -456,7 +455,7 @@ void main() {
       final api = _FlakyApi();
       final container = makeContainer(api);
       final notifier = container.read(searchSessionProvider.notifier);
-      notifier.open();
+      notifier.refresh();
 
       notifier.submit('jazz');
       await Future.delayed(const Duration(milliseconds: 900));
@@ -481,7 +480,7 @@ void main() {
       final api = _FakeApi();
       final container = makeContainer(api);
       final notifier = container.read(searchSessionProvider.notifier);
-      notifier.open();
+      notifier.refresh();
       notifier.submit('jazz');
 
       notifier.setResultsFilter(
@@ -498,7 +497,7 @@ void main() {
       final api = _FakeApi();
       final container = makeContainer(api);
       final notifier = container.read(searchSessionProvider.notifier);
-      notifier.open();
+      notifier.refresh();
       notifier.submit('jazz');
       await Future.delayed(const Duration(milliseconds: 900));
 
@@ -515,7 +514,7 @@ void main() {
       final api = _FakeApi();
       final container = makeContainer(api);
       final notifier = container.read(searchSessionProvider.notifier);
-      notifier.open();
+      notifier.refresh();
 
       // Results is inert until a search has run.
       notifier.selectView(FindMusicView.results);
@@ -550,23 +549,22 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 900));
     });
 
-    test('closing discards the workspace but keeps history', () async {
+    test('resetting discards the workspace but keeps history', () async {
       final api = _FakeApi();
       final container = makeContainer(api);
       final notifier = container.read(searchSessionProvider.notifier);
-      notifier.open();
+      notifier.refresh();
       notifier.submit('jazz');
       notifier.submit('techno');
       await Future.delayed(const Duration(milliseconds: 900));
 
-      notifier.close();
+      notifier.resetToRoot();
       var state = container.read(searchSessionProvider);
-      expect(state.isOpen, isFalse);
       expect(state.resultsAvailable, isFalse);
       expect(state.results, isNull);
       expect(state.catalogPage.isRoot, isTrue);
 
-      notifier.open();
+      notifier.refresh();
       state = container.read(searchSessionProvider);
       // Newest-first history.
       expect(state.history.take(2), ['techno', 'jazz']);
@@ -701,7 +699,7 @@ void main() {
         final notifier = container.read(searchSessionProvider.notifier);
         BrowseFilterQuery filter() =>
             container.read(searchSessionProvider).resultsFilter;
-        notifier.open();
+        notifier.refresh();
 
         notifier.setResultsFilter(
           const BrowseFilterQuery(
@@ -720,8 +718,8 @@ void main() {
         expectChosen(filter());
         await Future.delayed(_settle);
 
-        notifier.close();
-        notifier.open();
+        notifier.resetToRoot();
+        notifier.refresh();
         expectChosen(filter());
         notifier.submit('techno');
         await Future.delayed(_settle);
@@ -737,7 +735,7 @@ void main() {
       final container = makeContainer(api, modules: _twoSources);
       final notifier = container.read(searchSessionProvider.notifier);
       SearchSessionState state() => container.read(searchSessionProvider);
-      notifier.open();
+      notifier.refresh();
       notifier.submit('jazz');
       await Future.delayed(_settle);
 
@@ -758,7 +756,7 @@ void main() {
       final container = makeContainer(api, modules: _twoSources);
       final notifier = container.read(searchSessionProvider.notifier);
       SearchSessionState state() => container.read(searchSessionProvider);
-      notifier.open();
+      notifier.refresh();
       notifier.submit('jazz');
       await Future.delayed(_settle);
 
@@ -792,7 +790,7 @@ void main() {
         final container = makeContainer(api, modules: _twoSources);
         final notifier = container.read(searchSessionProvider.notifier);
         SearchSessionState state() => container.read(searchSessionProvider);
-        notifier.open();
+        notifier.refresh();
         notifier.setResultsFilter(
           const BrowseFilterQuery(type: SearchType.album),
         );
@@ -839,7 +837,7 @@ void main() {
         final container = makeContainer(api, modules: _twoSources);
         final notifier = container.read(searchSessionProvider.notifier);
         SearchSessionState state() => container.read(searchSessionProvider);
-        notifier.open();
+        notifier.refresh();
         notifier.setResultsFilter(
           const BrowseFilterQuery(type: SearchType.album),
         );
@@ -871,7 +869,7 @@ void main() {
       final api = _FakeApi();
       final container = makeContainer(api, modules: _twoNameOnlySources);
       final notifier = container.read(searchSessionProvider.notifier);
-      notifier.open();
+      notifier.refresh();
       notifier.setResultsFilter(
         const BrowseFilterQuery(type: SearchType.album, sources: ['qobuz']),
       );
@@ -895,7 +893,7 @@ void main() {
         final container = makeContainer(api, modules: _nameOnlyModules);
         final notifier = container.read(searchSessionProvider.notifier);
         SearchSessionState state() => container.read(searchSessionProvider);
-        notifier.open();
+        notifier.refresh();
         notifier.setResultsFilter(
           const BrowseFilterQuery(kind: ResultKind.recommendations),
         );
@@ -922,7 +920,7 @@ void main() {
         final api = _FakeApi();
         final container = makeContainer(api, modules: _nameOnlyModules);
         final notifier = container.read(searchSessionProvider.notifier);
-        notifier.open();
+        notifier.refresh();
         notifier.setResultsFilter(
           const BrowseFilterQuery(kind: ResultKind.recommendations),
         );
@@ -954,7 +952,7 @@ void main() {
         final api = _FakeApi();
         final container = makeContainer(api, modules: _twoNameOnlySources);
         final notifier = container.read(searchSessionProvider.notifier);
-        notifier.open();
+        notifier.refresh();
         notifier.setResultsFilter(
           const BrowseFilterQuery(
             type: SearchType.album,
@@ -1020,7 +1018,7 @@ void main() {
       final notifier = container.read(searchSessionProvider.notifier);
       BrowseFilterQuery filter() =>
           container.read(searchSessionProvider).catalogFilter;
-      notifier.open();
+      notifier.refresh();
 
       notifier.openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
       notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
@@ -1032,7 +1030,7 @@ void main() {
 
       notifier.backToCatalogsRoot();
       expect(filter().isEmpty, isTrue);
-      notifier.close();
+      notifier.resetToRoot();
       final restarted = makeContainer(_FakeApi());
       restarted
           .read(searchSessionProvider.notifier)
@@ -1076,7 +1074,7 @@ void main() {
         List<CatalogCardGroup> Function() cardGroups,
       ) async {
         final container = makeContainer(_FakeApi(), cardGroups: cardGroups);
-        container.read(searchSessionProvider.notifier).open();
+        container.read(searchSessionProvider.notifier).refresh();
         await Future.delayed(const Duration(milliseconds: 50));
       }
 
@@ -1144,7 +1142,7 @@ void main() {
           modules: _nameOnlyModules,
           modulesAfter: const Duration(milliseconds: 20),
         );
-        container.read(searchSessionProvider.notifier).open();
+        container.read(searchSessionProvider.notifier).refresh();
         await Future.delayed(const Duration(milliseconds: 100));
 
         final saved = prefs.getString('Kalinka.catalogFilters');
@@ -1160,7 +1158,7 @@ void main() {
       final container = makeContainer(api, modules: _twoSources);
       final notifier = container.read(searchSessionProvider.notifier);
       SearchSessionState state() => container.read(searchSessionProvider);
-      notifier.open();
+      notifier.refresh();
       notifier.setResultsFilter(const BrowseFilterQuery(sources: ['qobuz']));
 
       notifier.submit('jazz');
@@ -1202,7 +1200,7 @@ void main() {
         final container = makeContainer(api, modules: _twoSources);
         final notifier = container.read(searchSessionProvider.notifier);
         SearchSessionState state() => container.read(searchSessionProvider);
-        notifier.open();
+        notifier.refresh();
         notifier.setResultsFilter(
           const BrowseFilterQuery(type: SearchType.album, sources: ['qobuz']),
         );
@@ -1229,7 +1227,7 @@ void main() {
       final api = _FakeApi();
       final container = makeContainer(api, modules: _twoSources);
       final notifier = container.read(searchSessionProvider.notifier);
-      notifier.open();
+      notifier.refresh();
       notifier.setResultsFilter(
         const BrowseFilterQuery(kind: ResultKind.nameMatches),
       );
@@ -1262,7 +1260,7 @@ void main() {
           modules: [..._nameOnlyModules, ..._modules],
         );
         final notifier = container.read(searchSessionProvider.notifier);
-        notifier.open();
+        notifier.refresh();
         notifier.setResultsFilter(
           const BrowseFilterQuery(
             kind: ResultKind.recommendations,
@@ -1299,7 +1297,7 @@ void main() {
     testWidgets('shows the catalogs divider and favourites', (tester) async {
       final api = _FakeApi();
       final container = makeContainer(api);
-      container.read(searchSessionProvider.notifier).open();
+      container.read(searchSessionProvider.notifier).refresh();
 
       await tester.pumpWidget(
         UncontrolledProviderScope(

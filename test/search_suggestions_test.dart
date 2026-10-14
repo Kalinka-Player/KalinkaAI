@@ -99,7 +99,7 @@ void main() {
     final container = makeContainer(api);
     final notifier = container.read(searchSessionProvider.notifier);
 
-    notifier.open();
+    notifier.refresh();
     await Future.delayed(const Duration(milliseconds: 50));
 
     expect(api.suggestionCalls, 1);
@@ -118,7 +118,7 @@ void main() {
     final container = makeContainer(failing);
     final notifier = container.read(searchSessionProvider.notifier);
 
-    notifier.open();
+    notifier.refresh();
     await Future.delayed(const Duration(milliseconds: 50));
 
     final state = container.read(searchSessionProvider);

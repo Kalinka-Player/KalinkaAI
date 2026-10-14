@@ -5,12 +5,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/browse_filters.dart';
 import '../../providers/catalog_cards_provider.dart';
+import '../../providers/connection_state_provider.dart';
 import '../../providers/indexer_status_provider.dart';
 import '../../providers/row_expansion_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/selection_state_provider.dart';
+import '../../providers/shell_nav_provider.dart';
 import '../../theme/app_theme.dart';
 import '../breadcrumb_crumb.dart';
+import '../connection_banner.dart';
+import '../home/up_next_card.dart';
+import '../kalinka_top_bar.dart';
 import '../browse_filters/search_filter_button.dart';
 import '../browse_filters/search_filter_overlay.dart';
 import '../mini_player.dart';
@@ -52,18 +57,38 @@ final _kDiscoverFadeOut = LinearGradient(
   stops: const [0.80, 0.98],
 );
 
-/// Full-screen search session surface. The search bar sits in a header strip
-/// at the top — back button on its left, connection dot on its right — with
-/// the scrollable content (zero state, then query blocks, newest on top)
-/// below it.
+/// Home: the app's top level. Its root is the Discover scroll — the search
+/// invitation, Up next, collections and catalogs — under the wordmark bar;
+/// a catalog page or the results below it trade that bar for a back arrow
+/// and breadcrumb.
 ///
-/// The bar does not take focus when the session opens; it focuses only when
-/// tapped.
+/// The search entry does not take focus on its own; tapping it lifts the
+/// search overlay.
 class SearchSessionView extends ConsumerStatefulWidget {
-  /// Opens the server sheet — the connection dot's tap target.
+  /// Opens the server sheet — the connection chip's tap target.
   final VoidCallback? onServerTap;
 
-  const SearchSessionView({super.key, this.onServerTap});
+  /// Opens the queue page from the Up next card; no card without it.
+  final VoidCallback? onOpenQueue;
+
+  /// The resting search entry, for the first-run tour to point at.
+  final GlobalKey? entryKey;
+
+  /// The connection chip in the top-level bar, for the first-run tour.
+  final GlobalKey? connectionKey;
+
+  /// False while a panel opened over Home owns the system back: every
+  /// PopScope on a route hears it, so both would unwind.
+  final bool handlesBack;
+
+  const SearchSessionView({
+    super.key,
+    this.onServerTap,
+    this.onOpenQueue,
+    this.entryKey,
+    this.connectionKey,
+    this.handlesBack = true,
+  });
 
   @override
   ConsumerState<SearchSessionView> createState() => _SearchSessionViewState();
@@ -96,7 +121,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
 
   // The resting search entry's screen rect, measured on open so the overlay
   // card can rise out of exactly where the entry sat.
-  final _entryKey = GlobalKey();
+  final _ownEntryKey = GlobalKey();
+  GlobalKey get _entryKey => widget.entryKey ?? _ownEntryKey;
   Rect? _originRect;
 
   // Tracks the keyboard so its dismissal (e.g. the hardware back that hides it)
@@ -118,9 +144,13 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   // (whose height is the shared kKalinkaTopBarHeight).
   static const double _kBarMinHeight = 46;
 
+  // Read up front: `ref` is off limits in dispose, where it is needed.
+  late final SearchEntryModeNotifier _entryMode;
+
   @override
   void initState() {
     super.initState();
+    _entryMode = ref.read(searchEntryModeProvider.notifier);
     _overlayCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -133,6 +163,12 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     );
     _composerController.addListener(_onTextChange);
     WidgetsBinding.instance.addObserver(this);
+    // Mounted while connecting, Home waits for the connection instead.
+    if (ref.read(connectionStateProvider) == ConnectionStatus.connected) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ref.read(searchSessionProvider.notifier).refresh();
+      });
+    }
   }
 
   @override
@@ -143,15 +179,23 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     _filtersCtrl.dispose();
     _composerController.dispose();
     _composerFocus.dispose();
-    // Torn down with the overlay still up (session closed externally) would
+    // Torn down with the overlay still up (the server went away) would
     // otherwise leave the shared flag stuck true and the mini-player hidden.
     // Clear it after this frame — a synchronous write could land mid-build of
     // whatever removed this surface.
     if (_focused) {
-      final notifier = ref.read(searchEntryModeProvider.notifier);
+      final notifier = _entryMode;
       WidgetsBinding.instance.addPostFrameCallback((_) => notifier.set(false));
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        ref.read(connectionStateProvider) == ConnectionStatus.connected) {
+      ref.read(searchSessionProvider.notifier).refreshIfStale();
+    }
   }
 
   @override
@@ -335,9 +379,16 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
       ? session.resultsFilter.copyWith(text: session.searchQuery)
       : session.catalogFilter;
 
+  /// Whether nothing is left to unwind: the system back may leave the app.
+  bool _atTopLevel(SearchSessionState session) =>
+      !_focused &&
+      !_filtersOpen &&
+      session.activeView == FindMusicView.catalogs &&
+      session.catalogPage.isRoot;
+
   /// One back press unwinds one layer (MD §11): overlay → Results/catalog
-  /// page → Catalogs root → close to playback. Shared by the title-bar arrow
-  /// and the system back gesture.
+  /// page → Catalogs root. Shared by the title-bar arrow and the system back
+  /// gesture; at the root the back leaves the app.
   void _handleBack() {
     if (_focused) {
       _closeSearch();
@@ -357,9 +408,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     }
     if (!session.catalogPage.isRoot) {
       ref.read(searchSessionProvider.notifier).backToCatalogsRoot();
-      return;
     }
-    ref.read(searchSessionProvider.notifier).close();
   }
 
   @override
@@ -375,15 +424,21 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     }
 
     // A selection belongs to the listing it was gathered from: leaving that
-    // listing — for another catalog, the root, the results, or out of Find
-    // Music altogether — ends it rather than keeping a batch bar over rows
-    // nothing on screen still shows.
+    // listing — for another catalog, the root or the results — ends it
+    // rather than keeping a batch bar over rows nothing on screen still shows.
     ref.listen(
-      searchSessionProvider.select(
-        (s) => (s.isOpen, s.activeView, s.shownListing.id),
-      ),
+      searchSessionProvider.select((s) => (s.activeView, s.shownListing.id)),
       (_, _) => ref.read(selectionStateProvider.notifier).exitSelectionMode(),
     );
+
+    ref.listen(connectionStateProvider, (previous, next) {
+      if (next == ConnectionStatus.connected &&
+          previous != ConnectionStatus.connected) {
+        ref.read(searchSessionProvider.notifier).refresh();
+      }
+    });
+
+    ref.listen(homeSearchRequestProvider, (_, _) => _openSearch());
 
     // The shared tiles long-press into multi-select; surface the same batch
     // bar the old search feed used so the selection can be acted on.
@@ -391,13 +446,13 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
       selectionStateProvider.select((s) => s.isActive),
     );
 
-    // Find Music owns its back handling: the route must not pop while any
+    // Home owns its back handling: the route must not pop while any
     // in-screen layer can still unwind (the parent screen's PopScope leaves it
     // alone).
     return PopScope(
-      canPop: false,
+      canPop: !widget.handlesBack || _atTopLevel(session),
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _handleBack();
+        if (!didPop && widget.handlesBack) _handleBack();
       },
       child: ColoredBox(
         color: KalinkaColors.background,
@@ -501,10 +556,24 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     return _buildCatalogsRoot(session);
   }
 
-  /// Title bar: back arrow · breadcrumb · filter · connection dot. The arrow
-  /// is the one navigation control (layered back, [_handleBack]).
+  /// The top level's bar is the app's own: wordmark and connection chip.
+  /// Deeper, it is back arrow · breadcrumb · filter · connection dot, the
+  /// arrow being the one navigation control (layered back, [_handleBack]).
   Widget _buildHeader(SearchSessionState session) {
     final onResults = session.activeView == FindMusicView.results;
+    if (!onResults && session.catalogPage.isRoot) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          KalinkaTopBar(
+            transparent: true,
+            onServerChipTap: widget.onServerTap,
+            connectionKey: widget.connectionKey,
+          ),
+          const ConnectionBanner(),
+        ],
+      );
+    }
 
     // No opaque fill and no bottom rule — the bar and the content below it
     // read as one surface, with the Discover glow showing through both.
@@ -559,7 +628,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     );
   }
 
-  /// The navigation stack (`DISCOVER › CATEGORY`); the earlier segment is
+  /// The navigation stack (`HOME › CATEGORY`); the earlier segment is
   /// muted because it is where back returns to — and, being where back
   /// returns to, it is also a target: tapping it unwinds the same layer the
   /// arrow does.
@@ -574,10 +643,10 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     return Row(
       children: [
         BreadcrumbCrumb(
-          label: 'DISCOVER',
-          semanticsLabel: 'Back to Discover',
+          label: 'HOME',
+          semanticsLabel: 'Back to Home',
           style: style,
-          // At the root there is nowhere to go: DISCOVER is the page itself.
+          // At the root there is nowhere to go: HOME is the page itself.
           onTap: current == null ? null : _handleBack,
         ),
         if (current != null) ...[
@@ -627,6 +696,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           onOpenSearch: _openSearch,
         ),
         const SizedBox(height: 30),
+        if (widget.onOpenQueue != null)
+          UpNextCard(onOpenQueue: widget.onOpenQueue!),
       ],
     );
   }

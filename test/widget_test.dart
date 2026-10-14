@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/main.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/indexer_status_provider.dart';
+import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
 import 'package:kalinka/providers/renderer_host_provider.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
@@ -22,6 +23,14 @@ class _EpochNotifier extends Notifier<int> {
 final _epochProvider = NotifierProvider<_EpochNotifier, int>(
   _EpochNotifier.new,
 );
+
+/// Home's sections ask the server for catalogs; the real client would keep a
+/// ten-minute keep-alive timer running past the test.
+class _NoServer implements KalinkaPlayerProxy {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName}');
+}
 
 class _FakeIndexerStatusNotifier extends IndexerStatusNotifier {
   @override
@@ -51,6 +60,7 @@ void main() {
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
         indexerStatusProvider.overrideWith(_FakeIndexerStatusNotifier.new),
+        kalinkaProxyProvider.overrideWithValue(_NoServer()),
         rendererHostProvider.overrideWith((ref) {
           ref.watch(_epochProvider);
           hostBuilds++;

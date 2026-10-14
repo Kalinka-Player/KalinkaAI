@@ -37,11 +37,19 @@ class QueueZone extends ConsumerStatefulWidget {
   final bool isTablet;
   final VoidCallback? onOpenManagementTray;
 
+  /// False where the host's header carries the queue menu.
+  final bool showMenuButton;
+
+  /// Offered by the empty queue; see [EmptyQueueState.onFindMusic].
+  final VoidCallback? onFindMusic;
+
   const QueueZone({
     super.key,
     this.bottomPadding = 72,
     this.isTablet = false,
     this.onOpenManagementTray,
+    this.showMenuButton = true,
+    this.onFindMusic,
   });
 
   @override
@@ -165,7 +173,10 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
     final isQueueEmpty = upNextTracks.isEmpty && previousTracks.isEmpty;
 
     if (isQueueEmpty) {
-      return EmptyQueueState(isOffline: isOfflineOrNone);
+      return EmptyQueueState(
+        isOffline: isOfflineOrNone,
+        onFindMusic: widget.onFindMusic,
+      );
     }
 
     if (connectionState == ConnectionStatus.none) {
@@ -201,7 +212,7 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
           ),
 
         // Floating menu button — always sits in the pinned header area.
-        if (!isOffline)
+        if (!isOffline && widget.showMenuButton)
           Positioned(
             top: (_kHeaderHeight - 36) / 2,
             right: 20,
@@ -219,7 +230,10 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
   }) {
     final Widget list;
     if (trackList.isEmpty) {
-      list = EmptyQueueState(isOffline: isOfflineOrNone);
+      list = EmptyQueueState(
+        isOffline: isOfflineOrNone,
+        onFindMusic: widget.onFindMusic,
+      );
     } else if (isOffline) {
       list = IgnorePointer(
         child: Opacity(opacity: 0.4, child: _buildSavedQueue(trackList)),
@@ -237,7 +251,9 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
         _SavedQueueHeader(
           trackCount: trackList.length,
           onPlay: trackList.isEmpty || isOffline ? null : _playQueue,
-          menuButton: isOffline ? null : _buildMenuButton(),
+          menuButton: isOffline || !widget.showMenuButton
+              ? null
+              : _buildMenuButton(),
         ),
         Expanded(child: list),
       ],

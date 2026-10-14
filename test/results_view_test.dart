@@ -162,7 +162,7 @@ Future<ProviderContainer> _pump(
     ],
   );
   addTearDown(container.dispose);
-  container.read(searchSessionProvider.notifier).open();
+  container.read(searchSessionProvider.notifier).refresh();
   container.read(searchSessionProvider.notifier).submit('jazz');
 
   await tester.pumpWidget(

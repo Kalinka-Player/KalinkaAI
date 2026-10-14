@@ -15,6 +15,7 @@ import '../providers/renderer_settings_route_provider.dart';
 import '../providers/search_session_provider.dart';
 import '../providers/server_connect.dart';
 import '../providers/settings_provider.dart';
+import '../providers/shell_nav_provider.dart';
 import '../providers/server_info_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../providers/toast_provider.dart';
@@ -22,7 +23,6 @@ import '../theme/app_theme.dart';
 import '../utils/renderer_fault_text.dart';
 import '../widgets/box_actions.dart';
 import '../widgets/coach_marks_overlay.dart';
-import '../widgets/connection_banner.dart';
 import '../widgets/discovery_screen.dart';
 import '../widgets/escalation_card.dart';
 import '../widgets/kalinka_button.dart';
@@ -35,12 +35,11 @@ import '../widgets/now_playing_content.dart';
 import '../widgets/playback_error_dialog.dart';
 import '../widgets/queue_actions.dart';
 import '../widgets/queue_management_tray.dart';
-import '../widgets/queue_zone.dart';
 import '../widgets/renderer_switcher.dart' show rendererDisplayName;
-import '../widgets/search/search_dock.dart';
 import '../widgets/search/search_session_view.dart';
 import '../widgets/server_sheet.dart';
 import 'onboarding_screen.dart';
+import 'queue_page.dart';
 import 'renderer_settings_screen.dart';
 import 'settings_screen.dart';
 import 'plugin_catalog_screen.dart';
@@ -56,7 +55,7 @@ class MusicPlayerScreen extends ConsumerStatefulWidget {
 
 class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     with SingleTickerProviderStateMixin {
-  final _searchDockKey = GlobalKey();
+  final _searchEntryKey = GlobalKey();
   final _connectionDotKey = GlobalKey();
   // The output switcher moves house across the breakpoint — mini-player on
   // phone, Now Playing header on tablet — and the two are different widgets.
@@ -67,6 +66,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // remounting it (which would reload config and drop staged edits).
   final _settingsKey = GlobalKey();
   final _pluginsKey = GlobalKey();
+  final _queueKey = GlobalKey();
 
   // Drives the mini-player sliding down out of view while the search entry
   // overlay is up (0 = shown, 1 = hidden). The keyboard is held back until
@@ -84,9 +84,11 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // slide-in). Used to Offstage the occluded content so it isn't painted while
   // hidden — but only after the animation, so the slide-in still shows it.
   bool _settingsCovering = false;
+  // The same for the queue page over Home.
+  bool _queueCovering = false;
   bool _discoveryOpen = false;
   // Tablet-only: the queue management tray, hosted here (not inside QueueZone)
-  // so its overlay covers the search dock like the connection sheet.
+  // so its overlay covers the whole panel like the connection sheet.
   bool _queueTrayOpen = false;
 
   // The wizard connects, which fires `connected` — these keep the
@@ -102,15 +104,15 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   String? _playbackErrorMessage;
   int _playbackErrorShowToken = 0;
 
-  // Live height of the floating dock (plus escalation card, when shown) so the
-  // queue behind it can reserve matching bottom space and clear the bar.
-  double _dockClusterHeight = 0;
+  // Live height of the escalation card, when shown, so the queue behind it
+  // can reserve matching bottom space.
+  double _escalationHeight = 0;
 
   double? _publishedToastInset;
 
-  void _onDockClusterMeasured(double height) {
-    if (!mounted || _dockClusterHeight == height) return;
-    setState(() => _dockClusterHeight = height);
+  void _onEscalationMeasured(double height) {
+    if (!mounted || _escalationHeight == height) return;
+    setState(() => _escalationHeight = height);
   }
 
   /// Tell the toast host how much of the bottom edge this screen is using.
@@ -287,6 +289,19 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   Future<void> _onTabletTrayAction(TrayAction action) =>
       runQueueTrayAction(context, ref, action);
 
+  void _openQueue() => ref.read(queuePageProvider.notifier).open();
+
+  void _closeQueue() {
+    ref.read(queuePageProvider.notifier).close();
+    setState(() => _queueCovering = false);
+  }
+
+  /// The empty queue's way out: back to Home with the search overlay up.
+  void _findMusicFromQueue() {
+    _closeQueue();
+    ref.read(homeSearchRequestProvider.notifier).request();
+  }
+
   void _showExpandedPlayer() {
     showModalBottomSheet(
       context: context,
@@ -298,7 +313,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       // Override the M3 default 640px cap so the sheet fills the window and
       // resizes smoothly instead of centering with the layout poking out.
       constraints: const BoxConstraints(maxWidth: double.infinity),
-      builder: (_) => const _ExpandedPlayerSheet(),
+      builder: (sheetContext) => _ExpandedPlayerSheet(
+        onOpenQueue: () {
+          Navigator.of(sheetContext).pop();
+          _openQueue();
+        },
+      ),
     );
   }
 
@@ -555,28 +575,20 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }
 
   Widget _buildPhoneLayout(BuildContext context) {
-    final searchOpen = ref.watch(searchSessionProvider.select((s) => s.isOpen));
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
-    final connectionState = ref.watch(connectionStateProvider);
+    final queueOpen = ref.watch(queuePageProvider);
     final showCoachMarks = _showCoachMarks;
-    // Clear the mini-player, and off search the dock cluster too — on search
-    // the bar lives in the header, so nothing else docks at the bottom.
-    _publishToastInset(
-      searchOpen ? kMiniPlayerHeight : kMiniPlayerHeight + _dockClusterHeight,
-    );
+    // Clear the mini-player, and the escalation card when it is up.
+    _publishToastInset(kMiniPlayerHeight + _escalationHeight);
 
+    // The queue page, settings, configuration and renderer panels handle
+    // their own layered Back navigation; Home its own at its top level.
     return PopScope(
       canPop:
-          !searchOpen &&
+          !queueOpen &&
           !_settingsOpen &&
           !_pluginsOpen &&
           rendererSettings == null,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        // Configuration, settings, renderer panels and search handle their
-        // own layered Back navigation.
-        if (_settingsOpen || _pluginsOpen || rendererSettings != null) return;
-      },
       child: Stack(
         children: [
           Column(
@@ -586,94 +598,21 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   fit: StackFit.expand,
                   children: [
                     Visibility(
-                      visible: !_settingsCovering,
+                      visible: !_settingsCovering && !_queueCovering,
                       maintainState: true,
                       maintainAnimation: true,
                       maintainSize: true,
-                      child: Column(
-                        children: [
-                          // The search session carries its own header (roundel + search
-                          // bar + connection dot), so the shared top bar leaves with it.
-                          if (!searchOpen) ...[
-                            RepaintBoundary(
-                              child: KalinkaTopBar(
-                                onServerChipTap: _showServerSheet,
-                                connectionKey: _connectionDotKey,
-                              ),
-                            ),
-                            // Find Music signals connection state via its header dot; the
-                            // banner would only push its content down.
-                            const ConnectionBanner(),
-                          ],
-                          Expanded(
-                            // The dock (and escalation card) float over the content, which
-                            // scrolls behind them and fades into the page; the mini-player
-                            // below stays solid.
-                            child: Stack(
-                              children: [
-                                Positioned.fill(
-                                  child: AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 200),
-                                    layoutBuilder: _topmostScreenLayout,
-                                    transitionBuilder:
-                                        _screenSwitcherTransition,
-                                    child: searchOpen
-                                        ? SearchSessionView(
-                                            key: const ValueKey('search'),
-                                            onServerTap: _showServerSheet,
-                                          )
-                                        : KeyedSubtree(
-                                            key: const ValueKey('queue'),
-                                            child:
-                                                connectionState ==
-                                                    ConnectionStatus.none
-                                                ? _buildDisconnectedState()
-                                                : RepaintBoundary(
-                                                    child: QueueZone(
-                                                      bottomPadding:
-                                                          _dockClusterHeight,
-                                                      onOpenManagementTray:
-                                                          _showQueueManagementTray,
-                                                    ),
-                                                  ),
-                                          ),
-                                  ),
-                                ),
-                                if (!searchOpen)
-                                  Positioned(
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    child: MeasureSize(
-                                      onChange: (size) =>
-                                          _onDockClusterMeasured(size.height),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          EscalationCard(
-                                            onScanForServers: () => setState(
-                                              () => _discoveryOpen = true,
-                                            ),
-                                          ),
-                                          SearchDock(
-                                            buttonKey: _searchDockKey,
-                                            onTap: () => ref
-                                                .read(
-                                                  searchSessionProvider
-                                                      .notifier,
-                                                )
-                                                .open(),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                      child: _buildHome(isTablet: false),
                     ),
+                    if (queueOpen)
+                      MediaQuery.removePadding(
+                        context: context,
+                        removeBottom: true,
+                        child: ClipRect(
+                          child: _buildQueuePage(isTablet: false),
+                        ),
+                      ),
+                    _buildEscalation(isTablet: false),
                     // Configuration and every nested page share the space
                     // above the mini-player, including its safe-area inset.
                     if (_pluginsOpen)
@@ -745,18 +684,25 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
   }
 
-  /// Whether the one-time tour should run: first time the queue is visible
-  /// with a live connection (right after the setup wizard, or an upgrade).
-  /// Never in the browser — there the local first-run flag is set from the
-  /// seeded connection, so the tour would greet every new browser, whether
-  /// or not the server has been set up.
+  /// Whether the one-time tour should run: first time Home's top level is
+  /// up with a live connection (right after the setup wizard, or an
+  /// upgrade). Never in the browser — there the local first-run flag is set
+  /// from the seeded connection, so the tour would greet every new browser,
+  /// whether or not the server has been set up.
   bool get _showCoachMarks {
     if (kIsWeb) return false;
     final onboarding = ref.watch(onboardingStatusProvider);
     return onboarding.oobeComplete &&
         !onboarding.coachMarksShown &&
         ref.watch(connectionStateProvider) == ConnectionStatus.connected &&
-        !ref.watch(searchSessionProvider.select((s) => s.isOpen));
+        !ref.watch(queuePageProvider) &&
+        !ref.watch(searchEntryModeProvider) &&
+        ref.watch(
+          searchSessionProvider.select(
+            (s) =>
+                s.activeView == FindMusicView.catalogs && s.catalogPage.isRoot,
+          ),
+        );
   }
 
   /// The tour itself. Shared by both layouts — only where the controls sit
@@ -771,13 +717,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       child: CoachMarksOverlay(
         stops: [
           CoachMarkStop(
-            targetKey: _searchDockKey,
+            targetKey: _searchEntryKey,
             title: 'Find music',
             body:
-                'Search and browse from here — by name, or by describing '
-                'what you want, like “mellow late-night jazz”, when smart '
-                'search is on. Results stage below; nothing plays until '
-                'you add it.',
+                'Search from here — by name, or by describing what you '
+                'want, like “mellow late-night jazz”, when smart search is '
+                'on. Nothing plays until you add it.',
           ),
           if (hasOutputSwitcher)
             CoachMarkStop(
@@ -803,6 +748,92 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
   }
 
+  /// Home, or what stands in for it without a server.
+  Widget _buildHome({required bool isTablet}) {
+    final disconnected =
+        ref.watch(connectionStateProvider) == ConnectionStatus.none;
+    final rendererSettings = ref.watch(rendererSettingsRouteProvider);
+    final VoidCallback onServerTap = isTablet
+        ? () => setState(() => _serverSheetOpen = true)
+        : _showServerSheet;
+    // Whatever is open over Home takes the back press instead.
+    final covered =
+        ref.watch(queuePageProvider) ||
+        _settingsOpen ||
+        _pluginsOpen ||
+        _discoveryOpen ||
+        rendererSettings != null ||
+        (isTablet && (_serverSheetOpen || _queueTrayOpen));
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      layoutBuilder: _topmostScreenLayout,
+      transitionBuilder: _screenSwitcherTransition,
+      child: disconnected
+          ? KeyedSubtree(
+              key: const ValueKey('disconnected'),
+              child: Column(
+                children: [
+                  KalinkaTopBar(
+                    onServerChipTap: onServerTap,
+                    connectionKey: _connectionDotKey,
+                  ),
+                  Expanded(child: _buildDisconnectedState()),
+                ],
+              ),
+            )
+          : SearchSessionView(
+              key: const ValueKey('home'),
+              onServerTap: onServerTap,
+              onOpenQueue: _openQueue,
+              entryKey: _searchEntryKey,
+              connectionKey: _connectionDotKey,
+              handlesBack: !covered,
+            ),
+    );
+  }
+
+  Widget _buildQueuePage({required bool isTablet}) {
+    final rendererSettings = ref.watch(rendererSettingsRouteProvider);
+    return QueuePage(
+      key: _queueKey,
+      isTablet: isTablet,
+      handlesBack:
+          !_settingsOpen &&
+          !_pluginsOpen &&
+          !_discoveryOpen &&
+          rendererSettings == null &&
+          !(isTablet && (_serverSheetOpen || _queueTrayOpen)),
+      bottomPadding: _escalationHeight + 16,
+      onOpenMenu: isTablet
+          ? () => setState(() => _queueTrayOpen = true)
+          : _showQueueManagementTray,
+      onFindMusic: _findMusicFromQueue,
+      onClose: _closeQueue,
+      onCoverageChanged: (covering) =>
+          setState(() => _queueCovering = covering),
+    );
+  }
+
+  /// The escalation card, floating over the foot of Home and the queue page.
+  Widget _buildEscalation({required bool isTablet}) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: MeasureSize(
+        onChange: (size) => _onEscalationMeasured(size.height),
+        // No mini-player below it on tablet, so it keeps clear of the inset.
+        child: SafeArea(
+          top: false,
+          bottom: isTablet,
+          child: EscalationCard(
+            onScanForServers: () => setState(() => _discoveryOpen = true),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDiscoveryOverlay(bool isTablet) {
     return Positioned.fill(
       // Consumer keeps settings churn from the overlay's own connect flow
@@ -822,22 +853,26 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }
 
   Widget _buildTabletLayout(BuildContext context) {
-    final searchOpen = ref.watch(searchSessionProvider.select((s) => s.isOpen));
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
-    // Lifted clear of the search dock, or of the composer when search is open.
-    _publishToastInset(searchOpen ? 116 : 80);
+    final queueOpen = ref.watch(queuePageProvider);
+    _publishToastInset(24 + _escalationHeight);
     return PopScope(
       canPop:
-          !searchOpen &&
+          !queueOpen &&
           !_settingsOpen &&
           !_pluginsOpen &&
           !_serverSheetOpen &&
+          !_queueTrayOpen &&
           rendererSettings == null,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // Settings, renderer settings and search own their back via internal
-        // PopScopes.
+        // Settings, renderer settings, the queue page and Home own their
+        // back via internal PopScopes.
         if (_settingsOpen || _pluginsOpen || rendererSettings != null) return;
+        if (_queueTrayOpen) {
+          setState(() => _queueTrayOpen = false);
+          return;
+        }
         if (_serverSheetOpen) {
           setState(() => _serverSheetOpen = false);
           return;
@@ -862,11 +897,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                       child: Stack(
                         children: [
                           // Playback stays visible and interactive while the
-                          // management panels cover the queue on the right.
+                          // management panels cover the right panel.
                           SafeArea(
                             child: NowPlayingContent(
                               isTablet: true,
                               outputSwitcherKey: _outputSwitcherKey,
+                              onOpenQueue: _openQueue,
                             ),
                           ),
                           // Sheets opened here are anchored to this panel,
@@ -890,199 +926,90 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               ),
               // Divider
               Container(width: 1, color: KalinkaColors.borderSubtle),
-              // Right panel — mirrors the phone main screen: a top bar carrying
-              // the connection dot, the queue (or the chat search session), and
-              // the bottom search dock. There is no miniplayer here — Now Playing
-              // lives in the left panel — so the dock/composer is the sole bottom
-              // element. SizedBox.expand() gives RepaintBoundary tight constraints
-              // so its layout invalidations don't cross into the left panel.
+              // Right panel — Home, with the queue page and the management
+              // panels opening over it. SizedBox.expand() gives RepaintBoundary
+              // tight constraints so its layout invalidations don't cross into
+              // the left panel.
               Expanded(
                 child: SizedBox.expand(
                   child: RepaintBoundary(
-                    child: Column(
+                    child: Stack(
                       children: [
-                        // The whole right panel — including the search dock — sits
-                        // in a Stack so the connection sheet overlays it as a
-                        // bottom card, covering the dock rather than stopping above
-                        // it.
-                        Expanded(
-                          child: Stack(
-                            children: [
-                              Visibility(
-                                visible: !_settingsCovering,
-                                maintainState: true,
-                                maintainAnimation: true,
-                                maintainSize: true,
-                                child: Column(
-                                  children: [
-                                    // Search brings its own header row; the
-                                    // shared top bar yields to it.
-                                    if (!searchOpen) ...[
-                                      KalinkaTopBar(
-                                        onServerChipTap: () => setState(
-                                          () => _serverSheetOpen = true,
-                                        ),
-                                        connectionKey: _connectionDotKey,
-                                      ),
-                                      // Search signals connection via its header
-                                      // dot — no banner while it is up.
-                                      const ConnectionBanner(),
-                                    ],
-                                    Expanded(
-                                      // Dock floats over the queue, which fades
-                                      // behind it (same as phone, minus the
-                                      // mini-player).
-                                      child: Stack(
-                                        children: [
-                                          Positioned.fill(
-                                            child: AnimatedSwitcher(
-                                              duration: const Duration(
-                                                milliseconds: 200,
-                                              ),
-                                              layoutBuilder:
-                                                  _topmostScreenLayout,
-                                              transitionBuilder:
-                                                  _screenSwitcherTransition,
-                                              child: searchOpen
-                                                  ? SearchSessionView(
-                                                      key: const ValueKey(
-                                                        'search',
-                                                      ),
-                                                      onServerTap: () => setState(
-                                                        () => _serverSheetOpen =
-                                                            true,
-                                                      ),
-                                                    )
-                                                  : KeyedSubtree(
-                                                      key: const ValueKey(
-                                                        'queue',
-                                                      ),
-                                                      child: RepaintBoundary(
-                                                        child: QueueZone(
-                                                          bottomPadding:
-                                                              _dockClusterHeight,
-                                                          isTablet: true,
-                                                          onOpenManagementTray:
-                                                              () => setState(
-                                                                () =>
-                                                                    _queueTrayOpen =
-                                                                        true,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                            ),
-                                          ),
-                                          if (!searchOpen)
-                                            Positioned(
-                                              left: 0,
-                                              right: 0,
-                                              bottom: 0,
-                                              child: MeasureSize(
-                                                onChange: (size) =>
-                                                    _onDockClusterMeasured(
-                                                      size.height,
-                                                    ),
-                                                child: Column(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    EscalationCard(
-                                                      onScanForServers: () =>
-                                                          setState(
-                                                            () =>
-                                                                _discoveryOpen =
-                                                                    true,
-                                                          ),
-                                                    ),
-                                                    SearchDock(
-                                                      buttonKey: _searchDockKey,
-                                                      bottomSafeArea: true,
-                                                      onTap: () => ref
-                                                          .read(
-                                                            searchSessionProvider
-                                                                .notifier,
-                                                          )
-                                                          .open(),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
+                        Visibility(
+                          visible: !_settingsCovering && !_queueCovering,
+                          maintainState: true,
+                          maintainAnimation: true,
+                          maintainSize: true,
+                          child: _buildHome(isTablet: true),
+                        ),
+                        if (queueOpen)
+                          Positioned.fill(
+                            child: SheetAnchor(
+                              child: ClipRect(
+                                child: _buildQueuePage(isTablet: true),
+                              ),
+                            ),
+                          ),
+                        _buildEscalation(isTablet: true),
+                        if (_serverSheetOpen)
+                          Positioned.fill(
+                            child: ServerSheet(
+                              onClose: () =>
+                                  setState(() => _serverSheetOpen = false),
+                              onOpenDiscovery: () =>
+                                  setState(() => _discoveryOpen = true),
+                              onOpenSettings: _openSettings,
+                              onOpenPlugins: _openPlugins,
+                              onPowerOff: _powerOffServer,
+                            ),
+                          ),
+                        // Queue management tray — same panel-level overlay.
+                        if (_queueTrayOpen)
+                          Positioned.fill(
+                            child: TabletQueueManagementTray(
+                              onClose: () =>
+                                  setState(() => _queueTrayOpen = false),
+                              onAction: _onTabletTrayAction,
+                            ),
+                          ),
+                        // Management overlays share the right-hand bounds,
+                        // including their sheets and slide motion.
+                        if (_settingsOpen)
+                          Positioned.fill(
+                            child: SheetAnchor(
+                              child: ClipRect(
+                                child: SettingsScreen(
+                                  key: _settingsKey,
+                                  handlesBack: rendererSettings == null,
+                                  onClose: () => setState(() {
+                                    _settingsOpen = false;
+                                    _settingsCovering = false;
+                                  }),
+                                  onCoverageChanged: (covering) => setState(
+                                    () => _settingsCovering = covering,
+                                  ),
                                 ),
                               ),
-                              if (_serverSheetOpen)
-                                Positioned.fill(
-                                  child: ServerSheet(
-                                    onClose: () => setState(
-                                      () => _serverSheetOpen = false,
-                                    ),
-                                    onOpenDiscovery: () =>
-                                        setState(() => _discoveryOpen = true),
-                                    onOpenSettings: _openSettings,
-                                    onOpenPlugins: _openPlugins,
-                                    onPowerOff: _powerOffServer,
-                                  ),
-                                ),
-                              // Queue management tray — same panel-level overlay
-                              // so it covers the search dock too.
-                              if (_queueTrayOpen)
-                                Positioned.fill(
-                                  child: TabletQueueManagementTray(
-                                    onClose: () =>
-                                        setState(() => _queueTrayOpen = false),
-                                    onAction: _onTabletTrayAction,
-                                  ),
-                                ),
-                              // Management overlays share the right-hand queue
-                              // bounds, including their sheets and slide motion.
-                              if (_settingsOpen)
-                                Positioned.fill(
-                                  child: SheetAnchor(
-                                    child: ClipRect(
-                                      child: SettingsScreen(
-                                        key: _settingsKey,
-                                        handlesBack: rendererSettings == null,
-                                        onClose: () => setState(() {
-                                          _settingsOpen = false;
-                                          _settingsCovering = false;
-                                        }),
-                                        onCoverageChanged: (covering) =>
-                                            setState(
-                                              () =>
-                                                  _settingsCovering = covering,
-                                            ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              if (_pluginsOpen)
-                                Positioned.fill(
-                                  child: SheetAnchor(
-                                    child: ClipRect(
-                                      child: _buildPlugins(
-                                        handlesBack: rendererSettings == null,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              if (rendererSettings != null)
-                                Positioned.fill(
-                                  child: SheetAnchor(
-                                    child: ClipRect(
-                                      child: _buildRendererSettings(
-                                        rendererSettings,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
+                            ),
                           ),
-                        ),
+                        if (_pluginsOpen)
+                          Positioned.fill(
+                            child: SheetAnchor(
+                              child: ClipRect(
+                                child: _buildPlugins(
+                                  handlesBack: rendererSettings == null,
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (rendererSettings != null)
+                          Positioned.fill(
+                            child: SheetAnchor(
+                              child: ClipRect(
+                                child: _buildRendererSettings(rendererSettings),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -1104,7 +1031,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 /// player instead lives permanently in the left panel — otherwise the sheet
 /// would float on top of the tablet layout.
 class _ExpandedPlayerSheet extends StatefulWidget {
-  const _ExpandedPlayerSheet();
+  final VoidCallback onOpenQueue;
+
+  const _ExpandedPlayerSheet({required this.onOpenQueue});
 
   @override
   State<_ExpandedPlayerSheet> createState() => _ExpandedPlayerSheetState();
@@ -1131,6 +1060,7 @@ class _ExpandedPlayerSheetState extends State<_ExpandedPlayerSheet> {
       child: NowPlayingContent(
         showOverlayHeader: true,
         onClose: () => Navigator.of(context).pop(),
+        onOpenQueue: widget.onOpenQueue,
       ),
     );
   }

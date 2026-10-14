@@ -6,6 +6,7 @@ import '../../providers/catalog_cards_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../search_cards/browse_item_rows.dart';
+import '../shelf_heading.dart' show hasLargeType;
 import 'catalog_cards_section.dart';
 import 'collections_section.dart';
 
@@ -71,6 +72,14 @@ class _DividerLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Large type leaves no room for the rules.
+    if (hasLargeType(context)) {
+      return Text(
+        text,
+        style: KalinkaTextStyles.sectionLabel,
+        textAlign: TextAlign.center,
+      );
+    }
     return Row(
       children: [
         const Expanded(

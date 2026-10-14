@@ -44,7 +44,7 @@ mouse wheel = buttons 4/5. Working click/scroll scripts from a past session:
 `d.sync()` between.
 
 Gotchas:
-- The search dock opens via the sparkle FAB at bottom-right (~0.966, 0.945).
+- The app opens on Home; search opens from the field under "What shall we play?", and the queue from QUEUE beside Up next.
 - GTK CSD: the X window is bigger than the visible frame by invisible shadow
   extents — read the `_GTK_FRAME_EXTENTS` property and subtract before
   mapping fractions. Even then the client height can disagree with the

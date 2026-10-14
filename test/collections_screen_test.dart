@@ -310,7 +310,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    container.read(searchSessionProvider.notifier).open();
+    container.read(searchSessionProvider.notifier).refresh();
 
     await tester.pumpWidget(
       UncontrolledProviderScope(

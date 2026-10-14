@@ -38,6 +38,9 @@ const _searchTimeout = Duration(seconds: 10);
 /// How many suggestions the zero state asks the server for.
 const _suggestionCount = 4;
 
+/// How old Home's data may get before coming back to the app refreshes it.
+const _staleAfter = Duration(minutes: 5);
+
 /// Static fallback prompts for the zero state, shown until the server's
 /// context-aware suggestions arrive (or when the fetch fails). Phrased the
 /// way the retrieval stack handles well — concrete genre/instrument words,
@@ -232,9 +235,6 @@ class CatalogPage {
 /// independently preserved content, plus the persisted zero-state data.
 /// Results holds a single current query — a new search replaces it.
 class SearchSessionState {
-  /// Whether the full-screen Find Music surface is open.
-  final bool isOpen;
-
   /// The visible view. Switching is pure state — no back-stack.
   final FindMusicView activeView;
 
@@ -302,7 +302,6 @@ class SearchSessionState {
   final List<SearchSuggestion> aiSuggestions;
 
   const SearchSessionState({
-    this.isOpen = false,
     this.activeView = FindMusicView.catalogs,
     this.resultsAvailable = false,
     this.searchQuery = '',
@@ -398,7 +397,6 @@ class SearchSessionState {
   }
 
   SearchSessionState copyWith({
-    bool? isOpen,
     FindMusicView? activeView,
     bool? resultsAvailable,
     String? searchQuery,
@@ -425,7 +423,6 @@ class SearchSessionState {
     List<SearchSuggestion>? aiSuggestions,
   }) {
     return SearchSessionState(
-      isOpen: isOpen ?? this.isOpen,
       activeView: activeView ?? this.activeView,
       resultsAvailable: resultsAvailable ?? this.resultsAvailable,
       searchQuery: searchQuery ?? this.searchQuery,
@@ -462,6 +459,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   bool _disposed = false;
 
+  DateTime? _refreshedAt;
+
   BrowseFilterQuery _savedResultsFilter = const BrowseFilterQuery();
   Map<String, String> _savedResultsGenreNames = {};
   Map<String, BrowseFilterQuery> _savedCatalogFilters = {};
@@ -474,6 +473,15 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     _savedResultsFilter = _loadResultsFilter();
     _savedCatalogFilters = _loadCatalogFilters();
     _savedFolderPaths = _loadFolderPaths();
+    // Another server's results and pages mean nothing on this one.
+    ref.listen(connectionSettingsProvider.select((s) => s.baseUrl), (
+      previous,
+      next,
+    ) {
+      if (previous == next) return;
+      resetToRoot();
+      ref.read(catalogCardsReloadProvider.notifier).bump();
+    });
     return SearchSessionState(
       history: _loadHistory(),
       resultsFilter: _savedResultsFilter,
@@ -482,24 +490,32 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     );
   }
 
-  /// Open Find Music on the Catalogs root and refresh its data. Catalog
-  /// cards reload on every open (shimmer meanwhile) — a stale set from the
-  /// last session may miss sources added or re-indexed since.
-  void open() {
-    if (state.isOpen) return;
-    state = state.copyWith(isOpen: true, history: _loadHistory());
-    ref.read(catalogCardsReloadProvider.notifier).bump();
+  /// Refresh what Home fetches for itself: suggestions, favourites and the
+  /// saved searches. The catalog and collection sections refetch on their
+  /// own when the connection comes back.
+  void refresh() {
+    _refreshedAt = DateTime.now();
+    state = state.copyWith(history: _loadHistory());
     _loadRecentFavourites();
     _loadSuggestions();
     _forgetUnofferedCatalogs();
   }
 
-  /// Close Find Music and discard the ephemeral workspace (results + catalog
-  /// page). History is written live on each [submit], so nothing to fold here.
-  void close() {
-    if (!state.isOpen) return;
+  /// Everything on Home, catalogs too, unless refreshed within [_staleAfter].
+  /// The catalog sections keep showing while they refetch.
+  void refreshIfStale() {
+    final at = _refreshedAt;
+    if (at != null && DateTime.now().difference(at) < _staleAfter) return;
+    ref.invalidate(catalogCardGroupsProvider);
+    ref.invalidate(collectionsShelfProvider);
+    refresh();
+  }
+
+  /// Back to the Catalogs root with the ephemeral workspace (results and the
+  /// catalog page) discarded. History is written live on each [submit].
+  void resetToRoot() {
+    _queryGen++;
     state = state.copyWith(
-      isOpen: false,
       activeView: FindMusicView.catalogs,
       resultsAvailable: false,
       searchQuery: '',

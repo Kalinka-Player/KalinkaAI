@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/indexer_status_provider.dart';
 import '../theme/app_theme.dart';
+import 'kalinka_button.dart';
 
 /// Empty queue state — shown when the queue contains no tracks.
 /// Displays procedural art, title, and subtitle.
@@ -17,7 +18,10 @@ import '../theme/app_theme.dart';
 class EmptyQueueState extends ConsumerStatefulWidget {
   final bool isOffline;
 
-  const EmptyQueueState({super.key, this.isOffline = false});
+  /// Leads to search; offered only while connected.
+  final VoidCallback? onFindMusic;
+
+  const EmptyQueueState({super.key, this.isOffline = false, this.onFindMusic});
 
   @override
   ConsumerState<EmptyQueueState> createState() => _EmptyQueueStateState();
@@ -70,6 +74,20 @@ class _EmptyQueueStateState extends ConsumerState<EmptyQueueState>
                     style: KalinkaTextStyles.emptyQueueSubtitle,
                     textAlign: TextAlign.center,
                   ),
+                  if (widget.onFindMusic != null && !widget.isOffline) ...[
+                    const SizedBox(height: 24),
+                    KalinkaButton(
+                      label: 'Find music',
+                      variant: KalinkaButtonVariant.neutral,
+                      size: KalinkaButtonSize.normal,
+                      leading: const Icon(
+                        Icons.search_rounded,
+                        size: 16,
+                        color: KalinkaColors.textSecondary,
+                      ),
+                      onTap: widget.onFindMusic,
+                    ),
+                  ],
                   // Animated slot so the centered block doesn't jump when
                   // the pipeline caption appears or finishes mid-view.
                   AnimatedSize(
