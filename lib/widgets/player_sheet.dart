@@ -135,12 +135,11 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
                   child: child,
                 );
               },
-              child: SafeArea(
-                bottom: false,
-                child: Material(
-                  color: KalinkaColors.background,
-                  child: widget.child,
-                ),
+              // Full height, under the status bar too, so that strip comes and
+              // goes with the sheet; only the content keeps clear of it.
+              child: Material(
+                color: KalinkaColors.background,
+                child: SafeArea(bottom: false, child: widget.child),
               ),
             ),
             const Positioned(
