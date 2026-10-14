@@ -7,7 +7,6 @@ import '../providers/app_state_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/demo_mode.dart';
-import '../providers/kalinka_player_api_provider.dart';
 import '../providers/onboarding_provider.dart';
 import '../providers/playback_failure_provider.dart';
 import '../providers/renderer_host_provider.dart' show rendererIdentityProvider;
@@ -22,7 +21,6 @@ import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/renderer_fault_text.dart';
 import '../widgets/box_actions.dart';
-import '../widgets/clear_all_confirm_dialog.dart';
 import '../widgets/coach_marks_overlay.dart';
 import '../widgets/connection_banner.dart';
 import '../widgets/discovery_screen.dart';
@@ -35,10 +33,10 @@ import '../widgets/measure_size.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/now_playing_content.dart';
 import '../widgets/playback_error_dialog.dart';
+import '../widgets/queue_actions.dart';
 import '../widgets/queue_management_tray.dart';
 import '../widgets/queue_zone.dart';
 import '../widgets/renderer_switcher.dart' show rendererDisplayName;
-import '../widgets/search/add_to_collection_sheet.dart';
 import '../widgets/search/search_dock.dart';
 import '../widgets/search/search_session_view.dart';
 import '../widgets/server_sheet.dart';
@@ -282,45 +280,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         setState(() => _settingsCovering = covering),
   );
 
-  Future<void> _showQueueManagementTray() async {
-    final result = await showKalinkaBottomSheet<TrayAction>(
-      context: context,
-      contentBuilder: (_) => const QueueManagementTrayContent(),
-    );
-    if (!mounted) return;
-    switch (result) {
-      case TrayAction.saveToCollection:
-        await _saveQueueToCollection();
-      case TrayAction.clearPlayed:
-        await _clearPlayed();
-      case TrayAction.clearAll:
-        await Future.delayed(const Duration(milliseconds: 160));
-        if (!mounted) return;
-        await showKalinkaDialog<bool>(
-          context: context,
-          builder: (_) => ClearAllConfirmDialog(onConfirmClearAll: _clearAll),
-        );
-      case null:
-        break;
-    }
-  }
+  Future<void> _showQueueManagementTray() =>
+      showQueueManagementTray(context, ref);
 
   /// Tablet: act on the panel-level queue management tray's selection.
-  Future<void> _onTabletTrayAction(TrayAction action) async {
-    switch (action) {
-      case TrayAction.saveToCollection:
-        await _saveQueueToCollection();
-      case TrayAction.clearPlayed:
-        await _clearPlayed();
-      case TrayAction.clearAll:
-        await Future.delayed(const Duration(milliseconds: 160));
-        if (!mounted) return;
-        await showKalinkaDialog<bool>(
-          context: context,
-          builder: (_) => ClearAllConfirmDialog(onConfirmClearAll: _clearAll),
-        );
-    }
-  }
+  Future<void> _onTabletTrayAction(TrayAction action) =>
+      runQueueTrayAction(context, ref, action);
 
   void _showExpandedPlayer() {
     showModalBottomSheet(
@@ -335,47 +300,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       constraints: const BoxConstraints(maxWidth: double.infinity),
       builder: (_) => const _ExpandedPlayerSheet(),
     );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Queue actions
-  // ---------------------------------------------------------------------------
-
-  /// Opens the destination sheet on the queue as it stands; what becomes of
-  /// what the chosen collection already holds is decided in there.
-  Future<void> _saveQueueToCollection() async {
-    final tracks = ref.read(playQueueProvider);
-    if (tracks.isEmpty) {
-      ref.read(toastProvider.notifier).show('Nothing in the queue yet');
-      return;
-    }
-    await showAddToCollectionSheet(
-      context,
-      CollectionAddition.queue([for (final track in tracks) track.id]),
-    );
-  }
-
-  Future<void> _clearPlayed() async {
-    final queueState = ref.read(playQueueStateStoreProvider);
-    final currentIndex = queueState.playbackState.index ?? 0;
-    final api = ref.read(kalinkaProxyProvider);
-    final toast = ref.read(toastProvider.notifier);
-    for (int i = currentIndex - 1; i >= 0; i--) {
-      try {
-        await api.remove(i);
-      } catch (e) {
-        toast.show('Failed to clear played: $e', isError: true);
-        return;
-      }
-    }
-    toast.show('Played tracks cleared');
-  }
-
-  Future<void> _clearAll() async {
-    final api = ref.read(kalinkaProxyProvider);
-    final toast = ref.read(toastProvider.notifier);
-    await api.clear();
-    toast.show('Queue cleared');
   }
 
   Widget _buildDisconnectedState() {
