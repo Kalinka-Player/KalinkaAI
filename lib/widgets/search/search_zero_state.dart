@@ -16,6 +16,9 @@ import 'collections_section.dart';
 /// your collections, then an "EXPLORE CATALOGS" divider, the catalog cards,
 /// and recent favourites. Suggestions and recent searches live in the focused
 /// search overlay ([SearchSuggestionsList]), not here.
+/// Home's side inset; what reaches the window edge bleeds past it by this.
+const kHomeSideInset = 16.0;
+
 class SearchZeroState extends ConsumerWidget {
   /// Opens a catalog page directly (browse id + resolved provider label).
   final OpenCatalog onOpenCatalog;
@@ -46,7 +49,7 @@ class SearchZeroState extends ConsumerWidget {
       // to its top — the shelf you came from is where you look next.
       key: const PageStorageKey('discoverRoot'),
       controller: controller,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.fromLTRB(kHomeSideInset, 8, kHomeSideInset, 24),
       children: [
         ...leading,
 

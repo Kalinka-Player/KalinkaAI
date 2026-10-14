@@ -1057,9 +1057,6 @@ class _DiscoverHero extends StatelessWidget {
     required this.onOpenSearch,
   });
 
-  /// Past the list's side inset, so the artwork reaches the window edge.
-  static const _bleed = 16.0;
-
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -1067,7 +1064,7 @@ class _DiscoverHero extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final artWidth = math.min(
-            (constraints.maxWidth + _bleed) * 0.64,
+            (constraints.maxWidth + kHomeSideInset) * 0.64,
             440.0,
           );
           return Stack(
@@ -1077,7 +1074,8 @@ class _DiscoverHero extends StatelessWidget {
               // so the text and the entry read over it.
               Positioned(
                 top: -8,
-                right: -_bleed,
+                // Past the list's inset, to the window edge.
+                right: -kHomeSideInset,
                 width: artWidth,
                 height: artWidth * 9 / 16,
                 child: IgnorePointer(

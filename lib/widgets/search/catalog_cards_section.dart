@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data_model/data_model.dart';
 import '../../providers/catalog_cards_provider.dart';
 import '../../providers/connection_state_provider.dart';
+import '../../providers/recently_added_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
@@ -45,6 +46,13 @@ class CatalogCardsSection extends ConsumerWidget {
     });
 
     final groupsAsync = ref.watch(catalogCardGroupsProvider);
+    // Home shows the recent catalog as a shelf of its own, above; its card
+    // comes back only if that shelf fails or turns out empty.
+    final shelfMissing = ref.watch(
+      recentlyAddedProvider.select(
+        (s) => s.hasError || (s.hasValue && s.value == null),
+      ),
+    );
 
     return groupsAsync.when(
       // Counts unknown yet — one nominal shimmer group so the section doesn't
@@ -52,9 +60,23 @@ class CatalogCardsSection extends ConsumerWidget {
       loading: () => const _CardGrid(cardCount: 3, children: null),
       error: (_, _) => const SizedBox.shrink(),
       data: (groups) {
-        if (groups.isEmpty) return const SizedBox.shrink();
+        final shelved = shelfMissing ? null : recentCatalogIn(groups)?.plan.id;
+        final shown = [
+          for (final group in groups)
+            if (group.cards.any((plan) => plan.id != shelved))
+              CatalogCardGroup(
+                sourceName: group.sourceName,
+                sourceTitle: group.sourceTitle,
+                cards: [
+                  for (final plan in group.cards)
+                    if (plan.id != shelved) plan,
+                ],
+                ownLibrary: group.ownLibrary,
+              ),
+        ];
+        if (shown.isEmpty) return const SizedBox.shrink();
         return _sectionColumn([
-          for (final group in groups) ...[
+          for (final group in shown) ...[
             _SourceGroupHeader(group: group),
             const SizedBox(height: 10),
             _CardGrid(
