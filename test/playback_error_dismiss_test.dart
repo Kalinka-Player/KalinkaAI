@@ -12,6 +12,7 @@ import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
+import 'package:kalinka/providers/shell_nav_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
@@ -174,6 +175,10 @@ void main() {
     addTearDown(tester.view.reset);
 
     final queue = await _pumpScreen(tester);
+    ProviderScope.containerOf(
+      tester.element(find.byType(MusicPlayerScreen)),
+    ).read(queuePageProvider.notifier).open();
+    await tester.pumpAndSettle();
     expect(find.byIcon(Icons.error_outline), findsNothing);
 
     queue.set(

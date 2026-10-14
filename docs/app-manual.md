@@ -22,17 +22,15 @@ The wizard then walks you through the first-run essentials — your music source
 
 ## 2. The main screen
 
-After setup you land on the play queue. On a fresh server it greets
-you with *"Nothing Queued"*:
+After setup you land on **Home**, the place to search, explore your sources and collections, and see what is queued:
 
 <img src="images/manual/main-screen.png" width="260">
 
-The three things to know:
+The things to know:
 
-- **Search button** (bottom-right) — the floating sparkle button opens
-  search and Discover; ask for music in plain language.
-- **Mini player** (bottom) — the current track; tap it to open the full
-  player.
+- **Search** — the field under *What shall we play?* opens search; ask for music in plain language.
+- **Up next** — what is playing and what follows; **QUEUE** opens the whole queue.
+- **Mini player** (bottom) — the current track; tap it to open the full player.
 - **The server chip** (top-right) — your server's name with its status
   dot, **and a button**. This is the door to everything server-related;
   it's easy to miss, so:
@@ -85,12 +83,7 @@ tier.
 
 ## 5. Search and queue music
 
-Tap the sparkle button to open search. It is AI-first: describe what you
-want in plain language ("jazz", "melancholic evening piano"), send, and
-the server curates matches from your library, grouped by source. Before
-you type, the **Discover** screen offers ready-made AI prompts, catalog
-cards to explore your sources, recent searches and recently favourited
-tracks:
+Tap the search field on Home to open search. It is AI-first: describe what you want in plain language ("jazz", "melancholic evening piano"), send, and the server curates matches from your library, grouped by source. Before you type, search offers ready-made AI prompts and your recent searches; Home itself has catalog cards to explore your sources and your recently favourited tracks:
 
 | AI suggestions | Batch selection |
 |:---:|:---:|
@@ -103,10 +96,7 @@ start a selection — or use **Select all** on a section — then choose
 
 ## 6. The queue and the player
 
-Back on the main screen your queue is live: the current track on top,
-**UP NEXT** below, drag handles to reorder, swipe to remove. Tap the mini
-player to expand the full player with artwork, format/quality info,
-transport controls and volume:
+The queue has a page of its own: open it with **QUEUE** beside *Up next* on Home, or with the queue button at the top of the full player. The current track is on top, **UP NEXT** below, drag handles to reorder, swipe to remove; its menu saves the queue as a collection or clears it. Tap the mini player to expand the full player with artwork, format/quality info, transport controls and volume:
 
 | Play queue | Player |
 |:---:|:---:|

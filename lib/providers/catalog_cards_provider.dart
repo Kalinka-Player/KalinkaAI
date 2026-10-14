@@ -107,10 +107,10 @@ String? artPathOf(BrowseItem item) {
   return (path != null && path.isNotEmpty) ? path : null;
 }
 
-/// Bumped on each Find Music open. As a watched dependency it RELOADS the
-/// cards provider — the grid drops to shimmer until fresh plans arrive —
-/// whereas invalidation-driven refetches (art polls, reconnect) are REFRESHES
-/// that hold the previous cards, so the grid never flickers mid-session.
+/// Bumped when Home starts over on another server. As a watched dependency it
+/// RELOADS the cards provider — the grid drops to shimmer until fresh plans
+/// arrive — whereas invalidation-driven refetches (art polls, reconnect, a
+/// refresh) hold the previous cards, so the grid never flickers mid-session.
 class CatalogCardsReload extends Notifier<int> {
   @override
   int build() => 0;

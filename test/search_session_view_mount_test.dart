@@ -14,6 +14,7 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_button.dart';
+import 'package:kalinka/widgets/kalinka_top_bar.dart';
 import 'package:kalinka/widgets/overlay_card.dart';
 import 'package:kalinka/widgets/search/folder_trail.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
@@ -115,7 +116,7 @@ void main() {
     List<ModuleInfo> modules = const [],
   }) async {
     final container = makeContainer(modules: modules);
-    container.read(searchSessionProvider.notifier).open();
+    container.read(searchSessionProvider.notifier).refresh();
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -130,7 +131,9 @@ void main() {
   testWidgets('the surface mounts without throwing', (tester) async {
     await pumpSurface(tester);
     expect(tester.takeException(), isNull);
-    expect(find.text('DISCOVER'), findsOneWidget);
+    // The top level carries the app's own bar, not a breadcrumb.
+    expect(find.byType(KalinkaTopBar), findsOneWidget);
+    expect(find.text('HOME'), findsNothing);
   });
 
   testWidgets('the Discover root offers no filter control', (tester) async {
@@ -227,7 +230,7 @@ void main() {
     expect(find.text('SMART SEARCH'), findsNothing);
   });
 
-  testWidgets('the DISCOVER crumb goes back, like the arrow', (tester) async {
+  testWidgets('the HOME crumb goes back, like the arrow', (tester) async {
     final container = await pumpSurface(tester);
     container
         .read(searchSessionProvider.notifier)
@@ -238,7 +241,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(container.read(searchSessionProvider).catalogPage.isRoot, isFalse);
 
-    await tester.tap(find.text('DISCOVER'));
+    await tester.tap(find.text('HOME'));
     await tester.pumpAndSettle();
     expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
   });
@@ -256,7 +259,7 @@ void main() {
         );
     await tester.pumpAndSettle();
 
-    expect(find.text('DISCOVER'), findsOneWidget);
+    expect(find.text('HOME'), findsOneWidget);
     expect(find.text('MY LIBRARY'), findsOneWidget);
     expect(find.byType(FolderTrail), findsOneWidget);
 
@@ -265,7 +268,7 @@ void main() {
     expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
   });
 
-  testWidgets('the DISCOVER crumb highlights under the pointer', (
+  testWidgets('the HOME crumb highlights under the pointer', (
     tester,
   ) async {
     final container = await pumpSurface(tester);
@@ -281,7 +284,7 @@ void main() {
       final box = tester.widget<AnimatedContainer>(
         find
             .ancestor(
-              of: find.text('DISCOVER'),
+              of: find.text('HOME'),
               matching: find.byType(AnimatedContainer),
             )
             .first,
@@ -294,19 +297,57 @@ void main() {
     final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await pointer.addPointer(location: Offset.zero);
     addTearDown(pointer.removePointer);
-    await pointer.moveTo(tester.getCenter(find.text('DISCOVER')));
+    await pointer.moveTo(tester.getCenter(find.text('HOME')));
     await tester.pumpAndSettle();
     expect(crumbFill()!.a, greaterThan(0));
   });
 
-  testWidgets('at the root the crumb names the page, and does not act', (
-    tester,
-  ) async {
+  testWidgets('back leaves the app only from the top level', (tester) async {
     final container = await pumpSurface(tester);
+    bool canPop() => tester
+        .widget<PopScope>(
+          find
+              .descendant(
+                of: find.byType(SearchSessionView),
+                matching: find.byWidgetPredicate((w) => w is PopScope),
+              )
+              .first,
+        )
+        .canPop;
 
-    // Nowhere to go back to from Discover itself.
-    await tester.tap(find.text('DISCOVER'));
+    expect(find.byIcon(Icons.arrow_back), findsNothing);
+    expect(canPop(), isTrue);
+
+    container
+        .read(searchSessionProvider.notifier)
+        .openCatalog(
+          id: 'kalinka:localfiles:catalog:albums',
+          title: 'My Albums',
+        );
     await tester.pumpAndSettle();
-    expect(container.read(searchSessionProvider).isOpen, isTrue);
+    expect(canPop(), isFalse);
+  });
+
+  testWidgets('a panel over Home takes the back press', (tester) async {
+    final container = makeContainer();
+    container
+        .read(searchSessionProvider.notifier)
+        .openCatalog(
+          id: 'kalinka:localfiles:catalog:albums',
+          title: 'My Albums',
+        );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          home: Scaffold(body: SearchSessionView(handlesBack: false)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(container.read(searchSessionProvider).catalogPage.isRoot, isFalse);
   });
 }

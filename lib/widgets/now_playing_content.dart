@@ -38,12 +38,16 @@ class NowPlayingContent extends ConsumerStatefulWidget {
   /// layout, where this header carries the only switcher on screen.
   final Key? outputSwitcherKey;
 
+  /// Opens the queue page; the header shows no queue button without it.
+  final VoidCallback? onOpenQueue;
+
   const NowPlayingContent({
     super.key,
     this.isTablet = false,
     this.showOverlayHeader = false,
     this.onClose,
     this.outputSwitcherKey,
+    this.onOpenQueue,
   });
 
   @override
@@ -279,6 +283,20 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     );
   }
 
+  Widget? _queueButton() {
+    final onOpenQueue = widget.onOpenQueue;
+    if (onOpenQueue == null) return null;
+    return IconButton(
+      tooltip: 'Queue',
+      onPressed: onOpenQueue,
+      icon: const Icon(
+        Icons.queue_music_rounded,
+        size: 22,
+        color: KalinkaColors.textSecondary,
+      ),
+    );
+  }
+
   Widget _buildHeader() {
     if (widget.showOverlayHeader) {
       return Padding(
@@ -318,13 +336,17 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                     ),
                   ),
                 ),
-                const Align(
+                Align(
                   alignment: Alignment.centerRight,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      KioskEnterButton(),
-                      RendererSwitcherButton(hitDiameter: 36, iconSize: 20),
+                      ?_queueButton(),
+                      const KioskEnterButton(),
+                      const RendererSwitcherButton(
+                        hitDiameter: 36,
+                        iconSize: 20,
+                      ),
                     ],
                   ),
                 ),
@@ -347,6 +369,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                 style: KalinkaTextStyles.nowPlayingLabel,
               ),
             ),
+            ?_queueButton(),
             const KioskEnterButton(),
             RendererSwitcherDropdown(key: widget.outputSwitcherKey),
           ],
