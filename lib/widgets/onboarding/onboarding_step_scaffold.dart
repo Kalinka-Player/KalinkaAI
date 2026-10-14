@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
 import '../kalinka_button.dart';
 
@@ -56,38 +57,46 @@ class OnboardingStepScaffold extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      OnboardingProgress(
-                        stepNumber: stepNumber,
-                        stepCount: stepCount,
-                        stepLabels: stepLabels,
-                      ),
-                      const SizedBox(height: 20),
-                      Text(title, style: KalinkaTextStyles.dialogTitle),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          subtitle!,
-                          // Same size as [OnboardingNote]: the deck and the
-                          // body copy are one voice, and a deck that reads
-                          // smaller than the paragraph under it looks demoted.
-                          style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                            fontSize: KalinkaTypography.baseSize + 3,
-                            height: 1.55,
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              OnboardingProgress(
+                                stepNumber: stepNumber,
+                                stepCount: stepCount,
+                                stepLabels: stepLabels,
+                              ),
+                              const SizedBox(height: 20),
+                              Text(title, style: KalinkaTextStyles.dialogTitle),
+                              if (subtitle != null) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  subtitle!,
+                                  // Same size as [OnboardingNote]: the deck and the
+                                  // body copy are one voice, and a deck that reads
+                                  // smaller than the paragraph under it looks demoted.
+                                  style: KalinkaTextStyles.trayRowSublabel
+                                      .copyWith(
+                                        fontSize:
+                                            KalinkaTypography.baseSize + 3,
+                                        height: 1.55,
+                                      ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
+                        const SizedBox(height: 16),
+                        ...children,
                       ],
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.only(top: 16, bottom: 24),
-                    children: children,
+                    ),
                   ),
                 ),
                 Padding(

@@ -119,6 +119,7 @@ class OobeResume {
     'host': address.host,
     'port': address.port,
     'step': step,
+    'version': 2,
   };
 
   /// Null for anything this build did not write.
@@ -130,10 +131,11 @@ class OobeResume {
       'port': final int port,
       'step': final int step,
     }) {
+      if (json['version'] != null && json['version'] != 2) return null;
       return OobeResume(
         name: name,
         address: (scheme: scheme, host: host, port: port),
-        step: step,
+        step: json['version'] == 2 ? step : step + 1,
       );
     }
     return null;
