@@ -41,6 +41,10 @@ const _suggestionCount = 4;
 /// How old Home's data may get before coming back to the app refreshes it.
 const _staleAfter = Duration(minutes: 5);
 
+/// Suggestions are refetched past this age, or in a new hour, when the search
+/// opens: they are picked for the time of day.
+const _suggestionsStaleAfter = Duration(minutes: 20);
+
 /// Static fallback prompts for the zero state, shown until the server's
 /// context-aware suggestions arrive (or when the fetch fails). Phrased the
 /// way the retrieval stack handles well — concrete genre/instrument words,
@@ -461,6 +465,9 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   DateTime? _refreshedAt;
 
+  /// When the shown suggestions were asked for; null until one succeeds.
+  DateTime? _suggestionsAt;
+
   BrowseFilterQuery _savedResultsFilter = const BrowseFilterQuery();
   Map<String, String> _savedResultsGenreNames = {};
   Map<String, BrowseFilterQuery> _savedCatalogFilters = {};
@@ -509,6 +516,19 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     ref.invalidate(catalogCardGroupsProvider);
     ref.invalidate(collectionsShelfProvider);
     refresh();
+  }
+
+  /// Refetch the suggestions if [_suggestionsStaleAfter] old or from an
+  /// earlier hour, so a Home left open keeps up with the time of day.
+  void refreshSuggestionsIfStale() {
+    final at = _suggestionsAt;
+    final now = DateTime.now();
+    if (at != null &&
+        now.difference(at) < _suggestionsStaleAfter &&
+        now.hour == at.hour) {
+      return;
+    }
+    _loadSuggestions();
   }
 
   /// Back to the Catalogs root with the ephemeral workspace (results and the
@@ -977,6 +997,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   Future<void> _loadSuggestions() async {
     final settings = ref.read(connectionSettingsProvider);
     if (!settings.isSet) return;
+    // Taken as fresh while asking, so opening search twice asks once.
+    _suggestionsAt = DateTime.now();
     try {
       final api = ref.read(kalinkaProxyProvider);
       final result = await api.searchSuggestions(count: _suggestionCount);
@@ -984,6 +1006,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       state = state.copyWith(aiSuggestions: result.suggestions);
     } catch (_) {
       // Zero state must render regardless — the fallback stays.
+      _suggestionsAt = null;
     }
   }
 
