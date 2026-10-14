@@ -389,9 +389,10 @@ class _CatalogHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _CatalogBanner(page: page),
-        if (LibraryRescanControl.isLibraryPage(page.id))
-          const LibraryRescanControl(),
+        _CatalogBanner(
+          page: page,
+          showLibraryRescan: LibraryRescanControl.isLibraryPage(page.id),
+        ),
         if (page.canEdit) CollectionsActions(hasRows: hasRows),
         ActiveFilterChips(
           capabilities: capabilities,
@@ -433,10 +434,12 @@ class _FolderHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _CatalogBanner(page: listing),
-        if (identical(page, listing) &&
-            LibraryRescanControl.isLibraryPage(page.id))
-          const LibraryRescanControl(),
+        _CatalogBanner(
+          page: listing,
+          showLibraryRescan:
+              identical(page, listing) &&
+              LibraryRescanControl.isLibraryPage(page.id),
+        ),
         if (_FolderActions.anyFor(page, listing))
           Padding(
             key: actionsKey,
@@ -605,8 +608,9 @@ Widget _onTheRight(Widget art) => FractionallySizedBox(
 /// the surface level and does not scroll with this header).
 class _CatalogBanner extends ConsumerWidget {
   final CatalogPage page;
+  final bool showLibraryRescan;
 
-  const _CatalogBanner({required this.page});
+  const _CatalogBanner({required this.page, this.showLibraryRescan = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -619,9 +623,15 @@ class _CatalogBanner extends ConsumerWidget {
         ? description
         : (page.provider ?? '');
 
-    return PageBanner(
+    final rescanSupported =
+        showLibraryRescan &&
+        ref.watch(
+          indexerStatusProvider.select((s) => s.scan?.rescanSupported == true),
+        );
+    final banner = PageBanner(
       title: page.title ?? '',
       subtitle: subtitle,
+      padding: EdgeInsets.fromLTRB(16, 8, 16, rescanSupported ? 8 : 24),
       subtitleLeading: subtitle.isEmpty
           ? null
           : Row(
@@ -631,6 +641,10 @@ class _CatalogBanner extends ConsumerWidget {
                 if (sourceBadgeVisible(ref, page.id!)) const SizedBox(width: 7),
               ],
             ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [banner, if (showLibraryRescan) const LibraryRescanControl()],
     );
   }
 }

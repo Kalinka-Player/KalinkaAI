@@ -25,6 +25,7 @@ IndexerStatus _status({
   bool pending = false,
   bool scanning = false,
   bool available = true,
+  bool enriching = false,
 }) => IndexerStatus.fromJson({
   'localfiles': {
     'indexing': {
@@ -40,6 +41,7 @@ IndexerStatus _status({
       'scanning': scanning,
       'last_scan_at': last,
     },
+    if (enriching) 'enrichment': {'total': 100, 'done': 73, 'pending': 27},
   },
 });
 
@@ -328,7 +330,7 @@ void main() {
     testWidgets('rescan refreshes empty $id (sections: $withSections)', (
       tester,
     ) async {
-      final api = _Api();
+      final api = _Api()..status = _status(enriching: true);
       final container = await pump(
         tester,
         api,
@@ -349,6 +351,15 @@ void main() {
         ],
       );
       expect(find.text('Rescan library'), findsOneWidget);
+      final button = find.widgetWithText(TextButton, 'Rescan library');
+      final lastChecked = tester.getRect(find.textContaining('Last checked'));
+      final enrichment = tester.getRect(find.text('Enrichment · 73%'));
+      final action = tester.getRect(button);
+      expect(action.left, greaterThan(lastChecked.right));
+      expect(enrichment.left, lastChecked.left);
+      expect(enrichment.top, greaterThan(lastChecked.bottom));
+      expect(action.height, greaterThanOrEqualTo(48));
+      expect(tester.widget<TextButton>(button).onPressed, isNotNull);
       final before = api.browses;
       api.onRescan = () async {
         api.status = _status(last: 1005);
@@ -407,12 +418,18 @@ void main() {
     );
     expect(api.requests, 2);
     expect(
-      tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Scan queued…'))
+          .onPressed,
       isNull,
     );
   });
 
-  for (final size in [const Size(375, 812), const Size(812, 375)]) {
+  for (final size in [
+    const Size(320, 812),
+    const Size(375, 812),
+    const Size(812, 375),
+  ]) {
     testWidgets('control fits $size with large text and reduced motion', (
       tester,
     ) async {
@@ -423,15 +440,15 @@ void main() {
         textScale: 2.5,
       );
       expect(find.text('Checking folders…'), findsOneWidget);
-      expect(
-        tester.getSize(find.byType(OutlinedButton)).height,
-        greaterThanOrEqualTo(48),
-      );
+      final button = find.widgetWithText(TextButton, 'Checking folders…');
+      final action = tester.getRect(button);
+      final lastChecked = tester.getRect(find.textContaining('Last checked'));
+      expect(action.top, greaterThan(lastChecked.bottom));
+      expect(action.right, closeTo(size.width - 16, 0.1));
+      expect(action.left, greaterThanOrEqualTo(16));
+      expect(action.height, greaterThanOrEqualTo(48));
       expect(tester.takeException(), isNull);
-      expect(
-        tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
-        isNull,
-      );
+      expect(tester.widget<TextButton>(button).onPressed, isNull);
     });
   }
 
