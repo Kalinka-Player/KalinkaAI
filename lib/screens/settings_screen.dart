@@ -145,17 +145,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: Column(
               children: [
                 const SettingsTopBar(title: 'Server settings'),
-                SettingsToolbar(
-                  children: [
-                    IconButton(
-                      tooltip: 'Restart Kalinka',
-                      style: settingsIconButtonStyle,
-                      icon: const Icon(Icons.restart_alt, size: 22),
-                      onPressed: _onRestart,
-                    ),
-                    const ExpertModeToggle(),
-                  ],
-                ),
                 // Reconnecting / offline indicator — the same banner the
                 // queue screen shows. Self-hides when connected.
                 const ConnectionBanner(),

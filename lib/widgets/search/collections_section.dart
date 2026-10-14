@@ -5,6 +5,7 @@ import '../../providers/catalog_cards_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/connection_state_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/click_cursor.dart';
 import '../browse_rows_shimmer.dart';
 import '../collection_art_tile.dart';
 import '../kalinka_button.dart';
@@ -53,7 +54,7 @@ class CollectionsSection extends ConsumerWidget {
         if (shelf.isEmpty) {
           return _section(
             heading: ShelfHeading(title: shelf.plan.title.toUpperCase()),
-            body: const CollectionsEmptyCard(),
+            body: const CollectionsEmptyRow(),
           );
         }
         return _section(
@@ -103,6 +104,84 @@ class CollectionsSection extends ConsumerWidget {
         body,
         const SizedBox(height: 26),
       ],
+    );
+  }
+}
+
+/// Home's empty shelf uses the same visual weight as a music row. The whole
+/// invitation opens the name sheet; the dedicated Collections page keeps its
+/// fuller empty-state card below.
+class CollectionsEmptyRow extends ConsumerWidget {
+  const CollectionsEmptyRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    void create() => showNewCollectionSheet(context, ref);
+
+    return Semantics(
+      container: true,
+      button: true,
+      label: 'Create your first collection',
+      hint: 'Keep tracks from any source together.',
+      onTap: create,
+      excludeSemantics: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: create,
+          mouseCursor: clickCursor(interactive: true),
+          borderRadius: BorderRadius.circular(8),
+          focusColor: KalinkaColors.surfaceOverlay,
+          hoverColor: KalinkaColors.surfaceRaised,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 72),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: KalinkaColors.surfaceElevated,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.add,
+                      size: 22,
+                      color: KalinkaColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Create your first collection',
+                          style: KalinkaTextStyles.trayRowLabel,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Keep tracks from any source together.',
+                          style: KalinkaTextStyles.trayRowSublabel,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: KalinkaColors.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
