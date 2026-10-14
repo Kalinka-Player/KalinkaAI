@@ -31,6 +31,12 @@ List<String> _recordSystemCalls() {
 
 final _queueView = find.byType(PlayerQueueView);
 
+/// The mini-player under the player's queue, not the one under Home.
+final _queueMiniPlayer = find.descendant(
+  of: find.byType(NowPlayingContent),
+  matching: find.byType(MiniPlayer),
+);
+
 class _RecordingWsApi extends KalinkaWsApi {
   _RecordingWsApi(super.ref);
 
@@ -68,8 +74,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(_queueView, findsOneWidget);
     expect(find.byTooltip('Queue options'), findsOneWidget);
-    // The queue keeps only the way out and the way back to the track.
+    expect(_queueMiniPlayer, findsOneWidget);
+    // The queue keeps only the way out; its mini-player has the rest.
     expect(find.byIcon(Icons.fullscreen_rounded), findsNothing);
+    expect(find.byTooltip('Queue'), findsNothing);
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -132,12 +140,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('NOW PLAYING'), findsOneWidget);
     expect(_queueView, findsNothing);
+    expect(_queueMiniPlayer, findsNothing);
 
     await tester.tap(find.byTooltip('Queue'));
     await tester.pumpAndSettle();
     expect(_queueView, findsOneWidget);
 
-    await tester.tap(find.byTooltip('Queue'));
+    await tester.tap(_queueMiniPlayer);
     await tester.pumpAndSettle();
     expect(_queueView, findsNothing);
     expect(find.text('NOW PLAYING'), findsOneWidget);
@@ -219,6 +228,11 @@ void main() {
     );
     // A panel, not a sheet: Home stays usable beside it.
     expect(find.byType(SearchSessionView).hitTestable(), findsOneWidget);
+
+    await tester.tap(_queueMiniPlayer);
+    await tester.pumpAndSettle();
+    expect(_queueView, findsNothing);
+    expect(find.text('NOW PLAYING'), findsOneWidget);
   });
 
   testWidgets('the first-run tour starts at the search entry', (tester) async {

@@ -8,10 +8,6 @@ class PlayerViewNotifier extends Notifier<PlayerView> {
   PlayerView build() => PlayerView.nowPlaying;
 
   void show(PlayerView view) => state = view;
-
-  void toggle() => state = state == PlayerView.queue
-      ? PlayerView.nowPlaying
-      : PlayerView.queue;
 }
 
 final playerViewProvider = NotifierProvider<PlayerViewNotifier, PlayerView>(

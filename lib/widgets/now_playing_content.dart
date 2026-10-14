@@ -14,6 +14,7 @@ import '../providers/source_modules_provider.dart';
 import 'bit_perfect_badge.dart';
 import 'kalinka_dialog.dart';
 import 'kiosk/kiosk_enter_button.dart';
+import 'mini_player.dart';
 import 'play_pause_glyph.dart';
 import 'playback_progress_slider.dart';
 import 'player_queue_view.dart';
@@ -37,7 +38,8 @@ class NowPlayingContent extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
 
   /// Marks the output switcher for the first-run tour. Used by the tablet
-  /// layout, where this header carries the only switcher on screen.
+  /// layout, where this panel carries the only switcher on screen: the
+  /// header's, or in the queue view the mini-player's.
   final Key? outputSwitcherKey;
 
   /// Offered by the queue view while the queue is empty.
@@ -120,7 +122,9 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     if (showingQueue) {
       return Container(
         color: KalinkaColors.background,
+        // The mini-player pads its own raised surface past the bottom inset.
         child: SafeArea(
+          bottom: false,
           child: Column(
             children: [
               _buildHeader(showingQueue: true),
@@ -130,10 +134,12 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                   isTablet: widget.isTablet,
                 ),
               ),
-              // The queue is no reason to lose the transport.
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
-                child: _TransportControls(compact: true),
+              // The way back to the track.
+              MiniPlayer(
+                onTap: () => ref
+                    .read(playerViewProvider.notifier)
+                    .show(PlayerView.nowPlaying),
+                outputSwitcherKey: widget.outputSwitcherKey,
               ),
             ],
           ),
@@ -313,26 +319,18 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     );
   }
 
-  /// Switches the player between the playing track and the queue.
-  Widget _queueToggle({required bool showingQueue}) {
-    return Semantics(
-      label: 'Queue',
-      button: true,
-      toggled: showingQueue,
-      child: Tooltip(
-        message: 'Queue',
-        excludeFromSemantics: true,
-        child: TransportButton(
-          hitDiameter: 36,
-          background: showingQueue ? KalinkaColors.surfaceInput : null,
-          onTap: () => ref.read(playerViewProvider.notifier).toggle(),
-          child: Icon(
-            Icons.queue_music_rounded,
-            size: 22,
-            color: showingQueue
-                ? KalinkaColors.textPrimary
-                : KalinkaColors.textSecondary,
-          ),
+  /// Turns the player to the queue; the queue's mini-player turns it back.
+  Widget _queueButton() {
+    return Tooltip(
+      message: 'Queue',
+      child: TransportButton(
+        hitDiameter: 36,
+        onTap: () =>
+            ref.read(playerViewProvider.notifier).show(PlayerView.queue),
+        child: const Icon(
+          Icons.queue_music_rounded,
+          size: 22,
+          color: KalinkaColors.textSecondary,
         ),
       ),
     );
@@ -363,46 +361,50 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
             // list is read (and always on servers without /renderer/*), and
             // the label must stay centred either way. The switcher stays
             // icon-only here — a phone header hasn't the width the tablet's
-            // name enjoys. The queue keeps only the way out and the way back.
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                Text(label, style: KalinkaTextStyles.nowPlayingLabel),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        onTap: widget.onClose,
-                        child: const Icon(
-                          Icons.keyboard_arrow_down,
-                          size: 28,
-                          color: KalinkaColors.textSecondary,
+            // name enjoys. The queue keeps only the way out; its mini-player
+            // has the rest. The floor keeps both views' headers level.
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 36),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Text(label, style: KalinkaTextStyles.nowPlayingLabel),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: widget.onClose,
+                          child: const Icon(
+                            Icons.keyboard_arrow_down,
+                            size: 28,
+                            color: KalinkaColors.textSecondary,
+                          ),
                         ),
-                      ),
-                      if (!showingQueue) ...[
-                        const SizedBox(width: 4),
-                        const KioskEnterButton(),
+                        if (!showingQueue) ...[
+                          const SizedBox(width: 4),
+                          const KioskEnterButton(),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (!showingQueue)
-                        const RendererSwitcherButton(
-                          hitDiameter: 36,
-                          iconSize: 20,
-                        ),
-                      _queueToggle(showingQueue: showingQueue),
-                    ],
-                  ),
-                ),
-              ],
+                  if (!showingQueue)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const RendererSwitcherButton(
+                            hitDiameter: 36,
+                            iconSize: 20,
+                          ),
+                          _queueButton(),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
@@ -413,15 +415,21 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
       // Connection status lives in the right-panel top bar, not here.
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(label, style: KalinkaTextStyles.nowPlayingLabel),
-            ),
-            const KioskEnterButton(),
-            RendererSwitcherDropdown(key: widget.outputSwitcherKey),
-            _queueToggle(showingQueue: showingQueue),
-          ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 36),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(label, style: KalinkaTextStyles.nowPlayingLabel),
+              ),
+              // In the queue the mini-player carries the switcher, key and all.
+              if (!showingQueue) ...[
+                const KioskEnterButton(),
+                RendererSwitcherDropdown(key: widget.outputSwitcherKey),
+                _queueButton(),
+              ],
+            ],
+          ),
         ),
       );
     }
@@ -526,11 +534,7 @@ class _ExclusivePlaybackNote extends ConsumerWidget {
 /// Extracted so only this widget rebuilds on playerState / playbackMode changes,
 /// leaving the rest of NowPlayingContent (album art, metadata) untouched.
 class _TransportControls extends ConsumerWidget {
-  /// Previous, play/pause and next only, smaller: under the queue, whose
-  /// menu has shuffle and repeat.
-  final bool compact;
-
-  const _TransportControls({this.compact = false});
+  const _TransportControls();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -552,18 +556,12 @@ class _TransportControls extends ConsumerWidget {
     final playPauseDisabled = transport.playPauseDisabled;
     final canPrev = transport.canPrev;
     final canNext = transport.canNext;
-    final skipHit = compact ? 44.0 : 52.0;
-    final skipIcon = compact ? 30.0 : 36.0;
-    final modes = !exclusive && !compact;
 
     return RepaintBoundary(
       child: Row(
-        mainAxisAlignment: compact
-            ? MainAxisAlignment.center
-            : MainAxisAlignment.spaceEvenly,
-        spacing: compact ? 28 : 0,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          if (modes)
+          if (!exclusive)
             TransportButton(
               hitDiameter: 44,
               onTap: () {
@@ -586,13 +584,13 @@ class _TransportControls extends ConsumerWidget {
           Opacity(
             opacity: canPrev ? 1.0 : 0.4,
             child: TransportButton(
-              hitDiameter: skipHit,
+              hitDiameter: 52,
               onTap: canPrev
                   ? () => api.sendQueueCommand(const QueueCommand.prev())
                   : null,
-              child: Icon(
+              child: const Icon(
                 Icons.skip_previous_rounded,
-                size: skipIcon,
+                size: 36,
                 color: KalinkaColors.textPrimary,
               ),
             ),
@@ -600,7 +598,7 @@ class _TransportControls extends ConsumerWidget {
           Opacity(
             opacity: hasTrack ? 1.0 : 0.4,
             child: TransportButton(
-              hitDiameter: compact ? 52 : 68,
+              hitDiameter: 68,
               background: Colors.white,
               // Ripple has to read against the white face of the play/pause
               // disc, so use a dark tint instead of the default white-on-dark.
@@ -615,27 +613,27 @@ class _TransportControls extends ConsumerWidget {
                     ),
               child: PlayPauseGlyph(
                 playerState: playerState,
-                iconSize: compact ? 28 : 38,
-                spinnerSize: compact ? 22 : 30,
-                spinnerStrokeWidth: compact ? 2.5 : 3,
+                iconSize: 38,
+                spinnerSize: 30,
+                spinnerStrokeWidth: 3,
               ),
             ),
           ),
           Opacity(
             opacity: canNext ? 1.0 : 0.4,
             child: TransportButton(
-              hitDiameter: skipHit,
+              hitDiameter: 52,
               onTap: canNext
                   ? () => api.sendQueueCommand(const QueueCommand.next())
                   : null,
-              child: Icon(
+              child: const Icon(
                 Icons.skip_next_rounded,
-                size: skipIcon,
+                size: 36,
                 color: KalinkaColors.textPrimary,
               ),
             ),
           ),
-          if (modes)
+          if (!exclusive)
             TransportButton(
               hitDiameter: 44,
               onTap: () {

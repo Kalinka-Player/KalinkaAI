@@ -27,8 +27,8 @@ import 'transport_button.dart';
 /// the keyboard back by this long so the bar clears first.
 const Duration kMiniPlayerHideDuration = Duration(milliseconds: 260);
 
-/// Fixed bottom mini player — 72px tall plus safe area inset. Stays put on the
-/// search screen too; playback controls remain reachable while browsing.
+/// Fixed bottom mini player — 72px tall plus safe area inset. Sits under Home
+/// and under the player's queue view, where a tap turns back to the track.
 ///
 /// Swipe gestures:
 /// - Swipe left  = next track (with resistance; haptic + auto-complete at 1/3)
@@ -40,9 +40,7 @@ const Duration kMiniPlayerHideDuration = Duration(milliseconds: 260);
 class MiniPlayer extends ConsumerStatefulWidget {
   final VoidCallback? onTap;
 
-  /// Marks the output switcher for the first-run tour. Lives here on phone;
-  /// the tablet layout has no mini-player and keys its Now Playing header
-  /// switcher instead.
+  /// Marks the output switcher for the first-run tour.
   final Key? outputSwitcherKey;
 
   const MiniPlayer({super.key, this.onTap, this.outputSwitcherKey});
