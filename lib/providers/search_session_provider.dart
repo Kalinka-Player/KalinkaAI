@@ -137,6 +137,17 @@ class CatalogPage {
     this.canAdd = false,
   });
 
+  /// An album's own page: its tracks under its cover, not a catalog.
+  bool get isAlbum {
+    final id = this.id;
+    if (id == null) return false;
+    try {
+      return EntityId.fromString(id).type == EntityType.album;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// The listing a browsable [item] stands for, owned by [provider].
   factory CatalogPage.fromItem(BrowseItem item, {String? provider}) =>
       CatalogPage.category(

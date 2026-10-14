@@ -20,6 +20,7 @@ import '../browse_filters/filters_match_nothing.dart';
 import '../browse_rows_shimmer.dart';
 import '../infinite_list_view.dart';
 import '../page_banner.dart';
+import '../procedural_album_art.dart';
 import '../search_cards/action_pill_button.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../shelf_heading.dart';
@@ -161,7 +162,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       if (_actionsHeld) setState(() => _actionsHeld = false);
     });
 
-    final Widget header = page.folderLayout
+    final Widget header = page.isAlbum
+        ? _AlbumHeader(page: page)
+        : page.folderLayout
         ? _FolderHeader(
             key: _headerKey,
             page: page,
@@ -181,7 +184,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     // A catalog made of shelves shows them until a kind is chosen; choosing
     // one narrows the catalog to that kind's flat listing, which is the same
     // listing its shelf was previewing.
-    if (!page.folderLayout && page.sections.isNotEmpty && query.type == null) {
+    // An album is its tracks, whatever sections it claims.
+    if (!page.folderLayout &&
+        !page.isAlbum &&
+        page.sections.isNotEmpty &&
+        query.type == null) {
       return CatalogSectionsView(
         page: page,
         query: query,
@@ -407,6 +414,114 @@ class _CatalogHeader extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// An album's head: its cover large and centred, its title and artist over
+/// the cover's foot on a shade that keeps them legible on pale art, then
+/// Play all and Enqueue. Its tracks follow as one list.
+class _AlbumHeader extends ConsumerWidget {
+  final CatalogPage page;
+
+  const _AlbumHeader({required this.page});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final path = page.artPath;
+    final url = path == null ? null : ref.watch(urlResolverProvider).abs(path);
+    final title = page.title ?? '';
+    final artist = page.description?.trim() ?? '';
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = (constraints.maxWidth - 32).clamp(0.0, 360.0);
+        final fallback = ProceduralAlbumArt(trackId: page.id!, size: size);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            children: [
+              Semantics(
+                header: true,
+                label: artist.isEmpty ? title : '$title, $artist',
+                excludeSemantics: true,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox.square(
+                    dimension: size,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (url == null)
+                          fallback
+                        else
+                          Image.network(
+                            url,
+                            fit: BoxFit.cover,
+                            cacheWidth:
+                                (size * MediaQuery.devicePixelRatioOf(context))
+                                    .round(),
+                            errorBuilder: (_, _, _) => fallback,
+                          ),
+                        const DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              stops: [0.45, 1],
+                              colors: [Color(0x00000000), Color(0xCC000000)],
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 16,
+                          right: 16,
+                          bottom: 14,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: KalinkaFonts.display(
+                                  fontSize: KalinkaTypography.baseSize + 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: KalinkaColors.textPrimary,
+                                ),
+                              ),
+                              if (artist.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  artist,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: KalinkaTextStyles.trackRowSubtitle
+                                      .copyWith(
+                                        color: KalinkaColors.textPrimary
+                                            .withValues(alpha: 0.85),
+                                      ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  PlayAllChip(trackIds: [page.id!]),
+                  const SizedBox(width: 8),
+                  AddAllChip(trackIds: [page.id!], name: title),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
