@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data_model/data_model.dart' show SearchSuggestion;
 import '../../providers/catalog_cards_provider.dart';
 import '../../providers/search_session_provider.dart';
+import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
+import '../home/recently_added_section.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../shelf_heading.dart' show hasLargeType;
 import 'catalog_cards_section.dart';
@@ -49,6 +51,7 @@ class SearchZeroState extends ConsumerWidget {
         ...leading,
 
         CollectionsSection(onOpenCatalog: onOpenCatalog),
+        RecentlyAddedSection(onOpenCatalog: onOpenCatalog),
 
         // Not "OR": a section may sit between the entry and this rule, and
         // the label has to read the same whether one does or not.
@@ -133,9 +136,13 @@ class SearchSuggestionsList extends ConsumerWidget {
     final session = ref.watch(searchSessionProvider);
     final notifier = ref.read(searchSessionProvider.notifier);
     final needle = query.trim().toLowerCase();
-    final suggestions = needle.isEmpty
+    // Without smart search, mood prompts would only run as name searches.
+    final offered = (ref.watch(smartSearchAvailableProvider) ?? true)
         ? session.suggestions
-        : session.suggestions
+        : const <SearchSuggestion>[];
+    final suggestions = needle.isEmpty
+        ? offered
+        : offered
               .where((s) => s.query.toLowerCase().contains(needle))
               .toList(growable: false);
     final history = needle.isEmpty

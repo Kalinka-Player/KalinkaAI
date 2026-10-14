@@ -11,6 +11,7 @@ import '../../providers/connection_state_provider.dart';
 import '../../providers/indexer_status_provider.dart';
 import '../../providers/row_expansion_provider.dart';
 import '../../providers/search_session_provider.dart';
+import '../../providers/source_modules_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../providers/shell_nav_provider.dart';
 import '../../theme/app_theme.dart';
@@ -264,6 +265,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
               entryBox.size
         : null;
     _keyboardUp = false;
+    ref.read(searchSessionProvider.notifier).refreshSuggestionsIfStale();
     // Flips searchEntryModeProvider → the mini-player starts sliding down.
     ref.read(searchEntryModeProvider.notifier).set(true);
     setState(() => _focused = true);
@@ -726,6 +728,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// "EXPLORE CATALOGS" divider, catalog cards and favourites. Tapping the
   /// entry lifts the overlay.
   Widget _buildCatalogsRoot(SearchSessionState session) {
+    final smart = ref.watch(smartSearchAvailableProvider) ?? true;
     return SearchZeroState(
       controller: _discoverScroll,
       onOpenCatalog: _openCatalog,
@@ -744,7 +747,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           ),
         _DiscoverHero(
           entryKey: _entryKey,
-          hint: _hintText(session),
+          hint: _hintText(session, smart: smart),
+          smartSearch: smart,
           onOpenSearch: _openSearch,
         ),
         const SizedBox(height: 30),
@@ -756,7 +760,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
 
   /// Rotating example hint — a different real suggestion each time the surface
   /// mounts, teaching the query language.
-  String _hintText(SearchSessionState session) {
+  String _hintText(SearchSessionState session, {required bool smart}) {
+    if (!smart) return 'Artist, album or track…';
     final suggestions = session.suggestions;
     if (suggestions.isEmpty) return 'Ask for music…';
     return 'Try “${suggestions[_hintIndex % suggestions.length].query}”';
@@ -1039,11 +1044,16 @@ class _ResultsReturnPill extends StatelessWidget {
 class _DiscoverHero extends StatelessWidget {
   final Key entryKey;
   final String hint;
+
+  /// Whether a source answers smart search; the description says only what
+  /// the search can do.
+  final bool smartSearch;
   final VoidCallback onOpenSearch;
 
   const _DiscoverHero({
     required this.entryKey,
     required this.hint,
+    required this.smartSearch,
     required this.onOpenSearch,
   });
 
@@ -1127,8 +1137,10 @@ class _DiscoverHero extends StatelessWidget {
         FractionallySizedBox(
           widthFactor: 0.55,
           child: Text(
-            'Describe a mood, activity, genre, or anything else you '
-            'would like to hear.',
+            smartSearch
+                ? 'Describe a mood, activity, genre, or anything else you '
+                      'would like to hear.'
+                : 'Find an artist, album or track by name.',
             style: KalinkaTextStyles.trackRowSubtitle,
           ),
         ),
