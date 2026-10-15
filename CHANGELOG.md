@@ -8,6 +8,26 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.20.0
+
+This release needs no server update. Library rescan and the inactivity power-off timer come alive with a supervisor that supports them; until then the app looks and behaves as before in those places.
+
+### Added
+- Power off streamer, in the server menu, with a confirmation dialog warning that the player shuts down safely and must be unplugged and plugged back in to start again.
+- An inactivity power-off timer for streamers whose supervisor offers it: a switch and a minutes field beside the existing manual power-off control.
+- Rescan library, in My Library's folder browser header: a compact action that shows when it was last checked, its progress while checking, and refreshes once a scan completes.
+
+### Changed
+- The app opens on Home instead of the queue; the queue is now a view of the player, reached from the player's own switch rather than a page over Home. The queue's own menu moved off the main screen and into the queue view, and its mini-player stays in place as the player sheet opens and closes.
+- The player sheet and Configuration's settings pages now draw their header artwork and background under the status bar instead of behind it.
+- Home shows header artwork with a backdrop that scrolls behind the page instead of a plain background.
+- The playing bars and collection play buttons are grey instead of accent-coloured.
+- Configuration's tabs size to their labels instead of to a fixed width.
+
+### Fixed
+- Server settings no longer leave a restart button behind once the restart it started has finished.
+- An output's settings reload correctly once its sound card changes, waiting for the renderer to come back and keeping any edit staged before the change instead of losing it; a staged edit the sound card change replaces is dropped instead of silently kept.
+
 ## 0.19.1
 
 This release needs no server update.
