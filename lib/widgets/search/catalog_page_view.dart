@@ -19,12 +19,14 @@ import '../browse_filters/browse_filter_form.dart' show filterTypeLabel;
 import '../browse_filters/filters_match_nothing.dart';
 import '../browse_rows_shimmer.dart';
 import '../infinite_list_view.dart';
+import '../measure_size.dart';
 import '../page_banner.dart';
-import '../procedural_album_art.dart';
 import '../search_cards/action_pill_button.dart';
 import '../search_cards/browse_item_rows.dart';
+import '../search_cards/search_track_row.dart';
 import '../shelf_heading.dart';
 import '../source_badge.dart';
+import 'album_page_header.dart';
 import 'catalog_sections_view.dart';
 import 'collections_edit_bar.dart';
 import 'collections_section.dart';
@@ -41,6 +43,10 @@ import 'track_group_actions.dart';
 class CatalogPageView extends ConsumerStatefulWidget {
   final CatalogPage page;
 
+  /// When supplied, Home owns the album cover behind the system inset and
+  /// navigation. The header reports its height so that cover ends at the list.
+  final ValueChanged<double>? onAlbumHeaderHeight;
+
   /// Returns to the Catalogs root — used by the error state's action.
   final VoidCallback onBackToCatalogs;
 
@@ -48,6 +54,7 @@ class CatalogPageView extends ConsumerStatefulWidget {
     super.key,
     required this.page,
     required this.onBackToCatalogs,
+    this.onAlbumHeaderHeight,
   });
 
   @override
@@ -63,8 +70,41 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   /// The listing's size as the server last said, -1 before it has.
   int _total = -1;
 
+  final _albumTrackDurations = <int, int>{};
+  int? _reportedAlbumDuration;
+  int? _albumDuration;
+
   void _countRows(int rows) {
-    if (rows != _rows) setState(() => _rows = rows);
+    // A refresh may correct duration metadata without changing row count.
+    setState(() => _rows = rows);
+  }
+
+  void _readAlbumDuration(BrowseItemsList list, int offset) {
+    if (offset == 0) {
+      _albumTrackDurations.clear();
+      final reported = widget.page.totalDurationSeconds;
+      _reportedAlbumDuration = reported != null && reported > 0
+          ? reported
+          : null;
+    }
+    for (var i = 0; i < list.items.length; i++) {
+      final track = list.items[i].track;
+      _albumTrackDurations[offset + i] = track?.duration ?? 0;
+      final reported = track?.album?.duration;
+      if (reported != null && reported > 0) _reportedAlbumDuration ??= reported;
+    }
+    // Never present a paginated subtotal as the album's length. Zero/missing
+    // track durations also mean that a reliable sum is not available yet.
+    final complete =
+        list.total > 0 && _albumTrackDurations.length == list.total;
+    _albumDuration =
+        _reportedAlbumDuration ??
+        (complete && _albumTrackDurations.values.every((seconds) => seconds > 0)
+            ? _albumTrackDurations.values.fold<int>(
+                0,
+                (sum, seconds) => sum + seconds,
+              )
+            : null);
   }
 
   /// A folder's header and the actions in it. Where the actions sit in the
@@ -163,7 +203,15 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     });
 
     final Widget header = page.isAlbum
-        ? _AlbumHeader(page: page)
+        ? MeasureSize(
+            onChange: (size) => widget.onAlbumHeaderHeight?.call(size.height),
+            child: AlbumPageHeader(
+              page: page,
+              trackCount: _total < 0 ? null : _total,
+              totalDurationSeconds: _albumDuration,
+              showArtwork: widget.onAlbumHeaderHeight == null,
+            ),
+          )
         : page.folderLayout
         ? _FolderHeader(
             key: _headerKey,
@@ -220,6 +268,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         );
         _pollWhileComposing(list.items);
         _total = list.total;
+        if (page.isAlbum) _readAlbumDuration(list, offset);
         return ItemChunk(items: list.items, total: list.total);
       },
       // Inset past the artwork of the row it follows, so the thumbnails read
@@ -229,21 +278,33 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           left: 16 + BrowseItemRows.textInsetOf(above),
           right: 16,
         ),
-        child: const Divider(
+        child: Divider(
           color: KalinkaColors.borderSubtle,
           thickness: 1,
-          height: 14,
+          height: page.isAlbum ? 1 : 14,
         ),
       ),
       itemBuilder: (context, item, index, loaded) {
         // Track rows play the whole loaded list as a queue from the
         // tapped row; as more chunks scroll in, the context grows.
         final trackIds = trackIdsMemo.of(loaded);
-        final row = BrowseItemRows.buildRow(
-          item,
-          queueContextIds: trackIds.isEmpty ? null : trackIds,
-        );
-        final heading = page.folderLayout ? _groupHeading(index, loaded) : null;
+        final row = page.isAlbum && item.track != null
+            ? SearchTrackRow(
+                item: item,
+                queueContextIds: trackIds.isEmpty ? null : trackIds,
+                albumTrackNumber: trackIdsMemo.albumNumberAt(index, loaded),
+                albumArtist: page.description,
+                labelled: false,
+              )
+            : BrowseItemRows.buildRow(
+                item,
+                queueContextIds: trackIds.isEmpty ? null : trackIds,
+              );
+        final heading = page.isAlbum
+            ? _discHeading(index, loaded)
+            : page.folderLayout
+            ? _groupHeading(index, loaded)
+            : null;
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: heading == null
@@ -265,11 +326,13 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       emptyBuilder: (context) => _emptyState(page, filter, onReset: setQuery),
       // The error state replaces only the rows, never the header — a filter
       // that failed has to stay reachable to be undone.
-      errorBuilder: (context, _) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          header,
-          Expanded(child: _CatalogError(onReturn: widget.onBackToCatalogs)),
+      errorBuilder: (context, _) => CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: header),
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _CatalogError(onReturn: widget.onBackToCatalogs),
+          ),
         ],
       ),
     );
@@ -313,6 +376,35 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget? _discHeading(int index, List<BrowseItem> loaded) {
+    final disc = loaded[index].track?.discNumber;
+    if (disc == null ||
+        disc <= 0 ||
+        (index > 0 && loaded[index - 1].track?.discNumber == disc)) {
+      return null;
+    }
+    // A single-disc album needs no "Disc 1" heading.
+    if (!loaded.any((i) {
+      final other = i.track?.discNumber;
+      return other != null && other != disc;
+    })) {
+      return null;
+    }
+    return Padding(
+      padding: EdgeInsets.fromLTRB(8, index == 0 ? 8 : 16, 8, 8),
+      child: Semantics(
+        header: true,
+        child: Text(
+          'Disc $disc',
+          style: KalinkaFonts.mono(
+            fontSize: 12,
+            color: KalinkaColors.textSecondary,
+          ),
+        ),
+      ),
     );
   }
 
@@ -418,114 +510,6 @@ class _CatalogHeader extends StatelessWidget {
   }
 }
 
-/// An album's head: its cover large and centred, its title and artist over
-/// the cover's foot on a shade that keeps them legible on pale art, then
-/// Play all and Enqueue. Its tracks follow as one list.
-class _AlbumHeader extends ConsumerWidget {
-  final CatalogPage page;
-
-  const _AlbumHeader({required this.page});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final path = page.artPath;
-    final url = path == null ? null : ref.watch(urlResolverProvider).abs(path);
-    final title = page.title ?? '';
-    final artist = page.description?.trim() ?? '';
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final size = (constraints.maxWidth - 32).clamp(0.0, 360.0);
-        final fallback = ProceduralAlbumArt(trackId: page.id!, size: size);
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Column(
-            children: [
-              Semantics(
-                header: true,
-                label: artist.isEmpty ? title : '$title, $artist',
-                excludeSemantics: true,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: SizedBox.square(
-                    dimension: size,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (url == null)
-                          fallback
-                        else
-                          Image.network(
-                            url,
-                            fit: BoxFit.cover,
-                            cacheWidth:
-                                (size * MediaQuery.devicePixelRatioOf(context))
-                                    .round(),
-                            errorBuilder: (_, _, _) => fallback,
-                          ),
-                        const DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              stops: [0.45, 1],
-                              colors: [Color(0x00000000), Color(0xCC000000)],
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          left: 16,
-                          right: 16,
-                          bottom: 14,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: KalinkaFonts.display(
-                                  fontSize: KalinkaTypography.baseSize + 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: KalinkaColors.textPrimary,
-                                ),
-                              ),
-                              if (artist.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  artist,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: KalinkaTextStyles.trackRowSubtitle
-                                      .copyWith(
-                                        color: KalinkaColors.textPrimary
-                                            .withValues(alpha: 0.85),
-                                      ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  PlayAllChip(trackIds: [page.id!]),
-                  const SizedBox(width: 8),
-                  AddAllChip(trackIds: [page.id!], name: title),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
 /// The head of a page of folders under its breadcrumb: the folder shown's
 /// banner, its actions, and — at the page's own top — the page's shelves.
 class _FolderHeader extends StatelessWidget {
@@ -611,6 +595,7 @@ class _FolderActions extends ConsumerWidget {
 class _TrackIdsMemo {
   List<String> _ids = const [];
   int _forLength = -1;
+  List<int> _albumNumbers = const [];
 
   List<String> of(List<BrowseItem> loaded) {
     if (loaded.length != _forLength) {
@@ -619,8 +604,25 @@ class _TrackIdsMemo {
         for (final i in loaded)
           if (i.track != null) i.id,
       ];
+      var position = 0;
+      int? previousDisc;
+      _albumNumbers = [];
+      for (final item in loaded) {
+        final track = item.track;
+        final disc = track?.discNumber;
+        if (disc != previousDisc) position = 0;
+        previousDisc = disc;
+        final tagged = track?.trackNumber;
+        position = tagged != null && tagged > 0 ? tagged : position + 1;
+        _albumNumbers.add(position);
+      }
     }
     return _ids;
+  }
+
+  int albumNumberAt(int index, List<BrowseItem> loaded) {
+    of(loaded);
+    return _albumNumbers[index];
   }
 }
 

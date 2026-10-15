@@ -81,6 +81,10 @@ class CatalogPage {
   /// Category description, e.g. "Most played this month" — the page subtitle.
   final String? description;
 
+  /// The source's album total, retained even while only a page of tracks is
+  /// loaded. Null means the page must wait for a complete list to add it up.
+  final int? totalDurationSeconds;
+
   /// Server-rendered card art path — reused as the page's header backdrop.
   final String? artPath;
 
@@ -115,6 +119,7 @@ class CatalogPage {
       title = null,
       provider = null,
       description = null,
+      totalDurationSeconds = null,
       artPath = null,
       filters = const [],
       sections = const [],
@@ -128,6 +133,7 @@ class CatalogPage {
     required this.title,
     this.provider,
     this.description,
+    this.totalDurationSeconds,
     this.artPath,
     this.filters = const [],
     this.sections = const [],
@@ -155,6 +161,7 @@ class CatalogPage {
         title: item.catalog?.title ?? item.name,
         provider: provider,
         description: item.catalog?.description,
+        totalDurationSeconds: item.album?.duration,
         artPath: artPathOf(item),
         filters: item.catalog?.filters ?? const [],
         sections: item.sections ?? const [],
@@ -196,6 +203,7 @@ class CatalogPage {
     title: title,
     provider: provider,
     description: description,
+    totalDurationSeconds: totalDurationSeconds,
     artPath: artPath,
     filters: filters,
     sections: sections,
@@ -591,6 +599,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     required String title,
     String? provider,
     String? description,
+    int? totalDurationSeconds,
     String? artPath,
     List<FilterSpec> filters = const [],
     List<BrowseItem> sections = const [],
@@ -604,6 +613,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       title: title,
       provider: provider,
       description: description,
+      totalDurationSeconds: totalDurationSeconds,
       artPath: artPath,
       filters: filters,
       sections: sections,

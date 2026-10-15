@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../data_model/data_model.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/kalinka_player_api_provider.dart';
@@ -31,11 +33,18 @@ class SearchTrackRow extends ConsumerStatefulWidget {
   /// under a heading that already says both.
   final bool labelled;
 
+  /// Album pages replace the repeated cover with a position, and only name
+  /// the performer when it differs from the album's artist.
+  final int? albumTrackNumber;
+  final String? albumArtist;
+
   const SearchTrackRow({
     super.key,
     required this.item,
     this.queueContextIds,
     this.labelled = true,
+    this.albumTrackNumber,
+    this.albumArtist,
   });
 
   @override
@@ -47,6 +56,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
   late final AnimationController _flashController;
   late final Animation<Color?> _flashColorAnim;
   bool _tappedToPlay = false;
+  bool _showFocus = false;
 
   @override
   void initState() {
@@ -153,10 +163,11 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     final title = track?.title ?? widget.item.name ?? 'Unknown';
     final artist = track?.performer?.name ?? '';
     final album = track?.album?.title ?? '';
-    final subtitle = [
-      artist,
-      album,
-    ].where((s) => s.isNotEmpty).join(' \u00B7 ');
+    final inAlbum = widget.albumTrackNumber != null;
+    final albumArtist = widget.albumArtist?.trim().toLowerCase() ?? '';
+    final subtitle = inAlbum
+        ? (artist.trim().toLowerCase() == albumArtist ? '' : artist)
+        : [artist, album].where((s) => s.isNotEmpty).join(' \u00B7 ');
     final duration = formatTrackDuration(
       track?.duration != null ? track!.duration * 1000 : null,
     );
@@ -223,23 +234,39 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
       leadingStartSpacing: 0,
       leading: Stack(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: resolvedImageUrl != null
-                ? Image.network(
-                    resolvedImageUrl,
-                    width: 44,
-                    height: 44,
-                    cacheWidth: 132,
-                    cacheHeight: 132,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                    filterQuality: FilterQuality.low,
-                    errorBuilder: (_, _, _) =>
-                        ProceduralAlbumArt(trackId: widget.item.id, size: 44),
-                  )
-                : ProceduralAlbumArt(trackId: widget.item.id, size: 44),
-          ),
+          if (inAlbum)
+            ExcludeSemantics(
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${widget.albumTrackNumber}',
+                    style: KalinkaFonts.mono(
+                      fontSize: 14,
+                      color: KalinkaColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: resolvedImageUrl != null
+                  ? Image.network(
+                      resolvedImageUrl,
+                      width: 44,
+                      height: 44,
+                      cacheWidth: 132,
+                      cacheHeight: 132,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                      filterQuality: FilterQuality.low,
+                      errorBuilder: (_, _, _) =>
+                          ProceduralAlbumArt(trackId: widget.item.id, size: 44),
+                    )
+                  : ProceduralAlbumArt(trackId: widget.item.id, size: 44),
+            ),
           if (longPressing && longPressProgress > 0)
             Positioned.fill(
               child: CustomPaint(
@@ -269,41 +296,44 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
           Text(
             title,
             style: KalinkaTextStyles.trackRowTitle.copyWith(
+              fontSize: inAlbum ? 16 : null,
               color: selectionMode && isSelected
                   ? KalinkaColors.accentTint
                   : null,
             ),
-            maxLines: 1,
+            maxLines: inAlbum ? 2 : 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              if (widget.labelled &&
-                  sourceBadgeVisible(ref, widget.item.id)) ...[
-                SourceBadge(
-                  entityId: widget.item.id,
-                  size: SourceBadgeSize.standard,
+          if (!inAlbum || subtitle.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (widget.labelled &&
+                    sourceBadgeVisible(ref, widget.item.id)) ...[
+                  SourceBadge(
+                    entityId: widget.item.id,
+                    size: SourceBadgeSize.standard,
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                Expanded(
+                  child: widget.labelled
+                      ? Text.rich(
+                          entityTypeSubtitle('Track', subtitle),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        )
+                      : Text(
+                          subtitle,
+                          style: KalinkaTextStyles.trackRowSubtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                 ),
-                const SizedBox(width: 6),
               ],
-              Expanded(
-                child: widget.labelled
-                    ? Text.rich(
-                        entityTypeSubtitle('Track', subtitle),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      )
-                    : Text(
-                        subtitle,
-                        style: KalinkaTextStyles.trackRowSubtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ],
       ),
       trailing: duration != null || showBars
@@ -311,18 +341,20 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
           : null,
     );
 
-    return SwipeToActRow(
+    void activate() {
+      if (selectionMode) {
+        ref.read(selectionStateProvider.notifier).toggle(widget.item.id);
+      } else {
+        _playTrack();
+      }
+    }
+
+    final row = SwipeToActRow(
       enabled: !selectionMode,
       onAddToQueue: () => addTrackToQueue(widget.item),
       onPlayNext: () => playTrackNext(widget.item),
       child: GestureDetector(
-        onTap: () {
-          if (selectionMode) {
-            ref.read(selectionStateProvider.notifier).toggle(widget.item.id);
-          } else {
-            _playTrack();
-          }
-        },
+        onTap: activate,
         onLongPressStart: selectionMode
             ? null
             : (_) => startLongPressRing(
@@ -345,7 +377,9 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
                     ? (_flashColorAnim.value ?? baseRowBg)
                     : baseRowBg;
                 return AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 180),
                   decoration: BoxDecoration(color: rowBg),
                   child: child,
                 );
@@ -362,6 +396,41 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
                 ),
               ),
           ],
+        ),
+      ),
+    );
+    if (!inAlbum) return row;
+
+    return FocusableActionDetector(
+      mouseCursor: SystemMouseCursors.click,
+      onShowFocusHighlight: (value) => setState(() => _showFocus = value),
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) {
+            activate();
+            return null;
+          },
+        ),
+      },
+      child: Semantics(
+        button: true,
+        selected: selectionMode ? isSelected : null,
+        label: 'Track ${widget.albumTrackNumber}',
+        customSemanticsActions: selectionMode
+            ? null
+            : {
+                CustomSemanticsAction(label: 'Add to queue'): () =>
+                    addTrackToQueue(widget.item),
+                CustomSemanticsAction(label: 'Play next'): () =>
+                    playTrackNext(widget.item),
+              },
+        child: Container(
+          foregroundDecoration: BoxDecoration(
+            border: _showFocus
+                ? Border.all(color: KalinkaColors.textSecondary, width: 2)
+                : null,
+          ),
+          child: row,
         ),
       ),
     );
