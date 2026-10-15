@@ -175,6 +175,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   @override
   Widget build(BuildContext context) {
     final page = widget.page;
+    // Parses the id; read once rather than per row.
+    final isAlbum = page.isAlbum;
     final capabilities = page.filterCapabilities;
     final (filter, expandedShelf) = ref.watch(
       searchSessionProvider.select((s) => (s.catalogFilter, s.expandedShelf)),
@@ -202,7 +204,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       if (_actionsHeld) setState(() => _actionsHeld = false);
     });
 
-    final Widget header = page.isAlbum
+    final Widget header = isAlbum
         ? MeasureSize(
             onChange: (size) => widget.onAlbumHeaderHeight?.call(size.height),
             child: AlbumPageHeader(
@@ -234,7 +236,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     // listing its shelf was previewing.
     // An album is its tracks, whatever sections it claims.
     if (!page.folderLayout &&
-        !page.isAlbum &&
+        !isAlbum &&
         page.sections.isNotEmpty &&
         query.type == null) {
       return CatalogSectionsView(
@@ -268,7 +270,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         );
         _pollWhileComposing(list.items);
         _total = list.total;
-        if (page.isAlbum) _readAlbumDuration(list, offset);
+        if (isAlbum) _readAlbumDuration(list, offset);
         return ItemChunk(items: list.items, total: list.total);
       },
       // Inset past the artwork of the row it follows, so the thumbnails read
@@ -281,14 +283,14 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         child: Divider(
           color: KalinkaColors.borderSubtle,
           thickness: 1,
-          height: page.isAlbum ? 1 : 14,
+          height: isAlbum ? 1 : 14,
         ),
       ),
       itemBuilder: (context, item, index, loaded) {
         // Track rows play the whole loaded list as a queue from the
         // tapped row; as more chunks scroll in, the context grows.
         final trackIds = trackIdsMemo.of(loaded);
-        final row = page.isAlbum && item.track != null
+        final row = isAlbum && item.track != null
             ? SearchTrackRow(
                 item: item,
                 queueContextIds: trackIds.isEmpty ? null : trackIds,
@@ -300,8 +302,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                 item,
                 queueContextIds: trackIds.isEmpty ? null : trackIds,
               );
-        final heading = page.isAlbum
-            ? _discHeading(index, loaded)
+        final heading = isAlbum
+            ? _discHeading(index, loaded, trackIdsMemo.multiDisc(loaded))
             : page.folderLayout
             ? _groupHeading(index, loaded)
             : null;
@@ -379,18 +381,12 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     );
   }
 
-  Widget? _discHeading(int index, List<BrowseItem> loaded) {
+  Widget? _discHeading(int index, List<BrowseItem> loaded, bool multiDisc) {
     final disc = loaded[index].track?.discNumber;
-    if (disc == null ||
-        disc <= 0 ||
-        (index > 0 && loaded[index - 1].track?.discNumber == disc)) {
-      return null;
-    }
     // A single-disc album needs no "Disc 1" heading.
-    if (!loaded.any((i) {
-      final other = i.track?.discNumber;
-      return other != null && other != disc;
-    })) {
+    if (!multiDisc ||
+        disc == null ||
+        (index > 0 && loaded[index - 1].track?.discNumber == disc)) {
       return null;
     }
     return Padding(
@@ -596,6 +592,8 @@ class _TrackIdsMemo {
   List<String> _ids = const [];
   int _forLength = -1;
   List<int> _albumNumbers = const [];
+  int _albumForLength = -1;
+  bool _multiDisc = false;
 
   List<String> of(List<BrowseItem> loaded) {
     if (loaded.length != _forLength) {
@@ -604,25 +602,42 @@ class _TrackIdsMemo {
         for (final i in loaded)
           if (i.track != null) i.id,
       ];
-      var position = 0;
-      int? previousDisc;
-      _albumNumbers = [];
-      for (final item in loaded) {
-        final track = item.track;
-        final disc = track?.discNumber;
-        if (disc != previousDisc) position = 0;
-        previousDisc = disc;
-        final tagged = track?.trackNumber;
-        position = tagged != null && tagged > 0 ? tagged : position + 1;
-        _albumNumbers.add(position);
-      }
     }
     return _ids;
   }
 
+  /// Album positions and whether more than one disc is loaded; album pages only.
+  void _album(List<BrowseItem> loaded) {
+    if (loaded.length == _albumForLength) return;
+    _albumForLength = loaded.length;
+    var position = 0;
+    int? previousDisc;
+    int? firstDisc;
+    _multiDisc = false;
+    _albumNumbers = [];
+    for (final item in loaded) {
+      final track = item.track;
+      final disc = track?.discNumber;
+      if (disc != null) {
+        firstDisc ??= disc;
+        if (disc != firstDisc) _multiDisc = true;
+      }
+      if (disc != previousDisc) position = 0;
+      previousDisc = disc;
+      final tagged = track?.trackNumber;
+      position = tagged != null && tagged > 0 ? tagged : position + 1;
+      _albumNumbers.add(position);
+    }
+  }
+
   int albumNumberAt(int index, List<BrowseItem> loaded) {
-    of(loaded);
+    _album(loaded);
     return _albumNumbers[index];
+  }
+
+  bool multiDisc(List<BrowseItem> loaded) {
+    _album(loaded);
+    return _multiDisc;
   }
 }
 
