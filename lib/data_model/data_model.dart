@@ -347,6 +347,11 @@ class Track {
   Album? album;
   String? playlistTrackId;
 
+  /// Optional album positions. Older sources omit these; the album view
+  /// falls back to listing order without guessing a disc number.
+  final int? trackNumber;
+  final int? discNumber;
+
   /// True when the backend could not retrieve a stream URL for this track and
   /// skipped it during playback. Surfaced as a warning indicator in the queue.
   bool unavailable;
@@ -362,6 +367,8 @@ class Track {
     this.performer,
     this.album,
     this.playlistTrackId,
+    this.trackNumber,
+    this.discNumber,
     this.unavailable = false,
     this.unavailableReason,
   });
@@ -375,6 +382,8 @@ class Track {
         : Artist.fromJson(json["performer"]),
     album: json["album"] == null ? null : Album.fromJson(json["album"]),
     playlistTrackId: json["playlist_track_id"],
+    trackNumber: _positivePosition(json["track_number"]),
+    discNumber: _positivePosition(json["disc_number"]),
     unavailable: json["unavailable"] as bool? ?? false,
   );
 
@@ -385,6 +394,8 @@ class Track {
     "performer": performer?.toJson(),
     "album": album?.toJson(),
     "playlist_track_id": playlistTrackId,
+    if (trackNumber != null) "track_number": trackNumber,
+    if (discNumber != null) "disc_number": discNumber,
     "unavailable": unavailable,
   };
 
@@ -397,11 +408,18 @@ class Track {
     performer: performer,
     album: album,
     playlistTrackId: playlistTrackId,
+    trackNumber: trackNumber,
+    discNumber: discNumber,
     unavailable: unavailable ?? this.unavailable,
     unavailableReason: unavailable == null
         ? this.unavailableReason
         : unavailableReason,
   );
+
+  static int? _positivePosition(Object? value) {
+    final number = value is num ? value.toInt() : int.tryParse('$value');
+    return number != null && number > 0 ? number : null;
+  }
 }
 
 class Album {

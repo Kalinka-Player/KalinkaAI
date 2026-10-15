@@ -31,6 +31,7 @@ class CatalogCardPlan {
   final String id;
   final String title;
   final String? description;
+  final int? totalDurationSeconds;
   final String sourceName;
   final PreviewContentType? contentType;
 
@@ -75,6 +76,7 @@ class CatalogCardPlan {
     required this.title,
     required this.sourceName,
     this.description,
+    this.totalDurationSeconds,
     this.contentType,
     this.icon,
     this.role,

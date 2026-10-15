@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -25,6 +26,7 @@ import '../mini_player.dart';
 import '../overlay_card.dart';
 import '../selection_overlay.dart';
 import '../server_chip.dart';
+import 'album_page_header.dart';
 import 'catalog_page_view.dart';
 import 'results_view.dart';
 import 'search_composer.dart';
@@ -112,6 +114,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   // while a catalog replaces the root, just as PageStorage retains the list.
   final _discoverOffset = ValueNotifier<double>(0);
   late final ScrollController _discoverScroll;
+  final _albumOffset = ValueNotifier<double>(0);
+  final _albumHeaderHeight = ValueNotifier<double>(0);
 
   // Whether the animated search overlay is up. Driven by _openSearch /
   // _closeSearch (not by raw focus), so dismissing the keyboard alone keeps
@@ -195,6 +199,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     WidgetsBinding.instance.removeObserver(this);
     _discoverScroll.dispose();
     _discoverOffset.dispose();
+    _albumOffset.dispose();
+    _albumHeaderHeight.dispose();
     _composerController.removeListener(_onTextChange);
     _overlayCtrl.dispose();
     _filtersCtrl.dispose();
@@ -339,6 +345,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           title: plan.title,
           provider: provider,
           description: plan.description,
+          totalDurationSeconds: plan.totalDurationSeconds,
           artPath: plan.artPath,
           filters: plan.filters,
           sections: plan.sections,
@@ -442,6 +449,13 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(searchSessionProvider);
+    final onAlbum =
+        session.activeView == FindMusicView.catalogs &&
+        session.catalogPage.isAlbum;
+    ref.listen(searchSessionProvider.select((s) => s.catalogPage.id), (_, _) {
+      _albumOffset.value = 0;
+      _albumHeaderHeight.value = 0;
+    });
 
     // ...and drop the flag too, so back does not spend a press closing a card
     // that is no longer on screen.
@@ -486,6 +500,17 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
         color: KalinkaColors.background,
         child: Stack(
           children: [
+            if (onAlbum)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: AlbumPageBackdrop(
+                  page: session.catalogPage,
+                  headerHeight: _albumHeaderHeight,
+                  scrollOffset: _albumOffset,
+                ),
+              ),
             // The backdrop behind the Discover root, full surface width and
             // rising behind the bar and the status-bar inset so the two read
             // as one surface. It moves one-for-one with the introduction,
@@ -532,6 +557,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
             // the canvas before the rows (same layer as the bloom above).
             if (session.activeView == FindMusicView.catalogs &&
                 !session.catalogPage.isRoot &&
+                !onAlbum &&
                 session.shownListing.artPath != null)
               Positioned(
                 top: 0,
@@ -540,17 +566,39 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                 child: IgnorePointer(
                   child: CatalogArtBackdrop(
                     artPath: session.shownListing.artPath!,
-                    // A folder's or an album's art is a cover; any other
-                    // page's is card art like any catalog's.
-                    fromCover:
-                        session.folderPath.isNotEmpty ||
-                        session.shownListing.isAlbum,
+                    // A folder uses cover art; albums carry their own
+                    // crisp backdrop inside the scrolling header.
+                    fromCover: session.folderPath.isNotEmpty,
                   ),
                 ),
               ),
             Column(
               children: [
-                _buildHeader(session),
+                if (onAlbum)
+                  AnnotatedRegion<SystemUiOverlayStyle>(
+                    value: const SystemUiOverlayStyle(
+                      statusBarColor: Colors.transparent,
+                      statusBarIconBrightness: Brightness.light,
+                      statusBarBrightness: Brightness.dark,
+                      systemStatusBarContrastEnforced: false,
+                    ),
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: _albumOffset,
+                      builder: (context, offset, child) => ColoredBox(
+                        key: const ValueKey('album-header-surface'),
+                        color: KalinkaColors.background.withValues(
+                          alpha: (offset / kKalinkaTopBarHeight).clamp(
+                            0.0,
+                            1.0,
+                          ),
+                        ),
+                        child: child,
+                      ),
+                      child: _buildHeader(session),
+                    ),
+                  )
+                else
+                  _buildHeader(session),
                 // Both views stay mounted (IndexedStack) so scroll and inline
                 // expansion survive view switches without a refetch.
                 Expanded(
@@ -591,10 +639,33 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// catalog page.
   Widget _buildCatalogsTab(SearchSessionState session) {
     if (!session.catalogPage.isRoot) {
-      return CatalogPageView(
-        page: session.catalogPage,
-        onBackToCatalogs: () =>
-            ref.read(searchSessionProvider.notifier).backToCatalogsRoot(),
+      // Metrics notifications also cover a list replaced by its loading,
+      // empty or error state, which starts at the top without scrolling.
+      return NotificationListener<Notification>(
+        onNotification: (notification) {
+          final (depth, metrics) = switch (notification) {
+            ScrollNotification n => (n.depth, n.metrics),
+            ScrollMetricsNotification n => (n.depth, n.metrics),
+            _ => (-1, null),
+          };
+          if (session.catalogPage.isAlbum &&
+              depth == 0 &&
+              metrics != null &&
+              metrics.axis == Axis.vertical) {
+            // Overscroll at the top keeps the cover in place.
+            _albumOffset.value = math.max(0, metrics.pixels);
+          }
+          return false;
+        },
+        child: CatalogPageView(
+          key: ValueKey(session.catalogPage.id),
+          page: session.catalogPage,
+          onAlbumHeaderHeight: session.catalogPage.isAlbum
+              ? (height) => _albumHeaderHeight.value = height
+              : null,
+          onBackToCatalogs: () =>
+              ref.read(searchSessionProvider.notifier).backToCatalogsRoot(),
+        ),
       );
     }
     return _buildCatalogsRoot(session);

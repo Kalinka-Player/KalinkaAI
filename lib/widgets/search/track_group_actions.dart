@@ -50,8 +50,14 @@ class TrackGroupActions extends ConsumerWidget {
 class PlayAllChip extends ConsumerStatefulWidget {
   final List<String> trackIds;
   final int? trackCount;
+  final double minHeight;
 
-  const PlayAllChip({super.key, required this.trackIds, this.trackCount});
+  const PlayAllChip({
+    super.key,
+    required this.trackIds,
+    this.trackCount,
+    this.minHeight = 0,
+  });
 
   @override
   ConsumerState<PlayAllChip> createState() => _PlayAllChipState();
@@ -87,9 +93,10 @@ class _PlayAllChipState extends ConsumerState<PlayAllChip> {
       label: 'Play all',
       icon: Icons.play_arrow_rounded,
       accent: true,
+      minHeight: widget.minHeight,
       enabled: !_busy,
       onTap: _playAll,
-      semanticsLabel: 'Play all tracks in this section',
+      semanticsLabel: 'Play all tracks',
     );
   }
 }
@@ -101,6 +108,7 @@ enum _AddStatus { idle, busy, added }
 class AddAllChip extends ConsumerStatefulWidget {
   final List<String> trackIds;
   final int? trackCount;
+  final double minHeight;
 
   /// What was enqueued, where the toast can name it — a container has a name,
   /// a section of results is only "these tracks".
@@ -110,6 +118,7 @@ class AddAllChip extends ConsumerStatefulWidget {
     super.key,
     required this.trackIds,
     this.trackCount,
+    this.minHeight = 0,
     this.name,
   });
 
@@ -163,6 +172,7 @@ class _AddAllChipState extends ConsumerState<AddAllChip> {
     final added = _status == _AddStatus.added;
     return ActionPillButton(
       label: added ? 'Added' : 'Enqueue',
+      minHeight: widget.minHeight,
       icon: added ? Icons.check_rounded : Icons.playlist_add_rounded,
       // Enabled only when idle — no re-add while adding or confirming.
       enabled: _status == _AddStatus.idle,

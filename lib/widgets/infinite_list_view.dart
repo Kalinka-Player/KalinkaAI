@@ -276,14 +276,27 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
     if (_items.isEmpty) {
       final empty =
           widget.emptyBuilder?.call(context) ?? const SizedBox.shrink();
-      // Empty state doesn't scroll; a Center-based placeholder needs bounded
-      // height, so stack (not ListView) the optional header above it.
+      // Keep a short empty state centred in the remaining viewport, but let
+      // a tall header scroll on small screens and with enlarged system text.
       if (widget.header == null) return empty;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          widget.header!,
-          Expanded(child: empty),
+      return CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: widget.header!),
+          // Avoid intrinsic sizing: some empty states use LayoutBuilder to
+          // adapt their card, which cannot answer intrinsic-height queries.
+          SliverLayoutBuilder(
+            builder: (context, constraints) => SliverToBoxAdapter(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight:
+                      (constraints.viewportMainAxisExtent -
+                              constraints.precedingScrollExtent)
+                          .clamp(0.0, double.infinity),
+                ),
+                child: empty,
+              ),
+            ),
+          ),
         ],
       );
     }
