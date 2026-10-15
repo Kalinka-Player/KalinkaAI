@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
 import 'catalog_cards_provider.dart';
+import 'indexer_status_provider.dart';
 import 'kalinka_player_api_provider.dart';
 
 /// Home's Recently added shelf: its first items, and the catalog VIEW ALL
@@ -42,8 +43,20 @@ const _kDefaultCount = 10;
 /// browsing the catalog itself is what its source offers a home shelf. Null
 /// when no source has one or it is empty.
 final recentlyAddedProvider = FutureProvider<RecentlyAddedShelf?>((ref) async {
+  // A finished index may have added to it.
+  ref.watch(indexerStatusProvider.select((s) => s.libraryRevision));
+  // Keyed on what the shelf uses, so the cards' art polls don't refetch it.
+  final key = await ref.watch(
+    catalogCardGroupsProvider.selectAsync((groups) {
+      final r = recentCatalogIn(groups);
+      return r == null
+          ? null
+          : (r.plan.id, r.plan.title, r.plan.preview?.itemsCount, r.provider);
+    }),
+  );
+  if (key == null) return null;
   final recent = recentCatalogIn(
-    await ref.watch(catalogCardGroupsProvider.future),
+    await ref.read(catalogCardGroupsProvider.future),
   );
   if (recent == null) return null;
   final list = await ref

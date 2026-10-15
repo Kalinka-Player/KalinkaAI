@@ -171,7 +171,7 @@ class _Tile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final path =
         item.image?.large ?? item.image?.small ?? item.image?.thumbnail;
-    final url = path == null ? null : ref.read(urlResolverProvider).abs(path);
+    final url = path == null ? null : ref.watch(urlResolverProvider).abs(path);
     final fallback = ProceduralAlbumArt(trackId: item.id, size: size);
     final art = url == null
         ? fallback

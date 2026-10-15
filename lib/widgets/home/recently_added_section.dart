@@ -39,6 +39,7 @@ class RecentlyAddedSection extends ConsumerWidget {
               description: item.album?.artist?.name ?? item.subname,
               totalDurationSeconds: item.album?.duration,
               artPath: item.image?.large ?? item.image?.small,
+              filters: item.catalog?.filters ?? const [],
               sections: item.sections ?? const [],
               canAdd: item.canAdd,
             ),
