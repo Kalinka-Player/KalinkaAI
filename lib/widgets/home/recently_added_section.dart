@@ -17,37 +17,54 @@ class RecentlyAddedSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final shelf = ref.watch(recentlyAddedProvider).value;
-    if (shelf == null) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ShelfHeading(
-          title: shelf.plan.title.toUpperCase(),
-          onViewAll: () => onOpenCatalog(shelf.plan, shelf.provider),
-        ),
-        const SizedBox(height: 10),
-        PreviewShelf(
-          items: shelf.items,
-          preview: shelf.plan.preview,
-          onOpenItem: (item) => onOpenCatalog(
-            CatalogCardPlan(
-              id: item.id,
-              title: item.name ?? '',
-              sourceName: shelf.plan.sourceName,
-              // An album's page names its artist under the title.
-              description: item.album?.artist?.name ?? item.subname,
-              totalDurationSeconds: item.album?.duration,
-              artPath: item.image?.large ?? item.image?.small,
-              filters: item.catalog?.filters ?? const [],
-              sections: item.sections ?? const [],
-              canAdd: item.canAdd,
-            ),
-            shelf.provider,
+    final async = ref.watch(recentlyAddedProvider);
+    final shelf = async.value;
+    if (shelf == null) {
+      if (!async.isLoading) return const SizedBox.shrink();
+      // Held back until the catalog is known to exist, so a setup without
+      // one never sees a placeholder come and go.
+      final groups = ref.watch(catalogCardGroupsProvider).value;
+      final recent = groups == null ? null : recentCatalogIn(groups);
+      if (recent == null) return const SizedBox.shrink();
+      return _section(
+        ShelfHeading(title: recent.plan.title.toUpperCase()),
+        PreviewShelfShimmer(preview: recent.plan.preview),
+      );
+    }
+    return _section(
+      ShelfHeading(
+        title: shelf.plan.title.toUpperCase(),
+        onViewAll: () => onOpenCatalog(shelf.plan, shelf.provider),
+      ),
+      PreviewShelf(
+        items: shelf.items,
+        preview: shelf.plan.preview,
+        onOpenItem: (item) => onOpenCatalog(
+          CatalogCardPlan(
+            id: item.id,
+            title: item.name ?? '',
+            sourceName: shelf.plan.sourceName,
+            // An album's page names its artist under the title.
+            description: item.album?.artist?.name ?? item.subname,
+            totalDurationSeconds: item.album?.duration,
+            artPath: item.image?.large ?? item.image?.small,
+            filters: item.catalog?.filters ?? const [],
+            sections: item.sections ?? const [],
+            canAdd: item.canAdd,
           ),
+          shelf.provider,
         ),
-        const SizedBox(height: 26),
-      ],
+      ),
     );
   }
+
+  Widget _section(Widget heading, Widget body) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      heading,
+      const SizedBox(height: 10),
+      body,
+      const SizedBox(height: 26),
+    ],
+  );
 }

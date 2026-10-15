@@ -7,6 +7,7 @@ import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../browse_rows_shimmer.dart';
 import '../procedural_album_art.dart';
 import '../search/search_zero_state.dart' show kHomeSideInset;
 import '../search_cards/browse_item_rows.dart';
@@ -34,25 +35,59 @@ class PreviewShelf extends StatelessWidget {
       return BrowseItemRows(items: items);
     }
     return _TileRail(
-      items: items,
-      rows: (preview?.rowsCount ?? 1).clamp(1, 3),
-      tileSize: preview?.cardSize == CardSize.large ? 168 : 128,
-      onOpenItem: onOpenItem,
+      count: items.length,
+      rows: _rowsOf(preview),
+      tileSize: _tileSizeOf(preview),
+      tile: (i, size) => _Tile(item: items[i], size: size, onOpen: onOpenItem),
+    );
+  }
+
+  static int _rowsOf(Preview? preview) => (preview?.rowsCount ?? 1).clamp(1, 3);
+
+  static double _tileSizeOf(Preview? preview) =>
+      preview?.cardSize == CardSize.large ? 168 : 128;
+}
+
+/// Stands in for a [PreviewShelf] while its items load, in the shape they
+/// will take. It does not scroll.
+class PreviewShelfShimmer extends StatelessWidget {
+  final Preview? preview;
+
+  const PreviewShelfShimmer({super.key, required this.preview});
+
+  @override
+  Widget build(BuildContext context) {
+    final count = preview?.itemsCount ?? 3;
+    if (preview?.type != PreviewType.imageText) {
+      return BrowseRowsShimmer(count: count.clamp(1, 3));
+    }
+    return ExcludeSemantics(
+      child: _Pulse(
+        child: _TileRail(
+          count: count,
+          rows: PreviewShelf._rowsOf(preview),
+          tileSize: PreviewShelf._tileSizeOf(preview),
+          scrollable: false,
+          tile: (_, size) => _TilePlaceholder(size: size),
+        ),
+      ),
     );
   }
 }
 
 class _TileRail extends StatelessWidget {
-  final List<BrowseItem> items;
+  final int count;
   final int rows;
   final double tileSize;
-  final ValueChanged<BrowseItem> onOpenItem;
+  final Widget Function(int index, double size) tile;
+  final bool scrollable;
 
   const _TileRail({
-    required this.items,
+    required this.count,
     required this.rows,
     required this.tileSize,
-    required this.onOpenItem,
+    required this.tile,
+    this.scrollable = true,
   });
 
   static const _gap = 12.0;
@@ -84,7 +119,7 @@ class _TileRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final columns = (items.length / rows).ceil();
+    final columns = (count / rows).ceil();
     final tileHeight = _tileHeight(context);
     // The height first: an OverflowBox fills what it is offered, and a list
     // offers unbounded height.
@@ -104,6 +139,9 @@ class _TileRail extends StatelessWidget {
                   .copyWith(dragDevices: PointerDeviceKind.values.toSet()),
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
+                physics: scrollable
+                    ? null
+                    : const NeverScrollableScrollPhysics(),
                 padding: const EdgeInsets.symmetric(horizontal: kHomeSideInset),
                 itemCount: columns,
                 separatorBuilder: (_, _) => const SizedBox(width: _gap),
@@ -111,12 +149,8 @@ class _TileRail extends StatelessWidget {
                   spacing: _rowGap,
                   children: [
                     for (var row = 0; row < rows; row++)
-                      if (column * rows + row < items.length)
-                        _Tile(
-                          item: items[column * rows + row],
-                          size: tileSize,
-                          onOpen: onOpenItem,
-                        ),
+                      if (column * rows + row < count)
+                        tile(column * rows + row, tileSize),
                   ],
                 ),
               ),
@@ -126,6 +160,78 @@ class _TileRail extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A tile's art and its two lines, as grey blocks.
+class _TilePlaceholder extends StatelessWidget {
+  final double size;
+
+  const _TilePlaceholder({required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    Widget bar(double width, double fontSize) => Container(
+      width: width,
+      height: scaler.scale(fontSize),
+      decoration: BoxDecoration(
+        color: KalinkaColors.surfaceOverlay,
+        borderRadius: BorderRadius.circular(4),
+      ),
+    );
+    return SizedBox(
+      width: size,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: KalinkaColors.surfaceOverlay,
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          const SizedBox(height: _Tile.artGap + 3),
+          bar(size * 0.75, 11),
+          const SizedBox(height: 6),
+          bar(size * 0.5, 9),
+        ],
+      ),
+    );
+  }
+}
+
+/// The opacity pulse every shimmer here shares.
+class _Pulse extends StatefulWidget {
+  final Widget child;
+
+  const _Pulse({required this.child});
+
+  @override
+  State<_Pulse> createState() => _PulseState();
+}
+
+class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat(reverse: true);
+
+  late final Animation<double> _opacity = Tween<double>(
+    begin: 0.55,
+    end: 1.0,
+  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      FadeTransition(opacity: _opacity, child: widget.child);
 }
 
 /// Art above, title and a line on what it is below. A track plays; anything
