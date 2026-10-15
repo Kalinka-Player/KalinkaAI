@@ -540,6 +540,9 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                               gradient: _kDiscoverFadeOut,
                             ),
                           ),
+                          const IgnorePointer(
+                            child: ExcludeSemantics(child: _HeroArtwork()),
+                          ),
                         ],
                       ),
                     ),
@@ -818,7 +821,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           smartSearch: smart,
           onOpenSearch: _openSearch,
         ),
-        const SizedBox(height: 30),
+        const SizedBox(height: 24),
       ],
     );
   }
@@ -1125,69 +1128,11 @@ class _DiscoverHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final artWidth = math.min(
-            (constraints.maxWidth + kHomeSideInset) * 0.64,
-            440.0,
-          );
-          return Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Right of the question; it fades out leftwards and downwards,
-              // so the text and the entry read over it.
-              Positioned(
-                top: -8,
-                // Past the list's inset, to the window edge.
-                right: -kHomeSideInset,
-                width: artWidth,
-                height: artWidth * 9 / 16,
-                child: IgnorePointer(
-                  child: ExcludeSemantics(
-                    child: RepaintBoundary(
-                      // Toned in the bloom's family: deep berry where it fades
-                      // in, warming to blush on the bright threads.
-                      child: ShaderMask(
-                        blendMode: BlendMode.srcIn,
-                        shaderCallback: (bounds) => LinearGradient(
-                          begin: Alignment.bottomLeft,
-                          end: Alignment.topRight,
-                          colors: [
-                            KalinkaColors.accent.withValues(alpha: 0.7),
-                            KalinkaColors.accentTint.withValues(alpha: 0.75),
-                            Color.lerp(
-                              KalinkaColors.accentTint,
-                              KalinkaColors.textPrimary,
-                              0.6,
-                            )!.withValues(alpha: 0.8),
-                          ],
-                          stops: const [0, 0.5, 1],
-                        ).createShader(bounds),
-                        child: SvgPicture.asset(
-                          'assets/images/header_artwork.svg',
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              _heroText(),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _heroText() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        FractionallySizedBox(
-          widthFactor: 0.55,
-          child: Text(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
             'What shall we play?',
             style: KalinkaFonts.display(
               fontSize: KalinkaTypography.baseSize + 17,
@@ -1195,21 +1140,69 @@ class _DiscoverHero extends StatelessWidget {
               color: KalinkaColors.textPrimary,
             ),
           ),
-        ),
-        const SizedBox(height: 12),
-        FractionallySizedBox(
-          widthFactor: 0.55,
-          child: Text(
-            smartSearch
-                ? 'Describe a mood, activity, genre, or anything else you '
-                      'would like to hear.'
-                : 'Find an artist, album or track by name.',
-            style: KalinkaTextStyles.trackRowSubtitle,
+          const SizedBox(height: 6),
+          FractionallySizedBox(
+            widthFactor: 0.8,
+            child: Text(
+              smartSearch
+                  ? 'Describe a mood, activity, genre, or anything else you '
+                        'would like to hear.'
+                  : 'Find an artist, album or track by name.',
+              style: KalinkaTextStyles.trackRowSubtitle,
+            ),
           ),
-        ),
-        const SizedBox(height: 34),
-        _SearchEntryButton(key: entryKey, hint: hint, onTap: onOpenSearch),
-      ],
+          const SizedBox(height: 18),
+          _SearchEntryButton(key: entryKey, hint: hint, onTap: onOpenSearch),
+        ],
+      ),
+    );
+  }
+}
+
+/// The header artwork, from the top of the bar to the window's right edge;
+/// it fades out leftwards and downwards, so the text reads over it.
+class _HeroArtwork extends StatelessWidget {
+  const _HeroArtwork();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = math.min(constraints.maxWidth * 0.64, 440.0);
+        return Align(
+          alignment: Alignment.topRight,
+          child: Padding(
+            padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+            child: SizedBox(
+              width: width,
+              height: width * 9 / 16,
+              // Toned in the bloom's family: deep berry where it fades in,
+              // warming to blush on the bright threads.
+              child: ShaderMask(
+                blendMode: BlendMode.srcIn,
+                shaderCallback: (bounds) => LinearGradient(
+                  begin: Alignment.bottomLeft,
+                  end: Alignment.topRight,
+                  colors: [
+                    KalinkaColors.accent.withValues(alpha: 0.7),
+                    KalinkaColors.accentTint.withValues(alpha: 0.75),
+                    Color.lerp(
+                      KalinkaColors.accentTint,
+                      KalinkaColors.textPrimary,
+                      0.6,
+                    )!.withValues(alpha: 0.8),
+                  ],
+                  stops: const [0, 0.5, 1],
+                ).createShader(bounds),
+                child: SvgPicture.asset(
+                  'assets/images/header_artwork.svg',
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
