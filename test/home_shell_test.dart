@@ -6,7 +6,6 @@ import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/widgets/coach_marks_overlay.dart';
-import 'package:kalinka/widgets/home/up_next_card.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
@@ -46,6 +45,14 @@ final _queueMiniPlayer = find.descendant(
   matching: find.byType(MiniPlayer),
 );
 
+/// Opens the phone player from Home's mini-player and turns it to the queue.
+Future<void> _openQueue(WidgetTester tester) async {
+  await tester.tap(find.byType(MiniPlayer));
+  await tester.pumpAndSettle();
+  await tester.tap(_side('QUEUE'));
+  await tester.pumpAndSettle();
+}
+
 class _RecordingWsApi extends KalinkaWsApi {
   _RecordingWsApi(super.ref);
 
@@ -64,23 +71,13 @@ void main() {
     expect(find.byType(SearchSessionView), findsOneWidget);
     expect(find.byType(KalinkaTopBar), findsOneWidget);
     expect(find.byType(QueueZone), findsNothing);
-    expect(find.text('UP NEXT'), findsOneWidget);
-    expect(find.text('4 tracks · 13 min'), findsOneWidget);
   });
 
-  testWidgets('an empty queue leaves Up next off Home', (tester) async {
-    await pumpHomeShell(tester, queue: SettableQueue(queueOf(0)));
-    expect(find.text('UP NEXT'), findsNothing);
-  });
-
-  testWidgets('Up next opens the player on its queue; back closes it', (
-    tester,
-  ) async {
+  testWidgets('the player turns to its queue; back closes it', (tester) async {
     final calls = _recordSystemCalls();
     await pumpHomeShell(tester, queue: SettableQueue(queueOf(4, index: 1)));
 
-    await tester.tap(find.text('QUEUE'));
-    await tester.pumpAndSettle();
+    await _openQueue(tester);
     expect(_queueView, findsOneWidget);
     expect(find.byTooltip('Queue options'), findsOneWidget);
     expect(_queueMiniPlayer, findsOneWidget);
@@ -96,8 +93,7 @@ void main() {
 
   testWidgets('the queue\'s menu holds the queue actions', (tester) async {
     await pumpHomeShell(tester, queue: SettableQueue(queueOf(3, index: 1)));
-    await tester.tap(find.text('QUEUE'));
-    await tester.pumpAndSettle();
+    await _openQueue(tester);
 
     await tester.tap(find.byTooltip('Queue options'));
     await tester.pumpAndSettle();
@@ -114,8 +110,7 @@ void main() {
         kalinkaWsApiProvider.overrideWith((ref) => ws = _RecordingWsApi(ref)),
       ],
     );
-    await tester.tap(find.text('QUEUE'));
-    await tester.pumpAndSettle();
+    await _openQueue(tester);
     await tester.tap(find.byTooltip('Queue options'));
     await tester.pumpAndSettle();
 
@@ -238,8 +233,7 @@ void main() {
     tester,
   ) async {
     await pumpHomeShell(tester, queue: SettableQueue(queueOf(3)));
-    await tester.tap(find.text('QUEUE'));
-    await tester.pumpAndSettle();
+    await _openQueue(tester);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
@@ -301,12 +295,7 @@ void main() {
       size: const Size(1280, 800),
     );
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(UpNextCard),
-        matching: find.text('QUEUE'),
-      ),
-    );
+    await tester.tap(_side('QUEUE'));
     await tester.pumpAndSettle();
     expect(_queueView, findsOneWidget);
     expect(

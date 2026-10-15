@@ -18,7 +18,6 @@ import '../../providers/shell_nav_provider.dart';
 import '../../theme/app_theme.dart';
 import '../breadcrumb_crumb.dart';
 import '../connection_banner.dart';
-import '../home/up_next_card.dart';
 import '../kalinka_top_bar.dart';
 import '../browse_filters/search_filter_button.dart';
 import '../browse_filters/search_filter_overlay.dart';
@@ -63,7 +62,7 @@ final _kDiscoverFadeOut = LinearGradient(
 );
 
 /// Home: the app's top level. Its root is the Discover scroll — the search
-/// invitation, Up next, collections and catalogs — under the wordmark bar;
+/// invitation, collections and catalogs — under the wordmark bar;
 /// a catalog page or the results below it trade that bar for a back arrow
 /// and breadcrumb.
 ///
@@ -72,10 +71,6 @@ final _kDiscoverFadeOut = LinearGradient(
 class SearchSessionView extends ConsumerStatefulWidget {
   /// Opens the server sheet — the connection chip's tap target.
   final VoidCallback? onServerTap;
-
-  /// Opens the player on its queue from the Up next card; no card without
-  /// it.
-  final VoidCallback? onOpenQueue;
 
   /// The resting search entry, for the first-run tour to point at.
   final GlobalKey? entryKey;
@@ -90,7 +85,6 @@ class SearchSessionView extends ConsumerStatefulWidget {
   const SearchSessionView({
     super.key,
     this.onServerTap,
-    this.onOpenQueue,
     this.entryKey,
     this.connectionKey,
     this.handlesBack = true,
@@ -825,8 +819,6 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           onOpenSearch: _openSearch,
         ),
         const SizedBox(height: 30),
-        if (widget.onOpenQueue != null)
-          UpNextCard(onOpenQueue: widget.onOpenQueue!),
       ],
     );
   }
