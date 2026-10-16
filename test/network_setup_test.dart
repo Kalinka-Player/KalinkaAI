@@ -3,12 +3,14 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/providers/network_setup_api.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
 import 'package:kalinka/screens/setup_method_screen.dart';
 import 'package:kalinka/screens/network_setup_screen.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/onboarding/hotspot_setup_guide.dart';
 import 'package:kalinka/widgets/onboarding/step_network.dart';
 
 class FakeSetupApi extends NetworkSetupApi {
@@ -179,6 +181,16 @@ void main() {
       api.dispose();
     },
   );
+
+  test('reopening setup retains the client identity for cancellation', () {
+    final first = NetworkSetupApi(Uri.parse('http://192.168.4.1'));
+    final firstSession = first.session;
+    first.dispose();
+    final reopened = NetworkSetupApi(Uri.parse('http://192.168.4.1'));
+    expect(reopened.session, firstSession);
+    expect(reopened.session, matches(RegExp(r'^[a-f0-9]{32}$')));
+    reopened.dispose();
+  });
 
   test('old wizard resume steps migrate past the new Network step', () {
     final old = {
@@ -671,7 +683,11 @@ void main() {
     );
   });
 
-  for (final size in [const Size(375, 812), const Size(812, 375)]) {
+  for (final size in [
+    const Size(320, 640),
+    const Size(375, 812),
+    const Size(812, 375),
+  ]) {
     for (final hotspot in [false, true]) {
       testWidgets('setup screen fits large text at $size (hotspot: $hotspot)', (
         tester,
@@ -772,12 +788,63 @@ void main() {
     await tester.tap(find.text('Use the temporary Wi-Fi hotspot'));
     await tester.pumpAndSettle();
     expect(find.text('Connect your box'), findsOneWidget);
+    expect(find.byType(HotspotSetupGuide), findsOneWidget);
+    expect(find.text('kalinka-setup'), findsOneWidget);
     await tester.tap(find.text('Back'));
     await tester.pumpAndSettle();
     expect(find.text('Search using Bluetooth'), findsOneWidget);
     expect(find.text('Start setup'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
+
+  for (final clipboardFails in [false, true]) {
+    testWidgets(
+      'hotspot guide copies the password (failure: $clipboardFails)',
+      (tester) async {
+        String? copied;
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              if (clipboardFails) throw PlatformException(code: 'unavailable');
+              copied = (call.arguments as Map)['text'] as String;
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.dark(),
+            home: const Scaffold(
+              body: SingleChildScrollView(child: HotspotSetupGuide()),
+            ),
+          ),
+        );
+        expect(find.text('Kalinka-Setup-XXXX'), findsOneWidget);
+        expect(find.text('kalinka-setup'), findsOneWidget);
+        expect(find.text('http://192.168.4.1'), findsOneWidget);
+        await tester.ensureVisible(find.text('Copy password'));
+        await tester.tap(find.text('Copy password'));
+        await tester.pump();
+        expect(copied, clipboardFails ? isNull : 'kalinka-setup');
+        expect(
+          find.text(
+            clipboardFails
+                ? 'Could not copy. Select the password to copy it manually.'
+                : 'Hotspot password copied',
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('setup offers Bluetooth and hotspot choices', (tester) async {
     await tester.pumpWidget(

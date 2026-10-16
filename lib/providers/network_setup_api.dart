@@ -2,11 +2,20 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 
+import 'network_setup_session.dart'
+    if (dart.library.js_interop) 'network_setup_session_web.dart';
+
 /// The supervisor's network setup transport, shared by native and web clients.
 class NetworkSetupApi {
   final Dio client;
   final Uri base;
-  final String session;
+  static final _session = restoreSetupSession(
+    List.generate(
+      16,
+      (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join(),
+  );
+  final String session = _session;
 
   NetworkSetupApi(this.base, {Dio? client})
     : client =
@@ -16,11 +25,7 @@ class NetworkSetupApi {
               connectTimeout: const Duration(seconds: 4),
               receiveTimeout: const Duration(seconds: 6),
             ),
-          ),
-      session = List.generate(
-        16,
-        (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'),
-      ).join();
+          );
 
   Future<Map<String, dynamic>> status() async {
     final response = await client.getUri(

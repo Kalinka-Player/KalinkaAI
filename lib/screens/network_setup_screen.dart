@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/provisioning_controller.dart';
+import '../widgets/onboarding/hotspot_setup_guide.dart';
 import '../widgets/onboarding/onboarding_step_scaffold.dart';
 import '../widgets/onboarding/step_network.dart';
 
@@ -29,6 +30,8 @@ class _NetworkSetupScreenState extends State<NetworkSetupScreen> {
   bool get _needsActivation =>
       widget.hotspot && kIsWeb && Uri.base.host != '192.168.4.1';
   bool get _connected => (_status?['network'] as Map?)?['connected'] == true;
+  bool get _showHotspotGuide =>
+      widget.hotspot && (_needsActivation || _status == null);
 
   Future<void> _continue() async {
     if (_needsActivation) {
@@ -68,8 +71,8 @@ class _NetworkSetupScreenState extends State<NetworkSetupScreen> {
       stepCount: 1,
       stepLabels: const ['NETWORK'],
       title: 'Connect your box',
-      subtitle: widget.hotspot
-          ? 'In your device’s Wi-Fi settings, join Kalinka-Setup-XXXX with password kalinka-setup, then return here. Stay connected if your device says there is no internet.'
+      subtitle: _showHotspotGuide
+          ? 'Connect your phone or computer to the box’s temporary Wi-Fi network.'
           : 'Keep your existing wired or Wi-Fi connection, or choose another network.',
       onBack: Navigator.of(context).canPop()
           ? () => Navigator.of(context).pop()
@@ -87,6 +90,7 @@ class _NetworkSetupScreenState extends State<NetworkSetupScreen> {
           ? (kIsWeb ? 'Open player' : 'Continue')
           : 'Keep this connection',
       children: [
+        if (_showHotspotGuide) const HotspotSetupGuide(),
         if (!_needsActivation)
           NetworkSetupPanel(
             endpoint: widget.endpoint,
