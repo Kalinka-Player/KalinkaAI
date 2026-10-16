@@ -8,6 +8,28 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.20.0
+
+The app opens on Home, the queue moves into the player, an album gets its own page, and a streamer that is not on your network yet can be set up through its Wi-Fi hotspot. The setup wizard's Network step needs supervisor 0.5.0, the inactivity power-off timer needs server 5.10.0 and supervisor 0.5.0, and Rescan library needs server 5.10.0. Against older ones the timer and Rescan library stay hidden, and the Network step says it cannot reach network setup and lets you move on.
+
+### Added
+- Network setup for a streamer. Set up a box offers Bluetooth or the streamer's temporary Wi-Fi hotspot, with illustrated steps and a Copy password button for the hotspot. The setup wizard gains a Network step: it shows the current Wi-Fi name or Ethernet connection, finds nearby networks for the country you choose, and joins another network on the spot, showing its progress and where it is joining. Setup carries on across a page reload in the browser player.
+- Power off in the server menu, after a confirmation, when the streamer supports power control.
+- A Power-off timer under the streamer's power controls: the streamer powers off once playback has stayed paused or stopped for the minutes you set.
+- Rescan library in My Library and Recently added checks for new files now instead of waiting for the next scan, shows when the last check finished, and updates the page when the new one completes.
+- Recently added on Home: what last arrived in your library, as a row of tiles. A track plays, an album or artist opens, and VIEW ALL opens the whole list.
+- An album has its own page: the cover full width with its title, artist, track count and length, Play all and Enqueue, and every track numbered as on the album, with disc headings for multi-disc albums.
+
+### Changed
+- The app opens on Home instead of the queue. The search field on Home opens search, Home has your sources and collections, and the floating search button is gone.
+- The queue lives in the player: PLAYING and QUEUE tabs at its top switch between the track and the queue, and the mini-player below the queue goes back to the track. The queue's menu saves it as a collection, clears it, and its shuffle switch now works.
+- Search's AI suggestions refresh as the day goes on, and stay out of the way when no source offers smart search.
+- The playing-row bars and the play buttons on collections are grey.
+- The settings title bar reaches under the status bar, Configuration's tabs are as wide as their labels, and Server settings drops its restart toolbar; Restart lives in Configuration's Streamer tab.
+
+### Fixed
+- After choosing a sound card from an output's settings, the page shows the card the renderer now plays through instead of the old device "(not detected)", and keeps edits you had not applied yet.
+
 ## 0.19.1
 
 This release needs no server update.

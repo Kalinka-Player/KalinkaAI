@@ -1,0 +1,4 @@
+- Opens on Home; the queue lives in the player
+- Albums get their own page, and Recently added shows on Home
+- Set up a streamer's Wi-Fi from the app (with supervisor 0.5.0)
+- Power-off timer and Rescan library (with server 5.10.0)
