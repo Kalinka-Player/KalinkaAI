@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
 import 'player_queue_view.dart';
@@ -91,7 +92,8 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
   }
 
   void _onDragUpdate(DragUpdateDetails details) {
-    final height = context.size?.height ?? 0;
+    final height =
+        (context.size?.height ?? 0) - MediaQuery.paddingOf(context).top;
     if (height <= 0) return;
     _controller.value -= details.primaryDelta! / height;
   }
@@ -114,6 +116,7 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
     return _SheetDragScope(
       onStart: _onDragStart,
       onUpdate: _onDragUpdate,
@@ -122,33 +125,57 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
       // Text outside the sliding sheet needs a Material too.
       child: Material(
         type: MaterialType.transparency,
-        child: Stack(
-          children: [
-            AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) {
-                final t = _linear
-                    ? _controller.value
-                    : _curve.transform(_controller.value);
-                return FractionalTranslation(
-                  translation: Offset(0, 1 - t),
-                  child: child,
-                );
-              },
-              // Full height, under the status bar too, so that strip comes and
-              // goes with the sheet; only the content keeps clear of it.
-              child: Material(
-                color: KalinkaColors.background,
-                child: SafeArea(bottom: false, child: widget.child),
-              ),
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            final t = _linear
+                ? _controller.value
+                : _curve.transform(_controller.value);
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                // Keep the status inset outside the moving surface, so no
+                // empty strip travels ahead of the drag handle.
+                Positioned.fill(
+                  top: topInset,
+                  child: FractionalTranslation(
+                    translation: Offset(0, 1 - t),
+                    child: child,
+                  ),
+                ),
+                if (_controller.isCompleted && topInset > 0)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: topInset,
+                    child: const AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: SystemUiOverlayStyle(
+                        statusBarColor: Colors.transparent,
+                        statusBarIconBrightness: Brightness.light,
+                        statusBarBrightness: Brightness.dark,
+                        systemStatusBarContrastEnforced: false,
+                      ),
+                      child: ColoredBox(color: KalinkaColors.background),
+                    ),
+                  ),
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: QueueMiniPlayer(),
+                ),
+              ],
+            );
+          },
+          child: MediaQuery.removePadding(
+            context: context,
+            removeTop: true,
+            child: Material(
+              color: KalinkaColors.background,
+              child: SafeArea(top: false, bottom: false, child: widget.child),
             ),
-            const Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: QueueMiniPlayer(),
-            ),
-          ],
+          ),
         ),
       ),
     );

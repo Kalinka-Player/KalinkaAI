@@ -116,7 +116,7 @@ void main() {
         expect(collapse.height, 36);
         expect(output.height, 36);
         if (scale == 1) {
-          expect(viewSwitch.height, lessThanOrEqualTo(36));
+          expect(viewSwitch.height, 48);
           if (width >= 375) {
             expect(viewSwitch.center.dy, closeTo(collapse.center.dy, .01));
           }
@@ -125,9 +125,9 @@ void main() {
         for (final label in ['PLAYING', 'QUEUE']) {
           final target = tester.getRect(_segment(label));
           expect(target.width, greaterThanOrEqualTo(48));
-          expect(target.height, greaterThanOrEqualTo(28));
+          expect(target.height, greaterThanOrEqualTo(48));
           final text = tester.renderObject<RenderParagraph>(find.text(label));
-          expect(text.textScaler.scale(12), closeTo(12 * scale, 0.01));
+          expect(text.textScaler.scale(14), closeTo(14 * scale, 0.01));
           // Enlarged text must not be scaled back down during painting.
           expect(
             text.getTransformTo(null).getMaxScaleOnAxis(),

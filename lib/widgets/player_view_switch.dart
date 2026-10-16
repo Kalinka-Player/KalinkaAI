@@ -5,8 +5,8 @@ import '../providers/shell_nav_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
 
-/// The player's two views as one switch: the track, or the queue. Grey, not
-/// berry: it is chrome that stays on screen.
+/// The player's two views as tabs in the section headings' caps, the chosen
+/// one underlined in berry.
 class PlayerViewSwitch extends ConsumerWidget {
   const PlayerViewSwitch({super.key});
 
@@ -14,29 +14,36 @@ class PlayerViewSwitch extends ConsumerWidget {
     (view: PlayerView.nowPlaying, label: 'PLAYING', spoken: 'Now playing'),
     (view: PlayerView.queue, label: 'QUEUE', spoken: 'Queue'),
   ];
+  static const _gap = 8.0;
+  static const _horizontalPadding = 8.0;
 
-  static final _labelStyle = KalinkaFonts.mono(
-    fontSize: KalinkaTypography.baseSize,
-    fontWeight: FontWeight.w600,
-    letterSpacing: 1.2,
-  );
+  /// The section headings' caps.
+  static final _labelStyle = KalinkaTextStyles.sectionLabel;
 
-  /// Space for both labels at the user's text size, including their padding
-  /// and the outer border. Headers can move the switch onto its own row.
-  static double preferredWidth(BuildContext context) {
-    var labelWidth = 0.0;
-    for (final view in _views) {
-      final painter = TextPainter(
-        text: TextSpan(text: view.label, style: _labelStyle),
-        textDirection: Directionality.of(context),
-        textScaler: MediaQuery.textScalerOf(context),
-        locale: Localizations.maybeLocaleOf(context),
-      )..layout();
-      if (painter.width > labelWidth) labelWidth = painter.width;
-      painter.dispose();
-    }
-    return 2 * (labelWidth.ceilToDouble() + 24) + 6;
+  static List<double> _labelWidths(BuildContext context) => [
+    for (final view in _views) _labelWidth(context, view.label),
+  ];
+
+  static double _labelWidth(BuildContext context, String label) {
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: _labelStyle),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+    )..layout();
+    final width = painter.width.ceilToDouble();
+    painter.dispose();
+    return width;
   }
+
+  static double _targetWidth(double labelWidth) =>
+      (labelWidth + 2 * _horizontalPadding).clamp(48.0, double.infinity);
+
+  /// Labels keep their natural widths so the tabs fit beside the phone's
+  /// header actions. Enlarged text can move them onto a separate row.
+  static double preferredWidth(BuildContext context) =>
+      _labelWidths(context)
+          .fold(_gap, (sum, width) => sum + _targetWidth(width));
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -44,82 +51,40 @@ class PlayerViewSwitch extends ConsumerWidget {
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 180);
-    final width = preferredWidth(context);
+    final labelWidths = _labelWidths(context);
+    final width = labelWidths.fold(
+      _gap,
+      (sum, labelWidth) => sum + _targetWidth(labelWidth),
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
-        // At very large text sizes, stack whole labels instead of shrinking
-        // them or breaking a word across lines.
+        // Keep large text at the requested size, stacking whole labels when
+        // the header cannot accommodate them side by side.
         final vertical = constraints.maxWidth < width;
         return SizedBox(
           width: vertical ? constraints.maxWidth : width,
-          child: Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: KalinkaColors.surfaceInput,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: KalinkaColors.borderSubtle),
-            ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: AnimatedAlign(
-                    alignment: vertical
-                        ? (current == PlayerView.queue
-                              ? Alignment.bottomCenter
-                              : Alignment.topCenter)
-                        : (current == PlayerView.queue
-                              ? AlignmentDirectional.centerEnd
-                              : AlignmentDirectional.centerStart),
+          child: Flex(
+            direction: vertical ? Axis.vertical : Axis.horizontal,
+            mainAxisSize: MainAxisSize.min,
+            spacing: _gap,
+            children: [
+              for (var i = 0; i < _views.length; i++)
+                SizedBox(
+                  width: vertical
+                      ? constraints.maxWidth
+                      : _targetWidth(labelWidths[i]),
+                  child: _ViewTab(
+                    label: _views[i].label,
+                    spoken: _views[i].spoken,
+                    labelWidth: labelWidths[i],
+                    active: _views[i].view == current,
                     duration: duration,
-                    curve: Curves.easeOutCubic,
-                    child: FractionallySizedBox(
-                      widthFactor: vertical ? 1 : 0.5,
-                      heightFactor: vertical ? 0.5 : 1,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: KalinkaColors.surfaceOverlay,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
+                    onTap: () => ref
+                        .read(playerViewProvider.notifier)
+                        .show(_views[i].view),
                   ),
                 ),
-                if (vertical)
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (final v in _views)
-                        _Segment(
-                          label: v.label,
-                          spoken: v.spoken,
-                          active: v.view == current,
-                          duration: duration,
-                          onTap: () => ref
-                              .read(playerViewProvider.notifier)
-                              .show(v.view),
-                        ),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      for (final v in _views)
-                        Expanded(
-                          child: _Segment(
-                            label: v.label,
-                            spoken: v.spoken,
-                            active: v.view == current,
-                            duration: duration,
-                            onTap: () => ref
-                                .read(playerViewProvider.notifier)
-                                .show(v.view),
-                          ),
-                        ),
-                    ],
-                  ),
-              ],
-            ),
+            ],
           ),
         );
       },
@@ -127,16 +92,18 @@ class PlayerViewSwitch extends ConsumerWidget {
   }
 }
 
-class _Segment extends StatelessWidget {
+class _ViewTab extends StatelessWidget {
   final String label;
   final String spoken;
+  final double labelWidth;
   final bool active;
   final Duration duration;
   final VoidCallback onTap;
 
-  const _Segment({
+  const _ViewTab({
     required this.label,
     required this.spoken,
+    required this.labelWidth,
     required this.active,
     required this.duration,
     required this.onTap,
@@ -155,25 +122,52 @@ class _Segment extends StatelessWidget {
         type: MaterialType.transparency,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
+          focusColor: KalinkaColors.surfaceOverlay,
+          hoverColor: KalinkaColors.surfaceInput,
           mouseCursor: clickCursor(interactive: !active),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 48),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              child: Center(
-                heightFactor: 1,
-                child: AnimatedDefaultTextStyle(
-                  duration: duration,
-                  style: PlayerViewSwitch._labelStyle.copyWith(
-                    color: active
-                        ? KalinkaColors.textPrimary
-                        : KalinkaColors.textSecondary,
+          child: Stack(
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: PlayerViewSwitch._horizontalPadding,
+                    vertical: 12,
                   ),
-                  child: Text(label, textAlign: TextAlign.center),
+                  child: Center(
+                    heightFactor: 1,
+                    child: AnimatedDefaultTextStyle(
+                      duration: duration,
+                      curve: Curves.easeOutCubic,
+                      style: PlayerViewSwitch._labelStyle.copyWith(
+                        color: active
+                            ? KalinkaColors.textPrimary
+                            : KalinkaColors.textSecondary,
+                      ),
+                      child: Text(label, textAlign: TextAlign.center),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 4,
+                child: Center(
+                  child: AnimatedContainer(
+                    duration: duration,
+                    curve: Curves.easeOutCubic,
+                    width: labelWidth,
+                    height: 2,
+                    decoration: BoxDecoration(
+                      color: active ? KalinkaColors.accent : Colors.transparent,
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

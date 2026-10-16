@@ -19,11 +19,14 @@ import '../browse_filters/browse_filter_form.dart' show filterTypeLabel;
 import '../browse_filters/filters_match_nothing.dart';
 import '../browse_rows_shimmer.dart';
 import '../infinite_list_view.dart';
+import '../measure_size.dart';
 import '../page_banner.dart';
 import '../search_cards/action_pill_button.dart';
 import '../search_cards/browse_item_rows.dart';
+import '../search_cards/search_track_row.dart';
 import '../shelf_heading.dart';
 import '../source_badge.dart';
+import 'album_page_header.dart';
 import 'catalog_sections_view.dart';
 import 'collections_edit_bar.dart';
 import 'collections_section.dart';
@@ -40,6 +43,10 @@ import 'track_group_actions.dart';
 class CatalogPageView extends ConsumerStatefulWidget {
   final CatalogPage page;
 
+  /// When supplied, Home owns the album cover behind the system inset and
+  /// navigation. The header reports its height so that cover ends at the list.
+  final ValueChanged<double>? onAlbumHeaderHeight;
+
   /// Returns to the Catalogs root — used by the error state's action.
   final VoidCallback onBackToCatalogs;
 
@@ -47,6 +54,7 @@ class CatalogPageView extends ConsumerStatefulWidget {
     super.key,
     required this.page,
     required this.onBackToCatalogs,
+    this.onAlbumHeaderHeight,
   });
 
   @override
@@ -62,8 +70,41 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   /// The listing's size as the server last said, -1 before it has.
   int _total = -1;
 
+  final _albumTrackDurations = <int, int>{};
+  int? _reportedAlbumDuration;
+  int? _albumDuration;
+
   void _countRows(int rows) {
-    if (rows != _rows) setState(() => _rows = rows);
+    // A refresh may correct duration metadata without changing row count.
+    setState(() => _rows = rows);
+  }
+
+  void _readAlbumDuration(BrowseItemsList list, int offset) {
+    if (offset == 0) {
+      _albumTrackDurations.clear();
+      final reported = widget.page.totalDurationSeconds;
+      _reportedAlbumDuration = reported != null && reported > 0
+          ? reported
+          : null;
+    }
+    for (var i = 0; i < list.items.length; i++) {
+      final track = list.items[i].track;
+      _albumTrackDurations[offset + i] = track?.duration ?? 0;
+      final reported = track?.album?.duration;
+      if (reported != null && reported > 0) _reportedAlbumDuration ??= reported;
+    }
+    // Never present a paginated subtotal as the album's length. Zero/missing
+    // track durations also mean that a reliable sum is not available yet.
+    final complete =
+        list.total > 0 && _albumTrackDurations.length == list.total;
+    _albumDuration =
+        _reportedAlbumDuration ??
+        (complete && _albumTrackDurations.values.every((seconds) => seconds > 0)
+            ? _albumTrackDurations.values.fold<int>(
+                0,
+                (sum, seconds) => sum + seconds,
+              )
+            : null);
   }
 
   /// A folder's header and the actions in it. Where the actions sit in the
@@ -134,6 +175,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   @override
   Widget build(BuildContext context) {
     final page = widget.page;
+    // Parses the id; read once rather than per row.
+    final isAlbum = page.isAlbum;
     final capabilities = page.filterCapabilities;
     final (filter, expandedShelf) = ref.watch(
       searchSessionProvider.select((s) => (s.catalogFilter, s.expandedShelf)),
@@ -161,7 +204,17 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       if (_actionsHeld) setState(() => _actionsHeld = false);
     });
 
-    final Widget header = page.folderLayout
+    final Widget header = isAlbum
+        ? MeasureSize(
+            onChange: (size) => widget.onAlbumHeaderHeight?.call(size.height),
+            child: AlbumPageHeader(
+              page: page,
+              trackCount: _total < 0 ? null : _total,
+              totalDurationSeconds: _albumDuration,
+              showArtwork: widget.onAlbumHeaderHeight == null,
+            ),
+          )
+        : page.folderLayout
         ? _FolderHeader(
             key: _headerKey,
             page: page,
@@ -181,7 +234,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     // A catalog made of shelves shows them until a kind is chosen; choosing
     // one narrows the catalog to that kind's flat listing, which is the same
     // listing its shelf was previewing.
-    if (!page.folderLayout && page.sections.isNotEmpty && query.type == null) {
+    // An album is its tracks, whatever sections it claims.
+    if (!page.folderLayout &&
+        !isAlbum &&
+        page.sections.isNotEmpty &&
+        query.type == null) {
       return CatalogSectionsView(
         page: page,
         query: query,
@@ -213,6 +270,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         );
         _pollWhileComposing(list.items);
         _total = list.total;
+        if (isAlbum) _readAlbumDuration(list, offset);
         return ItemChunk(items: list.items, total: list.total);
       },
       // Inset past the artwork of the row it follows, so the thumbnails read
@@ -222,21 +280,33 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           left: 16 + BrowseItemRows.textInsetOf(above),
           right: 16,
         ),
-        child: const Divider(
+        child: Divider(
           color: KalinkaColors.borderSubtle,
           thickness: 1,
-          height: 14,
+          height: isAlbum ? 1 : 14,
         ),
       ),
       itemBuilder: (context, item, index, loaded) {
         // Track rows play the whole loaded list as a queue from the
         // tapped row; as more chunks scroll in, the context grows.
         final trackIds = trackIdsMemo.of(loaded);
-        final row = BrowseItemRows.buildRow(
-          item,
-          queueContextIds: trackIds.isEmpty ? null : trackIds,
-        );
-        final heading = page.folderLayout ? _groupHeading(index, loaded) : null;
+        final row = isAlbum && item.track != null
+            ? SearchTrackRow(
+                item: item,
+                queueContextIds: trackIds.isEmpty ? null : trackIds,
+                albumTrackNumber: trackIdsMemo.albumNumberAt(index, loaded),
+                albumArtist: page.description,
+                labelled: false,
+              )
+            : BrowseItemRows.buildRow(
+                item,
+                queueContextIds: trackIds.isEmpty ? null : trackIds,
+              );
+        final heading = isAlbum
+            ? _discHeading(index, loaded, trackIdsMemo.multiDisc(loaded))
+            : page.folderLayout
+            ? _groupHeading(index, loaded)
+            : null;
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: heading == null
@@ -258,11 +328,13 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       emptyBuilder: (context) => _emptyState(page, filter, onReset: setQuery),
       // The error state replaces only the rows, never the header — a filter
       // that failed has to stay reachable to be undone.
-      errorBuilder: (context, _) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          header,
-          Expanded(child: _CatalogError(onReturn: widget.onBackToCatalogs)),
+      errorBuilder: (context, _) => CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(child: header),
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _CatalogError(onReturn: widget.onBackToCatalogs),
+          ),
         ],
       ),
     );
@@ -306,6 +378,29 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget? _discHeading(int index, List<BrowseItem> loaded, bool multiDisc) {
+    final disc = loaded[index].track?.discNumber;
+    // A single-disc album needs no "Disc 1" heading.
+    if (!multiDisc ||
+        disc == null ||
+        (index > 0 && loaded[index - 1].track?.discNumber == disc)) {
+      return null;
+    }
+    return Padding(
+      padding: EdgeInsets.fromLTRB(8, index == 0 ? 8 : 16, 8, 8),
+      child: Semantics(
+        header: true,
+        child: Text(
+          'Disc $disc',
+          style: KalinkaFonts.mono(
+            fontSize: 12,
+            color: KalinkaColors.textSecondary,
+          ),
+        ),
+      ),
     );
   }
 
@@ -496,6 +591,9 @@ class _FolderActions extends ConsumerWidget {
 class _TrackIdsMemo {
   List<String> _ids = const [];
   int _forLength = -1;
+  List<int> _albumNumbers = const [];
+  int _albumForLength = -1;
+  bool _multiDisc = false;
 
   List<String> of(List<BrowseItem> loaded) {
     if (loaded.length != _forLength) {
@@ -506,6 +604,40 @@ class _TrackIdsMemo {
       ];
     }
     return _ids;
+  }
+
+  /// Album positions and whether more than one disc is loaded; album pages only.
+  void _album(List<BrowseItem> loaded) {
+    if (loaded.length == _albumForLength) return;
+    _albumForLength = loaded.length;
+    var position = 0;
+    int? previousDisc;
+    int? firstDisc;
+    _multiDisc = false;
+    _albumNumbers = [];
+    for (final item in loaded) {
+      final track = item.track;
+      final disc = track?.discNumber;
+      if (disc != null) {
+        firstDisc ??= disc;
+        if (disc != firstDisc) _multiDisc = true;
+      }
+      if (disc != previousDisc) position = 0;
+      previousDisc = disc;
+      final tagged = track?.trackNumber;
+      position = tagged != null && tagged > 0 ? tagged : position + 1;
+      _albumNumbers.add(position);
+    }
+  }
+
+  int albumNumberAt(int index, List<BrowseItem> loaded) {
+    _album(loaded);
+    return _albumNumbers[index];
+  }
+
+  bool multiDisc(List<BrowseItem> loaded) {
+    _album(loaded);
+    return _multiDisc;
   }
 }
 

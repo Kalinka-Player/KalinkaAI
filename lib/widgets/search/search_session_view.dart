@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -11,12 +12,12 @@ import '../../providers/connection_state_provider.dart';
 import '../../providers/indexer_status_provider.dart';
 import '../../providers/row_expansion_provider.dart';
 import '../../providers/search_session_provider.dart';
+import '../../providers/source_modules_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../providers/shell_nav_provider.dart';
 import '../../theme/app_theme.dart';
 import '../breadcrumb_crumb.dart';
 import '../connection_banner.dart';
-import '../home/up_next_card.dart';
 import '../kalinka_top_bar.dart';
 import '../browse_filters/search_filter_button.dart';
 import '../browse_filters/search_filter_overlay.dart';
@@ -24,6 +25,7 @@ import '../mini_player.dart';
 import '../overlay_card.dart';
 import '../selection_overlay.dart';
 import '../server_chip.dart';
+import 'album_page_header.dart';
 import 'catalog_page_view.dart';
 import 'results_view.dart';
 import 'search_composer.dart';
@@ -60,7 +62,7 @@ final _kDiscoverFadeOut = LinearGradient(
 );
 
 /// Home: the app's top level. Its root is the Discover scroll — the search
-/// invitation, Up next, collections and catalogs — under the wordmark bar;
+/// invitation, collections and catalogs — under the wordmark bar;
 /// a catalog page or the results below it trade that bar for a back arrow
 /// and breadcrumb.
 ///
@@ -69,10 +71,6 @@ final _kDiscoverFadeOut = LinearGradient(
 class SearchSessionView extends ConsumerStatefulWidget {
   /// Opens the server sheet — the connection chip's tap target.
   final VoidCallback? onServerTap;
-
-  /// Opens the player on its queue from the Up next card; no card without
-  /// it.
-  final VoidCallback? onOpenQueue;
 
   /// The resting search entry, for the first-run tour to point at.
   final GlobalKey? entryKey;
@@ -87,7 +85,6 @@ class SearchSessionView extends ConsumerStatefulWidget {
   const SearchSessionView({
     super.key,
     this.onServerTap,
-    this.onOpenQueue,
     this.entryKey,
     this.connectionKey,
     this.handlesBack = true,
@@ -111,6 +108,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   // while a catalog replaces the root, just as PageStorage retains the list.
   final _discoverOffset = ValueNotifier<double>(0);
   late final ScrollController _discoverScroll;
+  final _albumOffset = ValueNotifier<double>(0);
+  final _albumHeaderHeight = ValueNotifier<double>(0);
 
   // Whether the animated search overlay is up. Driven by _openSearch /
   // _closeSearch (not by raw focus), so dismissing the keyboard alone keeps
@@ -194,6 +193,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     WidgetsBinding.instance.removeObserver(this);
     _discoverScroll.dispose();
     _discoverOffset.dispose();
+    _albumOffset.dispose();
+    _albumHeaderHeight.dispose();
     _composerController.removeListener(_onTextChange);
     _overlayCtrl.dispose();
     _filtersCtrl.dispose();
@@ -264,6 +265,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
               entryBox.size
         : null;
     _keyboardUp = false;
+    ref.read(searchSessionProvider.notifier).refreshSuggestionsIfStale();
     // Flips searchEntryModeProvider → the mini-player starts sliding down.
     ref.read(searchEntryModeProvider.notifier).set(true);
     setState(() => _focused = true);
@@ -337,6 +339,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           title: plan.title,
           provider: provider,
           description: plan.description,
+          totalDurationSeconds: plan.totalDurationSeconds,
           artPath: plan.artPath,
           filters: plan.filters,
           sections: plan.sections,
@@ -440,6 +443,13 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(searchSessionProvider);
+    final onAlbum =
+        session.activeView == FindMusicView.catalogs &&
+        session.catalogPage.isAlbum;
+    ref.listen(searchSessionProvider.select((s) => s.catalogPage.id), (_, _) {
+      _albumOffset.value = 0;
+      _albumHeaderHeight.value = 0;
+    });
 
     // ...and drop the flag too, so back does not spend a press closing a card
     // that is no longer on screen.
@@ -484,6 +494,17 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
         color: KalinkaColors.background,
         child: Stack(
           children: [
+            if (onAlbum)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: AlbumPageBackdrop(
+                  page: session.catalogPage,
+                  headerHeight: _albumHeaderHeight,
+                  scrollOffset: _albumOffset,
+                ),
+              ),
             // The backdrop behind the Discover root, full surface width and
             // rising behind the bar and the status-bar inset so the two read
             // as one surface. It moves one-for-one with the introduction,
@@ -519,6 +540,9 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                               gradient: _kDiscoverFadeOut,
                             ),
                           ),
+                          const IgnorePointer(
+                            child: ExcludeSemantics(child: _HeroArtwork()),
+                          ),
                         ],
                       ),
                     ),
@@ -530,6 +554,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
             // the canvas before the rows (same layer as the bloom above).
             if (session.activeView == FindMusicView.catalogs &&
                 !session.catalogPage.isRoot &&
+                !onAlbum &&
                 session.shownListing.artPath != null)
               Positioned(
                 top: 0,
@@ -538,15 +563,39 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                 child: IgnorePointer(
                   child: CatalogArtBackdrop(
                     artPath: session.shownListing.artPath!,
-                    // Only a folder's art is a cover; the page's own is
-                    // card art like any catalog's.
+                    // A folder uses cover art; albums carry their own
+                    // crisp backdrop inside the scrolling header.
                     fromCover: session.folderPath.isNotEmpty,
                   ),
                 ),
               ),
             Column(
               children: [
-                _buildHeader(session),
+                if (onAlbum)
+                  AnnotatedRegion<SystemUiOverlayStyle>(
+                    value: const SystemUiOverlayStyle(
+                      statusBarColor: Colors.transparent,
+                      statusBarIconBrightness: Brightness.light,
+                      statusBarBrightness: Brightness.dark,
+                      systemStatusBarContrastEnforced: false,
+                    ),
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: _albumOffset,
+                      builder: (context, offset, child) => ColoredBox(
+                        key: const ValueKey('album-header-surface'),
+                        color: KalinkaColors.background.withValues(
+                          alpha: (offset / kKalinkaTopBarHeight).clamp(
+                            0.0,
+                            1.0,
+                          ),
+                        ),
+                        child: child,
+                      ),
+                      child: _buildHeader(session),
+                    ),
+                  )
+                else
+                  _buildHeader(session),
                 // Both views stay mounted (IndexedStack) so scroll and inline
                 // expansion survive view switches without a refetch.
                 Expanded(
@@ -587,10 +636,33 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// catalog page.
   Widget _buildCatalogsTab(SearchSessionState session) {
     if (!session.catalogPage.isRoot) {
-      return CatalogPageView(
-        page: session.catalogPage,
-        onBackToCatalogs: () =>
-            ref.read(searchSessionProvider.notifier).backToCatalogsRoot(),
+      // Metrics notifications also cover a list replaced by its loading,
+      // empty or error state, which starts at the top without scrolling.
+      return NotificationListener<Notification>(
+        onNotification: (notification) {
+          final (depth, metrics) = switch (notification) {
+            ScrollNotification n => (n.depth, n.metrics),
+            ScrollMetricsNotification n => (n.depth, n.metrics),
+            _ => (-1, null),
+          };
+          if (session.catalogPage.isAlbum &&
+              depth == 0 &&
+              metrics != null &&
+              metrics.axis == Axis.vertical) {
+            // Overscroll at the top keeps the cover in place.
+            _albumOffset.value = math.max(0, metrics.pixels);
+          }
+          return false;
+        },
+        child: CatalogPageView(
+          key: ValueKey(session.catalogPage.id),
+          page: session.catalogPage,
+          onAlbumHeaderHeight: session.catalogPage.isAlbum
+              ? (height) => _albumHeaderHeight.value = height
+              : null,
+          onBackToCatalogs: () =>
+              ref.read(searchSessionProvider.notifier).backToCatalogsRoot(),
+        ),
       );
     }
     return _buildCatalogsRoot(session);
@@ -726,6 +798,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// "EXPLORE CATALOGS" divider, catalog cards and favourites. Tapping the
   /// entry lifts the overlay.
   Widget _buildCatalogsRoot(SearchSessionState session) {
+    final smart = ref.watch(smartSearchAvailableProvider) ?? true;
     return SearchZeroState(
       controller: _discoverScroll,
       onOpenCatalog: _openCatalog,
@@ -744,19 +817,19 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           ),
         _DiscoverHero(
           entryKey: _entryKey,
-          hint: _hintText(session),
+          hint: _hintText(session, smart: smart),
+          smartSearch: smart,
           onOpenSearch: _openSearch,
         ),
-        const SizedBox(height: 30),
-        if (widget.onOpenQueue != null)
-          UpNextCard(onOpenQueue: widget.onOpenQueue!),
+        const SizedBox(height: 24),
       ],
     );
   }
 
   /// Rotating example hint — a different real suggestion each time the surface
   /// mounts, teaching the query language.
-  String _hintText(SearchSessionState session) {
+  String _hintText(SearchSessionState session, {required bool smart}) {
+    if (!smart) return 'Artist, album or track…';
     final suggestions = session.suggestions;
     if (suggestions.isEmpty) return 'Ask for music…';
     return 'Try “${suggestions[_hintIndex % suggestions.length].query}”';
@@ -1039,82 +1112,27 @@ class _ResultsReturnPill extends StatelessWidget {
 class _DiscoverHero extends StatelessWidget {
   final Key entryKey;
   final String hint;
+
+  /// Whether a source answers smart search; the description says only what
+  /// the search can do.
+  final bool smartSearch;
   final VoidCallback onOpenSearch;
 
   const _DiscoverHero({
     required this.entryKey,
     required this.hint,
+    required this.smartSearch,
     required this.onOpenSearch,
   });
-
-  /// Past the list's side inset, so the artwork reaches the window edge.
-  static const _bleed = 16.0;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final artWidth = math.min(
-            (constraints.maxWidth + _bleed) * 0.64,
-            440.0,
-          );
-          return Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Right of the question; it fades out leftwards and downwards,
-              // so the text and the entry read over it.
-              Positioned(
-                top: -8,
-                right: -_bleed,
-                width: artWidth,
-                height: artWidth * 9 / 16,
-                child: IgnorePointer(
-                  child: ExcludeSemantics(
-                    child: RepaintBoundary(
-                      // Toned in the bloom's family: deep berry where it fades
-                      // in, warming to blush on the bright threads.
-                      child: ShaderMask(
-                        blendMode: BlendMode.srcIn,
-                        shaderCallback: (bounds) => LinearGradient(
-                          begin: Alignment.bottomLeft,
-                          end: Alignment.topRight,
-                          colors: [
-                            KalinkaColors.accent.withValues(alpha: 0.7),
-                            KalinkaColors.accentTint.withValues(alpha: 0.75),
-                            Color.lerp(
-                              KalinkaColors.accentTint,
-                              KalinkaColors.textPrimary,
-                              0.6,
-                            )!.withValues(alpha: 0.8),
-                          ],
-                          stops: const [0, 0.5, 1],
-                        ).createShader(bounds),
-                        child: SvgPicture.asset(
-                          'assets/images/header_artwork.svg',
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              _heroText(),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _heroText() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        FractionallySizedBox(
-          widthFactor: 0.55,
-          child: Text(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
             'What shall we play?',
             style: KalinkaFonts.display(
               fontSize: KalinkaTypography.baseSize + 17,
@@ -1122,19 +1140,69 @@ class _DiscoverHero extends StatelessWidget {
               color: KalinkaColors.textPrimary,
             ),
           ),
-        ),
-        const SizedBox(height: 12),
-        FractionallySizedBox(
-          widthFactor: 0.55,
-          child: Text(
-            'Describe a mood, activity, genre, or anything else you '
-            'would like to hear.',
-            style: KalinkaTextStyles.trackRowSubtitle,
+          const SizedBox(height: 6),
+          FractionallySizedBox(
+            widthFactor: 0.8,
+            child: Text(
+              smartSearch
+                  ? 'Describe a mood, activity, genre, or anything else you '
+                        'would like to hear.'
+                  : 'Find an artist, album or track by name.',
+              style: KalinkaTextStyles.trackRowSubtitle,
+            ),
           ),
-        ),
-        const SizedBox(height: 34),
-        _SearchEntryButton(key: entryKey, hint: hint, onTap: onOpenSearch),
-      ],
+          const SizedBox(height: 18),
+          _SearchEntryButton(key: entryKey, hint: hint, onTap: onOpenSearch),
+        ],
+      ),
+    );
+  }
+}
+
+/// The header artwork, from the top of the bar to the window's right edge;
+/// it fades out leftwards and downwards, so the text reads over it.
+class _HeroArtwork extends StatelessWidget {
+  const _HeroArtwork();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = math.min(constraints.maxWidth * 0.64, 440.0);
+        return Align(
+          alignment: Alignment.topRight,
+          child: Padding(
+            padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+            child: SizedBox(
+              width: width,
+              height: width * 9 / 16,
+              // Toned in the bloom's family: deep berry where it fades in,
+              // warming to blush on the bright threads.
+              child: ShaderMask(
+                blendMode: BlendMode.srcIn,
+                shaderCallback: (bounds) => LinearGradient(
+                  begin: Alignment.bottomLeft,
+                  end: Alignment.topRight,
+                  colors: [
+                    KalinkaColors.accent.withValues(alpha: 0.7),
+                    KalinkaColors.accentTint.withValues(alpha: 0.75),
+                    Color.lerp(
+                      KalinkaColors.accentTint,
+                      KalinkaColors.textPrimary,
+                      0.6,
+                    )!.withValues(alpha: 0.8),
+                  ],
+                  stops: const [0, 0.5, 1],
+                ).createShader(bounds),
+                child: SvgPicture.asset(
+                  'assets/images/header_artwork.svg',
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

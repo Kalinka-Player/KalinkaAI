@@ -96,6 +96,17 @@ final sourceCountProvider = Provider<int>((ref) {
   return ref.watch(sourceModulesProvider.select((m) => m.value?.length ?? 0));
 });
 
+/// Whether any enabled source answers smart (natural-language) search; null
+/// until the sources are read. Without one, mood prompts would only run as
+/// name searches. Selected like [sourceCountProvider].
+final smartSearchAvailableProvider = Provider<bool?>((ref) {
+  return ref.watch(
+    sourceModulesProvider.select(
+      (m) => m.value?.any((s) => s.can(ModuleCapability.aiSearch)),
+    ),
+  );
+});
+
 /// Maps source name -> display info (title, abbreviation, color).
 /// Returns empty map while loading.
 ///

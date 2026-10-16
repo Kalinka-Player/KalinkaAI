@@ -29,8 +29,7 @@ After setup you land on **Home**, the place to search, explore your sources and 
 The things to know:
 
 - **Search** — the field under *What shall we play?* opens search; ask for music in plain language.
-- **Up next** — what is playing and what follows; **QUEUE** opens the whole queue in the player.
-- **Mini player** (bottom) — the current track; tap it to open the full player.
+- **Mini player** (bottom) — the current track; tap it to open the full player, where **QUEUE** shows what plays next.
 - **The server chip** (top-right) — your server's name with its status
   dot, **and a button**. This is the door to everything server-related;
   it's easy to miss, so:
@@ -96,7 +95,7 @@ start a selection — or use **Select all** on a section — then choose
 
 ## 6. The queue and the player
 
-Tap the mini player to expand the full player with artwork, format/quality info, transport controls and volume. The queue lives in the player too: the queue button at its top right switches between the playing track and the queue, and **QUEUE** beside *Up next* on Home opens the player straight on it. The current track is on top, **UP NEXT** below, drag handles to reorder, swipe to remove; the menu saves the queue as a collection or clears it. On a wide screen the same switch sits on the player panel beside Home:
+Tap the mini player to expand the full player with artwork, format/quality info, transport controls and volume. The queue lives in the player too: the queue button at its top right switches between the playing track and the queue. The current track is on top, **UP NEXT** below, drag handles to reorder, swipe to remove; the menu saves the queue as a collection or clears it. On a wide screen the same switch sits on the player panel beside Home:
 
 | Play queue | Player |
 |:---:|:---:|

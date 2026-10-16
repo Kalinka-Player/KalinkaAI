@@ -20,6 +20,8 @@ import 'package:kalinka/widgets/browse_filters/search_filter_button.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
 import 'package:kalinka/widgets/overlay_card.dart';
 import 'package:kalinka/widgets/search/folder_trail.dart';
+import 'package:kalinka/widgets/search/album_page_header.dart';
+import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 
 /// Mounting the whole Find Music surface is the only thing that exercises its
@@ -62,7 +64,17 @@ class _FakeApi implements KalinkaPlayerProxy {
     int offset = 0,
     int limit = 10,
     String? filter,
-  }) async => BrowseItemsList(offset, limit, 0, const []);
+  }) async => id == 'kalinka:localfiles:album:example'
+      ? BrowseItemsList(offset, limit, 50, [
+          for (var i = offset; i < (offset + limit).clamp(0, 50); i++)
+            BrowseItem(
+              id: 'kalinka:localfiles:track:$i',
+              canBrowse: false,
+              canAdd: true,
+              track: Track(id: '$i', title: 'Album track $i', duration: 180),
+            ),
+        ])
+      : BrowseItemsList(offset, limit, 0, const []);
 
   @override
   Future<SearchSuggestionList> searchSuggestions({
@@ -215,6 +227,82 @@ void main() {
     // Nothing to narrow at the root — the button would be a dead affordance.
     expect(find.byType(SearchFilterButton), findsNothing);
   });
+
+  for (final (size, scale) in [
+    (const Size(375, 812), 1.0),
+    (const Size(812, 375), 1.0),
+    (const Size(375, 812), 3.0),
+  ]) {
+    testWidgets(
+      'album art spans system inset through list at $size, ${scale}x',
+      (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final container = await pumpSurface(
+          tester,
+          topInset: 24,
+          textScale: scale,
+          reduceMotion: true,
+        );
+        container
+            .read(searchSessionProvider.notifier)
+            .openCatalog(
+              id: 'kalinka:localfiles:album:example',
+              title: 'Abbey Road',
+              description: 'The Beatles',
+              totalDurationSeconds: 9000,
+            );
+        await tester.pumpAndSettle();
+
+        final cover = find.byKey(const ValueKey('album-backdrop'));
+        final surface = find.byKey(const ValueKey('album-header-surface'));
+        final coverRect = tester.getRect(cover);
+        final headerRect = tester.getRect(find.byType(AlbumPageHeader));
+        final navRect = tester.getRect(surface);
+        expect(coverRect.top, 0);
+        expect(coverRect.width, size.width);
+        expect(coverRect.bottom, headerRect.bottom);
+        expect(navRect.height, kKalinkaTopBarHeight + 24);
+        expect(headerRect.top, navRect.bottom);
+        expect(find.byType(AlbumArtwork), findsOneWidget);
+        expect(find.text('50 tracks · 2 hr 30 min'), findsOneWidget);
+
+        final systemStyle = tester
+            .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+              find.ancestor(
+                of: surface,
+                matching: find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+              ),
+            )
+            .value;
+        expect(systemStyle.statusBarColor, Colors.transparent);
+        expect(systemStyle.statusBarIconBrightness, Brightness.light);
+
+        final scrollable = tester.state<ScrollableState>(
+          find.byType(Scrollable).first,
+        );
+        scrollable.position.jumpTo(80);
+        await tester.pump();
+        expect(tester.getRect(cover), coverRect.shift(const Offset(0, -80)));
+        expect(tester.getRect(surface), navRect);
+        expect(
+          tester.widget<ColoredBox>(surface).color,
+          KalinkaColors.background,
+        );
+        expect(tester.takeException(), isNull);
+
+        // Rows remain below pinned navigation; leaving the album removes its
+        // cover and returns Home to its own backdrop.
+        await tester.scrollUntilVisible(find.text('Album track 4'), 300);
+        expect(find.byType(SearchTrackRow), findsWidgets);
+        container.read(searchSessionProvider.notifier).backToCatalogsRoot();
+        await tester.pumpAndSettle();
+        expect(cover, findsNothing);
+        expect(find.byType(KalinkaTopBar), findsOneWidget);
+      },
+    );
+  }
 
   final rootList = find.byKey(const PageStorageKey('discoverRoot'));
   final backdrop = find.byKey(const ValueKey('discover-backdrop'));

@@ -274,19 +274,11 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         setState(() => _settingsCovering = covering),
   );
 
-  /// The player, on the queue: the phone's sheet, or the tablet's panel.
-  void _openQueue() {
-    ref.read(playerViewProvider.notifier).show(PlayerView.queue);
-    if (MediaQuery.sizeOf(context).width < kKalinkaTabletBreakpoint) {
-      _showExpandedPlayer(view: PlayerView.queue);
-    }
-  }
-
   void _requestHomeSearch() =>
       ref.read(homeSearchRequestProvider.notifier).request();
 
-  void _showExpandedPlayer({PlayerView view = PlayerView.nowPlaying}) {
-    ref.read(playerViewProvider.notifier).show(view);
+  void _showExpandedPlayer() {
+    ref.read(playerViewProvider.notifier).show(PlayerView.nowPlaying);
     final navigator = Navigator.of(context);
     navigator.push(
       PlayerSheetRoute(
@@ -749,7 +741,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           : SearchSessionView(
               key: const ValueKey('home'),
               onServerTap: onServerTap,
-              onOpenQueue: _openQueue,
               entryKey: _searchEntryKey,
               connectionKey: _connectionDotKey,
               handlesBack: !covered,

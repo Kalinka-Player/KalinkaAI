@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data_model/data_model.dart' show SearchSuggestion;
 import '../../providers/catalog_cards_provider.dart';
 import '../../providers/search_session_provider.dart';
+import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
+import '../home/recently_added_section.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../shelf_heading.dart' show hasLargeType;
 import 'catalog_cards_section.dart';
@@ -14,6 +16,9 @@ import 'collections_section.dart';
 /// your collections, then an "EXPLORE CATALOGS" divider, the catalog cards,
 /// and recent favourites. Suggestions and recent searches live in the focused
 /// search overlay ([SearchSuggestionsList]), not here.
+/// Home's side inset; what reaches the window edge bleeds past it by this.
+const kHomeSideInset = 16.0;
+
 class SearchZeroState extends ConsumerWidget {
   /// Opens a catalog page directly (browse id + resolved provider label).
   final OpenCatalog onOpenCatalog;
@@ -44,11 +49,12 @@ class SearchZeroState extends ConsumerWidget {
       // to its top — the shelf you came from is where you look next.
       key: const PageStorageKey('discoverRoot'),
       controller: controller,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.fromLTRB(kHomeSideInset, 8, kHomeSideInset, 24),
       children: [
         ...leading,
 
         CollectionsSection(onOpenCatalog: onOpenCatalog),
+        RecentlyAddedSection(onOpenCatalog: onOpenCatalog),
 
         // Not "OR": a section may sit between the entry and this rule, and
         // the label has to read the same whether one does or not.
@@ -133,9 +139,13 @@ class SearchSuggestionsList extends ConsumerWidget {
     final session = ref.watch(searchSessionProvider);
     final notifier = ref.read(searchSessionProvider.notifier);
     final needle = query.trim().toLowerCase();
-    final suggestions = needle.isEmpty
+    // Without smart search, mood prompts would only run as name searches.
+    final offered = (ref.watch(smartSearchAvailableProvider) ?? true)
         ? session.suggestions
-        : session.suggestions
+        : const <SearchSuggestion>[];
+    final suggestions = needle.isEmpty
+        ? offered
+        : offered
               .where((s) => s.query.toLowerCase().contains(needle))
               .toList(growable: false);
     final history = needle.isEmpty

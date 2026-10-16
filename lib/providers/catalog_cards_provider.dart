@@ -31,12 +31,19 @@ class CatalogCardPlan {
   final String id;
   final String title;
   final String? description;
+  final int? totalDurationSeconds;
   final String sourceName;
   final PreviewContentType? contentType;
 
   /// Semantic icon id from the catalog's preview_config (e.g. "popular",
   /// "new_releases"); the card maps it to a glyph, falling back to contentType.
   final String? icon;
+
+  /// What the catalog claims to be, as its source declared it.
+  final CatalogRole? role;
+
+  /// How the source asked for the catalog to be previewed.
+  final Preview? preview;
 
   /// Unresolved background path (resolved against the base URL at render time).
   /// Null until the server has generated the art; the card is black until then.
@@ -69,8 +76,11 @@ class CatalogCardPlan {
     required this.title,
     required this.sourceName,
     this.description,
+    this.totalDurationSeconds,
     this.contentType,
     this.icon,
+    this.role,
+    this.preview,
     this.artPath,
     this.filters = const [],
     this.sections = const [],
@@ -163,6 +173,8 @@ final catalogCardGroupsProvider = FutureProvider<List<CatalogCardGroup>>((
           sourceName: sourceName,
           contentType: catalog.previewConfig?.contentType,
           icon: catalog.previewConfig?.icon,
+          role: catalog.role,
+          preview: catalog.previewConfig,
           artPath: artPathOf(item),
           filters: catalog.filters,
           sections: item.sections ?? const [],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
 
@@ -22,6 +23,11 @@ class ActionPillButton extends StatelessWidget {
   /// one being read. See the palette's outline treatment.
   final bool accent;
 
+  /// Minimum touch target height when the surrounding layout has room.
+  final double minHeight;
+
+  static const _padding = EdgeInsets.symmetric(horizontal: 10, vertical: 6);
+
   /// Reported to a screen reader for a pill that stands for a choice rather
   /// than an action. Null leaves it unsaid.
   final bool? selected;
@@ -40,6 +46,7 @@ class ActionPillButton extends StatelessWidget {
     this.icon,
     this.leading,
     this.accent = false,
+    this.minHeight = 0,
     this.selected,
     this.enabled = true,
     this.onTap,
@@ -76,10 +83,13 @@ class ActionPillButton extends StatelessWidget {
         onTap: enabled ? onTap : null,
         mouseCursor: clickCursor(interactive: enabled && onTap != null),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: _padding,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              minHeight: _lineHeightOf(context, labelStyle),
+              minHeight: (minHeight - _padding.vertical).clamp(
+                _lineHeightOf(context, labelStyle),
+                double.infinity,
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
