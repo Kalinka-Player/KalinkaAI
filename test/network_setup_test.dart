@@ -14,6 +14,7 @@ import 'package:kalinka/widgets/onboarding/step_network.dart';
 class FakeSetupApi extends NetworkSetupApi {
   final Map<String, dynamic> response;
   final List<String> commands = [];
+  final List<Map<String, Object>> payloads = [];
   Future<Map<String, dynamic>> Function()? readStatus;
   Future<void> Function(String)? sendCommand;
   FakeSetupApi(this.response) : super(Uri.parse('http://192.168.4.1'));
@@ -26,8 +27,94 @@ class FakeSetupApi extends NetworkSetupApi {
     Map<String, Object> fields = const {},
   ]) async {
     commands.add(operation);
+    payloads.add(fields);
     await sendCommand?.call(operation);
+    if (operation == 'scan') {
+      response['setup'] = {...response['setup'] as Map, 'scan_state': 'ready'};
+    } else if (operation == 'change_network') {
+      response['setup'] = {'state': 0, 'scan_state': 'idle', 'networks': []};
+    }
   }
+}
+
+Map<String, dynamic> status({
+  String? kind,
+  int state = 0,
+  bool available = true,
+}) => {
+  'available': available,
+  'network': {
+    'connected': kind != null,
+    'kind': kind,
+    'address': '192.168.1.20',
+  },
+  'setup': {
+    'state': state,
+    'scan_state': 'idle',
+    'networks': [
+      {'ssid': 'Home', 'security': 'wpa2'},
+      {'ssid': 'Open', 'security': 'open'},
+    ],
+  },
+};
+
+const manualEntry = 'Can’t find your network? Enter SSID manually';
+final countryField = find.byKey(const ValueKey('network-country'));
+final ssidField = find.byKey(const ValueKey('network-ssid'));
+final passwordField = find.byKey(const ValueKey('network-password'));
+
+Future<void> mountPanel(
+  WidgetTester tester,
+  FakeSetupApi api, {
+  ValueChanged<bool>? onBusy,
+  VoidCallback? onReconnect,
+  Locale locale = const Locale('en', 'GB'),
+  double scale = 1,
+}) async {
+  tester.platformDispatcher.localeTestValue = locale;
+  addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: AppTheme.dark(),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(scale),
+          disableAnimations: true,
+        ),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: NetworkSetupPanel(
+            endpoint: api.base,
+            api: api,
+            onBusy: onBusy,
+            onReconnect: onReconnect,
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+}
+
+Future<void> finishScan(WidgetTester tester) async {
+  await tester.pump(const Duration(seconds: 2));
+  await tester.pump();
+}
+
+Future<void> manualCredentials(WidgetTester tester) async {
+  await tester.ensureVisible(find.text(manualEntry));
+  await tester.tap(find.text(manualEntry));
+  await tester.pump();
+  await tester.enterText(ssidField, 'Home');
+  await tester.enterText(passwordField, 'test-password');
+}
+
+Future<void> join(WidgetTester tester) async {
+  await tester.ensureVisible(find.text('Connect to Wi-Fi'));
+  await tester.tap(find.text('Connect to Wi-Fi'));
+  await tester.pump();
 }
 
 void main() {
@@ -87,162 +174,246 @@ void main() {
     );
   });
 
-  for (final kind in ['wired', 'wifi']) {
-    testWidgets(
-      'existing $kind connection remains visible and is not changed',
-      (tester) async {
-        final api = FakeSetupApi({
-          'available': true,
-          'network': {
-            'connected': true,
-            'kind': kind,
-            'address': '192.168.1.20',
-          },
-          'setup': {'state': 4, 'networks': []},
-        });
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: AppTheme.dark(),
-            home: Scaffold(
-              body: SingleChildScrollView(
-                child: NetworkSetupPanel(endpoint: api.base, api: api),
-              ),
-            ),
-          ),
-        );
-        await tester.pump();
+  for (final kind in ['wired', 'wifi', null]) {
+    testWidgets('discovers automatically once while keeping $kind connection', (
+      tester,
+    ) async {
+      final api = FakeSetupApi(status(kind: kind, state: kind == null ? 0 : 4));
+      await mountPanel(tester, api);
+      expect(api.commands, ['open', 'scan']);
+      expect(api.payloads.last, {'country': 'GB'});
+      expect(find.text('Finding Wi-Fi networks…'), findsOneWidget);
+      expect(ssidField, findsNothing);
+      expect(passwordField, findsNothing);
+      if (kind != null) {
         expect(
           find.text(
             kind == 'wired' ? 'Connected by Ethernet' : 'Connected by Wi-Fi',
           ),
           findsOneWidget,
         );
-        expect(find.text('Connect to Wi-Fi'), findsOneWidget);
-        expect(api.commands, isEmpty);
-        await tester.pumpWidget(const SizedBox());
-      },
-    );
+      }
+      await finishScan(tester);
+      expect(find.text('Home'), findsOneWidget);
+      await finishScan(tester);
+      expect(api.commands, ['open', 'scan']);
+      await tester.pumpWidget(const SizedBox());
+    });
   }
 
-  testWidgets('network panel fits a small phone and validates credentials', (
+  testWidgets('selecting a network asks only for its password', (tester) async {
+    final api = FakeSetupApi(status());
+    await mountPanel(tester, api);
+    await finishScan(tester);
+    await tester.tap(find.text('Open'));
+    await tester.pump();
+    expect(passwordField, findsNothing);
+    await tester.tap(find.text('Home'));
+    await tester.pump();
+    expect(passwordField, findsOneWidget);
+    expect(ssidField, findsNothing);
+    await tester.enterText(passwordField, 'test-password');
+    await join(tester);
+    expect(api.commands, ['open', 'scan', 'open', 'join']);
+    expect(api.payloads.last, {
+      'ssid': 'Home',
+      'password': 'test-password',
+      'country': 'GB',
+    });
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('manual entry validates credentials and can return to the list', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(375, 812);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final api = FakeSetupApi({
-      'available': true,
-      'hotspot': true,
-      'network': {'connected': false},
-      'setup': {
-        'state': 0,
-        'networks': [
-          {'ssid': 'Home', 'security': 'wpa2'},
-          {'ssid': 'Open', 'security': 'open'},
-        ],
-      },
-    });
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.dark(),
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: NetworkSetupPanel(endpoint: api.base, api: api),
-          ),
-        ),
-      ),
-    );
+    final api = FakeSetupApi(status());
+    await mountPanel(tester, api);
+    await finishScan(tester);
+    await tester.tap(find.text(manualEntry));
     await tester.pump();
-    await tester.ensureVisible(find.text('Connect to Wi-Fi'));
-    await tester.tap(find.text('Connect to Wi-Fi'));
-    await tester.pump();
-    expect(api.commands, isEmpty);
+    expect(ssidField, findsOneWidget);
+    expect(passwordField, findsOneWidget);
+    await join(tester);
+    expect(api.commands, ['open', 'scan']);
     expect(find.text('Use a network name of 1–32 bytes.'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    expect(
+      find.text('Use 8–63 letters, numbers, spaces or symbols.'),
+      findsOneWidget,
+    );
+    await tester.enterText(passwordField, 'test-password');
+    await tester.ensureVisible(find.text('Back to available networks'));
+    await tester.tap(find.text('Back to available networks'));
+    await tester.pump();
+    expect(find.text('Home'), findsOneWidget);
+    expect(passwordField, findsNothing);
+    await tester.tap(find.text('Home'));
+    await tester.pump();
+    expect(
+      tester.widget<TextFormField>(passwordField).controller!.text,
+      isEmpty,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('missing locale country starts scanning when supplied', (
+    tester,
+  ) async {
+    final api = FakeSetupApi(status());
+    await mountPanel(tester, api, locale: const Locale('en'));
+    expect(api.commands, isEmpty);
+    expect(
+      find.text('Enter your country code below to find nearby networks.'),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(countryField);
+    await tester.enterText(countryField, 'gb');
+    await tester.pump();
+    expect(api.commands, ['open', 'scan']);
+    expect(api.payloads.last, {'country': 'GB'});
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('does not scan when setup is unavailable or joining', (
+    tester,
+  ) async {
+    for (final response in [status(available: false), status(state: 1)]) {
+      final api = FakeSetupApi(response);
+      await mountPanel(tester, api);
+      expect(api.commands, isEmpty);
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
+
+  testWidgets('failed discovery offers manual entry and a retry', (
+    tester,
+  ) async {
+    final api = FakeSetupApi(status());
+    await mountPanel(tester, api);
+    api.response['setup'] = {
+      'state': 0,
+      'scan_state': 'failed',
+      'networks': [],
+    };
+    await finishScan(tester);
+    expect(
+      find.text(
+        'Could not find networks. Try again or enter your network name manually.',
+      ),
+      findsOneWidget,
+    );
+    await manualCredentials(tester);
+    expect(passwordField, findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets(
     'accepted credentials offer reconnection without claiming success',
     (tester) async {
-      final api = FakeSetupApi({
-        'available': true,
-        'network': {'connected': false},
-        'setup': {'state': 0, 'networks': []},
-      });
+      final api = FakeSetupApi({...status(), 'hotspot': true});
       var reconnected = false;
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.dark(),
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: NetworkSetupPanel(
-                endpoint: api.base,
-                api: api,
-                onReconnect: () => reconnected = true,
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-      final fields = find.byType(TextFormField);
-      await tester.enterText(fields.at(0), 'GB');
-      await tester.enterText(fields.at(1), 'Home');
-      await tester.enterText(fields.at(2), 'test-password');
-      await tester.ensureVisible(find.text('Connect to Wi-Fi'));
-      await tester.tap(find.text('Connect to Wi-Fi'));
-      await tester.pump();
-      expect(api.commands, ['open', 'join']);
+      await mountPanel(tester, api, onReconnect: () => reconnected = true);
+      await finishScan(tester);
+      await manualCredentials(tester);
+      await join(tester);
+      expect(api.commands, ['open', 'scan', 'open', 'join']);
       expect(find.text('Reconnect after changing Wi-Fi'), findsOneWidget);
       await tester.ensureVisible(find.text('Reconnect after changing Wi-Fi'));
       await tester.tap(find.text('Reconnect after changing Wi-Fi'));
       expect(reconnected, true);
       expect(find.text('Connected by Wi-Fi'), findsNothing);
+      expect(
+        find.text('Your box is connected and ready to use.'),
+        findsNothing,
+      );
       await tester.pumpWidget(const SizedBox());
     },
   );
 
+  testWidgets(
+    'success replaces credentials and changing network starts discovery',
+    (tester) async {
+      final api = FakeSetupApi(status());
+      await mountPanel(tester, api);
+      await finishScan(tester);
+      await manualCredentials(tester);
+      await join(tester);
+      api.response.addAll(status(kind: 'wifi', state: 2));
+      await finishScan(tester);
+      expect(
+        find.text('Your box is connected and ready to use.'),
+        findsOneWidget,
+      );
+      expect(find.text('Change Wi-Fi network'), findsOneWidget);
+      expect(find.text('Choose another network'), findsNothing);
+      expect(passwordField, findsNothing);
+      expect(ssidField, findsNothing);
+      api.response.addAll(status(kind: 'wifi', state: 4));
+      await finishScan(tester);
+      expect(
+        find.text('Your box is connected and ready to use.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Change Wi-Fi network'));
+      await tester.pump();
+      await finishScan(tester);
+      expect(api.commands, [
+        'open',
+        'scan',
+        'open',
+        'join',
+        'open',
+        'change_network',
+        'open',
+        'scan',
+      ]);
+      expect(find.text('Finding Wi-Fi networks…'), findsOneWidget);
+      expect(
+        find.text('Your box is connected and ready to use.'),
+        findsNothing,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('a join failure keeps the selected network and allows retry', (
+    tester,
+  ) async {
+    final api = FakeSetupApi(status());
+    await mountPanel(tester, api);
+    await finishScan(tester);
+    await tester.tap(find.text('Home'));
+    await tester.pump();
+    await tester.enterText(passwordField, 'test-password');
+    await join(tester);
+    api.response['setup'] = {
+      'state': 3,
+      'reason': 2,
+      'scan_state': 'ready',
+      'networks': [],
+    };
+    await finishScan(tester);
+    expect(
+      find.text('The Wi-Fi password was not accepted. Try again.'),
+      findsOneWidget,
+    );
+    expect(find.text('Home'), findsOneWidget);
+    expect(passwordField, findsOneWidget);
+    expect(find.text('Connect to Wi-Fi'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   group('in-flight network requests', () {
     late FakeSetupApi api;
     final busy = <bool>[];
-
     setUp(() {
       busy.clear();
-      api = FakeSetupApi({
-        'available': true,
-        'network': {'connected': false},
-        'setup': {'state': 0, 'networks': []},
-      });
+      api = FakeSetupApi(status());
     });
-
     Future<void> ready(WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.dark(),
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: NetworkSetupPanel(
-                endpoint: api.base,
-                api: api,
-                onBusy: busy.add,
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-      final fields = find.byType(TextFormField);
-      await tester.enterText(fields.at(0), 'GB');
-      await tester.enterText(fields.at(1), 'Home');
-      await tester.enterText(fields.at(2), 'test-password');
-    }
-
-    Future<void> join(WidgetTester tester) async {
-      await tester.ensureVisible(find.text('Connect to Wi-Fi'));
-      await tester.tap(find.text('Connect to Wi-Fi'));
-      await tester.pump();
+      await mountPanel(tester, api, onBusy: busy.add);
+      await finishScan(tester);
+      api.commands.clear();
+      await manualCredentials(tester);
     }
 
     testWidgets('an older status cannot undo an accepted join', (tester) async {
@@ -259,23 +430,27 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('scanning keeps the parent action busy until results arrive', (
-      tester,
-    ) async {
-      await ready(tester);
-      await tester.ensureVisible(find.text('Find Wi-Fi networks'));
-      await tester.tap(find.text('Find Wi-Fi networks'));
-      await tester.pump();
+    testWidgets('scanning stays busy until results arrive', (tester) async {
+      await mountPanel(tester, api, onBusy: busy.add);
       expect(api.commands, ['open', 'scan']);
       expect(busy.last, true);
-      api.response['setup'] = {
-        'state': 0,
-        'scan_state': 'ready',
-        'networks': [],
-      };
-      await tester.pump(const Duration(seconds: 2));
+      await finishScan(tester);
       expect(busy.last, false);
       await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('leaving while opening discovery never sends scan', (
+      tester,
+    ) async {
+      final opening = Completer<void>();
+      api.sendCommand = (_) => opening.future;
+      await mountPanel(tester, api);
+      expect(api.commands, ['open']);
+      await tester.pumpWidget(const SizedBox());
+      opening.complete();
+      await tester.pump();
+      expect(api.commands, ['open']);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('leaving while opening setup never sends credentials', (
@@ -350,35 +525,17 @@ void main() {
     const Size(812, 375),
     const Size(1024, 768),
   ]) {
-    testWidgets('network setup supports large text at $size', (tester) async {
+    testWidgets('discovery and manual entry support large text at $size', (
+      tester,
+    ) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final api = FakeSetupApi({
-        'available': true,
-        'hotspot': true,
-        'network': {'connected': false},
-        'setup': {'state': 0, 'networks': []},
-      });
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.dark(),
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: const TextScaler.linear(2),
-              disableAnimations: true,
-            ),
-            child: child!,
-          ),
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: NetworkSetupPanel(endpoint: api.base, api: api),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
+      final api = FakeSetupApi(status());
+      await mountPanel(tester, api, scale: 2);
+      await finishScan(tester);
+      await manualCredentials(tester);
       await tester.ensureVisible(find.text('Connect to Wi-Fi'));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());

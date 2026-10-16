@@ -75,11 +75,16 @@ class _NetworkSetupScreenState extends State<NetworkSetupScreen> {
           ? () => Navigator.of(context).pop()
           : null,
       onNext: _continue,
-      nextEnabled: _needsActivation || (_connected && !_busy) || _submitted,
+      nextEnabled:
+          _needsActivation ||
+          (_connected && !_busy) ||
+          (_submitted && !_connected),
       nextLabel: _needsActivation
           ? 'Open activation page'
           : _submitted && !_connected
           ? (kIsWeb ? 'Open player on home network' : 'Return to discovery')
+          : _submitted && _connected
+          ? (kIsWeb ? 'Open player' : 'Continue')
           : 'Keep this connection',
       children: [
         if (!_needsActivation)

@@ -40,7 +40,12 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
   String? _message;
   bool _sending = false, _submitted = false, _showPassword = false;
   int _scanState = 0, _revision = 0;
-  bool _refreshing = false;
+  bool _refreshing = false, _scanStarted = false;
+  bool _manual = false, _networkChosen = false, _succeeded = false;
+  bool _changingNetwork = false;
+
+  bool get _validCountry =>
+      RegExp(r'^[A-Z]{2}$').hasMatch(_country.text.trim().toUpperCase());
 
   Map get _setup => _data?['setup'] as Map? ?? const {};
   Map get _network => _data?['network'] as Map? ?? const {};
@@ -66,14 +71,17 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
     if (!mounted || _sending || _refreshing) return;
     _refreshing = true;
     final revision = _revision;
+    var discover = false;
     try {
       final data = await _api.status();
       if (!mounted || revision != _revision) return;
       setState(() {
         _data = data;
         final state = _setup['state'];
+        if (_changingNetwork && state != 1) _changingNetwork = false;
         if (state == 3) {
           _submitted = false;
+          _succeeded = false;
           _message = switch (_setup['reason']) {
             2 => 'The Wi-Fi password was not accepted. Try again.',
             3 => 'The router did not assign an address. Check the router and try again.',
@@ -83,7 +91,8 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
           };
         } else if (state == 2) {
           _submitted = true;
-          _message = 'The box is connected. Reconnect this device to the same network to continue.';
+          _succeeded = true;
+          _message = 'Your box is connected and ready to use.';
         } else if (!_submitted &&
             !_sending &&
             _message ==
@@ -93,6 +102,13 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
         if (_setup['scan_state'] == 'ready') _scanState = 2;
         if (_setup['scan_state'] == 'failed') _scanState = 3;
       });
+      discover =
+          !_scanStarted &&
+          !_succeeded &&
+          !_busy &&
+          !_changingNetwork &&
+          data['available'] == true &&
+          _validCountry;
       widget.onStatus?.call({...data, 'submitted': _submitted});
       widget.onBusy?.call(_busy);
     } catch (_) {
@@ -106,16 +122,18 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
       _refreshing = false;
       _scheduleRefresh();
     }
+    if (discover && mounted) await _scan();
   }
 
   Future<void> _scan() async {
     final country = _country.text.trim().toUpperCase();
-    if (!RegExp(r'^[A-Z]{2}$').hasMatch(country)) {
+    if (!_validCountry) {
       setState(
         () => _message = 'Enter your two-letter country code before scanning.',
       );
       return;
     }
+    _scanStarted = true;
     await _send(() async {
       await _api.command('open');
       if (!mounted) return;
@@ -131,6 +149,13 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
   }
 
   Future<void> _join() async {
+    if (!_validCountry) {
+      setState(
+        () =>
+            _message = 'Enter your two-letter country code before connecting.',
+      );
+      return;
+    }
     if (!_form.currentState!.validate()) return;
     await _send(() async {
       await _api.command('open');
@@ -143,12 +168,59 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
       if (!mounted) return;
       _password.clear();
       _submitted = true;
+      _succeeded = false;
       _data = {
         ...?_data,
         'setup': {..._setup, 'state': 1},
       };
-      _message = 'Settings received. The box is connecting. Reconnect this device to your home network when the hotspot closes. If the connection fails, the Kalinka hotspot will return; join it again to retry.';
+      _message = _data?['hotspot'] == true
+          ? 'Connecting your box… When the hotspot closes, reconnect this device to your home network. If the connection fails, the hotspot will return for another attempt.'
+          : 'Connecting your box… This page will reconnect when it is ready.';
       widget.onStatus?.call({...?_data, 'submitted': true});
+    });
+  }
+
+  Future<void> _changeNetwork() async {
+    await _send(() async {
+      await _api.command('open');
+      if (!mounted) return;
+      await _api.command('change_network');
+      if (!mounted) return;
+      _submitted = false;
+      _succeeded = false;
+      _changingNetwork = true;
+      _scanStarted = false;
+      _scanState = 0;
+      _networkChosen = false;
+      _manual = false;
+      _password.clear();
+      _ssid.clear();
+      _message = null;
+      _data = {
+        ...?_data,
+        'setup': {..._setup, 'state': 1},
+      };
+      widget.onStatus?.call({...?_data, 'submitted': false});
+    });
+  }
+
+  void _chooseNetwork(String? ssid) {
+    setState(() {
+      _manual = ssid == null;
+      _networkChosen = true;
+      _ssid.text = ssid ?? '';
+      _password.clear();
+      _showPassword = false;
+      _message = null;
+    });
+  }
+
+  void _showNetworks() {
+    setState(() {
+      _networkChosen = false;
+      _manual = false;
+      _password.clear();
+      _message = null;
     });
   }
 
@@ -189,27 +261,182 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
     String label,
     TextEditingController controller,
     String? Function(String?) validate, {
+    required String fieldKey,
     bool password = false,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 16),
     child: TextFormField(
+      key: ValueKey(fieldKey),
       controller: controller,
-      enabled: !_busy,
-      decoration: kalinkaFieldDecoration(hint: label)
-          .copyWith(labelText: label),
+      enabled: !_sending && _setup['state'] != 1,
+      decoration: kalinkaFieldDecoration(hint: label).copyWith(
+        labelText: label,
+        suffixIcon: password
+            ? IconButton(
+                tooltip: _showPassword ? 'Hide password' : 'Show password',
+                onPressed: () => setState(() => _showPassword = !_showPassword),
+                icon: Icon(
+                  _showPassword
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                ),
+              )
+            : null,
+      ),
       obscureText: password && !_showPassword,
       autocorrect: false,
       enableSuggestions: false,
       textCapitalization: TextCapitalization.none,
       validator: validate,
-      autofillHints: password ? const [AutofillHints.newPassword] : null,
+      autofillHints: password ? const [AutofillHints.password] : null,
+    ),
+  );
+
+  Widget _region() => ExpansionTile(
+    tilePadding: EdgeInsets.zero,
+    initiallyExpanded: !_validCountry,
+    title: Text(
+      'Wi-Fi region${_validCountry ? ' · ${_country.text.trim().toUpperCase()}' : ''}',
+      style: KalinkaTextStyles.trayRowSublabel,
+    ),
+    children: [
+      TextField(
+        key: const ValueKey('network-country'),
+        controller: _country,
+        enabled: !_busy,
+        maxLength: 2,
+        autocorrect: false,
+        textCapitalization: TextCapitalization.characters,
+        decoration: kalinkaFieldDecoration(hint: 'GB').copyWith(
+          labelText: 'Country code',
+          helperText: 'For example GB or US. Used for local Wi-Fi channels.',
+        ),
+        onChanged: (_) {
+          setState(() {});
+          if (_validCountry && !_scanStarted && !_busy) _scan();
+        },
+      ),
+    ],
+  );
+
+  List<Widget> _networks() {
+    final networks = (_setup['networks'] as List? ?? const []).whereType<Map>();
+    final scanning = _scanState == 1 || _setup['scan_state'] == 'scanning';
+    return [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Available networks',
+              style: KalinkaTextStyles.sectionHeaderMuted,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Scan again',
+            onPressed: !_busy && _validCountry ? _scan : null,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      if (scanning) ...[
+        const LinearProgressIndicator(semanticsLabel: 'Finding Wi-Fi networks'),
+        const SizedBox(height: 12),
+        const Text('Finding Wi-Fi networks…'),
+      ] else ...[
+        if (_data?['networks_cached'] == true && _scanState == 2)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'Networks found before the hotspot started. You can also enter a name manually.',
+            ),
+          ),
+        for (final network in networks)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.wifi),
+            title: Text(network['ssid'] as String? ?? ''),
+            subtitle: network['security'] == 'wpa2'
+                ? null
+                : const Text('This network type is not supported'),
+            trailing: const Icon(Icons.chevron_right),
+            enabled: !_busy && network['security'] == 'wpa2',
+            onTap: () => _chooseNetwork(network['ssid'] as String),
+          ),
+        if (_scanState == 2 && networks.isEmpty)
+          const Text(
+            'No networks found. Scan again or enter your network name manually.',
+          ),
+        if (_scanState == 3)
+          const Text(
+            'Could not find networks. Try again or enter your network name manually.',
+          ),
+        if (!_validCountry)
+          const Text('Enter your country code below to find nearby networks.'),
+      ],
+      const SizedBox(height: 12),
+      TextButton(
+        onPressed: !_sending && _setup['state'] != 1
+            ? () => _chooseNetwork(null)
+            : null,
+        child: const Text('Can’t find your network? Enter SSID manually'),
+      ),
+    ];
+  }
+
+  Widget _credentials() => Form(
+    key: _form,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_manual)
+          _field(
+            'Network name (SSID)',
+            _ssid,
+            (v) =>
+                v != null &&
+                    v.isNotEmpty &&
+                    utf8.encode(v).length <= 32 &&
+                    !v.runes.any((r) => r < 32 || r == 127)
+                ? null
+                : 'Use a network name of 1–32 bytes.',
+            fieldKey: 'network-ssid',
+          )
+        else
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.wifi),
+            title: Text(_ssid.text),
+            subtitle: const Text('Enter the password for this network.'),
+          ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: !_busy ? _showNetworks : null,
+            child: const Text('Back to available networks'),
+          ),
+        ),
+        _field(
+          'Wi-Fi password',
+          _password,
+          (v) => v != null && RegExp(r'^[\x20-\x7e]{8,63}$').hasMatch(v)
+              ? null
+              : 'Use 8–63 letters, numbers, spaces or symbols.',
+          fieldKey: 'network-password',
+          password: true,
+        ),
+        KalinkaButton(
+          fullWidth: true,
+          label: _busy ? 'Please wait…' : 'Connect to Wi-Fi',
+          enabled: !_busy,
+          onTap: _join,
+        ),
+      ],
     ),
   );
 
   @override
   Widget build(BuildContext context) {
     final connected = _network['connected'] == true;
-    final networks = (_setup['networks'] as List? ?? const []).whereType<Map>();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -233,17 +460,10 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
             ),
             subtitle: Text(
               connected
-                  ? '${_network['address']} · Keep this connection or choose Wi-Fi below.'
-                  : 'Connect an Ethernet cable to your router, or set up Wi-Fi.',
+                  ? '${_network['address']}'
+                  : 'Connect an Ethernet cable or choose Wi-Fi below.',
             ),
           ),
-          if (_data?['hotspot'] == true)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 16),
-              child: Text(
-                'The temporary hotspot closes while the box joins Wi-Fi. Your phone or computer must then reconnect to your home network.',
-              ),
-            ),
           if (_message != null)
             Semantics(
               liveRegion: true,
@@ -255,7 +475,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
                 ),
               ),
             ),
-          if (_submitted && widget.onReconnect != null)
+          if (_submitted && !connected && widget.onReconnect != null)
             TextButton(
               onPressed: widget.onReconnect,
               child: const Text('Reconnect after changing Wi-Fi'),
@@ -266,108 +486,27 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
             const Text(
               'This box does not offer Wi-Fi setup. You can keep the current connection or use Ethernet.',
             ),
-          if (_data?['available'] == true)
-            Form(
-              key: _form,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 16),
-                  Text('Wi-Fi', style: KalinkaTextStyles.sectionHeaderMuted),
-                  const SizedBox(height: 16),
-                  _field(
-                    'Country code (for example GB)',
-                    _country,
-                    (v) =>
-                        RegExp(r'^[A-Z]{2}$')
-                            .hasMatch((v ?? '').trim().toUpperCase())
-                        ? null
-                        : 'Enter two letters, for example GB or US.',
-                  ),
-                  KalinkaButton(
-                    fullWidth: true,
-                    label: _scanState == 1
-                        ? 'Finding networks…'
-                        : 'Find Wi-Fi networks',
-                    variant: KalinkaButtonVariant.neutral,
-                    enabled: !_busy,
-                    onTap: _scan,
-                  ),
-                  if (_data?['networks_cached'] == true && _scanState == 2)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        'Networks found before the hotspot started. You can also enter a name manually.',
-                      ),
-                    ),
-                  if (_scanState == 3)
-                    const Text('Scanning failed. Enter a network name below.'),
-                  for (final network in networks)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.wifi),
-                      title: Text(network['ssid'] as String? ?? ''),
-                      subtitle: network['security'] == 'wpa2'
-                          ? null
-                          : const Text('This network type is not supported'),
-                      enabled: !_busy && network['security'] == 'wpa2',
-                      selected: _ssid.text == network['ssid'],
-                      onTap: () => setState(
-                        () => _ssid.text = network['ssid'] as String,
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                  _field(
-                    'Network name',
-                    _ssid,
-                    (v) =>
-                        v != null &&
-                            v.isNotEmpty &&
-                            utf8.encode(v).length <= 32 &&
-                            !v.runes.any((r) => r < 32 || r == 127)
-                        ? null
-                        : 'Use a network name of 1–32 bytes.',
-                  ),
-                  _field(
-                    'Wi-Fi password',
-                    _password,
-                    (v) =>
-                        v != null && RegExp(r'^[\x20-\x7e]{8,63}$').hasMatch(v)
-                        ? null
-                        : 'Use 8–63 letters, numbers, spaces or symbols.',
-                    password: true,
-                  ),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Show password'),
-                    value: _showPassword,
-                    onChanged: (v) =>
-                        setState(() => _showPassword = v ?? false),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      'WPA2 and mixed WPA2/WPA3 personal networks are supported.',
-                    ),
-                  ),
-                  KalinkaButton(
-                    fullWidth: true,
-                    label: _busy ? 'Please wait…' : 'Connect to Wi-Fi',
-                    enabled: !_busy && _setup['state'] != 2,
-                    onTap: _join,
-                  ),
-                  if (_setup['state'] == 2)
-                    TextButton(
-                      onPressed: () => _send(() async {
-                        await _api.command('change_network');
-                        if (!mounted) return;
-                        _submitted = false;
-                      }),
-                      child: const Text('Choose another network'),
-                    ),
-                ],
-              ),
+          if (_succeeded) ...[
+            const SizedBox(height: 16),
+            KalinkaButton(
+              label: 'Change Wi-Fi network',
+              variant: KalinkaButtonVariant.neutral,
+              fullWidth: true,
+              enabled: !_busy,
+              onTap: _changeNetwork,
             ),
+          ] else if (_data?['available'] == true) ...[
+            const SizedBox(height: 16),
+            if (_changingNetwork)
+              const LinearProgressIndicator(
+                semanticsLabel: 'Preparing network discovery',
+              )
+            else ...[
+              if (_networkChosen) _credentials() else ..._networks(),
+              const SizedBox(height: 16),
+              _region(),
+            ],
+          ],
         ],
       ),
     );
