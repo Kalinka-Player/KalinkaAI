@@ -8,6 +8,7 @@ import '../../providers/network_setup_api.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/field_decoration.dart';
 import '../kalinka_button.dart';
+import 'setup_discovery.dart';
 
 /// Network review and Wi-Fi selection used in onboarding and hotspot activation.
 class NetworkSetupPanel extends StatefulWidget {
@@ -346,26 +347,20 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
     final networks = (_setup['networks'] as List? ?? const []).whereType<Map>();
     final scanning = _scanState == 1 || _setup['scan_state'] == 'scanning';
     return [
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              'AVAILABLE NETWORKS',
-              style: KalinkaTextStyles.sectionHeaderMuted,
-            ),
-          ),
-          IconButton(
-            tooltip: 'Scan again',
-            onPressed: !_busy && _validCountry ? _scan : null,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
+      SetupDiscoveryHeader(
+        title: 'AVAILABLE NETWORKS',
+        activityLabel: 'Finding Wi-Fi networks',
+        searching: scanning,
+        onScan: !_busy && _validCountry ? _scan : null,
       ),
-      if (scanning) ...[
-        const LinearProgressIndicator(semanticsLabel: 'Finding Wi-Fi networks'),
-        const SizedBox(height: 12),
-        const Text('Finding Wi-Fi networks…'),
-      ] else ...[
+      const SizedBox(height: 12),
+      if (scanning)
+        const SetupLoadingCard(
+          title: 'Finding Wi-Fi networks…',
+          subtitle: 'Your box is checking for nearby networks.',
+          loading: false,
+        )
+      else ...[
         if (_data?['networks_cached'] == true && _scanState == 2)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
@@ -465,28 +460,29 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(
-              connected
-                  ? (_network['kind'] == 'wired'
-                        ? Icons.settings_ethernet
-                        : Icons.wifi)
-                  : Icons.wifi_off,
+          if (_data != null)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                connected
+                    ? (_network['kind'] == 'wired'
+                          ? Icons.settings_ethernet
+                          : Icons.wifi)
+                    : Icons.wifi_off,
+              ),
+              title: Text(
+                connected
+                    ? (_network['kind'] == 'wired'
+                          ? 'Connected by Ethernet'
+                          : 'Connected by Wi-Fi')
+                    : 'Network connection',
+              ),
+              subtitle: Text(
+                connected
+                    ? '${_network['address']}'
+                    : 'Connect an Ethernet cable or choose Wi-Fi below.',
+              ),
             ),
-            title: Text(
-              connected
-                  ? (_network['kind'] == 'wired'
-                        ? 'Connected by Ethernet'
-                        : 'Connected by Wi-Fi')
-                  : 'Network connection',
-            ),
-            subtitle: Text(
-              connected
-                  ? '${_network['address']}'
-                  : 'Connect an Ethernet cable or choose Wi-Fi below.',
-            ),
-          ),
           if (_message != null)
             Semantics(
               liveRegion: true,
@@ -503,8 +499,20 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
               onPressed: widget.onReconnect,
               child: const Text('Reconnect after changing Wi-Fi'),
             ),
-          if (_data == null && _message == null)
-            const LinearProgressIndicator(),
+          if (_data == null && _message == null) ...[
+            const SetupDiscoveryHeader(
+              title: 'YOUR BOX',
+              activityLabel: 'Looking for your box',
+              searching: true,
+            ),
+            const SizedBox(height: 12),
+            const SetupLoadingCard(
+              title: 'Looking for your box…',
+              subtitle:
+                  'Keep your box powered on and stay connected to its network.',
+              loading: false,
+            ),
+          ],
           if (_data?['available'] == false)
             const Text(
               'This box does not offer Wi-Fi setup. You can keep the current connection or use Ethernet.',
@@ -521,11 +529,10 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
           ] else if (_data?['available'] == true) ...[
             const SizedBox(height: 16),
             if (_connecting) ...[
-              const LinearProgressIndicator(
-                semanticsLabel: 'Connecting to Wi-Fi',
+              const SetupLoadingCard(
+                title: 'Please wait…',
+                subtitle: 'Connecting your box to Wi-Fi.',
               ),
-              const SizedBox(height: 12),
-              const Text('Please wait…'),
               const SizedBox(height: 16),
               KalinkaButton(
                 label: 'Choose another network',
@@ -535,8 +542,9 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
                 onTap: _changeNetwork,
               ),
             ] else if (_changingNetwork)
-              const LinearProgressIndicator(
-                semanticsLabel: 'Preparing network discovery',
+              const SetupLoadingCard(
+                title: 'Preparing the network list…',
+                subtitle: 'Restoring settings before you choose again.',
               )
             else ...[
               if (_networkChosen) _credentials() else ..._networks(),
