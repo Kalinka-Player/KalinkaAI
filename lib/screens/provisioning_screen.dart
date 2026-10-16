@@ -15,6 +15,7 @@ import '../theme/app_theme.dart';
 import '../theme/field_decoration.dart';
 import '../widgets/kalinka_button.dart';
 import '../widgets/onboarding/onboarding_step_scaffold.dart';
+import '../widgets/onboarding/setup_discovery.dart';
 
 class ProvisioningScreen extends ConsumerStatefulWidget {
   final ProvisioningTransport? transport;
@@ -367,53 +368,22 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
         icon: Icons.speaker_outlined,
       ),
       _deck(
-        connecting
-            ? 'Accept the Bluetooth pairing request on your phone.'
-            : 'Switch on your box and keep it nearby.\nWe’ll take it from here.',
+        connecting ? 'Accept the Bluetooth pairing request on your phone.' : 'Switch on your box and keep it nearby.\nWe’ll take it from here.',
       ),
       if (connecting)
-        _loadingCard(
-          'Connecting to ${_setup.selected!.name}',
-          'Establishing a secure connection…',
+        SetupLoadingCard(
+          title: 'Connecting to ${_setup.selected!.name}',
+          subtitle: 'Establishing a secure connection…',
         )
       else ...[
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'NEARBY BOXES',
-                style: KalinkaTextStyles.sectionHeaderMuted,
-              ),
-            ),
-            if (_setup.phase == SetupPhase.scanning)
-              const SizedBox(
-                width: 48,
-                height: 48,
-                child: Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: KalinkaColors.accentTint,
-                      semanticsLabel: 'Searching for nearby boxes',
-                    ),
-                  ),
-                ),
-              )
-            else
-              IconButton(
-                tooltip: 'Scan again',
-                onPressed: () {
-                  _chosenBox = null;
-                  _setup.scan();
-                },
-                icon: const Icon(
-                  Icons.refresh_rounded,
-                  color: KalinkaColors.textSecondary,
-                ),
-              ),
-          ],
+        SetupDiscoveryHeader(
+          title: 'NEARBY BOXES',
+          activityLabel: 'Searching for nearby boxes',
+          searching: _setup.phase == SetupPhase.scanning,
+          onScan: () {
+            _chosenBox = null;
+            _setup.scan();
+          },
         ),
         const SizedBox(height: 12),
         for (final box in _setup.boxes)
@@ -428,11 +398,11 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
             ),
           ),
         if (_setup.boxes.isEmpty)
-          _loadingCard(
-            _setup.phase == SetupPhase.scanning
+          SetupLoadingCard(
+            title: _setup.phase == SetupPhase.scanning
                 ? 'Looking for your box…'
                 : 'No boxes found yet',
-            'Keep Bluetooth on and your box powered up.',
+            subtitle: 'Keep Bluetooth on and your box powered up.',
             loading: false,
           ),
         const SizedBox(height: 20),
@@ -517,51 +487,6 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     ),
   );
 
-  Widget _loadingCard(String title, String subtitle, {bool loading = true}) =>
-      Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: KalinkaColors.surfaceRaised,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: KalinkaColors.borderDefault),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (loading) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: 3),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: KalinkaColors.accentTint,
-                    semanticsLabel: title,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: KalinkaTextStyles.trayRowLabel.copyWith(
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(subtitle, style: _bodyStyle),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-
   List<Widget> _networkContent() => [
     _heading(
       _networkChosen
@@ -577,7 +502,10 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
           : 'Connect ${_setup.selected?.name ?? 'your box'} to the same network as your phone.',
     ),
     if (_setup.scanningWifi)
-      _loadingCard('Finding networks…', 'Your box is looking for Wi-Fi nearby.')
+      const SetupLoadingCard(
+        title: 'Finding networks…',
+        subtitle: 'Your box is looking for Wi-Fi nearby.',
+      )
     else if (!_networkChosen) ...[
       Row(
         children: [
@@ -636,9 +564,8 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
             controller: _ssid,
             autocorrect: false,
             textInputAction: TextInputAction.next,
-            decoration: kalinkaFieldDecoration(
-              hint: 'Exact network name',
-            ).copyWith(labelText: 'Network name (SSID)'),
+            decoration: kalinkaFieldDecoration(hint: 'Exact network name')
+                .copyWith(labelText: 'Network name (SSID)'),
             validator: (value) =>
                 value == null ||
                     utf8.encode(value).isEmpty ||
@@ -826,9 +753,9 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
             : 'Connecting to ${_ssid.text.isEmpty ? 'your network' : _ssid.text}.',
       ),
       if (changing)
-        _loadingCard(
-          'Preparing the network list…',
-          'Restoring settings before you choose again.',
+        const SetupLoadingCard(
+          title: 'Preparing the network list…',
+          subtitle: 'Restoring settings before you choose again.',
         )
       else
         Container(

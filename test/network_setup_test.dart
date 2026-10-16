@@ -193,6 +193,24 @@ void main() {
     );
   });
 
+  testWidgets('waits for box status before showing its network connection', (
+    tester,
+  ) async {
+    final response = Completer<Map<String, dynamic>>();
+    final api = FakeSetupApi(status(kind: 'wired', state: 4));
+    api.readStatus = () => response.future;
+    await mountPanel(tester, api);
+    expect(find.text('Looking for your box…'), findsOneWidget);
+    expect(find.text('Network connection'), findsNothing);
+    expect(api.commands, isEmpty);
+    response.complete(api.response);
+    await tester.pump();
+    expect(find.text('Looking for your box…'), findsNothing);
+    expect(find.text('Connected by Ethernet'), findsOneWidget);
+    expect(find.text('Finding Wi-Fi networks…'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final kind in ['wired', 'wifi', null]) {
     testWidgets('discovers automatically once while keeping $kind connection', (
       tester,
