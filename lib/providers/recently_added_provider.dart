@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
@@ -39,36 +40,108 @@ const _kDefaultCount = 10;
   return null;
 }
 
-/// As many of its newest items as its preview asks for, every kind together:
-/// browsing the catalog itself is what its source offers a home shelf. Null
-/// when no source has one or it is empty.
+/// Only the metadata that affects the shelf, so generated catalog artwork
+/// can refresh without refetching its items. Keep the plan with the key to
+/// avoid reading a different server's plan after awaiting the selection.
+class _RecentCatalog {
+  final CatalogCardPlan plan;
+  final String provider;
+  final List<(String, Preview?)> sections;
+
+  _RecentCatalog(this.plan, this.provider)
+    : sections = [
+        for (final section in plan.sections)
+          if (section.canBrowse && section.catalog != null)
+            (section.id, section.catalog!.previewConfig),
+      ];
+
+  @override
+  bool operator ==(Object other) =>
+      other is _RecentCatalog &&
+      plan.id == other.plan.id &&
+      plan.title == other.plan.title &&
+      plan.sourceName == other.plan.sourceName &&
+      plan.preview == other.plan.preview &&
+      provider == other.provider &&
+      listEquals(sections, other.sections);
+
+  @override
+  int get hashCode => Object.hash(
+    plan.id,
+    plan.title,
+    plan.sourceName,
+    plan.preview,
+    provider,
+    Object.hashAll(sections),
+  );
+}
+
+/// As many newest items as the preview asks for, with the entity kinds
+/// interleaved when the catalog offers separate shelves. Null when no source
+/// has one or it is empty.
 final recentlyAddedProvider = FutureProvider<RecentlyAddedShelf?>((ref) async {
+  // Watch and capture the client before awaiting catalogs. Identical catalog
+  // metadata on two servers must still fetch separate items and artwork.
+  final api = ref.watch(kalinkaProxyProvider);
+  ref.watch(catalogCardsReloadProvider);
   // A finished index may have added to it.
   ref.watch(indexerStatusProvider.select((s) => s.libraryRevision));
   // Keyed on what the shelf uses, so the cards' art polls don't refetch it.
-  final key = await ref.watch(
+  final recent = await ref.watch(
     catalogCardGroupsProvider.selectAsync((groups) {
       final r = recentCatalogIn(groups);
-      return r == null
-          ? null
-          : (r.plan.id, r.plan.title, r.plan.preview?.itemsCount, r.provider);
+      return r == null ? null : _RecentCatalog(r.plan, r.provider);
     }),
   );
-  if (key == null) return null;
-  final recent = recentCatalogIn(
-    await ref.read(catalogCardGroupsProvider.future),
-  );
-  if (recent == null) return null;
-  final list = await ref
-      .read(kalinkaProxyProvider)
-      .browse(
-        recent.plan.id,
-        limit: recent.plan.preview?.itemsCount ?? _kDefaultCount,
-      );
-  if (list.items.isEmpty) return null;
+  if (!ref.mounted || recent == null) return null;
+  final items = await _previewItems(api, recent.plan);
+  if (items.isEmpty) return null;
   return RecentlyAddedShelf(
     plan: recent.plan,
     provider: recent.provider,
-    items: list.items,
+    items: items,
   );
 });
+
+Future<List<BrowseItem>> _previewItems(
+  KalinkaPlayerProxy api,
+  CatalogCardPlan plan,
+) async {
+  final limit = plan.preview?.itemsCount ?? _kDefaultCount;
+  var sections = plan.sections
+      .where((item) => item.canBrowse && item.catalog != null)
+      .toList();
+  if (sections.isEmpty) {
+    final list = await api.browse(plan.id, limit: limit);
+    // Older servers return the items directly. Other servers advertise the
+    // sub-catalogs here instead of in the parent catalog's sections metadata.
+    if (list.items.isEmpty ||
+        list.items.any((item) => !item.canBrowse || item.catalog == null)) {
+      return list.items;
+    }
+    sections = list.items;
+  }
+
+  final lists = await Future.wait([
+    for (final section in sections)
+      api.browse(
+        section.id,
+        limit: (section.catalog!.previewConfig?.itemsCount ?? limit).clamp(
+          0,
+          limit,
+        ),
+      ),
+  ]);
+  final items = <BrowseItem>[];
+  for (var index = 0; items.length < limit; index++) {
+    var added = false;
+    for (final list in lists) {
+      if (index >= list.items.length) continue;
+      items.add(list.items[index]);
+      added = true;
+      if (items.length == limit) break;
+    }
+    if (!added) break;
+  }
+  return items;
+}

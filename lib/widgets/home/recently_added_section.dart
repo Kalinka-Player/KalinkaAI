@@ -31,12 +31,15 @@ class _RecentlyAddedSectionState extends ConsumerState<RecentlyAddedSection>
     super.build(context);
     final onOpenCatalog = widget.onOpenCatalog;
     final async = ref.watch(recentlyAddedProvider);
-    final shelf = async.value;
+    // A dependency reload can retain the previous value. Its artwork paths
+    // must not be resolved against the newly selected server while loading.
+    final shelf = async.isReloading || async.hasError ? null : async.value;
     if (shelf == null) {
       if (!async.isLoading) return const SizedBox.shrink();
       // Held back until the catalog is known to exist, so a setup without
       // one never sees a placeholder come and go.
-      final groups = ref.watch(catalogCardGroupsProvider).value;
+      final groupsAsync = ref.watch(catalogCardGroupsProvider);
+      final groups = groupsAsync.isReloading ? null : groupsAsync.value;
       final recent = groups == null ? null : recentCatalogIn(groups);
       if (recent == null) return const SizedBox.shrink();
       return _section(

@@ -145,7 +145,9 @@ final catalogCardGroupsProvider = FutureProvider<List<CatalogCardGroup>>((
   // such above, not offered here as catalogs to explore.
   final builtin = ref.watch(builtinSourcesProvider);
 
-  final api = ref.read(kalinkaProxyProvider);
+  // Catalog ids and artwork paths belong to this server, even when another
+  // server advertises exactly the same sources and catalogs.
+  final api = ref.watch(kalinkaProxyProvider);
   final root = await api.browse('', limit: 20);
 
   final groups = <CatalogCardGroup>[];
@@ -217,8 +219,10 @@ final catalogCardGroupsProvider = FutureProvider<List<CatalogCardGroup>>((
   } else {
     delay = _kRefreshInterval;
   }
-  final timer = Timer(delay, ref.invalidateSelf);
-  ref.onDispose(timer.cancel);
+  if (ref.mounted) {
+    final timer = Timer(delay, ref.invalidateSelf);
+    ref.onDispose(timer.cancel);
+  }
 
   return groups;
 });
