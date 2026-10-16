@@ -64,6 +64,8 @@ Everything is also on the [releases page](https://github.com/Kalinka-Player/Kali
 2. **Install the app** as described [above](#-install), or use a browser.
 3. **Follow the setup wizard** the first time you connect.
 
+**Box not on your network yet?** Use **Set up a box** in the app for Bluetooth or hotspot setup. From a laptop without the app, join **`Kalinka-Setup-XXXX`** with password **`kalinka-setup`**, stay connected without internet, and open **`http://192.168.4.1`**. [Read and save the connection instructions first](docs/first-run-setup.md#connect-an-offline-box).
+
 | | |
 |---|---|
 | [Installing the server](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md) | Images for a Raspberry Pi or PC, virtual machines, the one-command install, adding music and outputs in other rooms |

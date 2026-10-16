@@ -1,12 +1,27 @@
 # First-run setup
 
-The first time you open Kalinka it runs a short setup wizard. It has seven steps and takes a few minutes. This guide explains what each step asks for and why.
+The first time you open Kalinka it runs a short setup wizard. It has eight steps and takes a few minutes. This guide explains what each step asks for and why.
 
-The wizard is the same in the **app** (Android, Linux, Windows) and in the **web player** in your browser, with one difference: the web player already knows which server it belongs to, so it skips step 1 and starts at **Music sources** (step 2 of 7).
+The wizard is the same in the **app** (Android, Linux, Windows) and in the **web player** in your browser, with one difference: the web player already knows which server it belongs to, so it skips step 1 and starts at **Network** (step 2 of 8). Network setup is always shown, including when the box already uses Wi-Fi or Ethernet.
 
-Before you start, the Kalinka server should already be installed and running on your network — see [installing the server](https://github.com/Kalinka-Player/KalinkaPlayer#installation).
+Before you start, the Kalinka server should already be installed — see [installing the server](https://github.com/Kalinka-Player/KalinkaPlayer#installation). If it is not on your network yet, use the connection steps below.
 
-At the end the wizard saves everything and restarts the server, which takes about half a minute. Nothing is applied before that, so you can go back and change your answers at any point.
+Network changes apply when you connect. At the end the wizard saves the remaining settings and restarts the server, which takes about half a minute.
+
+## Connect an offline box
+
+**Save these instructions before changing Wi-Fi.** They are available here before you can reach the box's own web page.
+
+<img src="https://raw.githubusercontent.com/Kalinka-Player/KalinkaPlayer/main/docs/images/install/hotspot-setup.svg" width="640" alt="Join Kalinka-Setup-XXXX in Wi-Fi settings, use password kalinka-setup, stay connected without internet, then open http://192.168.4.1 and choose your home Wi-Fi.">
+
+1. Power on the box and wait a couple of minutes. In your laptop or phone's Wi-Fi settings, join **`Kalinka-Setup-XXXX`**. The last four characters identify your box.
+2. Enter **`kalinka-setup`** — all lowercase, with a hyphen. This is the hotspot password, separate from your home Wi-Fi password.
+3. Stay connected if your device says **No internet**. Open the network sign-in page, or enter **`http://192.168.4.1`** in your browser.
+4. Choose your home Wi-Fi and enter its password. The hotspot disconnects during joining; reconnect your laptop or phone to your home network, then open the player. If joining fails, reconnect to the restored hotspot to retry.
+
+The native app also offers **Set up a box → Search using Bluetooth**, so you can send Wi-Fi settings without changing your phone's Wi-Fi connection. Its **Use the temporary Wi-Fi hotspot** option shows illustrated steps and a **Copy password** button. A laptop browser needs no app and uses the steps above. You can instead connect the box to your router by Ethernet and keep that connection in the Network step.
+
+A box that already has a working network connection does not open the hotspot. After a previously connected box loses its network, allow about five minutes for setup to return. See the [image installation guide](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md#connect-your-box-to-the-network) for hardware requirements and a saveable copy of the illustration.
 
 ## Step 1 — Find your server (app only)
 
@@ -17,7 +32,11 @@ The app looks for Kalinka servers on your network and lists what it finds, with 
 - **Rescan** — searches again. Use it if your server is missing; servers that just started up sometimes need a second look.
 - **Enter Address Manually** — type `<server-ip>:8000` yourself. Use this when your network blocks discovery (mDNS), for example on guest or isolated Wi-Fi.
 
-## Step 2 — Music sources
+## Step 2 — Network
+
+Review the current Wi-Fi name or Ethernet connection and choose **Keep this connection**, or select another Wi-Fi network. Available networks are discovered automatically; **Can’t find your network? Enter SSID manually** allows manual entry. Choosing a new network applies immediately, even before the rest of the wizard is finished.
+
+## Step 3 — Music sources
 
 <img src="images/setup/2-music-sources.png" width="320">
 
@@ -28,7 +47,7 @@ Choose what fills your library. You need at least one source.
 
 Other sources appear here too if their plugins are installed on the server. You can always add or remove sources later in Settings.
 
-## Step 3 — Set up your sources
+## Step 4 — Set up your sources
 
 <img src="images/setup/3-source-setup.png" width="320">
 
@@ -56,7 +75,7 @@ Each source you enabled asks only for what it needs.
 
 > **To get smart search everywhere, turn AI search on for both My Library and Jamendo.** The two settings are separate: switching it off for one source does not affect the other. If you leave both off, search still works, but only by matching names.
 
-## Step 4 — Audio output
+## Step 5 — Audio output
 
 <img src="images/setup/4-audio-output.png" width="320">
 
@@ -68,7 +87,7 @@ If the list is empty, nothing can play yet. Install the Kalinka renderer on the 
 
 You can switch outputs at any time later from the cast icon in the player.
 
-## Step 5 — Amplifier or receiver
+## Step 6 — Amplifier or receiver
 
 <img src="images/setup/5-amplifier.png" width="320">
 
@@ -79,7 +98,7 @@ This decides what handles volume and power.
 
 Only devices whose plugins are installed on the server appear here. If yours is missing, install its plugin on the server later — it shows up in Settings afterwards.
 
-## Step 6 — Test sound
+## Step 7 — Test sound
 
 **Do not skip this one.** It is the quickest way to find out whether your audio settings actually work, before you finish setup.
 
@@ -99,7 +118,7 @@ If something is wrong, the test offers that output's settings — device, format
 
 If you would rather not test now, the button at the bottom says **Skip for now**, and you can run the same test later from the output picker.
 
-## Step 7 — Almost there
+## Step 8 — Almost there
 
 <img src="images/setup/7-finish.png" width="320">
 
