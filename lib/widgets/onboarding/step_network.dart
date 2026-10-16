@@ -55,6 +55,9 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
   bool get _connecting =>
       !_changingNetwork &&
       (_sendingJoin || (_submitted && !_succeeded) || _setup['state'] == 1);
+  String? get _targetSsid =>
+      _setup['target_ssid'] as String? ??
+      (_sendingJoin || _submitted ? _ssid.text : null);
 
   @override
   void initState() {
@@ -455,6 +458,10 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
   @override
   Widget build(BuildContext context) {
     final connected = _network['connected'] == true;
+    final currentSsid = _network['kind'] == 'wifi'
+        ? _network['ssid'] as String?
+        : null;
+    final targetSsid = _targetSsid;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -477,11 +484,18 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
                           : 'Connected by Wi-Fi')
                     : 'Network connection',
               ),
-              subtitle: Text(
-                connected
-                    ? '${_network['address']}'
-                    : 'Connect an Ethernet cable or choose Wi-Fi below.',
-              ),
+              subtitle: connected
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (currentSsid != null && currentSsid.isNotEmpty)
+                          Text(currentSsid),
+                        Text('${_network['address']}'),
+                      ],
+                    )
+                  : const Text(
+                      'Connect an Ethernet cable or choose Wi-Fi below.',
+                    ),
             ),
           if (_message != null)
             Semantics(
@@ -529,9 +543,11 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
           ] else if (_data?['available'] == true) ...[
             const SizedBox(height: 16),
             if (_connecting) ...[
-              const SetupLoadingCard(
-                title: 'Please wait…',
-                subtitle: 'Connecting your box to Wi-Fi.',
+              SetupLoadingCard(
+                title: targetSsid != null && targetSsid.isNotEmpty
+                    ? 'Connecting to $targetSsid…'
+                    : 'Connecting to Wi-Fi…',
+                subtitle: 'Please wait…',
               ),
               const SizedBox(height: 16),
               KalinkaButton(

@@ -43,12 +43,14 @@ Map<String, dynamic> status({
   String? kind,
   int state = 0,
   bool available = true,
+  String? ssid,
 }) => {
   'available': available,
   'network': {
     'connected': kind != null,
     'kind': kind,
     'address': '192.168.1.20',
+    'ssid': ?ssid,
   },
   'setup': {
     'state': state,
@@ -114,6 +116,7 @@ Future<void> manualCredentials(WidgetTester tester) async {
 }
 
 Future<void> join(WidgetTester tester) async {
+  await tester.pumpAndSettle();
   await tester.ensureVisible(find.text('Connect to Wi-Fi'));
   await tester.tap(find.text('Connect to Wi-Fi'));
   await tester.pump();
@@ -257,6 +260,55 @@ void main() {
       'password': 'test-password',
       'country': 'GB',
     });
+    expect(find.text('Connecting to Home…'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'shows the connected SSID and keeps it separate from a new join',
+    (tester) async {
+      final api = FakeSetupApi(
+        status(kind: 'wifi', state: 4, ssid: 'Current Wi-Fi'),
+      );
+      await mountPanel(tester, api);
+      expect(find.text('Current Wi-Fi'), findsOneWidget);
+      expect(find.text('192.168.1.20'), findsOneWidget);
+      await finishScan(tester);
+      await manualCredentials(tester);
+      await tester.enterText(ssidField, 'New Wi-Fi');
+      await join(tester);
+      expect(find.text('Current Wi-Fi'), findsOneWidget);
+      expect(find.text('Connecting to New Wi-Fi…'), findsOneWidget);
+      expect(passwordField, findsNothing);
+      api.response.addAll(status(kind: 'wifi', state: 2, ssid: 'New Wi-Fi'));
+      await finishScan(tester);
+      expect(find.text('Current Wi-Fi'), findsNothing);
+      expect(find.text('Connecting to New Wi-Fi…'), findsNothing);
+      expect(find.text('New Wi-Fi'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('restores the joining network name from supervisor status', (
+    tester,
+  ) async {
+    final response = status(state: 1);
+    response['setup']['target_ssid'] = 'Café Wi-Fi';
+    final api = FakeSetupApi(response);
+    await mountPanel(tester, api);
+    expect(find.text('Connecting to Café Wi-Fi…'), findsOneWidget);
+    expect(find.text('Please wait…'), findsOneWidget);
+    expect(api.commands, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Ethernet never displays a Wi-Fi name', (tester) async {
+    final api = FakeSetupApi(
+      status(kind: 'wired', state: 4, ssid: 'Other Wi-Fi'),
+    );
+    await mountPanel(tester, api);
+    expect(find.text('Connected by Ethernet'), findsOneWidget);
+    expect(find.text('Other Wi-Fi'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -666,7 +718,13 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final api = FakeSetupApi(status());
+      final api = FakeSetupApi(
+        status(
+          kind: 'wifi',
+          state: 4,
+          ssid: '12345678901234567890123456789012',
+        ),
+      );
       await mountPanel(tester, api, scale: 2);
       await finishScan(tester);
       await tester.ensureVisible(find.text('Wi-Fi region · GB'));
@@ -676,6 +734,13 @@ void main() {
       await finishScan(tester);
       await manualCredentials(tester);
       await tester.ensureVisible(find.text('Connect to Wi-Fi'));
+      await tester.enterText(ssidField, 'Another network with a long name');
+      await join(tester);
+      await tester.ensureVisible(find.text('Choose another network'));
+      expect(
+        find.text('Connecting to Another network with a long name…'),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });
