@@ -5,34 +5,28 @@ import '../providers/shell_nav_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
 
-/// The player's two views as quiet text tabs with a berry selection underline.
+/// The player's two views as tabs in the section headings' caps, the chosen
+/// one underlined in berry.
 class PlayerViewSwitch extends ConsumerWidget {
   const PlayerViewSwitch({super.key});
 
   static const _views = [
-    (view: PlayerView.nowPlaying, label: 'Now playing'),
-    (view: PlayerView.queue, label: 'Queue'),
+    (view: PlayerView.nowPlaying, label: 'PLAYING', spoken: 'Now playing'),
+    (view: PlayerView.queue, label: 'QUEUE', spoken: 'Queue'),
   ];
   static const _gap = 8.0;
   static const _horizontalPadding = 8.0;
 
-  static final _labelStyle = KalinkaFonts.sans(
-    fontSize: 14,
-    fontWeight: FontWeight.w500,
-    height: 1.3,
-  );
+  /// The section headings' caps.
+  static final _labelStyle = KalinkaTextStyles.sectionLabel;
 
-  /// Measure the selected weight so changing views never moves the targets.
   static List<double> _labelWidths(BuildContext context) => [
     for (final view in _views) _labelWidth(context, view.label),
   ];
 
   static double _labelWidth(BuildContext context, String label) {
     final painter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: _labelStyle.copyWith(fontWeight: FontWeight.w600),
-      ),
+      text: TextSpan(text: label, style: _labelStyle),
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
       locale: Localizations.maybeLocaleOf(context),
@@ -81,6 +75,7 @@ class PlayerViewSwitch extends ConsumerWidget {
                       : _targetWidth(labelWidths[i]),
                   child: _ViewTab(
                     label: _views[i].label,
+                    spoken: _views[i].spoken,
                     labelWidth: labelWidths[i],
                     active: _views[i].view == current,
                     duration: duration,
@@ -99,6 +94,7 @@ class PlayerViewSwitch extends ConsumerWidget {
 
 class _ViewTab extends StatelessWidget {
   final String label;
+  final String spoken;
   final double labelWidth;
   final bool active;
   final Duration duration;
@@ -106,6 +102,7 @@ class _ViewTab extends StatelessWidget {
 
   const _ViewTab({
     required this.label,
+    required this.spoken,
     required this.labelWidth,
     required this.active,
     required this.duration,
@@ -115,7 +112,7 @@ class _ViewTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: label,
+      label: spoken,
       button: true,
       selected: active,
       inMutuallyExclusiveGroup: true,
@@ -144,7 +141,6 @@ class _ViewTab extends StatelessWidget {
                       duration: duration,
                       curve: Curves.easeOutCubic,
                       style: PlayerViewSwitch._labelStyle.copyWith(
-                        fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                         color: active
                             ? KalinkaColors.textPrimary
                             : KalinkaColors.textSecondary,

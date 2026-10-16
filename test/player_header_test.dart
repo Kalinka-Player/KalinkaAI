@@ -92,8 +92,8 @@ void main() {
   setUpAll(() async {
     // Real metrics matter when deciding whether the labels fit beside the
     // header actions; the test font gives every glyph the same width.
-    final loader = FontLoader(KalinkaFonts.sansFamily)
-      ..addFont(rootBundle.load('assets/fonts/IBMPlexSans-SemiBold.ttf'));
+    final loader = FontLoader(KalinkaFonts.monoFamily)
+      ..addFont(rootBundle.load('assets/fonts/IBMPlexMono-SemiBold.ttf'));
     await loader.load();
   });
 
@@ -122,7 +122,7 @@ void main() {
           }
         }
 
-        for (final label in ['Now playing', 'Queue']) {
+        for (final label in ['PLAYING', 'QUEUE']) {
           final target = tester.getRect(_segment(label));
           expect(target.width, greaterThanOrEqualTo(48));
           expect(target.height, greaterThanOrEqualTo(48));
@@ -142,7 +142,7 @@ void main() {
         }
 
         // The edge of the padded target must work, not just the label.
-        final queue = tester.getRect(_segment('Queue'));
+        final queue = tester.getRect(_segment('QUEUE'));
         await tester.tapAt(queue.bottomLeft + const Offset(2, -2));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
@@ -182,7 +182,7 @@ void main() {
     final output = tester.getRect(find.byType(RendererSwitcherDropdown));
     expect(viewSwitch.overlaps(output), isFalse);
     expect(output.top, greaterThan(viewSwitch.bottom));
-    await tester.tap(find.text('Queue'));
+    await tester.tap(find.text('QUEUE'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(tester.getRect(find.byType(PlayerViewSwitch)), viewSwitch);
@@ -193,7 +193,7 @@ void main() {
   ) async {
     final semantics = tester.ensureSemantics();
     await _pumpHeader(tester, width: 320, scale: 3.2, reduceMotion: true);
-    Focus.of(tester.element(find.text('Now playing'))).requestFocus();
+    Focus.of(tester.element(find.text('PLAYING'))).requestFocus();
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();

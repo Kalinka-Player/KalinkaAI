@@ -9,14 +9,27 @@ import 'preview_shelf.dart';
 /// What arrived in the library last, on Home, drawn as its catalog's preview
 /// asks. Absent until it has items, so a setup without a library source never
 /// sees it come and go.
-class RecentlyAddedSection extends ConsumerWidget {
+class RecentlyAddedSection extends ConsumerStatefulWidget {
   /// Opens the whole catalog, or one item in it, as a page.
   final OpenCatalog onOpenCatalog;
 
   const RecentlyAddedSection({super.key, required this.onOpenCatalog});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RecentlyAddedSection> createState() =>
+      _RecentlyAddedSectionState();
+}
+
+class _RecentlyAddedSectionState extends ConsumerState<RecentlyAddedSection>
+    with AutomaticKeepAliveClientMixin {
+  // Kept while scrolled off, so coming back does not rebuild the rail.
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final onOpenCatalog = widget.onOpenCatalog;
     final async = ref.watch(recentlyAddedProvider);
     final shelf = async.value;
     if (shelf == null) {
@@ -39,6 +52,7 @@ class RecentlyAddedSection extends ConsumerWidget {
       PreviewShelf(
         items: shelf.items,
         preview: shelf.plan.preview,
+        storageId: shelf.plan.id,
         onOpenItem: (item) => onOpenCatalog(
           CatalogCardPlan(
             id: item.id,

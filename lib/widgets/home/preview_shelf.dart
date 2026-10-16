@@ -19,6 +19,9 @@ class PreviewShelf extends StatelessWidget {
   final List<BrowseItem> items;
   final Preview? preview;
 
+  /// Names the shelf's sideways scroll, so it comes back where it was left.
+  final String storageId;
+
   /// Opens a browsable item as a page of its own.
   final ValueChanged<BrowseItem> onOpenItem;
 
@@ -26,6 +29,7 @@ class PreviewShelf extends StatelessWidget {
     super.key,
     required this.items,
     required this.preview,
+    required this.storageId,
     required this.onOpenItem,
   });
 
@@ -38,6 +42,7 @@ class PreviewShelf extends StatelessWidget {
       count: items.length,
       rows: _rowsOf(preview),
       tileSize: _tileSizeOf(preview),
+      storageId: storageId,
       tile: (i, size) => _Tile(item: items[i], size: size, onOpen: onOpenItem),
     );
   }
@@ -68,6 +73,7 @@ class PreviewShelfShimmer extends StatelessWidget {
           rows: PreviewShelf._rowsOf(preview),
           tileSize: PreviewShelf._tileSizeOf(preview),
           scrollable: false,
+          storageId: 'placeholder',
           tile: (_, size) => _TilePlaceholder(size: size),
         ),
       ),
@@ -81,12 +87,14 @@ class _TileRail extends StatelessWidget {
   final double tileSize;
   final Widget Function(int index, double size) tile;
   final bool scrollable;
+  final String storageId;
 
   const _TileRail({
     required this.count,
     required this.rows,
     required this.tileSize,
     required this.tile,
+    required this.storageId,
     this.scrollable = true,
   });
 
@@ -138,6 +146,9 @@ class _TileRail extends StatelessWidget {
               behavior: ScrollConfiguration.of(context)
                   .copyWith(dragDevices: PointerDeviceKind.values.toSet()),
               child: ListView.separated(
+                // Its own key: without one it would take Home's vertical
+                // offset as its own when it scrolls back into view.
+                key: PageStorageKey<String>('rail:$storageId'),
                 scrollDirection: Axis.horizontal,
                 physics: scrollable
                     ? null
