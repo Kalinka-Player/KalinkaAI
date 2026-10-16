@@ -31,6 +31,8 @@ class FakeSetupApi extends NetworkSetupApi {
     await sendCommand?.call(operation);
     if (operation == 'scan') {
       response['setup'] = {...response['setup'] as Map, 'scan_state': 'ready'};
+    } else if (operation == 'join') {
+      response['setup'] = {...response['setup'] as Map, 'state': 1};
     } else if (operation == 'change_network') {
       response['setup'] = {'state': 0, 'scan_state': 'idle', 'networks': []};
     }
@@ -114,6 +116,23 @@ Future<void> manualCredentials(WidgetTester tester) async {
 Future<void> join(WidgetTester tester) async {
   await tester.ensureVisible(find.text('Connect to Wi-Fi'));
   await tester.tap(find.text('Connect to Wi-Fi'));
+  await tester.pump();
+}
+
+Future<void> chooseCountry(
+  WidgetTester tester,
+  String query,
+  String label,
+) async {
+  await tester.ensureVisible(countryField);
+  final input = find.descendant(
+    of: countryField,
+    matching: find.byType(TextField),
+  );
+  await tester.tap(input);
+  await tester.enterText(input, query);
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(MenuItemButton, label).last);
   await tester.pump();
 }
 
@@ -262,16 +281,34 @@ void main() {
     await mountPanel(tester, api, locale: const Locale('en'));
     expect(api.commands, isEmpty);
     expect(
-      find.text('Enter your country code below to find nearby networks.'),
+      find.text('Choose your country below to find nearby networks.'),
       findsOneWidget,
     );
-    await tester.ensureVisible(countryField);
-    await tester.enterText(countryField, 'gb');
-    await tester.pump();
+    await chooseCountry(tester, 'gb', 'United Kingdom (GB)');
     expect(api.commands, ['open', 'scan']);
     expect(api.payloads.last, {'country': 'GB'});
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets(
+    'country names are searchable and selection rescans with its code',
+    (tester) async {
+      final api = FakeSetupApi(status());
+      await mountPanel(tester, api);
+      await finishScan(tester);
+      await tester.ensureVisible(find.text('Wi-Fi region · GB'));
+      await tester.tap(find.text('Wi-Fi region · GB'));
+      await tester.pumpAndSettle();
+      await chooseCountry(tester, 'Germany', 'Germany (DE)');
+      expect(api.commands, ['open', 'scan', 'open', 'scan']);
+      expect(api.payloads.last, {'country': 'DE'});
+      await finishScan(tester);
+      await manualCredentials(tester);
+      await join(tester);
+      expect(api.payloads.last['country'], 'DE');
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('does not scan when setup is unavailable or joining', (
     tester,
@@ -371,6 +408,84 @@ void main() {
         find.text('Your box is connected and ready to use.'),
         findsNothing,
       );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'connecting hides credentials and can be cancelled into discovery',
+    (tester) async {
+      final api = FakeSetupApi(status());
+      await mountPanel(tester, api);
+      await finishScan(tester);
+      await manualCredentials(tester);
+      final joining = Completer<void>();
+      api.sendCommand = (operation) async {
+        if (operation == 'join') await joining.future;
+        if (operation == 'open' && api.response['setup']['state'] == 1) {
+          throw StateError('Cannot open setup while joining');
+        }
+      };
+      await join(tester);
+      expect(passwordField, findsNothing);
+      expect(ssidField, findsNothing);
+      expect(find.text('Please wait…'), findsOneWidget);
+      joining.complete();
+      await tester.pump();
+      final cancelling = Completer<void>();
+      api.sendCommand = (operation) async {
+        expect(operation, 'change_network');
+        await cancelling.future;
+      };
+      await tester.tap(find.text('Choose another network'));
+      await tester.pump();
+      await tester.tap(find.text('Choose another network'));
+      await tester.pump();
+      expect(api.commands, ['open', 'scan', 'open', 'join', 'change_network']);
+      cancelling.complete();
+      await tester.pump();
+      api.sendCommand = null;
+      await finishScan(tester);
+      expect(api.commands, [
+        'open',
+        'scan',
+        'open',
+        'join',
+        'change_network',
+        'open',
+        'scan',
+      ]);
+      expect(find.text('Finding Wi-Fi networks…'), findsOneWidget);
+      expect(passwordField, findsNothing);
+      await finishScan(tester);
+      await tester.tap(find.text(manualEntry));
+      await tester.pump();
+      expect(
+        tester.widget<TextFormField>(passwordField).controller!.text,
+        isEmpty,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'a failed cancellation keeps the waiting screen and offers retry',
+    (tester) async {
+      final api = FakeSetupApi(status());
+      await mountPanel(tester, api);
+      await finishScan(tester);
+      await manualCredentials(tester);
+      await join(tester);
+      api.sendCommand = (_) async => throw StateError('unreachable');
+      await tester.tap(find.text('Choose another network'));
+      await tester.pump();
+      expect(find.text('Please wait…'), findsOneWidget);
+      expect(passwordField, findsNothing);
+      api.sendCommand = null;
+      await tester.tap(find.text('Choose another network'));
+      await tester.pump();
+      await finishScan(tester);
+      expect(find.text('Finding Wi-Fi networks…'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     },
   );
@@ -521,6 +636,7 @@ void main() {
   }
 
   for (final size in [
+    const Size(320, 640),
     const Size(375, 812),
     const Size(812, 375),
     const Size(1024, 768),
@@ -534,6 +650,11 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final api = FakeSetupApi(status());
       await mountPanel(tester, api, scale: 2);
+      await finishScan(tester);
+      await tester.ensureVisible(find.text('Wi-Fi region · GB'));
+      await tester.tap(find.text('Wi-Fi region · GB'));
+      await tester.pumpAndSettle();
+      await chooseCountry(tester, 'United States', 'United States (US)');
       await finishScan(tester);
       await manualCredentials(tester);
       await tester.ensureVisible(find.text('Connect to Wi-Fi'));

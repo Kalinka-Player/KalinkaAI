@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../data_model/wifi_countries.dart';
 import '../../providers/network_setup_api.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/field_decoration.dart';
@@ -32,9 +33,8 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
   late final NetworkSetupApi _api =
       widget.api ?? NetworkSetupApi(widget.endpoint);
   final _form = GlobalKey<FormState>();
-  final _ssid = TextEditingController(),
-      _password = TextEditingController(),
-      _country = TextEditingController();
+  final _ssid = TextEditingController(), _password = TextEditingController();
+  String? _country;
   Timer? _timer;
   Map<String, dynamic>? _data;
   String? _message;
@@ -43,20 +43,22 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
   bool _refreshing = false, _scanStarted = false;
   bool _manual = false, _networkChosen = false, _succeeded = false;
   bool _changingNetwork = false;
+  bool _sendingJoin = false;
 
-  bool get _validCountry =>
-      RegExp(r'^[A-Z]{2}$').hasMatch(_country.text.trim().toUpperCase());
+  bool get _validCountry => wifiCountries.containsKey(_country);
 
   Map get _setup => _data?['setup'] as Map? ?? const {};
   Map get _network => _data?['network'] as Map? ?? const {};
   bool get _busy =>
       _sending || _setup['state'] == 1 || _setup['scan_state'] == 'scanning';
+  bool get _connecting =>
+      !_changingNetwork &&
+      (_sendingJoin || (_submitted && !_succeeded) || _setup['state'] == 1);
 
   @override
   void initState() {
     super.initState();
-    _country.text =
-        WidgetsBinding.instance.platformDispatcher.locale.countryCode ?? '';
+    _country = WidgetsBinding.instance.platformDispatcher.locale.countryCode;
     _refresh();
   }
 
@@ -126,18 +128,16 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
   }
 
   Future<void> _scan() async {
-    final country = _country.text.trim().toUpperCase();
+    final country = _country;
     if (!_validCountry) {
-      setState(
-        () => _message = 'Enter your two-letter country code before scanning.',
-      );
+      setState(() => _message = 'Choose your country before scanning.');
       return;
     }
     _scanStarted = true;
     await _send(() async {
       await _api.command('open');
       if (!mounted) return;
-      await _api.command('scan', {'country': country});
+      await _api.command('scan', {'country': country!});
       if (!mounted) return;
       _scanState = 1;
       _data = {
@@ -150,20 +150,19 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
 
   Future<void> _join() async {
     if (!_validCountry) {
-      setState(
-        () =>
-            _message = 'Enter your two-letter country code before connecting.',
-      );
+      setState(() => _message = 'Choose your country before connecting.');
       return;
     }
     if (!_form.currentState!.validate()) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _sendingJoin = true);
     await _send(() async {
       await _api.command('open');
       if (!mounted) return;
       await _api.command('join', {
         'ssid': _ssid.text,
         'password': _password.text,
-        'country': _country.text.trim().toUpperCase(),
+        'country': _country!,
       });
       if (!mounted) return;
       _password.clear();
@@ -178,12 +177,15 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
           : 'Connecting your box… This page will reconnect when it is ready.';
       widget.onStatus?.call({...?_data, 'submitted': true});
     });
+    if (mounted) setState(() => _sendingJoin = false);
   }
 
   Future<void> _changeNetwork() async {
     await _send(() async {
-      await _api.command('open');
-      if (!mounted) return;
+      if (!_connecting) {
+        await _api.command('open');
+        if (!mounted) return;
+      }
       await _api.command('change_network');
       if (!mounted) return;
       _submitted = false;
@@ -201,7 +203,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
         'setup': {..._setup, 'state': 1},
       };
       widget.onStatus?.call({...?_data, 'submitted': false});
-    });
+    }, allowWhileJoining: true);
   }
 
   void _chooseNetwork(String? ssid) {
@@ -224,8 +226,11 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
     });
   }
 
-  Future<void> _send(Future<void> Function() action) async {
-    if (_busy) return;
+  Future<void> _send(
+    Future<void> Function() action, {
+    bool allowWhileJoining = false,
+  }) async {
+    if (_sending || _changingNetwork || (_busy && !allowWhileJoining)) return;
     _revision++;
     _timer?.cancel();
     setState(() => _sending = true);
@@ -253,7 +258,6 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
     _api.dispose();
     _ssid.dispose();
     _password.dispose();
-    _country.dispose();
     super.dispose();
   }
 
@@ -294,27 +298,46 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
 
   Widget _region() => ExpansionTile(
     tilePadding: EdgeInsets.zero,
+    childrenPadding: const EdgeInsets.only(top: 16, bottom: 16),
     initiallyExpanded: !_validCountry,
     title: Text(
-      'Wi-Fi region${_validCountry ? ' · ${_country.text.trim().toUpperCase()}' : ''}',
+      'Wi-Fi region${_validCountry ? ' · $_country' : ''}',
       style: KalinkaTextStyles.trayRowSublabel,
     ),
     children: [
-      TextField(
+      DropdownMenu<String>(
         key: const ValueKey('network-country'),
-        controller: _country,
         enabled: !_busy,
-        maxLength: 2,
-        autocorrect: false,
-        textCapitalization: TextCapitalization.characters,
-        decoration: kalinkaFieldDecoration(hint: 'GB').copyWith(
-          labelText: 'Country code',
-          helperText: 'For example GB or US. Used for local Wi-Fi channels.',
-        ),
-        onChanged: (_) {
-          setState(() {});
-          if (_validCountry && !_scanStarted && !_busy) _scan();
+        initialSelection: _validCountry ? _country : null,
+        expandedInsets: EdgeInsets.zero,
+        menuHeight: 280,
+        enableFilter: true,
+        requestFocusOnTap: true,
+        textStyle: KalinkaTextStyles.trayRowSublabel,
+        decorationBuilder: (context, controller) =>
+            kalinkaFieldDecoration(hint: 'Search countries')
+                .copyWith(labelText: 'Country'),
+        dropdownMenuEntries: [
+          for (final country in wifiCountries.entries)
+            DropdownMenuEntry(
+              value: country.key,
+              label: '${country.value} (${country.key})',
+              labelWidget: Text('${country.value} (${country.key})'),
+            ),
+        ],
+        onSelected: (country) {
+          if (country == null || country == _country) return;
+          setState(() => _country = country);
+          FocusManager.instance.primaryFocus?.unfocus();
+          if (!_busy) _scan();
         },
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Text(
+          'Choose the country where the box is used. This sets the available Wi-Fi channels.',
+          style: KalinkaTextStyles.trayRowSublabel,
+        ),
       ),
     ],
   );
@@ -327,7 +350,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
         children: [
           Expanded(
             child: Text(
-              'Available networks',
+              'AVAILABLE NETWORKS',
               style: KalinkaTextStyles.sectionHeaderMuted,
             ),
           ),
@@ -371,7 +394,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
             'Could not find networks. Try again or enter your network name manually.',
           ),
         if (!_validCountry)
-          const Text('Enter your country code below to find nearby networks.'),
+          const Text('Choose your country below to find nearby networks.'),
       ],
       const SizedBox(height: 12),
       TextButton(
@@ -497,7 +520,21 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
             ),
           ] else if (_data?['available'] == true) ...[
             const SizedBox(height: 16),
-            if (_changingNetwork)
+            if (_connecting) ...[
+              const LinearProgressIndicator(
+                semanticsLabel: 'Connecting to Wi-Fi',
+              ),
+              const SizedBox(height: 12),
+              const Text('Please wait…'),
+              const SizedBox(height: 16),
+              KalinkaButton(
+                label: 'Choose another network',
+                variant: KalinkaButtonVariant.neutral,
+                fullWidth: true,
+                enabled: !_sending,
+                onTap: _changeNetwork,
+              ),
+            ] else if (_changingNetwork)
               const LinearProgressIndicator(
                 semanticsLabel: 'Preparing network discovery',
               )
