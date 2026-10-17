@@ -12,6 +12,7 @@ import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/player_queue_view.dart';
 import 'package:kalinka/widgets/player_view_switch.dart';
 import 'package:kalinka/widgets/queue_zone.dart';
+import 'package:kalinka/widgets/search/search_composer.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 
 import 'support/home_shell.dart';
@@ -282,7 +283,7 @@ void main() {
     await tester.tap(find.text('Find music'));
     await tester.pumpAndSettle();
     expect(find.byType(NowPlayingContent), findsNothing);
-    expect(find.text('SMART SEARCH'), findsOneWidget);
+    expect(find.byType(SearchComposer), findsOneWidget);
     expect(container.read(searchEntryModeProvider), isTrue);
   });
 

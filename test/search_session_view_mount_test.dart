@@ -486,15 +486,29 @@ void main() {
     expect(container.read(searchSessionProvider).resultsFilter.isEmpty, isTrue);
   });
 
-  testWidgets('the smart search card names itself and closes', (tester) async {
-    await pumpSurface(tester);
-
+  Future<void> openSearch(WidgetTester tester) async {
     await tester.tap(
       find.byWidgetPredicate(
         (widget) => widget is Semantics && widget.properties.label == 'Search',
       ),
     );
     await tester.pumpAndSettle();
+  }
+
+  testWidgets('the smart search card names itself and closes', (tester) async {
+    await pumpSurface(
+      tester,
+      modules: [
+        ModuleInfo(
+          name: 'localfiles',
+          title: 'My Library',
+          enabled: true,
+          state: ModuleState.ready,
+          capabilities: const [ModuleCapability.aiSearch],
+        ),
+      ],
+    );
+    await openSearch(tester);
 
     // The card carries its own name and dismiss, the same chrome the filter
     // card uses, so the composer inside it needs neither.
@@ -503,6 +517,21 @@ void main() {
     await tester.tap(find.byType(OverlayCloseButton));
     await tester.pumpAndSettle();
     expect(find.text('SMART SEARCH'), findsNothing);
+  });
+
+  testWidgets('without smart search the card is a plain name search', (
+    tester,
+  ) async {
+    await pumpSurface(tester);
+    expect(
+      find.text('Search your music by artist, album or track.'),
+      findsOneWidget,
+    );
+    await openSearch(tester);
+
+    expect(find.text('SMART SEARCH'), findsNothing);
+    expect(find.text('SEARCH'), findsOneWidget);
+    expect(find.textContaining('mood'), findsNothing);
   });
 
   testWidgets('the HOME crumb goes back, like the arrow', (tester) async {

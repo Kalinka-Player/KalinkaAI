@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import 'connection_settings_provider.dart';
+import 'connection_state_provider.dart';
 import 'kalinka_player_api_provider.dart';
 
 /// Full snapshot of `/server/modules` — every loaded input module and
@@ -15,6 +16,7 @@ import 'kalinka_player_api_provider.dart';
 final modulesStateProvider = FutureProvider<ModulesAndDevices>((ref) async {
   // A server-side rename refreshes the name; only the address matters here.
   ref.watch(connectionSettingsProvider.select((s) => s.address));
+  refetchOnReconnect(ref);
   final settings = ref.read(connectionSettingsProvider);
   if (!settings.isSet) {
     return ModulesAndDevices(inputModules: const [], devices: const []);

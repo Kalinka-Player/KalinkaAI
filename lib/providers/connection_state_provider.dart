@@ -19,6 +19,18 @@ final connectionStateProvider =
       ConnectionStateNotifier.new,
     );
 
+/// Re-runs the calling provider when the connection comes back: the server
+/// may have restarted with other settings in the meantime.
+void refetchOnReconnect(Ref ref) {
+  ref.listen<ConnectionStatus>(connectionStateProvider, (previous, next) {
+    if (previous != null &&
+        previous != ConnectionStatus.connected &&
+        next == ConnectionStatus.connected) {
+      ref.invalidateSelf();
+    }
+  });
+}
+
 /// Incremented each time a reconnect attempt fires. `webSocketProvider` watches
 /// this so that only timer-driven ticks (or a manual retry) trigger new socket
 /// connection attempts — preventing Riverpod's autoDispose rebuild loop.

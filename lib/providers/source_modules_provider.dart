@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import '../utils/schema_icons.dart';
 import 'connection_settings_provider.dart';
+import 'connection_state_provider.dart';
 import 'kalinka_player_api_provider.dart';
 
 /// Display metadata for a single source.
@@ -77,6 +78,7 @@ Color colorForSourceName(String name) {
 final sourceModulesProvider = FutureProvider<List<ModuleInfo>>((ref) async {
   // A server-side rename refreshes the name; only the address matters here.
   ref.watch(connectionSettingsProvider.select((s) => s.address));
+  refetchOnReconnect(ref);
   final settings = ref.read(connectionSettingsProvider);
   if (!settings.isSet) return <ModuleInfo>[];
   final api = ref.read(kalinkaProxyProvider);

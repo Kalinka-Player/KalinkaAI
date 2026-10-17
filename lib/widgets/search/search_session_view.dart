@@ -829,11 +829,13 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// Rotating example hint — a different real suggestion each time the surface
   /// mounts, teaching the query language.
   String _hintText(SearchSessionState session, {required bool smart}) {
-    if (!smart) return 'Artist, album or track…';
+    if (!smart) return _plainHint;
     final suggestions = session.suggestions;
     if (suggestions.isEmpty) return 'Ask for music…';
     return 'Try “${suggestions[_hintIndex % suggestions.length].query}”';
   }
+
+  static const _plainHint = 'Artist, album or track…';
 
   /// The unfolded search-and-filters card, resting under the title bar so the
   /// pill it came from stays visible above it. The scrim is lighter than the
@@ -914,6 +916,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// right half, so the overlay stays inside it and unrolls exactly as on
   /// phone rather than sweeping across the whole screen.
   Widget _buildSearchOverlay(SearchSessionState session) {
+    final smart = ref.watch(smartSearchAvailableProvider) ?? true;
     final topInset = MediaQuery.paddingOf(context).top;
     // Rest the card at the title-bar bottom rather than the screen top, so it
     // never overlaps the "Find Music" bar.
@@ -975,8 +978,10 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                         // like every other surface that opens over the title
                         // bar; the field below is then only a field.
                         OverlayCardHeader(
-                          icon: Icons.auto_awesome,
-                          title: 'SMART SEARCH',
+                          icon: smart
+                              ? Icons.auto_awesome
+                              : Icons.search_rounded,
+                          title: smart ? 'SMART SEARCH' : 'SEARCH',
                           onClose: _closeSearch,
                           closeLabel: 'Close search',
                         ),
@@ -989,7 +994,9 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                               color: KalinkaColors.surfaceInput,
                               borderRadius: BorderRadius.circular(26),
                               border: Border.all(
-                                color: KalinkaColors.accentBorder,
+                                color: smart
+                                    ? KalinkaColors.accentBorder
+                                    : KalinkaColors.borderDefault,
                               ),
                             ),
                             child: Padding(
@@ -1001,7 +1008,9 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                                 controller: _composerController,
                                 focusNode: _composerFocus,
                                 onSubmit: _submit,
-                                hint: 'Search music, or describe a mood',
+                                hint: smart
+                                    ? 'Search music, or describe a mood'
+                                    : _plainHint,
                               ),
                             ),
                           ),
@@ -1147,12 +1156,17 @@ class _DiscoverHero extends StatelessWidget {
               smartSearch
                   ? 'Describe a mood, activity, genre, or anything else you '
                         'would like to hear.'
-                  : 'Find an artist, album or track by name.',
+                  : 'Search your music by artist, album or track.',
               style: KalinkaTextStyles.trackRowSubtitle,
             ),
           ),
           const SizedBox(height: 18),
-          _SearchEntryButton(key: entryKey, hint: hint, onTap: onOpenSearch),
+          _SearchEntryButton(
+            key: entryKey,
+            hint: hint,
+            smart: smartSearch,
+            onTap: onOpenSearch,
+          ),
         ],
       ),
     );
@@ -1212,38 +1226,47 @@ class _HeroArtwork extends StatelessWidget {
 /// Its screen rect is measured on open so the overlay card rises from here.
 class _SearchEntryButton extends StatelessWidget {
   final String hint;
+
+  /// Smart search gets the crimson invitation; a name search is a plain field.
+  final bool smart;
   final VoidCallback onTap;
 
   const _SearchEntryButton({
     super.key,
     required this.hint,
+    required this.smart,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    // The main feature of the surface — a crimson-tinted field with a soft
-    // glow so it reads as the invitation, not another gray card.
+    // With smart search, the main feature of the surface — a crimson-tinted
+    // field with a soft glow so it reads as the invitation, not a gray card.
     return Semantics(
       label: 'Search',
-      hint: 'Ask for music in plain language',
+      hint: smart
+          ? 'Ask for music in plain language'
+          : 'Search by artist, album or track',
       button: true,
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(22),
           boxShadow: [
-            BoxShadow(
-              color: KalinkaColors.accent.withValues(alpha: 0.16),
-              blurRadius: 26,
-              spreadRadius: 1,
-            ),
+            if (smart)
+              BoxShadow(
+                color: KalinkaColors.accent.withValues(alpha: 0.16),
+                blurRadius: 26,
+                spreadRadius: 1,
+              ),
           ],
         ),
         child: Material(
-          color: Color.alphaBlend(
-            KalinkaColors.accentSubtle,
-            KalinkaColors.surfaceInput,
-          ),
+          color: smart
+              ? Color.alphaBlend(
+                  KalinkaColors.accentSubtle,
+                  KalinkaColors.surfaceInput,
+                )
+              : KalinkaColors.surfaceInput,
           borderRadius: BorderRadius.circular(22),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -1253,17 +1276,28 @@ class _SearchEntryButton extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: KalinkaColors.accentBorder, width: 1),
+                border: Border.all(
+                  color: smart
+                      ? KalinkaColors.accentBorder
+                      : KalinkaColors.borderDefault,
+                  width: 1,
+                ),
               ),
               child: Row(
                 children: [
-                  const SizedBox(
+                  SizedBox(
                     width: 26,
-                    child: Icon(
-                      Icons.auto_awesome,
-                      size: 16,
-                      color: KalinkaColors.gold,
-                    ),
+                    child: smart
+                        ? const Icon(
+                            Icons.auto_awesome,
+                            size: 16,
+                            color: KalinkaColors.gold,
+                          )
+                        : const Icon(
+                            Icons.search_rounded,
+                            size: 18,
+                            color: KalinkaColors.textMuted,
+                          ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -1275,10 +1309,12 @@ class _SearchEntryButton extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(
+                  Icon(
                     Icons.arrow_forward_rounded,
                     size: 18,
-                    color: KalinkaColors.accentTint,
+                    color: smart
+                        ? KalinkaColors.accentTint
+                        : KalinkaColors.textMuted,
                   ),
                 ],
               ),

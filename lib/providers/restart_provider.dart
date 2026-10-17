@@ -6,7 +6,9 @@ import 'package:logger/logger.dart' show Logger;
 import 'box_control_provider.dart';
 import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
+import 'modules_state_provider.dart';
 import 'settings_provider.dart';
+import 'source_modules_provider.dart';
 
 final _logger = Logger();
 
@@ -186,6 +188,9 @@ class RestartNotifier extends Notifier<RestartState> {
       await ref.read(settingsProvider.notifier).loadConfig();
       if (!current()) return;
       ref.invalidate(boxControlProvider);
+      // Modules and their capabilities follow the settings just applied.
+      ref.invalidate(modulesStateProvider);
+      ref.invalidate(sourceModulesProvider);
 
       // All done
       state = RestartState(
