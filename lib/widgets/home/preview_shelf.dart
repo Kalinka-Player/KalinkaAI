@@ -12,6 +12,7 @@ import '../loading_shimmer.dart';
 import '../procedural_album_art.dart';
 import '../search/search_zero_state.dart' show kHomeSideInset;
 import '../search_cards/browse_item_rows.dart';
+import '../search_cards/track_row_support.dart' show CornerGlyph;
 
 /// A catalog's preview, drawn the way its source asked: `image` as square
 /// tiles with their text underneath, in rows that scroll sideways; any other
@@ -231,6 +232,15 @@ class _Tile extends ConsumerWidget {
       item.name ??
       'Unknown';
 
+  /// The kind badge on the art, as the list rows show it. Artists need none:
+  /// their round art says it.
+  IconData? get _kind {
+    if (item.browseType == BrowseType.folder) return Icons.folder_outlined;
+    if (item.album != null) return Icons.album_outlined;
+    if (item.playlist != null) return Icons.queue_music;
+    return null;
+  }
+
   String get _subtitle {
     if (item.album != null) return item.album!.artist?.name ?? '';
     if (item.track != null) return item.track!.performer?.name ?? '';
@@ -285,7 +295,24 @@ class _Tile extends ConsumerWidget {
                     ? ClipOval(child: art)
                     : ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: art,
+                        child: switch (_kind) {
+                          null => art,
+                          final kind => Stack(
+                            children: [
+                              art,
+                              // Grows with the tile, from the rows' size on a
+                              // phone.
+                              PositionedDirectional(
+                                end: 6 * size / 128,
+                                bottom: 6 * size / 128,
+                                child: SizedBox.square(
+                                  dimension: 16 * size / 128,
+                                  child: FittedBox(child: CornerGlyph(kind)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        },
                       ),
                 const SizedBox(height: artGap),
                 Text(
