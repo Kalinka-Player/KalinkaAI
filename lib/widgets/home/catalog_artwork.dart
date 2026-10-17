@@ -182,14 +182,14 @@ class _ArtworkImageState extends State<_ArtworkImage> {
                               end: AlignmentDirectional.centerEnd,
                               colors: [
                                 KalinkaColors.background.withValues(
-                                  alpha: 0.75,
+                                  alpha: 0.85,
                                 ),
-                                KalinkaColors.background.withValues(
-                                  alpha: 0.45,
-                                ),
+                                KalinkaColors.background.withValues(alpha: 0.7),
                                 KalinkaColors.background.withValues(alpha: 0),
                               ],
-                              stops: const [0, 0.55, 1],
+                              // Dense under the caption, which takes about
+                              // the first half of the card.
+                              stops: const [0, 0.5, 0.9],
                             ),
                           ),
                         ),
@@ -213,6 +213,11 @@ class _ArtworkImageState extends State<_ArtworkImage> {
     );
   }
 
+  // Lifts the caption off bright spots the scrim leaves showing.
+  static const _captionShadows = [
+    Shadow(color: Color(0x99000000), blurRadius: 8),
+  ];
+
   Widget _caption(double scale) {
     final textScale = scale * 0.85;
     return Padding(
@@ -234,6 +239,7 @@ class _ArtworkImageState extends State<_ArtworkImage> {
                   widget.title,
                   style: KalinkaTextStyles.blockTitle.apply(
                     fontSizeFactor: textScale,
+                    shadows: _captionShadows,
                   ),
                 ),
               ),
@@ -245,6 +251,7 @@ class _ArtworkImageState extends State<_ArtworkImage> {
               widget.description!,
               style: KalinkaTextStyles.trackRowSubtitle.apply(
                 fontSizeFactor: textScale,
+                shadows: _captionShadows,
               ),
             ),
           ],
