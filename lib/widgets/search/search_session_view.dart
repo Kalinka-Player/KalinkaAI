@@ -106,8 +106,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   final _composerFocus = FocusNode();
 
   // The backdrop spans the pinned header and the list, so it is painted at
-  // surface level but follows the list's exact offset. Retain that offset
-  // while a catalog replaces the root, just as PageStorage retains the list.
+  // surface level but follows the list's exact offset. Retained while a
+  // catalog replaces the root, and the list comes back at it.
   final _discoverOffset = ValueNotifier<double>(0);
   late final ScrollController _discoverScroll;
   final _albumOffset = ValueNotifier<double>(0);
@@ -160,10 +160,11 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   @override
   void initState() {
     super.initState();
-    _discoverScroll = ScrollController(
+    _discoverScroll = _ResumingScrollController(
+      _discoverOffset,
       onAttach: (_) {
-        // PageStorage restores the position during attachment. Synchronise
-        // after layout too, in case the viewport has changed while away.
+        // Synchronise after layout, in case the viewport has changed while
+        // away and clamped the offset.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _syncDiscoverOffset();
         });
@@ -1442,4 +1443,17 @@ class _IndexerProgressCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Reattaches at the last offset the list was seen at. PageStorage keeps only
+/// where a scroll last came to rest, which is stale when the root is left
+/// mid-fling: coming back would land further down than it was left.
+class _ResumingScrollController extends ScrollController {
+  final ValueNotifier<double> resumeAt;
+
+  _ResumingScrollController(this.resumeAt, {super.onAttach})
+    : super(keepScrollOffset: false);
+
+  @override
+  double get initialScrollOffset => resumeAt.value;
 }
