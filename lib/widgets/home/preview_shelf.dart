@@ -258,19 +258,7 @@ class _Tile extends ConsumerWidget {
     final fallback = ProceduralAlbumArt(trackId: item.id, size: size);
     final art = url == null
         ? fallback
-        : Image.network(
-            url,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-            cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
-            frameBuilder: (_, child, frame, _) => frame == null
-                ? ShimmerPulse(
-                    child: ShimmerBlock(width: size, height: size),
-                  )
-                : child,
-            errorBuilder: (_, _, _) => fallback,
-          );
+        : _TileArt(url: url, size: size, fallback: fallback);
     final isArtist = item.artist != null && item.album == null;
     final subtitle = _subtitle;
     final playable = item.track != null && !item.canBrowse;
@@ -317,6 +305,59 @@ class _Tile extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A tile's artwork. Resizing the window resizes the tile, so the decode
+/// width moves in steps, and art already shown stays while the next size
+/// loads instead of flashing back to a placeholder.
+class _TileArt extends StatefulWidget {
+  final String url;
+  final double size;
+  final Widget fallback;
+
+  const _TileArt({
+    required this.url,
+    required this.size,
+    required this.fallback,
+  });
+
+  @override
+  State<_TileArt> createState() => _TileArtState();
+}
+
+class _TileArtState extends State<_TileArt> {
+  static const _decodeStep = 64.0;
+
+  bool _shown = false;
+
+  @override
+  void didUpdateWidget(_TileArt oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) _shown = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = widget.size;
+    final decodeSize = (size / _decodeStep).ceil() * _decodeStep;
+    return Image.network(
+      widget.url,
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      cacheWidth: (decodeSize * MediaQuery.devicePixelRatioOf(context)).round(),
+      gaplessPlayback: true,
+      frameBuilder: (_, child, frame, _) {
+        if (frame != null) _shown = true;
+        return _shown
+            ? child
+            : ShimmerPulse(
+                child: ShimmerBlock(width: size, height: size),
+              );
+      },
+      errorBuilder: (_, _, _) => widget.fallback,
     );
   }
 }
