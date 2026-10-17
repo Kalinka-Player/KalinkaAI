@@ -16,6 +16,8 @@ class ShelfHeading extends StatelessWidget {
 
   /// A glyph before the title, where the shelf has a mark of its own.
   final IconData? icon;
+  final Color? iconColor;
+  final bool showDivider;
 
   final VoidCallback? onViewAll;
   final String viewAllLabel;
@@ -26,6 +28,8 @@ class ShelfHeading extends StatelessWidget {
     this.count,
     this.subtitle,
     this.icon,
+    this.iconColor,
+    this.showDivider = true,
     this.onViewAll,
     this.viewAllLabel = 'VIEW ALL',
   });
@@ -46,15 +50,15 @@ class ShelfHeading extends StatelessWidget {
         Row(
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 15, color: KalinkaColors.accentTint),
+              Icon(icon, size: 15, color: iconColor),
               const SizedBox(width: 8),
             ],
-            if (roomy) heading else Expanded(child: heading),
+            if (roomy && showDivider) heading else Expanded(child: heading),
             if (count != null) ...[
               const SizedBox(width: 8),
               ShelfTally(count!),
             ],
-            if (roomy) ...[
+            if (roomy && showDivider) ...[
               const SizedBox(width: 12),
               const Expanded(
                 child: Divider(

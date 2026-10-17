@@ -8,6 +8,7 @@ import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../browse_rows_shimmer.dart';
+import '../loading_shimmer.dart';
 import '../procedural_album_art.dart';
 import '../search/search_zero_state.dart' show kHomeSideInset;
 import '../search_cards/browse_item_rows.dart';
@@ -64,10 +65,10 @@ class PreviewShelfShimmer extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = preview?.itemsCount ?? 3;
     if (preview?.type != PreviewType.imageText) {
-      return BrowseRowsShimmer(count: count.clamp(1, 3));
+      return BrowseRowsShimmer(count: count.clamp(1, 5));
     }
     return ExcludeSemantics(
-      child: _Pulse(
+      child: ShimmerPulse(
         child: _TileRail(
           count: count,
           rows: PreviewShelf._rowsOf(preview),
@@ -84,6 +85,8 @@ class PreviewShelfShimmer extends StatelessWidget {
 class _TileRail extends StatelessWidget {
   final int count;
   final int rows;
+
+  /// The tile's size on a phone; wider screens scale it up to twice that.
   final double tileSize;
   final Widget Function(int index, double size) tile;
   final bool scrollable;
@@ -101,8 +104,12 @@ class _TileRail extends StatelessWidget {
   static const _gap = 12.0;
   static const _rowGap = 16.0;
 
+  /// Content width at which tiles show at [tileSize]; they grow in step
+  /// beyond it.
+  static const _phoneWidth = 400.0;
+
   /// The art, then a line each of title and subtitle at the user's text size.
-  double _tileHeight(BuildContext context) {
+  double _tileHeight(BuildContext context, double tileSize) {
     final scaler = MediaQuery.textScalerOf(context);
     // Merged as Text merges it, so the measure is the line it will draw.
     final base = DefaultTextStyle.of(context).style;
@@ -128,17 +135,21 @@ class _TileRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final columns = (count / rows).ceil();
-    final tileHeight = _tileHeight(context);
-    // The height first: an OverflowBox fills what it is offered, and a list
-    // offers unbounded height.
-    return SizedBox(
-      height: rows * tileHeight + (rows - 1) * _rowGap,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth + 2 * kHomeSideInset;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = (tileSize * constraints.maxWidth / _phoneWidth).clamp(
+          tileSize,
+          tileSize * 2,
+        );
+        final tileHeight = _tileHeight(context, size);
+        final width = constraints.maxWidth + 2 * kHomeSideInset;
+        // The height first: an OverflowBox fills what it is offered, and a
+        // list offers unbounded height.
+        return SizedBox(
+          height: rows * tileHeight + (rows - 1) * _rowGap,
           // Out to the window's edges, so tiles scroll off them rather than
           // stopping short at the list's inset; the first still lines up.
-          return OverflowBox(
+          child: OverflowBox(
             minWidth: width,
             maxWidth: width,
             child: ScrollConfiguration(
@@ -161,14 +172,14 @@ class _TileRail extends StatelessWidget {
                   children: [
                     for (var row = 0; row < rows; row++)
                       if (column * rows + row < count)
-                        tile(column * rows + row, tileSize),
+                        tile(column * rows + row, size),
                   ],
                 ),
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -182,27 +193,14 @@ class _TilePlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scaler = MediaQuery.textScalerOf(context);
-    Widget bar(double width, double fontSize) => Container(
-      width: width,
-      height: scaler.scale(fontSize),
-      decoration: BoxDecoration(
-        color: KalinkaColors.surfaceOverlay,
-        borderRadius: BorderRadius.circular(4),
-      ),
-    );
+    Widget bar(double width, double fontSize) =>
+        ShimmerBlock(width: width, height: scaler.scale(fontSize), radius: 4);
     return SizedBox(
       width: size,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              color: KalinkaColors.surfaceOverlay,
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
+          ShimmerBlock(width: size, height: size, radius: 8),
           const SizedBox(height: _Tile.artGap + 3),
           bar(size * 0.75, 11),
           const SizedBox(height: 6),
@@ -211,38 +209,6 @@ class _TilePlaceholder extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The opacity pulse every shimmer here shares.
-class _Pulse extends StatefulWidget {
-  final Widget child;
-
-  const _Pulse({required this.child});
-
-  @override
-  State<_Pulse> createState() => _PulseState();
-}
-
-class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1400),
-  )..repeat(reverse: true);
-
-  late final Animation<double> _opacity = Tween<double>(
-    begin: 0.55,
-    end: 1.0,
-  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) =>
-      FadeTransition(opacity: _opacity, child: widget.child);
 }
 
 /// Art above, title and a line on what it is below. A track plays; anything
@@ -298,6 +264,11 @@ class _Tile extends ConsumerWidget {
             height: size,
             fit: BoxFit.cover,
             cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+            frameBuilder: (_, child, frame, _) => frame == null
+                ? ShimmerPulse(
+                    child: ShimmerBlock(width: size, height: size),
+                  )
+                : child,
             errorBuilder: (_, _, _) => fallback,
           );
     final isArtist = item.artist != null && item.album == null;

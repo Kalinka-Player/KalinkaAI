@@ -39,6 +39,7 @@ import '../widgets/renderer_switcher.dart' show rendererDisplayName;
 import '../widgets/search/search_session_view.dart';
 import '../widgets/server_sheet.dart';
 import 'onboarding_screen.dart';
+import 'customise_home_screen.dart';
 import 'renderer_settings_screen.dart';
 import 'settings_screen.dart';
 import 'plugin_catalog_screen.dart';
@@ -436,6 +437,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
   @override
   Widget build(BuildContext context) {
+    final customiseOpen = ref.watch(homeCustomisationProvider);
+    final rendererSettings = ref.watch(rendererSettingsRouteProvider);
     // Arm the failure recorder from app start. Left to the queue rows that
     // read it, it would miss an error that lands while the queue isn't built
     // — during a search session, say.
@@ -491,6 +494,27 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               isTablet
                   ? _buildTabletLayout(context)
                   : _buildPhoneLayout(context),
+              if (customiseOpen &&
+                  !_settingsOpen &&
+                  !_pluginsOpen &&
+                  !_serverSheetOpen &&
+                  rendererSettings == null)
+                Positioned(
+                  left: isTablet ? (constraints.maxWidth + 1) / 2 : 0,
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: SheetAnchor(
+                    child: ClipRect(
+                      child: CustomiseHomeScreen(
+                        handlesBack: !_discoveryOpen,
+                        onClose: () => ref
+                            .read(homeCustomisationProvider.notifier)
+                            .close(),
+                      ),
+                    ),
+                  ),
+                ),
               // Hosted above the phone/tablet switch so an in-progress scan
               // (and its state) survives resizing across the breakpoint.
               if (_discoveryOpen) _buildDiscoveryOverlay(isTablet),
@@ -716,6 +740,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         : _showServerSheet;
     // Whatever is open over Home takes the back press instead.
     final covered =
+        ref.watch(homeCustomisationProvider) ||
         _settingsOpen ||
         _pluginsOpen ||
         _discoveryOpen ||

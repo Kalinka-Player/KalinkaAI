@@ -8,6 +8,7 @@ import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../browse_rows_shimmer.dart';
 import '../search_cards/browse_item_rows.dart';
+import '../search_cards/browse_navigation_scope.dart';
 import '../shelf_heading.dart';
 
 /// Items a shelf shows when its source did not say.
@@ -177,6 +178,18 @@ class _SectionShelf extends ConsumerWidget {
     final catalog = shelf.catalog;
     final title = section.name ?? catalog.title;
     final type = CatalogPage.typeOf(section);
+    final navigation = BrowseNavigationScope.maybeOf(context);
+    void openSection() {
+      final page = CatalogPage.fromItem(
+        section,
+        provider: ref.read(searchSessionProvider).catalogPage.provider,
+      );
+      final filter = ref
+          .read(searchSessionProvider)
+          .catalogFilter
+          .fittedTo(page.filterCapabilities);
+      ref.read(searchSessionProvider.notifier).openPage(page, filter: filter);
+    }
 
     return preview.when(
       loading: () =>
@@ -206,10 +219,11 @@ class _SectionShelf extends ConsumerWidget {
         return _Shelf(
           title: title,
           count: list.total,
-          onViewAll:
-              type == null ||
-                  onViewAll == null ||
-                  list.total <= list.items.length
+          onViewAll: navigation != null && section.canBrowse
+              ? openSection
+              : type == null ||
+                    onViewAll == null ||
+                    list.total <= list.items.length
               ? null
               : () => onViewAll!(type),
           child: BrowseItemRows(

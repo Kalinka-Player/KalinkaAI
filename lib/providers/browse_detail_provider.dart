@@ -16,6 +16,6 @@ final browseDetailProvider = FutureProvider.family<BrowseItemsList, String>((
   if (ownedByServer(ref.watch(builtinSourcesProvider), id)) {
     ref.watch(collectionsRevisionProvider);
   }
-  final api = ref.read(kalinkaProxyProvider);
+  final api = ref.watch(kalinkaProxyProvider);
   return api.browse(id, limit: 50);
 });

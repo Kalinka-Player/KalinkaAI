@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
-import 'catalog_cards_provider.dart';
 import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
 
@@ -201,7 +200,6 @@ class IndexerStatusNotifier extends Notifier<IndexerStatusState> {
         scan!.lastScanAt != previousScan?.lastScanAt &&
         (previousScan != null || state.requesting);
     final revision = state.libraryRevision + (completed ? 1 : 0);
-    if (completed) ref.invalidate(catalogCardGroupsProvider);
     IndexerDisplayStage? displayedStage;
     double? progress;
     for (final stage in IndexerDisplayStage.values) {

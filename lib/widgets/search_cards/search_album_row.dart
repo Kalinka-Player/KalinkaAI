@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../data_model/data_model.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/browse_detail_provider.dart';
@@ -15,6 +16,7 @@ import '../source_badge.dart';
 import '../swipe_to_act_row.dart';
 import 'container_action_header.dart';
 import 'expand_chevron_button.dart';
+import 'browse_navigation_scope.dart';
 import 'long_press_ring_painter.dart';
 import 'track_row_support.dart';
 
@@ -67,9 +69,14 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
 
   @override
   Widget build(BuildContext context) {
-    final isExpanded = ref.watch(
-      rowExpansionProvider.select((s) => s.unrolled.contains(widget.item.id)),
-    );
+    final navigation = BrowseNavigationScope.maybeOf(context);
+    final isExpanded =
+        (navigation?.allowInline ?? true) &&
+        ref.watch(
+          rowExpansionProvider.select(
+            (s) => s.unrolled.contains(widget.item.id),
+          ),
+        );
 
     // Scoped watches so unrelated selection changes don't rebuild the row.
     final selectionMode = ref.watch(
@@ -123,7 +130,11 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
                     .read(selectionStateProvider.notifier)
                     .toggleContainer(widget.item.id);
               } else {
-                _toggleExpand();
+                if (navigation != null) {
+                  navigation.onOpen(widget.item);
+                } else {
+                  _toggleExpand();
+                }
               }
             },
             onLongPressStart: selectionMode
@@ -192,11 +203,10 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
                                   fit: BoxFit.cover,
                                   gaplessPlayback: true,
                                   filterQuality: FilterQuality.low,
-                                  errorBuilder: (_, _, _) =>
-                                      ProceduralAlbumArt(
-                                        trackId: widget.item.id,
-                                        size: 60,
-                                      ),
+                                  errorBuilder: (_, _, _) => ProceduralAlbumArt(
+                                    trackId: widget.item.id,
+                                    size: 60,
+                                  ),
                                 )
                               : ProceduralAlbumArt(
                                   trackId: widget.item.id,
@@ -289,7 +299,10 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
                   const SizedBox(width: 12),
                   ExpandChevronButton(
                     isExpanded: isExpanded,
-                    onTap: _toggleExpand,
+                    onTap: (navigation?.allowInline ?? true)
+                        ? _toggleExpand
+                        : () => navigation!.onOpen(widget.item),
+                    canExpand: navigation?.allowInline ?? true,
                   ),
                 ],
               ),

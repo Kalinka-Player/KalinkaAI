@@ -21,10 +21,26 @@ typedef CatalogSectionRequest = ({
 /// edited a few times would otherwise hold every listing it had ever shown.
 final catalogSectionProvider = FutureProvider.autoDispose
     .family<BrowseItemsList, CatalogSectionRequest>((ref, request) async {
-      final api = ref.read(kalinkaProxyProvider);
+      final api = ref.watch(kalinkaProxyProvider);
       return api.browse(
         request.id,
         limit: request.limit,
         filter: request.filter,
       );
+    });
+
+/// A pinned catalog's preview on Home. Kept between visits, since slow
+/// sources would otherwise shimmer each time Home comes back; Home expires it
+/// hourly and on pull to refresh.
+final pinnedPreviewProvider = FutureProvider.autoDispose
+    .family<BrowseItemsList, CatalogSectionRequest>((ref, request) async {
+      final api = ref.watch(kalinkaProxyProvider);
+      final list = await api.browse(
+        request.id,
+        limit: request.limit,
+        filter: request.filter,
+      );
+      // Only a success is kept; a failure is retried on the next visit.
+      ref.keepAlive();
+      return list;
     });

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../data_model/data_model.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/browse_detail_provider.dart';
@@ -15,6 +16,7 @@ import '../swipe_to_act_row.dart';
 import 'long_press_ring_painter.dart';
 import '../../providers/toast_provider.dart';
 import 'expand_chevron_button.dart';
+import 'browse_navigation_scope.dart';
 import 'search_album_row.dart';
 import 'track_row_support.dart';
 
@@ -48,9 +50,14 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
 
   @override
   Widget build(BuildContext context) {
-    final isExpanded = ref.watch(
-      rowExpansionProvider.select((s) => s.artists.contains(widget.item.id)),
-    );
+    final navigation = BrowseNavigationScope.maybeOf(context);
+    final isExpanded =
+        (navigation?.allowInline ?? true) &&
+        ref.watch(
+          rowExpansionProvider.select(
+            (s) => s.artists.contains(widget.item.id),
+          ),
+        );
     // Artists aren't a playable unit, so they sit out multi-select: the row
     // greys out (B&W avatar, dimmed) and ignores taps while it's active.
     final selectionMode = ref.watch(
@@ -77,7 +84,11 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
       children: [
         // Artist header row
         GestureDetector(
-          onTap: selectionMode ? null : _toggleExpand,
+          onTap: selectionMode
+              ? null
+              : navigation == null
+              ? _toggleExpand
+              : () => navigation.onOpen(widget.item),
           onLongPress: () {
             showSafeToast('Artists can’t be multi-selected');
           },
@@ -142,11 +153,10 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
                                   fit: BoxFit.cover,
                                   gaplessPlayback: true,
                                   filterQuality: FilterQuality.low,
-                                  errorBuilder: (_, _, _) =>
-                                      ProceduralAlbumArt(
-                                        trackId: widget.item.id,
-                                        size: 60,
-                                      ),
+                                  errorBuilder: (_, _, _) => ProceduralAlbumArt(
+                                    trackId: widget.item.id,
+                                    size: 60,
+                                  ),
                                 )
                               : ProceduralAlbumArt(
                                   trackId: widget.item.id,
@@ -202,7 +212,10 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
                       ignoring: selectionMode,
                       child: ExpandChevronButton(
                         isExpanded: isExpanded,
-                        onTap: _toggleExpand,
+                        onTap: (navigation?.allowInline ?? true)
+                            ? _toggleExpand
+                            : () => navigation!.onOpen(widget.item),
+                        canExpand: navigation?.allowInline ?? true,
                       ),
                     ),
                   ],
@@ -300,7 +313,15 @@ class _ArtistExpansionContent extends ConsumerWidget {
             children: [
               // Album rows — reuse the same SearchAlbumRow as top-level
               for (int i = 0; i < displayAlbums.length; i++) ...[
-                SearchAlbumRow(item: displayAlbums[i]),
+                if (BrowseNavigationScope.maybeOf(context)
+                    case final navigation?)
+                  BrowseNavigationScope(
+                    onOpen: navigation.onOpen,
+                    allowInline: false,
+                    child: SearchAlbumRow(item: displayAlbums[i]),
+                  )
+                else
+                  SearchAlbumRow(item: displayAlbums[i]),
                 if (i < displayAlbums.length - 1)
                   const Divider(
                     color: KalinkaColors.borderSubtle,

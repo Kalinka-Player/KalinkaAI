@@ -17,7 +17,8 @@ enum KalinkaDialogSide {
   full,
 }
 
-/// The app's dialog surface: a bottom-anchored card over its own scrim.
+/// The app's dialog surface: a card over its own scrim.
+/// Defaults to bottom-anchored; [centered] uses a regular centered dialog.
 ///
 /// Below [kKalinkaTabletBreakpoint] the dialog owns the window. At or above
 /// it, card *and* scrim confine themselves to the [side] panel, so a queue
@@ -33,6 +34,9 @@ enum KalinkaDialogSide {
 class KalinkaDialog extends StatelessWidget {
   /// Panel the dialog belongs to once the layout splits.
   final KalinkaDialogSide side;
+
+  /// Centers the card within its panel, using only the route's fade-in.
+  final bool centered;
 
   /// Glyph for the tinted tile above the title. Without it the card starts at
   /// the title.
@@ -64,6 +68,7 @@ class KalinkaDialog extends StatelessWidget {
     super.key,
     required this.side,
     required this.title,
+    this.centered = false,
     this.icon,
     this.iconColor = KalinkaColors.accent,
     this.iconGlyphColor,
@@ -172,27 +177,31 @@ class KalinkaDialog extends StatelessWidget {
       ),
     );
 
+    final cardContent = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: _cardMargin),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: _maxCardWidth),
+        // Absorb taps on the card so they don't reach the scrim.
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {},
+          child: card,
+        ),
+      ),
+    );
+
+    if (centered) {
+      return SafeArea(
+        minimum: const EdgeInsets.symmetric(vertical: _cardMargin),
+        child: Center(child: SingleChildScrollView(child: cardContent)),
+      );
+    }
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Flexible(
-          child: _slideIn(
-            context,
-            SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: _cardMargin),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: _maxCardWidth),
-                  // Absorb taps on the card so they don't reach the scrim.
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {},
-                    child: card,
-                  ),
-                ),
-              ),
-            ),
-          ),
+          child: _slideIn(context, SingleChildScrollView(child: cardContent)),
         ),
         SizedBox(height: MediaQuery.of(context).padding.bottom + 28),
       ],

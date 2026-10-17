@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
+import 'browse_root.dart';
 import 'catalog_cards_provider.dart';
 import 'kalinka_player_api_provider.dart';
 import 'source_modules_provider.dart';
@@ -51,9 +52,9 @@ final collectionsShelfProvider = FutureProvider<CollectionsShelf?>((ref) async {
   final builtin = ref.watch(builtinSourcesProvider);
   if (builtin.isEmpty) return null;
 
-  final api = ref.read(kalinkaProxyProvider);
-  final root = await api.browse('', limit: 20);
-  for (final module in root.items) {
+  final api = ref.watch(kalinkaProxyProvider);
+  final roots = await browseAllRoots(api);
+  for (final module in roots) {
     if (!module.canBrowse) continue;
     final sourceName = sourceOfId(module.id);
     if (sourceName == null || !builtin.contains(sourceName)) continue;

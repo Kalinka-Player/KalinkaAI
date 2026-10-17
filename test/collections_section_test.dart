@@ -91,10 +91,22 @@ class _Api implements KalinkaPlayerProxy {
     int limit = 10,
     String? filter,
   }) async {
-    if (id.isEmpty) return BrowseItemsList(0, limit, roots.length, roots);
+    if (id.isEmpty) {
+      return BrowseItemsList(
+        offset,
+        limit,
+        roots.length,
+        roots.skip(offset).take(limit).toList(),
+      );
+    }
     final items = children[id] ?? const <BrowseItem>[];
     final total = id == _shelfId ? shelfTotal : items.length;
-    return BrowseItemsList(offset, limit, total, items.take(limit).toList());
+    return BrowseItemsList(
+      offset,
+      limit,
+      total,
+      items.skip(offset).take(limit).toList(),
+    );
   }
 
   @override

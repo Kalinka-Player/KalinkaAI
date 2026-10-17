@@ -736,6 +736,9 @@ class Preview {
   /// "ai_suggestions", "album", "artist"); mapped to a concrete icon by the UI.
   final String? icon;
   final int? rowsCount;
+
+  /// Preferred item width / height supplied by the plugin.
+  final double? aspectRatio;
   final CardSize? cardSize;
 
   Preview({
@@ -744,6 +747,7 @@ class Preview {
     this.contentType,
     this.icon,
     this.rowsCount,
+    this.aspectRatio,
     this.cardSize,
   });
 
@@ -755,6 +759,7 @@ class Preview {
         : PreviewContentTypeExtension.fromValue(json["content_type"]),
     icon: json["icon"],
     rowsCount: json["rows_count"],
+    aspectRatio: (json["aspect_ratio"] as num?)?.toDouble(),
     cardSize: json["card_size"] == null
         ? null
         : CardSizeExtension.fromValue(json["card_size"]),
@@ -766,6 +771,7 @@ class Preview {
     "content_type": contentType?.toValue(),
     "icon": icon,
     "rows_count": rowsCount,
+    "aspect_ratio": aspectRatio,
     "card_size": cardSize?.toValue(),
   };
 
@@ -775,6 +781,7 @@ class Preview {
     PreviewContentType? contentType,
     String? icon,
     int? rowsCount,
+    double? aspectRatio,
     CardSize? cardSize,
   }) {
     return Preview(
@@ -783,6 +790,7 @@ class Preview {
       contentType: contentType ?? this.contentType,
       icon: icon ?? this.icon,
       rowsCount: rowsCount ?? this.rowsCount,
+      aspectRatio: aspectRatio ?? this.aspectRatio,
       cardSize: cardSize ?? this.cardSize,
     );
   }
@@ -796,12 +804,20 @@ class Preview {
         other.contentType == contentType &&
         other.icon == icon &&
         other.rowsCount == rowsCount &&
+        other.aspectRatio == aspectRatio &&
         other.cardSize == cardSize;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(itemsCount, type, contentType, icon, rowsCount, cardSize);
+  int get hashCode => Object.hash(
+    itemsCount,
+    type,
+    contentType,
+    icon,
+    rowsCount,
+    aspectRatio,
+    cardSize,
+  );
 }
 
 enum CatalogRole { featured, discovery, library, indexNode, hideOnHome }
@@ -1596,6 +1612,9 @@ abstract final class ModuleCapability {
   /// leg. A source without it has nothing of its own to suggest, so asking
   /// would only buy an empty answer and a row that waits for it.
   static const aiSearch = 'ai_search';
+
+  /// The plugin exposes a browsable catalog root in `/browse`.
+  static const catalogs = 'catalogs';
 }
 
 class ModuleInfo {
@@ -1627,10 +1646,10 @@ class ModuleInfo {
   /// local library and its shelves are not catalogs to explore.
   final bool builtin;
 
-  /// The optional calls this source answers, by name — `ai_search` so far.
-  /// Browsing and matching a name are what make a source a source and are
-  /// not listed. Read it to decide what to ask for rather than asking and
-  /// reading an empty answer.
+  /// The optional features this source offers, including `ai_search` and
+  /// `catalogs`. Catalog availability must be declared by the plugin.
+  /// A browse method alone does not imply that a plugin exposes catalogs.
+  /// Read these declarations before offering optional features.
   final List<String> capabilities;
 
   ModuleInfo({

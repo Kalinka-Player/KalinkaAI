@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../data_model/data_model.dart';
 import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/row_expansion_provider.dart';
@@ -12,6 +13,7 @@ import '../procedural_album_art.dart';
 import '../source_badge.dart';
 import '../swipe_to_act_row.dart';
 import 'expand_chevron_button.dart';
+import 'browse_navigation_scope.dart';
 import 'expanded_track_list.dart';
 import 'long_press_ring_painter.dart';
 import 'track_row_support.dart';
@@ -65,9 +67,14 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
 
   @override
   Widget build(BuildContext context) {
-    final isExpanded = ref.watch(
-      rowExpansionProvider.select((s) => s.unrolled.contains(widget.item.id)),
-    );
+    final navigation = BrowseNavigationScope.maybeOf(context);
+    final isExpanded =
+        (navigation?.allowInline ?? true) &&
+        ref.watch(
+          rowExpansionProvider.select(
+            (s) => s.unrolled.contains(widget.item.id),
+          ),
+        );
     final urlResolver = ref.read(urlResolverProvider);
 
     // Scoped watches so unrelated selection changes don't rebuild the row.
@@ -118,7 +125,11 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
                     .read(selectionStateProvider.notifier)
                     .toggleContainer(widget.item.id);
               } else {
-                _toggleExpand();
+                if (navigation != null) {
+                  navigation.onOpen(widget.item);
+                } else {
+                  _toggleExpand();
+                }
               }
             },
             onLongPressStart: selectionMode
@@ -277,7 +288,10 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
                   const SizedBox(width: 12),
                   ExpandChevronButton(
                     isExpanded: isExpanded,
-                    onTap: _toggleExpand,
+                    onTap: (navigation?.allowInline ?? true)
+                        ? _toggleExpand
+                        : () => navigation!.onOpen(widget.item),
+                    canExpand: navigation?.allowInline ?? true,
                   ),
                 ],
               ),
