@@ -27,6 +27,8 @@ import '../selection_overlay.dart';
 import '../server_chip.dart';
 import 'album_page_header.dart';
 import 'catalog_page_view.dart';
+import '../home/catalog_pin_button.dart';
+import '../home/home_layout.dart';
 import 'results_view.dart';
 import 'search_composer.dart';
 import 'search_zero_state.dart';
@@ -347,6 +349,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           focusItemId: focusItemId,
           folderLayout: plan.folderLayout,
           canAdd: plan.canAdd,
+          preview: plan.preview,
         );
   }
 
@@ -436,8 +439,19 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
       return;
     }
     if (!session.catalogPage.isRoot) {
-      ref.read(searchSessionProvider.notifier).backToCatalogsRoot();
+      ref.read(searchSessionProvider.notifier).backFromCatalog();
     }
+  }
+
+  /// The HOME crumb skips the page stack that the back arrow unwinds.
+  void _goHome() {
+    if (_focused || _filtersOpen) {
+      _handleBack();
+      return;
+    }
+    ref.read(searchSessionProvider.notifier)
+      ..backToCatalogsRoot()
+      ..selectView(FindMusicView.catalogs);
   }
 
   @override
@@ -729,6 +743,13 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
               // hover outline has somewhere to sit.
               const SizedBox(width: 2),
               Expanded(child: _buildBreadcrumb(session, onResults)),
+              if (!onResults && session.shownListing.isCatalog)
+                CatalogPinButton(
+                  page: session.shownListing,
+                  filter: session.catalogFilter.copyWith(
+                    type: session.expandedShelf,
+                  ),
+                ),
               // Only where there is something to narrow: the Catalogs root
               // has no listing of its own.
               if (!_filterCapabilities(session).isEmpty)
@@ -751,10 +772,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     );
   }
 
-  /// The navigation stack (`HOME › CATEGORY`); the earlier segment is
-  /// muted because it is where back returns to — and, being where back
-  /// returns to, it is also a target: tapping it unwinds the same layer the
-  /// arrow does.
+  /// The navigation trail (`HOME › CATEGORY`); the muted HOME segment is a
+  /// target that returns straight to the root, past any page stack.
   Widget _buildBreadcrumb(SearchSessionState session, bool onResults) {
     final String? current = onResults
         ? 'RESULTS'
@@ -770,7 +789,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           semanticsLabel: 'Back to Home',
           style: style,
           // At the root there is nowhere to go: HOME is the page itself.
-          onTap: current == null ? null : _handleBack,
+          onTap: current == null ? null : _goHome,
         ),
         if (current != null) ...[
           Padding(
@@ -794,9 +813,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   }
 
   /// The Catalogs root: one scroll holding the Playfair question, its
-  /// description, the resting search entry, your collections, then the
-  /// "EXPLORE CATALOGS" divider, catalog cards and favourites. Tapping the
-  /// entry lifts the overlay.
+  /// description, the resting search entry, your collections, source tiles,
+  /// then pinned previews. Tapping the entry lifts the overlay.
   Widget _buildCatalogsRoot(SearchSessionState session) {
     final smart = ref.watch(smartSearchAvailableProvider) ?? true;
     return SearchZeroState(
@@ -819,9 +837,10 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           entryKey: _entryKey,
           hint: _hintText(session, smart: smart),
           smartSearch: smart,
+          smartSources: smart ? ref.watch(smartSearchSourcesProvider) : '',
           onOpenSearch: _openSearch,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: kHomeSectionGap),
       ],
     );
   }
@@ -1125,12 +1144,16 @@ class _DiscoverHero extends StatelessWidget {
   /// Whether a source answers smart search; the description says only what
   /// the search can do.
   final bool smartSearch;
+
+  /// Which sources answer smart search; empty hides the note.
+  final String smartSources;
   final VoidCallback onOpenSearch;
 
   const _DiscoverHero({
     required this.entryKey,
     required this.hint,
     required this.smartSearch,
+    required this.smartSources,
     required this.onOpenSearch,
   });
 
@@ -1167,6 +1190,19 @@ class _DiscoverHero extends StatelessWidget {
             smart: smartSearch,
             onTap: onOpenSearch,
           ),
+          if (smartSources.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                'Smart search works with $smartSources.',
+                style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+                  fontSize: KalinkaTypography.baseSize,
+                  color: KalinkaColors.textMuted,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

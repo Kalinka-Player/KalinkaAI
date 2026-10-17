@@ -23,6 +23,7 @@ import '../measure_size.dart';
 import '../page_banner.dart';
 import '../search_cards/action_pill_button.dart';
 import '../search_cards/browse_item_rows.dart';
+import '../search_cards/browse_navigation_scope.dart';
 import '../search_cards/search_track_row.dart';
 import '../shelf_heading.dart';
 import '../source_badge.dart';
@@ -34,9 +35,9 @@ import 'folder_trail.dart';
 import 'library_rescan_control.dart';
 import 'track_group_actions.dart';
 
-/// One selected catalog page — the single navigation level below the
-/// Catalogs root (back lives in the title bar). The banner scrolls away with
-/// the items; albums/artists/playlists unroll inline. A page of folders shows
+/// One browsed page in the catalog navigation stack (back lives in the title
+/// bar). The banner scrolls away with the items; row titles navigate and
+/// albums/artists/playlists can also unroll one level inline. A page of folders shows
 /// one folder at a time under a breadcrumb, its subfolders above its tracks.
 /// Items are pulled in chunks by an [InfiniteListView] straight off the
 /// browse endpoint (deterministic — never the AI router).
@@ -173,7 +174,12 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => BrowseNavigationScope(
+    onOpen: ref.read(searchSessionProvider.notifier).openBrowseItem,
+    child: _buildPage(context),
+  );
+
+  Widget _buildPage(BuildContext context) {
     final page = widget.page;
     // Parses the id; read once rather than per row.
     final isAlbum = page.isAlbum;
@@ -250,7 +256,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     }
 
     final listView = InfiniteListView<BrowseItem>(
-      key: ValueKey(listing.id),
+      key: page.folderLayout
+          ? ValueKey(listing.id)
+          : PageStorageKey(listing.id),
       // Only the facets the server honours restart the list, so touching an
       // inert placeholder never costs a refetch.
       reloadKey: '${listing.id}|${query.serverKey(capabilities)}|$revision',

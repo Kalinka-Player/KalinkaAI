@@ -22,9 +22,8 @@ import 'show_more_row.dart';
 /// truncated and a [ShowMoreRow] is appended that toggles [isExpanded] via
 /// [onToggleExpand].
 ///
-/// Used by both the search-results feed (AI groups) and the zero-state
-/// surface (Recently Favourited, Based on Now Playing) so tap-to-play
-/// animation, sibling dim, and row styling stay consistent between them.
+/// Shared by every list of browse rows so tap-to-play animation, sibling
+/// dim, and row styling stay consistent between them.
 class BrowseItemRows extends StatelessWidget {
   final List<BrowseItem> items;
   final int? visibleLimit;
@@ -64,7 +63,7 @@ class BrowseItemRows extends StatelessWidget {
       // Per-row RepaintBoundary: each row becomes its own composited layer
       // so scroll just shifts layers instead of re-rasterising the whole
       // section. Matters most for sections that pack many rows into a single
-      // outer ListView child (BASED ON NOW PLAYING, RECENTLY FAVOURITED).
+      // outer ListView child.
       children.add(
         RepaintBoundary(
           child: buildRow(

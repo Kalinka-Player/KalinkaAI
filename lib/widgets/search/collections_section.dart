@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/catalog_cards_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/connection_state_provider.dart';
+import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
 import '../browse_rows_shimmer.dart';
 import '../collection_art_tile.dart';
+import '../home/home_layout.dart';
 import '../kalinka_button.dart';
 import 'collection_name_sheet.dart';
 import '../search_cards/browse_item_rows.dart';
@@ -37,15 +39,15 @@ class CollectionsSection extends ConsumerWidget {
     });
 
     final shelfAsync = ref.watch(collectionsShelfProvider);
+    final loadingSources = ref.watch(
+      sourceModulesProvider.select(
+        (sources) => sources.isLoading && !sources.hasValue,
+      ),
+    );
+    if (loadingSources) return _loading();
 
     return shelfAsync.when(
-      loading: () => _section(
-        heading: const ShelfHeading(title: 'YOUR COLLECTIONS'),
-        body: const BrowseRowsShimmer(
-          count: 3,
-          shape: ShimmerRowShape.collection,
-        ),
-      ),
+      loading: _loading,
       // A shelf that failed to load is not worth a message on the root; the
       // catalogs below still work, and the next reload tries again.
       error: (_, _) => const SizedBox.shrink(),
@@ -95,14 +97,19 @@ class CollectionsSection extends ConsumerWidget {
     );
   }
 
+  Widget _loading() => _section(
+    heading: const ShelfHeading(title: 'YOUR COLLECTIONS'),
+    body: const BrowseRowsShimmer(count: 3, shape: ShimmerRowShape.collection),
+  );
+
   Widget _section({required Widget heading, required Widget body}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         heading,
-        const SizedBox(height: 10),
+        const SizedBox(height: kHomeHeadingGap),
         body,
-        const SizedBox(height: 26),
+        const SizedBox(height: kHomeSectionGap),
       ],
     );
   }

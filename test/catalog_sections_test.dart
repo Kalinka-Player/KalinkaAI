@@ -171,7 +171,16 @@ Future<_Harness> _pump(
       container: container,
       child: MaterialApp(
         home: Scaffold(
-          body: CatalogPageView(page: page, onBackToCatalogs: () {}),
+          body: Consumer(
+            builder: (context, ref, _) {
+              final shown = ref.watch(searchSessionProvider).catalogPage;
+              return CatalogPageView(
+                key: ValueKey(shown.id),
+                page: shown,
+                onBackToCatalogs: () {},
+              );
+            },
+          ),
         ),
       ),
     ),
@@ -333,7 +342,7 @@ void main() {
       expect(find.text('ALBUMS'), findsOneWidget);
     });
 
-    testWidgets('View all narrows the page to that shelf\'s kind', (
+    testWidgets('View all opens the shelf as a pinnable catalog page', (
       tester,
     ) async {
       final harness = await _pump(
@@ -347,12 +356,15 @@ void main() {
       await tester.tap(find.text('VIEW ALL').first);
       await tester.pumpAndSettle();
 
-      // The shelves give way to the library itself, narrowed to that kind.
       expect(find.text('ALBUMS'), findsNothing);
-      expect(harness.api.calls.first.id, 'kalinka:localfiles:catalog:library');
-      expect(harness.api.calls.first.filter, '{"type":{"any":["album"]}}');
+      expect(harness.api.calls.first.id, 'kalinka:localfiles:catalog:albums');
+      expect(harness.api.calls.first.filter, isNull);
+      expect(
+        harness.container.read(searchSessionProvider).catalogPage.isCatalog,
+        isTrue,
+      );
 
-      await tester.tap(find.text('Albums'));
+      harness.container.read(searchSessionProvider.notifier).backFromCatalog();
       await tester.pumpAndSettle();
 
       expect(find.text('ALBUMS'), findsOneWidget);
@@ -388,7 +400,7 @@ void main() {
 
       await tester.tap(find.text('VIEW ALL').first);
       await tester.pumpAndSettle();
-      expect(state().expandedShelf, SearchType.album);
+      expect(state().catalogPage.id, 'kalinka:localfiles:catalog:albums');
       expect(state().catalogFilter.type, isNull);
       _reopen(harness.container);
 
@@ -416,20 +428,15 @@ void main() {
         state().catalogFilter.copyWith(genreIds: ['jazz']),
       );
       await tester.pumpAndSettle();
-      expect(state().expandedShelf, SearchType.album);
-      expect(
-        harness.api.calls.first.filter,
-        '{"type":{"any":["album"]},"genre":{"any":["jazz"]}}',
-      );
+      expect(state().catalogPage.id, 'kalinka:localfiles:catalog:albums');
+      expect(harness.api.calls.first.filter, '{"genre":{"any":["jazz"]}}');
 
-      session.setCatalogFilter(
-        state().catalogFilter.copyWith(type: SearchType.artist),
-      );
-      expect(state().expandedShelf, isNull);
-
+      session.backFromCatalog();
+      expect(state().catalogPage.id, 'kalinka:localfiles:catalog:library');
+      expect(state().catalogFilter.isEmpty, isTrue);
       _reopen(harness.container);
-      expect(state().catalogFilter.type, SearchType.artist);
-      expect(state().catalogFilter.genreIds, ['jazz']);
+      expect(state().catalogFilter.type, isNull);
+      expect(state().catalogFilter.genreIds, isEmpty);
     });
 
     testWidgets('the page filter reaches each shelf in its own terms', (

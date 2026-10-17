@@ -1,0 +1,48 @@
+# Home catalogs and plugin capability contract
+
+Home offers compact tiles for enabled, non-builtin sources that explicitly advertise `catalogs`. Source tiles appear under **BROWSE SOURCES**, above the pinned previews. There is no overall **PINNED CATALOGS** heading. Each source tile shows the plugin icon, plugin name and navigation chevron, without a description or subtitle. Users open a source, navigate to any catalog or subcatalog, choose filters, and pin that selection. Album, artist and playlist pages do not offer pinning.
+
+Pins are stored on this device, separately for each server address. Each pin retains its catalog metadata, filters, display labels, preview choice and position. The same catalog can be pinned with different filters. Disabling or temporarily losing a source does not delete its pins.
+
+Cards and List preview headings have two text levels: the title and the pinned BrowseItem's saved description, omitting missing text or a repeated title. Source attribution is the source-coloured plugin icon to the left of the title, with a generic library icon as fallback. There is no separate source/filter attribution line. Icons come from module metadata matched by the catalog ID; an unavailable source shows Unavailable in place of the description. Saved filters still apply when opening a preview.
+
+After the final pinned preview, a centered **Customise Home** button opens Home management. It uses a neutral outlined capsule, a tune icon, sentence-case IBM Plex Sans, and a minimum 48dp touch target. Its label wraps at large text sizes. The footer uses `textSecondary`, the shared pointer highlight and a visible neutral keyboard-focus outline. The button opens a names-only list in the right panel on tablets and across the screen on phones. Each row has a drag handle, the current preview icon and a crossed-out Unpin icon. The row actions and dropdown choices use round 48dp icon buttons with Kalinka’s standard hover/press highlight. The preview icon opens a dropdown with four icon choices, the active choice highlighted in crimson, and its description underneath. Changes save immediately; the dropdown closes after three seconds of inactivity, or on an outside tap, Escape or Back. Unpin opens a centered confirmation dialog, naming the catalog, with Cancel and Unpin actions. It is centered within the right panel on tablets and the screen on phones; dismissing it leaves the catalog pinned. Show the footer only when at least one catalog is pinned. Keep 32dp between major Home sections and before the footer, 12dp between headings and content, and 32dp below the footer. Loading states use the same spacing. Cards and List preview headings also use `ShelfHeading`, with a trailing **VIEW ALL** action that restores the saved filters. Individual pinned headings omit the separator rule. See the [Home catalog heading guideline](../PALETTE.md#home-catalog-headings).
+
+Cards previews show up to eight items in a horizontally scrolling row. Artwork shows the pinned catalog BrowseItem's own artwork in its native proportions, with the source icon, a Playfair Display title in its original casing, and an optional description in normal IBM Plex Sans on the card without added shadows or gradient overlays. The caption is left-aligned and vertically centered as a group. Its fonts, icon and spacing scale proportionally with the actual card width above 400dp, retaining the base caption sizes on smaller cards. Both text styles use 85% of the shared sizes: a 22.1dp title and 10.2dp description before card and system scaling. System text scaling still applies. It has no separate section heading or View All action. The caption wraps at large text sizes, allowing the card to grow without distorting the image. Tapping the card opens the saved catalog and filters. Artwork never fetches the catalog's children; missing or failed artwork uses a neutral placeholder. The backend's optional `preview.aspect_ratio` is preserved in app models and saved pins. This describes preview items rather than image dimensions, so it supplies the initial frame until the image loads; the decoded image dimensions then take precedence. Without a valid hint, the frame defaults to 3:1, matching server-generated catalog art. List previews show up to five items vertically. Compact shows one source-style tile with the catalog name, source/filter description and source colour tint. It opens the saved catalog and filters without fetching children or adding a separate shelf heading. Adjacent Compact pins share the source tiles' responsive layout while retaining the user's pin order. Every tile in a grid has the same width and the tallest tile's height, including tiles in an incomplete last row. The height adapts to wrapped text and system text size; content is vertically centered and the full tile is tappable. Pinning and customisation share the same layout icons and descriptions: carousel for Cards, image for Artwork, rows for List and compact rectangles for Compact. Initial pinning offers these in a bottom sheet; customisation uses the icon dropdown. Search and collections remain above the pins. Future smart suggestions are outside the ordered pin list.
+
+Home sections share a muted shimmer treatment for loading. Source tiles reserve their responsive grid while root catalogs load, and pinned previews retain their corresponding Cards, List, Artwork or Compact shape. Module loading does not temporarily mark pins Unavailable. Image loading uses the same shimmer; missing or failed artwork retains its fallback. Reduced-motion mode keeps placeholders static.
+
+Saved previews carry a format version. Original, unversioned Artwork selections become Cards to preserve their horizontal layout. Compact and List selections, filters and pin order are retained. Versioned Artwork selections continue to show the catalog's own image.
+
+Catalog rows open pages. Media row titles on those pages also open pages, while the right-hand chevron expands one level inline. Nested media inside an expanded artist opens a page rather than creating another inline level. Back restores the parent catalog, its filters and folder navigation.
+
+## Backend capability and pagination contract
+
+Plugin SDK 3.14 adds `ModuleCapability.CATALOGS = "catalogs"` to the existing capability enum. Input plugins declare it through `InputModule.capabilities()`, the same method used for `ai_search`. The default does not report `catalogs`, and implementing `browse` alone does not imply catalog availability.
+
+The server includes declared capabilities in each `/server/modules` entry's `capabilities` string list, in enum order. Disabled plugins, builtins and receiver-only plugins expose no capabilities. My Library (`localfiles`) and Jamendo declare `catalogs`; the UPnP receiver does not. Out-of-tree plugins such as Qobuz, Tidal and Spotify must declare the capability in their own packages and require SDK >= 3.14 before their Home tiles appear. The app has no plugin-specific detection.
+
+REST API 0.18 ships this contract. The app does not gate source tiles on the API version: missing `catalogs` means no source tile, including on older servers. There is deliberately no name-based allowlist or fallback probing of every plugin.
+
+Example module metadata:
+
+```json
+{
+  "name": "example_source",
+  "title": "Example Music",
+  "enabled": true,
+  "state": "ready",
+  "builtin": false,
+  "capabilities": ["ai_search", "catalogs"]
+}
+```
+
+The root `GET /browse` listing now honours `offset` and `limit` (default 10), with `total` counting all sources. Source tiles, Discover, catalog cards and collections share a helper that reads every root page until an empty page or `offset >= total`. Root IDs remain `kalinka:<source>:catalog:root`; the app uses each returned ID verbatim and never manufactures one. Each provider keeps its own filtering and ordering.
+
+## Catalog metadata and filters
+
+Existing BrowseItem metadata supplies everything else: a stable `kalinka:<source>:catalog:<id>` identity, `can_browse`, a catalog title, optional image/description, `filters`, and optional `sections`. A folder layout is still a catalog and can be pinned. A section's View all opens that section's own catalog page with the applicable parent filters.
+
+Each plugin must expose its own subcatalog tree and filter declarations. For example, multiple release or editorial lists and their genre vocabularies belong in plugin responses; the app does not flatten or invent a provider-specific taxonomy. Genre choices use the existing `/browse/{catalog_id}/filter/{field}/values` API. Pins send only filters supported by their saved catalog schema. If a plugin removes a catalog or changes its schema, the preview reports a loading error and users can browse the updated source and replace the pin.
+
+The backend test suite covers capability reporting and root pagination. Frontend coverage lives in `browse_root_test.dart`, `catalog_sources_test.dart`, `pinned_catalogs_test.dart`, and `catalog_home_ui_test.dart`.

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,8 +9,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/data_model/browse_filters.dart';
+import 'package:kalinka/providers/pinned_catalogs_provider.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
-import 'package:kalinka/providers/catalog_cards_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/indexer_status_provider.dart';
@@ -147,6 +150,23 @@ void main() {
     List<ModuleInfo> modules = const [],
     bool withHomeContent = false,
   }) {
+    if (withHomeContent) {
+      prefs.setString(
+        'Kalinka.pinnedCatalogs.v1:http://localhost:8080',
+        jsonEncode([
+          for (var i = 0; i < 10; i++)
+            PinnedCatalog(
+              page: CatalogPage.category(
+                id: 'kalinka:localfiles:catalog:$i',
+                title: 'Catalog $i',
+                provider: 'My music',
+              ),
+              filter: const BrowseFilterQuery(),
+              preview: HomePreviewType.artwork,
+            ).toJson(),
+        ]),
+      );
+    }
     final container = ProviderContainer(
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
@@ -156,23 +176,6 @@ void main() {
         sourceModulesProvider.overrideWith((ref) => modules),
         connectionStateProvider.overrideWith(_FixedConnection.new),
         playerStateProvider.overrideWithValue(PlaybackState.empty),
-        catalogCardGroupsProvider.overrideWith(
-          (ref) async => [
-            if (withHomeContent)
-              CatalogCardGroup(
-                sourceName: 'localfiles',
-                sourceTitle: 'My music',
-                cards: [
-                  for (var i = 0; i < 6; i++)
-                    CatalogCardPlan(
-                      id: 'kalinka:localfiles:catalog:$i',
-                      title: 'Catalog $i',
-                      sourceName: 'localfiles',
-                    ),
-                ],
-              ),
-          ],
-        ),
         indexerStatusProvider.overrideWith(_IdleIndexer.new),
       ],
     );

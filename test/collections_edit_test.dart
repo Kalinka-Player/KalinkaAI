@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
-import 'package:kalinka/providers/catalog_cards_provider.dart';
 import 'package:kalinka/providers/collection_edit_provider.dart';
 import 'package:kalinka/providers/collections_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
@@ -167,9 +166,6 @@ void main() {
         sourceModulesProvider.overrideWith((ref) => _modules),
         connectionStateProvider.overrideWith(_FixedConnection.new),
         playerStateProvider.overrideWithValue(PlaybackState.empty),
-        catalogCardGroupsProvider.overrideWith(
-          (ref) => Future.value(const <CatalogCardGroup>[]),
-        ),
         collectionsShelfProvider.overrideWith((ref) => Future.value(null)),
         indexerStatusProvider.overrideWith(_IdleIndexer.new),
       ],

@@ -8,6 +8,8 @@ import '../data_model/browse_filters.dart';
 import '../data_model/data_model.dart';
 import '../data_model/search_results.dart';
 import 'catalog_cards_provider.dart';
+import 'catalog_sources_provider.dart';
+import 'catalog_section_provider.dart';
 import 'collections_provider.dart';
 import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
@@ -40,6 +42,7 @@ const _suggestionCount = 4;
 
 /// How old Home's data may get before coming back to the app refreshes it.
 const _staleAfter = Duration(minutes: 5);
+const _pinnedPreviewsExpireAfter = Duration(hours: 1);
 
 /// Suggestions are refetched past this age, or in a new hour, when the search
 /// opens: they are picked for the time of day.
@@ -64,9 +67,8 @@ enum FindMusicView { catalogs, results }
 typedef ExpandedBlock = ({ResultKind kind, String? source});
 
 /// The Catalogs view is either at its root (search invitation + catalog cards)
-/// or on one selected catalog page. Navigation is exactly one level deep — a
-/// page never opens another page; albums/artists/playlists unroll inline, and
-/// a page of folders moves between its folders in place.
+/// or on a browsed page. Pages form a back stack; chevrons still reveal one
+/// level inline, and folders retain their breadcrumb navigation.
 class CatalogPage {
   /// Stable browse id of the open catalog category; null on the root screen.
   final String? id;
@@ -113,6 +115,7 @@ class CatalogPage {
   /// Adding the id to the queue adds tracks — for a folder, whether any sit
   /// directly in it.
   final bool canAdd;
+  final Preview? preview;
 
   const CatalogPage.root()
     : id = null,
@@ -126,7 +129,8 @@ class CatalogPage {
       canEdit = false,
       focusItemId = null,
       folderLayout = false,
-      canAdd = false;
+      canAdd = false,
+      preview = null;
 
   const CatalogPage.category({
     required this.id,
@@ -141,7 +145,50 @@ class CatalogPage {
     this.focusItemId,
     this.folderLayout = false,
     this.canAdd = false,
+    this.preview,
   });
+
+  bool get isCatalog {
+    try {
+      return id != null && EntityId.fromString(id!).type == EntityType.catalog;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'provider': provider,
+    'description': description,
+    'artPath': artPath,
+    'filters': filters.map((f) => f.toJson()).toList(),
+    'sections': sections.map((s) => s.toJson()).toList(),
+    'folderLayout': folderLayout,
+    'canAdd': canAdd,
+    'preview': preview?.toJson(),
+  };
+
+  factory CatalogPage.fromJson(Map<String, dynamic> json) =>
+      CatalogPage.category(
+        id: json['id'] as String,
+        title: json['title'] as String,
+        provider: json['provider'] as String?,
+        description: json['description'] as String?,
+        artPath: json['artPath'] as String?,
+        filters: FilterSpec.parseList(json['filters']),
+        sections: [
+          for (final item in json['sections'] as List? ?? [])
+            BrowseItem.fromJson(Map<String, dynamic>.from(item as Map)),
+        ],
+        folderLayout: json['folderLayout'] == true,
+        canAdd: json['canAdd'] == true,
+        preview: json['preview'] == null
+            ? null
+            : Preview.fromJson(
+                Map<String, dynamic>.from(json['preview'] as Map),
+              ),
+      );
 
   /// An album's own page: its tracks under its cover, not a catalog.
   bool get isAlbum {
@@ -160,14 +207,18 @@ class CatalogPage {
         id: item.id,
         title: item.catalog?.title ?? item.name,
         provider: provider,
-        description: item.catalog?.description,
+        description:
+            item.catalog?.description ??
+            item.album?.artist?.name ??
+            item.subname,
         totalDurationSeconds: item.album?.duration,
-        artPath: artPathOf(item),
+        artPath: item.image?.large ?? item.image?.small ?? artPathOf(item),
         filters: item.catalog?.filters ?? const [],
         sections: item.sections ?? const [],
         canEdit: item.canEdit,
         folderLayout: item.browseType == BrowseType.folder,
         canAdd: item.canAdd,
+        preview: item.catalog?.previewConfig,
       );
 
   /// A folder as [toFolderJson] kept it, owned by [provider].
@@ -210,14 +261,14 @@ class CatalogPage {
     canEdit: canEdit,
     folderLayout: folderLayout,
     canAdd: canAdd,
+    preview: preview,
   );
 
   /// The entity kinds this category holds, in the order its source listed
   /// them — one per section. Empty for a single-kind category, which is what
   /// keeps the kind facet off a page with nothing to choose between.
   List<SearchType> get sectionTypes => [
-    for (final section in sections)
-      ?typeOf(section),
+    for (final section in sections) ?typeOf(section),
   ];
 
   /// The entity kind a shelf stands for, as its source declared it — null
@@ -316,8 +367,6 @@ class SearchSessionState {
   final SearchType? expandedShelf;
 
   final List<String> history;
-  final List<BrowseItem> recentFavourites;
-  final bool zeroStateLoading;
 
   /// Context-aware suggestions fetched from `/ai_search/suggestions` —
   /// matched to the listener's time of day and validated against the
@@ -341,8 +390,6 @@ class SearchSessionState {
     this.catalogFilter = const BrowseFilterQuery(),
     this.expandedShelf,
     this.history = const [],
-    this.recentFavourites = const [],
-    this.zeroStateLoading = false,
     this.aiSuggestions = const [],
   });
 
@@ -441,8 +488,6 @@ class SearchSessionState {
     SearchType? expandedShelf,
     bool clearExpandedShelf = false,
     List<String>? history,
-    List<BrowseItem>? recentFavourites,
-    bool? zeroStateLoading,
     List<SearchSuggestion>? aiSuggestions,
   }) {
     return SearchSessionState(
@@ -466,8 +511,6 @@ class SearchSessionState {
           ? null
           : (expandedShelf ?? this.expandedShelf),
       history: history ?? this.history,
-      recentFavourites: recentFavourites ?? this.recentFavourites,
-      zeroStateLoading: zeroStateLoading ?? this.zeroStateLoading,
       aiSuggestions: aiSuggestions ?? this.aiSuggestions,
     );
   }
@@ -475,6 +518,16 @@ class SearchSessionState {
 
 class SearchSessionNotifier extends Notifier<SearchSessionState> {
   late SharedPreferences _prefs;
+  final _catalogBackStack =
+      <
+        ({
+          FindMusicView view,
+          CatalogPage page,
+          List<CatalogPage> folderPath,
+          BrowseFilterQuery filter,
+          SearchType? expandedShelf,
+        })
+      >[];
 
   /// Bumped on each [submit]; a resolving query whose generation no longer
   /// matches has been superseded and drops its result.
@@ -483,6 +536,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   bool _disposed = false;
 
   DateTime? _refreshedAt;
+  DateTime? _pinnedPreviewsAt;
 
   /// When the shown suggestions were asked for; null until one succeeds.
   DateTime? _suggestionsAt;
@@ -516,25 +570,56 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     );
   }
 
-  /// Refresh what Home fetches for itself: suggestions, favourites and the
-  /// saved searches. The catalog and collection sections refetch on their
-  /// own when the connection comes back.
+  /// Refresh what Home fetches for itself: suggestions and the saved
+  /// searches. The catalog and collection sections refetch on their own when
+  /// the connection comes back.
   void refresh() {
     _refreshedAt = DateTime.now();
+    _expirePinnedPreviews();
     state = state.copyWith(history: _loadHistory());
-    _loadRecentFavourites();
     _loadSuggestions();
-    _forgetUnofferedCatalogs();
   }
 
   /// Everything on Home, catalogs too, unless refreshed within [_staleAfter].
   /// The catalog sections keep showing while they refetch.
+  /// Pinned previews keep their own, longer expiry; see
+  /// [_expirePinnedPreviews].
   void refreshIfStale() {
     final at = _refreshedAt;
     if (at != null && DateTime.now().difference(at) < _staleAfter) return;
-    ref.invalidate(catalogCardGroupsProvider);
+    _refreshCatalogs();
+  }
+
+  /// Everything on Home, pinned previews too. Completes once the sources and
+  /// collections have reloaded, failed or not.
+  Future<void> refreshAll() {
+    _pinnedPreviewsAt = DateTime.now();
+    ref.invalidate(pinnedPreviewProvider);
+    return _refreshCatalogs();
+  }
+
+  /// Refetches pinned previews an hour after they were last refreshed. The
+  /// first call only starts the clock: Home is fetching them already.
+  void _expirePinnedPreviews() {
+    final now = DateTime.now();
+    final at = _pinnedPreviewsAt;
+    if (at != null && now.difference(at) < _pinnedPreviewsExpireAfter) return;
+    _pinnedPreviewsAt = now;
+    if (at != null) ref.invalidate(pinnedPreviewProvider);
+  }
+
+  Future<void> _refreshCatalogs() async {
+    ref.invalidate(catalogSourcesProvider);
     ref.invalidate(collectionsShelfProvider);
     refresh();
+    try {
+      await Future.wait([
+        ref.read(catalogSourcesProvider.future),
+        ref.read(collectionsShelfProvider.future),
+      ]);
+    } catch (_) {
+      // Each section shows its own error.
+    }
   }
 
   /// Refetch the suggestions if [_suggestionsStaleAfter] old or from an
@@ -553,6 +638,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// Back to the Catalogs root with the ephemeral workspace (results and the
   /// catalog page) discarded. History is written live on each [submit].
   void resetToRoot() {
+    _catalogBackStack.clear();
     _queryGen++;
     state = state.copyWith(
       activeView: FindMusicView.catalogs,
@@ -580,6 +666,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     if (view == FindMusicView.catalogs &&
         state.activeView == FindMusicView.catalogs &&
         !state.catalogPage.isRoot) {
+      _catalogBackStack.clear();
       state = state.copyWith(
         catalogPage: const CatalogPage.root(),
         folderPath: const [],
@@ -607,7 +694,20 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     String? focusItemId,
     bool folderLayout = false,
     bool canAdd = false,
+    Preview? preview,
+    BrowseFilterQuery? initialFilter,
+    bool restoreFolder = true,
   }) {
+    if (!state.catalogPage.isRoot ||
+        state.activeView == FindMusicView.results) {
+      _catalogBackStack.add((
+        view: state.activeView,
+        page: state.catalogPage,
+        folderPath: state.folderPath,
+        filter: state.catalogFilter,
+        expandedShelf: state.expandedShelf,
+      ));
+    }
     final page = CatalogPage.category(
       id: id,
       title: title,
@@ -621,16 +721,71 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       focusItemId: focusItemId,
       folderLayout: folderLayout,
       canAdd: canAdd,
+      preview: preview,
     );
     state = state.copyWith(
       activeView: FindMusicView.catalogs,
       catalogPage: page,
-      folderPath: folderLayout ? _savedFolderPath(id, provider) : const [],
+      folderPath: folderLayout && restoreFolder
+          ? _savedFolderPath(id, provider)
+          : const [],
       // The source may have dropped a field since the filter was chosen.
       catalogFilter:
-          _savedCatalogFilters[id]?.fittedTo(page.filterCapabilities) ??
+          (initialFilter ?? _savedCatalogFilters[id])?.fittedTo(
+            page.filterCapabilities,
+          ) ??
           const BrowseFilterQuery(),
       clearExpandedShelf: true,
+    );
+  }
+
+  void openBrowseItem(BrowseItem item) {
+    if (!item.canBrowse) return;
+    final source = sourceOfId(item.id);
+    final page = CatalogPage.fromItem(
+      item,
+      provider:
+          ref.read(sourceDisplayInfoProvider)[source]?.title ??
+          source ??
+          state.catalogPage.provider,
+    );
+    openPage(page);
+  }
+
+  void openPage(CatalogPage page, {BrowseFilterQuery? filter}) {
+    if (page.id == null) return;
+    openCatalog(
+      id: page.id!,
+      title: page.title ?? '',
+      provider: page.provider,
+      description: page.description,
+      totalDurationSeconds: page.totalDurationSeconds,
+      artPath: page.artPath,
+      filters: page.filters,
+      sections: page.sections,
+      canEdit: page.canEdit,
+      folderLayout: page.folderLayout,
+      canAdd: page.canAdd,
+      preview: page.preview,
+      initialFilter: filter,
+      restoreFolder: false,
+    );
+  }
+
+  /// Return one navigation level, restoring that page's filters and folders.
+  void backFromCatalog() {
+    if (_catalogBackStack.isEmpty) {
+      backToCatalogsRoot();
+      return;
+    }
+    final previous = _catalogBackStack.removeLast();
+    state = state.copyWith(
+      activeView: previous.view,
+      catalogPage: previous.page,
+      folderPath: previous.folderPath,
+      catalogFilter: previous.filter,
+      expandedShelf: previous.expandedShelf,
+      clearExpandedShelf: previous.expandedShelf == null,
     );
   }
 
@@ -644,6 +799,10 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   /// Show [folder], listed in the folder shown now, in its place.
   void openFolder(BrowseItem folder) {
+    if (!state.catalogPage.folderLayout) {
+      openBrowseItem(folder);
+      return;
+    }
     state = state.copyWith(
       folderPath: [
         ...state.folderPath,
@@ -665,6 +824,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   /// Return from a catalog page to the Catalogs root (the search screen).
   void backToCatalogsRoot() {
+    _catalogBackStack.clear();
     if (state.catalogPage.isRoot) return;
     state = state.copyWith(
       catalogPage: const CatalogPage.root(),
@@ -1031,43 +1191,6 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     }
   }
 
-  Future<void> _loadRecentFavourites() async {
-    final settings = ref.read(connectionSettingsProvider);
-    if (!settings.isSet) return;
-    final api = ref.read(kalinkaProxyProvider);
-    state = state.copyWith(zeroStateLoading: true);
-    try {
-      final (tracks, albums, artists, playlists) = await (
-        api.getFavorite(SearchType.track, limit: 5),
-        api.getFavorite(SearchType.album, limit: 5),
-        api.getFavorite(SearchType.artist, limit: 5),
-        api.getFavorite(SearchType.playlist, limit: 5),
-      ).wait;
-      if (_disposed) return;
-
-      final all = [
-        ...tracks.items,
-        ...albums.items,
-        ...artists.items,
-        ...playlists.items,
-      ];
-      // Newest first; entries without a timestamp sink to the bottom.
-      all.sort((a, b) {
-        if (a.timestamp == 0 && b.timestamp == 0) return 0;
-        if (a.timestamp == 0) return 1;
-        if (b.timestamp == 0) return -1;
-        return b.timestamp.compareTo(a.timestamp);
-      });
-
-      state = state.copyWith(
-        recentFavourites: all.take(6).toList(),
-        zeroStateLoading: false,
-      );
-    } catch (_) {
-      state = state.copyWith(zeroStateLoading: false);
-    }
-  }
-
   List<String> _loadHistory() {
     final json = _prefs.getString(_historyKey);
     if (json == null) return <String>[];
@@ -1136,8 +1259,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         genre.id: genre.name,
     };
     _savedResultsGenreNames = {
-      for (final id in filter.genreIds)
-        id: ?names[id],
+      for (final id in filter.genreIds) id: ?names[id],
     };
     if (_savedResultsFilter.isEmpty) {
       _prefs.remove(_resultsFilterKey);
@@ -1239,39 +1361,6 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     } else {
       _prefs.setString(_folderPathsKey, jsonEncode(_savedFolderPaths));
     }
-  }
-
-  /// Removes filters for deleted catalogs. Sources missing from the catalog
-  /// list keep their filters because they may only be offline or logged out.
-  Future<void> _forgetUnofferedCatalogs() async {
-    if (_savedCatalogFilters.isEmpty) return;
-    final Set<String> listing;
-    final Set<String> offered;
-    try {
-      // The collections shelf is missing until the module list lands.
-      await ref.read(sourceModulesProvider.future);
-      final (groups, collections) = await (
-        ref.read(catalogCardGroupsProvider.future),
-        ref.read(collectionsShelfProvider.future),
-      ).wait;
-      listing = {
-        for (final group in groups) group.sourceName,
-        if (collections != null) collections.plan.sourceName,
-      };
-      offered = {
-        for (final group in groups)
-          for (final card in group.cards) card.id,
-        if (collections != null) collections.plan.id,
-      };
-    } catch (_) {
-      return;
-    }
-    if (_disposed) return;
-    final before = _savedCatalogFilters.length;
-    _savedCatalogFilters.removeWhere(
-      (id, _) => listing.contains(sourceOfId(id)) && !offered.contains(id),
-    );
-    if (_savedCatalogFilters.length != before) _saveCatalogFilters();
   }
 }
 

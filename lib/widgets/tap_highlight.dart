@@ -18,6 +18,16 @@ final WidgetStateProperty<Color?> kalinkaOverlay =
       return null;
     });
 
+/// Round icon actions with the same pointer highlight as other Kalinka controls.
+/// Leave keyboard focus to IconButton's native focus highlight: a menu may
+/// focus its anchor after a touch without needing a persistent focus border.
+final kalinkaIconButtonStyle = ButtonStyle(
+  minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
+  padding: const WidgetStatePropertyAll(EdgeInsets.all(12)),
+  shape: const WidgetStatePropertyAll(CircleBorder()),
+  overlayColor: kalinkaOverlay,
+);
+
 /// Makes a row answer the pointer: the click cursor where there is somewhere
 /// to go, a lift under the pointer, and a stronger one while it is held.
 ///

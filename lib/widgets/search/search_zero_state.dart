@@ -3,18 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart' show SearchSuggestion;
 import '../../providers/catalog_cards_provider.dart';
+import '../../providers/pinned_catalogs_provider.dart';
 import '../../providers/search_session_provider.dart';
+import '../../providers/shell_nav_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
-import '../home/recently_added_section.dart';
-import '../search_cards/browse_item_rows.dart';
-import '../shelf_heading.dart' show hasLargeType;
+import '../home/home_layout.dart';
+import '../home/pinned_catalogs_section.dart';
+import '../tap_highlight.dart';
 import 'catalog_cards_section.dart';
 import 'collections_section.dart';
 
 /// The Catalogs root body: the search invitation (passed in via [leading]),
-/// your collections, then an "EXPLORE CATALOGS" divider, the catalog cards,
-/// and recent favourites. Suggestions and recent searches live in the focused
+/// your collections, source tiles, then pinned catalogs.
+/// Suggestions and recent searches live in the focused
 /// search overlay ([SearchSuggestionsList]), not here.
 /// Home's side inset; what reaches the window edge bleeds past it by this.
 const kHomeSideInset = 16.0;
@@ -40,70 +42,73 @@ class SearchZeroState extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final favourites = ref.watch(
-      searchSessionProvider.select((s) => s.recentFavourites),
-    );
+    final pins = ref.watch(pinnedCatalogsProvider);
 
-    return ListView(
-      // Coming back from a catalog returns to where the root was left, not
-      // to its top — the shelf you came from is where you look next.
-      key: const PageStorageKey('discoverRoot'),
-      controller: controller,
-      padding: const EdgeInsets.fromLTRB(kHomeSideInset, 8, kHomeSideInset, 24),
-      children: [
-        ...leading,
+    return RefreshIndicator(
+      onRefresh: ref.read(searchSessionProvider.notifier).refreshAll,
+      color: KalinkaColors.accent,
+      backgroundColor: KalinkaColors.surfaceRaised,
+      child: ListView(
+        // Coming back from a catalog returns to where the root was left, not
+        // to its top — the shelf you came from is where you look next.
+        key: const PageStorageKey('discoverRoot'),
+        controller: controller,
+        // Pullable even when Home is shorter than the screen.
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          kHomeSideInset,
+          8,
+          kHomeSideInset,
+          kHomeSectionGap,
+        ),
+        children: [
+          ...leading,
 
-        CollectionsSection(onOpenCatalog: onOpenCatalog),
-        RecentlyAddedSection(onOpenCatalog: onOpenCatalog),
-
-        // Not "OR": a section may sit between the entry and this rule, and
-        // the label has to read the same whether one does or not.
-        const _DividerLabel('EXPLORE CATALOGS'),
-        const SizedBox(height: 26),
-        CatalogCardsSection(onOpenCatalog: onOpenCatalog),
-
-        // ── RECENTLY FAVOURITED ─────────────────────────────────────────────
-        if (favourites.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          Text('RECENTLY FAVOURITED', style: KalinkaTextStyles.sectionLabel),
-          const SizedBox(height: 6),
-          BrowseItemRows(items: favourites),
+          CollectionsSection(onOpenCatalog: onOpenCatalog),
+          const CatalogCardsSection(),
+          if (pins.isEmpty)
+            const PinnedCatalogsEmptyCard()
+          else ...[
+            PinnedCatalogsSection(pins: pins),
+            // After the pins, so it can't be read as the first shelf's own.
+            Center(
+              child: OutlinedButton.icon(
+                key: const ValueKey('customise-home-button'),
+                onPressed: () =>
+                    ref.read(homeCustomisationProvider.notifier).open(),
+                style:
+                    OutlinedButton.styleFrom(
+                      foregroundColor: KalinkaColors.textSecondary,
+                      minimumSize: const Size(48, 48),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      shape: const StadiumBorder(),
+                      textStyle: KalinkaFonts.sans(
+                        fontSize: KalinkaTypography.baseSize + 2,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ).copyWith(
+                      overlayColor: kalinkaOverlay,
+                      side: WidgetStateProperty.resolveWith(
+                        (states) => BorderSide(
+                          color: states.contains(WidgetState.focused)
+                              ? KalinkaColors.textSecondary
+                              : KalinkaColors.borderDefault,
+                        ),
+                      ),
+                    ),
+                icon: const Icon(Icons.tune, size: 18),
+                label: const Text(
+                  'Customise Home',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ],
         ],
-      ],
-    );
-  }
-}
-
-/// A centred section label flanked by hairline rules — the "EXPLORE
-/// CATALOGS" separator between what is yours and what the sources offer.
-class _DividerLabel extends StatelessWidget {
-  final String text;
-
-  const _DividerLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    // Large type leaves no room for the rules.
-    if (hasLargeType(context)) {
-      return Text(
-        text,
-        style: KalinkaTextStyles.sectionLabel,
-        textAlign: TextAlign.center,
-      );
-    }
-    return Row(
-      children: [
-        const Expanded(
-          child: Divider(color: KalinkaColors.borderSubtle, thickness: 1),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text(text, style: KalinkaTextStyles.sectionLabel),
-        ),
-        const Expanded(
-          child: Divider(color: KalinkaColors.borderSubtle, thickness: 1),
-        ),
-      ],
+      ),
     );
   }
 }

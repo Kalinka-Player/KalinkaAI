@@ -7,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/playqueue_events.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
-import 'package:kalinka/providers/catalog_cards_provider.dart';
 import 'package:kalinka/providers/collections_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
@@ -111,6 +110,7 @@ Future<ProviderContainer> pumpHomeShell(
   HomeApi? api,
   Size size = const Size(400, 800),
   bool coachMarksShown = true,
+  List<ModuleInfo> sources = const [],
   List<Override> overrides = const [],
 }) async {
   SharedPreferences.setMockInitialValues({
@@ -133,11 +133,8 @@ Future<ProviderContainer> pumpHomeShell(
       connectionStateProvider.overrideWith(_Connected.new),
       playbackTimeMsProvider.overrideWith(_StillClock.new),
       indexerStatusProvider.overrideWith(_IdleIndexer.new),
-      sourceModulesProvider.overrideWith((ref) => <ModuleInfo>[]),
+      sourceModulesProvider.overrideWith((ref) => sources),
       sourceCountProvider.overrideWithValue(1),
-      catalogCardGroupsProvider.overrideWith(
-        (ref) async => const <CatalogCardGroup>[],
-      ),
       collectionsShelfProvider.overrideWith((ref) async => null),
       // The real family dials a socket and arms a 5s connect timeout that
       // outlives the test; a never-completing future keeps it inert.

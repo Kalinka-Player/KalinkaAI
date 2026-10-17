@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
+import 'browse_root.dart';
 import 'kalinka_player_api_provider.dart';
 
 /// One shelf plan on the Discover surface — everything needed to render a
@@ -33,12 +34,12 @@ const int _kMaxIndexChildren = 2;
 /// grouped by role (library → featured → discovery).
 final discoverShelfPlansProvider =
     FutureProvider<List<DiscoverShelf>>((ref) async {
-  final api = ref.read(kalinkaProxyProvider);
+  final api = ref.watch(kalinkaProxyProvider);
 
-  final root = await api.browse('', limit: 20);
+  final roots = await browseAllRoots(api);
 
   final shelves = <DiscoverShelf>[];
-  for (final module in root.items) {
+  for (final module in roots) {
     if (!module.canBrowse) continue;
     final moduleTitle = module.name ?? module.catalog?.title ?? '';
     final children = await api.browse(module.id, limit: 20);

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
+import 'loading_shimmer.dart';
 
 /// Where the rows below start their artwork. Shared by both shapes because
 /// the search rows and the collection shelf agree on it, having agreed on
@@ -58,7 +60,7 @@ class ShimmerRowShape {
 /// so the block it occupies is the block they will fill, down to where the
 /// hairlines between them start. Used as the load-more footer in
 /// paged/infinite lists.
-class BrowseRowsShimmer extends StatefulWidget {
+class BrowseRowsShimmer extends StatelessWidget {
   final int count;
 
   /// Hairline divider above the first shimmer row, so it reads as a
@@ -75,41 +77,10 @@ class BrowseRowsShimmer extends StatefulWidget {
   });
 
   @override
-  State<BrowseRowsShimmer> createState() => _BrowseRowsShimmerState();
-}
-
-class _BrowseRowsShimmerState extends State<BrowseRowsShimmer>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _opacity;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat(reverse: true);
-    // Pulses toward full opacity — the boxes are already dark greys, so
-    // fading them further (0.4–0.7) rendered invisibly on the page canvas.
-    _opacity = Tween<double>(
-      begin: 0.55,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final shape = widget.shape;
     final rows = <Widget>[];
-    for (int i = 0; i < widget.count; i++) {
-      if (widget.leadingDivider || i > 0) {
+    for (int i = 0; i < count; i++) {
+      if (leadingDivider || i > 0) {
         rows.add(
           Padding(
             padding: EdgeInsets.only(left: shape.textInset),
@@ -123,10 +94,7 @@ class _BrowseRowsShimmerState extends State<BrowseRowsShimmer>
       }
       rows.add(_row(shape));
     }
-    return AnimatedBuilder(
-      animation: _opacity,
-      builder: (context, child) =>
-          Opacity(opacity: _opacity.value, child: child),
+    return ShimmerPulse(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: rows,
@@ -160,26 +128,13 @@ class _BrowseRowsShimmerState extends State<BrowseRowsShimmer>
     ),
   );
 
-  Widget _box(double size) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      color: KalinkaColors.surfaceOverlay,
-      borderRadius: BorderRadius.circular(6),
-    ),
-  );
+  Widget _box(double size) => ShimmerBlock(width: size, height: size);
 
   Widget _line(double factor, double height) => Align(
     alignment: Alignment.centerLeft,
     child: FractionallySizedBox(
       widthFactor: factor,
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          color: KalinkaColors.surfaceOverlay,
-          borderRadius: BorderRadius.circular(4),
-        ),
-      ),
+      child: ShimmerBlock(height: height, radius: 4),
     ),
   );
 }

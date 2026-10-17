@@ -26,3 +26,17 @@ class HomeSearchRequest extends Notifier<int> {
 final homeSearchRequestProvider = NotifierProvider<HomeSearchRequest, int>(
   HomeSearchRequest.new,
 );
+
+/// Hosted by the player shell so tablet customisation stays in the right panel.
+class HomeCustomisationNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void open() => state = true;
+  void close() => state = false;
+}
+
+final homeCustomisationProvider =
+    NotifierProvider<HomeCustomisationNotifier, bool>(
+      HomeCustomisationNotifier.new,
+    );

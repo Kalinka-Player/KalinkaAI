@@ -10,7 +10,6 @@ import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/search_results.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
-import 'package:kalinka/providers/catalog_cards_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
@@ -211,7 +210,12 @@ class _CollectionsApi extends _FakeApi {
       ],
       _ => const <BrowseItem>[],
     };
-    return BrowseItemsList(offset, limit, items.length, items);
+    return BrowseItemsList(
+      offset,
+      limit,
+      items.length,
+      items.skip(offset).take(limit).toList(),
+    );
   }
 }
 
@@ -332,7 +336,6 @@ void main() {
     List<ModuleInfo>? modules,
     Duration? modulesAfter,
     bool liveModules = false,
-    List<CatalogCardGroup> Function()? cardGroups,
   }) {
     final container = ProviderContainer(
       overrides: [
@@ -347,11 +350,6 @@ void main() {
         connectionStateProvider.overrideWith(_FixedConnection.new),
         // The real provider opens the wire-event WebSocket (retry timer).
         playerStateProvider.overrideWithValue(PlaybackState.empty),
-        // Keep the zero-state's catalog section inert (its real fetch arms a
-        // refresh timer that would outlive the test).
-        catalogCardGroupsProvider.overrideWith(
-          (ref) async => cardGroups?.call() ?? const <CatalogCardGroup>[],
-        ),
       ],
     );
     addTearDown(container.dispose);
@@ -412,7 +410,7 @@ void main() {
       },
     );
 
-    test('refreshing loads favourites but fires no search', () async {
+    test('refreshing fires no search', () async {
       final api = _FakeApi();
       final container = makeContainer(api);
       final notifier = container.read(searchSessionProvider.notifier);
@@ -423,7 +421,6 @@ void main() {
       final state = container.read(searchSessionProvider);
       expect(state.activeView, FindMusicView.catalogs);
       expect(state.resultsAvailable, isFalse);
-      expect(state.recentFavourites, isNotEmpty);
       expect(api.matchCalls + api.aiSearchCalls, 0);
     });
 
@@ -1125,7 +1122,7 @@ void main() {
       expect(filter.genreIds, isEmpty);
     });
 
-    group('of catalogs no longer offered', () {
+    group('of catalogs absent from the root listing', () {
       const kept = 'kalinka:jamendo:catalog:popular';
       const gone = 'kalinka:jamendo:catalog:retired';
 
@@ -1136,85 +1133,38 @@ void main() {
         );
       });
 
-      Future<void> openUnder(
-        List<CatalogCardGroup> Function() cardGroups,
-      ) async {
-        final container = makeContainer(_FakeApi(), cardGroups: cardGroups);
+      test('are retained after a refresh', () async {
+        final container = makeContainer(_FakeApi());
         container.read(searchSessionProvider.notifier).refresh();
         await Future.delayed(const Duration(milliseconds: 50));
-      }
-
-      test('are forgotten once the catalog list loads', () async {
-        await openUnder(
-          () => const [
-            CatalogCardGroup(
-              sourceName: 'jamendo',
-              sourceTitle: 'Jamendo',
-              cards: [
-                CatalogCardPlan(
-                  id: kept,
-                  title: 'Popular',
-                  sourceName: 'jamendo',
-                ),
-              ],
-            ),
-          ],
-        );
-
-        expect(prefs.getString('Kalinka.catalogFilters'), contains(kept));
-        expect(
-          prefs.getString('Kalinka.catalogFilters'),
-          isNot(contains(gone)),
-        );
-      });
-
-      test('are kept when the list failed to load', () async {
-        await openUnder(() => throw StateError('server unreachable'));
-
-        expect(prefs.getString('Kalinka.catalogFilters'), contains(gone));
-      });
-
-      test('are kept while their source lists nothing', () async {
-        await openUnder(
-          () => const [
-            CatalogCardGroup(
-              sourceName: 'qobuz',
-              sourceTitle: 'Qobuz',
-              cards: [
-                CatalogCardPlan(
-                  id: 'kalinka:qobuz:catalog:new',
-                  title: 'New',
-                  sourceName: 'qobuz',
-                ),
-              ],
-            ),
-          ],
-        );
 
         final saved = prefs.getString('Kalinka.catalogFilters');
         expect(saved, contains(kept));
         expect(saved, contains(gone));
       });
 
-      test('are judged only once the sources have loaded', () async {
-        const collections = _CollectionsApi.shelfId;
-        const gone = 'kalinka:collections:catalog:retired';
-        prefs.setString(
-          'Kalinka.catalogFilters',
-          '{"$collections":{"text":"night"},"$gone":{"genreIds":["rock"]}}',
-        );
-        final container = makeContainer(
-          _CollectionsApi(),
-          modules: _nameOnlyModules,
-          modulesAfter: const Duration(milliseconds: 20),
-        );
-        container.read(searchSessionProvider.notifier).refresh();
-        await Future.delayed(const Duration(milliseconds: 100));
+      test(
+        'are retained after sources load without a deletion signal',
+        () async {
+          const collections = _CollectionsApi.shelfId;
+          const gone = 'kalinka:collections:catalog:retired';
+          prefs.setString(
+            'Kalinka.catalogFilters',
+            '{"$collections":{"text":"night"},"$gone":{"genreIds":["rock"]}}',
+          );
+          final container = makeContainer(
+            _CollectionsApi(),
+            modules: _nameOnlyModules,
+            modulesAfter: const Duration(milliseconds: 20),
+          );
+          container.read(searchSessionProvider.notifier).refresh();
+          await Future.delayed(const Duration(milliseconds: 100));
 
-        final saved = prefs.getString('Kalinka.catalogFilters');
-        expect(saved, contains(collections));
-        expect(saved, isNot(contains(gone)));
-      });
+          final saved = prefs.getString('Kalinka.catalogFilters');
+          expect(saved, contains(collections));
+          expect(saved, contains(gone));
+        },
+      );
     });
   });
 
@@ -1360,7 +1310,7 @@ void main() {
   });
 
   group('SearchZeroState', () {
-    testWidgets('shows the catalogs divider and favourites', (tester) async {
+    testWidgets('shows no pinned heading without pins', (tester) async {
       final api = _FakeApi();
       final container = makeContainer(api);
       container.read(searchSessionProvider.notifier).refresh();
@@ -1377,8 +1327,9 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.text('EXPLORE CATALOGS'), findsOneWidget);
-      expect(find.text('RECENTLY FAVOURITED'), findsOneWidget);
+      expect(find.text('CUSTOMISE HOME'), findsNothing);
+      expect(find.text('No catalog sources available.'), findsNothing);
+      expect(find.text('RECENTLY FAVOURITED'), findsNothing);
     });
   });
 }

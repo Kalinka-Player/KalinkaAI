@@ -74,6 +74,8 @@ Use the bundled IBM Plex families. System text scaling is respected, not clamped
 
 ## Geometry and spacing
 
+**Customise Home** follows the same fixed header, typography and page gutters. Its content is a draggable list of catalog names and metadata, with subtle row separators. It occupies the right panel on tablets and the full screen on phones. The preview and Unpin row actions use Kalinka’s round 48dp icon buttons with the shared hover/press highlight and native keyboard focus feedback, rather than the header’s outlined focus style. The preview icon opens an anchored icon switch with a crimson active state and a description below; it closes after three seconds of inactivity. The crossed-out Unpin icon opens a centered confirmation dialog with Cancel and Unpin actions. Center it within the right panel on tablets and within the screen on phones; use a fade-in, not a bottom-sheet slide. Dismissing the dialog leaves the catalog pinned. See [Customise Home](../PALETTE.md#customise-home) for the interaction rules.
+
 | Element | Specification |
 | --- | --- |
 | Header | 52dp minimum height; grows for wrapped/scaled titles |

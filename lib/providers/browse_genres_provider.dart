@@ -15,7 +15,7 @@ final browseGenresProvider =
       ref,
       vocabulary,
     ) async {
-      final api = ref.read(kalinkaProxyProvider);
+      final api = ref.watch(kalinkaProxyProvider);
       final list = await api.getFilterValues(
         vocabulary.catalogId,
         vocabulary.field,
