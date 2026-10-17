@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart' show Color, IconData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/data_model.dart';
 import '../utils/schema_icons.dart';
-import 'connection_settings_provider.dart';
-import 'connection_state_provider.dart';
-import 'kalinka_player_api_provider.dart';
+import 'modules_state_provider.dart';
 
 /// Display metadata for a single source.
 class SourceDisplayInfo {
@@ -74,15 +73,9 @@ Color colorForSourceName(String name) {
   return _sourceColors[index % _sourceColors.length];
 }
 
-/// Fetches enabled input modules from the backend.
+/// Enabled input modules, refreshed with plugin installation and settings.
 final sourceModulesProvider = FutureProvider<List<ModuleInfo>>((ref) async {
-  // A server-side rename refreshes the name; only the address matters here.
-  ref.watch(connectionSettingsProvider.select((s) => s.address));
-  refetchOnReconnect(ref);
-  final settings = ref.read(connectionSettingsProvider);
-  if (!settings.isSet) return <ModuleInfo>[];
-  final api = ref.read(kalinkaProxyProvider);
-  final modulesAndDevices = await api.listModules();
+  final modulesAndDevices = await ref.watch(modulesStateProvider.future);
   return modulesAndDevices.inputModules.where((m) => m.enabled).toList();
 });
 

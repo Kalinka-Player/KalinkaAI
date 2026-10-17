@@ -14,6 +14,7 @@ import 'package:kalinka/providers/catalog_cards_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/modules_state_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/widgets/search/search_zero_state.dart';
@@ -21,6 +22,15 @@ import 'package:kalinka/widgets/search/search_zero_state.dart';
 /// Minimal fake proxy: only the methods the search session calls are
 /// implemented; everything else throws if unexpectedly invoked.
 class _FakeApi implements KalinkaPlayerProxy {
+  List<ModuleInfo> modules = _modules;
+  int moduleCalls = 0;
+
+  @override
+  Future<ModulesAndDevices> listModules() async {
+    moduleCalls++;
+    return ModulesAndDevices(inputModules: modules, devices: const []);
+  }
+
   int aiSearchCalls = 0;
   int matchCalls = 0;
   final List<String> queries = [];
@@ -47,7 +57,9 @@ class _FakeApi implements KalinkaPlayerProxy {
     matchCalls++;
     queries.add(query);
     matchSources.add(sources!.single);
-    return _matchesFor(sources.single);
+    return sources.single == 'tidal'
+        ? BrowseItemsList(0, 1, 1, [_track('tidal', 't1', 'A Song')])
+        : _matchesFor(sources.single);
   }
 
   @override
@@ -319,17 +331,18 @@ void main() {
     _FakeApi api, {
     List<ModuleInfo>? modules,
     Duration? modulesAfter,
+    bool liveModules = false,
     List<CatalogCardGroup> Function()? cardGroups,
   }) {
     final container = ProviderContainer(
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
         kalinkaProxyProvider.overrideWithValue(api),
-        if (modulesAfter == null)
+        if (!liveModules && modulesAfter == null)
           sourceModulesProvider.overrideWith((ref) => modules ?? _modules)
-        else
+        else if (!liveModules)
           sourceModulesProvider.overrideWith(
-            (ref) => Future.delayed(modulesAfter, () => modules ?? _modules),
+            (ref) => Future.delayed(modulesAfter!, () => modules ?? _modules),
           ),
         connectionStateProvider.overrideWith(_FixedConnection.new),
         // The real provider opens the wire-event WebSocket (retry timer).
@@ -346,6 +359,59 @@ void main() {
   }
 
   group('SearchSessionNotifier', () {
+    test(
+      'plugin refresh updates search sources, tracks and source filters',
+      () async {
+        final api = _FakeApi();
+        final container = makeContainer(api, liveModules: true);
+        final notifier = container.read(searchSessionProvider.notifier);
+        notifier.submit('A Song');
+        await Future.delayed(_settle);
+        expect(api.matchSources, ['qobuz']);
+        expect(api.moduleCalls, 1);
+
+        api.modules = [
+          ..._modules,
+          ModuleInfo(
+            name: 'tidal',
+            title: 'TIDAL',
+            enabled: true,
+            state: ModuleState.ready,
+          ),
+        ];
+        container.invalidate(modulesStateProvider);
+        await container.read(modulesStateProvider.future);
+        expect(
+          (await container.read(sourceModulesProvider.future))
+              .map((m) => m.name),
+          ['qobuz', 'tidal'],
+        );
+        expect(
+          container.read(sourceDisplayInfoProvider)['tidal']!.title,
+          'TIDAL',
+        );
+        notifier.submit('A Song');
+        await Future.delayed(_settle);
+        final results = container.read(searchSessionProvider).results!;
+        expect(api.matchSources, contains('tidal'));
+        expect(api.aiSources, isNot(contains('tidal')));
+        expect(results.sources.map((s) => s.name), contains('tidal'));
+        expect(
+          results.rankedMatches.any((item) => item.track?.title == 'A Song'),
+          isTrue,
+        );
+        expect(api.moduleCalls, 2);
+
+        api.modules = _modules;
+        container.invalidate(modulesStateProvider);
+        expect(
+          (await container.read(sourceModulesProvider.future))
+              .map((m) => m.name),
+          ['qobuz'],
+        );
+      },
+    );
+
     test('refreshing loads favourites but fires no search', () async {
       final api = _FakeApi();
       final container = makeContainer(api);
