@@ -1,0 +1,4 @@
+- Plain name search when no source offers AI search
+- New plugins show in search straight away
+- Album pages from plugins no longer come up empty
+- Recently added follows a server switch

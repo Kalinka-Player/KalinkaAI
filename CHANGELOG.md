@@ -8,6 +8,16 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.20.1
+
+Fixes for search and Home. Works with server 5.10.0; with server 5.11.0, search follows each source's AI search setting.
+
+### Fixed
+- With AI search switched off on every source, search shows a plain name search: a search icon, a "SEARCH" card and an "Artist, album or track…" hint, without the mood styling it kept in part before. Turning AI search off or on takes effect after the server restarts, without relaunching the app.
+- A plugin installed, enabled or removed from the plugin catalog, such as TIDAL, shows in search and its source filter straight away.
+- Album pages of a plugin that leaves out unset flags list their tracks instead of coming up empty.
+- Recently added on Home shows the new server's albums and artwork after switching servers.
+
 ## 0.20.0
 
 The app opens on Home, the queue moves into the player, an album gets its own page, and a streamer that is not on your network yet can be set up through its Wi-Fi hotspot. The setup wizard's Network step needs supervisor 0.5.0, the inactivity power-off timer needs server 5.10.0 and supervisor 0.5.0, and Rescan library needs server 5.10.0. Against older ones the timer and Rescan library stay hidden, and the Network step says it cannot reach network setup and lets you move on.
