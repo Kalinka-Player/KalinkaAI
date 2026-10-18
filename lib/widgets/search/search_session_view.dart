@@ -1134,7 +1134,7 @@ class _ResultsReturnPill extends StatelessWidget {
   }
 }
 
-/// The Discover hero: the Playfair question, its description, and the resting
+/// The Discover hero: the Playfair question and the resting
 /// search entry, over the tinted header artwork on the right. The text keeps
 /// to the left half (wrapping as needed); the crimson bloom behind it is
 /// painted once at the surface level, not here.
@@ -1142,8 +1142,7 @@ class _DiscoverHero extends StatelessWidget {
   final Key entryKey;
   final String hint;
 
-  /// Whether a source answers smart search; the description says only what
-  /// the search can do.
+  /// Whether a source answers smart search; controls the search entry icon.
   final bool smartSearch;
 
   /// Which sources answer smart search; empty hides the note.
@@ -1171,17 +1170,6 @@ class _DiscoverHero extends StatelessWidget {
               fontSize: KalinkaTypography.baseSize + 17,
               fontWeight: FontWeight.w600,
               color: KalinkaColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          FractionallySizedBox(
-            widthFactor: 0.8,
-            child: Text(
-              smartSearch
-                  ? 'Describe a mood, activity, genre, or anything else you '
-                        'would like to hear.'
-                  : 'Search your music by artist, album or track.',
-              style: KalinkaTextStyles.trackRowSubtitle,
             ),
           ),
           const SizedBox(height: 18),

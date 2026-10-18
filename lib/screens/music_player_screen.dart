@@ -451,6 +451,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(musicSourcesSettingsRequestProvider, (_, _) => _openPlugins());
     final customiseOpen = ref.watch(homeCustomisationProvider);
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
     // Arm the failure recorder from app start. Left to the queue rows that

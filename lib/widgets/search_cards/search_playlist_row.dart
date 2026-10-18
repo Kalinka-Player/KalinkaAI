@@ -68,8 +68,9 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
   @override
   Widget build(BuildContext context) {
     final navigation = BrowseNavigationScope.maybeOf(context);
+    final allowInline = navigation?.allowInline ?? true;
     final isExpanded =
-        (navigation?.allowInline ?? true) &&
+        allowInline &&
         ref.watch(
           rowExpansionProvider.select(
             (s) => s.unrolled.contains(widget.item.id),
@@ -288,10 +289,10 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
                   const SizedBox(width: 12),
                   ExpandChevronButton(
                     isExpanded: isExpanded,
-                    onTap: (navigation?.allowInline ?? true)
+                    onTap: allowInline
                         ? _toggleExpand
                         : () => navigation!.onOpen(widget.item),
-                    canExpand: navigation?.allowInline ?? true,
+                    canExpand: allowInline,
                   ),
                 ],
               ),

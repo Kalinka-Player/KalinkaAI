@@ -10,6 +10,7 @@ import '../providers/restart_provider.dart';
 import '../providers/server_info_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/supervisor_api.dart' show supervisorPort;
+import '../providers/shell_nav_provider.dart';
 import '../providers/server_update_provider.dart';
 import '../providers/upgrade_provider.dart';
 import '../providers/toast_provider.dart';
@@ -245,6 +246,18 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Home's gear asks for Music sources even while another tab is open.
+    ref.listen(musicSourcesSettingsRequestProvider, (_, _) {
+      setState(() {
+        _tab = PluginTab.sources;
+        _settingsFor = null;
+        _aboutFor = null;
+        _advancedOpen = false;
+        _logsOpen = false;
+        _networkOpen = false;
+      });
+      if (_scroll.hasClients) _scroll.jumpTo(0);
+    });
     // The server restarts to carry a plugin operation out; that restart shows
     // here as one started by Apply does.
     ref.listen(restartProvider.select((s) => s.isRestarting), (_, restarting) {

@@ -251,6 +251,7 @@ class PinnedCatalogPreview extends ConsumerWidget {
                             )
                           : BrowseNavigationScope(
                               onOpen: notifier.openBrowseItem,
+                              allowInline: false,
                               child: PreviewShelf(
                                 items: list.items.take(request.limit).toList(),
                                 preview: preview,

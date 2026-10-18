@@ -272,6 +272,25 @@ void main() {
     expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
   });
 
+  for (final count in [1, 3]) {
+    testWidgets('no VIEW ALL when all $count collections are visible', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        api: _serverWith(_collections.take(count).toList(), total: count),
+        modules: _withCollections,
+      );
+
+      expect(find.byType(CollectionShelfRow), findsNWidgets(count));
+      expect(find.text('VIEW ALL'), findsNothing);
+      await tester.tap(find.text('Late Night Focus'));
+      await tester.pump();
+      expect(opened.single.id, _shelfId);
+      expect(focused, ['kalinka:collections:playlist:c1']);
+    });
+  }
+
   testWidgets('VIEW ALL opens the shelf itself', (tester) async {
     await pump(
       tester,

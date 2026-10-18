@@ -143,6 +143,7 @@ void main() {
         ],
       );
       final sources = find.byType(CatalogCardsSection);
+      expect(find.text('LISTENING ON'), findsNothing);
       final sourceTiles = find.descendant(
         of: sources,
         matching: find.byType(CatalogTileShimmer),
