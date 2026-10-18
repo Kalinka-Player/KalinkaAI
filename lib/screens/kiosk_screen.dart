@@ -19,6 +19,7 @@ import '../providers/url_resolver.dart';
 import '../providers/volume_activity_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/playback_utils.dart';
+import '../widgets/away.dart';
 import '../widgets/kiosk/kiosk_backdrop.dart';
 import '../widgets/kiosk/kiosk_clock.dart';
 import '../widgets/kiosk/kiosk_cover_flow.dart';
@@ -30,7 +31,6 @@ import '../widgets/kiosk/kiosk_track_text.dart';
 import '../widgets/kiosk/kiosk_transport.dart';
 import '../widgets/kiosk/kiosk_volume_control.dart';
 import '../widgets/measure_size.dart';
-import '../widgets/mini_player.dart' show AwayDim;
 import '../widgets/transport_button.dart';
 
 /// Full-screen now-playing display, for a screen that shows what plays
@@ -860,17 +860,14 @@ class _PlayingView extends ConsumerWidget {
     final barScale = fill ? math.max(scale * 0.8, 0.62) : scale;
     final progress = KioskProgressBar(durationMs: durationMs, scale: barScale);
     // Never wider than the space it is given.
-    Widget controls({double? width}) => IgnorePointer(
-      ignoring: away,
-      child: ExcludeFocus(
-        excluding: away,
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: KioskTransport(
-            scale: fill ? math.max(scale * 0.9, 0.6) : scale,
-            width: width,
-            onSkip: onSkip,
-          ),
+    Widget controls({double? width}) => AwayLock(
+      away: away,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: KioskTransport(
+          scale: fill ? math.max(scale * 0.9, 0.6) : scale,
+          width: width,
+          onSkip: onSkip,
         ),
       ),
     );

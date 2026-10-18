@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'away.dart';
 import 'kiosk/kiosk_enter_button.dart';
-import 'mini_player.dart' show AwayDim;
 import 'player_view_switch.dart';
 import 'queue_actions.dart';
 import 'renderer_switcher.dart';
@@ -30,10 +30,7 @@ class PlayerHeader extends StatelessWidget {
 
   Widget _output(Widget switcher) => AwayDim(
     away: away,
-    child: IgnorePointer(
-      ignoring: away,
-      child: ExcludeFocus(excluding: away, child: switcher),
-    ),
+    child: AwayLock(away: away, child: switcher),
   );
 
   @override
