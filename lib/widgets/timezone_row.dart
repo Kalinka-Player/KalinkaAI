@@ -90,9 +90,16 @@ Future<void> chooseTimezone(
   BoxTimezone box, {
   bool inPanel = false,
 }) async {
-  final local = ref.read(localTimezoneProvider.future);
+  // Held until read, or the zone would be dropped while nothing shows it.
+  final local = ref.listenManual(localTimezoneProvider.future, (_, _) {});
+  final String? localZone;
+  try {
+    localZone = await local.read();
+  } finally {
+    local.close();
+  }
+  if (!context.mounted) return;
   final zones = await ref.read(supervisorApiProvider)?.timezones();
-  final localZone = await local;
   if (!context.mounted) return;
   if (zones == null) {
     ref

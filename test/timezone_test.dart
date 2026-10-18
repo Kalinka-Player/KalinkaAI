@@ -15,15 +15,17 @@ final _setsTimezone = supervisorInfo(
   actions: const {'reboot', 'poweroff', setTimezoneAction},
 );
 
+String? _london() => 'Europe/London';
+
 Future<ProviderContainer> _pump(
   WidgetTester tester,
   FakeBox box, {
-  String? local = 'Europe/London',
+  String? Function() local = _london,
 }) async {
   final container = ProviderContainer(
     overrides: [
       ...soundcardOverrides(await boxPrefs(), box: box),
-      localTimezoneProvider.overrideWith((ref) async => local),
+      localTimezoneProvider.overrideWith((ref) async => local()),
     ],
   );
   addTearDown(container.dispose);
@@ -110,6 +112,26 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('No time zone matches “atlantis”.'), findsOne);
+  });
+
+  testWidgets('reads this device’s zone again each time the picker opens', (
+    tester,
+  ) async {
+    var here = 'Europe/London';
+    await _pump(tester, FakeBox(answers: [_setsTimezone]), local: () => here);
+
+    await tester.tap(find.text('Time zone'));
+    await tester.pumpAndSettle();
+    expect(find.text('Europe/London'), findsNWidgets(2));
+    Navigator.of(tester.element(find.byKey(const ValueKey('timezone-search'))))
+        .pop();
+    await tester.pumpAndSettle();
+
+    here = 'Asia/Kolkata';
+    await tester.tap(find.text('Time zone'));
+    await tester.pumpAndSettle();
+    expect(find.text('Asia/Kolkata'), findsNWidgets(2));
+    expect(find.text('Europe/London'), findsOne);
   });
 
   testWidgets('a second tap while the zones load opens one picker', (
