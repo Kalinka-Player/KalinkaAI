@@ -74,6 +74,7 @@ class PlaybackTimeMsNotifier extends Notifier<int> {
   // reports again, even once reconnected: extrapolating the old state would
   // count the outage as played.
   ({_ServerTiming server, int ms})? _held;
+  bool _wasInterrupted = false;
 
   int _extrapolate(_ServerTiming server) {
     if (server.playerState == PlayerStateType.playing) {
@@ -147,9 +148,12 @@ class PlaybackTimeMsNotifier extends Notifier<int> {
     ref.onDispose(_cancelTick);
 
     if (_held?.server != snapshot.server) _held = null;
-    if (snapshot.interrupted) {
-      _held ??= (server: snapshot.server, ms: _extrapolate(snapshot.server));
+    // Only on the drop itself: a report arriving while still interrupted
+    // (e.g. the replay) is fresh and must not be held past reconnecting.
+    if (snapshot.interrupted && !_wasInterrupted) {
+      _held = (server: snapshot.server, ms: _extrapolate(snapshot.server));
     }
+    _wasInterrupted = snapshot.interrupted;
 
     _restartTicking(lifecycle: lifecycle, snapshot: snapshot);
     return _computeTimeMs(snapshot);

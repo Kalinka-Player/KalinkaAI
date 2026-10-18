@@ -103,4 +103,28 @@ void main() {
       expect(time(), 41000);
     });
   });
+
+  test('a report arriving while still reconnecting is not held', () {
+    fakeAsync((async) {
+      final h = _harness(async);
+      int time() => h.container.read(playbackTimeMsProvider);
+
+      h.queue.set(_playing(positionMs: 10000, atMs: 0));
+      async.elapse(Duration.zero);
+      h.connection.set(ConnectionStatus.reconnecting);
+      async.elapse(const Duration(seconds: 30));
+      expect(time(), 10000);
+
+      // The reconnect replay lands before the status flips back.
+      h.queue.set(
+        _playing(positionMs: 40000, atMs: h.clock.elapsedMilliseconds),
+      );
+      async.elapse(Duration.zero);
+      expect(time(), 40000);
+
+      h.connection.set(ConnectionStatus.connected);
+      async.elapse(const Duration(seconds: 2));
+      expect(time(), 42000);
+    });
+  });
 }
