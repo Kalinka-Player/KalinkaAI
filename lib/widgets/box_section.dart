@@ -18,10 +18,14 @@ class BoxSection extends ConsumerWidget {
   final String title;
   final List<Widget> leadingActions;
 
+  /// Opens the box's network page; the row shows only for a box.
+  final VoidCallback? onNetwork;
+
   const BoxSection({
     super.key,
     this.title = 'STREAMER',
     this.leadingActions = const [],
+    this.onNetwork,
   });
 
   Future<void> _openDashboard(WidgetRef ref, Uri page) async {
@@ -56,6 +60,13 @@ class BoxSection extends ConsumerWidget {
           children: [
             ...leadingActions,
             if (hasBox) ...[
+              if (onNetwork case final onNetwork?)
+                SettingsActionRow(
+                  label: 'Network',
+                  sublabel: 'How it connects, and the Wi-Fi network it joins',
+                  leading: configured ? Icons.wifi : null,
+                  onTap: onNetwork,
+                ),
               SettingsActionRow(
                 label: 'Streamer dashboard',
                 sublabel:
