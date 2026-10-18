@@ -13,6 +13,7 @@ import '../../utils/click_cursor.dart';
 import '../search/add_queue_chip.dart';
 import '../search/collection_menu_sheet.dart';
 import 'action_pill_button.dart';
+import 'browse_navigation_scope.dart';
 import 'collection_identity.dart';
 import 'editable_track_list.dart';
 import 'expand_chevron_button.dart';
@@ -20,9 +21,9 @@ import 'expanded_track_list.dart';
 import 'track_row_support.dart';
 
 /// A collection on the Collections screen: its cover, what it holds, and its
-/// tracks when it is unrolled. A collection is never a screen of its own —
-/// the listing is where you look at one and where you will edit it — so this
-/// row opens downwards like any other container.
+/// tracks when it is unrolled. The listing is where you look at one and edit
+/// it, so this row opens downwards there. In a Home preview that disallows
+/// inline expansion, the row and chevron open the item instead.
 ///
 /// Long-press takes it into the selection, as every other container row does.
 class CollectionRow extends ConsumerStatefulWidget {
@@ -83,9 +84,23 @@ class _CollectionRowState extends ConsumerState<CollectionRow>
 
   @override
   Widget build(BuildContext context) {
-    final expanded = ref.watch(
-      rowExpansionProvider.select((s) => s.unrolled.contains(widget.item.id)),
-    );
+    final navigation = BrowseNavigationScope.maybeOf(context);
+    final allowInline = navigation?.allowInline ?? true;
+    final expanded =
+        allowInline &&
+        ref.watch(
+          rowExpansionProvider.select(
+            (s) => s.unrolled.contains(widget.item.id),
+          ),
+        );
+    void activate() {
+      if (allowInline) {
+        _toggle();
+      } else {
+        navigation!.onOpen(widget.item);
+      }
+    }
+
     // An editing session takes the row's gestures over: what a tap and a long
     // press mean while one is running is decided by the session, not by
     // whatever selection was going on before it.
@@ -121,7 +136,7 @@ class _CollectionRowState extends ConsumerState<CollectionRow>
           nameAction: editing && widget.item.canEdit
               ? _CollectionMenuButton(item: widget.item)
               : null,
-          onTap: selecting && !editing ? _select : _toggle,
+          onTap: selecting && !editing ? _select : activate,
           onSelectPressStart: selecting || editing
               ? null
               : () => startLongPressRing(_select),
@@ -130,7 +145,11 @@ class _CollectionRowState extends ConsumerState<CollectionRow>
             mainAxisSize: MainAxisSize.min,
             children: [
               if (editing && changes > 0) _ChangesChip(count: changes),
-              ExpandChevronButton(isExpanded: expanded, onTap: _toggle),
+              ExpandChevronButton(
+                isExpanded: expanded,
+                onTap: activate,
+                canExpand: allowInline,
+              ),
             ],
           ),
         ),

@@ -51,8 +51,9 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
   @override
   Widget build(BuildContext context) {
     final navigation = BrowseNavigationScope.maybeOf(context);
+    final allowInline = navigation?.allowInline ?? true;
     final isExpanded =
-        (navigation?.allowInline ?? true) &&
+        allowInline &&
         ref.watch(
           rowExpansionProvider.select(
             (s) => s.artists.contains(widget.item.id),
@@ -212,10 +213,10 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
                       ignoring: selectionMode,
                       child: ExpandChevronButton(
                         isExpanded: isExpanded,
-                        onTap: (navigation?.allowInline ?? true)
+                        onTap: allowInline
                             ? _toggleExpand
                             : () => navigation!.onOpen(widget.item),
-                        canExpand: navigation?.allowInline ?? true,
+                        canExpand: allowInline,
                       ),
                     ),
                   ],

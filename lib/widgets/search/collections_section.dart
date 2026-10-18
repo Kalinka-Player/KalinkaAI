@@ -64,7 +64,9 @@ class CollectionsSection extends ConsumerWidget {
             title: shelf.plan.title.toUpperCase(),
             count: shelf.total,
             subtitle: shelf.plan.description,
-            onViewAll: () => onOpenCatalog(shelf.plan, shelf.plan.title),
+            onViewAll: shelf.items.length < shelf.total
+                ? () => onOpenCatalog(shelf.plan, shelf.plan.title)
+                : null,
           ),
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

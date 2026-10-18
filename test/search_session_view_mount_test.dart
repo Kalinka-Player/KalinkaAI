@@ -528,7 +528,7 @@ void main() {
     await pumpSurface(tester);
     expect(
       find.text('Search your music by artist, album or track.'),
-      findsOneWidget,
+      findsNothing,
     );
     await openSearch(tester);
 

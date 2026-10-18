@@ -5,10 +5,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/data_model/plugin_catalog.dart';
+import 'package:kalinka/providers/modules_state_provider.dart';
 import 'package:kalinka/providers/pinned_catalogs_provider.dart';
+import 'package:kalinka/providers/plugin_catalog_provider.dart';
+import 'package:kalinka/providers/row_expansion_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
+import 'package:kalinka/providers/server_info_provider.dart';
+import 'package:kalinka/providers/server_update_provider.dart';
+import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/screens/customise_home_screen.dart';
+import 'package:kalinka/screens/plugin_catalog_screen.dart';
 import 'package:kalinka/providers/shell_nav_provider.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/theme/app_theme.dart';
@@ -127,7 +135,93 @@ Future<ProviderContainer> pump(
   sources: [module('alpha'), module('receiver', catalogs: false)],
 );
 
+class _QuietSettings extends SettingsNotifier {
+  @override
+  SettingsState build() => const SettingsState();
+
+  @override
+  Future<void> loadConfig() async {}
+}
+
 void main() {
+  for (final size in [const Size(375, 812), const Size(1200, 800)]) {
+    testWidgets('Music sources gear opens Configuration and returns at $size', (
+      tester,
+    ) async {
+      await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(0)),
+        api: CatalogHomeApi(),
+        size: size,
+        sources: [module('alpha')],
+        overrides: [
+          serverInfoProvider.overrideWith(
+            (ref) async => const ServerInfo(
+              version: '5.8.0',
+              latencyMs: 2,
+              pluginCatalogEnabled: true,
+            ),
+          ),
+          modulesStateProvider.overrideWith(
+            (ref) async => ModulesAndDevices(
+              inputModules: [module('alpha')],
+              devices: const [],
+            ),
+          ),
+          pluginCatalogProvider.overrideWith(
+            (ref) async => const PluginCatalog(status: 'available'),
+          ),
+          serverUpdateProvider.overrideWith((ref) async => null),
+          settingsProvider.overrideWith(_QuietSettings.new),
+        ],
+      );
+
+      expect(find.text('MUSIC SOURCES'), findsOneWidget);
+      expect(find.text('BROWSE SOURCES'), findsNothing);
+      expect(find.text('LISTENING ON'), findsNothing);
+      final gear = find.byTooltip('Configure music sources');
+      await tester.ensureVisible(gear);
+      await tester.pumpAndSettle();
+      final homeRect = tester.getRect(find.byType(SearchZeroState));
+      final gearRect = tester.getRect(gear);
+      expect(gearRect.size.shortestSide, greaterThanOrEqualTo(48));
+      await tester.tap(gear);
+      await tester.pumpAndSettle();
+
+      final settings = find.byType(PluginCatalogScreen);
+      expect(settings, findsOneWidget);
+      expect(find.text('Configuration'), findsOneWidget);
+      final sourceTab = find
+          .descendant(
+            of: find.byKey(const ValueKey('catalog-tab-sources')),
+            matching: find.byType(Semantics),
+          )
+          .first;
+      expect(tester.widget<Semantics>(sourceTab).properties.selected, isTrue);
+      if (size.width >= 900) {
+        expect(tester.getRect(settings).left, homeRect.left);
+        expect(tester.getRect(settings).width, homeRect.width);
+        expect(find.byType(NowPlayingContent), findsOneWidget);
+      }
+
+      await tester.tap(find.byKey(const ValueKey('settings-back')));
+      await tester.pumpAndSettle();
+      expect(settings, findsNothing);
+      expect(gear.hitTestable(), findsOneWidget);
+      expect(tester.getRect(gear), gearRect);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('Music sources stays browsable without Configuration support', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.text('MUSIC SOURCES'), findsOneWidget);
+    expect(find.byTooltip('Configure music sources'), findsNothing);
+    expect(find.byKey(const ValueKey('catalog-source-alpha')), findsOneWidget);
+  });
+
   testWidgets(
     'browse, expand one level, pin a filtered catalog and return through parents',
     (tester) async {
@@ -250,6 +344,16 @@ void main() {
       }
       await tester.pumpAndSettle();
       expect(find.text('Customise'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.text('Customise Home'),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(SearchZeroState),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       expect(find.text('Customise Home'), findsOneWidget);
       await tester.ensureVisible(find.text('Customise Home'));
       final button = find.byKey(const ValueKey('customise-home-button'));
@@ -495,7 +599,16 @@ void main() {
         of: find.byType(PinnedCatalogPreview),
         matching: find.byType(CatalogTile),
       );
-      await tester.ensureVisible(compactTile);
+      await tester.scrollUntilVisible(
+        compactTile,
+        150,
+        scrollable: find
+            .descendant(
+              of: find.byType(SearchZeroState),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       await tester.pumpAndSettle();
       expect(compactTile, findsOneWidget);
       expect(find.text('Customise Home'), findsOneWidget);
@@ -557,7 +670,14 @@ void main() {
       final previewSwitch = find.byTooltip(
         'Preview for Editorial albums and selected new releases',
       );
-      await tester.ensureVisible(previewSwitch);
+      await tester.scrollUntilVisible(
+        previewSwitch,
+        150,
+        scrollable: find.descendant(
+          of: find.byType(ReorderableListView),
+          matching: find.byType(Scrollable),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(previewSwitch);
       await tester.pumpAndSettle();
@@ -733,6 +853,76 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final kind in ['album', 'artist', 'playlist', 'collection']) {
+    testWidgets('pinned List $kind opens from the row and right chevron', (
+      tester,
+    ) async {
+      final id = 'kalinka:alpha:${kind == 'collection' ? 'playlist' : kind}:1';
+      final item = BrowseItem(
+        id: id,
+        name: 'Preview $kind',
+        canBrowse: true,
+        canAdd: false,
+        canEdit: kind == 'collection',
+        album: kind == 'album' ? Album(id: id, title: 'Preview $kind') : null,
+        artist: kind == 'artist' ? Artist(id: id, name: 'Preview $kind') : null,
+        playlist: kind == 'playlist' || kind == 'collection'
+            ? Playlist(id: id, name: 'Preview $kind')
+            : null,
+      );
+      final container = await pump(
+        tester,
+        api: CatalogHomeApi(editorialItems: [item]),
+      );
+      await container
+          .read(pinnedCatalogsProvider.notifier)
+          .pin(
+            PinnedCatalog(
+              page: CatalogPage.fromItem(catalog('editorial', 'Editorial')),
+              filter: const BrowseFilterQuery(),
+              preview: HomePreviewType.list,
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      for (final viaChevron in [true, false]) {
+        final preview = find.byType(PreviewShelf);
+        expect(
+          find.descendant(of: preview, matching: find.byTooltip('Expand')),
+          findsNothing,
+        );
+        final chevron = find.descendant(
+          of: preview,
+          matching: find.byIcon(Icons.chevron_right),
+        );
+        expect(chevron, findsOneWidget);
+        final target = viaChevron
+            ? chevron
+            : find.descendant(
+                of: preview,
+                matching: find.text('Preview $kind'),
+              );
+        await tester.ensureVisible(target);
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+
+        expect(container.read(searchSessionProvider).catalogPage.id, id);
+        expect(container.read(rowExpansionProvider).unrolled, isEmpty);
+        expect(container.read(rowExpansionProvider).artists, isEmpty);
+        expect(find.byType(PreviewShelf), findsNothing);
+
+        await tester.tap(find.bySemanticsLabel('Back').first);
+        await tester.pumpAndSettle();
+        expect(
+          container.read(searchSessionProvider).catalogPage.isRoot,
+          isTrue,
+        );
+        expect(find.byType(PreviewShelf), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
 
   testWidgets(
     'List shows five rows and Cards scroll horizontally with saved filters',

@@ -5,11 +5,15 @@ import '../../data_model/data_model.dart';
 import '../../providers/catalog_sources_provider.dart';
 import '../../providers/connection_state_provider.dart';
 import '../../providers/search_session_provider.dart';
+import '../../providers/server_info_provider.dart';
+import '../../providers/shell_nav_provider.dart';
 import '../../providers/source_modules_provider.dart';
+import '../../theme/app_theme.dart';
 import '../../utils/schema_icons.dart';
 import '../home/catalog_tile.dart';
 import '../home/home_layout.dart';
 import '../shelf_heading.dart';
+import '../tap_highlight.dart';
 
 /// Compact source tiles. Catalog selection belongs to the listener, so Home
 /// never fetches or promotes arbitrary children of these roots.
@@ -39,6 +43,7 @@ class CatalogCardsSection extends ConsumerWidget {
                 .length;
             if (count == 0) return const SizedBox.shrink();
             return _section(
+              ref,
               CatalogTileGrid(
                 children: List.generate(
                   count ?? 3,
@@ -57,6 +62,7 @@ class CatalogCardsSection extends ConsumerWidget {
               return const SizedBox.shrink();
             }
             return _section(
+              ref,
               CatalogTileGrid(
                 children: [
                   for (final source in sources)
@@ -82,10 +88,26 @@ class CatalogCardsSection extends ConsumerWidget {
         );
   }
 
-  Widget _section(Widget grid) => Column(
+  Widget _section(WidgetRef ref, Widget grid) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const ShelfHeading(title: 'BROWSE SOURCES'),
+      Row(
+        children: [
+          const Expanded(child: ShelfHeading(title: 'MUSIC SOURCES')),
+          if (ref.watch(pluginCatalogEnabledProvider)) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              key: const ValueKey('music-sources-settings-button'),
+              tooltip: 'Configure music sources',
+              style: kalinkaIconButtonStyle,
+              color: KalinkaColors.textSecondary,
+              icon: const Icon(Icons.settings_outlined, size: 20),
+              onPressed: () =>
+                  ref.read(musicSourcesSettingsRequestProvider.notifier).open(),
+            ),
+          ],
+        ],
+      ),
       const SizedBox(height: kHomeHeadingGap),
       grid,
       const SizedBox(height: kHomeSectionGap),

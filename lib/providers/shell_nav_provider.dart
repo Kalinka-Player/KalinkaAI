@@ -27,6 +27,20 @@ final homeSearchRequestProvider = NotifierProvider<HomeSearchRequest, int>(
   HomeSearchRequest.new,
 );
 
+/// Opens Configuration's Music sources tab through the player shell, keeping
+/// settings in the tablet panel and preserving Home's scroll position.
+class MusicSourcesSettingsRequest extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void open() => state++;
+}
+
+final musicSourcesSettingsRequestProvider =
+    NotifierProvider<MusicSourcesSettingsRequest, int>(
+      MusicSourcesSettingsRequest.new,
+    );
+
 /// Hosted by the player shell so tablet customisation stays in the right panel.
 class HomeCustomisationNotifier extends Notifier<bool> {
   @override

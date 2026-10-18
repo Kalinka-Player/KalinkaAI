@@ -29,7 +29,7 @@ class SearchZeroState extends ConsumerWidget {
   final ScrollController? controller;
 
   /// Widgets pinned to the top of the scroll — the "What shall we play?"
-  /// heading, description and the search entry — so they scroll with the
+  /// heading and the search entry — so they scroll with the
   /// content rather than sitting sticky above it.
   final List<Widget> leading;
 
