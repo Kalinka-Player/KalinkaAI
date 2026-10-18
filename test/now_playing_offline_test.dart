@@ -7,6 +7,7 @@ import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
+import 'package:kalinka/widgets/player_header.dart';
 import 'package:kalinka/widgets/player_view_switch.dart';
 import 'package:kalinka/widgets/procedural_album_art.dart';
 import 'package:kalinka/widgets/transport_button.dart';
@@ -82,6 +83,12 @@ void main() {
               .mode,
           mode,
         );
+        expect(
+          tester
+              .widget<PlayerHeader>(_inPlayer(find.byType(PlayerHeader)))
+              .away,
+          isTrue,
+        );
 
         await tester.tap(
           _inPlayer(find.byIcon(Icons.skip_next_rounded)),
@@ -137,6 +144,38 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pump();
     expect(ws.sent, [const QueueCommand.pause(paused: true)]);
+  });
+
+  testWidgets('phone: while the server is away, the queue\'s rows take no '
+      'taps', (tester) async {
+    late _RecordingWsApi ws;
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(3)),
+      overrides: [
+        kalinkaWsApiProvider.overrideWith((ref) => ws = _RecordingWsApi(ref)),
+      ],
+    );
+    await tester.tap(find.byType(MiniPlayer));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(PlayerViewSwitch),
+        matching: find.text('QUEUE'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Track t1'));
+    await tester.pump();
+    expect(ws.sent, [const QueueCommand.play(index: 1)]);
+
+    (container.read(connectionStateProvider.notifier) as SettableConnection)
+        .set(ConnectionStatus.reconnecting);
+    await tester.pump();
+    await tester.tap(find.text('Track t2'), warnIfMissed: false);
+    await tester.pump();
+    expect(ws.sent, [const QueueCommand.play(index: 1)]);
   });
 
   testWidgets('phone: with no server the player sheet closes and the '

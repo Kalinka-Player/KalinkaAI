@@ -136,7 +136,9 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           child: Column(
             children: [
               // Only the top drags the phone sheet, so the list scrolls.
-              SheetDragArea(child: _buildHeader(showingQueue: true)),
+              SheetDragArea(
+                child: _buildHeader(showingQueue: true, away: away),
+              ),
               Expanded(
                 child: PlayerQueueView(
                   onFindMusic: widget.onFindMusic,
@@ -159,7 +161,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           child: Column(
             children: [
               // Header
-              _buildHeader(showingQueue: false),
+              _buildHeader(showingQueue: false, away: away),
               // Content — fills remaining space with controls pinned to bottom
               _buildBodyContent(
                 currentTrack: currentTrack,
@@ -365,13 +367,14 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     );
   }
 
-  Widget _buildHeader({required bool showingQueue}) {
+  Widget _buildHeader({required bool showingQueue, required bool away}) {
     if (widget.showOverlayHeader || widget.isTablet) {
       return PlayerHeader(
         isTablet: widget.isTablet && !widget.showOverlayHeader,
         showingQueue: showingQueue,
         onClose: widget.onClose,
         outputSwitcherKey: widget.outputSwitcherKey,
+        away: away,
       );
     }
 
