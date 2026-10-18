@@ -30,6 +30,7 @@ import '../widgets/kiosk/kiosk_track_text.dart';
 import '../widgets/kiosk/kiosk_transport.dart';
 import '../widgets/kiosk/kiosk_volume_control.dart';
 import '../widgets/measure_size.dart';
+import '../widgets/mini_player.dart' show AwayDim;
 import '../widgets/transport_button.dart';
 
 /// Full-screen now-playing display, for a screen that shows what plays
@@ -444,10 +445,8 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                       child: fill
                           ? KeyedSubtree(
                               key: const ValueKey('fill'),
-                              child: AnimatedOpacity(
-                                opacity: away ? 0.45 : 1.0,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOut,
+                              child: AwayDim(
+                                away: away,
                                 child: _FillArt(
                                   trackId: track.id,
                                   imageUrl: imagePath == null
@@ -656,11 +655,9 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       duration: const Duration(milliseconds: 600),
       child: track == null
           ? _StandbyView(key: const ValueKey('standby'), scale: scale)
-          : AnimatedOpacity(
+          : AwayDim(
               key: const ValueKey('playing'),
-              opacity: away ? 0.45 : 1.0,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
+              away: away,
               child: _PlayingView(
                 track: track,
                 largeImage: largeImage,
