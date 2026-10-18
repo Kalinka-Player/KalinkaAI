@@ -14,6 +14,7 @@ import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
 import '../utils/playback_utils.dart';
+import 'away.dart';
 import 'bit_perfect_badge.dart';
 import 'gradient_progress_line.dart';
 import 'play_pause_glyph.dart';
@@ -479,15 +480,12 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
               const SizedBox(width: 4),
               // Outside the gesture area too, for the same reason as the play
               // button: the swipe recognizer must not steal its taps.
-              IgnorePointer(
-                ignoring: isOffline,
-                child: ExcludeFocus(
-                  excluding: isOffline,
-                  child: RendererSwitcherButton(
-                    key: widget.outputSwitcherKey,
-                    hitDiameter: 40,
-                    iconSize: 20,
-                  ),
+              AwayLock(
+                away: isOffline,
+                child: RendererSwitcherButton(
+                  key: widget.outputSwitcherKey,
+                  hitDiameter: 40,
+                  iconSize: 20,
                 ),
               ),
               const SizedBox(width: 4),
@@ -590,58 +588,36 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
   }) {
     final disabled =
         !hasTrack || isPlayPauseDisabled(playerState, exclusive: exclusive);
-    return IgnorePointer(
-      ignoring: isOffline,
-      child: ExcludeFocus(
-        excluding: isOffline,
-        child: Opacity(
-          opacity: hasTrack ? 1.0 : 0.4,
-          child: TransportButton(
-            hitDiameter: 46,
-            background: Colors.white,
-            // Ripple has to read against the white face, so use a dark tint.
-            splashColor: KalinkaColors.background.withValues(alpha: 0.18),
-            highlightColor: KalinkaColors.background.withValues(alpha: 0.08),
-            onTap: disabled
-                ? null
-                : () => sendPlayPauseCommand(
-                    ref,
-                    playerState,
-                    exclusive: exclusive,
-                  ),
-            // Fixed 26×26 glyph slot keeps visual weight stable across states
-            // and prevents the spinner from appearing offset against the icon.
-            child: SizedBox(
-              width: 26,
-              height: 26,
-              child: PlayPauseGlyph(
-                playerState: playerState,
-                iconSize: 26,
-                spinnerSize: 22,
-              ),
+    return AwayLock(
+      away: isOffline,
+      child: Opacity(
+        opacity: hasTrack ? 1.0 : 0.4,
+        child: TransportButton(
+          hitDiameter: 46,
+          background: Colors.white,
+          // Ripple has to read against the white face, so use a dark tint.
+          splashColor: KalinkaColors.background.withValues(alpha: 0.18),
+          highlightColor: KalinkaColors.background.withValues(alpha: 0.08),
+          onTap: disabled
+              ? null
+              : () => sendPlayPauseCommand(
+                  ref,
+                  playerState,
+                  exclusive: exclusive,
+                ),
+          // Fixed 26×26 glyph slot keeps visual weight stable across states
+          // and prevents the spinner from appearing offset against the icon.
+          child: SizedBox(
+            width: 26,
+            height: 26,
+            child: PlayPauseGlyph(
+              playerState: playerState,
+              iconSize: 26,
+              spinnerSize: 22,
             ),
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Dims playback while the server is [away], the same way in the mini-player,
-/// Now Playing and the kiosk.
-class AwayDim extends StatelessWidget {
-  final bool away;
-  final Widget child;
-
-  const AwayDim({super.key, required this.away, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedOpacity(
-      opacity: away ? 0.45 : 1.0,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-      child: child,
     );
   }
 }

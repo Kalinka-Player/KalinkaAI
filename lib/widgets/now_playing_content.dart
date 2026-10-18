@@ -13,11 +13,11 @@ import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
 import '../utils/playback_utils.dart';
 import '../providers/source_modules_provider.dart';
+import 'away.dart';
 import 'bit_perfect_badge.dart';
 import 'kalinka_dialog.dart';
 import 'kiosk/kiosk_enter_button.dart';
 import 'kalinka_toast_overlay.dart' show kMiniPlayerHeight;
-import 'mini_player.dart' show AwayDim;
 import 'play_pause_glyph.dart';
 import 'playback_progress_slider.dart';
 import 'player_queue_view.dart';
@@ -232,21 +232,9 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                     enabled: currentTrack != null,
                   ),
                   const SizedBox(height: 20),
-                  IgnorePointer(
-                    ignoring: away,
-                    child: ExcludeFocus(
-                      excluding: away,
-                      child: const _TransportControls(),
-                    ),
-                  ),
+                  AwayLock(away: away, child: const _TransportControls()),
                   const SizedBox(height: 16),
-                  IgnorePointer(
-                    ignoring: away,
-                    child: ExcludeFocus(
-                      excluding: away,
-                      child: const NowPlayingVolumeControl(),
-                    ),
-                  ),
+                  AwayLock(away: away, child: const NowPlayingVolumeControl()),
                   const SizedBox(height: 24),
                 ],
               ),
