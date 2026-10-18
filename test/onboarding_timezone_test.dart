@@ -166,6 +166,17 @@ void main() {
     },
   );
 
+  testWidgets('proposes nothing while the box’s zone is not known', (
+    tester,
+  ) async {
+    final box = FakeBox(answers: [_setsTimezone])..zone = null;
+    await _atNetworkStep(tester, box);
+
+    expect(find.text('Not known'), findsOne);
+    expect(find.textContaining('This device is on'), findsNothing);
+    await _drain(tester);
+  });
+
   testWidgets('a device that names no zone leaves the choice to the row', (
     tester,
   ) async {

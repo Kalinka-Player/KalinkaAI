@@ -20,12 +20,15 @@ class OnboardingTimezoneSection extends ConsumerWidget {
     if (box == null) return const SizedBox.shrink();
     final local = box.settable ? ref.watch(localTimezoneProvider).value : null;
     final setting = ref.watch(timezoneChangeProvider);
-    // Until a change is read back, box.zone still names the old zone.
+    final boxZone = box.zone;
+    // Until a change is read back, box.zone still names the old zone. A zone
+    // that could not be read is most often a box that did not answer.
     final propose =
         local != null &&
+        boxZone != null &&
         setting == null &&
         !boxState.isLoading &&
-        !ref.read(timezoneChangeProvider.notifier).isOn(local, box.zone);
+        !ref.read(timezoneChangeProvider.notifier).isOn(local, boxZone);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
