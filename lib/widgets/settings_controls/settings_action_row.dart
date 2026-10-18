@@ -4,13 +4,14 @@ import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
 
 /// A settings card row that acts when tapped — opens a screen, a page or a
-/// confirmation — with [trailing] hinting at which.
+/// confirmation — with [trailing] hinting at which. Without [onTap] the row
+/// is disabled, and its [sublabel] should say why.
 class SettingsActionRow extends StatelessWidget {
   final String label;
   final String? sublabel;
   final IconData? leading;
   final IconData? trailing;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const SettingsActionRow({
     super.key,
@@ -23,13 +24,14 @@ class SettingsActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     // Ink paints on the nearest Material, which must sit above the card's
     // fill for the press to show.
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        mouseCursor: clickCursor(interactive: true),
+        mouseCursor: clickCursor(interactive: enabled),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
@@ -39,7 +41,9 @@ class SettingsActionRow extends StatelessWidget {
                   child: Icon(
                     icon,
                     size: 24,
-                    color: KalinkaColors.textSecondary,
+                    color: enabled
+                        ? KalinkaColors.textSecondary
+                        : KalinkaColors.textMuted,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -48,7 +52,14 @@ class SettingsActionRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(label, style: KalinkaTextStyles.trayRowLabel),
+                    Text(
+                      label,
+                      style: enabled
+                          ? KalinkaTextStyles.trayRowLabel
+                          : KalinkaTextStyles.trayRowLabel.copyWith(
+                              color: KalinkaColors.textMuted,
+                            ),
+                    ),
                     if (sublabel != null) ...[
                       const SizedBox(height: 2),
                       Text(sublabel!, style: KalinkaTextStyles.trayRowSublabel),

@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/box_control_provider.dart';
 import '../providers/supervisor_api.dart';
+import '../providers/timezone_provider.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import 'configuration_appearance.dart';
@@ -11,6 +12,7 @@ import 'box_actions.dart';
 import 'box_power_off_timer.dart';
 import 'settings_controls/settings_action_row.dart';
 import 'settings_controls/settings_card.dart';
+import 'timezone_row.dart';
 
 /// Management actions for the server's hardware, through its supervisor.
 /// Optional server actions remain available without a matching supervisor.
@@ -42,6 +44,7 @@ class BoxSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final control = ref.watch(boxControlProvider).value;
     final api = ref.watch(supervisorApiProvider);
+    final timezone = ref.watch(boxTimezoneProvider).value;
     final hasBox = control != null && api != null;
     if (!hasBox && leadingActions.isEmpty) return const SizedBox.shrink();
     final configured = ConfigurationAppearance.active(context);
@@ -65,6 +68,12 @@ class BoxSection extends ConsumerWidget {
                 leading: configured ? Icons.dashboard_outlined : null,
                 onTap: () => _openDashboard(ref, api.page),
               ),
+              if (timezone != null)
+                TimezoneRow(
+                  box: timezone,
+                  leading: configured ? Icons.schedule : null,
+                  inPanel: true,
+                ),
               if (control.offers(BoxAction.reboot))
                 SettingsActionRow(
                   label: 'Restart streamer',

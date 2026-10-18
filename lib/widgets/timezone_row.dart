@@ -1,0 +1,251 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../data_model/presentation_schema.dart' show OptionSpec;
+import '../providers/supervisor_api.dart';
+import '../providers/timezone_provider.dart';
+import '../providers/toast_provider.dart';
+import '../theme/app_theme.dart';
+import '../theme/field_decoration.dart';
+import 'kalinka_bottom_sheet.dart';
+import 'kalinka_button.dart';
+import 'kalinka_dialog.dart';
+import 'settings_controls/option_picker.dart';
+import 'settings_controls/settings_action_row.dart';
+
+/// "Time zone" on the connected server's box: the zone it is on, opening the
+/// picker. A box that cannot set its zone shows the row disabled, saying why.
+class TimezoneRow extends ConsumerWidget {
+  final BoxTimezone box;
+  final IconData? leading;
+
+  /// Set when shown in the tablet layout's left panel.
+  final bool inPanel;
+
+  const TimezoneRow({
+    super.key,
+    required this.box,
+    this.leading,
+    this.inPanel = false,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!box.settable) {
+      return SettingsActionRow(
+        label: 'Time zone',
+        sublabel: timezoneUnavailable(box),
+        leading: leading,
+        trailing: null,
+        onTap: null,
+      );
+    }
+    final setting = ref.watch(timezoneChangeProvider);
+    return SettingsActionRow(
+      label: 'Time zone',
+      sublabel: switch ((setting, box.zone)) {
+        (final zone?, _) => 'Setting ${timezoneLabel(zone)}…',
+        (_, final zone?) => timezoneLabel(zone),
+        _ => 'Not known',
+      },
+      leading: leading,
+      onTap: () {
+        if (setting != null) return;
+        chooseTimezone(context, ref, box, inPanel: inPanel);
+      },
+    );
+  }
+}
+
+/// Why [box] cannot be set to another zone from the app.
+String timezoneUnavailable(BoxTimezone box) => box.control == null
+    ? 'The server keeps the time zone of the computer it runs on. Set it '
+          'there.'
+    : 'Updating Kalinka on this box lets the app set its time zone.';
+
+/// Lets the person pick one of the zones [box] offers, confirms it, and
+/// sets it.
+Future<void> chooseTimezone(
+  BuildContext context,
+  WidgetRef ref,
+  BoxTimezone box, {
+  bool inPanel = false,
+}) async {
+  final local = ref.read(localTimezoneProvider.future);
+  final zones = await ref.read(supervisorApiProvider)?.timezones();
+  final localZone = await local;
+  if (!context.mounted) return;
+  if (zones == null) {
+    ref
+        .read(toastProvider.notifier)
+        .show(
+          'The box did not answer. Check that it is on and connected.',
+          isError: true,
+          inPanel: inPanel,
+        );
+    return;
+  }
+  final picked = await showKalinkaBottomSheet<String>(
+    context: context,
+    mayFillScreen: true,
+    contentBuilder: (_) =>
+        TimezonePicker(zones: zones, current: box.zone, local: localZone),
+  );
+  if (picked == null || picked == box.zone || !context.mounted) return;
+  await setTimezoneOnceConfirmed(context, ref, picked, inPanel: inPanel);
+}
+
+/// Asks before setting the box to [zone], since its display restarts.
+Future<void> setTimezoneOnceConfirmed(
+  BuildContext context,
+  WidgetRef ref,
+  String zone, {
+  bool inPanel = false,
+}) async {
+  final confirmed = await showKalinkaDialog<bool>(
+    context: context,
+    builder: (_) => _ConfirmTimezone(zone: zone),
+  );
+  if (confirmed != true) return;
+  await ref.read(timezoneChangeProvider.notifier).apply(zone, inPanel: inPanel);
+}
+
+/// The zones a box offers, searchable, with this device's own first; pops the
+/// one tapped.
+class TimezonePicker extends StatefulWidget {
+  final List<String> zones;
+
+  /// The zone the box is on, listed even when it is not among [zones].
+  final String? current;
+
+  /// This device's zone.
+  final String? local;
+
+  const TimezonePicker({
+    super.key,
+    required this.zones,
+    this.current,
+    this.local,
+  });
+
+  @override
+  State<TimezonePicker> createState() => _TimezonePickerState();
+}
+
+class _TimezonePickerState extends State<TimezonePicker> {
+  String _query = '';
+
+  bool _matches(String zone) =>
+      timezoneLabel(zone).toLowerCase().contains(_query.trim().toLowerCase());
+
+  @override
+  Widget build(BuildContext context) {
+    final current = widget.current;
+    final local = widget.local;
+    final all = [
+      if (current != null && !widget.zones.contains(current)) current,
+      ...widget.zones,
+    ].where(_matches).toList();
+    final entries = <({String text, bool header})>[
+      if (local != null && _matches(local)) ...[
+        (text: 'THIS DEVICE', header: true),
+        (text: local, header: false),
+      ],
+      if (all.isNotEmpty) (text: 'ALL TIME ZONES', header: true),
+      for (final zone in all) (text: zone, header: false),
+    ];
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+              child: TextField(
+                key: const ValueKey('timezone-search'),
+                style: KalinkaTextStyles.textFieldInput,
+                decoration: kalinkaFieldDecoration(hint: 'Search time zones'),
+                onChanged: (value) => setState(() => _query = value),
+              ),
+            ),
+            Flexible(
+              child: entries.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                      child: Text(
+                        'No time zone matches “${_query.trim()}”.',
+                        textAlign: TextAlign.center,
+                        style: KalinkaTextStyles.trayRowSublabel,
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.only(bottom: 12),
+                      itemCount: entries.length,
+                      itemBuilder: (context, i) {
+                        final (:text, :header) = entries[i];
+                        if (header) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+                            child: Text(
+                              text,
+                              style: KalinkaTextStyles.sectionHeaderMuted,
+                            ),
+                          );
+                        }
+                        return OptionRow(
+                          option: OptionSpec(
+                            value: text,
+                            label: timezoneLabel(text),
+                          ),
+                          selected: text == current,
+                          onTap: () => Navigator.of(context).pop(text),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConfirmTimezone extends StatelessWidget {
+  final String zone;
+
+  const _ConfirmTimezone({required this.zone});
+
+  @override
+  Widget build(BuildContext context) {
+    return KalinkaDialog(
+      side: KalinkaDialogSide.left,
+      icon: Icons.schedule,
+      iconColor: KalinkaColors.accent,
+      iconGlyphColor: KalinkaColors.accentTint,
+      title: 'Change the time zone?',
+      message:
+          'The box shows the time in ${timezoneLabel(zone)} from now on. A '
+          'now-playing display on it restarts to follow; playback carries on.',
+      actions: [
+        KalinkaButton(
+          label: 'Cancel',
+          variant: KalinkaButtonVariant.neutral,
+          fullWidth: true,
+          onTap: () => Navigator.pop(context, false),
+        ),
+        KalinkaButton(
+          label: 'Apply',
+          variant: KalinkaButtonVariant.accent,
+          fullWidth: true,
+          onTap: () => Navigator.pop(context, true),
+        ),
+      ],
+    );
+  }
+}
