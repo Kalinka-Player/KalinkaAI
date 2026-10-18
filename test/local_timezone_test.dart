@@ -76,6 +76,11 @@ void main() {
       expect(calls, ['timeZone']);
     });
 
+    test('names an old zone by the name the box knows', () async {
+      messenger.setMockMethodCallHandler(_native, (_) async => 'Asia/Calcutta');
+      expect(await localTimezone(), 'Asia/Kolkata');
+    });
+
     test('names none for a phone set to a bare offset', () async {
       messenger.setMockMethodCallHandler(_native, (_) async => 'GMT+05:30');
       expect(await localTimezone(), isNull);

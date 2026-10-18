@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:io' show ProcessResult;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/timezone_provider.dart';
 import 'package:kalinka/screens/onboarding_screen.dart';
+import 'package:kalinka/utils/local_timezone.dart';
 import 'package:kalinka/utils/local_timezone_io.dart'
     show ProcessRunner, windowsTimezone;
 
@@ -144,6 +146,25 @@ void main() {
     expect(find.text('Use Asia/Calcutta'), findsNothing);
     await _drain(tester);
   });
+
+  testWidgets(
+    'a phone on an old zone name is not offered the zone the box is on',
+    (tester) async {
+      const native = MethodChannel('org.kalinka.kalinka/media_session');
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(native, (call) async {
+        if (call.method == 'timeZone') return 'Asia/Calcutta';
+        throw MissingPluginException();
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(native, null));
+      final box = FakeBox(answers: [_setsTimezone])..zone = 'Asia/Kolkata';
+      await _atNetworkStep(tester, box, readLocal: localTimezone);
+
+      expect(find.text('Asia/Kolkata'), findsOne);
+      expect(find.textContaining('This device is on'), findsNothing);
+      await _drain(tester);
+    },
+  );
 
   testWidgets('a device that names no zone leaves the choice to the row', (
     tester,
