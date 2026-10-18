@@ -17,6 +17,7 @@ import 'bit_perfect_badge.dart';
 import 'kalinka_dialog.dart';
 import 'kiosk/kiosk_enter_button.dart';
 import 'kalinka_toast_overlay.dart' show kMiniPlayerHeight;
+import 'mini_player.dart' show AwayDim;
 import 'play_pause_glyph.dart';
 import 'playback_progress_slider.dart';
 import 'player_queue_view.dart';
@@ -204,10 +205,8 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
               trackId: currentTrack?.id,
               resolvedImageUrl: resolvedImageUrl,
             );
-            final content = AnimatedOpacity(
-              opacity: away ? 0.45 : 1.0,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
+            final content = AwayDim(
+              away: away,
               child: Column(
                 children: [
                   const SizedBox(height: 8),
