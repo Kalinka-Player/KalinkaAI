@@ -62,6 +62,7 @@ class TimezoneChange extends Notifier<String?> {
         BoxIdentity(serverId: control.serverId),
       );
       _setFor[zone] = set;
+      if (!ref.mounted) return true;
       ref.invalidate(boxTimezoneProvider);
       toast.show(
         'The box shows the time in ${timezoneLabel(set)}.',
