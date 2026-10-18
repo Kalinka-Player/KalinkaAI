@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import '../data_model/kalinka_ws_api.dart';
 import '../providers/app_state_provider.dart';
+import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_ws_api_provider.dart';
 import '../providers/now_playing_provider.dart';
 import '../providers/shell_nav_provider.dart';
@@ -91,6 +92,9 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
       ),
     );
     ref.watch(playbackControlProvider.select((c) => c.isExclusive));
+    final away = ref.watch(
+      connectionStateProvider.select((s) => s.isInterrupted),
+    );
     // Read full state without watching — content is current because the
     // selectors above already gated the rebuild on a meaningful change.
     final playbackState = ref.read(playerStateProvider);
@@ -163,6 +167,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                 mimeLabel: mimeLabel,
                 qualityLabel: qualityLabel,
                 durationMs: durationMs,
+                away: away,
               ),
             ],
           ),
@@ -171,6 +176,8 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     );
   }
 
+  /// While the server is [away], dimmed and without its controls, as the
+  /// mini-player is.
   Widget _buildBodyContent({
     required Track? currentTrack,
     required String? resolvedImageUrl,
@@ -178,6 +185,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     required String mimeLabel,
     required String qualityLabel,
     required int durationMs,
+    required bool away,
   }) {
     return Expanded(
       child: Padding(
@@ -196,34 +204,45 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
               trackId: currentTrack?.id,
               resolvedImageUrl: resolvedImageUrl,
             );
-            final content = Column(
-              children: [
-                const SizedBox(height: 8),
-                if (scroll)
-                  SizedBox(
-                    height: (constraints.maxWidth * 0.72).clamp(0.0, 240.0),
-                    child: Column(children: [artwork]),
-                  )
-                else
-                  artwork,
-                const SizedBox(height: 20),
-                _buildTrackMetadataSection(
-                  currentTrack: currentTrack,
-                  sourceInfo: sourceInfo,
-                  mimeLabel: mimeLabel,
-                  qualityLabel: qualityLabel,
-                ),
-                const SizedBox(height: 24),
-                PlaybackProgressSlider(
-                  durationMs: durationMs,
-                  enabled: currentTrack != null,
-                ),
-                const SizedBox(height: 20),
-                const _TransportControls(),
-                const SizedBox(height: 16),
-                const NowPlayingVolumeControl(),
-                const SizedBox(height: 24),
-              ],
+            final content = AnimatedOpacity(
+              opacity: away ? 0.45 : 1.0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+              child: Column(
+                children: [
+                  const SizedBox(height: 8),
+                  if (scroll)
+                    SizedBox(
+                      height: (constraints.maxWidth * 0.72).clamp(0.0, 240.0),
+                      child: Column(children: [artwork]),
+                    )
+                  else
+                    artwork,
+                  const SizedBox(height: 20),
+                  _buildTrackMetadataSection(
+                    currentTrack: currentTrack,
+                    sourceInfo: sourceInfo,
+                    mimeLabel: mimeLabel,
+                    qualityLabel: qualityLabel,
+                  ),
+                  const SizedBox(height: 24),
+                  PlaybackProgressSlider(
+                    durationMs: durationMs,
+                    enabled: currentTrack != null,
+                  ),
+                  const SizedBox(height: 20),
+                  IgnorePointer(
+                    ignoring: away,
+                    child: const _TransportControls(),
+                  ),
+                  const SizedBox(height: 16),
+                  IgnorePointer(
+                    ignoring: away,
+                    child: const NowPlayingVolumeControl(),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
             );
             return scroll ? SingleChildScrollView(child: content) : content;
           },

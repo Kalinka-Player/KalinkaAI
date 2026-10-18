@@ -7,16 +7,22 @@ import '../data_model/data_model.dart' show PlaybackControl, PlayerStateType;
 import '../data_model/kalinka_ws_api.dart';
 import '../data_model/playqueue_events.dart' show PlayQueueState;
 import '../providers/app_state_provider.dart';
+import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_ws_api_provider.dart';
 import '../providers/monotonic_clock_provider.dart';
 import '../providers/playback_time_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
 import '../utils/playback_utils.dart';
+import 'gradient_progress_line.dart';
+
+const _trackHeight = 3.0;
+const _overlayRadius = 14.0;
 
 /// Playback progress slider with optimistic seeking while dragging. While the
 /// playback cannot seek, the bar is drawn grey and without a thumb, and the
-/// times stay readable.
+/// times stay readable. While the server is away, the mini-player's
+/// reconnecting line stands in for the bar.
 class PlaybackProgressSlider extends ConsumerStatefulWidget {
   final int durationMs;
 
@@ -61,6 +67,7 @@ mixin OptimisticSeek<T extends ConsumerStatefulWidget> on ConsumerState<T> {
   Timer? _seekTimeout;
   double _lastHapticSeekPosition = -1.0;
   ProviderSubscription? _queueSubscription;
+  ProviderSubscription? _connectionSubscription;
 
   int get seekDurationMs;
 
@@ -112,17 +119,26 @@ mixin OptimisticSeek<T extends ConsumerStatefulWidget> on ConsumerState<T> {
         }
       },
     );
+    _connectionSubscription = ref.listenManual<bool>(
+      connectionStateProvider.select((s) => s.isInterrupted),
+      (_, interrupted) {
+        if (interrupted && isSeeking) cancelSeek();
+      },
+    );
   }
 
   @override
   void dispose() {
     _seekTimeout?.cancel();
     _queueSubscription?.close();
+    _connectionSubscription?.close();
     super.dispose();
   }
 
   void beginSeek(double progress) {
-    if (seekDurationMs <= 0 || !ref.read(playbackControlProvider).seekable) {
+    if (seekDurationMs <= 0 ||
+        !ref.read(playbackControlProvider).seekable ||
+        ref.read(connectionStateProvider).isInterrupted) {
       return;
     }
     _seekTimeout?.cancel();
@@ -199,7 +215,11 @@ class _PlaybackProgressSliderState extends ConsumerState<PlaybackProgressSlider>
     final seekable = ref.watch(
       playbackControlProvider.select((c) => c.seekable),
     );
-    final interactive = widget.enabled && seekable;
+    final lineMode = ref.watch(
+      connectionStateProvider.select(progressLineModeFor),
+    );
+    final away = lineMode != GradientProgressLineMode.normal;
+    final interactive = widget.enabled && seekable && !away;
 
     return RepaintBoundary(
       child: Opacity(
@@ -208,37 +228,61 @@ class _PlaybackProgressSliderState extends ConsumerState<PlaybackProgressSlider>
           ignoring: !interactive,
           child: Column(
             children: [
-              SliderTheme(
-                data: SliderThemeData(
-                  trackHeight: 3,
-                  thumbShape: seekable
-                      ? const RoundSliderThumbShape(enabledThumbRadius: 6)
-                      : SliderComponentShape.noThumb,
-                  overlayShape: const RoundSliderOverlayShape(
-                    overlayRadius: 14,
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Hidden, not removed, so the row keeps its height and the
+                  // slider's semantics their shape.
+                  Visibility.maintain(
+                    visible: !away,
+                    child: SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: _trackHeight,
+                        thumbShape: seekable
+                            ? const RoundSliderThumbShape(enabledThumbRadius: 6)
+                            : SliderComponentShape.noThumb,
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: _overlayRadius,
+                        ),
+                        activeTrackColor: seekable
+                            ? KalinkaColors.accent
+                            : KalinkaColors.textMuted,
+                        inactiveTrackColor: KalinkaColors.borderDefault,
+                        thumbColor: Colors.white,
+                        overlayColor: KalinkaColors.accent.withValues(
+                          alpha: 0.25,
+                        ),
+                      ),
+                      // Disabled via the IgnorePointer above, never a null
+                      // onChanged: that restructures the Slider's semantics,
+                      // which asserts in flushSemantics if a dialog pops the
+                      // same frame (Clear all).
+                      child: Slider(
+                        value: progress,
+                        onChangeStart: (value) {
+                          if (interactive) beginSeek(value);
+                        },
+                        onChanged: (value) {
+                          if (interactive) seekTo(value);
+                        },
+                        onChangeEnd: (value) {
+                          if (interactive) commitSeek(value);
+                        },
+                      ),
+                    ),
                   ),
-                  activeTrackColor: seekable
-                      ? KalinkaColors.accent
-                      : KalinkaColors.textMuted,
-                  inactiveTrackColor: KalinkaColors.borderDefault,
-                  thumbColor: Colors.white,
-                  overlayColor: KalinkaColors.accent.withValues(alpha: 0.25),
-                ),
-                // Disabled via the IgnorePointer above, never a null onChanged:
-                // that restructures the Slider's semantics, which asserts in
-                // flushSemantics if a dialog pops the same frame (Clear all).
-                child: Slider(
-                  value: progress,
-                  onChangeStart: (value) {
-                    if (interactive) beginSeek(value);
-                  },
-                  onChanged: (value) {
-                    if (interactive) seekTo(value);
-                  },
-                  onChangeEnd: (value) {
-                    if (interactive) commitSeek(value);
-                  },
-                ),
+                  // The slider insets its track by the overlay radius.
+                  if (away)
+                    Positioned(
+                      left: _overlayRadius,
+                      right: _overlayRadius,
+                      child: GradientProgressLine(
+                        progress: progress,
+                        mode: lineMode,
+                        height: _trackHeight,
+                      ),
+                    ),
+                ],
               ),
               // SizedBox gives tight constraints (tight width from Column + fixed
               // height here), making the Row a Flutter relayout boundary. This

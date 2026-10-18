@@ -11,6 +11,7 @@ import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/providers/monotonic_clock_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_progress_bar.dart';
 import 'package:kalinka/widgets/playback_progress_slider.dart';
 
@@ -301,6 +302,41 @@ void main() {
     );
     await _seek(tester, 0.75);
     expect(h.api.commands, isEmpty);
+  });
+
+  testWidgets('while the server is away the bar is the reconnecting line and '
+      'does not seek', (tester) async {
+    final h = await _pump(tester);
+    h.connection.set(ConnectionStatus.reconnecting);
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<GradientProgressLine>(find.byType(GradientProgressLine))
+          .mode,
+      GradientProgressLineMode.reconnecting,
+    );
+    await _seek(tester, 0.75);
+    expect(h.api.commands, isEmpty);
+    expect(find.text('0:20'), findsOneWidget);
+  });
+
+  testWidgets('a drag held as the connection drops seeks nothing', (
+    tester,
+  ) async {
+    final h = await _pump(tester);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(Slider)),
+    );
+    await gesture.moveBy(const Offset(80, 0));
+    await tester.pump();
+
+    h.connection.set(ConnectionStatus.reconnecting);
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    expect(h.api.commands, isEmpty);
+    expect(find.text('0:20'), findsOneWidget);
   });
 
   testWidgets('the kiosk bar does not seek playback that cannot seek', (
