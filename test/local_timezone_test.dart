@@ -121,6 +121,13 @@ void main() {
       );
     });
 
+    test('maps a zone with daylight saving turned off', () async {
+      expect(
+        await windowsTimezone(run: tzutil('Pacific Standard Time_dstoff\r\n')),
+        'America/Los_Angeles',
+      );
+    });
+
     test('names none when tzutil fails or is missing', () async {
       expect(await windowsTimezone(run: tzutil('', exitCode: 1)), isNull);
       expect(
