@@ -1,12 +1,15 @@
+import '../data_model/zone_aliases.dart';
 import 'local_timezone_io.dart'
     if (dart.library.js_interop) 'local_timezone_web.dart'
     as impl;
 
-/// This device's time zone as tzdata names it, such as `Europe/London`; null
-/// where the platform names none.
+/// This device's time zone by the name the box knows it by, such as
+/// `Asia/Kolkata` where the device says `Asia/Calcutta`; null where the
+/// platform names none.
 Future<String?> localTimezone() async {
   final value = await impl.localTimezone();
-  return value == null ? null : zoneNamed(value);
+  final zone = value == null ? null : zoneNamed(value);
+  return zoneAliases[zone] ?? zone;
 }
 
 final _zoneName = RegExp(r'^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$');
