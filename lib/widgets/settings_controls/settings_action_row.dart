@@ -73,7 +73,9 @@ class SettingsActionRow extends StatelessWidget {
                   child: Icon(
                     icon,
                     size: 20,
-                    color: KalinkaColors.textSecondary,
+                    color: enabled
+                        ? KalinkaColors.textSecondary
+                        : KalinkaColors.textMuted,
                   ),
                 ),
               ],

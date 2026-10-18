@@ -178,6 +178,11 @@ void main() {
       }
     });
 
+    test('a supervisor that fails did not answer', () async {
+      final (api, _) = _api((_) => _json(503, {'detail': 'busy'}));
+      expect((await api.probe()).reach, SupervisorReach.silent);
+    });
+
     test('a timeout or a lost route is a box that did not answer', () async {
       for (final api in [
         failing(

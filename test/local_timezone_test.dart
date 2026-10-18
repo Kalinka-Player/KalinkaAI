@@ -32,6 +32,10 @@ void main() {
         zoneNamed('/usr/share/zoneinfo/posix/Europe/London'),
         'Europe/London',
       );
+      expect(
+        zoneNamed('/usr/share/zoneinfo/right/Europe/London'),
+        'Europe/London',
+      );
     });
 
     test('names no zone for a rule, an offset or another path', () {
