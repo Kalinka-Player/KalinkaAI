@@ -15,13 +15,15 @@ Future<String?> localTimezone() async {
         return null;
       }
     case TargetPlatform.linux || TargetPlatform.macOS:
-      // glibc reads TZ before /etc/localtime.
-      final tz = Platform.environment['TZ'];
-      if (tz != null && tz.isNotEmpty) return tz;
+      // glibc reads TZ before /etc/localtime. A TZ such as :/etc/localtime
+      // names a file, which may itself be a link into zoneinfo.
+      final tz = Platform.environment['TZ'] ?? '';
+      final file = tz.startsWith(':/') ? tz.substring(1) : null;
+      if (tz.isNotEmpty && file == null) return tz;
       try {
-        return Link('/etc/localtime').targetSync();
+        return Link(file ?? '/etc/localtime').targetSync();
       } on FileSystemException {
-        return null;
+        return file;
       }
     default:
       return null;

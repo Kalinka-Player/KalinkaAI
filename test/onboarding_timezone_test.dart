@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,6 +75,23 @@ void main() {
     expect(box.zonesSet, [
       ('Europe/London', const BoxIdentity(serverId: 'box-1')),
     ]);
+    expect(find.text('Use Europe/London'), findsNothing);
+    expect(find.text('Europe/London'), findsOne);
+    await _drain(tester);
+  });
+
+  testWidgets('the proposal stays away while the zone set is read back', (
+    tester,
+  ) async {
+    final box = FakeBox(answers: [_setsTimezone]);
+    await _atNetworkStep(tester, box);
+
+    box.holdZone = Completer();
+    await _accept(tester, 'Europe/London');
+    expect(find.text('Use Europe/London'), findsNothing);
+    box.holdZone!.complete();
+    await tester.pumpAndSettle();
+
     expect(find.text('Use Europe/London'), findsNothing);
     expect(find.text('Europe/London'), findsOne);
     await _drain(tester);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -98,10 +100,32 @@ void main() {
     expect(find.text('THIS DEVICE'), findsNothing);
     await tester.enterText(
       find.byKey(const ValueKey('timezone-search')),
+      'new_york',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('America/New York'), findsOne);
+    await tester.enterText(
+      find.byKey(const ValueKey('timezone-search')),
       'atlantis',
     );
     await tester.pumpAndSettle();
     expect(find.text('No time zone matches “atlantis”.'), findsOne);
+  });
+
+  testWidgets('a second tap while the zones load opens one picker', (
+    tester,
+  ) async {
+    final box = FakeBox(answers: [_setsTimezone])..holdZones = Completer();
+    await _pump(tester, box);
+
+    await tester.tap(find.text('Time zone'));
+    await tester.pump();
+    await tester.tap(find.text('Time zone'));
+    await tester.pump();
+    box.holdZones!.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('timezone-search')), findsOne);
   });
 
   testWidgets('a cancelled confirmation leaves the box alone', (tester) async {
@@ -188,5 +212,21 @@ void main() {
     expect(box.zone, 'Asia/Kolkata');
     expect(change.isOn('Asia/Calcutta', 'Asia/Kolkata'), isTrue);
     expect(change.isOn('Europe/London', 'Asia/Kolkata'), isFalse);
+  });
+
+  test('a change answered after the app has gone touches nothing', () async {
+    final box = FakeBox(answers: [_setsTimezone])..holdTimezone = Completer();
+    final container = ProviderContainer(
+      overrides: soundcardOverrides(await boxPrefs(), box: box),
+    );
+    await container.read(boxControlProvider.future);
+    final applying = container
+        .read(timezoneChangeProvider.notifier)
+        .apply('Europe/London');
+    container.dispose();
+    box.holdTimezone!.complete();
+
+    expect(await applying, isTrue);
+    expect(box.zone, 'Europe/London');
   });
 }

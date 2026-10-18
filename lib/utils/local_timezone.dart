@@ -20,5 +20,7 @@ String? zoneNamed(String value) {
   const directory = 'zoneinfo/';
   final at = name.lastIndexOf(directory);
   if (at >= 0) name = name.substring(at + directory.length);
+  // Some distributions link /etc/localtime into zoneinfo/posix/.
+  if (name.startsWith('posix/')) name = name.substring('posix/'.length);
   return name.length <= 64 && _zoneName.hasMatch(name) ? name : null;
 }

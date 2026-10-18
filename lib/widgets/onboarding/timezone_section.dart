@@ -15,13 +15,16 @@ class OnboardingTimezoneSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final box = ref.watch(boxTimezoneProvider).value;
+    final boxState = ref.watch(boxTimezoneProvider);
+    final box = boxState.value;
     if (box == null) return const SizedBox.shrink();
     final local = box.settable ? ref.watch(localTimezoneProvider).value : null;
     final setting = ref.watch(timezoneChangeProvider);
+    // Until a change is read back, box.zone still names the old zone.
     final propose =
         local != null &&
         setting == null &&
+        !boxState.isLoading &&
         !ref.read(timezoneChangeProvider.notifier).isOn(local, box.zone);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

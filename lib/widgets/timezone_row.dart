@@ -15,7 +15,7 @@ import 'settings_controls/settings_action_row.dart';
 
 /// "Time zone" on the connected server's box: the zone it is on, opening the
 /// picker. A box that cannot set its zone shows the row disabled, saying why.
-class TimezoneRow extends ConsumerWidget {
+class TimezoneRow extends ConsumerStatefulWidget {
   final BoxTimezone box;
   final IconData? leading;
 
@@ -30,7 +30,27 @@ class TimezoneRow extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TimezoneRow> createState() => _TimezoneRowState();
+}
+
+class _TimezoneRowState extends ConsumerState<TimezoneRow> {
+  // A second tap while the list loads would open a second picker.
+  bool _choosing = false;
+
+  Future<void> _choose() async {
+    if (_choosing) return;
+    _choosing = true;
+    try {
+      await chooseTimezone(context, ref, widget.box, inPanel: widget.inPanel);
+    } finally {
+      _choosing = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final box = widget.box;
+    final leading = widget.leading;
     if (!box.settable) {
       return SettingsActionRow(
         label: 'Time zone',
@@ -50,8 +70,7 @@ class TimezoneRow extends ConsumerWidget {
       },
       leading: leading,
       onTap: () {
-        if (setting != null) return;
-        chooseTimezone(context, ref, box, inPanel: inPanel);
+        if (setting == null) _choose();
       },
     );
   }
@@ -134,9 +153,10 @@ class TimezonePicker extends StatefulWidget {
 
 class _TimezonePickerState extends State<TimezonePicker> {
   String _query = '';
+  String _needle = '';
 
   bool _matches(String zone) =>
-      timezoneLabel(zone).toLowerCase().contains(_query.trim().toLowerCase());
+      timezoneLabel(zone).toLowerCase().contains(_needle);
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +190,10 @@ class _TimezonePickerState extends State<TimezonePicker> {
                 key: const ValueKey('timezone-search'),
                 style: KalinkaTextStyles.textFieldInput,
                 decoration: kalinkaFieldDecoration(hint: 'Search time zones'),
-                onChanged: (value) => setState(() => _query = value),
+                onChanged: (value) => setState(() {
+                  _query = value;
+                  _needle = timezoneLabel(value).trim().toLowerCase();
+                }),
               ),
             ),
             Flexible(
