@@ -253,6 +253,14 @@ void main() {
     await tester.pump(const Duration(seconds: 30));
   });
 
+  testWidgets('album rows are announced by their position', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await pumpPage(tester, _AlbumApi([_track(1, number: 2), _track(2)]));
+    expect(find.bySemanticsLabel(RegExp(r'^Track 2\b')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp(r'^Track 3\b')), findsOneWidget);
+    semantics.dispose();
+  });
+
   testWidgets('disc positions continue across a paginated boundary', (
     tester,
   ) async {

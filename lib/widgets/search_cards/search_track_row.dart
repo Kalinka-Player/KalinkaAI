@@ -38,6 +38,10 @@ class SearchTrackRow extends ConsumerStatefulWidget {
   final int? albumTrackNumber;
   final String? albumArtist;
 
+  /// Folder pages show a position in place of the cover too, but keep the
+  /// rest of the row.
+  final int? folderTrackNumber;
+
   const SearchTrackRow({
     super.key,
     required this.item,
@@ -45,6 +49,7 @@ class SearchTrackRow extends ConsumerStatefulWidget {
     this.labelled = true,
     this.albumTrackNumber,
     this.albumArtist,
+    this.folderTrackNumber,
   });
 
   @override
@@ -164,6 +169,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     final artist = track?.performer?.name ?? '';
     final album = track?.album?.title ?? '';
     final inAlbum = widget.albumTrackNumber != null;
+    final number = widget.albumTrackNumber ?? widget.folderTrackNumber;
     final albumArtist = widget.albumArtist?.trim().toLowerCase() ?? '';
     final subtitle = inAlbum
         ? (artist.trim().toLowerCase() == albumArtist ? '' : artist)
@@ -234,13 +240,13 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
       leadingStartSpacing: 0,
       leading: Stack(
         children: [
-          if (inAlbum)
+          if (number != null)
             ExcludeSemantics(
               child: Center(
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
-                    '${widget.albumTrackNumber}',
+                    '$number',
                     style: KalinkaFonts.mono(
                       fontSize: 14,
                       color: KalinkaColors.textSecondary,
@@ -399,7 +405,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
         ),
       ),
     );
-    if (!inAlbum) return row;
+    if (number == null) return row;
 
     return FocusableActionDetector(
       mouseCursor: SystemMouseCursors.click,
@@ -415,7 +421,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
       child: Semantics(
         button: true,
         selected: selectionMode ? isSelected : null,
-        label: 'Track ${widget.albumTrackNumber}',
+        label: 'Track $number',
         customSemanticsActions: selectionMode
             ? null
             : {
