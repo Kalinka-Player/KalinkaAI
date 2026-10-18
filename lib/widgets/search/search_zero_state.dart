@@ -10,6 +10,7 @@ import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
 import '../home/home_layout.dart';
 import '../home/pinned_catalogs_section.dart';
+import '../shelf_heading.dart';
 import '../tap_highlight.dart';
 import 'catalog_cards_section.dart';
 import 'collections_section.dart';
@@ -66,46 +67,30 @@ class SearchZeroState extends ConsumerWidget {
 
           CollectionsSection(onOpenCatalog: onOpenCatalog),
           const CatalogCardsSection(),
-          if (pins.isEmpty)
-            const PinnedCatalogsEmptyCard()
-          else ...[
-            PinnedCatalogsSection(pins: pins),
-            // After the pins, so it can't be read as the first shelf's own.
-            Center(
-              child: OutlinedButton.icon(
-                key: const ValueKey('customise-home-button'),
-                onPressed: () =>
-                    ref.read(homeCustomisationProvider.notifier).open(),
-                style:
-                    OutlinedButton.styleFrom(
-                      foregroundColor: KalinkaColors.textSecondary,
-                      minimumSize: const Size(48, 48),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
-                      shape: const StadiumBorder(),
-                      textStyle: KalinkaFonts.sans(
-                        fontSize: KalinkaTypography.baseSize + 2,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ).copyWith(
-                      overlayColor: kalinkaOverlay,
-                      side: WidgetStateProperty.resolveWith(
-                        (states) => BorderSide(
-                          color: states.contains(WidgetState.focused)
-                              ? KalinkaColors.textSecondary
-                              : KalinkaColors.borderDefault,
-                        ),
-                      ),
-                    ),
-                icon: const Icon(Icons.tune, size: 18),
-                label: const Text(
-                  'Customise Home',
-                  textAlign: TextAlign.center,
+          if (pins.isNotEmpty) ...[
+            // One action for the whole pinned group, before any previews.
+            Row(
+              children: [
+                const Expanded(
+                  child: ShelfHeading(
+                    title: 'PINNED CATALOGS',
+                    titleColor: KalinkaColors.textSecondary,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                IconButton(
+                  key: const ValueKey('customise-home-button'),
+                  tooltip: 'Customise Home',
+                  style: kalinkaIconButtonStyle,
+                  color: KalinkaColors.textSecondary,
+                  icon: const Icon(Icons.tune, size: 20),
+                  onPressed: () =>
+                      ref.read(homeCustomisationProvider.notifier).open(),
+                ),
+              ],
             ),
+            const SizedBox(height: kHomeHeadingGap),
+            PinnedCatalogsSection(pins: pins),
           ],
         ],
       ),

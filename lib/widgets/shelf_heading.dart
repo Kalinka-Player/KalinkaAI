@@ -9,6 +9,7 @@ import 'hover_text_action.dart';
 class ShelfHeading extends StatelessWidget {
   /// Already in the case it should show in.
   final String title;
+  final Color titleColor;
   final int? count;
 
   /// One line under the title, saying what the shelf is made of.
@@ -25,6 +26,7 @@ class ShelfHeading extends StatelessWidget {
   const ShelfHeading({
     super.key,
     required this.title,
+    this.titleColor = KalinkaColors.textPrimary,
     this.count,
     this.subtitle,
     this.icon,
@@ -40,9 +42,7 @@ class ShelfHeading extends StatelessWidget {
     final roomy = !hasLargeType(context);
     final heading = Text(
       title,
-      style: KalinkaTextStyles.sectionLabel.copyWith(
-        color: KalinkaColors.textPrimary,
-      ),
+      style: KalinkaTextStyles.sectionLabel.copyWith(color: titleColor),
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

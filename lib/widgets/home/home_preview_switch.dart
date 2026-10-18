@@ -5,12 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/connection_settings_provider.dart';
 import '../../providers/pinned_catalogs_provider.dart';
+import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
+import '../configuration_appearance.dart';
 import '../tap_highlight.dart';
+import '../sheet_anchor.dart';
 import 'catalog_pin_button.dart';
 import 'home_preview_choices.dart';
 
-/// An anchored icon bar; choices save immediately and restart its idle timer.
+/// An anchored visual layout picker; choices save immediately and restart its idle timer.
 class HomePreviewSwitch extends ConsumerStatefulWidget {
   final PinnedCatalog pin;
   final ValueChanged<VoidCallback?> onMenuChanged;
@@ -71,88 +74,89 @@ class _HomePreviewSwitchState extends ConsumerState<HomePreviewSwitch> {
   }
 
   @override
-  Widget build(BuildContext context) => MenuAnchor(
-    controller: _menu,
-    childFocusNode: _buttonFocus,
-    consumeOutsideTap: true,
-    onOpen: _opened,
-    onClose: _closed,
-    style: MenuStyle(
-      backgroundColor: const WidgetStatePropertyAll(
-        KalinkaColors.surfaceRaised,
-      ),
-      surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-      padding: const WidgetStatePropertyAll(EdgeInsets.all(12)),
-      shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: KalinkaColors.borderDefault),
+  Widget build(BuildContext context) {
+    final viewport = MediaQuery.sizeOf(context);
+    final insets = SheetAnchor.paddingFor(
+      SheetAnchor.elementOf(context),
+      viewport.width,
+    );
+    final menuWidth =
+        (viewport.width -
+                insets.horizontal -
+                2 * ConfigurationAppearance.gutter(context))
+            .clamp(0.0, 500.0);
+    final sourceColor =
+        ref
+            .watch(sourceDisplayInfoProvider)[sourceOfId(widget.pin.page.id!)]
+            ?.color ??
+        KalinkaColors.accent;
+    return MenuAnchor(
+      controller: _menu,
+      childFocusNode: _buttonFocus,
+      consumeOutsideTap: true,
+      onOpen: _opened,
+      onClose: _closed,
+      // The menu origin is its leading edge. Align its trailing edge with the
+      // row's Unpin action, keeping both edges inside the panel's gutters.
+      alignmentOffset: Offset(48 - menuWidth, 8),
+      style: MenuStyle(
+        maximumSize: WidgetStatePropertyAll(
+          Size(menuWidth, viewport.height * .7),
         ),
+        elevation: const WidgetStatePropertyAll(0),
+        backgroundColor: const WidgetStatePropertyAll(
+          KalinkaColors.surfaceRaised,
+        ),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        padding: const WidgetStatePropertyAll(EdgeInsets.all(12)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: KalinkaColors.borderDefault),
+          ),
+        ),
+        alignment: AlignmentDirectional.bottomEnd,
       ),
-      alignment: AlignmentDirectional.bottomEnd,
-    ),
-    menuChildren: [
-      Listener(
-        onPointerDown: (_) => _resetIdle(),
-        child: MouseRegion(
-          onHover: (_) => _resetIdle(),
-          child: Focus(
-            onKeyEvent: (_, _) {
-              _resetIdle();
-              return KeyEventResult.ignored;
-            },
-            child: SizedBox(
-              key: const ValueKey('home-preview-switch-menu'),
-              width: 248,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      for (final type in HomePreviewType.values)
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 2),
-                            child: IconButton(
-                              tooltip: type.label,
-                              isSelected: type == widget.pin.preview,
-                              onPressed: () => _select(type),
-                              style: kalinkaIconButtonStyle.copyWith(
-                                backgroundColor: WidgetStatePropertyAll(
-                                  type == widget.pin.preview
-                                      ? KalinkaColors.accent
-                                      : Colors.transparent,
-                                ),
-                                foregroundColor: const WidgetStatePropertyAll(
-                                  KalinkaColors.textPrimary,
-                                ),
-                              ),
-                              icon: Icon(homePreviewIcon(type), size: 22),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    '${widget.pin.preview.label}: ${widget.pin.preview.description}',
-                    style: KalinkaTextStyles.trackRowSubtitle,
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+      menuChildren: [
+        Listener(
+          onPointerDown: (_) => _resetIdle(),
+          onPointerSignal: (_) => _resetIdle(),
+          child: MouseRegion(
+            onHover: (_) => _resetIdle(),
+            child: Focus(
+              onKeyEvent: (_, _) {
+                _resetIdle();
+                return KeyEventResult.ignored;
+              },
+              child: SizedBox(
+                key: const ValueKey('home-preview-switch-menu'),
+                width: (menuWidth - 24).clamp(0.0, 476.0),
+                child: HomePreviewGrid(
+                  width: (menuWidth - 24).clamp(0.0, 476.0),
+                  selected: widget.pin.preview,
+                  sourceColor: sourceColor,
+                  onSelected: _select,
+                ),
               ),
             ),
           ),
         ),
+      ],
+      builder: (_, controller, _) => IconButton(
+        focusNode: _buttonFocus,
+        tooltip: 'Preview for ${widget.pin.page.title ?? 'Catalog'}',
+        style: kalinkaIconButtonStyle.copyWith(
+          backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+          // Returning null falls back to IconButton's focused overlay. MenuAnchor
+          // restores focus after closing, so explicitly clear all idle states.
+          overlayColor: WidgetStateProperty.resolveWith(
+            (states) => kalinkaOverlay.resolve(states) ?? Colors.transparent,
+          ),
+        ),
+        icon: Icon(homePreviewIcon(widget.pin.preview), size: 22),
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
       ),
-    ],
-    builder: (_, controller, _) => IconButton(
-      focusNode: _buttonFocus,
-      tooltip: 'Preview for ${widget.pin.page.title ?? 'Catalog'}',
-      style: kalinkaIconButtonStyle,
-      icon: Icon(homePreviewIcon(widget.pin.preview), size: 22),
-      onPressed: () =>
-          controller.isOpen ? controller.close() : controller.open(),
-    ),
-  );
+    );
+  }
 }

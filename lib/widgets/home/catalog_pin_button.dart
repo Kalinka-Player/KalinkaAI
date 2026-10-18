@@ -10,6 +10,7 @@ import '../../providers/source_modules_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../kalinka_bottom_sheet.dart';
+import '../tap_highlight.dart';
 import 'home_preview_choices.dart';
 
 Future<void> saveHomeChange(BuildContext context, Future<void> change) async {
@@ -66,32 +67,95 @@ class CatalogPinButton extends ConsumerWidget {
         final type = await showKalinkaBottomSheet<HomePreviewType>(
           context: context,
           mayFillScreen: true,
-          contentBuilder: (context) => SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SheetHeader(
-                  title: 'PIN CATALOG',
-                  summary: page.title ?? 'Catalog',
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    kSheetGutter,
-                    0,
-                    kSheetGutter,
-                    16,
+          contentBuilder: (context) => ConstrainedBox(
+            // A short decision sheet, even on a tall tablet. Enlarged text
+            // and short windows scroll within the available space.
+            constraints: const BoxConstraints(maxHeight: 560),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(kSheetGutter, 12, 12, 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Pin to Home',
+                                style: KalinkaTextStyles.settingsPageTitle,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                page.title ?? 'Catalog',
+                                style: KalinkaTextStyles.trayRowSublabel,
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close',
+                          style: kalinkaIconButtonStyle,
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: KalinkaColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Text(
-                    'Your current filters are saved with this pin.',
-                    style: KalinkaTextStyles.trackRowSubtitle,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      kSheetGutter,
+                      0,
+                      kSheetGutter,
+                      12,
+                    ),
+                    child: Text(
+                      'Your current filters are saved with this pin.',
+                      style: KalinkaTextStyles.trackRowSubtitle,
+                    ),
                   ),
-                ),
-                const SheetSectionLabel('PREVIEW'),
-                HomePreviewChoices(
-                  onSelected: (type) => Navigator.pop(context, type),
-                ),
-              ],
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      kSheetGutter,
+                      0,
+                      kSheetGutter,
+                      8,
+                    ),
+                    child: Text(
+                      'Choose a preview',
+                      style: KalinkaTextStyles.trayRowLabel,
+                    ),
+                  ),
+                  HomePreviewChoices(
+                    sourceColor:
+                        ref
+                            .read(sourceDisplayInfoProvider)[sourceOfId(
+                              page.id!,
+                            )]
+                            ?.color ??
+                        KalinkaColors.accent,
+                    onSelected: (type) => Navigator.pop(context, type),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: kSheetGutter,
+                      vertical: 12,
+                    ),
+                    child: Text(
+                      'Tap a layout to pin it.',
+                      textAlign: TextAlign.center,
+                      style: KalinkaTextStyles.trayRowSublabel,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );

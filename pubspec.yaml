@@ -87,7 +87,6 @@ flutter:
     - assets/images/kalinka_icon.svg
     - assets/images/kalinka_logo.svg
     - assets/images/header_artwork.svg
-    - assets/images/home_layout_diagram.svg
     - assets/fonts/OFL-IBMPlex.txt
     - assets/fonts/OFL-PlayfairDisplay.txt
 

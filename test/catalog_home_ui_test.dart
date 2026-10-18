@@ -24,6 +24,8 @@ import 'package:kalinka/widgets/home/pinned_catalogs_section.dart';
 import 'package:kalinka/widgets/home/catalog_artwork.dart';
 import 'package:kalinka/widgets/home/catalog_tile.dart';
 import 'package:kalinka/widgets/home/preview_shelf.dart';
+import 'package:kalinka/widgets/home/home_preview_choices.dart';
+import 'package:kalinka/widgets/home/home_preview_illustration.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/search/search_zero_state.dart';
 import 'package:kalinka/widgets/search_cards/search_album_row.dart';
@@ -144,6 +146,59 @@ class _QuietSettings extends SettingsNotifier {
 }
 
 void main() {
+  for (final size in [
+    const Size(900, 1100),
+    const Size(1200, 800),
+    const Size(1920, 1080),
+  ]) {
+    testWidgets('Pin sheet stays compact in the Home panel at $size', (
+      tester,
+    ) async {
+      final container = await pump(tester, size: size);
+      final source = find.byKey(const ValueKey('catalog-source-alpha'));
+      await tester.ensureVisible(source);
+      await tester.tap(source);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Editorial'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Pin catalog to Home'));
+      await tester.pumpAndSettle();
+
+      void expectPanelBounds(double width) {
+        final choices = find.byType(HomePreviewChoices);
+        final rect = tester.getRect(choices);
+        expect(rect.left, closeTo((width + 1) / 2, 1));
+        expect(rect.right, closeTo(width, 1));
+        final scroll = find.ancestor(
+          of: choices,
+          matching: find.byType(SingleChildScrollView),
+        );
+        expect(tester.getSize(scroll).height, lessThanOrEqualTo(560));
+        for (final type in HomePreviewType.values) {
+          expect(
+            find
+                .byKey(ValueKey('home-preview-option-${type.name}'))
+                .hitTestable(),
+            findsOneWidget,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      }
+
+      expectPanelBounds(size.width);
+      // Follow the actual Home panel as the window changes size.
+      tester.view.physicalSize = Size(size.width + 100, size.height);
+      await tester.pumpAndSettle();
+      expectPanelBounds(size.width + 100);
+
+      // Tapping beside the sheet dismisses it without pinning anything.
+      await tester.tapAt(Offset(20, size.height - 20));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(container.read(pinnedCatalogsProvider), isEmpty);
+    });
+  }
+
   for (final size in [const Size(375, 812), const Size(1200, 800)]) {
     testWidgets('Music sources gear opens Configuration and returns at $size', (
       tester,
@@ -256,10 +311,9 @@ void main() {
       await tester.tap(find.byTooltip('Pin catalog to Home'));
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsOneWidget);
-      expect(find.byIcon(Icons.view_carousel_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.image_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.view_list_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.view_agenda_outlined), findsOneWidget);
+      expect(find.text('Pin to Home'), findsOneWidget);
+      expect(find.text('Choose a preview'), findsOneWidget);
+      expect(find.byType(HomePreviewIllustration), findsNWidgets(4));
       await tester.tap(find.text('Cards'));
       await tester.pumpAndSettle();
       final saved = container.read(pinnedCatalogsProvider).single;
@@ -316,7 +370,9 @@ void main() {
       container.read(searchSessionProvider.notifier).backFromCatalog();
       await tester.pumpAndSettle();
       expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
-      expect(find.text('Customise Home'), findsNothing);
+      expect(find.byTooltip('Customise Home'), findsNothing);
+      expect(find.text('PINNED CATALOGS'), findsNothing);
+      expect(find.text('Pin catalogs to Home'), findsNothing);
       expect(
         find.byKey(const ValueKey('catalog-source-alpha')),
         findsOneWidget,
@@ -345,7 +401,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Customise'), findsNothing);
       await tester.scrollUntilVisible(
-        find.text('Customise Home'),
+        find.byTooltip('Customise Home'),
         200,
         scrollable: find
             .descendant(
@@ -354,20 +410,39 @@ void main() {
             )
             .first,
       );
-      expect(find.text('Customise Home'), findsOneWidget);
-      await tester.ensureVisible(find.text('Customise Home'));
+      expect(find.byTooltip('Customise Home'), findsOneWidget);
+      await tester.ensureVisible(find.byTooltip('Customise Home'));
       final button = find.byKey(const ValueKey('customise-home-button'));
       final buttonRect = tester.getRect(button);
       expect(buttonRect.height, greaterThanOrEqualTo(48));
       expect(
-        buttonRect.center.dx,
-        tester.getRect(find.byType(SearchZeroState)).center.dx,
+        buttonRect.right,
+        tester.getRect(find.byType(SearchZeroState)).right - kHomeSideInset,
       );
-      Focus.of(tester.element(find.text('Customise Home'))).requestFocus();
+      expect(find.text('PINNED CATALOGS'), findsOneWidget);
+      expect(
+        buttonRect.bottom,
+        lessThan(tester.getTopLeft(find.byType(PinnedCatalogPreview).first).dy),
+      );
+      final icon = find.descendant(
+        of: button,
+        matching: find.byIcon(Icons.tune),
+      );
+      Focus.of(tester.element(icon)).requestFocus();
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.space);
       await tester.pumpAndSettle();
       expect(find.byType(CustomiseHomeScreen), findsOneWidget);
+      expect(
+        find.text(
+          'Drag catalogs to reorder.\nSearch, collections and sources stay in place.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('customise-home-intro-divider')),
+        findsOneWidget,
+      );
       expect(
         find.descendant(
           of: find.byType(CustomiseHomeScreen),
@@ -425,6 +500,23 @@ void main() {
         expect((shape! as CircleBorder).side, BorderSide.none);
       }
 
+      void expectIdlePreviewAction() {
+        expectRoundAction(previewAction);
+        expect(actionSurface(previewAction).color, Colors.transparent);
+        final currentInk = tester.widget<InkWell>(
+          find.descendant(of: previewAction, matching: find.byType(InkWell)),
+        );
+        expect(
+          currentInk.overlayColor!.resolve({WidgetState.focused}),
+          Colors.transparent,
+        );
+        expect(currentInk.overlayColor!.resolve({}), Colors.transparent);
+        expect(
+          currentInk.overlayColor!.resolve({WidgetState.hovered})!.a,
+          greaterThan(0),
+        );
+      }
+
       final press = await tester.startGesture(tester.getCenter(previewAction));
       await tester.pump(const Duration(milliseconds: 150));
       expectRoundAction(previewAction);
@@ -439,13 +531,22 @@ void main() {
       await tester.pumpAndSettle();
       final menu = find.byKey(const ValueKey('home-preview-switch-menu'));
       expect(menu, findsOneWidget);
-      // MenuAnchor focuses its trigger even after touch. This must not paint
-      // the settings header's persistent white focus border.
+      final screenRect = tester.getRect(find.byType(CustomiseHomeScreen));
+      expect(
+        tester.getRect(menu).left,
+        greaterThanOrEqualTo(screenRect.left + 20),
+      );
+      expect(
+        tester.getRect(menu).right,
+        lessThanOrEqualTo(screenRect.right - 20),
+      );
+      // MenuAnchor focuses its trigger even after touch. Focus and an open
+      // menu must not leave a persistent fill behind the icon.
       expect(
         tester.widget<IconButton>(previewAction).focusNode!.hasFocus,
         isTrue,
       );
-      expectRoundAction(previewAction);
+      expectIdlePreviewAction();
       expect(ink.statesController!.value, isNot(contains(WidgetState.pressed)));
       expectRoundAction(
         find.ancestor(
@@ -457,25 +558,19 @@ void main() {
         tester.getTopLeft(find.byTooltip('Preview for first')).dx,
         lessThan(tester.getTopLeft(find.byTooltip('Unpin first')).dx),
       );
-      final artworkButton = tester.widget<IconButton>(
-        find
-            .ancestor(
-              of: find.byTooltip('Artwork'),
-              matching: find.byType(IconButton),
-            )
-            .first,
-      );
-      expect(artworkButton.isSelected, isTrue);
-      expectRoundAction(
-        find.ancestor(
-          of: find.byTooltip('Artwork'),
-          matching: find.byType(IconButton),
-        ),
+      expect(find.byType(HomePreviewIllustration), findsNWidgets(4));
+      final artworkButton = tester.widget<TextButton>(
+        find.byKey(const ValueKey('home-preview-option-artwork')),
       );
       expect(
-        artworkButton.style!.backgroundColor!.resolve({WidgetState.selected}),
-        KalinkaColors.accent,
+        artworkButton.style!.side!.resolve({})!.color,
+        KalinkaColors.accentTint,
       );
+      expect(
+        tester.widget<HomePreviewGrid>(find.byType(HomePreviewGrid)).selected,
+        HomePreviewType.artwork,
+      );
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
       await tester.pump(const Duration(seconds: 2));
       await tester.tap(find.byTooltip('Cards'));
       await tester.pumpAndSettle();
@@ -484,13 +579,16 @@ void main() {
         container.read(pinnedCatalogsProvider).first.preview,
         HomePreviewType.cards,
       );
-      expect(find.text('Cards: Horizontally scrolling cards'), findsOneWidget);
+      expect(
+        tester.widget<HomePreviewGrid>(find.byType(HomePreviewGrid)).selected,
+        HomePreviewType.cards,
+      );
       await tester.pump(const Duration(seconds: 2));
       expect(menu, findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpAndSettle();
       expect(menu, findsNothing);
-      expectRoundAction(previewAction);
+      expectIdlePreviewAction();
       await tester.tap(find.byTooltip('Preview for first'));
       await tester.pumpAndSettle();
       await tester.binding.handlePopRoute();
@@ -505,6 +603,11 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(menu, findsNothing);
+      expect(
+        tester.widget<IconButton>(previewAction).focusNode!.hasFocus,
+        isTrue,
+      );
+      expectIdlePreviewAction();
       final handle = find.byType(ReorderableDragStartListener).first;
       final gesture = await tester.startGesture(tester.getCenter(handle));
       await tester.pump();
@@ -576,7 +679,9 @@ void main() {
         tester.widget<CatalogTile>(find.byType(CatalogTile)).subtitle,
         isNull,
       );
-      expect(find.text('Customise Home'), findsNothing);
+      expect(find.byTooltip('Customise Home'), findsNothing);
+      expect(find.text('PINNED CATALOGS'), findsNothing);
+      expect(find.text('Pin catalogs to Home'), findsNothing);
       expect(tester.takeException(), isNull);
       await container
           .read(pinnedCatalogsProvider.notifier)
@@ -611,7 +716,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(compactTile, findsOneWidget);
-      expect(find.text('Customise Home'), findsOneWidget);
+      expect(find.byTooltip('Customise Home'), findsOneWidget);
       expect(tester.takeException(), isNull);
       final pin = container.read(pinnedCatalogsProvider).single;
       await container
@@ -686,6 +791,8 @@ void main() {
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.byTooltip('Compact'));
+      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Compact'));
       await tester.pumpAndSettle();
       expect(
@@ -724,8 +831,8 @@ void main() {
             ),
           );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Customise Home'));
-      await tester.tap(find.text('Customise Home'));
+      await tester.ensureVisible(find.byTooltip('Customise Home'));
+      await tester.tap(find.byTooltip('Customise Home'));
       await tester.pumpAndSettle();
       final panel = find.byType(CustomiseHomeScreen);
       expect(tester.getRect(panel).left, 600.5);
@@ -738,6 +845,12 @@ void main() {
             .getRect(find.byKey(const ValueKey('home-preview-switch-menu')))
             .left,
         greaterThanOrEqualTo(600.5),
+      );
+      expect(
+        tester
+            .getRect(find.byKey(const ValueKey('home-preview-switch-menu')))
+            .right,
+        lessThanOrEqualTo(tester.getRect(panel).right - 25),
       );
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
