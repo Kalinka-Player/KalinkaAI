@@ -38,9 +38,12 @@ class SearchTrackRow extends ConsumerStatefulWidget {
   final int? albumTrackNumber;
   final String? albumArtist;
 
-  /// Folder pages show a position in place of the cover too, but keep the
-  /// rest of the row.
+  /// Folder pages show a position before the cover, and keep the rest of the
+  /// row.
   final int? folderTrackNumber;
+
+  /// Fits three digits of the 14px mono numeral; longer numbers scale down.
+  static const double folderNumberWidth = 28;
 
   const SearchTrackRow({
     super.key,
@@ -227,7 +230,23 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
         ? KalinkaColors.accent
         : (showNowPlaying ? KalinkaColors.accentBorder : null);
 
-    final tileChild = TrackTileLayout(
+    // Built only for the rows that show a number.
+    Widget numeral() => ExcludeSemantics(
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            '$number',
+            style: KalinkaFonts.mono(
+              fontSize: 14,
+              color: KalinkaColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final tile = TrackTileLayout(
       // Match the album/artist rows' 3px artwork inset — the default
       // TrackTileLayout left padding (12) pushed track artwork out of line.
       // Right 8 lands the duration on the chevrons'/chips' right edge.
@@ -240,21 +259,8 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
       leadingStartSpacing: 0,
       leading: Stack(
         children: [
-          if (number != null)
-            ExcludeSemantics(
-              child: Center(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    '$number',
-                    style: KalinkaFonts.mono(
-                      fontSize: 14,
-                      color: KalinkaColors.textSecondary,
-                    ),
-                  ),
-                ),
-              ),
-            )
+          if (inAlbum)
+            numeral()
           else
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
@@ -346,6 +352,18 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
           ? TrackRowTrailing(duration: duration, current: showBars)
           : null,
     );
+    // Folder rows keep their cover, so the number gets a column before it.
+    final tileChild = widget.folderTrackNumber == null
+        ? tile
+        : Row(
+            children: [
+              SizedBox(
+                width: SearchTrackRow.folderNumberWidth,
+                child: numeral(),
+              ),
+              Expanded(child: tile),
+            ],
+          );
 
     void activate() {
       if (selectionMode) {
