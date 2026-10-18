@@ -19,6 +19,14 @@ const setSoundcardAction = 'set_soundcard';
 /// the supervisor gives up after 90 seconds.
 const _soundcardTimeout = Duration(seconds: 100);
 
+/// The action that sets the box's time zone. It takes a zone, so it is no
+/// [BoxAction].
+const setTimezoneAction = 'set_timezone';
+
+/// The supervisor waits up to 30 seconds for timedated and for the display to
+/// restart on the new zone.
+const _timezoneTimeout = Duration(seconds: 40);
+
 /// What the box's supervisor can be asked to do, by its name in the API.
 enum BoxAction {
   restartServer('restart_core'),
@@ -63,6 +71,9 @@ class SupervisorInfo {
 
   /// Whether the box is a Raspberry Pi whose sound card it can set up.
   bool get setsSoundcard => actions.contains(setSoundcardAction);
+
+  /// Whether the box can be set to another time zone.
+  bool get setsTimezone => actions.contains(setTimezoneAction);
 
   /// Null when [json] is not a supervisor's answer.
   static SupervisorInfo? fromJson(Object? json) {
@@ -241,6 +252,17 @@ abstract class SupervisorApi {
   /// it. Returns once the box has written its boot configuration.
   Future<bool> setSoundcard(String card, BoxIdentity identity);
 
+  /// The zone the box is on, such as `Europe/London`; null when it names
+  /// none, or does not answer.
+  Future<String?> timezone();
+
+  /// Every zone the box can be set to; null when it does not answer.
+  Future<List<String>?> timezones();
+
+  /// Sets the box to [zone] and returns the zone it is now on, which for an
+  /// old name such as `Asia/Calcutta` is the one it links to.
+  Future<String> setTimezone(String zone, BoxIdentity identity);
+
   /// The supervisor's own page, for a browser.
   Uri get page;
 }
@@ -297,6 +319,38 @@ class DioSupervisorApi implements SupervisorApi {
     return reply is Map && reply['reboot'] == true;
   }
 
+  @override
+  Future<String?> timezone() async {
+    try {
+      final data = (await _client.get('/v$_protocol/status')).data;
+      final zone = data is Map ? data['timezone'] : null;
+      return zone is String ? zone : null;
+    } on DioException {
+      return null;
+    }
+  }
+
+  @override
+  Future<List<String>?> timezones() async {
+    try {
+      final data = (await _client.get('/v$_protocol/timezones')).data;
+      final zones = data is Map ? data['timezones'] : null;
+      return zones is List ? zones.whereType<String>().toList() : null;
+    } on DioException {
+      return null;
+    }
+  }
+
+  @override
+  Future<String> setTimezone(String zone, BoxIdentity identity) async {
+    final reply = await _act(setTimezoneAction, {
+      ...identity.toJson(),
+      'timezone': zone,
+    }, receiveTimeout: _timezoneTimeout);
+    final set = reply is Map ? reply['timezone'] : null;
+    return set is String ? set : zone;
+  }
+
   Future<Object?> _act(
     String action,
     Map<String, String> body, {
@@ -339,6 +393,8 @@ class DioSupervisorApi implements SupervisorApi {
     'unknown_soundcard': 'This box cannot be set up for that sound card.',
     'soundcard_failed':
         'The box could not set that sound card up. Try again in a moment.',
+    'unknown_timezone':
+        'This box does not have that time zone. Choose one from its list.',
   };
 }
 

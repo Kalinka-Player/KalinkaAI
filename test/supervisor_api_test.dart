@@ -215,6 +215,81 @@ void main() {
     });
   });
 
+  group('time zone', () {
+    test('a box offers it once its supervisor lists the action', () async {
+      final (older, _) = _api((_) => _json(200, _info));
+      final (newer, _) = _api(
+        (_) => _json(200, {
+          ..._info,
+          'actions': [..._info['actions'] as List, 'set_timezone'],
+        }),
+      );
+      expect((await older.info())!.setsTimezone, isFalse);
+      expect((await newer.info())!.setsTimezone, isTrue);
+    });
+
+    test('reads the zone the box is on from its status', () async {
+      final (api, adapter) = _api(
+        (_) => _json(200, {'core': 'active', 'timezone': 'Europe/London'}),
+      );
+      expect(await api.timezone(), 'Europe/London');
+      expect(adapter.requests.single.path, '/v1/status');
+    });
+
+    test('is unknown when the box names no zone or does not answer', () async {
+      final (unnamed, _) = _api(
+        (_) => _json(200, {'core': 'active', 'timezone': null}),
+      );
+      final (silent, _) = _api((_) => null);
+      expect(await unnamed.timezone(), isNull);
+      expect(await silent.timezone(), isNull);
+    });
+
+    test('lists the zones the box offers', () async {
+      final (api, adapter) = _api(
+        (_) => _json(200, {
+          'timezones': ['Europe/London', 5, 'UTC'],
+        }),
+      );
+      expect(await api.timezones(), ['Europe/London', 'UTC']);
+      expect(adapter.requests.single.path, '/v1/timezones');
+    });
+
+    test('sets a zone, naming the box, and returns the one it set', () async {
+      final (api, adapter) = _api(
+        (_) =>
+            _json(202, {'action': 'set_timezone', 'timezone': 'Asia/Kolkata'}),
+      );
+
+      final set = await api.setTimezone(
+        'Asia/Calcutta',
+        const BoxIdentity(serverId: 'box-1'),
+      );
+
+      expect(set, 'Asia/Kolkata');
+      final sent = adapter.requests.single;
+      expect(sent.method, 'POST');
+      expect(sent.path, '/v1/actions/set_timezone');
+      expect(sent.data, {'server_id': 'box-1', 'timezone': 'Asia/Calcutta'});
+      expect(sent.receiveTimeout, greaterThan(const Duration(seconds: 30)));
+    });
+
+    test('words a zone the box does not have', () async {
+      final (api, _) = _api((_) => _refusal(400, 'unknown_timezone'));
+
+      await expectLater(
+        api.setTimezone('Mars/Olympus', const BoxIdentity(serverId: 'box-1')),
+        throwsA(
+          isA<BoxActionException>().having(
+            (e) => e.message,
+            'message',
+            'This box does not have that time zone. Choose one from its list.',
+          ),
+        ),
+      );
+    });
+  });
+
   group('supervisorApiProvider', () {
     Future<SupervisorApi?> read(Map<String, Object> stored) async {
       SharedPreferences.setMockInitialValues(stored);
