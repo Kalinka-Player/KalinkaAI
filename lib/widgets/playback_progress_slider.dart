@@ -235,39 +235,44 @@ class _PlaybackProgressSliderState extends ConsumerState<PlaybackProgressSlider>
                   // slider's semantics their shape.
                   Visibility.maintain(
                     visible: !away,
-                    child: SliderTheme(
-                      data: SliderThemeData(
-                        trackHeight: _trackHeight,
-                        thumbShape: seekable
-                            ? const RoundSliderThumbShape(enabledThumbRadius: 6)
-                            : SliderComponentShape.noThumb,
-                        overlayShape: const RoundSliderOverlayShape(
-                          overlayRadius: _overlayRadius,
+                    child: ExcludeFocus(
+                      excluding: away,
+                      child: SliderTheme(
+                        data: SliderThemeData(
+                          trackHeight: _trackHeight,
+                          thumbShape: seekable
+                              ? const RoundSliderThumbShape(
+                                  enabledThumbRadius: 6,
+                                )
+                              : SliderComponentShape.noThumb,
+                          overlayShape: const RoundSliderOverlayShape(
+                            overlayRadius: _overlayRadius,
+                          ),
+                          activeTrackColor: seekable
+                              ? KalinkaColors.accent
+                              : KalinkaColors.textMuted,
+                          inactiveTrackColor: KalinkaColors.borderDefault,
+                          thumbColor: Colors.white,
+                          overlayColor: KalinkaColors.accent.withValues(
+                            alpha: 0.25,
+                          ),
                         ),
-                        activeTrackColor: seekable
-                            ? KalinkaColors.accent
-                            : KalinkaColors.textMuted,
-                        inactiveTrackColor: KalinkaColors.borderDefault,
-                        thumbColor: Colors.white,
-                        overlayColor: KalinkaColors.accent.withValues(
-                          alpha: 0.25,
+                        // Disabled via the IgnorePointer above, never a null
+                        // onChanged: that restructures the Slider's semantics,
+                        // which asserts in flushSemantics if a dialog pops the
+                        // same frame (Clear all).
+                        child: Slider(
+                          value: progress,
+                          onChangeStart: (value) {
+                            if (interactive) beginSeek(value);
+                          },
+                          onChanged: (value) {
+                            if (interactive) seekTo(value);
+                          },
+                          onChangeEnd: (value) {
+                            if (interactive) commitSeek(value);
+                          },
                         ),
-                      ),
-                      // Disabled via the IgnorePointer above, never a null
-                      // onChanged: that restructures the Slider's semantics,
-                      // which asserts in flushSemantics if a dialog pops the
-                      // same frame (Clear all).
-                      child: Slider(
-                        value: progress,
-                        onChangeStart: (value) {
-                          if (interactive) beginSeek(value);
-                        },
-                        onChanged: (value) {
-                          if (interactive) seekTo(value);
-                        },
-                        onChangeEnd: (value) {
-                          if (interactive) commitSeek(value);
-                        },
                       ),
                     ),
                   ),

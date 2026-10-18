@@ -851,12 +851,15 @@ class _PlayingView extends ConsumerWidget {
     // Never wider than the space it is given.
     Widget controls({double? width}) => IgnorePointer(
       ignoring: away,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: KioskTransport(
-          scale: fill ? math.max(scale * 0.9, 0.6) : scale,
-          width: width,
-          onSkip: onSkip,
+      child: ExcludeFocus(
+        excluding: away,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: KioskTransport(
+            scale: fill ? math.max(scale * 0.9, 0.6) : scale,
+            width: width,
+            onSkip: onSkip,
+          ),
         ),
       ),
     );
