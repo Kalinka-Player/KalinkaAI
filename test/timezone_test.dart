@@ -219,12 +219,13 @@ void main() {
     expect(find.byKey(const ValueKey('timezone-search')), findsNothing);
   });
 
-  test('an old name counts as the zone the box set for it', () async {
+  test('an old name counts as the zone the box set for it, after a new '
+      'launch too', () async {
     final box = FakeBox(answers: [_setsTimezone]);
+    final prefs = await boxPrefs();
     final container = ProviderContainer(
-      overrides: soundcardOverrides(await boxPrefs(), box: box),
+      overrides: soundcardOverrides(prefs, box: box),
     );
-    addTearDown(container.dispose);
     await container.read(boxControlProvider.future);
     final change = container.read(timezoneChangeProvider.notifier);
 
@@ -234,6 +235,18 @@ void main() {
     expect(box.zone, 'Asia/Kolkata');
     expect(change.isOn('Asia/Calcutta', 'Asia/Kolkata'), isTrue);
     expect(change.isOn('Europe/London', 'Asia/Kolkata'), isFalse);
+    container.dispose();
+
+    final relaunched = ProviderContainer(
+      overrides: soundcardOverrides(prefs, box: box),
+    );
+    addTearDown(relaunched.dispose);
+    expect(
+      relaunched
+          .read(timezoneChangeProvider.notifier)
+          .isOn('Asia/Calcutta', 'Asia/Kolkata'),
+      isTrue,
+    );
   });
 
   test('a change answered after the app has gone touches nothing', () async {

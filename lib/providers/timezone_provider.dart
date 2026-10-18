@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/local_timezone.dart';
 import 'box_control_provider.dart';
+import 'connection_settings_provider.dart' show sharedPrefsProvider;
 import 'supervisor_api.dart';
 import 'toast_provider.dart';
 
@@ -47,11 +49,19 @@ class TimezoneChange extends Notifier<String?> {
   @override
   String? build() => null;
 
-  final _setFor = <String, String>{};
+  /// Old zone names, `from=to`, each with the zone a box set when asked for
+  /// it; kept across launches, since the box names only the zone it is on.
+  static const _linksKey = 'Kalinka.timezoneLinks';
 
-  /// Whether a box on [boxZone] is on [zone]: the same zone, or the one the
-  /// box set when asked for [zone] under an old name such as `Asia/Calcutta`.
-  bool isOn(String zone, String? boxZone) => (_setFor[zone] ?? zone) == boxZone;
+  Map<String, String> _links(SharedPreferences prefs) => {
+    for (final link in prefs.getStringList(_linksKey) ?? const <String>[])
+      if (link.split('=') case [final from, final to]) from: to,
+  };
+
+  /// Whether a box on [boxZone] is on [zone]: the same zone, or the one a box
+  /// set when asked for [zone] under an old name such as `Asia/Calcutta`.
+  bool isOn(String zone, String? boxZone) =>
+      (_links(ref.read(sharedPrefsProvider))[zone] ?? zone) == boxZone;
 
   /// Returns whether the box took [zone]; the outcome is reported in a toast.
   Future<bool> apply(String zone, {bool inPanel = false}) async {
@@ -59,13 +69,19 @@ class TimezoneChange extends Notifier<String?> {
     final api = ref.read(supervisorApiProvider);
     if (state != null || control == null || api == null) return false;
     final toast = ref.read(toastProvider.notifier);
+    final prefs = ref.read(sharedPrefsProvider);
     state = zone;
     try {
       final set = await api.setTimezone(
         zone,
         BoxIdentity(serverId: control.serverId),
       );
-      _setFor[zone] = set;
+      if (set != zone) {
+        final links = {..._links(prefs), zone: set};
+        await prefs.setStringList(_linksKey, [
+          for (final MapEntry(:key, :value) in links.entries) '$key=$value',
+        ]);
+      }
       if (!ref.mounted) return true;
       ref.invalidate(boxTimezoneProvider);
       toast.show(
