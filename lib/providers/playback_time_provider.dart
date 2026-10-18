@@ -3,6 +3,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart' show PlayerStateType;
 import '../providers/app_state_provider.dart' show playerStateProvider;
+import '../providers/connection_state_provider.dart'
+    show connectionStateProvider;
 import '../providers/monotonic_clock_provider.dart' show monotonicClockProvider;
 
 /// Expose app lifecycle as a provider.
@@ -30,22 +32,26 @@ class AppLifecycleNotifier extends Notifier<AppLifecycleState> {
 /// - Uses `Stopwatch` (monotonic) to advance between accurate updates.
 /// - Emits once per second only when app is RESUMED.
 /// - On resume, emits immediately (catch-up) and restarts the 1s tick.
+/// - While the connection is interrupted, holds still until the server
+///   reports again.
 final playbackTimeMsProvider = NotifierProvider<PlaybackTimeMsNotifier, int>(
   PlaybackTimeMsNotifier.new,
 );
 
-typedef _PlaybackTimingSnapshot = ({
+typedef _ServerTiming = ({
   PlayerStateType? playerState,
   int positionMs,
   int timestampMs,
 });
+
+typedef _PlaybackTimingSnapshot = ({_ServerTiming server, bool interrupted});
 
 final _playbackTimingSnapshotProvider = Provider<_PlaybackTimingSnapshot>((
   ref,
 ) {
   // Keep this snapshot primitive-only so unrelated object identity churn
   // (e.g. currentTrack instances) does not retrigger the playback ticker.
-  return ref.watch(
+  final server = ref.watch(
     playerStateProvider.select(
       (s) => (
         playerState: s.state,
@@ -54,21 +60,33 @@ final _playbackTimingSnapshotProvider = Provider<_PlaybackTimingSnapshot>((
       ),
     ),
   );
+  final interrupted = ref.watch(
+    connectionStateProvider.select((s) => s.isInterrupted),
+  );
+  return (server: server, interrupted: interrupted);
 });
 
 class PlaybackTimeMsNotifier extends Notifier<int> {
   Timer? _tick;
   int _tickGeneration = 0;
 
-  int _computeTimeMs(_PlaybackTimingSnapshot snapshot) {
-    if (snapshot.playerState == PlayerStateType.playing) {
+  // Where playback stood when the connection dropped. Kept until the server
+  // reports again, even once reconnected: extrapolating the old state would
+  // count the outage as played.
+  ({_ServerTiming server, int ms})? _held;
+
+  int _extrapolate(_ServerTiming server) {
+    if (server.playerState == PlayerStateType.playing) {
       final deltaMs =
           ref.read(monotonicClockProvider).elapsedMilliseconds -
-          snapshot.timestampMs;
-      return snapshot.positionMs + (deltaMs > 0 ? deltaMs : 0);
+          server.timestampMs;
+      return server.positionMs + (deltaMs > 0 ? deltaMs : 0);
     }
-    return snapshot.positionMs;
+    return server.positionMs;
   }
+
+  int _computeTimeMs(_PlaybackTimingSnapshot snapshot) =>
+      _held?.ms ?? _extrapolate(snapshot.server);
 
   void _cancelTick() {
     _tick?.cancel();
@@ -86,8 +104,9 @@ class PlaybackTimeMsNotifier extends Notifier<int> {
   }) {
     _cancelTick();
 
-    if (lifecycle != AppLifecycleState.resumed ||
-        snapshot.playerState != PlayerStateType.playing) {
+    if (_held != null ||
+        lifecycle != AppLifecycleState.resumed ||
+        snapshot.server.playerState != PlayerStateType.playing) {
       return;
     }
 
@@ -126,6 +145,11 @@ class PlaybackTimeMsNotifier extends Notifier<int> {
     // Riverpod disposes the previous build's callbacks when these watched
     // values change. Register cleanup for every newly created ticker.
     ref.onDispose(_cancelTick);
+
+    if (_held?.server != snapshot.server) _held = null;
+    if (snapshot.interrupted) {
+      _held ??= (server: snapshot.server, ms: _extrapolate(snapshot.server));
+    }
 
     _restartTicking(lifecycle: lifecycle, snapshot: snapshot);
     return _computeTimeMs(snapshot);

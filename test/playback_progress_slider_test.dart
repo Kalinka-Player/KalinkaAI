@@ -7,6 +7,7 @@ import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/data_model/playqueue_events.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
+import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/providers/monotonic_clock_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
@@ -48,6 +49,13 @@ class _Queue extends PlayQueueStateStore {
   void unrelatedEvent() => state = state.copyWith(seq: state.seq + 1);
 }
 
+class _Connection extends ConnectionStateNotifier {
+  @override
+  ConnectionStatus build() => ConnectionStatus.connected;
+
+  void set(ConnectionStatus next) => state = next;
+}
+
 class _Api extends KalinkaWsApi {
   _Api(super.ref);
   final commands = <SeekCommand>[];
@@ -60,18 +68,20 @@ class _Api extends KalinkaWsApi {
   }
 }
 
-Future<({_Queue queue, _Api api})> _pump(
+Future<({_Queue queue, _Api api, _Connection connection})> _pump(
   WidgetTester tester, {
   bool kiosk = false,
+  Stopwatch? clock,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         playQueueStateStoreProvider.overrideWith(_Queue.new),
         kalinkaWsApiProvider.overrideWith((ref) => _Api(ref)),
+        connectionStateProvider.overrideWith(_Connection.new),
         // Freeze interpolation; actual server positions still flow through the
         // real playbackTimeMsProvider, rather than a separately updated fake.
-        monotonicClockProvider.overrideWithValue(Stopwatch()),
+        monotonicClockProvider.overrideWithValue(clock ?? Stopwatch()),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -95,6 +105,7 @@ Future<({_Queue queue, _Api api})> _pump(
   return (
     queue: container.read(playQueueStateStoreProvider.notifier) as _Queue,
     api: container.read(kalinkaWsApiProvider) as _Api,
+    connection: container.read(connectionStateProvider.notifier) as _Connection,
   );
 }
 

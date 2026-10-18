@@ -12,7 +12,16 @@ import 'playback_time_provider.dart' show appLifecycleProvider;
 
 final _logger = Logger();
 
-enum ConnectionStatus { none, connecting, connected, reconnecting, offline }
+enum ConnectionStatus {
+  none,
+  connecting,
+  connected,
+  reconnecting,
+  offline;
+
+  /// The server stopped answering, so what it last reported may be stale.
+  bool get isInterrupted => this == reconnecting || this == offline;
+}
 
 final connectionStateProvider =
     NotifierProvider<ConnectionStateNotifier, ConnectionStatus>(
