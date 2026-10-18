@@ -7,6 +7,7 @@ import '../providers/app_state_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/demo_mode.dart';
+import '../providers/networked_boxes_provider.dart';
 import '../providers/onboarding_provider.dart';
 import '../providers/playback_failure_provider.dart';
 import '../providers/renderer_host_provider.dart' show rendererIdentityProvider;
@@ -170,10 +171,15 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     super.dispose();
   }
 
-  void _openWizard({bool startAtSetup = false}) {
+  void _openWizard({bool startAtSetup = false, bool offerNetwork = true}) {
     _wizardOpen = true;
     Navigator.of(context)
-        .push(_onboardingRoute(startAtSetup: startAtSetup))
+        .push(
+          _onboardingRoute(
+            startAtSetup: startAtSetup,
+            offerNetwork: offerNetwork,
+          ),
+        )
         .whenComplete(() => _wizardOpen = false);
   }
 
@@ -193,21 +199,29 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       }
       final values = ref.read(settingsProvider).values;
       if (values[OnboardingStatusNotifier.serverOobeFlagPath] == false) {
-        _openWizard(startAtSetup: true);
+        final offerNetwork = await offerNetworkSetup(ref);
+        if (!mounted || _wizardOpen) return;
+        _openWizard(startAtSetup: true, offerNetwork: offerNetwork);
       }
     } finally {
       _setupCheckBusy = false;
     }
   }
 
-  Route<void> _onboardingRoute({required bool startAtSetup}) {
+  Route<void> _onboardingRoute({
+    required bool startAtSetup,
+    bool offerNetwork = true,
+  }) {
     return PageRouteBuilder(
       opaque: true,
       transitionDuration: const Duration(milliseconds: 280),
       reverseTransitionDuration: const Duration(milliseconds: 280),
       pageBuilder: (_, _, _) => Material(
         type: MaterialType.transparency,
-        child: OnboardingScreen(startAtSetup: startAtSetup),
+        child: OnboardingScreen(
+          startAtSetup: startAtSetup,
+          offerNetwork: offerNetwork,
+        ),
       ),
       transitionsBuilder: (_, anim, _, child) =>
           FadeTransition(opacity: anim, child: child),

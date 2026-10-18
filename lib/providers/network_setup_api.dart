@@ -5,6 +5,9 @@ import 'package:dio/dio.dart';
 import 'network_setup_session.dart'
     if (dart.library.js_interop) 'network_setup_session_web.dart';
 
+/// The box's own address on the Wi-Fi hotspot it raises for setup.
+const hotspotAddress = '192.168.4.1';
+
 /// The supervisor's network setup transport, shared by native and web clients.
 class NetworkSetupApi {
   final Dio client;

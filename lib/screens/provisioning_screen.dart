@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/discovery_provider.dart';
+import '../providers/networked_boxes_provider.dart';
 import '../providers/provisioning_controller.dart';
 import '../providers/provisioning_protocol.dart';
 import '../providers/provisioning_transport.dart';
@@ -125,6 +126,8 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     String? id,
   ) async {
     if (!mounted) return null;
+    // Joined: setup skips Network for this box, however the app reaches it.
+    ref.read(networkedBoxesProvider.notifier).add(id);
     final discovery = ref.read(discoveryProvider);
     final matches = discovery.servers.where(
       (server) => id != null && server.serverId == id,
@@ -151,6 +154,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
       );
       final serverId = sessions.data is Map ? sessions.data['server_id'] : null;
       if (serverId is! String || (id != null && id != serverId)) return null;
+      ref.read(networkedBoxesProvider.notifier).add(serverId);
       return ProvisionedEndpoint(
         match?.name ?? _setup.selected!.name,
         host,

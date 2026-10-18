@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../providers/network_setup_api.dart';
 import '../providers/provisioning_controller.dart';
 import '../widgets/onboarding/onboarding_step_scaffold.dart';
 import 'network_setup_screen.dart';
@@ -50,7 +51,7 @@ class SetupMethodScreen extends StatelessWidget {
             await _open(
               context,
               NetworkSetupScreen(
-                endpoint: Uri.parse('http://192.168.4.1'),
+                endpoint: Uri.http(hotspotAddress),
                 hotspot: true,
                 onReturnToDiscovery: () {
                   final navigator = Navigator.of(context);
