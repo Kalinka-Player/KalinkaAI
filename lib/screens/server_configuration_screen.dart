@@ -26,12 +26,14 @@ class ServerSettingsBody extends ConsumerWidget {
   final VoidCallback onRestart;
   final VoidCallback onDownloadLogs;
   final VoidCallback onAdvanced;
+  final VoidCallback? onNetwork;
 
   const ServerSettingsBody({
     super.key,
     required this.onRestart,
     required this.onDownloadLogs,
     required this.onAdvanced,
+    this.onNetwork,
   });
 
   @override
@@ -108,6 +110,7 @@ class ServerSettingsBody extends ConsumerWidget {
           ],
           BoxSection(
             title: 'MANAGEMENT',
+            onNetwork: onNetwork,
             leadingActions: [
               SettingsActionRow(
                 label: 'Restart Kalinka',

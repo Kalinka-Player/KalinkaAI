@@ -121,12 +121,14 @@ Keep this order directly on the tab:
 | --- | --- |
 | SERVER | Identity card: name and pencil, selectable address, server version, raw backend supervisor status |
 | SOFTWARE UPDATES | Bundle/component update state and automatic updates in one card |
-| MANAGEMENT | Restart Kalinka, dashboard, restart streamer, power off streamer, when supported |
+| MANAGEMENT | Restart Kalinka, Network, dashboard, restart streamer, power off streamer, when supported |
 | SUPPORT | Download server logs and Advanced settings |
 
 The name is a prominent value, not a duplicate page heading. Its 48dp pencil opens a bottom sheet; Done stages the name, Cancel/Back discards the sheet edit. Apply/restart follows the existing settings flow. Settings reads refresh the connected server's saved label without changing its address or reconnecting.
 
 The address has 16dp side padding, a 4dp label/value gap and 20dp bottom padding. The metadata area has 16dp padding, 8dp between details and 16dp between label/value columns. At less than `280 × textScaler.scale(1)` available width, each detail stacks its label above its value with a 4dp gap. Do not truncate an address or status.
+
+**Network** appears only for a box with a supervisor. It opens a **Network** page that hosts the same network panel as setup: the current wired or Wi-Fi connection, and the Wi-Fi networks the box can join.
 
 Display the supervisor status exactly as the backend returns it; do not parse a version or infer health from “Installed”. Package updates show the components the backend identifies as changed. Sound-card controls belong in Output settings. Device automation belongs in Advanced settings.
 

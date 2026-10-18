@@ -9,6 +9,7 @@ import '../providers/plugin_state.dart';
 import '../providers/restart_provider.dart';
 import '../providers/server_info_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/supervisor_api.dart' show supervisorPort;
 import '../providers/server_update_provider.dart';
 import '../providers/upgrade_provider.dart';
 import '../providers/toast_provider.dart';
@@ -22,6 +23,7 @@ import '../widgets/configuration_appearance.dart';
 import '../widgets/configuration_changes_bar.dart';
 import '../widgets/configuration_page.dart';
 import '../widgets/expert_settings_screen.dart';
+import '../widgets/onboarding/step_network.dart';
 import 'log_export_screen.dart';
 import 'configuration_review_screen.dart';
 import '../widgets/plugin_catalog_entry.dart';
@@ -65,6 +67,7 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   CatalogPlugin? _aboutFor;
   bool _advancedOpen = false;
   bool _logsOpen = false;
+  bool _networkOpen = false;
   bool _restartOverlayOpen = false;
   List<String>? _reviewPaths;
   // The check before the restart is a round trip, and the banner stays up
@@ -259,6 +262,7 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         _tab = PluginTab.sources;
         _advancedOpen = false;
         _logsOpen = false;
+        _networkOpen = false;
         _reviewPaths = null;
       });
       ref.read(pluginFailuresProvider.notifier).clear();
@@ -293,6 +297,7 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                   _aboutFor == null &&
                   !_advancedOpen &&
                   !_logsOpen &&
+                  !_networkOpen &&
                   _reviewPaths == null &&
                   !_restartOverlayOpen &&
                   !upgrading,
@@ -337,6 +342,38 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                         !upgrading,
                     bodyBuilder: (heading) =>
                         ExpertSettingsScreen(heading: heading),
+                  ),
+                if (_networkOpen)
+                  ConfigurationPage(
+                    key: const ValueKey('server-network'),
+                    title: 'Network',
+                    description:
+                        'How your streamer connects to your home network, '
+                        'and the Wi-Fi network it joins.',
+                    onClose: () => setState(() => _networkOpen = false),
+                    handlesBack:
+                        widget.handlesBack &&
+                        _reviewPaths == null &&
+                        !_restartOverlayOpen &&
+                        !upgrading,
+                    bodyBuilder: (heading) => ListView(
+                      padding: const EdgeInsets.only(bottom: 32),
+                      children: [
+                        heading,
+                        // The panel brings its own 20dp inset.
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: gutter - 20,
+                          ),
+                          child: NetworkSetupPanel(
+                            endpoint: ref
+                                .read(connectionSettingsProvider)
+                                .baseUrl
+                                .replace(port: supervisorPort),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 if (_logsOpen)
                   LogExportScreen(
@@ -710,6 +747,7 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       child: ServerSettingsBody(
         onRestart: _onRestart,
         onDownloadLogs: () => setState(() => _logsOpen = true),
+        onNetwork: () => setState(() => _networkOpen = true),
         onAdvanced: () => setState(() => _advancedOpen = true),
       ),
     ),
