@@ -380,6 +380,11 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
           ),
         );
     final splash = ref.watch(kioskSplashPendingProvider);
+    // Dimmed and without its controls while the server is away, as the
+    // app's mini-player is.
+    final away = ref.watch(
+      connectionStateProvider.select((s) => s.isInterrupted),
+    );
 
     return PopScope(
       canPop: false,
@@ -439,18 +444,23 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                       child: fill
                           ? KeyedSubtree(
                               key: const ValueKey('fill'),
-                              child: _FillArt(
-                                trackId: track.id,
-                                imageUrl: imagePath == null
-                                    ? null
-                                    : urls.abs(imagePath),
-                                infoTop: _infoHeight == null
-                                    ? null
-                                    : 1 -
-                                          (_infoHeight! +
-                                                  _fillPadding(scale).bottom +
-                                                  insets.bottom) /
-                                              constraints.maxHeight,
+                              child: AnimatedOpacity(
+                                opacity: away ? 0.45 : 1.0,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                                child: _FillArt(
+                                  trackId: track.id,
+                                  imageUrl: imagePath == null
+                                      ? null
+                                      : urls.abs(imagePath),
+                                  infoTop: _infoHeight == null
+                                      ? null
+                                      : 1 -
+                                            (_infoHeight! +
+                                                    _fillPadding(scale).bottom +
+                                                    insets.bottom) /
+                                                constraints.maxHeight,
+                                ),
                               ),
                             )
                           : KioskBackdrop(
@@ -473,6 +483,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                           scale: scale,
                           showExit: canExit,
                           controlsUp: controlsUp,
+                          away: away,
                           onLogoTap: lock == KioskLock.device
                               ? _onLogoTap
                               : null,
@@ -601,6 +612,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     required double scale,
     required bool showExit,
     required bool controlsUp,
+    required bool away,
     required VoidCallback? onLogoTap,
     required VoidCallback? onOutputTap,
   }) {
@@ -644,16 +656,22 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       duration: const Duration(milliseconds: 600),
       child: track == null
           ? _StandbyView(key: const ValueKey('standby'), scale: scale)
-          : _PlayingView(
+          : AnimatedOpacity(
               key: const ValueKey('playing'),
-              track: track,
-              largeImage: largeImage,
-              direction: _direction,
-              layout: layout,
-              scale: scale,
-              controlsUp: controlsUp,
-              onSkip: _skip,
-              onInfoHeight: _onInfoHeight,
+              opacity: away ? 0.45 : 1.0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+              child: _PlayingView(
+                track: track,
+                largeImage: largeImage,
+                direction: _direction,
+                layout: layout,
+                scale: scale,
+                controlsUp: controlsUp,
+                away: away,
+                onSkip: _skip,
+                onInfoHeight: _onInfoHeight,
+              ),
             ),
     );
 
@@ -784,6 +802,9 @@ class _PlayingView extends ConsumerWidget {
   /// False while the controls rest out of sight over the cover.
   final bool controlsUp;
 
+  /// The server is away: the controls take no input.
+  final bool away;
+
   /// Skips a track, +1 next or -1 previous.
   final ValueChanged<int> onSkip;
 
@@ -792,13 +813,13 @@ class _PlayingView extends ConsumerWidget {
   final ValueChanged<double>? onInfoHeight;
 
   const _PlayingView({
-    super.key,
     required this.track,
     required this.largeImage,
     required this.direction,
     required this.layout,
     required this.scale,
     required this.controlsUp,
+    required this.away,
     required this.onSkip,
     this.onInfoHeight,
   });
@@ -831,12 +852,15 @@ class _PlayingView extends ConsumerWidget {
     final barScale = fill ? math.max(scale * 0.8, 0.62) : scale;
     final progress = KioskProgressBar(durationMs: durationMs, scale: barScale);
     // Never wider than the space it is given.
-    Widget controls({double? width}) => FittedBox(
-      fit: BoxFit.scaleDown,
-      child: KioskTransport(
-        scale: fill ? math.max(scale * 0.9, 0.6) : scale,
-        width: width,
-        onSkip: onSkip,
+    Widget controls({double? width}) => IgnorePointer(
+      ignoring: away,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: KioskTransport(
+          scale: fill ? math.max(scale * 0.9, 0.6) : scale,
+          width: width,
+          onSkip: onSkip,
+        ),
       ),
     );
     Widget cover(double size) => KioskCoverFlow(
