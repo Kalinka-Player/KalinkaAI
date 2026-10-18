@@ -6,6 +6,7 @@ import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
+import 'package:kalinka/widgets/player_view_switch.dart';
 import 'package:kalinka/widgets/procedural_album_art.dart';
 
 import 'support/home_shell.dart';
@@ -97,4 +98,50 @@ void main() {
       }
     });
   }
+
+  testWidgets('phone: with no server the player sheet closes and the '
+      'mini-player goes', (tester) async {
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(3)),
+    );
+    await tester.tap(find.byType(MiniPlayer));
+    await tester.pumpAndSettle();
+    expect(find.byType(NowPlayingContent), findsOneWidget);
+
+    (container.read(connectionStateProvider.notifier) as SettableConnection)
+        .set(ConnectionStatus.none);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NowPlayingContent), findsNothing);
+    expect(find.byType(MiniPlayer), findsNothing);
+    expect(find.text('No server connected'), findsOneWidget);
+  });
+
+  testWidgets('tablet: with no server the player panel says so', (
+    tester,
+  ) async {
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(3)),
+      size: const Size(1280, 800),
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byType(PlayerViewSwitch),
+        matching: find.text('QUEUE'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(MiniPlayer), findsOneWidget);
+
+    (container.read(connectionStateProvider.notifier) as SettableConnection)
+        .set(ConnectionStatus.none);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NowPlayingContent), findsNothing);
+    expect(find.byType(MiniPlayer), findsNothing);
+    expect(find.text('No server connected'), findsNWidgets(2));
+    expect(find.text('Scan for servers'), findsOneWidget);
+  });
 }

@@ -102,6 +102,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // Live height of the escalation card, when shown, so toasts clear it.
   double _escalationHeight = 0;
 
+  // The phone's player sheet while it is open.
+  PlayerSheetRoute? _expandedPlayer;
+
   double? _publishedToastInset;
 
   void _onEscalationMeasured(double height) {
@@ -145,6 +148,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       if (next == ConnectionStatus.connected) {
         _checkServerNeedsSetup();
       }
+      // Without a server the player has no track to show.
+      if (next == ConnectionStatus.none) _closeExpandedPlayer();
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -295,21 +300,36 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   void _showExpandedPlayer() {
     ref.read(playerViewProvider.notifier).show(PlayerView.nowPlaying);
     final navigator = Navigator.of(context);
-    navigator.push(
-      PlayerSheetRoute(
-        themes: InheritedTheme.capture(from: context, to: navigator.context),
-        builder: (sheetContext) => _ExpandedPlayerSheet(
-          // The empty queue's way out: back to Home with search up.
-          onFindMusic: () {
-            Navigator.of(sheetContext).pop();
-            _requestHomeSearch();
-          },
-        ),
+    final sheet = PlayerSheetRoute(
+      themes: InheritedTheme.capture(from: context, to: navigator.context),
+      builder: (sheetContext) => _ExpandedPlayerSheet(
+        // The empty queue's way out: back to Home with search up.
+        onFindMusic: () {
+          Navigator.of(sheetContext).pop();
+          _requestHomeSearch();
+        },
       ),
     );
+    _expandedPlayer = sheet;
+    navigator.push(sheet).whenComplete(() {
+      if (identical(_expandedPlayer, sheet)) _expandedPlayer = null;
+    });
   }
 
-  Widget _buildDisconnectedState() {
+  void _closeExpandedPlayer() {
+    final sheet = _expandedPlayer;
+    if (!mounted || sheet == null || !sheet.isActive) return;
+    final navigator = Navigator.of(context);
+    if (sheet.isCurrent) {
+      navigator.pop();
+    } else {
+      navigator.removeRoute(sheet);
+    }
+  }
+
+  /// Without [actions], only the notice: the tablet's player panel, beside
+  /// Home's own disconnected state.
+  Widget _buildDisconnectedState({bool actions = true}) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -327,14 +347,16 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               style: KalinkaTextStyles.emptyQueueTitle,
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
-            Text(
-              kIsWeb ? 'Reload the page to reconnect to the server.' : 'Scan your network to find a Kalinka server and start listening.',
-              style: KalinkaTextStyles.emptyQueueSubtitle,
-              textAlign: TextAlign.center,
-            ),
+            if (actions) ...[
+              const SizedBox(height: 8),
+              Text(
+                kIsWeb ? 'Reload the page to reconnect to the server.' : 'Scan your network to find a Kalinka server and start listening.',
+                style: KalinkaTextStyles.emptyQueueSubtitle,
+                textAlign: TextAlign.center,
+              ),
+            ],
             // No mDNS in the browser — reloading re-seeds the connection.
-            if (!kIsWeb) ...[
+            if (actions && !kIsWeb) ...[
               const SizedBox(height: 32),
               KalinkaButton(
                 label: 'Scan for servers',
@@ -588,8 +610,13 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   Widget _buildPhoneLayout(BuildContext context) {
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
     final showCoachMarks = _showCoachMarks;
+    // Without a server there is no track for the mini-player to show.
+    final miniPlayer =
+        ref.watch(connectionStateProvider) != ConnectionStatus.none;
     // Clear the mini-player, and the escalation card when it is up.
-    _publishToastInset(kMiniPlayerHeight + _escalationHeight);
+    _publishToastInset(
+      (miniPlayer ? kMiniPlayerHeight : 0) + _escalationHeight,
+    );
 
     // Settings, configuration and renderer panels handle their own layered
     // Back navigation; Home its own at its top level.
@@ -633,27 +660,28 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   ],
                 ),
               ),
-              Visibility(
-                visible: !_settingsCovering || _pluginsOpen,
-                maintainState: true,
-                maintainAnimation: true,
-                maintainSize: true,
-                child: SizeTransition(
-                  sizeFactor: _pluginsOpen
-                      ? const AlwaysStoppedAnimation(1.0)
-                      : _miniPlayerReveal,
-                  alignment: AlignmentDirectional.bottomStart,
-                  child: SlideTransition(
-                    position: _pluginsOpen
-                        ? const AlwaysStoppedAnimation(Offset.zero)
-                        : _miniPlayerSlide,
-                    child: MiniPlayer(
-                      onTap: _showExpandedPlayer,
-                      outputSwitcherKey: _outputSwitcherKey,
+              if (miniPlayer)
+                Visibility(
+                  visible: !_settingsCovering || _pluginsOpen,
+                  maintainState: true,
+                  maintainAnimation: true,
+                  maintainSize: true,
+                  child: SizeTransition(
+                    sizeFactor: _pluginsOpen
+                        ? const AlwaysStoppedAnimation(1.0)
+                        : _miniPlayerReveal,
+                    alignment: AlignmentDirectional.bottomStart,
+                    child: SlideTransition(
+                      position: _pluginsOpen
+                          ? const AlwaysStoppedAnimation(Offset.zero)
+                          : _miniPlayerSlide,
+                      child: MiniPlayer(
+                        onTap: _showExpandedPlayer,
+                        outputSwitcherKey: _outputSwitcherKey,
+                      ),
                     ),
                   ),
                 ),
-              ),
             ],
           ),
           // Settings — full-screen overlay on phone (slides in from the right).
@@ -828,6 +856,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
   Widget _buildTabletLayout(BuildContext context) {
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
+    final disconnected =
+        ref.watch(connectionStateProvider) == ConnectionStatus.none;
     _publishToastInset(24 + _escalationHeight);
     return PopScope(
       canPop:
@@ -866,20 +896,34 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           // Playback stays visible and interactive while the
                           // management panels cover the right panel.
                           SafeArea(
-                            child: NowPlayingContent(
-                              isTablet: true,
-                              outputSwitcherKey: _outputSwitcherKey,
-                              onFindMusic: _requestHomeSearch,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              layoutBuilder: _topmostScreenLayout,
+                              transitionBuilder: _screenSwitcherTransition,
+                              child: disconnected
+                                  ? KeyedSubtree(
+                                      key: const ValueKey('disconnected'),
+                                      child: _buildDisconnectedState(
+                                        actions: false,
+                                      ),
+                                    )
+                                  : NowPlayingContent(
+                                      key: const ValueKey('player'),
+                                      isTablet: true,
+                                      outputSwitcherKey: _outputSwitcherKey,
+                                      onFindMusic: _requestHomeSearch,
+                                    ),
                             ),
                           ),
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            child: QueueMiniPlayer(
-                              outputSwitcherKey: _outputSwitcherKey,
+                          if (!disconnected)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: QueueMiniPlayer(
+                                outputSwitcherKey: _outputSwitcherKey,
+                              ),
                             ),
-                          ),
                           // Sheets opened here are anchored to this panel,
                           // so their answers belong over it too.
                           Positioned(
