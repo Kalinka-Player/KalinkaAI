@@ -241,7 +241,7 @@ void main() {
     expect(find.text('2 folders · 2 tracks · 15 min'), findsOneWidget);
   });
 
-  testWidgets('a folder numbers its tracks in place of their covers', (
+  testWidgets('a folder numbers its tracks before their covers', (
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
@@ -258,11 +258,21 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(
-        of: find.byType(SearchTrackRow),
-        matching: find.byType(ProceduralAlbumArt),
+      find.descendant(of: row, matching: find.byType(ProceduralAlbumArt)),
+      findsOneWidget,
+    );
+    expect(
+      tester.getCenter(find.descendant(of: row, matching: find.text('1'))).dx,
+      lessThan(
+        tester
+            .getTopLeft(
+              find.descendant(
+                of: row,
+                matching: find.byType(ProceduralAlbumArt),
+              ),
+            )
+            .dx,
       ),
-      findsNothing,
     );
     expect(find.bySemanticsLabel(RegExp(r'^Track 2\b')), findsOneWidget);
     semantics.dispose();

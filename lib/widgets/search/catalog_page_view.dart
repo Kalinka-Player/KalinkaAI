@@ -255,6 +255,10 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       );
     }
 
+    // Tracks on a folder page carry a position column before their cover.
+    bool numberedInFolder(BrowseItem item) =>
+        page.folderLayout && item.track != null;
+
     final listView = InfiniteListView<BrowseItem>(
       key: page.folderLayout
           ? ValueKey(listing.id)
@@ -285,7 +289,10 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       // as one uninterrupted column down the page.
       separatorBuilder: (context, _, above) => Padding(
         padding: EdgeInsets.only(
-          left: 16 + BrowseItemRows.textInsetOf(above),
+          left:
+              16 +
+              BrowseItemRows.textInsetOf(above) +
+              (numberedInFolder(above) ? SearchTrackRow.folderNumberWidth : 0),
           right: 16,
         ),
         child: Divider(
@@ -306,7 +313,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                 albumArtist: page.description,
                 labelled: false,
               )
-            : page.folderLayout && item.track != null
+            : numberedInFolder(item)
             ? SearchTrackRow(
                 item: item,
                 queueContextIds: trackIds.isEmpty ? null : trackIds,
