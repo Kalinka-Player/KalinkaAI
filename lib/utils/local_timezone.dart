@@ -3,7 +3,7 @@ import 'local_timezone_io.dart'
     as impl;
 
 /// This device's time zone as tzdata names it, such as `Europe/London`; null
-/// where the platform names none, as on Windows.
+/// where the platform names none.
 Future<String?> localTimezone() async {
   final value = await impl.localTimezone();
   return value == null ? null : zoneNamed(value);

@@ -1,7 +1,12 @@
+import 'dart:io' show ProcessException, ProcessResult;
+import 'dart:ui' show Locale;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/utils/local_timezone.dart';
+import 'package:kalinka/utils/local_timezone_io.dart'
+    show ProcessRunner, windowsTimezone;
 
 const _native = MethodChannel('org.kalinka.kalinka/media_session');
 
@@ -81,9 +86,52 @@ void main() {
     });
   });
 
-  test('Windows names no tzdata zone', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
-    expect(await localTimezone(), isNull);
+  group('on Windows', () {
+    final calls = <List<String>>[];
+    ProcessRunner tzutil(String output, {int exitCode = 0}) =>
+        (executable, arguments) async {
+          calls.add([executable, ...arguments]);
+          return ProcessResult(0, exitCode, output, '');
+        };
+
+    setUp(calls.clear);
+
+    test('maps the zone tzutil prints to its tzdata name', () async {
+      final zone = await windowsTimezone(
+        run: tzutil('W. Europe Standard Time\r\n'),
+      );
+      expect(zone, 'Europe/Berlin');
+      expect(calls, [
+        ['tzutil', '/g'],
+      ]);
+    });
+
+    test('picks the zone of the country the locale names', () async {
+      final dispatcher = TestWidgetsFlutterBinding.instance.platformDispatcher;
+      dispatcher.localeTestValue = const Locale('de', 'CH');
+      addTearDown(dispatcher.clearLocaleTestValue);
+      expect(
+        await windowsTimezone(run: tzutil('W. Europe Standard Time\r\n')),
+        'Europe/Zurich',
+      );
+    });
+
+    test('names none when tzutil fails or is missing', () async {
+      expect(await windowsTimezone(run: tzutil('', exitCode: 1)), isNull);
+      expect(
+        await windowsTimezone(
+          run: (executable, arguments) async =>
+              throw ProcessException(executable, arguments),
+        ),
+        isNull,
+      );
+    });
+
+    test('names none for a zone the table does not know', () async {
+      expect(
+        await windowsTimezone(run: tzutil('Mars Standard Time\r\n')),
+        isNull,
+      );
+    });
   });
 }

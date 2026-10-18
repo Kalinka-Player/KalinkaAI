@@ -1,10 +1,24 @@
-import 'dart:io' show FileSystemException, Link, Platform;
+import 'dart:io'
+    show
+        FileSystemException,
+        Link,
+        Platform,
+        Process,
+        ProcessException,
+        ProcessResult;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 
+import '../data_model/windows_zones.dart';
+
 const _native = MethodChannel('org.kalinka.kalinka/media_session');
+
+typedef ProcessRunner = Future<ProcessResult> Function(
+  String executable,
+  List<String> arguments,
+);
 
 Future<String?> localTimezone() async {
   switch (defaultTargetPlatform) {
@@ -25,7 +39,27 @@ Future<String?> localTimezone() async {
       } on FileSystemException {
         return file;
       }
+    case TargetPlatform.windows:
+      return windowsTimezone();
     default:
       return null;
   }
+}
+
+/// The zone Windows is on, by its tzdata name. [run] stands in for
+/// [Process.run] in tests.
+Future<String?> windowsTimezone({ProcessRunner run = Process.run}) async {
+  // tzutil prints the zone's ID, which stays the same in every language;
+  // DateTime.timeZoneName is a display name in the user's own.
+  final ProcessResult result;
+  try {
+    result = await run('tzutil', const ['/g']);
+  } on ProcessException {
+    return null;
+  }
+  final id = result.stdout;
+  if (result.exitCode != 0 || id is! String) return null;
+  final country =
+      ServicesBinding.instance.platformDispatcher.locale.countryCode;
+  return tzdataZoneFor(id.trim(), territory: country);
 }

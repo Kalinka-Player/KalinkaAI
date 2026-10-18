@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show ProcessResult;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,8 @@ import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/timezone_provider.dart';
 import 'package:kalinka/screens/onboarding_screen.dart';
+import 'package:kalinka/utils/local_timezone_io.dart'
+    show ProcessRunner, windowsTimezone;
 
 import 'support/soundcard_fakes.dart';
 
@@ -18,12 +21,15 @@ Future<void> _atNetworkStep(
   WidgetTester tester,
   FakeBox box, {
   String? local = 'Europe/London',
+  Future<String?> Function()? readLocal,
   double textScale = 1,
 }) async {
   final container = ProviderContainer(
     overrides: [
       ...soundcardOverrides(await boxPrefs(), box: box),
-      localTimezoneProvider.overrideWith((ref) async => local),
+      localTimezoneProvider.overrideWith(
+        (ref) => readLocal?.call() ?? Future.value(local),
+      ),
     ],
   );
   addTearDown(container.dispose);
@@ -151,6 +157,52 @@ void main() {
     expect(find.text('THIS DEVICE'), findsNothing);
     expect(find.text('Europe/London'), findsOne);
     await _drain(tester);
+  });
+
+  group('on Windows', () {
+    ProcessRunner tzutil(String output, {int exitCode = 0}) =>
+        (_, _) async => ProcessResult(0, exitCode, output, '');
+
+    testWidgets('proposes the zone Windows is on', (tester) async {
+      tester.platformDispatcher.localeTestValue = const Locale('de', 'CH');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+      final box = FakeBox(answers: [_setsTimezone]);
+      await _atNetworkStep(
+        tester,
+        box,
+        readLocal: () =>
+            windowsTimezone(run: tzutil('W. Europe Standard Time\r\n')),
+      );
+
+      expect(find.textContaining('This device is on Europe/Zurich.'), findsOne);
+      await _accept(tester, 'Europe/Zurich');
+
+      expect(box.zonesSet, [
+        ('Europe/Zurich', const BoxIdentity(serverId: 'box-1')),
+      ]);
+      expect(find.text('Use Europe/Zurich'), findsNothing);
+      await _drain(tester);
+    });
+
+    testWidgets('leaves the full list when tzutil names no zone', (
+      tester,
+    ) async {
+      final box = FakeBox(answers: [_setsTimezone]);
+      await _atNetworkStep(
+        tester,
+        box,
+        readLocal: () => windowsTimezone(run: tzutil('', exitCode: 1)),
+      );
+
+      expect(find.textContaining('This device is on'), findsNothing);
+      await tester.tap(find.text('Time zone'));
+      await tester.pumpAndSettle();
+      expect(find.text('THIS DEVICE'), findsNothing);
+      expect(find.text('ALL TIME ZONES'), findsOne);
+      expect(find.text('Asia/Kolkata'), findsOne);
+      expect(find.text('Europe/London'), findsOne);
+      await _drain(tester);
+    });
   });
 
   for (final (name, answer, reason) in [
