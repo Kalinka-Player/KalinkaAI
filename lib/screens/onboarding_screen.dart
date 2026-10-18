@@ -32,6 +32,7 @@ import '../widgets/onboarding/step_output.dart';
 import '../widgets/onboarding/step_review.dart';
 import '../widgets/onboarding/step_sound.dart';
 import '../widgets/onboarding/step_source_setup.dart';
+import '../widgets/onboarding/timezone_section.dart';
 import '../widgets/restart_overlay.dart';
 import '../widgets/soundcard_row.dart' show SoundcardHost, soundcardTrouble;
 
@@ -503,30 +504,36 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       1 => (
         'Network',
         'Use Ethernet or Wi-Fi to connect your box. Keep the current connection or choose another network.',
-        NetworkSetupPanel(
-          endpoint: ref
-              .read(connectionSettingsProvider)
-              .baseUrl
-              .replace(port: supervisorPort),
-          onReconnect: () async {
-            if (kIsWeb) {
-              await launchUrl(
-                Uri(
-                  scheme: 'http',
-                  host: 'kalinka.local',
-                  port: ref.read(connectionSettingsProvider).port,
-                ),
-                webOnlyWindowName: '_self',
-              );
-            } else {
-              _goTo(0);
-            }
-          },
-          onBusy: (busy) {
-            if (mounted && busy != _networkBusy) {
-              setState(() => _networkBusy = busy);
-            }
-          },
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            NetworkSetupPanel(
+              endpoint: ref
+                  .read(connectionSettingsProvider)
+                  .baseUrl
+                  .replace(port: supervisorPort),
+              onReconnect: () async {
+                if (kIsWeb) {
+                  await launchUrl(
+                    Uri(
+                      scheme: 'http',
+                      host: 'kalinka.local',
+                      port: ref.read(connectionSettingsProvider).port,
+                    ),
+                    webOnlyWindowName: '_self',
+                  );
+                } else {
+                  _goTo(0);
+                }
+              },
+              onBusy: (busy) {
+                if (mounted && busy != _networkBusy) {
+                  setState(() => _networkBusy = busy);
+                }
+              },
+            ),
+            const OnboardingTimezoneSection(),
+          ],
         ) as Widget,
         'Keep this connection',
       ),

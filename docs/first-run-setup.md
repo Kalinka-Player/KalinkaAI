@@ -36,6 +36,8 @@ The app looks for Kalinka servers on your network and lists what it finds, with 
 
 Review the current Wi-Fi name or Ethernet connection and choose **Keep this connection**, or select another Wi-Fi network. Available networks are discovered automatically; **Can’t find your network? Enter SSID manually** allows manual entry. Choosing a new network applies immediately, even before the rest of the wizard is finished.
 
+Below the network, **Time zone** shows the zone the box is on. A new box runs on UTC, so the clock on its now-playing display and its night-time updates follow UTC until you set it. When your phone, computer or browser is on another zone, the step offers it: **Use** followed by the zone asks once, then sets it straight away. Tap **Time zone** to choose any other. The box still sets its clock over the network; only the zone changes, and nothing is looked up online to find it. A server without the Kalinka box supervisor, such as one installed on a computer of your own, keeps that computer's zone, and the row says so.
+
 ## Step 3 — Music sources
 
 <img src="images/setup/2-music-sources.png" width="320">
@@ -134,6 +136,7 @@ Nothing here is permanent.
 
 - **Server settings** — tap the server chip at the top of the screen, then **Server settings**. Music sources and AI search live under **Input modules → My Library**.
 - **Audio output** — the cast icon in the player switches outputs, and the gear next to each one opens its settings and its sound test.
+- **Time zone** — **Server settings → General → Streamer → Time zone**.
 
 ## Updates
 
