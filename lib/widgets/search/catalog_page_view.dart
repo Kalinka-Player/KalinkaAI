@@ -298,6 +298,12 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                 albumArtist: page.description,
                 labelled: false,
               )
+            : page.folderLayout && item.track != null
+            ? SearchTrackRow(
+                item: item,
+                queueContextIds: trackIds.isEmpty ? null : trackIds,
+                folderTrackNumber: trackIdsMemo.folderNumberAt(index, loaded),
+              )
             : BrowseItemRows.buildRow(
                 item,
                 queueContextIds: trackIds.isEmpty ? null : trackIds,
@@ -638,6 +644,39 @@ class _TrackIdsMemo {
   bool multiDisc(List<BrowseItem> loaded) {
     _album(loaded);
     return _multiDisc;
+  }
+
+  List<int?> _folderNumbers = const [];
+  int _folderForLength = -1;
+
+  /// Folder pages only. The tags are shown only when every loaded track has
+  /// one and they rise in listing order; anything else numbers the whole
+  /// folder by position, so the two are never mixed.
+  int? folderNumberAt(int index, List<BrowseItem> loaded) {
+    if (loaded.length != _folderForLength) {
+      _folderForLength = loaded.length;
+      var previous = 0;
+      var tagged = true;
+      for (final item in loaded) {
+        final track = item.track;
+        if (track == null) continue;
+        final tag = track.trackNumber;
+        if (tag == null || tag <= previous) {
+          tagged = false;
+          break;
+        }
+        previous = tag;
+      }
+      var position = 0;
+      _folderNumbers = [
+        for (final item in loaded)
+          if (item.track == null)
+            null
+          else
+            tagged ? item.track!.trackNumber : ++position,
+      ];
+    }
+    return _folderNumbers[index];
   }
 }
 

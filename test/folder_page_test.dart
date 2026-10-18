@@ -12,9 +12,11 @@ import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/selection_state_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/widgets/breadcrumb_crumb.dart';
+import 'package:kalinka/widgets/procedural_album_art.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search/folder_trail.dart';
 import 'package:kalinka/widgets/search_cards/search_folder_row.dart';
+import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 import 'package:kalinka/widgets/shelf_heading.dart';
 
 class _FixedConnection extends ConnectionStateNotifier {
@@ -68,13 +70,13 @@ BrowseItem _folder(String name, {bool canAdd = true}) => BrowseItem(
   ),
 );
 
-BrowseItem _track(String id, String title) => BrowseItem(
+BrowseItem _track(String id, String title, {int? number}) => BrowseItem(
   id: 'kalinka:localfiles:track:$id',
   name: title,
   subname: 'Miles Davis',
   canBrowse: false,
   canAdd: true,
-  track: Track(id: id, title: title, duration: 450),
+  track: Track(id: id, title: title, duration: 450, trackNumber: number),
 );
 
 BrowseItem _playlist(String id, String name) => BrowseItem(
@@ -116,6 +118,25 @@ final _listings = <String, List<BrowseItem>>{
   ],
   _playlistsId: [_playlist('p1', 'Evening')],
   _idOf('Box set'): [for (var i = 0; i < 30; i++) _track('b$i', 'Take $i')],
+  _idOf('Fifty'): [
+    _folder('Scans'),
+    for (var i = 1; i <= 50; i++) _track('f$i', 'Part $i'),
+  ],
+  _idOf('Side B'): [
+    for (var i = 4; i <= 6; i++) _track('s$i', 'Side $i', number: i),
+  ],
+  _idOf('Two discs'): [
+    for (final (i, tag) in [1, 2, 1, 2].indexed)
+      _track('d$i', 'Disc track $i', number: tag),
+  ],
+  _idOf('Half tagged'): [
+    for (final (i, tag) in [3, null, 5].indexed)
+      _track('h$i', 'Half $i', number: tag),
+  ],
+  _idOf('Sessions'): [
+    for (var i = 1; i <= 35; i++)
+      _track('x$i', 'Session $i', number: i <= 30 ? i + 1 : null),
+  ],
 };
 
 const _longName =
@@ -183,6 +204,21 @@ final _upButton = find.byIcon(Icons.drive_folder_upload_outlined);
 String? _shown(ProviderContainer container) =>
     container.read(searchSessionProvider).shownListing.title;
 
+Finder _trackRow(String title) =>
+    find.ancestor(of: find.text(title), matching: find.byType(SearchTrackRow));
+
+int? _numberOf(WidgetTester tester, String title) =>
+    tester.widget<SearchTrackRow>(_trackRow(title)).folderTrackNumber;
+
+List<int?> _numbers(WidgetTester tester) => [
+  for (final row in tester.widgetList<SearchTrackRow>(
+    find.byType(SearchTrackRow),
+  ))
+    row.folderTrackNumber,
+];
+
+final _list = find.byType(Scrollable).first;
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -203,6 +239,93 @@ void main() {
     expect(_inTrail(find.text('Kind of Blue')), findsOneWidget);
     expect(find.text('Kind of Blue'), findsNWidgets(2));
     expect(find.text('2 folders · 2 tracks · 15 min'), findsOneWidget);
+  });
+
+  testWidgets('a folder numbers its tracks in place of their covers', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await _pumpLibrary(
+      tester,
+      openedFolders: [_folder('Jazz', canAdd: false), _folder('Kind of Blue')],
+    );
+
+    expect(_numbers(tester), [1, 2]);
+    final row = _trackRow('So What');
+    expect(find.descendant(of: row, matching: find.text('1')), findsOneWidget);
+    expect(
+      find.descendant(of: row, matching: find.text('Track')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(SearchTrackRow),
+        matching: find.byType(ProceduralAlbumArt),
+      ),
+      findsNothing,
+    );
+    expect(find.bySemanticsLabel(RegExp(r'^Track 2\b')), findsOneWidget);
+    semantics.dispose();
+  });
+
+  testWidgets('untagged tracks are numbered in listing order across pages', (
+    tester,
+  ) async {
+    await _pumpLibrary(tester, openedFolders: [_folder('Fifty')]);
+    expect(_numberOf(tester, 'Part 1'), 1);
+
+    await tester.scrollUntilVisible(
+      find.text('Part 50'),
+      400,
+      scrollable: _list,
+    );
+    await tester.pumpAndSettle();
+
+    expect(_numberOf(tester, 'Part 50'), 50);
+    for (final row in tester.widgetList<SearchTrackRow>(
+      find.byType(SearchTrackRow),
+    )) {
+      expect('Part ${row.folderTrackNumber}', row.item.name);
+    }
+  });
+
+  testWidgets('tags rising in listing order are shown as tagged', (
+    tester,
+  ) async {
+    await _pumpLibrary(tester, openedFolders: [_folder('Side B')]);
+
+    expect(_numbers(tester), [4, 5, 6]);
+  });
+
+  for (final (name, why) in [
+    ('Two discs', 'tags that start again'),
+    ('Half tagged', 'untagged tracks'),
+  ]) {
+    testWidgets('a folder with $why is numbered by position', (tester) async {
+      await _pumpLibrary(tester, openedFolders: [_folder(name)]);
+
+      final count = _listings[_idOf(name)]!.length;
+      expect(_numbers(tester), [for (var i = 1; i <= count; i++) i]);
+    });
+  }
+
+  testWidgets('a later page without tags renumbers the whole folder', (
+    tester,
+  ) async {
+    await _pumpLibrary(tester, openedFolders: [_folder('Sessions')]);
+    expect(_numberOf(tester, 'Session 1'), 2);
+
+    await tester.scrollUntilVisible(
+      find.text('Session 35'),
+      400,
+      scrollable: _list,
+    );
+    await tester.pumpAndSettle();
+    expect(_numberOf(tester, 'Session 35'), 35);
+
+    tester.state<ScrollableState>(_list).position.jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(_numberOf(tester, 'Session 1'), 1);
   });
 
   testWidgets('tracks directly in a folder can be played or enqueued', (
