@@ -481,10 +481,13 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
               // button: the swipe recognizer must not steal its taps.
               IgnorePointer(
                 ignoring: isOffline,
-                child: RendererSwitcherButton(
-                  key: widget.outputSwitcherKey,
-                  hitDiameter: 40,
-                  iconSize: 20,
+                child: ExcludeFocus(
+                  excluding: isOffline,
+                  child: RendererSwitcherButton(
+                    key: widget.outputSwitcherKey,
+                    hitDiameter: 40,
+                    iconSize: 20,
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
@@ -589,30 +592,33 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
         !hasTrack || isPlayPauseDisabled(playerState, exclusive: exclusive);
     return IgnorePointer(
       ignoring: isOffline,
-      child: Opacity(
-        opacity: hasTrack ? 1.0 : 0.4,
-        child: TransportButton(
-          hitDiameter: 46,
-          background: Colors.white,
-          // Ripple has to read against the white face, so use a dark tint.
-          splashColor: KalinkaColors.background.withValues(alpha: 0.18),
-          highlightColor: KalinkaColors.background.withValues(alpha: 0.08),
-          onTap: disabled
-              ? null
-              : () => sendPlayPauseCommand(
-                  ref,
-                  playerState,
-                  exclusive: exclusive,
-                ),
-          // Fixed 26×26 glyph slot keeps visual weight stable across states
-          // and prevents the spinner from appearing offset against the icon.
-          child: SizedBox(
-            width: 26,
-            height: 26,
-            child: PlayPauseGlyph(
-              playerState: playerState,
-              iconSize: 26,
-              spinnerSize: 22,
+      child: ExcludeFocus(
+        excluding: isOffline,
+        child: Opacity(
+          opacity: hasTrack ? 1.0 : 0.4,
+          child: TransportButton(
+            hitDiameter: 46,
+            background: Colors.white,
+            // Ripple has to read against the white face, so use a dark tint.
+            splashColor: KalinkaColors.background.withValues(alpha: 0.18),
+            highlightColor: KalinkaColors.background.withValues(alpha: 0.08),
+            onTap: disabled
+                ? null
+                : () => sendPlayPauseCommand(
+                    ref,
+                    playerState,
+                    exclusive: exclusive,
+                  ),
+            // Fixed 26×26 glyph slot keeps visual weight stable across states
+            // and prevents the spinner from appearing offset against the icon.
+            child: SizedBox(
+              width: 26,
+              height: 26,
+              child: PlayPauseGlyph(
+                playerState: playerState,
+                iconSize: 26,
+                spinnerSize: 22,
+              ),
             ),
           ),
         ),

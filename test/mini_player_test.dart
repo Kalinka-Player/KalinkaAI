@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -16,7 +17,9 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/mini_player.dart';
+import 'package:kalinka/widgets/transport_button.dart';
 
+import 'support/focus.dart';
 import 'support/haptic_recorder.dart';
 
 // ── Fake notifiers ────────────────────────────────────────────────────────────
@@ -761,6 +764,56 @@ void main() {
         expect(api.sent, isEmpty);
       },
     );
+  });
+
+  testWidgets('while the server is away, Tab never reaches Play', (
+    tester,
+  ) async {
+    Future<_FakeWsApi> pump(ConnectionStatus status) async {
+      final container = ProviderContainer(
+        overrides: [
+          ..._buildOverrides(
+            queueState: PlayQueueState(
+              playbackState: PlaybackState(
+                state: PlayerStateType.playing,
+                index: 0,
+              ),
+              trackList: [Track(id: 't0', title: 'First', duration: 100)],
+              playbackMode: PlaybackMode.empty,
+              seq: 0,
+            ),
+            connectionStatus: status,
+          ),
+          kalinkaWsApiProvider.overrideWith((ref) => _FakeWsApi(ref)),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: MiniPlayer())),
+        ),
+      );
+      await tester.pump();
+      return container.read(kalinkaWsApiProvider) as _FakeWsApi;
+    }
+
+    final play = find.ancestor(
+      of: find.byIcon(Icons.pause_rounded),
+      matching: find.byType(TransportButton),
+    );
+
+    final connected = await pump(ConnectionStatus.connected);
+    expect(await tabTo(tester, play), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(connected.sent, [const QueueCommand.pause(paused: true)]);
+
+    final away = await pump(ConnectionStatus.reconnecting);
+    expect(await tabTo(tester, play), isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(away.sent, isEmpty);
   });
 
   group('progress line mode', () {

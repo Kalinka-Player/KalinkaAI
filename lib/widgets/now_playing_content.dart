@@ -232,12 +232,18 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                   const SizedBox(height: 20),
                   IgnorePointer(
                     ignoring: away,
-                    child: const _TransportControls(),
+                    child: ExcludeFocus(
+                      excluding: away,
+                      child: const _TransportControls(),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   IgnorePointer(
                     ignoring: away,
-                    child: const NowPlayingVolumeControl(),
+                    child: ExcludeFocus(
+                      excluding: away,
+                      child: const NowPlayingVolumeControl(),
+                    ),
                   ),
                   const SizedBox(height: 24),
                 ],

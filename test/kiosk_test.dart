@@ -37,6 +37,8 @@ import 'package:kalinka/widgets/procedural_album_art.dart';
 import 'package:kalinka/widgets/transport_button.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/focus.dart';
+
 class _Queue extends PlayQueueStateStore {
   _Queue(this._initial);
   final PlayQueueState _initial;
@@ -836,6 +838,39 @@ void main() {
       expect(h.api.sent, isEmpty);
     });
   }
+
+  testWidgets('while the server is away, Tab never reaches the transport', (
+    tester,
+  ) async {
+    final play = find.ancestor(
+      of: find.byIcon(Icons.pause_rounded),
+      matching: find.byType(TransportButton),
+    );
+    final connected = await _pump(tester, _queue(PlayerStateType.playing));
+    expect(await tabTo(tester, play), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(connected.api.sent, [const QueueCommand.pause(paused: true)]);
+
+    final away = await _pump(
+      tester,
+      _queue(PlayerStateType.playing),
+      connection: ConnectionStatus.reconnecting,
+    );
+    for (final icon in [Icons.pause_rounded, Icons.skip_next_rounded]) {
+      expect(
+        await tabTo(
+          tester,
+          find.ancestor(
+            of: find.byIcon(icon),
+            matching: find.byType(TransportButton),
+          ),
+        ),
+        isFalse,
+      );
+    }
+    expect(away.api.sent, isEmpty);
+  });
 
   testWidgets('paused, the cover and track stay', (tester) async {
     await _pump(tester, _queue(PlayerStateType.paused));

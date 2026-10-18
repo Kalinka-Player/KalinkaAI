@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
@@ -8,7 +9,9 @@ import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/player_view_switch.dart';
 import 'package:kalinka/widgets/procedural_album_art.dart';
+import 'package:kalinka/widgets/transport_button.dart';
 
+import 'support/focus.dart';
 import 'support/home_shell.dart';
 
 class _RecordingWsApi extends KalinkaWsApi {
@@ -98,6 +101,43 @@ void main() {
       }
     });
   }
+
+  testWidgets('phone: while the server is away, Tab reaches no control that '
+      'would send', (tester) async {
+    late _RecordingWsApi ws;
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(3)),
+      overrides: [
+        kalinkaWsApiProvider.overrideWith((ref) => ws = _RecordingWsApi(ref)),
+      ],
+    );
+    await tester.tap(find.byType(MiniPlayer));
+    await tester.pumpAndSettle();
+    Finder transport(IconData icon) => find.ancestor(
+      of: _inPlayer(find.byIcon(icon)),
+      matching: find.byType(TransportButton),
+    );
+
+    expect(await tabTo(tester, transport(Icons.pause_rounded)), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(ws.sent, [const QueueCommand.pause(paused: true)]);
+
+    (container.read(connectionStateProvider.notifier) as SettableConnection)
+        .set(ConnectionStatus.reconnecting);
+    await tester.pump();
+    for (final control in [
+      transport(Icons.pause_rounded),
+      transport(Icons.skip_next_rounded),
+      _inPlayer(find.byType(Slider)),
+    ]) {
+      expect(await tabTo(tester, control), isFalse);
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(ws.sent, [const QueueCommand.pause(paused: true)]);
+  });
 
   testWidgets('phone: with no server the player sheet closes and the '
       'mini-player goes', (tester) async {
