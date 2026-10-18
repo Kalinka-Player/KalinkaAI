@@ -141,13 +141,11 @@ class AlbumPageHeader extends ConsumerWidget {
                             PlayAllChip(
                               trackIds: [page.id!],
                               trackCount: trackCount,
-                              minHeight: 48,
                             ),
                             AddAllChip(
                               trackIds: [page.id!],
                               trackCount: trackCount,
                               name: title,
-                              minHeight: 48,
                             ),
                           ],
                         ),
