@@ -150,7 +150,9 @@ class PlaybackTimeMsNotifier extends Notifier<int> {
     if (_held?.server != snapshot.server) _held = null;
     // Only on the drop itself: a report arriving while still interrupted
     // (e.g. the replay) is fresh and must not be held past reconnecting.
-    if (snapshot.interrupted && !_wasInterrupted) {
+    // A hold still in place is kept: re-extrapolating would count the
+    // earlier outage as played.
+    if (snapshot.interrupted && !_wasInterrupted && _held == null) {
       _held = (server: snapshot.server, ms: _extrapolate(snapshot.server));
     }
     _wasInterrupted = snapshot.interrupted;

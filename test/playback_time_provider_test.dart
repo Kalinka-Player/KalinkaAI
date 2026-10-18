@@ -127,4 +127,21 @@ void main() {
       expect(time(), 42000);
     });
   });
+
+  test('dropping again before the server reports keeps the first hold', () {
+    fakeAsync((async) {
+      final h = _harness(async);
+      int time() => h.container.read(playbackTimeMsProvider);
+
+      h.queue.set(_playing(positionMs: 10000, atMs: 0));
+      async.elapse(Duration.zero);
+      h.connection.set(ConnectionStatus.reconnecting);
+      async.elapse(const Duration(seconds: 30));
+      h.connection.set(ConnectionStatus.connected);
+      async.elapse(Duration.zero);
+      h.connection.set(ConnectionStatus.reconnecting);
+      async.elapse(const Duration(seconds: 5));
+      expect(time(), 10000);
+    });
+  });
 }
