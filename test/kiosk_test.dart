@@ -24,6 +24,7 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/screens/kiosk_screen.dart';
+import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_backdrop.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_cover_flow.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_header.dart';
@@ -790,6 +791,51 @@ void main() {
     );
     expect(find.text('Waiting for Den server…'), findsOneWidget);
   });
+
+  for (final (size, cover) in [
+    (const Size(1024, 600), find.byType(KioskCoverFlow)),
+    (const Size(300, 300), find.byType(KioskCoverFill)),
+  ]) {
+    testWidgets('at ${size.width}x${size.height}, while the server is away, '
+        'the track dims and its controls send nothing', (tester) async {
+      final h = await _pump(
+        tester,
+        _queue(PlayerStateType.playing),
+        size: size,
+        connection: ConnectionStatus.reconnecting,
+      );
+      final dimmed = find.byWidgetPredicate(
+        (w) => w is AnimatedOpacity && w.opacity == 0.45,
+      );
+
+      expect(
+        find.ancestor(of: find.text('Song 1'), matching: dimmed),
+        findsOneWidget,
+      );
+      expect(find.ancestor(of: cover, matching: dimmed), findsOneWidget);
+      expect(
+        tester
+            .widget<GradientProgressLine>(
+              find.descendant(
+                of: find.byType(KioskProgressBar),
+                matching: find.byType(GradientProgressLine),
+              ),
+            )
+            .mode,
+        GradientProgressLineMode.reconnecting,
+      );
+
+      await tester.tap(
+        find.byIcon(Icons.skip_next_rounded),
+        warnIfMissed: false,
+      );
+      await tester.tap(find.byIcon(Icons.pause_rounded), warnIfMissed: false);
+      final bar = tester.getRect(find.byType(KioskProgressBar));
+      await tester.tapAt(Offset(bar.left + bar.width / 4, bar.bottom - 22));
+      await tester.pump();
+      expect(h.api.sent, isEmpty);
+    });
+  }
 
   testWidgets('paused, the cover and track stay', (tester) async {
     await _pump(tester, _queue(PlayerStateType.paused));

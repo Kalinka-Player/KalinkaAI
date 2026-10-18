@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/app_state_provider.dart';
+import '../../providers/connection_state_provider.dart';
 import '../../providers/playback_time_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/playback_utils.dart';
+import '../gradient_progress_line.dart';
 import '../playback_progress_slider.dart' show OptimisticSeek;
 
 /// Full-width progress for a screen read from across the room: the bar,
 /// elapsed and total time under it, and a touch zone taller than the bar so
 /// a fingertip finds it. Tap or drag anywhere along it to seek, unless the
-/// playback cannot seek: the bar is then grey and has no knob.
+/// playback cannot seek: the bar is then grey and has no knob. While the
+/// server is away, the mini-player's reconnecting line stands in for the bar.
 class KioskProgressBar extends ConsumerStatefulWidget {
   final int durationMs;
   final double scale;
@@ -45,7 +48,11 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
     final seekable = ref.watch(
       playbackControlProvider.select((c) => c.seekable),
     );
-    final canSeek = durationMs > 0 && seekable;
+    final lineMode = ref.watch(
+      connectionStateProvider.select(progressLineModeFor),
+    );
+    final away = lineMode != GradientProgressLineMode.normal;
+    final canSeek = durationMs > 0 && seekable && !away;
 
     final timeStyle = KalinkaFonts.sans(
       fontSize: s(16),
@@ -119,15 +126,30 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
                           ? Duration.zero
                           : const Duration(milliseconds: 380),
                       curve: Curves.easeOutCubic,
-                      builder: (context, value, _) => CustomPaint(
-                        size: Size(width, s(28)),
-                        painter: _BarPainter(
-                          progress: value,
-                          thickness: s(isSeeking ? 9 : 5),
-                          knobRadius: canSeek ? s(isSeeking ? 13 : 9) : 0,
-                          muted: !seekable,
-                        ),
-                      ),
+                      builder: (context, value, _) => away
+                          ? SizedBox(
+                              width: width,
+                              height: s(28),
+                              child: Center(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(s(2.5)),
+                                  child: GradientProgressLine(
+                                    progress: value,
+                                    mode: lineMode,
+                                    height: s(5),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : CustomPaint(
+                              size: Size(width, s(28)),
+                              painter: _BarPainter(
+                                progress: value,
+                                thickness: s(isSeeking ? 9 : 5),
+                                knobRadius: canSeek ? s(isSeeking ? 13 : 9) : 0,
+                                muted: !seekable,
+                              ),
+                            ),
                     ),
                     labels,
                   ],

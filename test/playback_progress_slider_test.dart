@@ -339,6 +339,29 @@ void main() {
     expect(find.text('0:20'), findsOneWidget);
   });
 
+  testWidgets('the kiosk bar and its times stop while the server is away', (
+    tester,
+  ) async {
+    final h = await _pump(
+      tester,
+      kiosk: true,
+      clock: tester.binding.clock.stopwatch()..start(),
+    );
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('0:22'), findsOneWidget);
+
+    h.connection.set(ConnectionStatus.reconnecting);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 5));
+    expect(find.text('0:22'), findsOneWidget);
+    expect(
+      tester
+          .widget<GradientProgressLine>(find.byType(GradientProgressLine))
+          .mode,
+      GradientProgressLineMode.reconnecting,
+    );
+  });
+
   testWidgets('the kiosk bar does not seek playback that cannot seek', (
     tester,
   ) async {
