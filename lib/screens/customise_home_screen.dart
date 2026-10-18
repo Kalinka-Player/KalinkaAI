@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../providers/connection_settings_provider.dart';
 import '../providers/pinned_catalogs_provider.dart';
@@ -72,10 +73,7 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                     padding: const EdgeInsets.only(bottom: 32),
                     header: Padding(
                       padding: EdgeInsets.fromLTRB(gutter, 20, gutter, 20),
-                      child: Text(
-                        'Drag catalogs to change their order. Search and collections stay in place.',
-                        style: KalinkaTextStyles.settingsDescription,
-                      ),
+                      child: const _HomeLayoutIntro(),
                     ),
                     footer: pins.isEmpty
                         ? Padding(
@@ -205,6 +203,70 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _HomeLayoutIntro extends StatelessWidget {
+  const _HomeLayoutIntro();
+
+  @override
+  Widget build(BuildContext context) {
+    const aspectRatio = 512 / 288;
+    final diagramHeight = (MediaQuery.sizeOf(context).height * 0.27).clamp(
+      90.0,
+      202.5,
+    );
+    final maxDiagramWidth = diagramHeight * aspectRatio;
+    final textSize = KalinkaTextStyles.settingsDescription.fontSize!;
+    final minTextWidth =
+        180 * MediaQuery.textScalerOf(context).scale(textSize) / textSize;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Use the panel's width and allow more room for enlarged system text.
+        final beside =
+            constraints.maxWidth >= maxDiagramWidth * 8 / 9 + 24 + minTextWidth;
+        final diagramWidth = beside
+            ? (constraints.maxWidth - 24 - minTextWidth).clamp(
+                0.0,
+                maxDiagramWidth,
+              )
+            : maxDiagramWidth;
+        final diagram = SizedBox(
+          width: diagramWidth,
+          child: AspectRatio(
+            aspectRatio: aspectRatio,
+            child: SvgPicture.asset(
+              'assets/images/home_layout_diagram.svg',
+              theme: const SvgTheme(currentColor: KalinkaColors.accent),
+              excludeFromSemantics: true,
+            ),
+          ),
+        );
+        final explanation = Text(
+          'Drag catalogs to change their order on Home. Search, collections and sources stay in place.',
+          style: KalinkaTextStyles.settingsDescription,
+        );
+
+        if (beside) {
+          return Row(
+            children: [
+              diagram,
+              const SizedBox(width: 24),
+              Expanded(child: explanation),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(child: diagram),
+            const SizedBox(height: 16),
+            explanation,
+          ],
+        );
+      },
     );
   }
 }
