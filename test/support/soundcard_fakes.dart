@@ -1,5 +1,5 @@
-// Fakes for a Raspberry Pi box whose supervisor sets its sound card up, and
-// the server that box's renderer plays for.
+// Fakes for a Raspberry Pi box whose supervisor sets its sound card and time
+// zone up, and the server that box's renderer plays for.
 
 import 'dart:async';
 
@@ -57,13 +57,14 @@ SoundcardReport soundcardReport({
 SupervisorInfo supervisorInfo({
   String? serverId = 'box-1',
   String? rendererId,
+  Set<String> actions = const {'reboot', 'poweroff', setSoundcardAction},
 }) => SupervisorInfo(
   version: '0.3.0',
   protocol: 1,
   minProtocol: 1,
   serverId: serverId,
   rendererId: rendererId,
-  actions: const {'reboot', 'poweroff', setSoundcardAction},
+  actions: actions,
 );
 
 /// A box that answers [answers] to `/info` in turn, the last one for good, and
@@ -88,6 +89,19 @@ class FakeBox implements SupervisorApi {
   /// While set, `/info` answers only once it completes.
   Completer<void>? holdInfo;
 
+  /// The zone `/v1/status` names; setting one changes it.
+  String? zone = 'UTC';
+
+  List<String>? zones = const ['Asia/Kolkata', 'Europe/London', 'UTC'];
+
+  /// Old names the box sets the zone of, as its tzdata links them.
+  Map<String, String> zoneLinks = const {'Asia/Calcutta': 'Asia/Kolkata'};
+
+  final zonesSet = <(String, BoxIdentity)>[];
+
+  /// While set, a time zone change answers only once it completes.
+  Completer<void>? holdTimezone;
+
   T _next<T>(List<T> list) => list.length > 1 ? list.removeAt(0) : list.first;
 
   @override
@@ -109,6 +123,20 @@ class FakeBox implements SupervisorApi {
         ..addAll(after);
     }
     return restarts;
+  }
+
+  @override
+  Future<String?> timezone() async => zone;
+
+  @override
+  Future<List<String>?> timezones() async => zones;
+
+  @override
+  Future<String> setTimezone(String zone, BoxIdentity identity) async {
+    zonesSet.add((zone, identity));
+    await holdTimezone?.future;
+    if (refusal != null) throw refusal!;
+    return this.zone = zoneLinks[zone] ?? zone;
   }
 
   @override

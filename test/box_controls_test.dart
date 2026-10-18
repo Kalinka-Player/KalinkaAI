@@ -50,6 +50,15 @@ class _FakeBox implements SupervisorApi {
   Future<bool> setSoundcard(String card, BoxIdentity identity) async => false;
 
   @override
+  Future<String?> timezone() async => 'UTC';
+
+  @override
+  Future<List<String>?> timezones() async => const ['UTC'];
+
+  @override
+  Future<String> setTimezone(String zone, BoxIdentity identity) async => zone;
+
+  @override
   Uri get page => Uri.parse('http://kalinka.local:8001/');
 }
 
