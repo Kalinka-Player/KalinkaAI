@@ -7,10 +7,10 @@ import 'connection_settings_provider.dart';
 import 'search_session_provider.dart';
 
 enum HomePreviewType {
-  cards('Cards', 'Horizontally scrolling cards'),
-  artwork('Artwork', 'Catalog artwork with its title and description'),
+  cards('Cards', 'Horizontally scrolling covers'),
+  artwork('Artwork', 'Catalog image, title and description'),
   list('List', 'Five items in a vertical list'),
-  compact('Compact', 'Small tile tinted with the source colour');
+  compact('Compact', 'Small tile in the source colour');
 
   final String label;
   final String description;
@@ -176,23 +176,4 @@ class PinnedCatalogsNotifier extends Notifier<List<PinnedCatalog>> {
 final pinnedCatalogsProvider =
     NotifierProvider<PinnedCatalogsNotifier, List<PinnedCatalog>>(
       PinnedCatalogsNotifier.new,
-    );
-
-/// Whether the "Pin catalogs to Home" hint was dismissed. Per install, not
-/// per server: once learnt, pinning needs no second introduction.
-class PinHintDismissedNotifier extends Notifier<bool> {
-  static const _key = 'Kalinka.pinHintDismissed';
-
-  @override
-  bool build() => ref.read(sharedPrefsProvider).getBool(_key) ?? false;
-
-  void dismiss() {
-    state = true;
-    ref.read(sharedPrefsProvider).setBool(_key, true).ignore();
-  }
-}
-
-final pinHintDismissedProvider =
-    NotifierProvider<PinHintDismissedNotifier, bool>(
-      PinHintDismissedNotifier.new,
     );

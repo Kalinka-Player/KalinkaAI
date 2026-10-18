@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart';
 import '../../providers/catalog_section_provider.dart';
-import '../../providers/catalog_sources_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/indexer_status_provider.dart';
 import '../../providers/pinned_catalogs_provider.dart';
@@ -49,80 +48,6 @@ class PinnedCatalogsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: children,
-    );
-  }
-}
-
-/// Home without pins: says what pinning is, until dismissed. Absent until a
-/// source offers catalogs to pin.
-class PinnedCatalogsEmptyCard extends ConsumerWidget {
-  const PinnedCatalogsEmptyCard({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (ref.watch(pinHintDismissedProvider)) return const SizedBox.shrink();
-    final sources = ref.watch(catalogSourcesProvider).value;
-    if (sources == null || sources.isEmpty) return const SizedBox.shrink();
-    return Container(
-      // The close button's own padding makes up the top and end.
-      padding: const EdgeInsetsDirectional.fromSTEB(16, 4, 4, 16),
-      decoration: BoxDecoration(
-        color: KalinkaColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: KalinkaColors.borderDefault),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                CupertinoIcons.pin,
-                size: 18,
-                color: KalinkaColors.accentTint,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Pin catalogs to Home',
-                  style: KalinkaTextStyles.trackRowTitle,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Dismiss',
-                iconSize: 20,
-                color: KalinkaColors.textMuted,
-                onPressed: () =>
-                    ref.read(pinHintDismissedProvider.notifier).dismiss(),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsetsDirectional.only(end: 12),
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  const TextSpan(
-                    text: 'Open a source above, find a catalog and tap ',
-                  ),
-                  const WidgetSpan(
-                    alignment: PlaceholderAlignment.middle,
-                    child: Icon(
-                      CupertinoIcons.pin,
-                      size: 14,
-                      color: KalinkaColors.textSecondary,
-                      semanticLabel: 'the pin',
-                    ),
-                  ),
-                  const TextSpan(text: ' to keep it here.'),
-                ],
-              ),
-              style: KalinkaTextStyles.trackRowSubtitle,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

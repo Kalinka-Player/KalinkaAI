@@ -904,70 +904,75 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               // Right panel — Home, with the management panels opening over
               // it. SizedBox.expand() gives RepaintBoundary tight constraints
               // so its layout invalidations don't cross into the left panel.
+              // Home's catalog sheets belong over this panel too.
               Expanded(
                 child: SizedBox.expand(
                   child: RepaintBoundary(
-                    child: Stack(
-                      children: [
-                        Visibility(
-                          visible: !_settingsCovering,
-                          maintainState: true,
-                          maintainAnimation: true,
-                          maintainSize: true,
-                          child: _buildHome(isTablet: true),
-                        ),
-                        _buildEscalation(isTablet: true),
-                        if (_serverSheetOpen)
-                          Positioned.fill(
-                            child: ServerSheet(
-                              onClose: () =>
-                                  setState(() => _serverSheetOpen = false),
-                              onOpenDiscovery: () =>
-                                  setState(() => _discoveryOpen = true),
-                              onOpenSettings: _openSettings,
-                              onOpenPlugins: _openPlugins,
-                              onPowerOff: _powerOffServer,
-                            ),
+                    child: SheetAnchor(
+                      child: Stack(
+                        children: [
+                          Visibility(
+                            visible: !_settingsCovering,
+                            maintainState: true,
+                            maintainAnimation: true,
+                            maintainSize: true,
+                            child: _buildHome(isTablet: true),
                           ),
-                        // Management overlays share the right-hand bounds,
-                        // including their sheets and slide motion.
-                        if (_settingsOpen)
-                          Positioned.fill(
-                            child: SheetAnchor(
-                              child: ClipRect(
-                                child: SettingsScreen(
-                                  key: _settingsKey,
-                                  handlesBack: rendererSettings == null,
-                                  onClose: () => setState(() {
-                                    _settingsOpen = false;
-                                    _settingsCovering = false;
-                                  }),
-                                  onCoverageChanged: (covering) => setState(
-                                    () => _settingsCovering = covering,
+                          _buildEscalation(isTablet: true),
+                          if (_serverSheetOpen)
+                            Positioned.fill(
+                              child: ServerSheet(
+                                onClose: () =>
+                                    setState(() => _serverSheetOpen = false),
+                                onOpenDiscovery: () =>
+                                    setState(() => _discoveryOpen = true),
+                                onOpenSettings: _openSettings,
+                                onOpenPlugins: _openPlugins,
+                                onPowerOff: _powerOffServer,
+                              ),
+                            ),
+                          // Management overlays share the right-hand bounds,
+                          // including their sheets and slide motion.
+                          if (_settingsOpen)
+                            Positioned.fill(
+                              child: SheetAnchor(
+                                child: ClipRect(
+                                  child: SettingsScreen(
+                                    key: _settingsKey,
+                                    handlesBack: rendererSettings == null,
+                                    onClose: () => setState(() {
+                                      _settingsOpen = false;
+                                      _settingsCovering = false;
+                                    }),
+                                    onCoverageChanged: (covering) => setState(
+                                      () => _settingsCovering = covering,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        if (_pluginsOpen)
-                          Positioned.fill(
-                            child: SheetAnchor(
-                              child: ClipRect(
-                                child: _buildPlugins(
-                                  handlesBack: rendererSettings == null,
+                          if (_pluginsOpen)
+                            Positioned.fill(
+                              child: SheetAnchor(
+                                child: ClipRect(
+                                  child: _buildPlugins(
+                                    handlesBack: rendererSettings == null,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        if (rendererSettings != null)
-                          Positioned.fill(
-                            child: SheetAnchor(
-                              child: ClipRect(
-                                child: _buildRendererSettings(rendererSettings),
+                          if (rendererSettings != null)
+                            Positioned.fill(
+                              child: SheetAnchor(
+                                child: ClipRect(
+                                  child: _buildRendererSettings(
+                                    rendererSettings,
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

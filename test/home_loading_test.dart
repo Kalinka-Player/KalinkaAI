@@ -196,7 +196,7 @@ void main() {
         findsNWidgets(2),
       );
       expect(tester.getRect(grid), loadingRect);
-      expect(find.text('Customise Home'), findsOneWidget);
+      expect(find.byTooltip('Customise Home'), findsOneWidget);
       expect(find.byType(PreviewShelfShimmer), findsNWidgets(2));
 
       api.preview.complete(BrowseItemsList(0, 8, 0, const []));
@@ -218,7 +218,7 @@ void main() {
       modules.complete([_module('Receiver', catalogs: false)]);
       await tester.pumpAndSettle();
       expect(find.byType(ShimmerPulse), findsNothing);
-      expect(find.text('Customise Home'), findsNothing);
+      expect(find.byTooltip('Customise Home'), findsNothing);
       expect(api.calls, isEmpty);
     },
   );
