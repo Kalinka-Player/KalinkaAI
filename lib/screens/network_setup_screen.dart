@@ -1,14 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../providers/network_setup_api.dart';
+import '../providers/networked_boxes_provider.dart';
 import '../providers/provisioning_controller.dart';
 import '../widgets/onboarding/hotspot_setup_guide.dart';
 import '../widgets/onboarding/onboarding_step_scaffold.dart';
 import '../widgets/onboarding/step_network.dart';
 
 /// The same network setup UI is hosted by the captive portal and the native app.
-class NetworkSetupScreen extends StatefulWidget {
+class NetworkSetupScreen extends ConsumerStatefulWidget {
   final Uri endpoint;
   final bool hotspot;
   final VoidCallback? onReturnToDiscovery;
@@ -20,23 +23,24 @@ class NetworkSetupScreen extends StatefulWidget {
   });
 
   @override
-  State<NetworkSetupScreen> createState() => _NetworkSetupScreenState();
+  ConsumerState<NetworkSetupScreen> createState() => _NetworkSetupScreenState();
 }
 
-class _NetworkSetupScreenState extends State<NetworkSetupScreen> {
+class _NetworkSetupScreenState extends ConsumerState<NetworkSetupScreen> {
   Map<String, dynamic>? _status;
   bool _submitted = false;
   bool _busy = false;
   bool get _needsActivation =>
-      widget.hotspot && kIsWeb && Uri.base.host != '192.168.4.1';
+      widget.hotspot && kIsWeb && Uri.base.host != hotspotAddress;
   bool get _connected => (_status?['network'] as Map?)?['connected'] == true;
+  String? get _serverId => _status?['server_id'] as String?;
   bool get _showHotspotGuide =>
       widget.hotspot && (_needsActivation || _status == null);
 
   Future<void> _continue() async {
     if (_needsActivation) {
       await launchUrl(
-        Uri.parse('http://192.168.4.1/activate'),
+        Uri.http(hotspotAddress, '/activate'),
         webOnlyWindowName: '_self',
       );
       return;
@@ -46,19 +50,19 @@ class _NetworkSetupScreenState extends State<NetworkSetupScreen> {
     final host = _connected ? network!['address'] as String : 'kalinka.local';
     final port = setup?['port'] as int? ?? 8000;
     if (kIsWeb) {
+      final id = _serverId;
       await launchUrl(
-        Uri(scheme: 'http', host: host, port: port),
+        Uri(
+          scheme: 'http',
+          host: host,
+          port: port,
+          queryParameters: id == null ? null : {networkedQuery: id},
+        ),
         webOnlyWindowName: '_self',
       );
     } else if (_connected) {
-      Navigator.of(context).pop(
-        ProvisionedEndpoint(
-          'Kalinka',
-          host,
-          port,
-          _status?['server_id'] as String?,
-        ),
-      );
+      Navigator.of(context)
+          .pop(ProvisionedEndpoint('Kalinka', host, port, _serverId));
     } else {
       (widget.onReturnToDiscovery ?? () => Navigator.of(context).pop())();
     }
@@ -103,6 +107,11 @@ class _NetworkSetupScreenState extends State<NetworkSetupScreen> {
                   _status = status;
                   _submitted = status['submitted'] == true;
                 });
+                // Setup skips Network for this box once the app finds it
+                // again on the home network.
+                if (_submitted) {
+                  ref.read(networkedBoxesProvider.notifier).add(_serverId);
+                }
               }
             },
           ),

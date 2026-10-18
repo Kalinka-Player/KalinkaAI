@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/presentation_schema.dart' show ModuleSpec;
 import '../providers/connection_settings_provider.dart';
 import '../providers/kalinka_player_api_provider.dart';
+import '../providers/network_setup_api.dart' show hotspotAddress;
+import '../providers/networked_boxes_provider.dart';
 import '../providers/onboarding_provider.dart';
 import '../providers/renderer_provider.dart';
 import '../providers/renderer_settings_provider.dart';
@@ -56,15 +58,25 @@ import '../widgets/soundcard_row.dart' show SoundcardHost, soundcardTrouble;
 ///
 /// Whether the *server* is set up is its own config flag
 /// (`base_config.server.oobe_complete`): the wizard reads it after
-/// connecting and, after Network, skips the remaining steps if another client
-/// completed setup. With [startAtSetup] the discovery step is skipped
-/// instead — for an already-connected server that reports the flag false:
-/// an existing install pointing at a fresh server, or the web UI, whose
-/// connection always comes from the origin serving the page.
+/// connecting and goes straight to the app if another client completed
+/// setup — unless the box is on its own hotspot, which still needs Network.
+/// With [startAtSetup] the discovery step is skipped instead — for an
+/// already-connected server that reports the flag false: an existing install
+/// pointing at a fresh server, or the web UI, whose connection always comes
+/// from the origin serving the page.
+///
+/// Network is skipped for a box this app just put on a network
+/// ([offerNetworkSetup]); [offerNetwork] carries that answer in for
+/// [startAtSetup].
 class OnboardingScreen extends ConsumerStatefulWidget {
-  const OnboardingScreen({super.key, this.startAtSetup = false});
+  const OnboardingScreen({
+    super.key,
+    this.startAtSetup = false,
+    this.offerNetwork = true,
+  });
 
   final bool startAtSetup;
+  final bool offerNetwork;
 
   @override
   ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -84,7 +96,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   ];
   static const _soundStep = 6;
   bool _networkBusy = false;
+
+  /// Set up already, and here only for Network: the box is on its hotspot.
   bool _alreadySetUp = false;
+
+  /// Network is not offered, so Back steps over it.
+  late bool _networkSkipped = widget.startAtSetup && !widget.offerNetwork;
+
+  int get _backStep => _step - 1 == 1 && _networkSkipped ? 0 : _step - 1;
 
   /// Whether a sound test ran this session — flips the test step's Next
   /// from "Skip for now" to "Continue" and feeds the review row.
@@ -105,7 +124,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final resume = ref.read(oobeResumeProvider);
     if (resume == null ||
         resume.address != ref.read(connectionSettingsProvider).address) {
-      return 1;
+      return widget.offerNetwork ? 1 : 2;
     }
     ref.read(oobeResumeProvider.notifier).forget().ignore();
     return _resumedStep(resume);
@@ -147,18 +166,31 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Future<void> _onConnected({int step = 1}) async {
     // The discovery step keeps its "connecting" state up while this runs.
     await ref.read(settingsProvider.notifier).loadConfig();
+    final offerNetwork = await offerNetworkSetup(ref);
     if (!mounted) return;
-    // Already configured servers still show Network before saving the connection.
     final values = ref.read(settingsProvider).values;
     _alreadySetUp =
         !OnboardingStatusNotifier.forceOobe &&
         values[OnboardingStatusNotifier.serverOobeFlagPath] == true;
+    // Another client already set up the server: just persist the
+    // connection. The coach-mark tour still runs once per install.
+    if (_alreadySetUp &&
+        ref.read(connectionSettingsProvider).host != hotspotAddress) {
+      await _commitSetup();
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
     await ref.read(oobeResumeProvider.notifier).forget();
     if (!mounted) return;
     setState(() {
       _resuming = null;
       _networkBusy = false;
-      _step = _alreadySetUp ? 1 : step;
+      _networkSkipped = !_alreadySetUp && !offerNetwork;
+      _step = _alreadySetUp
+          ? 1
+          : step == 1 && !offerNetwork
+          ? 2
+          : step;
     });
   }
 
@@ -401,11 +433,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // System back walks one step backwards; never leaves the wizard.
-        if (_step > _firstStep &&
+        if (_backStep >= _firstStep &&
             !_restartOverlayOpen &&
             !_starting &&
             _soundcardRun == null) {
-          _goTo(_step - 1);
+          _goTo(_backStep);
         }
       },
       child: Scaffold(
@@ -566,8 +598,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       stepLabels: _stepLabels,
       title: title,
       subtitle: subtitle,
-      onBack: _step > _firstStep && !_starting && _soundcardRun == null
-          ? () => _goTo(_step - 1)
+      onBack: _backStep >= _firstStep && !_starting && _soundcardRun == null
+          ? () => _goTo(_backStep)
           : null,
       onNext: switch (_step) {
         1 when _alreadySetUp => () async {

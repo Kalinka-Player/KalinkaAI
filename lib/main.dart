@@ -14,6 +14,7 @@ import 'providers/kiosk_provider.dart';
 import 'providers/onboarding_provider.dart';
 import 'providers/renderer_host_provider.dart';
 import 'providers/media_notification_provider.dart';
+import 'providers/network_setup_api.dart';
 import 'providers/pinned_server.dart';
 import 'widgets/kalinka_toast_overlay.dart';
 import 'widgets/foreground_volume_overlay.dart';
@@ -72,7 +73,7 @@ class KalinkaApp extends ConsumerWidget {
     if (networkActivation) {
       final base = Uri.base;
       final endpoint = base.replace(
-        port: base.host == '192.168.4.1' ? base.port : 8001,
+        port: base.host == hotspotAddress ? base.port : 8001,
         path: '/',
         query: null,
         fragment: null,
