@@ -31,8 +31,11 @@ final boxTimezoneProvider = FutureProvider.autoDispose<BoxTimezone>((
   return BoxTimezone(control: control, zone: await api.timezone());
 });
 
-/// This device's own zone, which setup proposes for the box.
-final localTimezoneProvider = FutureProvider<String?>((ref) => localTimezone());
+/// This device's own zone, which setup proposes for the box. Read again each
+/// time it is shown, since a phone that travels changes its zone.
+final localTimezoneProvider = FutureProvider.autoDispose<String?>(
+  (ref) => localTimezone(),
+);
 
 /// How a zone reads: tzdata's underscores stand for spaces.
 String timezoneLabel(String zone) => zone.replaceAll('_', ' ');
