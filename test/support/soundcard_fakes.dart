@@ -102,6 +102,12 @@ class FakeBox implements SupervisorApi {
   /// While set, a time zone change answers only once it completes.
   Completer<void>? holdTimezone;
 
+  /// While set, reading the zone answers only once it completes.
+  Completer<void>? holdZone;
+
+  /// While set, the list of zones answers only once it completes.
+  Completer<void>? holdZones;
+
   T _next<T>(List<T> list) => list.length > 1 ? list.removeAt(0) : list.first;
 
   @override
@@ -126,10 +132,16 @@ class FakeBox implements SupervisorApi {
   }
 
   @override
-  Future<String?> timezone() async => zone;
+  Future<String?> timezone() async {
+    await holdZone?.future;
+    return zone;
+  }
 
   @override
-  Future<List<String>?> timezones() async => zones;
+  Future<List<String>?> timezones() async {
+    await holdZones?.future;
+    return zones;
+  }
 
   @override
   Future<String> setTimezone(String zone, BoxIdentity identity) async {

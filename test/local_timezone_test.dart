@@ -28,6 +28,10 @@ void main() {
         'America/New_York',
       );
       expect(zoneNamed(':Europe/Paris'), 'Europe/Paris');
+      expect(
+        zoneNamed('/usr/share/zoneinfo/posix/Europe/London'),
+        'Europe/London',
+      );
     });
 
     test('names no zone for a rule, an offset or another path', () {
