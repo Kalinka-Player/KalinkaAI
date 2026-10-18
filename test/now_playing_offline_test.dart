@@ -197,6 +197,30 @@ void main() {
     expect(find.text('No server connected'), findsOneWidget);
   });
 
+  testWidgets('phone: with no server a dialog opened from the player closes '
+      'with it', (tester) async {
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(3)),
+    );
+    await tester.tap(find.byType(MiniPlayer));
+    await tester.pumpAndSettle();
+    showDialog<void>(
+      context: tester.element(find.byType(NowPlayingContent)),
+      builder: (_) => const AlertDialog(content: Text('Over the player')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Over the player'), findsOneWidget);
+
+    (container.read(connectionStateProvider.notifier) as SettableConnection)
+        .set(ConnectionStatus.none);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Over the player'), findsNothing);
+    expect(find.byType(NowPlayingContent), findsNothing);
+    expect(find.text('No server connected'), findsOneWidget);
+  });
+
   testWidgets('tablet: with no server the player panel says so', (
     tester,
   ) async {

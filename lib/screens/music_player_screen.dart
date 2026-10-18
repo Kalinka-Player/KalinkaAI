@@ -319,12 +319,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   void _closeExpandedPlayer() {
     final sheet = _expandedPlayer;
     if (!mounted || sheet == null || !sheet.isActive) return;
+    // What the player opened goes with it, rather than left over Home.
     final navigator = Navigator.of(context);
-    if (sheet.isCurrent) {
-      navigator.pop();
-    } else {
-      navigator.removeRoute(sheet);
-    }
+    navigator.popUntil((route) => route == sheet || !sheet.isActive);
+    if (sheet.isCurrent) navigator.pop();
   }
 
   /// Without [actions], only the notice: the tablet's player panel, beside
