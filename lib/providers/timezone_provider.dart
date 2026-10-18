@@ -76,8 +76,14 @@ class TimezoneChange extends Notifier<String?> {
         zone,
         BoxIdentity(serverId: control.serverId),
       );
-      if (set != zone) {
-        final links = {..._links(prefs), zone: set};
+      final links = _links(prefs);
+      final before = links[zone];
+      if (set == zone) {
+        links.remove(zone);
+      } else {
+        links[zone] = set;
+      }
+      if (links[zone] != before) {
         await prefs.setStringList(_linksKey, [
           for (final MapEntry(:key, :value) in links.entries) '$key=$value',
         ]);
@@ -90,6 +96,8 @@ class TimezoneChange extends Notifier<String?> {
       );
       return true;
     } on BoxActionException catch (e) {
+      // A box that timed out may still have taken the zone.
+      if (ref.mounted) ref.invalidate(boxTimezoneProvider);
       toast.show(e.message, isError: true, inPanel: inPanel);
       return false;
     } finally {

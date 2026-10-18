@@ -178,6 +178,25 @@ void main() {
     await _drain(tester);
   });
 
+  testWidgets('reads the zone again after a change that timed out', (
+    tester,
+  ) async {
+    final box = FakeBox(answers: [_setsTimezone])
+      ..holdTimezone = Completer()
+      ..refusal = const BoxActionException('unreachable', 'No answer.');
+    await _pump(tester, box);
+
+    await _pick(tester, 'lond', 'Europe/London');
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    box.zone = 'Europe/London';
+    box.holdTimezone!.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Europe/London'), findsOne);
+    await _drain(tester);
+  });
+
   testWidgets('reads the zone again, so one set on the box itself shows', (
     tester,
   ) async {
@@ -247,6 +266,23 @@ void main() {
           .isOn('Asia/Calcutta', 'Asia/Kolkata'),
       isTrue,
     );
+  });
+
+  test('drops the link once the box sets the old name as asked', () async {
+    final box = FakeBox(answers: [_setsTimezone]);
+    final container = ProviderContainer(
+      overrides: soundcardOverrides(await boxPrefs(), box: box),
+    );
+    addTearDown(container.dispose);
+    await container.read(boxControlProvider.future);
+    final change = container.read(timezoneChangeProvider.notifier);
+
+    await change.apply('Asia/Calcutta');
+    box.zoneLinks = const {};
+    await change.apply('Asia/Calcutta');
+
+    expect(box.zone, 'Asia/Calcutta');
+    expect(change.isOn('Asia/Calcutta', 'Asia/Calcutta'), isTrue);
   });
 
   test('a change answered after the app has gone touches nothing', () async {
