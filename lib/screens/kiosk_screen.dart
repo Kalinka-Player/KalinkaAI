@@ -166,6 +166,15 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   void initState() {
     super.initState();
     ref.listenManual(volumeActivityProvider, (_, _) => _showVolume());
+    // The output panel and the volume would send to a server that is not
+    // there.
+    final interrupted = connectionStateProvider.select((s) => s.isInterrupted);
+    ref.listenManual(interrupted, (_, away) {
+      if (!away) return;
+      _closeOutputs();
+      _volumeTimer?.cancel();
+      if (_volumeVisible) setState(() => _volumeVisible = false);
+    });
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     ref.listenManual(playerStateProvider.select((s) => s.state), (_, next) {
       switch (next) {
@@ -239,7 +248,9 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   /// or keeps it up a while longer while it is used. Not while the output
   /// panel is open: its own slider is already in view.
   void _showVolume() {
-    if (_outputsOpen) return;
+    if (_outputsOpen || ref.read(connectionStateProvider).isInterrupted) {
+      return;
+    }
     if (!_volumeVisible) setState(() => _volumeVisible = true);
     _volumeTimer?.cancel();
     _volumeTimer = Timer(_volumeFor, () {

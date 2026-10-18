@@ -88,6 +88,8 @@ class _Connection extends ConnectionStateNotifier {
 
   @override
   ConnectionStatus build() => _status;
+
+  void set(ConnectionStatus next) => state = next;
 }
 
 class _Renderers extends RendererListNotifier {
@@ -1255,6 +1257,44 @@ void main() {
 
     final last = h.api.deviceSent.last as SetVolumeCommand;
     expect(last.volume, greaterThan(70));
+  });
+
+  testWidgets('losing the server closes the output panel and the volume, '
+      'which stays away until it is back', (tester) async {
+    final h = await _pump(
+      tester,
+      _queue(PlayerStateType.paused),
+      volume: _adjustable,
+    );
+    await tester.pumpAndSettle();
+    final connection =
+        h.container.read(connectionStateProvider.notifier) as _Connection;
+
+    await tester.tap(find.byType(KioskOutputPill));
+    await tester.pumpAndSettle();
+    expect(openPanel(), findsOneWidget);
+    connection.set(ConnectionStatus.reconnecting);
+    await tester.pump();
+    expect(openPanel(), findsNothing);
+
+    connection.set(ConnectionStatus.connected);
+    await tester.pump();
+    device(h).setLevel(55);
+    await tester.pump();
+    expect(volumeOpacity(tester), 1);
+    connection.set(ConnectionStatus.reconnecting);
+    await tester.pump();
+    expect(volumeOpacity(tester), 0);
+
+    device(h).setLevel(60);
+    await tester.pump();
+    expect(volumeOpacity(tester), 0);
+
+    connection.set(ConnectionStatus.connected);
+    await tester.pump();
+    device(h).setLevel(65);
+    await tester.pump();
+    expect(volumeOpacity(tester), 1);
   });
 
   testWidgets('a fixed-volume output shows no volume control', (tester) async {
