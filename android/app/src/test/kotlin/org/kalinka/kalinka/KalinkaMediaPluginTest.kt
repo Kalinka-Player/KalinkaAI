@@ -20,6 +20,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.util.ReflectionHelpers
+import java.util.TimeZone
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
@@ -53,6 +54,16 @@ class KalinkaMediaPluginTest {
     @Test fun swipeHapticsAnswerWhetherTheyPlayedSoDartCanFallBack() {
         assertEquals(false, call("hapticCorkPop"))
         assertEquals(false, call("hapticDelete"))
+    }
+
+    @Test fun timeZoneNamesTheDevicesOwn() {
+        val before = TimeZone.getDefault()
+        TimeZone.setDefault(TimeZone.getTimeZone("Asia/Kolkata"))
+        try {
+            assertEquals("Asia/Kolkata", call("timeZone"))
+        } finally {
+            TimeZone.setDefault(before)
+        }
     }
 
     @Test fun disableCancelsPendingBindingAndItsQueuedEnable() {
