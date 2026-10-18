@@ -53,22 +53,69 @@ final rememberServerIdentityProvider = Provider<void>((ref) {
   });
 });
 
-/// The box controls the app may offer for the connected server: null when
-/// its box has no supervisor, or one that does not belong to this server.
+/// Why the connected server has no box controls.
+enum NoBoxControl {
+  /// No supervisor answers on the server's host: none is installed, its
+  /// control page is turned off, or the server is a demo or behind TLS.
+  noSupervisor,
+
+  /// The supervisor did not answer, or the server it would have to match is
+  /// not known yet.
+  notAnswering,
+
+  /// The supervisor answers for another server, such as one that took over
+  /// the address.
+  otherServer,
+
+  /// The supervisor speaks no protocol this app does.
+  incompatible,
+}
+
+/// The connected server's box controls, or why there are none.
+class BoxProbe {
+  final BoxControl? control;
+  final NoBoxControl? missing;
+
+  const BoxProbe.found(BoxControl this.control) : missing = null;
+
+  const BoxProbe.missing(NoBoxControl this.missing) : control = null;
+}
+
+/// Looks for the connected server's box. Invalidate it to look again.
 ///
 /// While the server is down the box is matched against the server last seen
 /// at this address, which is what lets the app restart a server that stopped
 /// answering.
-final boxControlProvider = FutureProvider<BoxControl?>((ref) async {
+final boxProbeProvider = FutureProvider<BoxProbe>((ref) async {
   final api = ref.watch(supervisorApiProvider);
-  if (api == null || ref.watch(demoModeProvider)) return null;
+  if (api == null || ref.watch(demoModeProvider)) {
+    return const BoxProbe.missing(NoBoxControl.noSupervisor);
+  }
   final prefs = ref.watch(sharedPrefsProvider);
   ref.watch(connectionSettingsProvider.select((s) => s.address));
   final key = _knownServerKey(ref.read(connectionSettingsProvider));
   final current = await ref.watch(serverIdentityProvider.future);
   final known = current ?? prefs.getString(key);
-  if (known == null) return null;
-  final info = await api.info();
-  if (info == null || !info.compatible || info.serverId != known) return null;
-  return BoxControl(info, known);
+  if (known == null) return const BoxProbe.missing(NoBoxControl.notAnswering);
+  final (:reach, :info) = await api.probe();
+  if (info == null) {
+    return BoxProbe.missing(
+      reach == SupervisorReach.silent
+          ? NoBoxControl.notAnswering
+          : NoBoxControl.noSupervisor,
+    );
+  }
+  if (!info.compatible) {
+    return const BoxProbe.missing(NoBoxControl.incompatible);
+  }
+  if (info.serverId != known) {
+    return const BoxProbe.missing(NoBoxControl.otherServer);
+  }
+  return BoxProbe.found(BoxControl(info, known));
 });
+
+/// The box controls the app may offer for the connected server: null when
+/// [boxProbeProvider] found none.
+final boxControlProvider = FutureProvider<BoxControl?>(
+  (ref) async => (await ref.watch(boxProbeProvider.future)).control,
+);

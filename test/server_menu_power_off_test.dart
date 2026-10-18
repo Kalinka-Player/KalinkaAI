@@ -47,6 +47,15 @@ class _Box implements SupervisorApi {
       : null;
 
   @override
+  Future<({SupervisorReach reach, SupervisorInfo? info})> probe() async {
+    final answer = await info();
+    return (
+      reach: answer == null ? SupervisorReach.absent : SupervisorReach.answered,
+      info: answer,
+    );
+  }
+
+  @override
   Future<void> run(BoxAction action, {required String serverId}) async {
     runs.add((action, serverId));
     if (refusal != null) throw refusal!;

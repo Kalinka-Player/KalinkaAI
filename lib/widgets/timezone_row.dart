@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/presentation_schema.dart' show OptionSpec;
+import '../providers/box_control_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../providers/timezone_provider.dart';
 import '../providers/toast_provider.dart';
@@ -14,7 +15,8 @@ import 'settings_controls/option_picker.dart';
 import 'settings_controls/settings_action_row.dart';
 
 /// "Time zone" on the connected server's box: the zone it is on, opening the
-/// picker. A box that cannot set its zone shows the row disabled, saying why.
+/// picker. A box that cannot set its zone shows the row disabled, saying why,
+/// or offering to look again when its supervisor did not answer.
 class TimezoneRow extends ConsumerStatefulWidget {
   final BoxTimezone box;
   final IconData? leading;
@@ -52,12 +54,22 @@ class _TimezoneRowState extends ConsumerState<TimezoneRow> {
     final box = widget.box;
     final leading = widget.leading;
     if (!box.settable) {
+      final retry = switch (box.probe.missing) {
+        NoBoxControl.notAnswering || NoBoxControl.otherServer => true,
+        _ => false,
+      };
+      final looking = retry && ref.watch(boxProbeProvider).isLoading;
       return SettingsActionRow(
         label: 'Time zone',
-        sublabel: timezoneUnavailable(box),
+        sublabel: looking ? 'Looking for the box…' : timezoneUnavailable(box),
         leading: leading,
-        trailing: null,
-        onTap: null,
+        trailing: retry ? Icons.refresh : null,
+        onTap: retry && !looking
+            ? () {
+                ref.invalidate(serverIdentityProvider);
+                ref.invalidate(boxProbeProvider);
+              }
+            : null,
       );
     }
     final setting = ref.watch(timezoneChangeProvider);
@@ -77,10 +89,18 @@ class _TimezoneRowState extends ConsumerState<TimezoneRow> {
 }
 
 /// Why [box] cannot be set to another zone from the app.
-String timezoneUnavailable(BoxTimezone box) => box.control == null
-    ? 'The server keeps the time zone of the computer it runs on. Set it '
-          'there.'
-    : 'Updating Kalinka on this box lets the app set its time zone.';
+String timezoneUnavailable(BoxTimezone box) => switch (box.probe.missing) {
+  NoBoxControl.noSupervisor =>
+    'No box supervisor answers on this server, so it keeps the time zone of '
+        'the computer it runs on. Set it there.',
+  NoBoxControl.notAnswering => 'The box did not answer. Tap to try again.',
+  NoBoxControl.otherServer =>
+    'A different Kalinka box answers at this address. Tap to try again.',
+  NoBoxControl.incompatible =>
+    'The box’s supervisor and this app do not speak the same version. '
+        'Update both to set the time zone here.',
+  null => 'Updating Kalinka on this box lets the app set its time zone.',
+};
 
 /// Lets the person pick one of the zones [box] offers, confirms it, and
 /// sets it.

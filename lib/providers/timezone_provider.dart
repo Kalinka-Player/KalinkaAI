@@ -7,13 +7,15 @@ import 'toast_provider.dart';
 
 /// The connected server's box, as far as its time zone goes.
 class BoxTimezone {
-  /// The box's supervisor; null for a server that runs without one.
-  final BoxControl? control;
+  /// The box's supervisor, or why there is none.
+  final BoxProbe probe;
 
   /// The zone the box is on; null when it cannot be set, or names none.
   final String? zone;
 
-  const BoxTimezone({this.control, this.zone});
+  const BoxTimezone(this.probe, {this.zone});
+
+  BoxControl? get control => probe.control;
 
   bool get settable => control?.info.setsTimezone ?? false;
 }
@@ -23,12 +25,11 @@ class BoxTimezone {
 final boxTimezoneProvider = FutureProvider.autoDispose<BoxTimezone>((
   ref,
 ) async {
-  final control = await ref.watch(boxControlProvider.future);
+  final probe = await ref.watch(boxProbeProvider.future);
   final api = ref.watch(supervisorApiProvider);
-  if (control == null || api == null || !control.info.setsTimezone) {
-    return BoxTimezone(control: control);
-  }
-  return BoxTimezone(control: control, zone: await api.timezone());
+  final box = BoxTimezone(probe);
+  if (api == null || !box.settable) return box;
+  return BoxTimezone(probe, zone: await api.timezone());
 });
 
 /// This device's own zone, which setup proposes for the box. Read again each
@@ -54,7 +55,7 @@ class TimezoneChange extends Notifier<String?> {
 
   /// Returns whether the box took [zone]; the outcome is reported in a toast.
   Future<bool> apply(String zone, {bool inPanel = false}) async {
-    final control = ref.read(boxControlProvider).value;
+    final control = ref.read(boxProbeProvider).value?.control;
     final api = ref.read(supervisorApiProvider);
     if (state != null || control == null || api == null) return false;
     final toast = ref.read(toastProvider.notifier);

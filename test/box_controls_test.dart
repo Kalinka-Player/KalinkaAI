@@ -24,15 +24,26 @@ import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeBox implements SupervisorApi {
-  _FakeBox({this.answer, this.state = 'active'});
+  _FakeBox({
+    this.answer,
+    this.state = 'active',
+    this.noAnswer = SupervisorReach.absent,
+  });
 
   SupervisorInfo? answer;
+  final SupervisorReach noAnswer;
   String? state;
   BoxActionException? refusal;
   final runs = <(BoxAction, String)>[];
 
   @override
   Future<SupervisorInfo?> info() async => answer;
+
+  @override
+  Future<({SupervisorReach reach, SupervisorInfo? info})> probe() async => (
+    reach: answer == null ? noAnswer : SupervisorReach.answered,
+    info: answer,
+  );
 
   @override
   Future<String?> serverState() async => state;
@@ -249,6 +260,75 @@ void main() {
     test('a box without a supervisor offers nothing', () async {
       final container = await _container(box: _FakeBox(), identity: 'box-1');
       expect(await container.read(boxControlProvider.future), isNull);
+    });
+  });
+
+  group('boxProbeProvider', () {
+    Future<NoBoxControl?> missing(
+      _FakeBox box, {
+      String? identity = 'box-1',
+      bool demo = false,
+    }) async {
+      final container = await _container(
+        box: box,
+        identity: identity,
+        demo: demo,
+      );
+      return (await container.read(boxProbeProvider.future)).missing;
+    }
+
+    test('finds the box of the connected server', () async {
+      expect(await missing(_FakeBox(answer: _info())), isNull);
+    });
+
+    test('nothing listening is no supervisor', () async {
+      expect(await missing(_FakeBox()), NoBoxControl.noSupervisor);
+      expect(
+        await missing(_FakeBox(answer: _info()), demo: true),
+        NoBoxControl.noSupervisor,
+      );
+    });
+
+    test('a supervisor that does not answer is told apart', () async {
+      expect(
+        await missing(_FakeBox(noAnswer: SupervisorReach.silent)),
+        NoBoxControl.notAnswering,
+      );
+    });
+
+    test('a server not known yet cannot be matched', () async {
+      expect(
+        await missing(_FakeBox(answer: _info()), identity: null),
+        NoBoxControl.notAnswering,
+      );
+    });
+
+    test('a supervisor of another server says so', () async {
+      expect(
+        await missing(_FakeBox(answer: _info(serverId: 'box-2'))),
+        NoBoxControl.otherServer,
+      );
+    });
+
+    test('a supervisor on another protocol says so', () async {
+      expect(
+        await missing(_FakeBox(answer: _info(protocol: 2, minProtocol: 2))),
+        NoBoxControl.incompatible,
+      );
+    });
+
+    test('looks again once invalidated', () async {
+      final box = _FakeBox(noAnswer: SupervisorReach.silent);
+      final container = await _container(box: box, identity: 'box-1');
+      expect(await container.read(boxControlProvider.future), isNull);
+
+      box.answer = _info();
+      container.invalidate(boxProbeProvider);
+
+      expect(
+        (await container.read(boxControlProvider.future))!.serverId,
+        'box-1',
+      );
     });
   });
 

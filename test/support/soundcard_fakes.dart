@@ -89,6 +89,9 @@ class FakeBox implements SupervisorApi {
   /// While set, `/info` answers only once it completes.
   Completer<void>? holdInfo;
 
+  /// How a null answer in [answers] reads: nothing listening, or no answer.
+  SupervisorReach noAnswer = SupervisorReach.absent;
+
   /// The zone `/v1/status` names; setting one changes it.
   String? zone = 'UTC';
 
@@ -114,6 +117,15 @@ class FakeBox implements SupervisorApi {
   Future<SupervisorInfo?> info() async {
     await holdInfo?.future;
     return _next(answers);
+  }
+
+  @override
+  Future<({SupervisorReach reach, SupervisorInfo? info})> probe() async {
+    final info = await this.info();
+    return (
+      reach: info == null ? noAnswer : SupervisorReach.answered,
+      info: info,
+    );
   }
 
   @override
