@@ -148,12 +148,14 @@ Future<void> setTimezoneOnceConfirmed(
   String zone, {
   bool inPanel = false,
 }) async {
+  // Read before the dialog: the row may be gone by the time Apply is tapped.
+  final change = ref.read(timezoneChangeProvider.notifier);
   final confirmed = await showKalinkaDialog<bool>(
     context: context,
     builder: (_) => _ConfirmTimezone(zone: zone),
   );
   if (confirmed != true) return;
-  await ref.read(timezoneChangeProvider.notifier).apply(zone, inPanel: inPanel);
+  await change.apply(zone, inPanel: inPanel);
 }
 
 /// The zones a box offers, searchable, with this device's own first; pops the

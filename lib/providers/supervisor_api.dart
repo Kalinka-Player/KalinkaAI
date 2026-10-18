@@ -303,8 +303,10 @@ class DioSupervisorApi implements SupervisorApi {
         info: info,
       );
     } on DioException catch (e) {
+      // A 5xx is a supervisor that failed, not one that is missing.
+      final status = e.response?.statusCode;
       final absent =
-          e.response != null ||
+          (status != null && status < 500) ||
           (e.type == DioExceptionType.connectionError &&
               connectionRefused(e.error));
       return (
@@ -315,11 +317,13 @@ class DioSupervisorApi implements SupervisorApi {
   }
 
   @override
-  Future<String?> serverState() async {
+  Future<String?> serverState() => _statusField('core');
+
+  Future<String?> _statusField(String key) async {
     try {
       final data = (await _client.get('/v$_protocol/status')).data;
-      final core = data is Map ? data['core'] : null;
-      return core is String ? core : null;
+      final value = data is Map ? data[key] : null;
+      return value is String ? value : null;
     } on DioException {
       return null;
     }
@@ -350,15 +354,7 @@ class DioSupervisorApi implements SupervisorApi {
   }
 
   @override
-  Future<String?> timezone() async {
-    try {
-      final data = (await _client.get('/v$_protocol/status')).data;
-      final zone = data is Map ? data['timezone'] : null;
-      return zone is String ? zone : null;
-    } on DioException {
-      return null;
-    }
-  }
+  Future<String?> timezone() => _statusField('timezone');
 
   @override
   Future<List<String>?> timezones() async {
