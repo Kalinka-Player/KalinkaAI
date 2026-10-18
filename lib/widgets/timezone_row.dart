@@ -208,7 +208,7 @@ class _TimezonePickerState extends State<TimezonePicker> {
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.8,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

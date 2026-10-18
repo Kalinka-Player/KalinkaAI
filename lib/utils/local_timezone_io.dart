@@ -61,5 +61,7 @@ Future<String?> windowsTimezone({ProcessRunner run = Process.run}) async {
   if (result.exitCode != 0 || id is! String) return null;
   final country =
       ServicesBinding.instance.platformDispatcher.locale.countryCode;
-  return tzdataZoneFor(id.trim(), territory: country);
+  // tzutil appends _dstoff when daylight saving is turned off.
+  final zone = id.trim().replaceFirst(RegExp(r'_dstoff$'), '');
+  return tzdataZoneFor(zone, territory: country);
 }
