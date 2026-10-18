@@ -203,10 +203,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
         )
         .then((_) {
           if (!mounted) return;
-          final connectionState = ref.read(connectionStateProvider);
-          final isOffline =
-              connectionState == ConnectionStatus.reconnecting ||
-              connectionState == ConnectionStatus.offline;
+          final isOffline = ref.read(connectionStateProvider).isInterrupted;
           final command = _swipeIsNext == true
               ? const QueueCommand.next()
               : const QueueCommand.prev();
@@ -289,10 +286,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
       }
     });
     ref.listen(connectionStateProvider, (_, next) {
-      if (next == ConnectionStatus.offline ||
-          next == ConnectionStatus.reconnecting) {
-        _releaseTrackPreview();
-      }
+      if (next.isInterrupted) _releaseTrackPreview();
     });
     final queueSnapshot = ref.watch(
       playQueueStateStoreProvider.select(
