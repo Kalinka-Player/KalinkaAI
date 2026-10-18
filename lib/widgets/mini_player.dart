@@ -362,14 +362,8 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
               (_swipeIsNext == true ? nextTrack : prevTrack);
 
     final connectionState = ref.watch(connectionStateProvider);
-    final isOffline =
-        connectionState == ConnectionStatus.reconnecting ||
-        connectionState == ConnectionStatus.offline;
-    final progressLineMode = connectionState == ConnectionStatus.reconnecting
-        ? GradientProgressLineMode.reconnecting
-        : connectionState == ConnectionStatus.offline
-        ? GradientProgressLineMode.offline
-        : GradientProgressLineMode.normal;
+    final isOffline = connectionState.isInterrupted;
+    final progressLineMode = progressLineModeFor(connectionState);
 
     final durationMs = exclusive && queueSnapshot.fallbackDurationMs > 0
         ? queueSnapshot.fallbackDurationMs

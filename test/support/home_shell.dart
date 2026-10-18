@@ -32,9 +32,12 @@ class SettableQueue extends PlayQueueStateStore {
   void set(PlayQueueState next) => state = next;
 }
 
-class _Connected extends ConnectionStateNotifier {
+/// The connection, connected until set otherwise from the test.
+class SettableConnection extends ConnectionStateNotifier {
   @override
   ConnectionStatus build() => ConnectionStatus.connected;
+
+  void set(ConnectionStatus next) => state = next;
 }
 
 class _StillClock extends PlaybackTimeMsNotifier {
@@ -130,7 +133,7 @@ Future<ProviderContainer> pumpHomeShell(
       sharedPrefsProvider.overrideWithValue(prefs),
       kalinkaProxyProvider.overrideWithValue(api ?? HomeApi()),
       playQueueStateStoreProvider.overrideWith(() => queue),
-      connectionStateProvider.overrideWith(_Connected.new),
+      connectionStateProvider.overrideWith(SettableConnection.new),
       playbackTimeMsProvider.overrideWith(_StillClock.new),
       indexerStatusProvider.overrideWith(_IdleIndexer.new),
       sourceModulesProvider.overrideWith((ref) => sources),

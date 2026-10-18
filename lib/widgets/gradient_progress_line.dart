@@ -1,9 +1,18 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../providers/connection_state_provider.dart' show ConnectionStatus;
 import '../theme/app_theme.dart';
 
 enum GradientProgressLineMode { normal, reconnecting, offline }
+
+/// The line's mode for the connection to the server.
+GradientProgressLineMode progressLineModeFor(ConnectionStatus status) =>
+    switch (status) {
+      ConnectionStatus.reconnecting => GradientProgressLineMode.reconnecting,
+      ConnectionStatus.offline => GradientProgressLineMode.offline,
+      _ => GradientProgressLineMode.normal,
+    };
 
 /// A mini-player progress line with online/reconnecting/offline visual modes.
 ///

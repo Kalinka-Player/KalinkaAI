@@ -7,6 +7,7 @@ import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/data_model/playqueue_events.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/bit_perfect_provider.dart';
+import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/providers/renderer_provider.dart';
@@ -49,6 +50,11 @@ class _Time extends PlaybackTimeMsNotifier {
 class _Renderers extends RendererListNotifier {
   @override
   RendererListState build() => const RendererListState();
+}
+
+class _Connected extends ConnectionStateNotifier {
+  @override
+  ConnectionStatus build() => ConnectionStatus.connected;
 }
 
 class _Api extends KalinkaWsApi {
@@ -103,6 +109,7 @@ Future<_Api> _pump(WidgetTester tester, PlayQueueState state) async {
       playQueueStateStoreProvider.overrideWith(() => _Queue(state)),
       extDeviceStateStoreProvider.overrideWith(() => _Device()),
       playbackTimeMsProvider.overrideWith(() => _Time()),
+      connectionStateProvider.overrideWith(_Connected.new),
       rendererListProvider.overrideWith(() => _Renderers()),
       urlResolverProvider.overrideWithValue(UrlResolver('')),
       kalinkaWsApiProvider.overrideWith((ref) => _Api(ref)),
