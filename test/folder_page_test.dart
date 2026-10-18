@@ -285,7 +285,7 @@ void main() {
     for (final row in tester.widgetList<SearchTrackRow>(
       find.byType(SearchTrackRow),
     )) {
-      expect('Part ${row.folderTrackNumber}', row.item.name);
+      expect(row.item.name, 'Part ${row.folderTrackNumber}');
     }
   });
 
