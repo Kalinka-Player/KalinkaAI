@@ -112,15 +112,17 @@ Future<void> chooseTimezone(
 }) async {
   // Held until read, or the zone would be dropped while nothing shows it.
   final local = ref.listenManual(localTimezoneProvider.future, (_, _) {});
-  final String? localZone;
+  final (String?, List<String>?) found;
   try {
-    localZone = await local.read();
+    found = await (
+      local.read(),
+      ref.read(supervisorApiProvider)?.timezones() ?? Future.value(),
+    ).wait;
   } finally {
     local.close();
   }
   if (!context.mounted) return;
-  final zones = await ref.read(supervisorApiProvider)?.timezones();
-  if (!context.mounted) return;
+  final (localZone, zones) = found;
   if (zones == null) {
     ref
         .read(toastProvider.notifier)
@@ -182,21 +184,20 @@ class TimezonePicker extends StatefulWidget {
 
 class _TimezonePickerState extends State<TimezonePicker> {
   String _query = '';
-  String _needle = '';
-
-  bool _matches(String zone) =>
-      timezoneLabel(zone).toLowerCase().contains(_needle);
 
   @override
   Widget build(BuildContext context) {
+    final needle = timezoneLabel(_query).trim().toLowerCase();
+    bool matches(String zone) =>
+        timezoneLabel(zone).toLowerCase().contains(needle);
     final current = widget.current;
     final local = widget.local;
     final all = [
       if (current != null && !widget.zones.contains(current)) current,
       ...widget.zones,
-    ].where(_matches).toList();
+    ].where(matches).toList();
     final entries = <({String text, bool header})>[
-      if (local != null && _matches(local)) ...[
+      if (local != null && matches(local)) ...[
         (text: 'THIS DEVICE', header: true),
         (text: local, header: false),
       ],
@@ -219,10 +220,7 @@ class _TimezonePickerState extends State<TimezonePicker> {
                 key: const ValueKey('timezone-search'),
                 style: KalinkaTextStyles.textFieldInput,
                 decoration: kalinkaFieldDecoration(hint: 'Search time zones'),
-                onChanged: (value) => setState(() {
-                  _query = value;
-                  _needle = timezoneLabel(value).trim().toLowerCase();
-                }),
+                onChanged: (value) => setState(() => _query = value),
               ),
             ),
             Flexible(
