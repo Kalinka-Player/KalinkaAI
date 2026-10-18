@@ -1,6 +1,7 @@
-import 'package:dio/dio.dart' show Dio, DioException, Options;
+import 'package:dio/dio.dart' show Dio, DioException, DioExceptionType, Options;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../utils/local_platform.dart' show connectionRefused;
 import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart' show kalinkaHttpClient;
 
@@ -36,6 +37,18 @@ enum BoxAction {
   const BoxAction(this.wire);
 
   final String wire;
+}
+
+/// How a box's supervisor port answered.
+enum SupervisorReach {
+  answered,
+
+  /// Nothing listens there, or something that is no supervisor: a server
+  /// installed without one, or a box whose control page is turned off.
+  absent,
+
+  /// No answer in time, or the network failed on the way.
+  silent,
 }
 
 /// The supervisor's `GET /info`.
@@ -236,6 +249,9 @@ abstract class SupervisorApi {
   /// predates this API, or the box is unreachable.
   Future<SupervisorInfo?> info();
 
+  /// Like [info], saying which of those it is when there is none.
+  Future<({SupervisorReach reach, SupervisorInfo? info})> probe();
+
   /// The server's service state as systemd reports it, such as `active`,
   /// `activating` or `failed`; null when the box does not answer.
   Future<String?> serverState();
@@ -276,11 +292,25 @@ class DioSupervisorApi implements SupervisorApi {
   Uri get page => Uri.parse(_client.options.baseUrl).resolve('/');
 
   @override
-  Future<SupervisorInfo?> info() async {
+  Future<SupervisorInfo?> info() async => (await probe()).info;
+
+  @override
+  Future<({SupervisorReach reach, SupervisorInfo? info})> probe() async {
     try {
-      return SupervisorInfo.fromJson((await _client.get('/info')).data);
-    } on DioException {
-      return null;
+      final info = SupervisorInfo.fromJson((await _client.get('/info')).data);
+      return (
+        reach: info == null ? SupervisorReach.absent : SupervisorReach.answered,
+        info: info,
+      );
+    } on DioException catch (e) {
+      final absent =
+          e.response != null ||
+          (e.type == DioExceptionType.connectionError &&
+              connectionRefused(e.error));
+      return (
+        reach: absent ? SupervisorReach.absent : SupervisorReach.silent,
+        info: null,
+      );
     }
   }
 

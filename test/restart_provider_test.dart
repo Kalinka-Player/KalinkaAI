@@ -83,9 +83,9 @@ void main() {
             overrides: [
               sharedPrefsProvider.overrideWithValue(prefs),
               kalinkaProxyProvider.overrideWithValue(api),
-              boxControlProvider.overrideWith((ref) async {
+              boxProbeProvider.overrideWith((ref) async {
                 probes++;
-                return null;
+                return const BoxProbe.missing(NoBoxControl.noSupervisor);
               }),
             ],
           );

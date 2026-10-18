@@ -157,13 +157,25 @@ void main() {
     (
       'without a supervisor',
       null,
-      'The server keeps the time zone of the computer it runs on. Set it '
-          'there.',
+      'No box supervisor answers on this server, so it keeps the time zone '
+          'of the computer it runs on. Set it there.',
     ),
     (
       'whose supervisor cannot set it',
       supervisorInfo(),
       'Updating Kalinka on this box lets the app set its time zone.',
+    ),
+    (
+      'whose supervisor speaks another protocol',
+      const SupervisorInfo(
+        version: '9.0.0',
+        protocol: 3,
+        minProtocol: 2,
+        serverId: 'box-1',
+        actions: {setTimezoneAction},
+      ),
+      'The box’s supervisor and this app do not speak the same version. '
+          'Update both to set the time zone here.',
     ),
   ]) {
     testWidgets('a box $name shows the row disabled, saying why', (
@@ -178,6 +190,41 @@ void main() {
       await tester.tap(find.text('Time zone'));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('timezone-search')), findsNothing);
+      await _drain(tester);
+    });
+  }
+
+  for (final (name, box, reason) in [
+    (
+      'did not answer',
+      FakeBox(answers: [null])..noAnswer = SupervisorReach.silent,
+      'The box did not answer. Tap to try again.',
+    ),
+    (
+      'answers for another server',
+      FakeBox(
+        answers: [
+          supervisorInfo(serverId: 'box-2', actions: const {setTimezoneAction}),
+        ],
+      ),
+      'A different Kalinka box answers at this address. Tap to try again.',
+    ),
+  ]) {
+    testWidgets('a box that $name is looked for again on a tap', (
+      tester,
+    ) async {
+      await _atNetworkStep(tester, box);
+      expect(find.text(reason), findsOne);
+
+      box.answers
+        ..clear()
+        ..add(_setsTimezone);
+      await tester.tap(find.text('Time zone'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(reason), findsNothing);
+      expect(find.text('UTC'), findsOne);
+      expect(find.text('Use Europe/London'), findsOne);
       await _drain(tester);
     });
   }

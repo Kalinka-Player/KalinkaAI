@@ -187,7 +187,7 @@ class RestartNotifier extends Notifier<RestartState> {
       // Read the actual result and discover newly installed/removed controls.
       await ref.read(settingsProvider.notifier).loadConfig();
       if (!current()) return;
-      ref.invalidate(boxControlProvider);
+      ref.invalidate(boxProbeProvider);
       // Modules and their capabilities follow the settings just applied.
       ref.invalidate(modulesStateProvider);
       ref.invalidate(sourceModulesProvider);

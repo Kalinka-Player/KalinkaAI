@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show OSError, SocketException;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -31,6 +32,23 @@ class _Adapter implements HttpClientAdapter {
     }
     return response;
   }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// Fails each request with what [fail] makes of it.
+class _Failing implements HttpClientAdapter {
+  _Failing(this.fail);
+
+  final DioException Function(RequestOptions options) fail;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => throw fail(options);
 
   @override
   void close({bool force = false}) {}
@@ -119,6 +137,59 @@ void main() {
     test('a box whose server never ran has no identity', () async {
       final (api, _) = _api((_) => _json(200, {..._info, 'server_id': null}));
       expect((await api.info())!.serverId, isNull);
+    });
+  });
+
+  group('probe', () {
+    DioSupervisorApi failing(DioException Function(RequestOptions) fail) =>
+        DioSupervisorApi(
+          Dio(BaseOptions(baseUrl: 'http://kalinka.local:8001'))
+            ..httpClientAdapter = _Failing(fail),
+        );
+
+    DioException socket(RequestOptions options, String message, int errno) =>
+        DioException.connectionError(
+          requestOptions: options,
+          reason: message,
+          error: SocketException(message, osError: OSError(message, errno)),
+        );
+
+    test('a supervisor answers', () async {
+      final (api, _) = _api((_) => _json(200, _info));
+      final (:reach, :info) = await api.probe();
+      expect(reach, SupervisorReach.answered);
+      expect(info!.serverId, 'box-1');
+    });
+
+    test('a refused connection means no supervisor listens', () async {
+      final api = failing((o) => socket(o, 'Connection refused', 111));
+      final (:reach, :info) = await api.probe();
+      expect(reach, SupervisorReach.absent);
+      expect(info, isNull);
+    });
+
+    test('something else on the port is no supervisor', () async {
+      for (final reply in [
+        _json(404, {'detail': 'Not Found'}),
+        _json(200, {'name': 'other', 'protocol': 1}),
+      ]) {
+        final (api, _) = _api((_) => reply);
+        expect((await api.probe()).reach, SupervisorReach.absent);
+      }
+    });
+
+    test('a timeout or a lost route is a box that did not answer', () async {
+      for (final api in [
+        failing(
+          (o) => DioException.connectionTimeout(
+            requestOptions: o,
+            timeout: const Duration(seconds: 5),
+          ),
+        ),
+        failing((o) => socket(o, 'No route to host', 113)),
+      ]) {
+        expect((await api.probe()).reach, SupervisorReach.silent);
+      }
     });
   });
 
