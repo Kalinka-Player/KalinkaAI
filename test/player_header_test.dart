@@ -14,6 +14,7 @@ import 'package:kalinka/widgets/player_header.dart';
 import 'package:kalinka/widgets/player_view_switch.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
 
+import 'support/focus.dart';
 import 'support/home_shell.dart';
 
 class _Connected extends ConnectionStateNotifier {
@@ -32,6 +33,7 @@ Future<void> _pumpHeader(
   double scale = 1,
   bool tablet = false,
   bool reduceMotion = false,
+  bool away = false,
   VoidCallback? onClose,
 }) async {
   tester.view.physicalSize = Size(width, 600);
@@ -73,6 +75,7 @@ Future<void> _pumpHeader(
                 isTablet: tablet,
                 showingQueue: ref.watch(playerViewProvider) == PlayerView.queue,
                 onClose: onClose ?? () {},
+                away: away,
               ),
             ),
           ),
@@ -206,6 +209,41 @@ void main() {
     await tester.pumpAndSettle();
     semantics.dispose();
   });
+
+  for (final tablet in [false, true]) {
+    for (final away in [false, true]) {
+      testWidgets('${tablet ? 'tablet' : 'phone'} header '
+          '${away ? 'while the server is away' : 'when connected'}: the '
+          'output switcher ${away ? 'takes no input' : 'takes input'}, and '
+          'the view switch still works', (tester) async {
+        var closed = false;
+        await _pumpHeader(
+          tester,
+          tablet: tablet,
+          away: away,
+          onClose: () => closed = true,
+        );
+        final output = find.byType(
+          tablet ? RendererSwitcherDropdown : RendererSwitcherButton,
+        );
+
+        expect(output, findsOneWidget);
+        expect(output.hitTestable(), away ? findsNothing : findsOneWidget);
+        expect(await tabTo(tester, output), !away);
+
+        await tester.tap(_segment('QUEUE'));
+        await tester.pumpAndSettle();
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(PlayerViewSwitch)),
+        );
+        expect(container.read(playerViewProvider), PlayerView.queue);
+        if (!tablet) {
+          await tester.tap(find.byTooltip('Minimise player'));
+          expect(closed, isTrue);
+        }
+      });
+    }
+  }
 
   testWidgets('collapse action remains accessible after reflow', (
     tester,

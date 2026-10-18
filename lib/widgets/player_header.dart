@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import 'kiosk/kiosk_enter_button.dart';
+import 'mini_player.dart' show AwayDim;
 import 'player_view_switch.dart';
 import 'queue_actions.dart';
 import 'renderer_switcher.dart';
@@ -14,13 +15,26 @@ class PlayerHeader extends StatelessWidget {
   final VoidCallback? onClose;
   final Key? outputSwitcherKey;
 
+  /// The server is away: the output switcher takes no input, as the
+  /// mini-player's does. Closing and switching views still work.
+  final bool away;
+
   const PlayerHeader({
     super.key,
     required this.isTablet,
     required this.showingQueue,
     this.onClose,
     this.outputSwitcherKey,
+    this.away = false,
   });
+
+  Widget _output(Widget switcher) => AwayDim(
+    away: away,
+    child: IgnorePointer(
+      ignoring: away,
+      child: ExcludeFocus(excluding: away, child: switcher),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +58,9 @@ class PlayerHeader extends StatelessWidget {
                   const KioskEnterButton(),
                   const SizedBox(width: 8),
                   Flexible(
-                    child: RendererSwitcherDropdown(key: outputSwitcherKey),
+                    child: _output(
+                      RendererSwitcherDropdown(key: outputSwitcherKey),
+                    ),
                   ),
                 ],
               ),
@@ -78,7 +94,7 @@ class PlayerHeader extends StatelessWidget {
     );
     final trailing = showingQueue
         ? const QueueMenuButton()
-        : const RendererSwitcherButton(hitDiameter: 36, iconSize: 20);
+        : _output(const RendererSwitcherButton(hitDiameter: 36, iconSize: 20));
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
