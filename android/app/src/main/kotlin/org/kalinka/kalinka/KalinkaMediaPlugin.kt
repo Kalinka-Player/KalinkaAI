@@ -17,6 +17,7 @@ import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.util.TimeZone
 
 class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware {
 
@@ -117,6 +118,7 @@ class KalinkaMediaPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Activ
             }
             "hapticCorkPop" -> result.success(haptics?.corkPop() ?: false)
             "hapticDelete" -> result.success(haptics?.delete() ?: false)
+            "timeZone" -> result.success(TimeZone.getDefault().id)
             else -> result.notImplemented()
         }
     }
