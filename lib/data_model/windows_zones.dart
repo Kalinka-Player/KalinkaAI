@@ -47,10 +47,13 @@
 ///
 /// The UTC±hh zones list countries only: CLDR's `001` for them is an
 /// `Etc/GMT` offset, which a box does not offer. Dateline Standard Time, with
-/// nothing else, is left out.
+/// nothing else, is left out. So is a place whose clock no longer follows the
+/// Windows zone CLDR files it under, such as Vostok, since the box would then
+/// show a different time from the computer.
 const windowsZones = <String, Map<String, String>>{
   'Afghanistan Standard Time': {'001': 'Asia/Kabul'},
   'Alaskan Standard Time': {'001': 'America/Anchorage'},
+  'Alberta Standard Time': {'001': 'America/Edmonton'},
   'Aleutian Standard Time': {'001': 'America/Adak'},
   'Altai Standard Time': {'001': 'Asia/Barnaul'},
   'Arab Standard Time': {
@@ -78,6 +81,7 @@ const windowsZones = <String, Map<String, String>>{
   'Bangladesh Standard Time': {'001': 'Asia/Dhaka', 'BT': 'Asia/Thimphu'},
   'Belarus Standard Time': {'001': 'Europe/Minsk'},
   'Bougainville Standard Time': {'001': 'Pacific/Bougainville'},
+  'British Columbia Standard Time': {'001': 'America/Vancouver'},
   'Canada Central Standard Time': {'001': 'America/Regina'},
   'Cape Verde Standard Time': {'001': 'Atlantic/Cape_Verde'},
   'Caucasus Standard Time': {'001': 'Asia/Yerevan'},
@@ -120,7 +124,7 @@ const windowsZones = <String, Map<String, String>>{
   },
   'Central Standard Time': {
     '001': 'America/Chicago',
-    'CA': 'America/Winnipeg',
+    'CA': 'America/Rankin_Inlet',
     'MX': 'America/Matamoros',
   },
   'Central Standard Time (Mexico)': {'001': 'America/Mexico_City'},
@@ -183,6 +187,7 @@ const windowsZones = <String, Map<String, String>>{
     'BF': 'Africa/Ouagadougou',
     'CI': 'Africa/Abidjan',
     'GH': 'Africa/Accra',
+    'GL': 'America/Danmarkshavn',
     'GM': 'Africa/Banjul',
     'GN': 'Africa/Conakry',
     'GW': 'Africa/Bissau',
@@ -217,6 +222,7 @@ const windowsZones = <String, Map<String, String>>{
   'Magadan Standard Time': {'001': 'Asia/Magadan'},
   'Magallanes Standard Time': {'001': 'America/Punta_Arenas'},
   'Marquesas Standard Time': {'001': 'Pacific/Marquesas'},
+  'Manitoba Standard Time': {'001': 'America/Winnipeg'},
   'Mauritius Standard Time': {
     '001': 'Indian/Mauritius',
     'RE': 'Indian/Reunion',
@@ -230,7 +236,7 @@ const windowsZones = <String, Map<String, String>>{
   },
   'Mountain Standard Time': {
     '001': 'America/Denver',
-    'CA': 'America/Edmonton',
+    'CA': 'America/Cambridge_Bay',
     'MX': 'America/Ciudad_Juarez',
   },
   'Mountain Standard Time (Mexico)': {'001': 'America/Mazatlan'},
@@ -249,10 +255,7 @@ const windowsZones = <String, Map<String, String>>{
   'North Korea Standard Time': {'001': 'Asia/Pyongyang'},
   'Omsk Standard Time': {'001': 'Asia/Omsk'},
   'Pacific SA Standard Time': {'001': 'America/Santiago'},
-  'Pacific Standard Time': {
-    '001': 'America/Los_Angeles',
-    'CA': 'America/Vancouver',
-  },
+  'Pacific Standard Time': {'001': 'America/Los_Angeles'},
   'Pacific Standard Time (Mexico)': {'001': 'America/Tijuana'},
   'Pakistan Standard Time': {'001': 'Asia/Karachi'},
   'Paraguay Standard Time': {'001': 'America/Asuncion'},
