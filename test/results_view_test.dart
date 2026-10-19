@@ -20,6 +20,7 @@ import 'package:kalinka/widgets/search_cards/action_pill_button.dart';
 import 'package:kalinka/widgets/search/results_view.dart';
 import 'package:kalinka/widgets/search/inspired_block.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
+import 'package:kalinka/widgets/column_separator.dart';
 import 'package:kalinka/widgets/shelf_heading.dart';
 import 'package:kalinka/widgets/source_badge.dart';
 
@@ -490,7 +491,7 @@ void main() {
   /// Under a heading that names the source, in a group that is all tracks,
   /// "Track" and the source badge would only repeat it. The mixed name
   /// matches keep both.
-  testWidgets('a wide row gives the album a column of its own', (
+  testWidgets('a wide row gives the album and artist columns of their own', (
     tester,
   ) async {
     final api = _ScriptedApi(
@@ -505,12 +506,15 @@ void main() {
     await _pump(tester, api);
     await tester.pump(_settle);
 
-    expect(find.textContaining('Track · Someone'), findsOneWidget);
-    expect(find.textContaining('An Album'), findsOneWidget);
-    expect(
-      tester.getTopLeft(find.text('An Album')).dx,
-      greaterThan(tester.getTopRight(find.text('Named Song')).dx),
-    );
+    // The line under the title no longer repeats what the columns say.
+    expect(find.textContaining('Track · Someone'), findsNothing);
+    expect(find.text('Someone'), findsOneWidget);
+    expect(find.text('An Album'), findsOneWidget);
+    final title = tester.getTopRight(find.text('Named Song')).dx;
+    final artist = tester.getTopLeft(find.text('Someone')).dx;
+    expect(artist, greaterThan(title));
+    expect(tester.getTopLeft(find.text('An Album')).dx, greaterThan(artist));
+    expect(find.byType(ColumnSeparator), findsWidgets);
   });
 
   testWidgets('a source\'s rows say the artist and album, not the kind again', (
