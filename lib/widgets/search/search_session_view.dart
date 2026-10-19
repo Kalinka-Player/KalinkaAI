@@ -35,6 +35,14 @@ import 'results_view.dart';
 import 'search_composer.dart';
 import 'search_zero_state.dart';
 
+/// The resting search entry's widest: a readable field, not a bar across a
+/// desktop-wide pane. The overlay it lifts into keeps its width.
+const double _kSearchEntryMaxWidth = 600;
+
+/// How far a backdrop fades out before browsing's right edge, where it meets
+/// the player's pane, so it does not end in a cut.
+const double _kPaneEdgeFade = 165;
+
 /// How far the Discover backdrop reaches below the status inset. The bloom
 /// is drawn over all of it and [_kDiscoverFadeOut] dissolves it before the
 /// bottom, so this is the bloom's reach and not an edge anything can see.
@@ -509,6 +517,10 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           // A wide album sets its cover beside the tracks, not behind them.
           final onAlbum =
               albumPage && constraints.maxWidth < kAlbumSideLayoutWidth;
+          // Beside the player's pane, backdrops fade out before meeting it.
+          final besidePlayer = kalinkaSplitLayout(
+            MediaQuery.sizeOf(context).width,
+          );
           return ColoredBox(
             color: KalinkaColors.background,
             child: Stack(
@@ -546,23 +558,28 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                             ),
                         child: RepaintBoundary(
                           key: const ValueKey('discover-backdrop'),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: _kDiscoverBloom,
+                          child: _PaneEdgeFade(
+                            enabled: besidePlayer,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: _kDiscoverBloom,
+                                  ),
                                 ),
-                              ),
-                              DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: _kDiscoverFadeOut,
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: _kDiscoverFadeOut,
+                                  ),
                                 ),
-                              ),
-                              const IgnorePointer(
-                                child: ExcludeSemantics(child: _HeroArtwork()),
-                              ),
-                            ],
+                                const IgnorePointer(
+                                  child: ExcludeSemantics(
+                                    child: _HeroArtwork(),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -580,11 +597,14 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                     left: 0,
                     right: 0,
                     child: IgnorePointer(
-                      child: CatalogArtBackdrop(
-                        artPath: session.shownListing.artPath!,
-                        // A folder uses cover art; albums carry their own
-                        // crisp backdrop inside the scrolling header.
-                        fromCover: session.folderPath.isNotEmpty,
+                      child: _PaneEdgeFade(
+                        enabled: besidePlayer,
+                        child: CatalogArtBackdrop(
+                          artPath: session.shownListing.artPath!,
+                          // A folder uses cover art; albums carry their own
+                          // crisp backdrop inside the scrolling header.
+                          fromCover: session.folderPath.isNotEmpty,
+                        ),
                       ),
                     ),
                   ),
@@ -969,16 +989,20 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
         final surfaceWidth = constraints.maxWidth;
         final origin =
             _originRect ??
-            Rect.fromLTWH(16, targetTop + 120, surfaceWidth - 32, 56);
+            Rect.fromLTWH(
+              16,
+              targetTop + 120,
+              math.min(surfaceWidth - 32, _kSearchEntryMaxWidth),
+              56,
+            );
         return AnimatedBuilder(
           animation: _overlayCtrl,
           builder: (context, _) {
             final t = Curves.easeOutCubic.transform(_overlayCtrl.value);
-            // The card slides up from the entry and its left/right ease to the
-            // surface margins (they already sit at 16, so mostly vertical).
+            // The card slides up from the entry, as wide as the entry.
             final top = lerpDouble(origin.top, targetTop, t)!;
-            final left = lerpDouble(origin.left, 16, t)!;
-            final right = lerpDouble(surfaceWidth - origin.right, 16, t)!;
+            final left = origin.left;
+            final right = surfaceWidth - origin.right;
             // The panel unfurls (height grows) so the card stretches as it
             // opens.
             final panelReveal = Curves.easeOutCubic.transform(
@@ -1156,6 +1180,33 @@ class _ResultsReturnPill extends StatelessWidget {
   }
 }
 
+/// Fades [child] out over its last [_kPaneEdgeFade] at the right while
+/// [enabled].
+class _PaneEdgeFade extends StatelessWidget {
+  final bool enabled;
+  final Widget child;
+
+  const _PaneEdgeFade({required this.enabled, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled) return child;
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (bounds) => LinearGradient(
+        colors: const [Color(0xFFFFFFFF), Color(0x00FFFFFF)],
+        stops: [
+          bounds.width > 0
+              ? (1 - _kPaneEdgeFade / bounds.width).clamp(0.0, 1.0)
+              : 0.0,
+          1,
+        ],
+      ).createShader(bounds),
+      child: child,
+    );
+  }
+}
+
 /// The Discover hero: the Playfair question and the resting
 /// search entry, over the tinted header artwork on the right. The text keeps
 /// to the left half (wrapping as needed); the crimson bloom behind it is
@@ -1195,9 +1246,8 @@ class _DiscoverHero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          // A readable field, not a bar across a desktop-wide pane.
           ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
+            constraints: const BoxConstraints(maxWidth: _kSearchEntryMaxWidth),
             child: _SearchEntryButton(
               key: entryKey,
               hint: hint,
