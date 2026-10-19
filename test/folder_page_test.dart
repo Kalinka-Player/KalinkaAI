@@ -12,6 +12,7 @@ import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/selection_state_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/widgets/breadcrumb_crumb.dart';
+import 'package:kalinka/widgets/column_separator.dart';
 import 'package:kalinka/widgets/procedural_album_art.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search/folder_trail.dart';
@@ -238,8 +239,40 @@ void main() {
     expect(find.byType(SearchFolderRow), findsNWidgets(2));
     expect(_inTrail(find.text('Kind of Blue')), findsOneWidget);
     expect(find.text('Kind of Blue'), findsNWidgets(2));
-    expect(find.text('2 folders · 2 tracks · 15 min'), findsOneWidget);
+    // The page's own description, and each folder row's in its column.
+    expect(find.text('2 folders · 2 tracks · 15 min'), findsNWidgets(3));
   });
+
+  testWidgets(
+    'a wide folder row sets out what it holds on the tracks\' lines',
+    (tester) async {
+      tester.view.physicalSize = const Size(1100, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pumpLibrary(
+        tester,
+        openedFolders: [
+          _folder('Jazz', canAdd: false),
+          _folder('Kind of Blue'),
+        ],
+      );
+
+      final folderRow = find.byType(SearchFolderRow).first;
+      Finder inFolder(Finder f) => find.descendant(of: folderRow, matching: f);
+      expect(inFolder(find.text('2 folders')), findsOneWidget);
+      expect(inFolder(find.text('2 tracks · 15 min')), findsOneWidget);
+
+      List<double> lines(Finder row) => [
+        for (final element
+            in find
+                .descendant(of: row, matching: find.byType(ColumnSeparator))
+                .evaluate())
+          (element.renderObject! as RenderBox).localToGlobal(Offset.zero).dx,
+      ];
+      expect(lines(folderRow), isNotEmpty);
+      expect(lines(_trackRow('So What')), lines(folderRow));
+    },
+  );
 
   testWidgets('a folder numbers its tracks before their covers', (
     tester,

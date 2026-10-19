@@ -29,6 +29,13 @@ class _SearchFolderRowState extends ConsumerState<SearchFolderRow>
   Widget build(BuildContext context) {
     final item = widget.item;
     final subname = item.subname ?? '';
+    // What is directly inside, as the source words it: "2 folders · 5 tracks
+    // · 45 min". Wide rows set it in their columns, subfolders first.
+    final contents = item.catalog?.description ?? '';
+    final parts = contents.split(' · ').where((p) => p.isNotEmpty).toList();
+    bool isFolders(String part) => RegExp(r'\bfolders?$').hasMatch(part);
+    final folders = parts.where(isFolders).join(' · ');
+    final rest = parts.where((p) => !isFolders(p)).join(' · ');
     final selectionMode = ref.watch(
       selectionStateProvider.select((s) => s.isActive),
     );
@@ -133,7 +140,12 @@ class _SearchFolderRowState extends ConsumerState<SearchFolderRow>
                     ),
                   ),
                   const SizedBox(width: 12),
-                  RowColumnCells(columns: columns),
+                  RowColumnCells(
+                    columns: columns,
+                    artist: columns.artist ? folders : null,
+                    album: columns.artist ? rest : contents,
+                    sourceOf: item.id,
+                  ),
                   RowTrailing(
                     columns: columns,
                     child: const Icon(
