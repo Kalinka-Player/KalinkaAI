@@ -31,7 +31,8 @@ import 'package:kalinka/widgets/search/search_session_view.dart';
 /// SingleTickerProviderStateMixin threw on the first build.
 class _FakeApi implements KalinkaPlayerProxy {
   final bool withHomeContent;
-  _FakeApi({this.withHomeContent = false});
+  final List<SearchSuggestion> suggestions;
+  _FakeApi({this.withHomeContent = false, this.suggestions = const []});
 
   @override
   Future<BrowseItemsList> getFavorite(
@@ -82,7 +83,7 @@ class _FakeApi implements KalinkaPlayerProxy {
   Future<SearchSuggestionList> searchSuggestions({
     int count = 4,
     int? tzOffsetMin,
-  }) async => const SearchSuggestionList(suggestions: []);
+  }) async => SearchSuggestionList(suggestions: suggestions);
 
   @override
   Future<BrowseItemsList> searchMatches(
@@ -148,6 +149,7 @@ void main() {
   ProviderContainer makeContainer({
     List<ModuleInfo> modules = const [],
     bool withHomeContent = false,
+    List<SearchSuggestion> suggestions = const [],
   }) {
     if (withHomeContent) {
       prefs.setString(
@@ -170,7 +172,7 @@ void main() {
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
         kalinkaProxyProvider.overrideWithValue(
-          _FakeApi(withHomeContent: withHomeContent),
+          _FakeApi(withHomeContent: withHomeContent, suggestions: suggestions),
         ),
         sourceModulesProvider.overrideWith((ref) => modules),
         connectionStateProvider.overrideWith(_FixedConnection.new),
@@ -189,10 +191,12 @@ void main() {
     double textScale = 1,
     bool reduceMotion = false,
     double topInset = 0,
+    List<SearchSuggestion> suggestions = const [],
   }) async {
     final container = makeContainer(
       modules: modules,
       withHomeContent: withHomeContent,
+      suggestions: suggestions,
     );
     container.read(searchSessionProvider.notifier).refresh();
 
@@ -518,6 +522,52 @@ void main() {
     await tester.tap(find.byType(OverlayCloseButton));
     await tester.pumpAndSettle();
     expect(find.text('SMART SEARCH'), findsNothing);
+  });
+
+  group('curated prompts under the search entry', () {
+    const suggestions = [
+      SearchSuggestion(query: 'calm piano for deep focus'),
+      SearchSuggestion(query: 'upbeat indie'),
+      SearchSuggestion(query: 'something unvetted', experimental: true),
+    ];
+    final smartLibrary = ModuleInfo(
+      name: 'localfiles',
+      title: 'My Library',
+      enabled: true,
+      state: ModuleState.ready,
+      capabilities: const [ModuleCapability.aiSearch],
+    );
+
+    testWidgets('run as searches of exactly their words', (tester) async {
+      final container = await pumpSurface(
+        tester,
+        modules: [smartLibrary],
+        suggestions: suggestions,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('upbeat indie'), findsOneWidget);
+      expect(find.text('something unvetted'), findsNothing);
+      // Under the note on which sources answer.
+      expect(
+        tester.getTopLeft(find.text('upbeat indie')).dy,
+        greaterThan(
+          tester.getBottomLeft(find.textContaining('Smart search works')).dy,
+        ),
+      );
+
+      await tester.tap(find.text('calm piano for deep focus'));
+      await tester.pumpAndSettle();
+      final session = container.read(searchSessionProvider);
+      expect(session.activeView, FindMusicView.results);
+      expect(session.searchQuery, 'calm piano for deep focus');
+    });
+
+    testWidgets('are absent without smart search', (tester) async {
+      await pumpSurface(tester, suggestions: suggestions);
+      await tester.pumpAndSettle();
+      expect(find.text('upbeat indie'), findsNothing);
+    });
   });
 
   testWidgets('without smart search the card is a plain name search', (
