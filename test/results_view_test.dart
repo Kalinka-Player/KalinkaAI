@@ -490,6 +490,29 @@ void main() {
   /// Under a heading that names the source, in a group that is all tracks,
   /// "Track" and the source badge would only repeat it. The mixed name
   /// matches keep both.
+  testWidgets('a wide row gives the album a column of its own', (
+    tester,
+  ) async {
+    final api = _ScriptedApi(
+      matches: {
+        'qobuz': [_track('qobuz', 'm', 'Named Song', tier: MatchTier.exact)],
+      },
+      inspired: const {},
+    );
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(tester, api);
+    await tester.pump(_settle);
+
+    expect(find.textContaining('Track · Someone'), findsOneWidget);
+    expect(find.textContaining('An Album'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('An Album')).dx,
+      greaterThan(tester.getTopRight(find.text('Named Song')).dx),
+    );
+  });
+
   testWidgets('a source\'s rows say the artist and album, not the kind again', (
     tester,
   ) async {
@@ -503,6 +526,10 @@ void main() {
         ],
       },
     );
+    // A phone folds the album into the line under the title.
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await _pump(tester, api);
     await tester.pump(_settle);
 
