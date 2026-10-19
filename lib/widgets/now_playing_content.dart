@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
-import '../data_model/kalinka_ws_api.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/connection_state_provider.dart';
-import '../providers/kalinka_ws_api_provider.dart';
 import '../providers/now_playing_provider.dart';
 import '../providers/shell_nav_provider.dart';
 import '../providers/url_resolver.dart';
@@ -25,6 +23,7 @@ import 'player_sheet.dart';
 import 'player_header.dart';
 import 'renderer_switcher.dart';
 import 'transport_button.dart';
+import 'transport_controls.dart';
 import 'procedural_album_art.dart';
 import 'source_badge.dart';
 import 'stream_info_dialog.dart';
@@ -472,63 +471,20 @@ class _TransportControls extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final transport = ref.watch(transportStateProvider);
     final playerState = transport.playerState;
-    final playbackMode = ref.watch(playbackModeProvider);
-    final api = ref.read(kalinkaWsApiProvider);
-
-    final isShuffle = playbackMode.shuffle;
-    final isRepeatAll = playbackMode.repeatAll;
-    final isRepeatOne = playbackMode.repeatSingle;
+    final exclusive = transport.exclusive;
 
     // No track loaded → the transport buttons (prev / play-pause / next) go
     // inactive. Shuffle and repeat are switches that apply to whatever the
     // queue plays next, so they stay live, but only while the queue plays —
     // a plugin's playback takes neither.
-    final exclusive = transport.exclusive;
-    final hasTrack = transport.hasTrack;
-    final playPauseDisabled = transport.playPauseDisabled;
-    final canPrev = transport.canPrev;
-    final canNext = transport.canNext;
-
     return RepaintBoundary(
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          if (!exclusive)
-            TransportButton(
-              hitDiameter: 44,
-              onTap: () {
-                api.sendQueueCommand(
-                  QueueCommand.setPlaybackMode(
-                    shuffle: !isShuffle,
-                    repeatAll: playbackMode.repeatAll,
-                    repeatSingle: playbackMode.repeatSingle,
-                  ),
-                );
-              },
-              child: Icon(
-                Icons.shuffle,
-                size: 22,
-                color: isShuffle
-                    ? KalinkaColors.accent
-                    : KalinkaColors.textSecondary,
-              ),
-            ),
+          if (!exclusive) const ShuffleButton(),
+          const SkipButton(next: false),
           Opacity(
-            opacity: canPrev ? 1.0 : 0.4,
-            child: TransportButton(
-              hitDiameter: 52,
-              onTap: canPrev
-                  ? () => api.sendQueueCommand(const QueueCommand.prev())
-                  : null,
-              child: const Icon(
-                Icons.skip_previous_rounded,
-                size: 36,
-                color: KalinkaColors.textPrimary,
-              ),
-            ),
-          ),
-          Opacity(
-            opacity: hasTrack ? 1.0 : 0.4,
+            opacity: transport.hasTrack ? 1.0 : 0.4,
             child: TransportButton(
               hitDiameter: 68,
               background: Colors.white,
@@ -536,7 +492,7 @@ class _TransportControls extends ConsumerWidget {
               // disc, so use a dark tint instead of the default white-on-dark.
               splashColor: KalinkaColors.background.withValues(alpha: 0.18),
               highlightColor: KalinkaColors.background.withValues(alpha: 0.08),
-              onTap: playPauseDisabled
+              onTap: transport.playPauseDisabled
                   ? null
                   : () => sendPlayPauseCommand(
                       ref,
@@ -551,52 +507,8 @@ class _TransportControls extends ConsumerWidget {
               ),
             ),
           ),
-          Opacity(
-            opacity: canNext ? 1.0 : 0.4,
-            child: TransportButton(
-              hitDiameter: 52,
-              onTap: canNext
-                  ? () => api.sendQueueCommand(const QueueCommand.next())
-                  : null,
-              child: const Icon(
-                Icons.skip_next_rounded,
-                size: 36,
-                color: KalinkaColors.textPrimary,
-              ),
-            ),
-          ),
-          if (!exclusive)
-            TransportButton(
-              hitDiameter: 44,
-              onTap: () {
-                final bool newRepeatAll;
-                final bool newRepeatSingle;
-                if (isRepeatOne) {
-                  newRepeatAll = false;
-                  newRepeatSingle = false;
-                } else if (isRepeatAll) {
-                  newRepeatAll = false;
-                  newRepeatSingle = true;
-                } else {
-                  newRepeatAll = true;
-                  newRepeatSingle = false;
-                }
-                api.sendQueueCommand(
-                  QueueCommand.setPlaybackMode(
-                    shuffle: playbackMode.shuffle,
-                    repeatAll: newRepeatAll,
-                    repeatSingle: newRepeatSingle,
-                  ),
-                );
-              },
-              child: Icon(
-                isRepeatOne ? Icons.repeat_one : Icons.repeat,
-                size: 22,
-                color: (isRepeatAll || isRepeatOne)
-                    ? KalinkaColors.accent
-                    : KalinkaColors.textSecondary,
-              ),
-            ),
+          const SkipButton(next: true),
+          if (!exclusive) const RepeatButton(),
         ],
       ),
     );
