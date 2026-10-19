@@ -408,7 +408,12 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: Scaffold(body: MiniPlayer())),
+          // A phone's bar, which skips by swiping.
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Center(child: SizedBox(width: 390, child: MiniPlayer())),
+            ),
+          ),
         ),
       );
       await tester.pump();
@@ -879,7 +884,7 @@ void main() {
     'the widest bar stacks its extras outward and greys a fixed volume',
     (tester) async {
       final semantics = tester.ensureSemantics();
-      tester.view.physicalSize = const Size(1500, 800);
+      tester.view.physicalSize = const Size(1700, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await pumpMiniPlayer(
@@ -931,4 +936,59 @@ void main() {
       semantics.dispose();
     },
   );
+
+  testWidgets('a bar with room for skip buttons skips by them, not a swipe', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(700, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final container = ProviderContainer(
+      overrides: [
+        ..._buildOverrides(
+          queueState: PlayQueueState(
+            playbackState: PlaybackState(
+              index: 0,
+              state: PlayerStateType.playing,
+            ),
+            trackList: [
+              Track(id: 'a', title: 'First', duration: 100),
+              Track(id: 'b', title: 'Second', duration: 100),
+            ],
+            playbackMode: PlaybackMode.empty,
+            seq: 0,
+          ),
+        ),
+        kalinkaWsApiProvider.overrideWith((ref) => _FakeWsApi(ref)),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: MiniPlayer())),
+      ),
+    );
+    await tester.pump();
+    final api = container.read(kalinkaWsApiProvider) as _FakeWsApi;
+
+    // Shuffle and repeat sit outside previous and next.
+    final shuffle = tester.getCenter(find.byIcon(Icons.shuffle)).dx;
+    final previous = tester.getCenter(find.byIcon(Icons.skip_previous_rounded));
+    final next = tester.getCenter(find.byIcon(Icons.skip_next_rounded)).dx;
+    final repeat = tester.getCenter(find.byIcon(Icons.repeat)).dx;
+    expect(shuffle, lessThan(previous.dx));
+    expect(next, lessThan(repeat));
+
+    await tester.dragFrom(
+      tester.getCenter(find.text('First')),
+      const Offset(-300, 0),
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(api.sent, isEmpty);
+
+    await tester.tap(find.byIcon(Icons.skip_next_rounded));
+    await tester.pump();
+    expect(api.sent, [const QueueCommand.next()]);
+  });
 }

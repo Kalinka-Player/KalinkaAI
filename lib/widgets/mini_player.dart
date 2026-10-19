@@ -26,6 +26,7 @@ import 'procedural_album_art.dart';
 import 'renderer_switcher.dart';
 import 'source_badge.dart';
 import 'transport_button.dart';
+import 'transport_controls.dart';
 import 'volume_control_slider.dart';
 
 /// How long the mini-player takes to slide down out of view when the search
@@ -40,6 +41,8 @@ const Duration kMiniPlayerHideDuration = Duration(milliseconds: 260);
 /// - Swipe left  = next track (with resistance; haptic + auto-complete at 1/3)
 /// - Swipe right = previous track
 /// - Swipe up    = open now-playing overlay (same as tap)
+///
+/// A bar wide enough for previous and next buttons takes no sideways swipe.
 ///
 /// Only the track title/artist text participates in the carousel slide.
 /// Album art and play/pause button remain stationary.
@@ -449,7 +452,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     required PlayerStateType? playerState,
     required bool exclusive,
   }) {
-    final canSwipe = _latchedCurrentTrack == null;
+    // Once the bar has buttons to skip with, swiping no longer does.
+    final canSwipe =
+        _latchedCurrentTrack == null && tier.index < _MiniPlayerTier.skip.index;
     return AwayDim(
       away: isOffline,
       child: SizedBox(
@@ -500,7 +505,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                   // the slider in what is left before the extras.
                   if (wide)
                     SizedBox(
-                      width: (constraints.maxWidth * 0.24).clamp(220.0, 340.0),
+                      width: (constraints.maxWidth * 0.2).clamp(200.0, 320.0),
                       child: track,
                     )
                   else
@@ -565,7 +570,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                     child: tier.index >= _MiniPlayerTier.output.index
                         ? RendererSwitcherDropdown(
                             key: widget.outputSwitcherKey,
-                            maxNameWidth: 160,
+                            maxNameWidth: 140,
                           )
                         : RendererSwitcherButton(
                             key: widget.outputSwitcherKey,
@@ -574,12 +579,42 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                           ),
                   ),
                   const SizedBox(width: 4),
+                  // Skipping joins play first, then shuffle and repeat
+                  // outside them, as on the player.
+                  if (tier.index >= _MiniPlayerTier.modes.index)
+                    AwayLock(
+                      away: isOffline,
+                      child: const ShuffleButton(hitDiameter: 36, iconSize: 18),
+                    ),
+                  if (tier.index >= _MiniPlayerTier.skip.index)
+                    AwayLock(
+                      away: isOffline,
+                      child: const SkipButton(
+                        next: false,
+                        hitDiameter: 40,
+                        iconSize: 26,
+                      ),
+                    ),
                   _buildPlayPauseButton(
                     playerState: playerState,
                     isOffline: isOffline,
                     hasTrack: currentTrack != null,
                     exclusive: exclusive,
                   ),
+                  if (tier.index >= _MiniPlayerTier.skip.index)
+                    AwayLock(
+                      away: isOffline,
+                      child: const SkipButton(
+                        next: true,
+                        hitDiameter: 40,
+                        iconSize: 26,
+                      ),
+                    ),
+                  if (tier.index >= _MiniPlayerTier.modes.index)
+                    AwayLock(
+                      away: isOffline,
+                      child: const RepeatButton(hitDiameter: 36, iconSize: 18),
+                    ),
                 ],
               );
             },
@@ -710,28 +745,35 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
 }
 
 /// What the bar adds as it widens, each step keeping the ones before it:
-/// the output by name, a seekable slider in place of the top line, where the
-/// music comes from, the album and the stream's format, then volume. Each
-/// joins left of the one before, so the newest sits furthest from the
-/// controls.
+/// previous and next beside play, which take over from swiping; shuffle and
+/// repeat outside them; the output by name; a seekable slider in place of
+/// the top line; where the music comes from; the album and the stream's
+/// format; then volume. Each joins left of the one before, so the newest
+/// sits furthest from the controls.
 enum _MiniPlayerTier {
   compact,
+  skip,
+  modes,
   output,
   progress,
   source,
   details,
   volume;
 
-  static _MiniPlayerTier of(double width) => width >= 1400
+  static _MiniPlayerTier of(double width) => width >= 1650
       ? volume
-      : width >= 1150
+      : width >= 1450
       ? details
-      : width >= 1000
+      : width >= 1150
       ? source
-      : width >= 900
+      : width >= 1000
       ? progress
-      : width >= 520
+      : width >= 720
       ? output
+      : width >= 600
+      ? modes
+      : width >= 480
+      ? skip
       : compact;
 }
 
