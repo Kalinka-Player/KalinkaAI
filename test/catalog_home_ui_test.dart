@@ -949,10 +949,11 @@ void main() {
         tester.getTopLeft(tiles.last).dy,
         greaterThan(tester.getTopLeft(find.text('art')).dy),
       );
+      // Sources share the whole row; pinned compact tiles keep tile size.
       final sourceTile = find.byKey(const ValueKey('catalog-source-alpha'));
       expect(
-        tester.getSize(tiles.first).width,
         tester.getSize(sourceTile).width,
+        greaterThan(tester.getSize(tiles.first).width),
       );
       await tester.ensureVisible(tiles.first);
       await tester.pumpAndSettle();

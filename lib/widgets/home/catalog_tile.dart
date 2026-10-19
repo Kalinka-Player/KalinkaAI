@@ -24,29 +24,51 @@ class CatalogTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => _CatalogTileSurface(
-    tint: tint,
-    onTap: onTap,
-    child: ListTile(
-      enabled: onTap != null,
-      leading: Icon(icon, color: tint),
-      title: Text(
-        title,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: KalinkaTextStyles.trackRowTitle,
+  Widget build(BuildContext context) {
+    final scale = _TileScale.of(context);
+    return _CatalogTileSurface(
+      tint: tint,
+      onTap: onTap,
+      child: ListTile(
+        enabled: onTap != null,
+        leading: Icon(icon, color: tint, size: 24 * scale),
+        title: Text(
+          title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: _scaled(KalinkaTextStyles.trackRowTitle, scale),
+        ),
+        subtitle: subtitle == null || subtitle!.isEmpty
+            ? null
+            : Text(
+                subtitle!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: _scaled(KalinkaTextStyles.trackRowSubtitle, scale),
+              ),
+        trailing: onTap == null
+            ? null
+            : Icon(Icons.chevron_right, size: 24 * scale),
       ),
-      subtitle: subtitle == null || subtitle!.isEmpty
-          ? null
-          : Text(
-              subtitle!,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: KalinkaTextStyles.trackRowSubtitle,
-            ),
-      trailing: onTap == null ? null : const Icon(Icons.chevron_right),
-    ),
-  );
+    );
+  }
+}
+
+TextStyle _scaled(TextStyle style, double scale) =>
+    scale == 1 ? style : style.copyWith(fontSize: style.fontSize! * scale);
+
+/// How much larger than a compact catalog's a tile in a filling
+/// [CatalogTileGrid] draws: its text, icons and padding grow with its width.
+class _TileScale extends InheritedWidget {
+  final double scale;
+
+  const _TileScale({required this.scale, required super.child});
+
+  static double of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_TileScale>()?.scale ?? 1;
+
+  @override
+  bool updateShouldNotify(_TileScale oldWidget) => scale != oldWidget.scale;
 }
 
 /// Uses the source tile's own frame and list layout while its metadata loads.
@@ -57,6 +79,7 @@ class CatalogTileShimmer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scale = _TileScale.of(context);
     // Measure inside ListTile's inherited text style, just as its labels do.
     // Font metrics (not just font size) determine the tile's large-text height.
     Widget line(double fraction, TextStyle style) => Builder(
@@ -91,15 +114,21 @@ class CatalogTileShimmer extends StatelessWidget {
     return ShimmerPulse(
       child: _CatalogTileSurface(
         child: ListTile(
-          leading: const ShimmerBlock(width: 24, height: 24),
-          title: line(0.7, KalinkaTextStyles.trackRowTitle),
+          leading: ShimmerBlock(width: 24 * scale, height: 24 * scale),
+          title: line(0.7, _scaled(KalinkaTextStyles.trackRowTitle, scale)),
           subtitle: hasSubtitle
-              ? line(0.5, KalinkaTextStyles.trackRowSubtitle)
+              ? line(0.5, _scaled(KalinkaTextStyles.trackRowSubtitle, scale))
               : null,
-          trailing: const SizedBox(
-            width: 24,
-            height: 24,
-            child: Center(child: ShimmerBlock(width: 8, height: 16, radius: 4)),
+          trailing: SizedBox(
+            width: 24 * scale,
+            height: 24 * scale,
+            child: Center(
+              child: ShimmerBlock(
+                width: 8 * scale,
+                height: 16 * scale,
+                radius: 4,
+              ),
+            ),
           ),
         ),
       ),
@@ -115,41 +144,54 @@ class _CatalogTileSurface extends StatelessWidget {
   const _CatalogTileSurface({required this.child, this.tint, this.onTap});
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: tint == null
-        ? KalinkaColors.surfaceRaised
-        : Color.alphaBlend(
-            tint!.withValues(alpha: 0.14),
-            KalinkaColors.surfaceRaised,
+  Widget build(BuildContext context) {
+    final scale = _TileScale.of(context);
+    return Material(
+      color: tint == null
+          ? KalinkaColors.surfaceRaised
+          : Color.alphaBlend(
+              tint!.withValues(alpha: 0.14),
+              KalinkaColors.surfaceRaised,
+            ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: tint?.withValues(alpha: 0.30) ?? KalinkaColors.borderDefault,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        // Tighter than ListTile's defaults, so a half-width phone tile keeps
+        // room for its title.
+        child: ListTileTheme.merge(
+          contentPadding: EdgeInsetsDirectional.only(
+            start: 12 * scale,
+            end: 8 * scale,
           ),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12),
-      side: BorderSide(
-        color: tint?.withValues(alpha: 0.30) ?? KalinkaColors.borderDefault,
+          horizontalTitleGap: 8 * scale,
+          minLeadingWidth: 24 * scale,
+          minVerticalPadding: scale == 1 ? null : 10 * scale,
+          minTileHeight: scale == 1 ? null : 56 * scale,
+          child: Center(child: child),
+        ),
       ),
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      onTap: onTap,
-      // Tighter than ListTile's defaults, so a half-width phone tile keeps
-      // room for its title.
-      child: ListTileTheme.merge(
-        contentPadding: const EdgeInsetsDirectional.only(start: 12, end: 8),
-        horizontalTitleGap: 8,
-        minLeadingWidth: 24,
-        child: Center(child: child),
-      ),
-    ),
-  );
+    );
+  }
 }
 
 /// Equal-size tiles in reading order, allowing more room at large text sizes.
 /// A wide pane adds columns rather than stretching tiles, so a short row of
-/// sources keeps tile-sized tiles at its start.
+/// pinned catalogs keeps tile-sized tiles at its start.
+///
+/// With [fill], as for the music sources, the tiles share the whole width
+/// instead — a lone one spans it — in as few rows as fit, as evenly filled
+/// as their count allows, and draw larger as they widen.
 class CatalogTileGrid extends StatelessWidget {
   final List<Widget> children;
+  final bool fill;
 
-  const CatalogTileGrid({super.key, required this.children});
+  const CatalogTileGrid({super.key, required this.children, this.fill = false});
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -157,17 +199,33 @@ class CatalogTileGrid extends StatelessWidget {
       final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
       const gap = _RenderEqualHeightTileGrid._gap;
       // Two to a row on a 360dp phone, with room for "My Library".
-      final columns = ((constraints.maxWidth + gap) / (160 * scale + gap))
+      final fit = ((constraints.maxWidth + gap) / (160 * scale + gap))
           .floor()
           .clamp(1, 6);
-      return _EqualHeightTileGrid(
+      final columns = fill ? _balanced(fit) : fit;
+      final grid = _EqualHeightTileGrid(
         columns: columns,
-        maxTileWidth: 260 * scale,
+        maxTileWidth: fill ? double.infinity : 260 * scale,
         textDirection: Directionality.of(context),
         children: children,
       );
+      if (!fill) return grid;
+      final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+      return _TileScale(
+        scale: (width / 180 / scale).clamp(1.15, 1.6),
+        child: grid,
+      );
     },
   );
+
+  /// As many columns as fit, but no more than the tiles need, and the rows
+  /// as evenly filled as the count allows: five across three makes three and
+  /// two, not four and one.
+  int _balanced(int fit) {
+    if (children.isEmpty) return 1;
+    final rows = (children.length / fit).ceil();
+    return (children.length / rows).ceil();
+  }
 }
 
 class _EqualHeightTileGrid extends MultiChildRenderObjectWidget {

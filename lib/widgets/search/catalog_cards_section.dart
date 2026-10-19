@@ -45,6 +45,7 @@ class CatalogCardsSection extends ConsumerWidget {
             return _section(
               ref,
               CatalogTileGrid(
+                fill: true,
                 children: List.generate(
                   count ?? 3,
                   (_) => const CatalogTileShimmer(),
@@ -64,6 +65,7 @@ class CatalogCardsSection extends ConsumerWidget {
             return _section(
               ref,
               CatalogTileGrid(
+                fill: true,
                 children: [
                   for (final source in sources)
                     CatalogTile(

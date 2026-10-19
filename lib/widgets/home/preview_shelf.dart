@@ -13,6 +13,7 @@ import '../procedural_album_art.dart';
 import '../search/search_zero_state.dart' show kHomeSideInset;
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/track_row_support.dart' show CornerGlyph;
+import '../tap_highlight.dart' show kalinkaOverlay;
 
 /// A catalog's preview, drawn the way its source asked: `image` as square
 /// tiles with their text underneath, in rows that scroll sideways; any other
@@ -87,7 +88,8 @@ class _TileRail extends StatelessWidget {
   final int count;
   final int rows;
 
-  /// The tile's size on a phone; wider screens scale it up to 1.6 times that.
+  /// The tile's size on a phone; wider screens scale it up to 2.08 times
+  /// that.
   final double tileSize;
   final Widget Function(int index, double size) tile;
   final bool scrollable;
@@ -102,7 +104,8 @@ class _TileRail extends StatelessWidget {
     this.scrollable = true,
   });
 
-  static const _gap = 12.0;
+  /// Between tiles' frames; their art stands a frame's inset further apart.
+  static const _gap = 10.0;
   static const _rowGap = 16.0;
 
   /// Content width at which tiles show at [tileSize]; they grow in step
@@ -126,7 +129,8 @@ class _TileRail extends StatelessWidget {
       return height;
     }
 
-    return (tileSize +
+    return (2 * _Tile.inset +
+            tileSize +
             _Tile.artGap +
             line(_Tile.titleStyle) +
             line(_Tile.subtitleStyle))
@@ -140,7 +144,7 @@ class _TileRail extends StatelessWidget {
       builder: (context, constraints) {
         final size = (tileSize * constraints.maxWidth / _phoneWidth).clamp(
           tileSize,
-          tileSize * 1.6,
+          tileSize * 2.08,
         );
         final tileHeight = _tileHeight(context, size);
         final width = constraints.maxWidth + 2 * kHomeSideInset;
@@ -165,7 +169,11 @@ class _TileRail extends StatelessWidget {
                 physics: scrollable
                     ? null
                     : const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: kHomeSideInset),
+                // The first tile's art, not its frame, lines up with the
+                // list's inset.
+                padding: const EdgeInsets.symmetric(
+                  horizontal: kHomeSideInset - _Tile.inset,
+                ),
                 itemCount: columns,
                 separatorBuilder: (_, _) => const SizedBox(width: _gap),
                 itemBuilder: (context, column) => Column(
@@ -196,34 +204,54 @@ class _TilePlaceholder extends StatelessWidget {
     final scaler = MediaQuery.textScalerOf(context);
     Widget bar(double width, double fontSize) =>
         ShimmerBlock(width: width, height: scaler.scale(fontSize), radius: 4);
-    return SizedBox(
-      width: size,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ShimmerBlock(width: size, height: size, radius: 8),
-          const SizedBox(height: _Tile.artGap + 3),
-          bar(size * 0.75, 11),
-          const SizedBox(height: 6),
-          bar(size * 0.5, 9),
-        ],
+    return Padding(
+      padding: const EdgeInsets.all(_Tile.inset),
+      child: SizedBox(
+        width: size,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ShimmerBlock(width: size, height: size, radius: 8),
+            const SizedBox(height: _Tile.artGap + 3),
+            bar(size * 0.75, 11),
+            const SizedBox(height: 6),
+            bar(size * 0.5, 9),
+          ],
+        ),
       ),
     );
   }
 }
 
 /// Art above, title and a line on what it is below. A track plays; anything
-/// browsable opens.
-class _Tile extends ConsumerWidget {
+/// browsable opens. Under the pointer, held or focused, the whole card is
+/// lifted and outlined.
+class _Tile extends ConsumerStatefulWidget {
   final BrowseItem item;
   final double size;
   final ValueChanged<BrowseItem> onOpen;
 
   const _Tile({required this.item, required this.size, required this.onOpen});
 
+  /// Between the card's frame and its art and text.
+  static const inset = 6.0;
   static const artGap = 8.0;
   static final titleStyle = KalinkaTextStyles.trackRowTitle;
   static final subtitleStyle = KalinkaTextStyles.trackRowSubtitle;
+
+  @override
+  ConsumerState<_Tile> createState() => _TileState();
+}
+
+class _TileState extends ConsumerState<_Tile> {
+  /// Concentric with the art's corners, a frame's inset out.
+  static final _frame = BorderRadius.circular(8 + _Tile.inset);
+
+  bool _hovered = false;
+  bool _focused = false;
+  bool _pressed = false;
+
+  BrowseItem get item => widget.item;
 
   String get _title =>
       item.album?.title ??
@@ -248,7 +276,7 @@ class _Tile extends ConsumerWidget {
     return item.subname ?? '';
   }
 
-  Future<void> _play(WidgetRef ref) async {
+  Future<void> _play() async {
     final api = ref.read(kalinkaProxyProvider);
     final toast = ref.read(toastProvider.notifier);
     try {
@@ -261,7 +289,8 @@ class _Tile extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final size = widget.size;
     final path =
         item.image?.large ?? item.image?.small ?? item.image?.thumbnail;
     final url = path == null ? null : ref.watch(urlResolverProvider).abs(path);
@@ -277,57 +306,77 @@ class _Tile extends ConsumerWidget {
       button: true,
       label: subtitle.isEmpty ? _title : '$_title, $subtitle',
       excludeSemantics: true,
-      child: SizedBox(
-        width: size,
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            onTap: playable
-                ? () => _play(ref)
-                : item.canBrowse
-                ? () => onOpen(item)
-                : null,
-            borderRadius: BorderRadius.circular(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                isArtist
-                    ? ClipOval(child: art)
-                    : ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: switch (_kind) {
-                          null => art,
-                          final kind => Stack(
-                            children: [
-                              art,
-                              // Grows with the tile, from the rows' size on a
-                              // phone.
-                              PositionedDirectional(
-                                end: 6 * size / 128,
-                                bottom: 6 * size / 128,
-                                child: SizedBox.square(
-                                  dimension: 16 * size / 128,
-                                  child: FittedBox(child: CornerGlyph(kind)),
-                                ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: playable
+              ? _play
+              : item.canBrowse
+              ? () => widget.onOpen(item)
+              : null,
+          onHover: (value) => setState(() => _hovered = value),
+          onFocusChange: (value) => setState(() => _focused = value),
+          onHighlightChanged: (value) => setState(() => _pressed = value),
+          overlayColor: kalinkaOverlay,
+          borderRadius: _frame,
+          child: DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: BoxDecoration(
+              borderRadius: _frame,
+              border: Border.all(
+                color: _hovered || _focused || _pressed
+                    ? KalinkaColors.borderDefault
+                    : Colors.transparent,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(_Tile.inset),
+              child: SizedBox(
+                width: size,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    isArtist
+                        ? ClipOval(child: art)
+                        : ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: switch (_kind) {
+                              null => art,
+                              final kind => Stack(
+                                children: [
+                                  art,
+                                  // Grows with the tile, from the rows' size on a
+                                  // phone.
+                                  PositionedDirectional(
+                                    end: 6 * size / 128,
+                                    bottom: 6 * size / 128,
+                                    child: SizedBox.square(
+                                      dimension: 16 * size / 128,
+                                      child: FittedBox(
+                                        child: CornerGlyph(kind),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            },
                           ),
-                        },
-                      ),
-                const SizedBox(height: artGap),
-                Text(
-                  _title,
-                  style: titleStyle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                    const SizedBox(height: _Tile.artGap),
+                    Text(
+                      _title,
+                      style: _Tile.titleStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      subtitle,
+                      style: _Tile.subtitleStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-                Text(
-                  subtitle,
-                  style: subtitleStyle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+              ),
             ),
           ),
         ),
