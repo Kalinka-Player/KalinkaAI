@@ -14,6 +14,7 @@ import '../swipe_to_act_row.dart';
 import 'browse_navigation_scope.dart';
 import 'long_press_ring_painter.dart';
 import 'open_chevron_button.dart';
+import 'row_columns.dart';
 import 'row_play_button.dart';
 import 'track_row_support.dart';
 
@@ -92,13 +93,12 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
         ? urlResolver.abs(imageUrl)
         : null;
 
-    final subtitleParts = <String>[
-      if (artist.isNotEmpty) artist,
+    String subtitleFor(RowColumns columns) => [
+      if (artist.isNotEmpty && !columns.artist) artist,
       if (album?.year != null) '${album!.year}',
       if (trackCount != null)
         '$trackCount ${trackCount == 1 ? 'track' : 'tracks'}',
-    ];
-    final subtitle = subtitleParts.join(' \u00B7 ');
+    ].join(' \u00B7 ');
 
     return SwipeToActRow(
       enabled: !selectionMode,
@@ -124,149 +124,173 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
         onLongPressEnd: selectionMode ? null : (_) => cancelLongPressRing(),
         onLongPressCancel: selectionMode ? null : cancelLongPressRing,
         behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: EdgeInsets.only(
-            top: 8,
-            bottom: 8,
-            left: selectionMode && isSelected ? 0 : 3,
-            right: 0,
-          ),
-          decoration: BoxDecoration(
-            color: selectionMode && isSelected
-                ? KalinkaColors.accent.withValues(alpha: 0.07)
-                : Colors.transparent,
-            border: selectionMode && isSelected
-                ? const Border(
-                    left: BorderSide(color: KalinkaColors.accent, width: 3),
-                  )
-                : null,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Thumbnail 56x56 with selection overlay
-              SizedBox(
-                width: 60,
-                height: 60,
-                child: Stack(
-                  children: [
-                    // Note: previously wrapped in a Container with
-                    // BoxShadow(blurRadius: 6). Each blurred shadow
-                    // forced a saveLayer + Gaussian blur shader pass on
-                    // the GPU, and several album/playlist rows can be
-                    // on screen at once. Tracing showed this was the
-                    // dominant scroll-time cost on the zero-state
-                    // surface (BASED ON NOW PLAYING packs many
-                    // shadow-bearing rows into the first viewport).
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: resolvedImageUrl != null
-                          ? Image.network(
-                              resolvedImageUrl,
-                              width: 60,
-                              height: 60,
-                              cacheWidth: 180,
-                              cacheHeight: 180,
-                              fit: BoxFit.cover,
-                              gaplessPlayback: true,
-                              filterQuality: FilterQuality.low,
-                              errorBuilder: (_, _, _) => ProceduralAlbumArt(
+        child: RowColumnsScope(
+          builder: (context, columns) => AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: EdgeInsets.only(
+              top: 8,
+              bottom: 8,
+              left: selectionMode && isSelected ? 0 : 3,
+              right: 0,
+            ),
+            decoration: BoxDecoration(
+              color: selectionMode && isSelected
+                  ? KalinkaColors.accent.withValues(alpha: 0.07)
+                  : Colors.transparent,
+              border: selectionMode && isSelected
+                  ? const Border(
+                      left: BorderSide(color: KalinkaColors.accent, width: 3),
+                    )
+                  : null,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Thumbnail 56x56 with selection overlay
+                SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: Stack(
+                    children: [
+                      // Note: previously wrapped in a Container with
+                      // BoxShadow(blurRadius: 6). Each blurred shadow
+                      // forced a saveLayer + Gaussian blur shader pass on
+                      // the GPU, and several album/playlist rows can be
+                      // on screen at once. Tracing showed this was the
+                      // dominant scroll-time cost on the zero-state
+                      // surface (BASED ON NOW PLAYING packs many
+                      // shadow-bearing rows into the first viewport).
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: resolvedImageUrl != null
+                            ? Image.network(
+                                resolvedImageUrl,
+                                width: 60,
+                                height: 60,
+                                cacheWidth: 180,
+                                cacheHeight: 180,
+                                fit: BoxFit.cover,
+                                gaplessPlayback: true,
+                                filterQuality: FilterQuality.low,
+                                errorBuilder: (_, _, _) => ProceduralAlbumArt(
+                                  trackId: widget.item.id,
+                                  size: 60,
+                                ),
+                              )
+                            : ProceduralAlbumArt(
                                 trackId: widget.item.id,
                                 size: 60,
                               ),
-                            )
-                          : ProceduralAlbumArt(
-                              trackId: widget.item.id,
-                              size: 60,
+                      ),
+                      // Long-press ring
+                      if (longPressing && longPressProgress > 0)
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: LongPressRingPainter(
+                              progress: longPressProgress,
+                              color: KalinkaColors.accent,
                             ),
-                    ),
-                    // Long-press ring
-                    if (longPressing && longPressProgress > 0)
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: LongPressRingPainter(
-                            progress: longPressProgress,
-                            color: KalinkaColors.accent,
                           ),
                         ),
-                      ),
-                    // Selection overlay
-                    if (selectionMode && isSelected)
-                      Positioned.fill(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: KalinkaColors.accent.withValues(alpha: 0.4),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            isPartial ? Icons.remove : Icons.check,
-                            color: Colors.white,
-                            size: 24,
+                      // Selection overlay
+                      if (selectionMode && isSelected)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: KalinkaColors.accent.withValues(
+                                alpha: 0.4,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              isPartial ? Icons.remove : Icons.check,
+                              color: Colors.white,
+                              size: 24,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              // Info column
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ...matchBadge(widget.item),
-                    Text(
-                      title,
-                      style: KalinkaTextStyles.trackRowTitle.copyWith(
-                        color: selectionMode && isSelected
-                            ? KalinkaColors.accentTint
-                            : null,
+                const SizedBox(width: 12),
+                // Info column
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ...matchBadge(widget.item),
+                      Text(
+                        title,
+                        style: KalinkaTextStyles.trackRowTitle.copyWith(
+                          color: selectionMode && isSelected
+                              ? KalinkaColors.accentTint
+                              : null,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        if (sourceBadgeVisible(ref, widget.item.id)) ...[
-                          SourceBadge(entityId: widget.item.id),
-                          const SizedBox(width: 6),
-                        ],
-                        Expanded(
-                          child: Text.rich(
-                            entityTypeSubtitle('Album', subtitle),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          if (!columns.source &&
+                              sourceBadgeVisible(ref, widget.item.id)) ...[
+                            SourceBadge(entityId: widget.item.id),
+                            const SizedBox(width: 6),
+                          ],
+                          Expanded(
+                            child: Text.rich(
+                              entityTypeSubtitle('Album', subtitleFor(columns)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
+                        ],
+                      ),
+                      if (genre != null) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: KalinkaColors.surfaceElevated,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(genre, style: KalinkaTextStyles.tagPill),
                         ),
                       ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (columns.any)
+                  SizedBox(
+                    height: 60,
+                    child: Center(
+                      child: RowColumnCells(
+                        columns: columns,
+                        artist: artist,
+                        sourceOf: widget.item.id,
+                      ),
                     ),
-                    if (genre != null) ...[
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: KalinkaColors.surfaceElevated,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(genre, style: KalinkaTextStyles.tagPill),
+                  ),
+                RowTrailing(
+                  columns: columns,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.item.canAdd && !selectionMode)
+                        RowPlayButton(item: widget.item),
+                      OpenChevronButton(
+                        name: title,
+                        onTap: () => openBrowsable(context, ref, widget.item),
                       ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              if (widget.item.canAdd && !selectionMode)
-                RowPlayButton(item: widget.item),
-              OpenChevronButton(
-                name: title,
-                onTap: () => openBrowsable(context, ref, widget.item),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

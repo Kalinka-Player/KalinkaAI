@@ -10,6 +10,7 @@ import 'action_pill_button.dart';
 import 'browse_navigation_scope.dart';
 import 'collection_identity.dart';
 import 'open_chevron_button.dart';
+import 'row_columns.dart';
 import 'row_play_button.dart';
 import 'track_row_support.dart';
 
@@ -58,6 +59,7 @@ class _CollectionRowState extends ConsumerState<CollectionRow>
 
     return CollectionFace(
       item: widget.item,
+      listed: true,
       selected: selected && !editing,
       partial: partial,
       pressProgress: longPressing ? longPressProgress : 0,
@@ -189,6 +191,9 @@ class CollectionFace extends ConsumerWidget {
   /// An action drawn beside the name, where the row carries one.
   final Widget? nameAction;
 
+  /// Keeps a listing's columns, empty, so its lines run unbroken past it.
+  final bool listed;
+
   const CollectionFace({
     super.key,
     required this.item,
@@ -200,6 +205,7 @@ class CollectionFace extends ConsumerWidget {
     this.onSelectPressStart,
     this.onSelectPressStop,
     this.nameAction,
+    this.listed = false,
   });
 
   @override
@@ -217,38 +223,48 @@ class CollectionFace extends ConsumerWidget {
             : (_) => onSelectPressStop!(),
         onLongPressCancel: onSelectPressStop,
         behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          // The 3px the edge takes comes out of the inset, so selecting does
-          // not nudge the row sideways.
-          padding: EdgeInsets.only(top: 10, bottom: 10, left: selected ? 0 : 3),
-          decoration: BoxDecoration(
-            color: selected
-                ? KalinkaColors.accent.withValues(alpha: 0.07)
-                : Colors.transparent,
-            border: selected
-                ? const Border(
-                    left: BorderSide(color: KalinkaColors.accent, width: 3),
-                  )
-                : null,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: CollectionIdentity(
-                  item: item,
-                  chosen: selected,
-                  nameAction: nameAction,
-                  coverMark: selected
-                      ? (partial ? Icons.remove : Icons.check)
-                      : null,
-                  pressProgress: pressProgress,
-                ),
+        child: RowColumnsScope(
+          builder: (context, measured) {
+            final columns = listed ? measured : RowColumns.none;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              // The 3px the edge takes comes out of the inset, so selecting does
+              // not nudge the row sideways.
+              padding: EdgeInsets.only(
+                top: 10,
+                bottom: 10,
+                left: selected ? 0 : 3,
               ),
-              const SizedBox(width: 6),
-              trailing,
-            ],
-          ),
+              decoration: BoxDecoration(
+                color: selected
+                    ? KalinkaColors.accent.withValues(alpha: 0.07)
+                    : Colors.transparent,
+                border: selected
+                    ? const Border(
+                        left: BorderSide(color: KalinkaColors.accent, width: 3),
+                      )
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: CollectionIdentity(
+                      item: item,
+                      chosen: selected,
+                      nameAction: nameAction,
+                      coverMark: selected
+                          ? (partial ? Icons.remove : Icons.check)
+                          : null,
+                      pressProgress: pressProgress,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  RowColumnCells(columns: columns),
+                  RowTrailing(columns: columns, child: trailing),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );

@@ -14,6 +14,7 @@ import '../source_badge.dart';
 import '../swipe_to_act_row.dart';
 import '../track_tile_layout.dart';
 import 'long_press_ring_painter.dart';
+import 'row_columns.dart';
 import 'track_row_support.dart';
 
 /// Track row for search results.
@@ -49,9 +50,6 @@ class SearchTrackRow extends ConsumerStatefulWidget {
   /// identical tracks it is.
   final String? containerId;
   final int? containerIndex;
-
-  /// The narrowest a row's text gives the album a column of its own.
-  static const double albumColumnMinWidth = 560;
 
   /// Fits three digits of the 14px mono numeral; longer numbers scale down.
   static const double folderNumberWidth = 28;
@@ -198,9 +196,9 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     final subtitle = inAlbum
         ? (artist.trim().toLowerCase() == albumArtist ? '' : artist)
         : [artist, album].where((s) => s.isNotEmpty).join(' \u00B7 ');
-    // Where the row is wide enough, the album has a column of its own and
-    // the line under the title keeps the artist.
-    final albumColumn = !inAlbum && widget.folderTrackNumber == null;
+    // Where the row is wide enough, the album, then the artist, then the
+    // source take columns of their own, leaving the line under the title.
+    final columnsAllowed = !inAlbum;
     final duration = formatTrackDuration(
       track?.duration != null ? track!.duration * 1000 : null,
     );
@@ -270,7 +268,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
       ),
     );
 
-    final tile = TrackTileLayout(
+    Widget tileFor(RowColumns columns) => TrackTileLayout(
       // Match the album/artist rows' 3px artwork inset — the default
       // TrackTileLayout left padding (12) pushed track artwork out of line.
       // Right 8 lands the duration on the chevrons'/chips' right edge.
@@ -324,12 +322,18 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
             ),
         ],
       ),
-      content: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide =
-              albumColumn &&
-              constraints.maxWidth >= SearchTrackRow.albumColumnMinWidth;
-          Widget details(String subtitle) => Column(
+      content: Builder(
+        builder: (context) {
+          final line = !columns.any
+              ? subtitle
+              : columns.artist
+              ? ''
+              : artist;
+          final badge =
+              widget.labelled &&
+              !columns.source &&
+              sourceBadgeVisible(ref, widget.item.id);
+          final details = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -345,13 +349,13 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
                 maxLines: inAlbum ? 2 : 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (!inAlbum || subtitle.isNotEmpty) ...[
+              if (line.isNotEmpty ||
+                  !inAlbum && (widget.labelled || !columns.any)) ...[
                 const SizedBox(height: 2),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    if (widget.labelled &&
-                        sourceBadgeVisible(ref, widget.item.id)) ...[
+                    if (badge) ...[
                       SourceBadge(
                         entityId: widget.item.id,
                         size: SourceBadgeSize.standard,
@@ -361,12 +365,12 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
                     Expanded(
                       child: widget.labelled
                           ? Text.rich(
-                              entityTypeSubtitle('Track', subtitle),
+                              entityTypeSubtitle('Track', line),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             )
                           : Text(
-                              subtitle,
+                              line,
                               style: KalinkaTextStyles.trackRowSubtitle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -377,41 +381,45 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
               ],
             ],
           );
-          if (!wide) return details(subtitle);
+          if (!columns.any) return details;
           return Row(
             children: [
-              Expanded(flex: 5, child: details(artist)),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 4,
-                child: Text(
-                  album,
-                  style: KalinkaTextStyles.trackRowSubtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              Expanded(child: details),
+              RowColumnCells(
+                columns: columns,
+                album: album,
+                artist: artist,
+                sourceOf: widget.item.id,
               ),
             ],
           );
         },
       ),
-      trailing: duration != null || showBars
+      // Right of the columns the duration keeps the slot the other rows'
+      // controls take, past the layout's spacing and padding.
+      trailing: columns.any
+          ? RowTrailing(
+              columns: columns,
+              inset: 16,
+              child: TrackRowTrailing(duration: duration, current: showBars),
+            )
+          : duration != null || showBars
           ? TrackRowTrailing(duration: duration, current: showBars)
           : null,
     );
     // Folder rows keep their cover, so the number gets a column before it.
-    final tileChild = widget.folderTrackNumber == null
-        ? tile
-        : Row(
-            children: [
-              SizedBox(
-                width: SearchTrackRow.folderNumberWidth,
-                child: numeral(),
-              ),
-              Expanded(child: tile),
-            ],
-          );
-
+    final tileChild = RowColumnsScope(
+      builder: (context, measured) {
+        final tile = tileFor(columnsAllowed ? measured : RowColumns.none);
+        if (widget.folderTrackNumber == null) return tile;
+        return Row(
+          children: [
+            SizedBox(width: SearchTrackRow.folderNumberWidth, child: numeral()),
+            Expanded(child: tile),
+          ],
+        );
+      },
+    );
     void activate() {
       if (selectionMode) {
         ref.read(selectionStateProvider.notifier).toggle(widget.item.id);

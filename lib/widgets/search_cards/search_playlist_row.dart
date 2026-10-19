@@ -14,6 +14,7 @@ import '../swipe_to_act_row.dart';
 import 'browse_navigation_scope.dart';
 import 'long_press_ring_painter.dart';
 import 'open_chevron_button.dart';
+import 'row_columns.dart';
 import 'row_play_button.dart';
 import 'track_row_support.dart';
 
@@ -122,146 +123,169 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
         onLongPressEnd: selectionMode ? null : (_) => cancelLongPressRing(),
         onLongPressCancel: selectionMode ? null : cancelLongPressRing,
         behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: EdgeInsets.only(
-            top: 8,
-            bottom: 8,
-            left: selectionMode && isSelected ? 0 : 3,
-            right: 0,
-          ),
-          decoration: BoxDecoration(
-            color: selectionMode && isSelected
-                ? KalinkaColors.accent.withValues(alpha: 0.07)
-                : Colors.transparent,
-            border: selectionMode && isSelected
-                ? const Border(
-                    left: BorderSide(color: KalinkaColors.accent, width: 3),
-                  )
-                : null,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Thumbnail 56x56 with mosaic overlay
-              SizedBox(
-                width: 56,
-                height: 56,
-                child: Stack(
-                  children: [
-                    // Note: previously wrapped in a Container with
-                    // BoxShadow(blurRadius: 6). Removed for the same
-                    // GPU/saveLayer reason as the album row — see
-                    // comment in search_album_row.dart.
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Stack(
-                        children: [
-                          if (resolvedImageUrl != null)
-                            Image.network(
-                              resolvedImageUrl,
-                              fit: BoxFit.cover,
-                              width: 56,
-                              height: 56,
-                              cacheWidth: 168,
-                              cacheHeight: 168,
-                              gaplessPlayback: true,
-                              filterQuality: FilterQuality.low,
-                              errorBuilder: (context, error, stackTrace) {
-                                return ProceduralAlbumArt(
-                                  trackId: widget.item.id,
-                                  size: 56,
-                                );
-                              },
-                            )
-                          else
-                            ProceduralAlbumArt(
-                              trackId: widget.item.id,
-                              size: 56,
+        child: RowColumnsScope(
+          builder: (context, columns) => AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: EdgeInsets.only(
+              top: 8,
+              bottom: 8,
+              left: selectionMode && isSelected ? 0 : 3,
+              right: 0,
+            ),
+            decoration: BoxDecoration(
+              color: selectionMode && isSelected
+                  ? KalinkaColors.accent.withValues(alpha: 0.07)
+                  : Colors.transparent,
+              border: selectionMode && isSelected
+                  ? const Border(
+                      left: BorderSide(color: KalinkaColors.accent, width: 3),
+                    )
+                  : null,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Thumbnail 56x56 with mosaic overlay
+                SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: Stack(
+                    children: [
+                      // Note: previously wrapped in a Container with
+                      // BoxShadow(blurRadius: 6). Removed for the same
+                      // GPU/saveLayer reason as the album row — see
+                      // comment in search_album_row.dart.
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Stack(
+                          children: [
+                            if (resolvedImageUrl != null)
+                              Image.network(
+                                resolvedImageUrl,
+                                fit: BoxFit.cover,
+                                width: 56,
+                                height: 56,
+                                cacheWidth: 168,
+                                cacheHeight: 168,
+                                gaplessPlayback: true,
+                                filterQuality: FilterQuality.low,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return ProceduralAlbumArt(
+                                    trackId: widget.item.id,
+                                    size: 56,
+                                  );
+                                },
+                              )
+                            else
+                              ProceduralAlbumArt(
+                                trackId: widget.item.id,
+                                size: 56,
+                              ),
+                            // Playlist marker badge — bottom-right corner
+                            const Positioned(
+                              right: 3,
+                              bottom: 3,
+                              child: CornerGlyph(Icons.queue_music),
                             ),
-                          // Playlist marker badge — bottom-right corner
-                          const Positioned(
-                            right: 3,
-                            bottom: 3,
-                            child: CornerGlyph(Icons.queue_music),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Long-press ring
-                    if (longPressing && longPressProgress > 0)
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: LongPressRingPainter(
-                            progress: longPressProgress,
-                            color: KalinkaColors.accent,
-                          ),
-                        ),
-                      ),
-                    // Selection overlay
-                    if (selectionMode && isSelected)
-                      Positioned.fill(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: KalinkaColors.accent.withValues(alpha: 0.4),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            isPartial ? Icons.remove : Icons.check,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Info column
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ...matchBadge(widget.item),
-                    Text(
-                      title,
-                      style: KalinkaTextStyles.trackRowTitle.copyWith(
-                        color: selectionMode && isSelected
-                            ? KalinkaColors.accentTint
-                            : null,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (subtitle.isNotEmpty)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          if (sourceBadgeVisible(ref, widget.item.id)) ...[
-                            SourceBadge(entityId: widget.item.id),
-                            const SizedBox(width: 6),
                           ],
-                          Expanded(
-                            child: Text(
-                              subtitle,
-                              style: KalinkaTextStyles.trackRowSubtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      // Long-press ring
+                      if (longPressing && longPressProgress > 0)
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: LongPressRingPainter(
+                              progress: longPressProgress,
+                              color: KalinkaColors.accent,
                             ),
                           ),
-                        ],
-                      ),
-                  ],
+                        ),
+                      // Selection overlay
+                      if (selectionMode && isSelected)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: KalinkaColors.accent.withValues(
+                                alpha: 0.4,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              isPartial ? Icons.remove : Icons.check,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              if (widget.item.canAdd && !selectionMode)
-                RowPlayButton(item: widget.item),
-              OpenChevronButton(
-                name: title,
-                onTap: () => openBrowsable(context, ref, widget.item),
-              ),
-            ],
+                const SizedBox(width: 12),
+                // Info column
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ...matchBadge(widget.item),
+                      Text(
+                        title,
+                        style: KalinkaTextStyles.trackRowTitle.copyWith(
+                          color: selectionMode && isSelected
+                              ? KalinkaColors.accentTint
+                              : null,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (subtitle.isNotEmpty)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            if (!columns.source &&
+                                sourceBadgeVisible(ref, widget.item.id)) ...[
+                              SourceBadge(entityId: widget.item.id),
+                              const SizedBox(width: 6),
+                            ],
+                            Expanded(
+                              child: Text(
+                                subtitle,
+                                style: KalinkaTextStyles.trackRowSubtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (columns.any)
+                  SizedBox(
+                    height: 60,
+                    child: Center(
+                      child: RowColumnCells(
+                        columns: columns,
+                        sourceOf: widget.item.id,
+                      ),
+                    ),
+                  ),
+                RowTrailing(
+                  columns: columns,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.item.canAdd && !selectionMode)
+                        RowPlayButton(item: widget.item),
+                      OpenChevronButton(
+                        name: title,
+                        onTap: () => openBrowsable(context, ref, widget.item),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
