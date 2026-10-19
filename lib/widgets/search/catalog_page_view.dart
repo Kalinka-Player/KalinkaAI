@@ -391,15 +391,27 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             : null;
         // Rows across columns are already inset by the listing.
         if (columns > 1) return row;
-        // An album's numbered rows keep no columns to name.
-        final titles = index == 0 && !isAlbum ? _columnTitles(loaded) : null;
+        // An album's numbered rows keep no columns to name; a folder names
+        // them under each group's heading, in that group's terms.
+        final titles = isAlbum
+            ? null
+            : page.folderLayout
+            ? (heading == null
+                  ? null
+                  : RowColumnsHeader(
+                      tracks: item.browseType == BrowseType.track,
+                      titleInset: BrowseItemRows.textInsetOf(item),
+                    ))
+            : index == 0
+            ? _columnTitles(loaded)
+            : null;
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: heading == null && titles == null
               ? row
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [?titles, ?heading, row],
+                  children: [?heading, ?titles, row],
                 ),
         );
       },
