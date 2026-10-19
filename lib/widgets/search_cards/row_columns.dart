@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data_model/data_model.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
 import '../column_separator.dart';
@@ -16,7 +17,11 @@ class RowColumns {
   /// The row's full width, edge to edge.
   final double width;
 
-  const RowColumns(this.width);
+  /// False where no row of the listing has details to show, so none keeps
+  /// an empty column for them.
+  final bool details;
+
+  const RowColumns(this.width, {this.details = true});
 
   static const none = RowColumns(0);
 
@@ -24,10 +29,10 @@ class RowColumns {
   /// button and a chevron.
   static const double gutter = 92;
 
-  bool get detail => width >= 600;
+  bool get detail => details && width >= 600;
   bool get artist => width >= 800;
   bool get source => width >= 1000;
-  bool get any => detail;
+  bool get any => detail || artist || source;
 
   double get detailWidth => (width * 0.2).clamp(140.0, 280.0);
   double get artistWidth => (width * 0.16).clamp(120.0, 220.0);
@@ -47,9 +52,47 @@ class RowColumnsScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) =>
-        builder(context, RowColumns(constraints.maxWidth)),
+    builder: (context, constraints) => builder(
+      context,
+      RowColumns(
+        constraints.maxWidth,
+        details: RowColumnsListing.detailsOf(context),
+      ),
+    ),
   );
+}
+
+/// Tells a listing's rows and its header whether any row has details, so
+/// a listing whose source sends none — albums without a year, size or genre
+/// — draws no Details column at all.
+class RowColumnsListing extends InheritedWidget {
+  final bool details;
+
+  const RowColumnsListing({
+    super.key,
+    required this.details,
+    required super.child,
+  });
+
+  static bool detailsOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<RowColumnsListing>()
+          ?.details ??
+      true;
+
+  /// Whether any of [items] would fill the Details column. Only albums are
+  /// known to come without; any other row is taken to have some.
+  static bool anyDetails(Iterable<BrowseItem> items) => items.any((item) {
+    final album = item.album;
+    if (item.browseType != BrowseType.album || album == null) return true;
+    return album.year != null ||
+        album.trackCount != null ||
+        album.genres.isNotEmpty;
+  });
+
+  @override
+  bool updateShouldNotify(RowColumnsListing oldWidget) =>
+      details != oldWidget.details;
 }
 
 /// The cells right of a row's title, each after a hairline. A row with
@@ -97,8 +140,10 @@ class RowColumnCells extends ConsumerWidget {
           const ColumnSeparator(),
           SizedBox(width: columns.artistWidth, child: text(artist)),
         ],
-        const ColumnSeparator(),
-        SizedBox(width: columns.detailWidth, child: text(detail)),
+        if (columns.detail) ...[
+          const ColumnSeparator(),
+          SizedBox(width: columns.detailWidth, child: text(detail)),
+        ],
         if (columns.source) ...[
           const ColumnSeparator(),
           SizedBox(
@@ -196,11 +241,13 @@ class RowColumnsHeader extends StatelessWidget {
                   line,
                   SizedBox(width: columns.artistWidth, child: label('ARTIST')),
                 ],
-                line,
-                SizedBox(
-                  width: columns.detailWidth,
-                  child: label(tracks ? 'ALBUM' : 'DETAILS'),
-                ),
+                if (columns.detail) ...[
+                  line,
+                  SizedBox(
+                    width: columns.detailWidth,
+                    child: label(tracks ? 'ALBUM' : 'DETAILS'),
+                  ),
+                ],
                 if (columns.source) ...[
                   line,
                   SizedBox(
