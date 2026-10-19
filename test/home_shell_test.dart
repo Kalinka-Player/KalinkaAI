@@ -322,8 +322,8 @@ void main() {
     );
 
     // Browsing takes the room the player does not need.
-    expect(tester.getSize(find.byType(NowPlayingContent)).width, 483);
-    expect(tester.getRect(find.byType(SearchSessionView)).left, 484);
+    expect(tester.getSize(find.byType(NowPlayingContent)).width, 580);
+    expect(tester.getRect(find.byType(SearchSessionView)).left, 581);
 
     await tester.tap(_side('QUEUE'));
     await tester.pumpAndSettle();
