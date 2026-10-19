@@ -144,6 +144,8 @@ class _CatalogTileSurface extends StatelessWidget {
 }
 
 /// Equal-size tiles in reading order, allowing more room at large text sizes.
+/// A wide pane adds columns rather than stretching tiles, so a short row of
+/// sources keeps tile-sized tiles at its start.
 class CatalogTileGrid extends StatelessWidget {
   final List<Widget> children;
 
@@ -157,9 +159,10 @@ class CatalogTileGrid extends StatelessWidget {
       // Two to a row on a 360dp phone, with room for "My Library".
       final columns = ((constraints.maxWidth + gap) / (160 * scale + gap))
           .floor()
-          .clamp(1, 4);
+          .clamp(1, 6);
       return _EqualHeightTileGrid(
         columns: columns,
+        maxTileWidth: 260 * scale,
         textDirection: Directionality.of(context),
         children: children,
       );
@@ -169,24 +172,26 @@ class CatalogTileGrid extends StatelessWidget {
 
 class _EqualHeightTileGrid extends MultiChildRenderObjectWidget {
   final int columns;
+  final double maxTileWidth;
   final TextDirection textDirection;
 
   const _EqualHeightTileGrid({
     required this.columns,
+    required this.maxTileWidth,
     required this.textDirection,
     required super.children,
   });
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderEqualHeightTileGrid(columns, textDirection);
+      _RenderEqualHeightTileGrid(columns, maxTileWidth, textDirection);
 
   @override
   void updateRenderObject(
     BuildContext context,
     _RenderEqualHeightTileGrid renderObject,
   ) {
-    renderObject.updateLayout(columns, textDirection);
+    renderObject.updateLayout(columns, maxTileWidth, textDirection);
   }
 }
 
@@ -198,13 +203,27 @@ class _RenderEqualHeightTileGrid extends RenderBox
         RenderBoxContainerDefaultsMixin<RenderBox, _TileParentData> {
   static const _gap = 8.0;
   int _columns;
+  double _maxTileWidth;
   TextDirection _textDirection;
 
-  _RenderEqualHeightTileGrid(this._columns, this._textDirection);
+  _RenderEqualHeightTileGrid(
+    this._columns,
+    this._maxTileWidth,
+    this._textDirection,
+  );
 
-  void updateLayout(int columns, TextDirection textDirection) {
-    if (_columns == columns && _textDirection == textDirection) return;
+  void updateLayout(
+    int columns,
+    double maxTileWidth,
+    TextDirection textDirection,
+  ) {
+    if (_columns == columns &&
+        _maxTileWidth == maxTileWidth &&
+        _textDirection == textDirection) {
+      return;
+    }
     _columns = columns;
+    _maxTileWidth = maxTileWidth;
     _textDirection = textDirection;
     markNeedsLayout();
   }
@@ -217,7 +236,10 @@ class _RenderEqualHeightTileGrid extends RenderBox
   }
 
   Size _measure(BoxConstraints constraints, {required bool dry}) {
-    final width = (constraints.maxWidth - _gap * (_columns - 1)) / _columns;
+    final width = math.min(
+      (constraints.maxWidth - _gap * (_columns - 1)) / _columns,
+      _maxTileWidth,
+    );
     final tileConstraints = BoxConstraints.tightFor(width: width);
     var height = 0.0;
     for (var child = firstChild; child != null; child = childAfter(child)) {
