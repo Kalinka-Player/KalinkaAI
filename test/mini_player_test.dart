@@ -884,7 +884,7 @@ void main() {
     'the widest bar stacks its extras outward and greys a fixed volume',
     (tester) async {
       final semantics = tester.ensureSemantics();
-      tester.view.physicalSize = const Size(1700, 800);
+      tester.view.physicalSize = const Size(1800, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await pumpMiniPlayer(
@@ -979,6 +979,20 @@ void main() {
     final repeat = tester.getCenter(find.byIcon(Icons.repeat)).dx;
     expect(shuffle, lessThan(previous.dx));
     expect(next, lessThan(repeat));
+    // Larger, and spaced apart, than the phone's lone play button.
+    final play = find.ancestor(
+      of: find.byIcon(Icons.pause_rounded),
+      matching: find.byType(TransportButton),
+    );
+    expect(tester.getSize(play).width, 52);
+    final skipNext = find.ancestor(
+      of: find.byIcon(Icons.skip_next_rounded),
+      matching: find.byType(TransportButton),
+    );
+    expect(
+      tester.getRect(skipNext).left - tester.getRect(play).right,
+      greaterThanOrEqualTo(8),
+    );
 
     await tester.dragFrom(
       tester.getCenter(find.text('First')),
