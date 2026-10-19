@@ -13,9 +13,9 @@ import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
 
 class NowPlayingVolumeControl extends ConsumerStatefulWidget {
-  /// Greys the control out rather than hiding it when there is no volume to
-  /// set: full while the output's volume is fixed, as last known while
-  /// nothing plays.
+  /// Greys the control out rather than hiding it while nothing plays, at the
+  /// level last known. A fixed output is shown greyed at full either way
+  /// while something plays.
   final bool showUnavailable;
 
   const NowPlayingVolumeControl({super.key, this.showUnavailable = false});
@@ -46,14 +46,23 @@ mixin OptimisticVolume<T extends ConsumerStatefulWidget> on ConsumerState<T> {
   // (setState-during-build crash). A post-frame flush runs between frames safely.
   DeviceVolume _volumeState = DeviceVolume.empty;
   bool _volumeAvailable = false;
+  bool _volumeHeld = false;
   ProviderSubscription? _volumeSub;
   ProviderSubscription? _availableSub;
+  ProviderSubscription? _heldSub;
   ProviderSubscription? _keySub;
 
   DeviceVolume get volume => _volumeState;
 
   /// Whether there is a volume to control at all; see [volumeAvailableProvider].
   bool get volumeAvailable => _volumeAvailable;
+
+  /// Whether playback holds a volume, settable or not.
+  bool get volumeHeld => _volumeHeld;
+
+  /// The output plays at a level nothing here can change: full.
+  bool get volumeFixed =>
+      !_volumeState.supported || _volumeState.maxVolume <= 0;
 
   bool get isAdjustingVolume => _isAdjustingVolume;
 
@@ -85,6 +94,11 @@ mixin OptimisticVolume<T extends ConsumerStatefulWidget> on ConsumerState<T> {
         (_, next) => setState(() => _volumeAvailable = next),
         fireImmediately: true,
       );
+      _heldSub = ref.listenManual(
+        playbackHoldsVolumeProvider,
+        (_, next) => setState(() => _volumeHeld = next),
+        fireImmediately: true,
+      );
       // Hardware keys are sent natively; show their level without waiting
       // for the server's echo. A drag in progress keeps the thumb.
       _keySub = ref.listenManual(volumeActivityProvider, (_, next) {
@@ -102,6 +116,7 @@ mixin OptimisticVolume<T extends ConsumerStatefulWidget> on ConsumerState<T> {
     _settleCapTimer?.cancel();
     _volumeSub?.close();
     _availableSub?.close();
+    _heldSub?.close();
     _keySub?.close();
     super.dispose();
   }
@@ -187,8 +202,10 @@ class _NowPlayingVolumeControlState
   @override
   Widget build(BuildContext context) {
     final live = volumeAvailable;
-    if (!live && !widget.showUnavailable) return const SizedBox.shrink();
-    final fixed = !volume.supported;
+    final fixed = volumeFixed;
+    if (!live && !widget.showUnavailable && !(fixed && volumeHeld)) {
+      return const SizedBox.shrink();
+    }
 
     final row = Row(
       children: [
