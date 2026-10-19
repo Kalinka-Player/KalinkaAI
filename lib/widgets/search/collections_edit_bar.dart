@@ -13,86 +13,93 @@ import '../kalinka_dialog.dart';
 import '../search_cards/action_pill_button.dart';
 import 'collection_name_sheet.dart';
 
-/// What the Collections screen does to the listing itself: make another one,
-/// or rearrange the ones there are.
+/// What the Collections screen does to the listing itself: make another one.
+/// Each collection is edited on its own page.
 ///
-/// Editing is the screen's own mode rather than a session per collection — a
-/// collection is not a place you go to edit — so this one bar covers every
-/// row below it and commits them together.
+/// New takes the outline berry that Play all takes over a plain Enqueue. Not
+/// a fill: a fill marks where a decision lands, and for New that is Create,
+/// inside the sheet this opens — spending berry on the doorway as well would
+/// flatten the two into one step.
 class CollectionsActions extends ConsumerWidget {
-  /// Whether the listing under it has anything in it. Nothing to rearrange —
-  /// no collections made yet, or a filter that matched none — leaves editing
-  /// dead rather than gone: a filter narrowing to nothing is a passing state,
-  /// and chrome that comes and goes with it is harder to aim at than chrome
-  /// that dims. Making one stays live, since that is what an empty screen is
-  /// for.
-  final bool hasRows;
-
-  const CollectionsActions({super.key, required this.hasRows});
+  const CollectionsActions({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // A running session keeps its bar whatever the listing does: it holds
-    // changes that have not been written, and the way to write them.
-    final editing = ref.watch(collectionEditProvider.select((s) => s.active));
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-      child: editing ? const _EditingBar() : _RestingActions(hasRows: hasRows),
-    );
-  }
-}
-
-/// New leads the pair, so it takes the outline berry that Play all takes over
-/// a plain Enqueue. Not a fill: a fill marks where a decision lands, and for
-/// New that is Create, inside the sheet this opens — spending berry on the
-/// doorway as well would flatten the two into one step.
-class _RestingActions extends ConsumerWidget {
-  final bool hasRows;
-
-  const _RestingActions({required this.hasRows});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        ActionPillButton(
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ActionPillButton(
           label: 'New',
           icon: Icons.add,
           accent: true,
           onTap: () => showNewCollectionSheet(context, ref),
           semanticsLabel: 'New collection',
         ),
-        ActionPillButton(
-          label: 'Edit',
-          // Not tune_rounded: that is the filters glyph in the bar above it.
-          icon: Icons.edit_note_rounded,
-          enabled: hasRows,
-          semanticsLabel: 'Edit collections',
-          onTap: () {
-            // Two ways of marking rows at once would fight over the same tap.
-            ref.read(selectionStateProvider.notifier).exitSelectionMode();
-            ref.read(collectionEditProvider.notifier).begin();
-          },
-        ),
-      ],
+      ),
     );
   }
+}
+
+/// Starts editing collections: their tracks become draggable and markable to
+/// be dropped, and nothing is written until Done.
+void beginCollectionEditing(WidgetRef ref) {
+  // Two ways of marking rows at once would fight over the same tap.
+  ref.read(selectionStateProvider.notifier).exitSelectionMode();
+  ref.read(collectionEditProvider.notifier).begin();
+}
+
+/// Back while editing leaves editing, not the page: with nothing staged it
+/// ends quietly, and anything staged is asked about first. False when the
+/// user chose to keep editing.
+Future<bool> leaveCollectionEditing(BuildContext context, WidgetRef ref) async {
+  final changes = ref.read(collectionEditProvider).changes;
+  if (changes > 0 && !await _confirmDiscard(context, changes)) return false;
+  ref.read(collectionEditProvider.notifier).end();
+  return true;
+}
+
+Future<bool> _confirmDiscard(BuildContext context, int changes) async {
+  final go = await showKalinkaDialog<bool>(
+    context: context,
+    builder: (dialog) => KalinkaDialog(
+      side: KalinkaDialogSide.right,
+      icon: Icons.undo_rounded,
+      iconColor: KalinkaColors.statusPending,
+      title: 'Discard ${_changes(changes)}?',
+      message:
+          'None of it has been written yet, and leaving now writes none '
+          'of it.',
+      actions: [
+        KalinkaButton(
+          label: 'Keep editing',
+          variant: KalinkaButtonVariant.neutral,
+          fullWidth: true,
+          onTap: () => Navigator.pop(dialog, false),
+        ),
+        KalinkaButton(
+          label: 'Discard',
+          fullWidth: true,
+          onTap: () => Navigator.pop(dialog, true),
+        ),
+      ],
+    ),
+  );
+  return go == true;
 }
 
 /// The running session: the way out without writing, what is staged, and the
 /// one control that writes it. Done carries the screen's single berry fill —
 /// editing is a decision surface, and this is where the decision lands.
-class _EditingBar extends ConsumerStatefulWidget {
-  const _EditingBar();
+class CollectionEditingBar extends ConsumerStatefulWidget {
+  const CollectionEditingBar({super.key});
 
   @override
-  ConsumerState<_EditingBar> createState() => _EditingBarState();
+  ConsumerState<CollectionEditingBar> createState() =>
+      _CollectionEditingBarState();
 }
 
-class _EditingBarState extends ConsumerState<_EditingBar> {
+class _CollectionEditingBarState extends ConsumerState<CollectionEditingBar> {
   bool _busy = false;
 
   @override
@@ -111,10 +118,7 @@ class _EditingBarState extends ConsumerState<_EditingBar> {
         Expanded(
           child: Column(
             children: [
-              Text(
-                'EDITING COLLECTIONS',
-                style: KalinkaTextStyles.sectionLabel,
-              ),
+              Text('EDITING', style: KalinkaTextStyles.sectionLabel),
               const SizedBox(height: 2),
               Text(
                 changes == 0
@@ -141,11 +145,7 @@ class _EditingBarState extends ConsumerState<_EditingBar> {
 
   /// Leaving without writing. Nothing staged leaves silently; anything staged
   /// is asked about, because there is nowhere to get it back from.
-  Future<void> _cancel() async {
-    final changes = ref.read(collectionEditProvider).changes;
-    if (changes > 0 && !await _confirmDiscard(changes)) return;
-    ref.read(collectionEditProvider.notifier).end();
-  }
+  Future<void> _cancel() => leaveCollectionEditing(context, ref);
 
   /// Writes every collection that has something staged, one write each.
   ///
@@ -205,35 +205,6 @@ class _EditingBarState extends ConsumerState<_EditingBar> {
     notifier.keepOnly(unwritten);
     toast.show(trouble!, isError: true);
     if (mounted) setState(() => _busy = false);
-  }
-
-  Future<bool> _confirmDiscard(int changes) async {
-    final go = await showKalinkaDialog<bool>(
-      context: context,
-      builder: (dialog) => KalinkaDialog(
-        side: KalinkaDialogSide.right,
-        icon: Icons.undo_rounded,
-        iconColor: KalinkaColors.statusPending,
-        title: 'Discard ${_changes(changes)}?',
-        message:
-            'None of it has been written yet, and leaving now writes none '
-            'of it.',
-        actions: [
-          KalinkaButton(
-            label: 'Keep editing',
-            variant: KalinkaButtonVariant.neutral,
-            fullWidth: true,
-            onTap: () => Navigator.pop(dialog, false),
-          ),
-          KalinkaButton(
-            label: 'Discard',
-            fullWidth: true,
-            onTap: () => Navigator.pop(dialog, true),
-          ),
-        ],
-      ),
-    );
-    return go == true;
   }
 
   Future<bool> _confirmRemoval(List<CollectionEdit> losing) async {

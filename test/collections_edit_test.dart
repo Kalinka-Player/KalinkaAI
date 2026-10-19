@@ -149,8 +149,8 @@ void main() {
     }
   }
 
-  /// The collections screen with one collection unrolled and the editing
-  /// session running — where every one of these tests starts.
+  /// One collection's page with its editing session running — where every
+  /// one of these tests starts.
   Future<ProviderContainer> pumpEditing(
     WidgetTester tester,
     _EditApi api,
@@ -183,9 +183,9 @@ void main() {
         .read(searchSessionProvider.notifier)
         .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
     await settle(tester);
-    await tester.tap(find.text('Edit'));
-    await settle(tester);
     await tester.tap(find.text('Night Drive'));
+    await settle(tester);
+    await tester.tap(find.text('Edit'));
     await settle(tester);
     return container;
   }
@@ -210,18 +210,49 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('Edit swaps the toolbar for the session it opens', (
+  testWidgets('Edit swaps the page actions for the session it opens', (
     tester,
   ) async {
-    await pumpEditing(tester, _EditApi());
+    final container = await pumpEditing(tester, _EditApi());
 
-    expect(find.text('EDITING COLLECTIONS'), findsOneWidget);
+    expect(container.read(collectionEditProvider).active, isTrue);
+    expect(container.read(searchSessionProvider).catalogPage.id, _c1);
+    expect(find.text('EDITING'), findsOneWidget);
     expect(find.text('No changes yet'), findsOneWidget);
     expect(find.text('Cancel'), findsOneWidget);
     expect(find.text('Done'), findsOneWidget);
     // Its tracks are the editable list now, not the one that plays them.
     expect(find.textContaining('Drag to reorder'), findsOneWidget);
     expect(find.text('Play all'), findsNothing);
+    expect(find.text('Edit'), findsNothing);
+  });
+
+  testWidgets('Back leaves editing, not the page', (tester) async {
+    final container = await pumpEditing(tester, _EditApi());
+
+    await tester.tap(find.bySemanticsLabel('Back'));
+    await settle(tester);
+
+    expect(container.read(collectionEditProvider).active, isFalse);
+    expect(container.read(searchSessionProvider).catalogPage.id, _c1);
+    expect(find.text('Play all'), findsOneWidget);
+    expect(find.text('Edit'), findsOneWidget);
+  });
+
+  testWidgets('Back with changes asks first, and stays either way', (
+    tester,
+  ) async {
+    final container = await pumpEditing(tester, _EditApi());
+    await toggleRemoval(tester, 'Second Wind');
+
+    await tester.tap(find.bySemanticsLabel('Back'));
+    await settle(tester);
+    expect(find.text('Discard 1 change?'), findsOneWidget);
+    await tester.tap(find.text('Keep editing'));
+    await settle(tester);
+
+    expect(container.read(collectionEditProvider).changes, 1);
+    expect(container.read(searchSessionProvider).catalogPage.id, _c1);
   });
 
   testWidgets('a track marked to go stays on screen and is counted', (
@@ -233,7 +264,6 @@ void main() {
 
     // It has not gone anywhere — it goes when the session lands.
     expect(find.text('Second Wind'), findsOneWidget);
-    expect(find.text('1 CHANGE'), findsOneWidget);
     expect(find.text('1 change staged'), findsOneWidget);
   });
 
@@ -244,7 +274,7 @@ void main() {
     await restore(tester, 'Second Wind');
 
     expect(find.text('No changes yet'), findsOneWidget);
-    expect(find.textContaining('CHANGE'), findsNothing);
+    expect(find.textContaining('staged'), findsNothing);
   });
 
   testWidgets('dragging a row by its handle stages the order it lands in', (
@@ -265,7 +295,7 @@ void main() {
     final edit = container.read(collectionEditProvider).of(_c1)!;
     expect(edit.surviving, ['e2', 'e1', 'e3']);
     expect(edit.moved, {'e1'});
-    expect(find.text('1 CHANGE'), findsOneWidget);
+    expect(find.text('1 change staged'), findsOneWidget);
   });
 
   testWidgets('Reset drops what one collection staged', (tester) async {

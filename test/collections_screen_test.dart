@@ -10,15 +10,16 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/indexer_status_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
-import 'package:kalinka/providers/row_expansion_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/selection_state_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/search_cards/action_pill_button.dart';
 import 'package:kalinka/widgets/search_cards/collection_row.dart';
-import 'package:kalinka/widgets/search_cards/container_action_header.dart';
+import 'package:kalinka/widgets/search_cards/row_play_button.dart';
+import 'package:kalinka/widgets/search/container_page_actions.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
+import 'package:kalinka/widgets/search/track_group_actions.dart';
 import 'package:kalinka/widgets/selection_overlay.dart';
 import 'package:kalinka/widgets/source_badge.dart';
 
@@ -100,7 +101,7 @@ class _EmptyApi implements KalinkaPlayerProxy {
 }
 
 /// Serves the collections screen: the shelf's rows, and each collection's
-/// tracks when a row unrolls. Records what was created.
+/// tracks when its page opens. Records what was written.
 class _ShelfApi extends _EmptyApi {
   final List<String> created = [];
   final List<(String, String)> renamed = [];
@@ -159,7 +160,8 @@ class _ShelfApi extends _EmptyApi {
   }
 }
 
-/// A collection longer than one browse: 99 tracks held, two of them served.
+/// A collection longer than one browse: 99 tracks held, served a page at a
+/// time.
 class _PagedApi extends _ShelfApi {
   static const held = 99;
   static const seconds = 22680; // 6 hr 18 min
@@ -178,7 +180,10 @@ class _PagedApi extends _ShelfApi {
       return BrowseItemsList(offset, limit, rows.length, rows);
     }
     if (id != _c1) return BrowseItemsList(offset, limit, 0, const []);
-    final page = [_track('t1', 'Night Drive'), _track('t2', 'Signals')];
+    final page = [
+      for (var i = offset; i < held && i < offset + limit; i++)
+        _track('t$i', 'Track $i'),
+    ];
     return BrowseItemsList(offset, limit, held, page);
   }
 }
@@ -335,6 +340,24 @@ void main() {
     }
   }
 
+  /// The Collections listing, and then [name]'s own page when given.
+  Future<void> openListing(
+    WidgetTester tester,
+    ProviderContainer container, {
+    String? name,
+  }) async {
+    container
+        .read(searchSessionProvider.notifier)
+        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
+    await settle(tester);
+    if (name == null) return;
+    await tester.tap(find.text(name));
+    await settle(tester);
+  }
+
+  ActionPillButton pill(WidgetTester tester, String label) => tester
+      .widget<ActionPillButton>(find.widgetWithText(ActionPillButton, label));
+
   testWidgets('a collection is found by name among the search results', (
     tester,
   ) async {
@@ -355,21 +378,16 @@ void main() {
     tester,
   ) async {
     final container = await pumpSurface(tester);
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
+    await openListing(tester, container);
 
     expect(find.text('No collections yet'), findsOneWidget);
-    // Making one is what an empty screen is for; rearranging is dead, having
-    // nothing to rearrange.
+    // Making one is what an empty screen is for, and all the listing offers.
     final pills = tester
         .widgetList<ActionPillButton>(find.byType(ActionPillButton))
         .toList();
-    expect(pills.map((b) => b.label), ['New', 'Edit']);
-    expect(pills.map((b) => b.enabled), [true, false]);
-    // New leads the pair with the outline, Edit follows it plainly.
-    expect(pills.map((b) => b.accent), [true, false]);
+    expect(pills.map((b) => b.label), ['New']);
+    expect(pills.single.enabled, isTrue);
+    expect(pills.single.accent, isTrue);
     // The one fill a screen at rest may carry is the empty state's call, and
     // the outline above it is the same call at a lower weight.
     final invitation = tester.widget<KalinkaButton>(find.byType(KalinkaButton));
@@ -377,88 +395,58 @@ void main() {
     expect(invitation.variant, KalinkaButtonVariant.accent);
   });
 
-  testWidgets('editing comes alive once there are collections to edit', (
+  testWidgets('editing comes alive once the collection holds tracks', (
     tester,
   ) async {
-    final container = await pumpSurface(tester, api: _ShelfApi());
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
+    final api = _FreshApi();
+    final container = await pumpSurface(tester, api: api);
+    await openListing(tester, container, name: 'Fresh Start');
+
+    // Nothing to reorder or drop yet.
+    expect(pill(tester, 'Edit').enabled, isFalse);
+
+    api.held.add(_track('x1', 'Landed Elsewhere'));
+    container.read(collectionsRevisionProvider.notifier).bump();
     await settle(tester);
 
-    final edit = tester.widget<ActionPillButton>(
-      find.ancestor(
-        of: find.text('Edit'),
-        matching: find.byType(ActionPillButton),
-      ),
-    );
-    expect(edit.enabled, isTrue);
+    expect(pill(tester, 'Edit').enabled, isTrue);
   });
 
-  testWidgets('New leads the pair, and Edit does not wear the filters glyph', (
-    tester,
-  ) async {
-    final container = await pumpSurface(tester, api: _ShelfApi());
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
+  testWidgets(
+    'the listing offers only New, and Edit is not the filters glyph',
+    (tester) async {
+      final container = await pumpSurface(tester, api: _ShelfApi());
+      await openListing(tester, container);
 
-    final pills = {
-      for (final pill in tester.widgetList<ActionPillButton>(
-        find.byType(ActionPillButton),
-      ))
-        pill.label: pill,
-    };
-    expect(pills['New']!.accent, isTrue);
-    expect(pills['Edit']!.accent, isFalse);
-    expect(pills['Edit']!.icon, isNot(Icons.tune_rounded));
-  });
+      // Each collection is edited on its own page, not from the listing.
+      final pills = tester
+          .widgetList<ActionPillButton>(find.byType(ActionPillButton))
+          .map((b) => b.label);
+      expect(pills, ['New']);
+      expect(pill(tester, 'New').accent, isTrue);
 
-  testWidgets('an unrolled page counts the collection, not the page', (
+      await tester.tap(find.text('Late Night Signals'));
+      await settle(tester);
+
+      expect(pill(tester, 'Edit').accent, isFalse);
+      expect(pill(tester, 'Edit').icon, isNot(Icons.tune_rounded));
+    },
+  );
+
+  testWidgets("a collection's page counts the collection, not the rows", (
     tester,
   ) async {
     final container = await pumpSurface(tester, api: _PagedApi());
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
-    await tester.tap(find.text('Late Night Signals'));
-    await settle(tester);
+    await openListing(tester, container, name: 'Late Night Signals');
 
-    // Play all sends the collection's id, so the line counts what will play
-    // rather than the two rows that arrived.
-    final header = tester.widget<ContainerActionHeader>(
-      find.byType(ContainerActionHeader),
-    );
-    expect(header.totalTracks, 99);
-    expect(header.trackIds.length, 2);
-    expect(
-      find.text('99 tracks · 6 hr 18 min · tap a track to play from there'),
-      findsOneWidget,
-    );
-    // The row that unrolled and the header under it now say the same number,
-    // which is the whole complaint.
-    expect(find.textContaining('99 tracks · 6 hr 18 min'), findsNWidgets(2));
-    expect(find.textContaining('Showing the first 2 of 99'), findsOneWidget);
-  });
-
-  testWidgets('a collection that arrived whole says nothing about pages', (
-    tester,
-  ) async {
-    final container = await pumpSurface(tester, api: _ShelfApi());
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
-    await tester.tap(find.text('Late Night Signals'));
-    await settle(tester);
-
-    final header = tester.widget<ContainerActionHeader>(
-      find.byType(ContainerActionHeader),
-    );
-    expect(header.totalTracks, 2);
-    expect(find.textContaining('Showing the first'), findsNothing);
+    // Play all sends the collection's id, so it counts what will play rather
+    // than the rows that arrived.
+    final play = tester.widget<PlayAllChip>(find.byType(PlayAllChip));
+    expect(play.trackIds, [_c1]);
+    expect(play.trackCount, _PagedApi.held);
+    final enqueue = tester.widget<AddAllChip>(find.byType(AddAllChip));
+    expect(enqueue.trackIds, [_c1]);
+    expect(enqueue.trackCount, _PagedApi.held);
   });
 
   testWidgets('a source catalog with nothing in it stays plain', (
@@ -475,14 +463,9 @@ void main() {
     expect(find.byType(ActionPillButton), findsNothing);
   });
 
-  testWidgets('a collection unrolls in place rather than opening a page', (
-    tester,
-  ) async {
+  testWidgets("a collection row opens the collection's page", (tester) async {
     final container = await pumpSurface(tester, api: _ShelfApi());
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
+    await openListing(tester, container);
 
     expect(find.text('Late Night Signals'), findsOneWidget);
     expect(find.text('2 tracks'), findsOneWidget);
@@ -499,64 +482,90 @@ void main() {
     await tester.tap(find.text('Late Night Signals'));
     await settle(tester);
 
+    final page = container.read(searchSessionProvider).catalogPage;
+    expect(page.id, _c1);
+    expect(page.isPlaylist, isTrue);
+    expect(page.canEdit, isTrue);
+    expect(find.text('LATE NIGHT SIGNALS'), findsOneWidget);
     expect(find.text('Night Drive'), findsOneWidget);
     expect(find.text('Signals'), findsOneWidget);
-    // Still the same screen — the collection is not somewhere you went.
+
+    // Back returns to the listing it was opened from.
+    await tester.tap(find.bySemanticsLabel('Back'));
+    await settle(tester);
     expect(container.read(searchSessionProvider).catalogPage.id, _shelfId);
   });
 
-  testWidgets('an unrolled collection carries the actions every list has', (
+  testWidgets('the chevron opens the same page, and play does not', (
     tester,
   ) async {
     final container = await pumpSurface(tester, api: _ShelfApi());
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
+    await openListing(tester, container);
+
+    // Both rows carry a way to start them without opening them.
+    expect(find.byType(RowPlayButton), findsNWidgets(2));
+
+    await tester.tap(find.byTooltip('Open Sunday Morning'));
     await settle(tester);
-    await tester.tap(find.text('Sunday Morning'));
-    await settle(tester);
+
+    expect(container.read(searchSessionProvider).catalogPage.id, _c2);
+    expect(find.text('Hypnotic'), findsOneWidget);
+  });
+
+  testWidgets("a collection's page carries the actions every list has", (
+    tester,
+  ) async {
+    final container = await pumpSurface(tester, api: _ShelfApi());
+    await openListing(tester, container, name: 'Sunday Morning');
 
     // The same pair a section of results carries, named the same way.
     expect(find.text('Play all'), findsOneWidget);
     expect(find.text('Enqueue'), findsOneWidget);
-    // Editing is the screen's mode, not a row's action.
+    // Then what only a collection's page has: editing it, and its menu.
+    expect(pill(tester, 'Edit').semanticsLabel, 'Edit Sunday Morning');
+    final menu = tester.widget<ActionPillButton>(
+      find.descendant(
+        of: find.byType(CollectionMenuButton),
+        matching: find.byType(ActionPillButton),
+      ),
+    );
+    expect(menu.semanticsLabel, 'More for Sunday Morning');
     expect(find.text('Edit tracks'), findsNothing);
   });
 
-  testWidgets('a long press takes a collection, and the actions stay put', (
+  testWidgets('a long press takes a collection rather than opening it', (
     tester,
   ) async {
     final container = await pumpSurface(tester, api: _ShelfApi());
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
-    await tester.tap(find.text('Late Night Signals'));
-    await settle(tester);
+    await openListing(tester, container);
 
     await hold(tester, find.text('Late Night Signals'));
     await settle(tester);
 
     expect(container.read(selectionStateProvider).selectedContainerIds, {_c1});
-    // A header that came and went under a selection would move every row
-    // beneath it; what changes is the line, not what is there.
-    expect(find.text('Play all'), findsOneWidget);
-    expect(find.text('Enqueue'), findsOneWidget);
-    expect(find.textContaining('2 selected'), findsOneWidget);
+    expect(container.read(searchSessionProvider).catalogPage.id, _shelfId);
+    // While selecting, a tap adds to the selection rather than leaving it,
+    // and nothing offers to play over it.
+    expect(find.byType(RowPlayButton), findsNothing);
+    await tester.tap(find.text('Sunday Morning'));
+    await settle(tester);
+    expect(container.read(selectionStateProvider).selectedContainerIds, {
+      _c1,
+      _c2,
+    });
+    expect(container.read(searchSessionProvider).catalogPage.id, _shelfId);
   });
 
   testWidgets('leaving the listing ends the selection gathered on it', (
     tester,
   ) async {
     final container = await pumpSurface(tester, api: _ShelfApi());
-    final session = container.read(searchSessionProvider.notifier);
-    session.openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
+    await openListing(tester, container);
     await hold(tester, find.text('Late Night Signals'));
     await settle(tester);
     expect(find.byType(MultiSelectBottomBar), findsOneWidget);
 
-    session.backToCatalogsRoot();
+    container.read(searchSessionProvider.notifier).backToCatalogsRoot();
     await settle(tester);
 
     // The rows it held are not on screen any more, so neither is the bar.
@@ -566,12 +575,7 @@ void main() {
 
   testWidgets('taking a track leaves the row where it was', (tester) async {
     final container = await pumpSurface(tester, api: _ShelfApi());
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
-    await tester.tap(find.text('Late Night Signals'));
-    await settle(tester);
+    await openListing(tester, container, name: 'Late Night Signals');
     final before = tester.getTopLeft(find.text('Night Drive'));
 
     await hold(tester, find.text('Night Drive'));
@@ -582,17 +586,22 @@ void main() {
     expect(tester.getTopLeft(find.text('Night Drive')), before);
   });
 
-  testWidgets('renaming an open collection sends the name it was given', (
+  testWidgets('renaming a collection sends the name and retitles its page', (
     tester,
   ) async {
     final api = _ShelfApi();
     final container = await pumpSurface(tester, api: api);
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
-    await tester.tap(find.text('Sunday Morning'));
-    await settle(tester);
+    await openListing(tester, container, name: 'Sunday Morning');
+
+    // The overflow is the same control as the pills beside it, not a taller
+    // one.
+    expect(
+      find.descendant(
+        of: find.byType(ContainerPageActions),
+        matching: find.byType(ActionPillButton),
+      ),
+      findsNWidgets(4),
+    );
 
     await tester.tap(find.byIcon(Icons.more_horiz_rounded));
     await settle(tester);
@@ -604,30 +613,22 @@ void main() {
     await settle(tester);
 
     expect(api.renamed, [(_c2, 'Sunday Mornings')]);
-    // The overflow is the same control as the pair beside it, not a taller one.
     expect(
-      find.descendant(
-        of: find.byType(ContainerActionHeader),
-        matching: find.byType(ActionPillButton),
-      ),
-      findsNWidgets(3),
+      container.read(searchSessionProvider).catalogPage.title,
+      'Sunday Mornings',
     );
+    expect(find.text('SUNDAY MORNINGS'), findsOneWidget);
     // The confirmation toast retires itself on a timer the container
     // outlives; left pending, it fails the test after the tree is gone.
     await tester.pump(const Duration(seconds: 30));
   });
 
-  testWidgets('deleting names what goes with it before it goes', (
+  testWidgets('deleting asks before it goes, then leaves the page', (
     tester,
   ) async {
     final api = _ShelfApi();
     final container = await pumpSurface(tester, api: api);
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
-    await tester.tap(find.text('Sunday Morning'));
-    await settle(tester);
+    await openListing(tester, container, name: 'Sunday Morning');
 
     await tester.tap(find.byIcon(Icons.more_horiz_rounded));
     await settle(tester);
@@ -635,6 +636,7 @@ void main() {
     await settle(tester);
 
     expect(find.text('Delete Sunday Morning?'), findsOneWidget);
+    expect(find.textContaining('cannot be undone'), findsOneWidget);
     expect(find.textContaining('Its 1 track'), findsOneWidget);
     expect(api.deleted, isEmpty);
 
@@ -642,18 +644,15 @@ void main() {
     await settle(tester);
 
     expect(api.deleted, [_c2]);
+    // Its page has nothing left to show; Back's visit is the listing.
+    expect(container.read(searchSessionProvider).catalogPage.id, _shelfId);
     await tester.pump(const Duration(seconds: 30));
   });
 
   testWidgets('a delete that is called off writes nothing', (tester) async {
     final api = _ShelfApi();
     final container = await pumpSurface(tester, api: api);
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
-    await tester.tap(find.text('Sunday Morning'));
-    await settle(tester);
+    await openListing(tester, container, name: 'Sunday Morning');
 
     await tester.tap(find.byIcon(Icons.more_horiz_rounded));
     await settle(tester);
@@ -663,7 +662,8 @@ void main() {
     await settle(tester);
 
     expect(api.deleted, isEmpty);
-    expect(find.text('Sunday Morning'), findsWidgets);
+    expect(container.read(searchSessionProvider).catalogPage.id, _c2);
+    expect(find.text('Hypnotic'), findsOneWidget);
   });
 
   testWidgets('making a collection names it and reloads the listing', (
@@ -671,10 +671,7 @@ void main() {
   ) async {
     final api = _ShelfApi();
     final container = await pumpSurface(tester, api: api);
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
+    await openListing(tester, container);
     final before = container.read(collectionsRevisionProvider);
 
     await tester.tap(find.widgetWithText(ActionPillButton, 'New'));
@@ -692,29 +689,6 @@ void main() {
     await tester.pump(const Duration(seconds: 30));
   });
 
-  testWidgets('entering by one collection lands on it, already open', (
-    tester,
-  ) async {
-    final container = await pumpSurface(tester, api: _ShelfApi());
-    container.read(rowExpansionProvider.notifier).unroll(_c2);
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(
-          id: _shelfId,
-          title: 'Your collections',
-          canEdit: true,
-          focusItemId: _c2,
-        );
-    await settle(tester);
-
-    expect(find.text('Hypnotic'), findsOneWidget);
-    expect(find.text('Night Drive'), findsNothing);
-    // Spent on arrival, so a row built again later does not jump the list.
-    final page = container.read(searchSessionProvider).catalogPage;
-    expect(page.focusItemId, isNull);
-    expect(page.canEdit, isTrue);
-  });
-
   testWidgets('an empty collection offers the queue, and takes it in place', (
     tester,
   ) async {
@@ -727,12 +701,7 @@ void main() {
         Track(id: 'q2', title: 'Second', duration: 100),
       ],
     );
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
-    await tester.tap(find.text('Fresh Start'));
-    await settle(tester);
+    await openListing(tester, container, name: 'Fresh Start');
 
     expect(find.text('Nothing in this collection yet'), findsOneWidget);
     // Nothing to play yet, but the collection's own menu is reachable.
@@ -745,7 +714,8 @@ void main() {
     // The whole queue, in playing order, into this collection: no sheet.
     expect(api.added.single.$1, _c1);
     expect(api.added.single.$2, ['q1', 'q2']);
-    // The rows land where the offer stood, the row still unrolled.
+    // The rows land where the offer stood, on the same page.
+    expect(container.read(searchSessionProvider).catalogPage.id, _c1);
     expect(find.text('Queued q1'), findsOneWidget);
     expect(find.text('Queued q2'), findsOneWidget);
     expect(find.textContaining('from the queue'), findsNothing);
@@ -754,17 +724,12 @@ void main() {
     await tester.pump(const Duration(seconds: 30));
   });
 
-  testWidgets('an unrolled collection follows a write made elsewhere', (
+  testWidgets("a collection's page follows a write made elsewhere", (
     tester,
   ) async {
     final api = _FreshApi();
     final container = await pumpSurface(tester, api: api);
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
-    await tester.tap(find.text('Fresh Start'));
-    await settle(tester);
+    await openListing(tester, container, name: 'Fresh Start');
     expect(find.text('Nothing in this collection yet'), findsOneWidget);
 
     // A write from elsewhere (the tray, say) bumps the revision.
@@ -779,16 +744,11 @@ void main() {
   testWidgets('a collection is reread each time it is opened', (tester) async {
     final api = _FreshApi();
     final container = await pumpSurface(tester, api: api);
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
-    await tester.tap(find.text('Fresh Start'));
-    await settle(tester);
+    await openListing(tester, container, name: 'Fresh Start');
     expect(find.text('Nothing in this collection yet'), findsOneWidget);
 
-    // Rolled up, and changed from somewhere this app never hears of.
-    await tester.tap(find.text('Fresh Start'));
+    // Left, and changed from somewhere this app never hears of.
+    container.read(searchSessionProvider.notifier).goBack();
     await settle(tester);
     api.held.add(_track('x2', 'Arrived Meanwhile'));
 
@@ -802,10 +762,7 @@ void main() {
   ) async {
     final api = _ComposingApi();
     final container = await pumpSurface(tester, api: api);
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
+    await openListing(tester, container);
 
     final cover = find.descendant(
       of: find.byType(CollectionRow),
@@ -836,12 +793,7 @@ void main() {
     tester,
   ) async {
     final container = await pumpSurface(tester, api: _FreshApi());
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: _shelfId, title: 'Your collections', canEdit: true);
-    await settle(tester);
-    await tester.tap(find.text('Fresh Start'));
-    await settle(tester);
+    await openListing(tester, container, name: 'Fresh Start');
 
     expect(find.text('Nothing in this collection yet'), findsOneWidget);
     expect(find.textContaining('from the queue'), findsNothing);

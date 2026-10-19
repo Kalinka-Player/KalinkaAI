@@ -106,10 +106,6 @@ class CatalogPage {
   /// the ones that change what is inside it.
   final bool canEdit;
 
-  /// The row the page was opened on, if any: it starts unrolled and the page
-  /// scrolls to it. Null when the page was opened at its top.
-  final String? focusItemId;
-
   /// The listing is a folder's: its subfolders, then its tracks, under a
   /// breadcrumb of the folders enclosing it.
   final bool folderLayout;
@@ -133,7 +129,6 @@ class CatalogPage {
       filters = const [],
       sections = const [],
       canEdit = false,
-      focusItemId = null,
       folderLayout = false,
       canAdd = false,
       preview = null,
@@ -149,7 +144,6 @@ class CatalogPage {
     this.filters = const [],
     this.sections = const [],
     this.canEdit = false,
-    this.focusItemId,
     this.folderLayout = false,
     this.canAdd = false,
     this.preview,
@@ -235,7 +229,7 @@ class CatalogPage {
         folderLayout: item.browseType == BrowseType.folder,
         canAdd: item.canAdd,
         preview: item.catalog?.previewConfig,
-        item: item.catalog == null ? item : null,
+        item: item,
       );
 
   /// A folder as [toFolderJson] kept it, owned by [provider].
@@ -264,9 +258,8 @@ class CatalogPage {
 
   bool get isRoot => id == null;
 
-  /// The same page with its landing instruction spent — see
-  /// [SearchSessionNotifier.catalogFocusReached].
-  CatalogPage withoutFocus() => CatalogPage.category(
+  /// The same page under another name.
+  CatalogPage retitled(String title) => CatalogPage.category(
     id: id,
     title: title,
     provider: provider,
@@ -794,7 +787,6 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     List<FilterSpec> filters = const [],
     List<BrowseItem> sections = const [],
     bool canEdit = false,
-    String? focusItemId,
     bool folderLayout = false,
     bool canAdd = false,
     Preview? preview,
@@ -812,7 +804,6 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       filters: filters,
       sections: sections,
       canEdit: canEdit,
-      focusItemId: focusItemId,
       folderLayout: folderLayout,
       canAdd: canAdd,
       preview: preview,
@@ -870,16 +861,22 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     );
   }
 
+  /// Calls the page of [id] [title] wherever a visit shows it — after a
+  /// collection was renamed.
+  void retitlePage(String id, String title) {
+    SearchSessionState retitled(SearchSessionState visit) =>
+        visit.catalogPage.id == id
+        ? visit.copyWith(catalogPage: visit.catalogPage.retitled(title))
+        : visit;
+    state = retitled(state).copyWith(
+      previousVisits: [
+        for (final visit in state.previousVisits) retitled(visit),
+      ],
+    );
+  }
+
   /// Return one visit; see [goBack].
   void backFromCatalog() => goBack();
-
-  /// The page has landed on the row it was opened by. Spending the focus
-  /// keeps a row that is scrolled away and built again from jumping the list
-  /// a second time.
-  void catalogFocusReached() {
-    if (state.catalogPage.focusItemId == null) return;
-    state = state.copyWith(catalogPage: state.catalogPage.withoutFocus());
-  }
 
   /// Show [folder], listed in the folder shown now, as a visit of its own
   /// under the same page, so its trail is the folders that hold it.

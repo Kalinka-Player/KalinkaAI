@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data_model/browse_filters.dart';
 import '../../data_model/data_model.dart';
 import '../../providers/catalog_cards_provider.dart';
+import '../../providers/collection_edit_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/indexer_status_provider.dart';
 import '../../providers/kalinka_player_api_provider.dart';
@@ -24,22 +25,26 @@ import '../page_banner.dart';
 import '../search_cards/action_pill_button.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/browse_navigation_scope.dart';
+import '../search_cards/editable_track_list.dart';
 import '../search_cards/search_track_row.dart';
 import '../shelf_heading.dart';
 import '../source_badge.dart';
+import 'add_queue_chip.dart';
 import 'album_page_header.dart';
 import 'browse_visit_scope.dart';
 import 'catalog_sections_view.dart';
 import 'collections_edit_bar.dart';
 import 'collections_section.dart';
+import 'container_page_actions.dart';
 import 'folder_trail.dart';
 import 'library_rescan_control.dart';
 import 'track_group_actions.dart';
 
-/// One browsed page in the catalog navigation stack (back lives in the title
-/// bar). The banner scrolls away with the items; row titles navigate and
-/// albums/artists/playlists can also unroll one level inline. A page of folders shows
-/// one folder at a time under a breadcrumb, its subfolders above its tracks.
+/// One browsed page in the browsing history (back lives in the title bar).
+/// The banner scrolls away with the items; every row opens its own page. A
+/// page of folders shows one folder at a time under a breadcrumb, its
+/// subfolders above its tracks. An album, playlist or collection lists its
+/// tracks, and a collection is edited here.
 /// Items are pulled in chunks by an [InfiniteListView] straight off the
 /// browse endpoint (deterministic — never the AI router).
 class CatalogPageView extends ConsumerStatefulWidget {
@@ -64,12 +69,8 @@ class CatalogPageView extends ConsumerStatefulWidget {
 }
 
 class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
-  /// How many rows the listing has, as the list last reported it; -1 until it
-  /// has said. What the head needs to know is only whether there are any —
-  /// an action on the listing has nothing to act on when there are not.
-  int _rows = -1;
-
-  /// The listing's size as the server last said, -1 before it has.
+  /// The listing's size as the server last said, -1 before it has. The head
+  /// shows it, and its actions have nothing to act on when it is 0.
   int _total = -1;
 
   final _albumTrackDurations = <int, int>{};
@@ -77,8 +78,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   int? _albumDuration;
 
   void _countRows(int rows) {
-    // A refresh may correct duration metadata without changing row count.
-    setState(() => _rows = rows);
+    // The head reads the total and duration a fetch just read; a refresh may
+    // correct them without changing how many rows there are.
+    setState(() {});
   }
 
   void _readAlbumDuration(BrowseItemsList list, int offset) {
@@ -235,8 +237,24 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             onQueryChanged: setQuery,
             expandedShelf: expandedShelf,
             onCollapse: () => notifier.expandShelf(null),
-            hasRows: _rows > 0,
+            total: _total < 0 ? null : _total,
           );
+
+    // A collection being edited lists its tracks to be moved and dropped
+    // rather than played, all of them at once, since an edit names them all.
+    if (ContainerPageActions.isCollection(page) &&
+        ref.watch(collectionEditProvider.select((s) => s.active))) {
+      return ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          header,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: EditableTrackList(item: ContainerPageActions.itemOf(page)),
+          ),
+        ],
+      );
+    }
 
     // A catalog made of shelves shows them until a kind is chosen; choosing
     // one narrows the catalog to that kind's flat listing, which is the same
@@ -260,7 +278,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     bool numberedInFolder(BrowseItem item) =>
         page.folderLayout && item.track != null;
 
-    final listView = InfiniteListView<BrowseItem>(
+    InfiniteListView<BrowseItem> listOf(Widget? head) => InfiniteListView(
       key: page.folderLayout
           ? ValueKey(listing.id)
           : PageStorageKey(listing.id),
@@ -272,7 +290,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       // No horizontal list padding — the banner bleeds edge to edge; rows and
       // separators carry their own 16px inset instead.
       padding: const EdgeInsets.only(bottom: 24),
-      header: header,
+      header: head,
       fetchChunk: (offset, limit) async {
         final api = ref.read(kalinkaProxyProvider);
         final list = await api.browse(
@@ -306,13 +324,26 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         // Track rows play the whole loaded list as a queue from the
         // tapped row; as more chunks scroll in, the context grows.
         final trackIds = trackIdsMemo.of(loaded);
+        // Unfiltered, a row's place in the listing is its place in the
+        // container, which then plays whole from it.
+        final inContainer =
+            (isAlbum || page.isPlaylist) && item.track != null && query.isEmpty;
         final row = isAlbum && item.track != null
             ? SearchTrackRow(
                 item: item,
                 queueContextIds: trackIds.isEmpty ? null : trackIds,
+                containerId: inContainer ? page.id : null,
+                containerIndex: inContainer ? index : null,
                 albumTrackNumber: trackIdsMemo.albumNumberAt(index, loaded),
                 albumArtist: page.description,
                 labelled: false,
+              )
+            : inContainer
+            ? SearchTrackRow(
+                item: item,
+                queueContextIds: trackIds.isEmpty ? null : trackIds,
+                containerId: page.id,
+                containerIndex: index,
               )
             : numberedInFolder(item)
             ? SearchTrackRow(
@@ -360,6 +391,30 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         ],
       ),
     );
+    if (isAlbum) {
+      // A wide pane sets the album's cover and details beside its tracks.
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          if (width < kAlbumSideLayoutWidth) return listOf(header);
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: (width * 0.34).clamp(300.0, 380.0),
+                child: AlbumIdentityColumn(
+                  page: page,
+                  trackCount: _total < 0 ? null : _total,
+                  totalDurationSeconds: _albumDuration,
+                ),
+              ),
+              Expanded(child: listOf(null)),
+            ],
+          );
+        },
+      );
+    }
+    final listView = listOf(header);
     if (!page.folderLayout) return listView;
 
     // Outside the list, so the way back stays in reach however far it scrolls.
@@ -464,6 +519,26 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         ),
       );
     }
+    if (ContainerPageActions.isCollection(page)) {
+      return Align(
+        alignment: Alignment.topLeft,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Nothing in this collection yet',
+                style: KalinkaTextStyles.trackRowSubtitle,
+              ),
+              const SizedBox(height: 10),
+              AddQueueChip(item: ContainerPageActions.itemOf(page)),
+            ],
+          ),
+        ),
+      );
+    }
     if (page.canEdit) {
       return const Align(
         alignment: Alignment.topCenter,
@@ -488,8 +563,8 @@ class _CatalogHeader extends StatelessWidget {
   final SearchType? expandedShelf;
   final VoidCallback onCollapse;
 
-  /// Whether the listing under it has anything in it.
-  final bool hasRows;
+  /// How many items the listing holds, once its source has said.
+  final int? total;
 
   const _CatalogHeader({
     required this.page,
@@ -498,7 +573,7 @@ class _CatalogHeader extends StatelessWidget {
     required this.onQueryChanged,
     required this.expandedShelf,
     required this.onCollapse,
-    required this.hasRows,
+    required this.total,
   });
 
   @override
@@ -510,7 +585,10 @@ class _CatalogHeader extends StatelessWidget {
           page: page,
           showLibraryRescan: LibraryRescanControl.isLibraryPage(page.id),
         ),
-        if (page.canEdit) CollectionsActions(hasRows: hasRows),
+        if (page.isPlaylist)
+          ContainerPageActions(page: page, total: total)
+        else if (page.canEdit)
+          const CollectionsActions(),
         ActiveFilterChips(
           capabilities: capabilities,
           query: query,

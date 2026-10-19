@@ -2,13 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
 
-/// Opens a catalog page: which catalog, the source label to attribute it to,
-/// and — for a listing entered by one of its rows — the row to land on.
-typedef OpenCatalog = void Function(
-  CatalogCardPlan plan,
-  String provider, {
-  String? focusItemId,
-});
+/// Opens a catalog page: which catalog, and the source label to attribute it
+/// to.
+typedef OpenCatalog = void Function(CatalogCardPlan plan, String provider);
 
 /// One advertisement card: a browsable category in a source's root catalog.
 class CatalogCardPlan {

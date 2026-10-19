@@ -9,6 +9,7 @@ import 'package:kalinka/providers/catalog_cards_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/collection_art_tile.dart';
@@ -169,7 +170,6 @@ void main() {
 
   late SharedPreferences prefs;
   final opened = <CatalogCardPlan>[];
-  final focused = <String?>[];
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({
@@ -179,7 +179,6 @@ void main() {
     });
     prefs = await SharedPreferences.getInstance();
     opened.clear();
-    focused.clear();
   });
 
   Future<ProviderContainer> pump(
@@ -212,10 +211,7 @@ void main() {
             body: ListView(
               children: [
                 CollectionsSection(
-                  onOpenCatalog: (plan, provider, {focusItemId}) {
-                    opened.add(plan);
-                    focused.add(focusItemId);
-                  },
+                  onOpenCatalog: (plan, provider) => opened.add(plan),
                 ),
               ],
             ),
@@ -284,10 +280,6 @@ void main() {
 
       expect(find.byType(CollectionShelfRow), findsNWidgets(count));
       expect(find.text('VIEW ALL'), findsNothing);
-      await tester.tap(find.text('Late Night Focus'));
-      await tester.pump();
-      expect(opened.single.id, _shelfId);
-      expect(focused, ['kalinka:collections:playlist:c1']);
     });
   }
 
@@ -303,13 +295,10 @@ void main() {
 
     expect(opened.map((plan) => plan.id), [_shelfId]);
     expect(opened.single.filters, isEmpty);
-    expect(focused, [null]);
   });
 
-  testWidgets('a row is a shortcut into the Collections screen, not a page', (
-    tester,
-  ) async {
-    await pump(
+  testWidgets("a row opens the collection's own page", (tester) async {
+    final container = await pump(
       tester,
       api: _serverWith(_collections, total: 6),
       modules: _withCollections,
@@ -318,11 +307,29 @@ void main() {
     await tester.tap(find.text('Sunday Jazz'));
     await tester.pump();
 
-    // The shelf itself, landing on the row that was tapped — never a screen
-    // of the collection's own.
-    expect(opened.map((plan) => plan.id), [_shelfId]);
-    expect(opened.single.canEdit, isTrue);
-    expect(focused, ['kalinka:collections:playlist:c3']);
+    // Its page, where it is played and edited — not the listing.
+    expect(opened, isEmpty);
+    final page = container.read(searchSessionProvider).catalogPage;
+    expect(page.id, 'kalinka:collections:playlist:c3');
+    expect(page.isPlaylist, isTrue);
+    expect(page.canEdit, isTrue);
+  });
+
+  testWidgets('the chevron opens the same page as the row', (tester) async {
+    final container = await pump(
+      tester,
+      api: _serverWith(_collections, total: 6),
+      modules: _withCollections,
+    );
+
+    await tester.tap(find.byTooltip('Open Late Night Focus'));
+    await tester.pump();
+
+    expect(opened, isEmpty);
+    expect(
+      container.read(searchSessionProvider).catalogPage.id,
+      'kalinka:collections:playlist:c1',
+    );
   });
 
   testWidgets('the whole empty row creates a collection and refreshes Home', (

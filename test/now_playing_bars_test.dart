@@ -5,12 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
-import 'package:kalinka/providers/browse_detail_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/selection_state_provider.dart';
 import 'package:kalinka/widgets/now_playing_bars.dart';
 import 'package:kalinka/widgets/search_cards/browse_item_rows.dart';
-import 'package:kalinka/widgets/search_cards/expanded_track_list.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 
 Track _track(String id) =>
@@ -149,48 +147,5 @@ void main() {
         .enterSelectionMode('kalinka:x:track:b');
     await tester.pump();
     expect(find.byType(NowPlayingBars), findsNothing);
-  });
-
-  testWidgets('an unrolled container marks its current track the same way', (
-    tester,
-  ) async {
-    final playlist = BrowseItem(
-      id: 'kalinka:x:playlist:p',
-      name: 'Mix',
-      canBrowse: true,
-      canAdd: true,
-      playlist: Playlist(id: 'p', name: 'Mix', trackCount: 2),
-    );
-    final container = ProviderContainer(
-      overrides: [
-        sharedPrefsProvider.overrideWithValue(prefs),
-        playerStateProvider.overrideWithValue(
-          PlaybackState(
-            state: PlayerStateType.playing,
-            currentTrack: _track('a'),
-          ),
-        ),
-        browseDetailProvider.overrideWith(
-          (ref, id) async => BrowseItemsList(0, 2, 2, [_item('a'), _item('b')]),
-        ),
-      ],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          home: Scaffold(body: ExpandedContainerTracks(item: playlist)),
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
-
-    expect(find.byType(NowPlayingBars), findsOneWidget);
-    final bars = tester.getRect(find.byType(NowPlayingBars)).center.dy;
-    final a = tester.getRect(find.text('Song a')).center.dy;
-    final b = tester.getRect(find.text('Song b')).center.dy;
-    expect((bars - a).abs(), lessThan((bars - b).abs()));
   });
 }

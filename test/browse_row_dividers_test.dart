@@ -172,7 +172,7 @@ void main() {
     ) async {
       final row = await pumpSized(
         tester,
-        CollectionShelfRow(item: _playlist(canEdit: true), onOpen: () {}),
+        CollectionShelfRow(item: _playlist(canEdit: true)),
       );
       final shimmer = await pumpSized(
         tester,

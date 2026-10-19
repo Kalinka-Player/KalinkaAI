@@ -9,7 +9,6 @@ import 'package:kalinka/data_model/plugin_catalog.dart';
 import 'package:kalinka/providers/modules_state_provider.dart';
 import 'package:kalinka/providers/pinned_catalogs_provider.dart';
 import 'package:kalinka/providers/plugin_catalog_provider.dart';
-import 'package:kalinka/providers/row_expansion_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/server_info_provider.dart';
 import 'package:kalinka/providers/server_update_provider.dart';
@@ -29,7 +28,6 @@ import 'package:kalinka/widgets/home/home_preview_illustration.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/search/search_zero_state.dart';
 import 'package:kalinka/widgets/search_cards/search_album_row.dart';
-import 'package:kalinka/widgets/search_cards/expand_chevron_button.dart';
 import 'package:kalinka/widgets/shelf_heading.dart';
 
 import 'support/home_shell.dart';
@@ -278,7 +276,7 @@ void main() {
   });
 
   testWidgets(
-    'browse, expand one level, pin a filtered catalog and return through parents',
+    'browse, open an album, pin a filtered catalog and return through parents',
     (tester) async {
       final container = await pump(tester);
       await tester.ensureVisible(
@@ -288,12 +286,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Editorial'), findsOneWidget);
       await tester.tap(find.text('Editorial'));
-      await tester.pumpAndSettle();
-      expect(
-        container.read(searchSessionProvider).catalogPage.id,
-        'kalinka:alpha:catalog:editorial',
-      );
-      await tester.tap(find.byType(ExpandChevronButton).first);
       await tester.pumpAndSettle();
       expect(
         container.read(searchSessionProvider).catalogPage.id,
@@ -1028,8 +1020,6 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(container.read(searchSessionProvider).catalogPage.id, id);
-        expect(container.read(rowExpansionProvider).unrolled, isEmpty);
-        expect(container.read(rowExpansionProvider).artists, isEmpty);
         expect(find.byType(PreviewShelf), findsNothing);
 
         await tester.tap(find.bySemanticsLabel('Back').first);

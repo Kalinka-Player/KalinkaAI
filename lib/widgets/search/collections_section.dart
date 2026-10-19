@@ -21,10 +21,9 @@ import '../shelf_heading.dart';
 /// what a collection is and where making one will live. Absent entirely when
 /// the server has no collections source.
 ///
-/// The rows are shortcuts into the Collections screen rather than a second
-/// place to unroll a collection — the root has to keep a settled height.
+/// Each row opens its collection's own page; VIEW ALL opens the listing.
 class CollectionsSection extends ConsumerWidget {
-  /// Opens the Collections screen — where VIEW ALL and every row lead.
+  /// Opens the Collections screen, where VIEW ALL leads.
   final OpenCatalog onOpenCatalog;
 
   const CollectionsSection({super.key, required this.onOpenCatalog});
@@ -83,14 +82,7 @@ class CollectionsSection extends ConsumerWidget {
                       height: 1,
                     ),
                   ),
-                CollectionShelfRow(
-                  item: shelf.items[i],
-                  onOpen: () => onOpenCatalog(
-                    shelf.plan,
-                    shelf.plan.title,
-                    focusItemId: shelf.items[i].id,
-                  ),
-                ),
+                CollectionShelfRow(item: shelf.items[i]),
               ],
             ],
           ),

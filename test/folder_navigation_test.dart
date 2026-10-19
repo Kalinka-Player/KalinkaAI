@@ -76,7 +76,6 @@ void main() {
     expect(folder.canAdd, isFalse);
     expect(folder.artPath, '/resource/folder/k_large.jpg');
     expect(folder.description, '1 folder · 2 tracks · 9 min');
-    expect(folder.withoutFocus().folderLayout, isTrue);
   });
 
   test('a folder opens in place of the one it is listed in', () {

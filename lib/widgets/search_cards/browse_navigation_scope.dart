@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart';
+import '../../providers/search_session_provider.dart';
 
-/// Row titles navigate; the trailing chevron unfolds one level only.
-/// With [allowInline] off, both the row and its right chevron navigate.
-/// Search surfaces without this scope retain their existing inline behavior.
+/// Where the rows below open what they stand for, when that is not a visit of
+/// the browsing history.
 class BrowseNavigationScope extends InheritedWidget {
   final ValueChanged<BrowseItem> onOpen;
-  final bool allowInline;
 
   const BrowseNavigationScope({
     super.key,
     required this.onOpen,
-    this.allowInline = true,
     required super.child,
   });
 
@@ -21,5 +20,16 @@ class BrowseNavigationScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(BrowseNavigationScope oldWidget) =>
-      onOpen != oldWidget.onOpen || allowInline != oldWidget.allowInline;
+      onOpen != oldWidget.onOpen;
+}
+
+/// Opens [item]'s own page — a source, catalog, folder, album, artist,
+/// playlist or collection — the same way from every row and card. Opening
+/// never touches playback.
+void openBrowsable(BuildContext context, WidgetRef ref, BrowseItem item) {
+  if (!item.canBrowse) return;
+  final open =
+      BrowseNavigationScope.maybeOf(context)?.onOpen ??
+      ref.read(searchSessionProvider.notifier).openBrowseItem;
+  open(item);
 }
