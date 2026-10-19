@@ -104,10 +104,6 @@ class _TileRail extends StatelessWidget {
     this.scrollable = true,
   });
 
-  /// Between tiles' frames; their art stands a frame's inset further apart.
-  static const _gap = 10.0;
-  static const _rowGap = 16.0;
-
   /// Content width at which tiles show at [tileSize]; they grow in step
   /// beyond it.
   static const _phoneWidth = 400.0;
@@ -151,7 +147,7 @@ class _TileRail extends StatelessWidget {
         // The height first: an OverflowBox fills what it is offered, and a
         // list offers unbounded height.
         return SizedBox(
-          height: rows * tileHeight + (rows - 1) * _rowGap,
+          height: rows * tileHeight,
           // Out to the window's edges, so tiles scroll off them rather than
           // stopping short at the list's inset; the first still lines up.
           child: OverflowBox(
@@ -161,7 +157,9 @@ class _TileRail extends StatelessWidget {
               // A mouse can drag it too; the wheel keeps scrolling the page.
               behavior: ScrollConfiguration.of(context)
                   .copyWith(dragDevices: PointerDeviceKind.values.toSet()),
-              child: ListView.separated(
+              // Frames abut, so two highlighted side by side meet exactly;
+              // the art keeps two insets apart.
+              child: ListView.builder(
                 // Its own key: without one it would take Home's vertical
                 // offset as its own when it scrolls back into view.
                 key: PageStorageKey<String>('rail:$storageId'),
@@ -175,9 +173,7 @@ class _TileRail extends StatelessWidget {
                   horizontal: kHomeSideInset - _Tile.inset,
                 ),
                 itemCount: columns,
-                separatorBuilder: (_, _) => const SizedBox(width: _gap),
                 itemBuilder: (context, column) => Column(
-                  spacing: _rowGap,
                   children: [
                     for (var row = 0; row < rows; row++)
                       if (column * rows + row < count)
@@ -233,8 +229,9 @@ class _Tile extends ConsumerStatefulWidget {
 
   const _Tile({required this.item, required this.size, required this.onOpen});
 
-  /// Between the card's frame and its art and text.
-  static const inset = 6.0;
+  /// Between the card's frame and its art and text: half the room between
+  /// two cards' art.
+  static const inset = 11.0;
   static const artGap = 8.0;
   static final titleStyle = KalinkaTextStyles.trackRowTitle;
   static final subtitleStyle = KalinkaTextStyles.trackRowSubtitle;
