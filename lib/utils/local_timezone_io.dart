@@ -46,6 +46,10 @@ Future<String?> localTimezone() async {
   }
 }
 
+// A bare name would be looked for in the current directory first.
+String get _tzutil =>
+    '${Platform.environment['SystemRoot'] ?? r'C:\Windows'}\\System32\\tzutil.exe';
+
 /// The zone Windows is on, by its tzdata name. [run] stands in for
 /// [Process.run] in tests.
 Future<String?> windowsTimezone({ProcessRunner run = Process.run}) async {
@@ -53,7 +57,7 @@ Future<String?> windowsTimezone({ProcessRunner run = Process.run}) async {
   // DateTime.timeZoneName is a display name in the user's own.
   final ProcessResult result;
   try {
-    result = await run('tzutil', const ['/g']);
+    result = await run(_tzutil, const ['/g']);
   } on ProcessException {
     return null;
   }

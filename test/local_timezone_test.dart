@@ -107,7 +107,7 @@ void main() {
       );
       expect(zone, 'Europe/Berlin');
       expect(calls, [
-        ['tzutil', '/g'],
+        [endsWith(r'\System32\tzutil.exe'), '/g'],
       ]);
     });
 
