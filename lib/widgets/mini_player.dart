@@ -547,7 +547,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                     ),
                   ],
                   if (tier.index >= _MiniPlayerTier.progress.index)
-                    const ColumnSeparator(gap: 8),
+                    const ColumnSeparator(),
                   if (currentTrack != null) const BitPerfectBadge(),
                   const SizedBox(width: 4),
                   // Outside the gesture area too, for the same reason as the play
