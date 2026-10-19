@@ -335,17 +335,17 @@ Do not reopen the agreed basics through these tuning decisions: combined Search,
 
 Landed:
 
-- Shell: the player pane is bounded by `kalinkaPlayerPaneWidth` (30% of the window, 340–420dp) beside browsing at the existing 900dp boundary; dialogs, toasts and Customise Home use the same split. The player header's expand control widens the player over browsing, which stays mounted beneath it, and Back gives browsing its room again.
+- Shell: the player pane is bounded by `kalinkaPlayerPaneWidth` (34.5% of the window, 391–483dp) beside browsing at the existing 900dp boundary; dialogs, toasts and Customise Home use the same split. The expanded-player mode was dropped: the Now playing display covers focused listening. While the queue shows, its mini-player spans the whole window and browsing ends above it. As the bar widens it adds the output by name, then a seekable slider in place of its top line, then the source, then album, year and stream format, then volume.
 - History: every page, folder, complete listing and search is a visit in `SearchSessionState.previousVisits`; Back restores the visit's page, filters, folder, query, results snapshot, local source shortcut and artist tab. The latest six visits stay built offstage, so their loaded rows and scroll survive. A search replaced while still loading is asked again on return. The title bar names the page instead of a `HOME ›` path.
 - Open and play: every row opens its page through `openBrowsable`; inline expansion, `rowExpansionProvider` and the focus-on-arrival shortcut are gone. Album, playlist and collection rows carry a separate Play. Tracks on album, playlist and collection pages queue the whole container by id and play from their place in it.
 - Collections: each collection has its own page with Play all, Enqueue, Edit and its menu. Editing runs there; Back while editing follows the discard guard and stays on the page. The listing keeps New.
-- Listings: album and artist catalogs default to an artwork grid with a Grid/List control remembered per family (`listingPresentationProvider`); List and the collections index put compact items two or three across on wide panes. Track rows give the album its own column from 560dp of row width.
-- Entity pages: albums set a square cover and their details beside the tracks from 860dp of pane width, with a linked artist where the album names one by id, and the source said once. Artists have a portrait header and an Albums or Tracks tab only when they hold both.
+- Listings: album and artist catalogs default to an artwork grid with a Grid/List control remembered per family (`listingPresentationProvider`); List and the collections index put compact items two or three across on wide panes. Wide rows add album, then artist, then source columns (`RowColumns`) from 600, 800 and 1000dp of row width. Column widths come from the row's width and end a fixed gutter from its right edge, so every row type in a listing draws its hairline separators on the same lines. Folder rows put their subfolders and direct tracks in those columns.
+- Entity pages: albums set a square cover and their details beside the tracks on any pane wider than a phone (480dp), with a linked artist where the album names one by id, and the source said once. Artists have a portrait header, fetched by id when the page was opened without one, and an Albums or Tracks tab only when they hold both. Opening an album or artist page that is already in the history returns to that visit, so cross-links cannot grow Back without end.
 - Home and Search: the search entry is bounded, source tiles stop at 260dp and add columns, collections go across a wide pane, and recommendation groups sit two across when both fit.
 
 Still open:
 
 - Splitting to one pane at large text sizes: the mini-player overflows at 2x text, so the split stays width-only for now.
 - Restoring the visible item when a grid's column count changes on resize; the scroll offset is kept, not the item anchor.
-- Metadata columns for mixed name matches beyond the track album column, and playlist or collection mosaics in the page header.
+- Playlist or collection mosaics in the page header, and a composer column, which the track model does not carry yet.
 - Resolving a complete ordered context for artist tracks and filtered container listings, which still queue the loaded rows.
