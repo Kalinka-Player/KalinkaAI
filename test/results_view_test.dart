@@ -521,6 +521,18 @@ void main() {
     expect(artist, greaterThan(title));
     expect(tester.getTopLeft(find.text('An Album')).dx, greaterThan(artist));
     expect(find.byType(ColumnSeparator), findsWidgets);
+    // A listing of tracks names its columns as such, over each one.
+    for (final (title, cell) in [
+      ('ARTIST', 'Someone'),
+      ('ALBUM', 'An Album'),
+    ]) {
+      expect(
+        tester.getTopLeft(find.text(title)).dx,
+        closeTo(tester.getTopLeft(find.text(cell)).dx, 1),
+      );
+    }
+    expect(find.text('TITLE'), findsOneWidget);
+    expect(find.text('TIME'), findsOneWidget);
   });
 
   testWidgets('the widest rows say the format after the source', (

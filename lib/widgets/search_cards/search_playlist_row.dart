@@ -237,7 +237,12 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (subtitle.isNotEmpty)
+                      // Its details move to their column, its badge to the
+                      // source's, as the row widens.
+                      if (subtitle.isNotEmpty &&
+                          (!columns.detail ||
+                              !columns.source &&
+                                  sourceBadgeVisible(ref, widget.item.id)))
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
@@ -248,7 +253,7 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
                             ],
                             Expanded(
                               child: Text(
-                                subtitle,
+                                columns.detail ? '' : subtitle,
                                 style: KalinkaTextStyles.trackRowSubtitle,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -266,6 +271,7 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
                     child: Center(
                       child: RowColumnCells(
                         columns: columns,
+                        detail: subtitle,
                         sourceOf: widget.item.id,
                       ),
                     ),

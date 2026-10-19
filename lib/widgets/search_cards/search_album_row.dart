@@ -93,11 +93,16 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
         ? urlResolver.abs(imageUrl)
         : null;
 
-    String subtitleFor(RowColumns columns) => [
-      if (artist.isNotEmpty && !columns.artist) artist,
+    // What the second line says of the album, moved to the details column
+    // once the row has one; the genre with it.
+    final details = [
       if (album?.year != null) '${album!.year}',
       if (trackCount != null)
         '$trackCount ${trackCount == 1 ? 'track' : 'tracks'}',
+    ].join(' \u00B7 ');
+    String subtitleFor(RowColumns columns) => [
+      if (artist.isNotEmpty && !columns.artist) artist,
+      if (details.isNotEmpty && !columns.detail) details,
     ].join(' \u00B7 ');
 
     return SwipeToActRow(
@@ -246,7 +251,7 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
                           ),
                         ],
                       ),
-                      if (genre != null) ...[
+                      if (genre != null && !columns.detail) ...[
                         const SizedBox(height: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -271,6 +276,10 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
                       child: RowColumnCells(
                         columns: columns,
                         artist: artist,
+                        detail: [
+                          if (details.isNotEmpty) details,
+                          ?genre,
+                        ].join(' \u00B7 '),
                         sourceOf: widget.item.id,
                       ),
                     ),

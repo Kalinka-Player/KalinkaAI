@@ -16,6 +16,7 @@ import 'package:kalinka/widgets/column_separator.dart';
 import 'package:kalinka/widgets/procedural_album_art.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search/folder_trail.dart';
+import 'package:kalinka/widgets/search_cards/row_columns.dart';
 import 'package:kalinka/widgets/search_cards/search_folder_row.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 import 'package:kalinka/widgets/shelf_heading.dart';
@@ -259,8 +260,13 @@ void main() {
 
       final folderRow = find.byType(SearchFolderRow).first;
       Finder inFolder(Finder f) => find.descendant(of: folderRow, matching: f);
-      expect(inFolder(find.text('2 folders')), findsOneWidget);
-      expect(inFolder(find.text('2 tracks · 15 min')), findsOneWidget);
+      // What it holds moves to its details column, off its second line.
+      expect(
+        inFolder(find.text('2 folders · 2 tracks · 15 min')),
+        findsOneWidget,
+      );
+      expect(inFolder(find.text('Folder')), findsOneWidget);
+      expect(inFolder(find.text('Folder · 2 tracks')), findsNothing);
 
       List<double> lines(Finder row) => [
         for (final element
@@ -271,6 +277,15 @@ void main() {
       ];
       expect(lines(folderRow), isNotEmpty);
       expect(lines(_trackRow('So What')), lines(folderRow));
+      // Named once, over the first row, on the same lines.
+      final titles = find.byType(RowColumnsHeader);
+      expect(titles, findsOneWidget);
+      expect(find.text('DETAILS'), findsOneWidget);
+      expect(lines(titles), lines(folderRow));
+      expect(
+        tester.getRect(titles).bottom,
+        lessThanOrEqualTo(tester.getRect(folderRow).top),
+      );
     },
   );
 
