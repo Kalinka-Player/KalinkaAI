@@ -12,9 +12,9 @@ import '../search_cards/track_row_support.dart';
 import '../source_badge.dart';
 import 'track_group_actions.dart';
 
-/// A phone-wide pane stacks an album's cover over its tracks; anything wider
-/// sets the cover and what it says in a column beside them.
-const double kAlbumSideLayoutWidth = 440;
+/// A pane narrower than this stacks an album's cover over its tracks; from
+/// here the cover and what it says stand in a column beside them.
+const double kAlbumSideLayoutWidth = 528;
 
 /// The artist an album page can open: only one its listing named by a full
 /// id, so the link keeps the album's source and never looks a name up.
