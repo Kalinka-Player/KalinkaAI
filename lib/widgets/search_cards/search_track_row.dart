@@ -9,6 +9,7 @@ import '../../providers/selection_state_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/playback_utils.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
 import '../swipe_to_act_row.dart';
@@ -390,6 +391,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
                 album: album,
                 artist: artist,
                 sourceOf: widget.item.id,
+                format: mimeTypeLabel(track?.mimeType),
               ),
             ],
           );

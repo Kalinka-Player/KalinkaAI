@@ -29,7 +29,7 @@ class RowColumns {
 
   double get albumWidth => (width * 0.2).clamp(140.0, 280.0);
   double get artistWidth => (width * 0.16).clamp(120.0, 220.0);
-  static const double sourceWidth = 132;
+  static const double sourceWidth = 160;
 
   /// The row's trailing slot, sized so its columns end at [gutter] from the
   /// edge; [inset] is what the row already holds between the slot and it.
@@ -60,12 +60,17 @@ class RowColumnCells extends ConsumerWidget {
   /// The entity whose source the source column names.
   final String? sourceOf;
 
+  /// The file's format — FLAC, MP3 — said after the source where the source
+  /// gives one, so a listing without formats keeps no empty column.
+  final String? format;
+
   const RowColumnCells({
     super.key,
     required this.columns,
     this.album,
     this.artist,
     this.sourceOf,
+    this.format,
   });
 
   @override
@@ -90,7 +95,9 @@ class RowColumnCells extends ConsumerWidget {
           const ColumnSeparator(),
           SizedBox(
             width: RowColumns.sourceWidth,
-            child: sourceOf == null ? null : _SourceCell(entityId: sourceOf!),
+            child: sourceOf == null
+                ? null
+                : _SourceCell(entityId: sourceOf!, format: format),
           ),
         ],
       ],
@@ -100,8 +107,9 @@ class RowColumnCells extends ConsumerWidget {
 
 class _SourceCell extends ConsumerWidget {
   final String entityId;
+  final String? format;
 
-  const _SourceCell({required this.entityId});
+  const _SourceCell({required this.entityId, this.format});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -123,6 +131,13 @@ class _SourceCell extends ConsumerWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ),
+        // A long source name gives way; the format is never cut.
+        if (format != null && format!.isNotEmpty)
+          Text(
+            title == null || title.isEmpty ? format! : ' · ${format!}',
+            style: KalinkaTextStyles.trackRowSubtitle,
+            maxLines: 1,
+          ),
       ],
     );
   }
