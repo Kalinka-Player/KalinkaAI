@@ -102,7 +102,7 @@ void main() {
     WidgetTester tester,
     _AlbumApi api, {
     CatalogPage page = _page,
-    Size size = const Size(450, 900),
+    Size size = const Size(390, 900),
     double textScale = 1,
   }) async {
     tester.view.physicalSize = size;
@@ -334,7 +334,7 @@ void main() {
     expect(find.text('2 tracks · 3 min'), findsNothing);
   });
 
-  for (final width in [375.0, 477.0]) {
+  for (final width in [375.0, 430.0]) {
     testWidgets('long album title leaves artwork visible at width $width', (
       tester,
     ) async {

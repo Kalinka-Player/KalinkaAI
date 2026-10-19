@@ -73,10 +73,10 @@ void main() {
     await _resizeTo(tester, const Size(1200, 800));
     await _open(tester, KalinkaDialogSide.right);
 
-    // Capped at 460 and centred in the browsing panel (415..1200).
+    // Capped at 460 and centred in the browsing panel (441..1200).
     final rect = tester.getRect(find.byKey(_card));
-    expect(rect.left, closeTo(577.5, 0.01));
-    expect(rect.right, closeTo(1037.5, 0.01));
+    expect(rect.left, closeTo(590.5, 0.01));
+    expect(rect.right, closeTo(1050.5, 0.01));
   });
 
   testWidgets('tablet width: a left-side dialog sits in the left panel', (
@@ -85,10 +85,10 @@ void main() {
     await _resizeTo(tester, const Size(1200, 800));
     await _open(tester, KalinkaDialogSide.left);
 
-    // The player panel is 414 wide here, so the card fills it to its margins.
+    // The player panel is 440 wide here, so the card fills it to its margins.
     final rect = tester.getRect(find.byKey(_card));
     expect(rect.left, 20);
-    expect(rect.right, closeTo(394, 0.01));
+    expect(rect.right, closeTo(420, 0.01));
   });
 
   testWidgets('tablet width: a full-width dialog centres in the window', (
@@ -107,7 +107,7 @@ void main() {
     (tester) async {
       await _resizeTo(tester, const Size(1200, 800));
       await _open(tester, KalinkaDialogSide.right);
-      expect(tester.getRect(find.byKey(_card)).left, closeTo(577.5, 0.01));
+      expect(tester.getRect(find.byKey(_card)).left, closeTo(590.5, 0.01));
 
       // Tablet → phone: the card re-centres on the (now single) layout rather
       // than staying pinned to a half that no longer exists.
@@ -119,8 +119,8 @@ void main() {
       await _resizeTo(tester, const Size(1200, 800));
       await tester.pumpAndSettle();
       final rect = tester.getRect(find.byKey(_card));
-      expect(rect.left, closeTo(577.5, 0.01));
-      expect(rect.right, closeTo(1037.5, 0.01));
+      expect(rect.left, closeTo(590.5, 0.01));
+      expect(rect.right, closeTo(1050.5, 0.01));
     },
   );
 

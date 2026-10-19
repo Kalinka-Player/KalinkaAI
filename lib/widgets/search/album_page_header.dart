@@ -14,7 +14,7 @@ import 'track_group_actions.dart';
 
 /// A phone-wide pane stacks an album's cover over its tracks; anything wider
 /// sets the cover and what it says in a column beside them.
-const double kAlbumSideLayoutWidth = 480;
+const double kAlbumSideLayoutWidth = 440;
 
 /// The artist an album page can open: only one its listing named by a full
 /// id, so the link keeps the album's source and never looks a name up.
