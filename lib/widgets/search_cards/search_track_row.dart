@@ -50,6 +50,9 @@ class SearchTrackRow extends ConsumerStatefulWidget {
   final String? containerId;
   final int? containerIndex;
 
+  /// The narrowest a row's text gives the album a column of its own.
+  static const double albumColumnMinWidth = 560;
+
   /// Fits three digits of the 14px mono numeral; longer numbers scale down.
   static const double folderNumberWidth = 28;
 
@@ -195,6 +198,9 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     final subtitle = inAlbum
         ? (artist.trim().toLowerCase() == albumArtist ? '' : artist)
         : [artist, album].where((s) => s.isNotEmpty).join(' \u00B7 ');
+    // Where the row is wide enough, the album has a column of its own and
+    // the line under the title keeps the artist.
+    final albumColumn = !inAlbum && widget.folderTrackNumber == null;
     final duration = formatTrackDuration(
       track?.duration != null ? track!.duration * 1000 : null,
     );
@@ -318,53 +324,76 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
             ),
         ],
       ),
-      content: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ...matchBadge(widget.item),
-          Text(
-            title,
-            style: KalinkaTextStyles.trackRowTitle.copyWith(
-              fontSize: inAlbum ? 16 : null,
-              color: selectionMode && isSelected
-                  ? KalinkaColors.accentTint
-                  : null,
-            ),
-            maxLines: inAlbum ? 2 : 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (!inAlbum || subtitle.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (widget.labelled &&
-                    sourceBadgeVisible(ref, widget.item.id)) ...[
-                  SourceBadge(
-                    entityId: widget.item.id,
-                    size: SourceBadgeSize.standard,
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                Expanded(
-                  child: widget.labelled
-                      ? Text.rich(
-                          entityTypeSubtitle('Track', subtitle),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        )
-                      : Text(
-                          subtitle,
-                          style: KalinkaTextStyles.trackRowSubtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+      content: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide =
+              albumColumn &&
+              constraints.maxWidth >= SearchTrackRow.albumColumnMinWidth;
+          Widget details(String subtitle) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ...matchBadge(widget.item),
+              Text(
+                title,
+                style: KalinkaTextStyles.trackRowTitle.copyWith(
+                  fontSize: inAlbum ? 16 : null,
+                  color: selectionMode && isSelected
+                      ? KalinkaColors.accentTint
+                      : null,
+                ),
+                maxLines: inAlbum ? 2 : 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (!inAlbum || subtitle.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (widget.labelled &&
+                        sourceBadgeVisible(ref, widget.item.id)) ...[
+                      SourceBadge(
+                        entityId: widget.item.id,
+                        size: SourceBadgeSize.standard,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Expanded(
+                      child: widget.labelled
+                          ? Text.rich(
+                              entityTypeSubtitle('Track', subtitle),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            )
+                          : Text(
+                              subtitle,
+                              style: KalinkaTextStyles.trackRowSubtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
-        ],
+            ],
+          );
+          if (!wide) return details(subtitle);
+          return Row(
+            children: [
+              Expanded(flex: 5, child: details(artist)),
+              const SizedBox(width: 16),
+              Expanded(
+                flex: 4,
+                child: Text(
+                  album,
+                  style: KalinkaTextStyles.trackRowSubtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          );
+        },
       ),
       trailing: duration != null || showBars
           ? TrackRowTrailing(duration: duration, current: showBars)

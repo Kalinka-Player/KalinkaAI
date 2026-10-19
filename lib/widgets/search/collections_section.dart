@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data_model/data_model.dart';
+
 import '../../providers/catalog_cards_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/connection_state_provider.dart';
@@ -67,25 +69,7 @@ class CollectionsSection extends ConsumerWidget {
                 ? () => onOpenCatalog(shelf.plan, shelf.plan.title)
                 : null,
           ),
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < shelf.items.length; i++) ...[
-                if (i > 0)
-                  Padding(
-                    padding: EdgeInsets.only(
-                      left: BrowseItemRows.textInsetOf(shelf.items[i - 1]),
-                    ),
-                    child: const Divider(
-                      color: KalinkaColors.borderSubtle,
-                      thickness: 1,
-                      height: 1,
-                    ),
-                  ),
-                CollectionShelfRow(item: shelf.items[i]),
-              ],
-            ],
-          ),
+          body: _CollectionColumns(items: shelf.items),
         );
       },
     );
@@ -280,6 +264,69 @@ class CollectionsEmptyCard extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// Collections in compact rows: one under another on a narrow pane, two or
+/// three across a wide one in reading order, so a lone collection keeps a
+/// row's width instead of stretching across the pane.
+class _CollectionColumns extends StatelessWidget {
+  final List<BrowseItem> items;
+
+  const _CollectionColumns({required this.items});
+
+  static const _gap = 16.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = ((constraints.maxWidth + _gap) / (360 * scale + _gap))
+            .floor()
+            .clamp(1, 3);
+        if (columns == 1) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < items.length; i++) ...[
+                if (i > 0)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: BrowseItemRows.textInsetOf(items[i - 1]),
+                    ),
+                    child: const Divider(
+                      color: KalinkaColors.borderSubtle,
+                      thickness: 1,
+                      height: 1,
+                    ),
+                  ),
+                CollectionShelfRow(item: items[i]),
+              ],
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < items.length; i += columns)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var c = 0; c < columns; c++) ...[
+                    if (c > 0) const SizedBox(width: _gap),
+                    Expanded(
+                      child: i + c < items.length
+                          ? CollectionShelfRow(item: items[i + c])
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              ),
+          ],
+        );
+      },
     );
   }
 }
