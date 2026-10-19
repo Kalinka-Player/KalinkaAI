@@ -114,9 +114,12 @@ class BrowseItemRows extends StatelessWidget {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
+    return RowColumnsListing(
+      details: RowColumnsListing.anyDetails(displayed),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
     );
   }
 

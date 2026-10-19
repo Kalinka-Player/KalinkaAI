@@ -414,14 +414,17 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             : index == 0
             ? _columnTitles(loaded)
             : null;
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: heading == null && titles == null
-              ? row
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [?heading, ?titles, row],
-                ),
+        return RowColumnsListing(
+          details: trackIdsMemo.details(loaded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: heading == null && titles == null
+                ? row
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [?heading, ?titles, row],
+                  ),
+          ),
         );
       },
       initialPlaceholder: grid
@@ -641,14 +644,17 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               queueContextIds: trackIds.isEmpty ? null : trackIds,
             );
             if (columns > 1) return row;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: index == 0
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [_columnTitles(loaded), row],
-                    )
-                  : row,
+            return RowColumnsListing(
+              details: trackIdsMemo.details(loaded),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: index == 0
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [_columnTitles(loaded), row],
+                      )
+                    : row,
+              ),
             );
           },
           initialPlaceholder: grid
@@ -953,6 +959,17 @@ class _FolderActions extends ConsumerWidget {
 class _TrackIdsMemo {
   List<String> _ids = const [];
   int _forLength = -1;
+  bool _details = true;
+  int _detailsForLength = -1;
+
+  /// Whether any loaded row would fill the Details column.
+  bool details(List<BrowseItem> loaded) {
+    if (loaded.length != _detailsForLength) {
+      _detailsForLength = loaded.length;
+      _details = RowColumnsListing.anyDetails(loaded);
+    }
+    return _details;
+  }
 
   List<int> _albumNumbers = const [];
   int _albumForLength = -1;
