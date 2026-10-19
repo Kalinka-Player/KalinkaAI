@@ -231,7 +231,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                   ),
                   const SizedBox(height: 20),
                   AwayLock(away: away, child: const _TransportControls()),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   // Where sound goes, under the transport; the headers carry no
                   // output switch, and volume is left to the output itself.
                   AwayLock(

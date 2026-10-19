@@ -282,6 +282,21 @@ void main() {
       expect(titles, findsNWidgets(2));
       expect(find.text('DETAILS'), findsOneWidget);
       expect(find.text('ALBUM'), findsOneWidget);
+      // Each name starts where its group's words do, past a track's number.
+      double left(Finder f) => tester.getTopLeft(f).dx;
+      expect(
+        left(find.text('NAME')),
+        left(inFolder(find.text('Bonus tracks'))),
+      );
+      expect(
+        left(find.text('TITLE')),
+        left(
+          find.descendant(
+            of: _trackRow('So What'),
+            matching: find.text('So What'),
+          ),
+        ),
+      );
       expect(lines(titles.first), lines(folderRow));
       expect(lines(titles.last), lines(folderRow));
       final folders = tester.getRect(_heading('FOLDERS'));

@@ -523,6 +523,7 @@ void main() {
     expect(find.byType(ColumnSeparator), findsWidgets);
     // A listing of tracks names its columns as such, over each one.
     for (final (title, cell) in [
+      ('TITLE', 'Named Song'),
       ('ARTIST', 'Someone'),
       ('ALBUM', 'An Album'),
     ]) {
@@ -531,7 +532,6 @@ void main() {
         closeTo(tester.getTopLeft(find.text(cell)).dx, 1),
       );
     }
-    expect(find.text('TITLE'), findsOneWidget);
     expect(find.text('TIME'), findsOneWidget);
   });
 

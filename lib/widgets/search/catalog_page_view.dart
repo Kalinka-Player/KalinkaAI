@@ -400,7 +400,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                   ? null
                   : RowColumnsHeader(
                       tracks: item.browseType == BrowseType.track,
-                      titleInset: BrowseItemRows.textInsetOf(item),
+                      titleInset:
+                          BrowseItemRows.textInsetOf(item) +
+                          (numberedInFolder(item)
+                              ? SearchTrackRow.folderNumberWidth
+                              : 0),
                     ))
             : index == 0
             ? _columnTitles(loaded)
