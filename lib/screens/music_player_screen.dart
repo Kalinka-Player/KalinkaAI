@@ -86,6 +86,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   bool _settingsCovering = false;
   bool _discoveryOpen = false;
 
+  // The docked player widened over browsing for focused listening. Browsing
+  // stays mounted beneath it, so its visit and scroll survive.
+  bool _playerExpanded = false;
+
   // The wizard connects, which fires `connected` — these keep the
   // connected-listener from stacking a second wizard or racing itself.
   bool _wizardOpen = false;
@@ -268,6 +272,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }
 
   void _openSettings() => setState(() {
+    _playerExpanded = false;
     _pluginsOpen = false;
     _settingsCovering = false;
     _settingsOpen = true;
@@ -277,6 +282,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     if (!ref.read(pluginCatalogEnabledProvider)) return;
     ref.read(rendererSettingsRouteProvider.notifier).close();
     setState(() {
+      _playerExpanded = false;
       _settingsOpen = false;
       _settingsCovering = false;
       _pluginsOpen = true;
@@ -294,8 +300,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         setState(() => _settingsCovering = covering),
   );
 
-  void _requestHomeSearch() =>
-      ref.read(homeSearchRequestProvider.notifier).request();
+  void _requestHomeSearch() {
+    if (_playerExpanded) setState(() => _playerExpanded = false);
+    ref.read(homeSearchRequestProvider.notifier).request();
+  }
 
   void _showExpandedPlayer() {
     ref.read(playerViewProvider.notifier).show(PlayerView.nowPlaying);
@@ -472,6 +480,17 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   @override
   Widget build(BuildContext context) {
     ref.listen(musicSourcesSettingsRequestProvider, (_, _) => _openPlugins());
+    // What opens in the browsing pane brings the pane back into view.
+    void showBrowsing() {
+      if (_playerExpanded) setState(() => _playerExpanded = false);
+    }
+
+    ref.listen(homeCustomisationProvider, (_, open) {
+      if (open) showBrowsing();
+    });
+    ref.listen(rendererSettingsRouteProvider, (_, route) {
+      if (route != null) showBrowsing();
+    });
     final customiseOpen = ref.watch(homeCustomisationProvider);
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
     // Arm the failure recorder from app start. Left to the queue rows that
@@ -521,7 +540,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       backgroundColor: KalinkaColors.background,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final isTablet = constraints.maxWidth >= kKalinkaTabletBreakpoint;
+          final isTablet = kalinkaSplitLayout(constraints.maxWidth);
           return Stack(
             // Tight constraints keep the layout root a relayout boundary.
             fit: StackFit.expand,
@@ -535,7 +554,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   !_serverSheetOpen &&
                   rendererSettings == null)
                 Positioned(
-                  left: isTablet ? (constraints.maxWidth + 1) / 2 : 0,
+                  left: isTablet
+                      ? kalinkaPlayerPaneWidth(constraints.maxWidth) + 1
+                      : 0,
                   right: 0,
                   top: 0,
                   bottom: 0,
@@ -786,7 +807,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         _pluginsOpen ||
         _discoveryOpen ||
         rendererSettings != null ||
-        (isTablet && _serverSheetOpen);
+        (isTablet && (_serverSheetOpen || _playerExpanded));
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 200),
       layoutBuilder: _topmostScreenLayout,
@@ -862,92 +883,41 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           !_settingsOpen &&
           !_pluginsOpen &&
           !_serverSheetOpen &&
+          !_playerExpanded &&
           rendererSettings == null,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // Settings, renderer settings and Home own their back via internal
         // PopScopes.
         if (_settingsOpen || _pluginsOpen || rendererSettings != null) return;
+        if (_playerExpanded) {
+          setState(() => _playerExpanded = false);
+          return;
+        }
         if (_serverSheetOpen) {
           setState(() => _serverSheetOpen = false);
           return;
         }
       },
-      child: Stack(
-        children: [
-          Row(
-            children: [
-              // Left panel: Now Playing with local overlays.
-              // SizedBox.expand() clamps infinity to the available size on both
-              // axes, giving RepaintBoundary tight constraints so it becomes a
-              // Flutter relayout boundary. Without this, layout invalidations
-              // (e.g. progress slider ticks) propagate up to the Row and cause
-              // the right panel to relayout and repaint unnecessarily.
-              // SheetAnchor aligns modal bottom sheets launched from this
-              // panel (e.g. the output switcher) with its bounds.
-              Expanded(
-                child: SizedBox.expand(
-                  child: RepaintBoundary(
-                    child: SheetAnchor(
-                      child: Stack(
-                        children: [
-                          // Playback stays visible and interactive while the
-                          // management panels cover the right panel.
-                          SafeArea(
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              layoutBuilder: _topmostScreenLayout,
-                              transitionBuilder: _screenSwitcherTransition,
-                              child: disconnected
-                                  ? KeyedSubtree(
-                                      key: const ValueKey('disconnected'),
-                                      child: _buildDisconnectedState(
-                                        actions: false,
-                                      ),
-                                    )
-                                  : NowPlayingContent(
-                                      key: const ValueKey('player'),
-                                      isTablet: true,
-                                      outputSwitcherKey: _outputSwitcherKey,
-                                      onFindMusic: _requestHomeSearch,
-                                    ),
-                            ),
-                          ),
-                          if (!disconnected)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              child: QueueMiniPlayer(
-                                outputSwitcherKey: _outputSwitcherKey,
-                              ),
-                            ),
-                          // Sheets opened here are anchored to this panel,
-                          // so their answers belong over it too.
-                          Positioned(
-                            left: 20,
-                            right: 20,
-                            bottom: 24,
-                            child: const IgnorePointer(
-                              child: KalinkaToastOverlay(
-                                isTablet: true,
-                                scope: ToastScope.panel,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              // Divider
-              Container(width: 1, color: KalinkaColors.borderSubtle),
-              // Right panel — Home, with the management panels opening over
-              // it. SizedBox.expand() gives RepaintBoundary tight constraints
-              // so its layout invalidations don't cross into the left panel.
-              // Home's catalog sheets belong over this panel too.
-              Expanded(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final playerWidth = kalinkaPlayerPaneWidth(width);
+          final expanded = _playerExpanded && !disconnected;
+          final motion = MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 220);
+          // Browsing keeps its own width and state under an expanded player,
+          // so giving it back restores the same visit.
+          final browsing = Positioned(
+            left: playerWidth + 1,
+            top: 0,
+            bottom: 0,
+            width: width - playerWidth - 1,
+            child: Offstage(
+              offstage: expanded,
+              child: TickerMode(
+                enabled: !expanded,
                 child: SizedBox.expand(
                   child: RepaintBoundary(
                     child: SheetAnchor(
@@ -1019,12 +989,116 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   ),
                 ),
               ),
+            ),
+          );
+          return Stack(
+            children: [
+              browsing,
+              // Divider
+              Positioned(
+                left: playerWidth,
+                top: 0,
+                bottom: 0,
+                width: 1,
+                child: const ColoredBox(color: KalinkaColors.borderSubtle),
+              ),
+              // Left panel: Now Playing with local overlays.
+              // SizedBox.expand() clamps infinity to the available size on both
+              // axes, giving RepaintBoundary tight constraints so it becomes a
+              // Flutter relayout boundary. Without this, layout invalidations
+              // (e.g. progress slider ticks) propagate up to the Row and cause
+              // the right panel to relayout and repaint unnecessarily.
+              // SheetAnchor aligns modal bottom sheets launched from this
+              // panel (e.g. the output switcher) with its bounds.
+              AnimatedPositioned(
+                duration: motion,
+                curve: Curves.easeOutCubic,
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: expanded ? width : playerWidth,
+                child: SizedBox.expand(
+                  child: RepaintBoundary(
+                    child: SheetAnchor(
+                      child: Stack(
+                        children: [
+                          // Playback stays visible and interactive while the
+                          // management panels cover the right panel.
+                          SafeArea(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              layoutBuilder: _topmostScreenLayout,
+                              transitionBuilder: _screenSwitcherTransition,
+                              child: disconnected
+                                  ? KeyedSubtree(
+                                      key: const ValueKey('disconnected'),
+                                      child: _buildDisconnectedState(
+                                        actions: false,
+                                      ),
+                                    )
+                                  : _boundedWhenExpanded(
+                                      NowPlayingContent(
+                                        key: const ValueKey('player'),
+                                        isTablet: true,
+                                        outputSwitcherKey: _outputSwitcherKey,
+                                        onFindMusic: _requestHomeSearch,
+                                        expanded: expanded,
+                                        onToggleExpanded: () => setState(
+                                          () => _playerExpanded =
+                                              !_playerExpanded,
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          if (!disconnected)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: _boundedWhenExpanded(
+                                QueueMiniPlayer(
+                                  outputSwitcherKey: _outputSwitcherKey,
+                                ),
+                              ),
+                            ),
+                          // Sheets opened here are anchored to this panel,
+                          // so their answers belong over it too.
+                          Positioned(
+                            left: 20,
+                            right: 20,
+                            bottom: 24,
+                            child: const IgnorePointer(
+                              child: KalinkaToastOverlay(
+                                isTablet: true,
+                                scope: ToastScope.panel,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // The same one-time tour as the phone. It used to be phone-only, so
+              // anyone who first ran the app on a wide window never saw it.
+              if (_showCoachMarks) _buildCoachMarks(),
             ],
-          ),
-          // The same one-time tour as the phone. It used to be phone-only, so
-          // anyone who first ran the app on a wide window never saw it.
-          if (_showCoachMarks) _buildCoachMarks(),
-        ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// The player's own column when it is widened over browsing: centred and
+  /// no wider than its controls read well.
+  Widget _boundedWhenExpanded(Widget child) {
+    if (!_playerExpanded) return child;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: child,
       ),
     );
   }
@@ -1051,8 +1125,7 @@ class _ExpandedPlayerSheetState extends State<_ExpandedPlayerSheet> {
     // Dismiss exactly once when crossing into the tablet layout. Scheduling a
     // pop on every resize frame re-ran after the route was gone and threw
     // "No element" (Navigator.pop on empty history) mid-resize.
-    if (!_dismissing &&
-        MediaQuery.of(context).size.width >= kKalinkaTabletBreakpoint) {
+    if (!_dismissing && kalinkaSplitLayout(MediaQuery.sizeOf(context).width)) {
       _dismissing = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {

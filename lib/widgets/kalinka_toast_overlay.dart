@@ -112,12 +112,12 @@ class KalinkaToastHost extends ConsumerWidget {
     final inset = ref.watch(toastBottomInsetProvider);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isTablet = constraints.maxWidth >= kKalinkaTabletBreakpoint;
+        final isTablet = kalinkaSplitLayout(constraints.maxWidth);
         return Stack(
           children: [
             child,
             if (isTablet)
-              // Bottom-right, over the queue panel.
+              // Bottom-right, over the browsing panel.
               Positioned(
                 right: 20,
                 bottom: inset,

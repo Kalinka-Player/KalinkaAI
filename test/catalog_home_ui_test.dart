@@ -167,7 +167,7 @@ void main() {
       void expectPanelBounds(double width) {
         final choices = find.byType(HomePreviewChoices);
         final rect = tester.getRect(choices);
-        expect(rect.left, closeTo((width + 1) / 2, 1));
+        expect(rect.left, closeTo(kalinkaPlayerPaneWidth(width) + 1, 1));
         expect(rect.right, closeTo(width, 1));
         final scroll = find.ancestor(
           of: choices,
@@ -835,8 +835,9 @@ void main() {
       await tester.tap(find.byTooltip('Customise Home'));
       await tester.pumpAndSettle();
       final panel = find.byType(CustomiseHomeScreen);
-      expect(tester.getRect(panel).left, 600.5);
-      expect(tester.getSize(panel).width, 599.5);
+      // The player keeps 360 of the 1200; Home takes the rest.
+      expect(tester.getRect(panel).left, 361);
+      expect(tester.getSize(panel).width, 839);
       expect(find.byType(NowPlayingContent), findsOneWidget);
       await tester.tap(find.byTooltip('Preview for Editorial'));
       await tester.pumpAndSettle();
@@ -844,7 +845,7 @@ void main() {
         tester
             .getRect(find.byKey(const ValueKey('home-preview-switch-menu')))
             .left,
-        greaterThanOrEqualTo(600.5),
+        greaterThanOrEqualTo(361),
       );
       expect(
         tester
@@ -858,11 +859,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester.getRect(find.byKey(KalinkaDialog.cardKey)).left,
-        greaterThanOrEqualTo(600.5),
+        greaterThanOrEqualTo(361),
       );
       expect(
         tester.getCenter(find.byKey(KalinkaDialog.cardKey)),
-        const Offset(900, 450),
+        const Offset(780.5, 450),
       );
       tester.view.physicalSize = const Size(375, 812);
       await tester.pumpAndSettle();
