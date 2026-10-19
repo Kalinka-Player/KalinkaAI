@@ -214,16 +214,24 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
 
     if (page.isArtist) return _buildArtist(page, visit);
     final listing = page.folderLayout ? visit.shownListing : page;
-    // A listing of one kind of item — declared by its source, or chosen to
-    // narrow it to — lays out as that family's chosen Grid or List.
-    final family = page.folderLayout || isAlbum || page.isPlaylist
+    // A catalog made of shelves shows them until a kind is chosen; choosing
+    // one narrows the catalog to that kind's flat listing, which is the same
+    // listing its shelf was previewing.
+    // An album is its tracks, whatever sections it claims.
+    final shelves =
+        !page.folderLayout &&
+        !isAlbum &&
+        page.sections.isNotEmpty &&
+        query.type == null;
+    // A listing laid out as its catalog's preview says, or as chosen for it
+    // on this device. Folders, albums and playlists list tracks.
+    final layout = page.folderLayout || isAlbum || page.isPlaylist || shelves
         ? null
-        : ListingFamily.of(
-            _contentTypeOf(expandedShelf) ?? page.preview?.contentType,
-          );
+        : _layoutOf(page, expandedShelf);
     final grid =
-        family != null &&
-        (ref.watch(listingPresentationProvider)[family] ?? family.byDefault) ==
+        layout != null &&
+        (ref.watch(listingPresentationProvider)[layout.id] ??
+                layout.byDefault) ==
             ListingPresentation.grid;
     // Any folder shown, the same one again included, opens at its top.
     if (listing.id != _shownListingId) {
@@ -257,7 +265,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             expandedShelf: expandedShelf,
             onCollapse: () => notifier.expandShelf(null),
             total: _total < 0 ? null : _total,
-            family: family,
+            layout: layout,
           );
 
     // A collection being edited lists its tracks to be moved and dropped
@@ -279,14 +287,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       );
     }
 
-    // A catalog made of shelves shows them until a kind is chosen; choosing
-    // one narrows the catalog to that kind's flat listing, which is the same
-    // listing its shelf was previewing.
-    // An album is its tracks, whatever sections it claims.
-    if (!page.folderLayout &&
-        !isAlbum &&
-        page.sections.isNotEmpty &&
-        query.type == null) {
+    if (shelves) {
       return CatalogSectionsView(
         page: page,
         query: query,
@@ -475,7 +476,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         },
       );
     }
-    if (family != null || (page.canEdit && !page.isPlaylist)) {
+    // Compact rows of one kind of item, and the collections index, go two
+    // or three across a wide pane; anything else keeps one row per line.
+    if (grid ||
+        (layout?.rowsAcross ?? false) ||
+        (page.canEdit && !page.isPlaylist)) {
       final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
       return LayoutBuilder(
         builder: (context, constraints) {
@@ -575,10 +580,17 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         ? visit.artistTab
         : (available.firstOrNull ?? ArtistRelation.albums);
     final releases = shown == ArtistRelation.albums;
-    const family = ListingFamily.albums;
+    // Kept under the artist: one artist's releases may read best as covers,
+    // another's as rows.
+    final layout = ListingLayout(
+      page.id!,
+      contentType: PreviewContentType.album,
+      byDefault: ListingPresentation.grid,
+    );
     final grid =
         releases &&
-        (ref.watch(listingPresentationProvider)[family] ?? family.byDefault) ==
+        (ref.watch(listingPresentationProvider)[layout.id] ??
+                layout.byDefault) ==
             ListingPresentation.grid;
     final header = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -589,9 +601,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             relations: available.length > 1 ? available : const [],
             shown: shown,
             onShow: notifier.setArtistTab,
-            trailing: releases
-                ? const PresentationToggle(family: family)
-                : null,
+            trailing: releases ? PresentationToggle(layout: layout) : null,
           ),
       ],
     );
@@ -688,14 +698,29 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     SearchType.album => PreviewContentType.album,
     SearchType.artist => PreviewContentType.artist,
     SearchType.playlist => PreviewContentType.playlist,
+    SearchType.track => PreviewContentType.track,
     _ => null,
   };
 
-  /// What an artwork grid shows as a card; anything else keeps its row.
-  static bool _inGrid(BrowseItem item) => switch (item.browseType) {
-    BrowseType.album || BrowseType.artist || BrowseType.playlist => true,
-    _ => false,
-  };
+  /// How [page] lays out, or the shelf it was narrowed to: that shelf's own
+  /// listing, under its own id and as its own preview says.
+  static ListingLayout? _layoutOf(CatalogPage page, SearchType? shelf) {
+    final id = page.id;
+    if (id == null) return null;
+    if (shelf == null) return ListingLayout.of(id, page.preview);
+    final section = page.sections
+        .where((section) => CatalogPage.typeOf(section) == shelf)
+        .firstOrNull;
+    return ListingLayout.of(
+      section?.id ?? '$id#${shelf.name}',
+      section?.catalog?.previewConfig ??
+          Preview(type: PreviewType.none, contentType: _contentTypeOf(shelf)),
+    );
+  }
+
+  /// What an artwork grid shows as a card: anything but a track, which keeps
+  /// its row.
+  static bool _inGrid(BrowseItem item) => item.browseType != BrowseType.track;
 
   /// The names of the listing's columns, over its first row; nothing while
   /// its rows are too narrow for any.
@@ -821,9 +846,9 @@ class _CatalogHeader extends StatelessWidget {
   /// How many items the listing holds, once its source has said.
   final int? total;
 
-  /// The family whose Grid/List choice lays the listing out; null where the
-  /// listing has only rows.
-  final ListingFamily? family;
+  /// How the listing lays out, offered as a Grid/List choice; null where it
+  /// has only rows.
+  final ListingLayout? layout;
 
   const _CatalogHeader({
     required this.page,
@@ -833,7 +858,7 @@ class _CatalogHeader extends StatelessWidget {
     required this.expandedShelf,
     required this.onCollapse,
     required this.total,
-    this.family,
+    this.layout,
   });
 
   @override
@@ -845,12 +870,12 @@ class _CatalogHeader extends StatelessWidget {
           page: page,
           showLibraryRescan: LibraryRescanControl.isLibraryPage(page.id),
         ),
-        if (family case final family?)
+        if (layout case final layout?)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Align(
               alignment: Alignment.centerRight,
-              child: PresentationToggle(family: family),
+              child: PresentationToggle(layout: layout),
             ),
           ),
         if (page.isPlaylist)

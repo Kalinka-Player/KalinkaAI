@@ -49,7 +49,12 @@ final _page = CatalogPage.category(
   ),
 );
 
-Future<ProviderContainer> _pump(WidgetTester tester, Size size) async {
+Future<ProviderContainer> _pump(
+  WidgetTester tester,
+  Size size, {
+  CatalogPage? page,
+}) async {
+  final shown = page ?? _page;
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -63,13 +68,13 @@ Future<ProviderContainer> _pump(WidgetTester tester, Size size) async {
     ],
   );
   addTearDown(container.dispose);
-  container.read(searchSessionProvider.notifier).openPage(_page);
+  container.read(searchSessionProvider.notifier).openPage(shown);
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
         home: Scaffold(
-          body: CatalogPageView(page: _page, onBackToCatalogs: () {}),
+          body: CatalogPageView(page: shown, onBackToCatalogs: () {}),
         ),
       ),
     ),
@@ -111,20 +116,64 @@ void main() {
     final second = tester.getRect(find.byType(SearchAlbumRow).at(1));
     expect(second.top, first.top);
     expect(second.left, greaterThan(first.right));
-    // Remembered for the family, not for this one page.
+    // Remembered for this listing, on this device.
     expect(
-      container
-          .read(listingPresentationProvider.notifier)
-          .of(ListingFamily.albums),
+      container.read(listingPresentationProvider)[_page.id],
       ListingPresentation.list,
     );
+  });
+
+  testWidgets('another album catalog keeps its own default', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'Kalinka.listingPresentation.v2': '{"kalinka:demo:catalog:old":"list"}',
+    });
+    await _pump(tester, const Size(1000, 900));
+    expect(find.byType(ArtworkGridCard), findsWidgets);
+  });
+
+  testWidgets('a catalog previewed as rows opens as rows', (tester) async {
+    await _pump(
+      tester,
+      const Size(1000, 900),
+      page: CatalogPage.category(
+        id: 'kalinka:demo:catalog:tiles',
+        title: 'Tiles',
+        preview: Preview(
+          type: PreviewType.tile,
+          contentType: PreviewContentType.album,
+        ),
+      ),
+    );
+    expect(find.byType(ArtworkGridCard), findsNothing);
+    expect(find.byType(SearchAlbumRow), findsWidgets);
+    expect(find.bySemanticsLabel('Grid view'), findsOneWidget);
+  });
+
+  testWidgets('a catalog of tracks offers no grid', (tester) async {
+    await _pump(
+      tester,
+      const Size(1000, 900),
+      page: CatalogPage.category(
+        id: 'kalinka:demo:catalog:tracks',
+        title: 'Tracks',
+        preview: Preview(
+          type: PreviewType.imageText,
+          contentType: PreviewContentType.track,
+        ),
+      ),
+    );
+    expect(find.bySemanticsLabel('Grid view'), findsNothing);
+    expect(find.byType(ArtworkGridCard), findsNothing);
   });
 
   testWidgets('a phone keeps one row per album in List', (tester) async {
     final container = await _pump(tester, const Size(390, 800));
     container
         .read(listingPresentationProvider.notifier)
-        .set(ListingFamily.albums, ListingPresentation.list);
+        .set(
+          ListingLayout.of(_page.id!, _page.preview)!,
+          ListingPresentation.list,
+        );
     await tester.pumpAndSettle();
 
     final first = tester.getRect(find.byType(SearchAlbumRow).at(0));
