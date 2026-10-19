@@ -58,6 +58,13 @@ class _AlbumApi extends QueueApi {
 
   _AlbumApi(this.tracks, {this.fail = false});
 
+  /// The server expands the album into all of its tracks.
+  @override
+  Future<StatusMessage> replace(List<String> items) async {
+    await super.replace(items);
+    return StatusMessage(count: tracks.length);
+  }
+
   @override
   Future<BrowseItemsList> browse(
     String id, {

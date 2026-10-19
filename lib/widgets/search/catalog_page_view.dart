@@ -262,8 +262,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
 
     // A collection being edited lists its tracks to be moved and dropped
     // rather than played, all of them at once, since an edit names them all.
+    // Only the shown visit: one kept for Back would load its whole list too.
     if (ContainerPageActions.isCollection(page) &&
-        ref.watch(collectionEditProvider.select((s) => s.active))) {
+        ref.watch(collectionEditProvider.select((s) => s.active)) &&
+        ref.watch(searchSessionProvider.select((s) => s.visitId)) ==
+            visit.visitId) {
       return ListView(
         padding: const EdgeInsets.only(bottom: 24),
         children: [
@@ -363,6 +366,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                 queueContextIds: trackIds.isEmpty ? null : trackIds,
                 containerId: inContainer ? page.id : null,
                 containerIndex: inContainer ? index : null,
+                containerSize: _total < 0 ? null : _total,
                 albumTrackNumber: trackIdsMemo.albumNumberAt(index, loaded),
                 albumArtist: page.description,
                 labelled: false,
@@ -373,6 +377,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                 queueContextIds: trackIds.isEmpty ? null : trackIds,
                 containerId: page.id,
                 containerIndex: index,
+                containerSize: _total < 0 ? null : _total,
               )
             : numberedInFolder(item)
             ? SearchTrackRow(
@@ -477,7 +482,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             grid: grid,
             columns: grid
                 ? _gridColumns(width - 20, scale)
-                : _compactColumns(width - 32, scale),
+                : compactColumnsFor(width - 32, scale),
           );
         },
       );
@@ -535,19 +540,22 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     bool keep(BrowseItem item) =>
         isArtistRelease(item) == (relation == ArtistRelation.albums);
     return (offset, limit) async {
-      if (offset == 0) _relationOffsets[relation] = 0;
       final api = ref.read(kalinkaProxyProvider);
       final kept = <BrowseItem>[];
+      // Advanced only once the chunk is whole, so a failed read is retried
+      // from where it began rather than skipping what it had kept.
+      var from = offset == 0 ? 0 : (_relationOffsets[relation] ?? 0);
       while (kept.length < limit) {
-        final from = _relationOffsets[relation] ?? 0;
         final list = await api.browse(id, offset: from, limit: limit);
-        _relationOffsets[relation] = from + list.items.length;
+        from += list.items.length;
         kept.addAll(list.items.where(keep));
-        if (list.items.isEmpty || from + list.items.length >= list.total) {
+        if (list.items.isEmpty || from >= list.total) {
+          _relationOffsets[relation] = from;
           // Read to its end: what is kept is all there is.
           return ItemChunk(items: kept, total: offset + kept.length);
         }
       }
+      _relationOffsets[relation] = from;
       return ItemChunk(items: kept);
     };
   }
@@ -604,7 +612,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             ? 1
             : grid
             ? _gridColumns(width - 20, scale)
-            : _compactColumns(width - 32, scale);
+            : compactColumnsFor(width - 32, scale);
         return InfiniteListView<BrowseItem>(
           key: ValueKey('${page.id}|$shown'),
           padding: const EdgeInsets.only(bottom: 24),
@@ -683,8 +691,6 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     _ => false,
   };
 
-  /// Covers of about 180–220 across, more columns as the pane grows, never
-  /// narrower than a readable caption.
   /// The names of the listing's columns, over its first row; nothing while
   /// its rows are too narrow for any.
   static Widget _columnTitles(List<BrowseItem> loaded) => RowColumnsHeader(
@@ -692,18 +698,13 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     titleInset: BrowseItemRows.textInsetOf(loaded.first),
   );
 
+  /// Covers of about 180–220 across, more columns as the pane grows, never
+  /// narrower than a readable caption.
   static int _gridColumns(double width, double scale) {
     const gap = 8.0;
     final wanted = ((width + gap) / (220 * scale + gap)).ceil();
     final fits = ((width + gap) / (140 * scale + gap)).floor();
     return wanted.clamp(1, fits < 1 ? 1 : fits).clamp(1, 10);
-  }
-
-  /// Compact items two or three across where each keeps room for its art,
-  /// name, detail and actions; one column otherwise.
-  static int _compactColumns(double width, double scale) {
-    const gap = 16.0;
-    return ((width + gap) / (360 * scale + gap)).floor().clamp(1, 3);
   }
 
   Widget? _discHeading(int index, List<BrowseItem> loaded, bool multiDisc) {
@@ -952,6 +953,7 @@ class _FolderActions extends ConsumerWidget {
 class _TrackIdsMemo {
   List<String> _ids = const [];
   int _forLength = -1;
+
   List<int> _albumNumbers = const [];
   int _albumForLength = -1;
   bool _multiDisc = false;

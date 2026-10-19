@@ -261,22 +261,40 @@ class CatalogPage {
 
   bool get isRoot => id == null;
 
-  /// The same page under another name.
-  CatalogPage retitled(String title) => CatalogPage.category(
-    id: id,
-    title: title,
-    provider: provider,
-    description: description,
-    totalDurationSeconds: totalDurationSeconds,
-    artPath: artPath,
-    filters: filters,
-    sections: sections,
-    canEdit: canEdit,
-    folderLayout: folderLayout,
-    canAdd: canAdd,
-    preview: preview,
-    item: item,
-  );
+  /// The same page under another name, its item renamed with it so its menu
+  /// and actions say the new one.
+  CatalogPage retitled(String title) {
+    final item = this.item;
+    final playlist = item?.playlist;
+    return CatalogPage.category(
+      id: id,
+      title: title,
+      provider: provider,
+      description: description,
+      totalDurationSeconds: totalDurationSeconds,
+      artPath: artPath,
+      filters: filters,
+      sections: sections,
+      canEdit: canEdit,
+      folderLayout: folderLayout,
+      canAdd: canAdd,
+      preview: preview,
+      item: item?.copyWith(
+        name: title,
+        playlist: playlist == null
+            ? null
+            : Playlist(
+                id: playlist.id,
+                name: title,
+                owner: playlist.owner,
+                image: playlist.image,
+                description: playlist.description,
+                trackCount: playlist.trackCount,
+                duration: playlist.duration,
+              ),
+      ),
+    );
+  }
 
   /// The entity kinds this category holds, in the order its source listed
   /// them — one per section. Empty for a single-kind category, which is what
@@ -723,6 +741,25 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
           state.results,
           holding: previous.resultsFilter,
         ),
+      );
+    } else if (previous.activeView != FindMusicView.results) {
+      // A page from before the latest search: that search stays the one
+      // Home offers to return to, and keeps running.
+      unanswered = const [];
+      next = next.copyWith(
+        queryGen: _queryGen,
+        searchQuery: state.searchQuery,
+        results: state.results,
+        clearResults: state.results == null,
+        searchLoading: state.searchLoading,
+        searchError: state.searchError,
+        clearError: state.searchError == null,
+        resultsFilter: state.resultsFilter,
+        resultsChoice: state.resultsChoice,
+        resultsGenreNames: state.resultsGenreNames,
+        matchSource: state.matchSource,
+        clearMatchSource: state.matchSource == null,
+        clearExpandedBlock: true,
       );
     } else {
       // A search a newer one replaced: what it still waited for is asked
@@ -1302,7 +1339,12 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// Drop the search: leave its results for the visit before them, with no
   /// query left to return to.
   void clearSearch() {
-    goBack();
+    // Past every visit of this search, an opened block's included.
+    final gen = state.queryGen;
+    do {
+      goBack();
+    } while (state.activeView == FindMusicView.results &&
+        state.queryGen == gen);
     if (state.activeView == FindMusicView.results) return;
     _queryGen++;
     state = state.copyWith(
