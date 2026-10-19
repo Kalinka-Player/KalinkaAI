@@ -12,9 +12,9 @@ import '../search_cards/track_row_support.dart';
 import '../source_badge.dart';
 import 'track_group_actions.dart';
 
-/// Below this pane width an album stacks its cover over its tracks; at or
-/// above it the cover and what it says stand in a column beside them.
-const double kAlbumSideLayoutWidth = 860;
+/// A phone-wide pane stacks an album's cover over its tracks; anything wider
+/// sets the cover and what it says in a column beside them.
+const double kAlbumSideLayoutWidth = 480;
 
 /// The artist an album page can open: only one its listing named by a full
 /// id, so the link keeps the album's source and never looks a name up.
@@ -138,68 +138,72 @@ class AlbumIdentityColumn extends StatelessWidget {
       trackCount,
       totalDurationSeconds ?? page.totalDurationSeconds,
     );
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: AlbumArtwork(page: page),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'ALBUM',
-            style: KalinkaFonts.mono(
-              fontSize: 12,
-              letterSpacing: 2,
-              color: KalinkaColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Semantics(
-            header: true,
-            child: Text(
-              title,
-              style: KalinkaFonts.display(
-                fontSize: 30,
-                height: 1.15,
-                letterSpacing: -0.5,
-                fontWeight: FontWeight.w500,
-                color: KalinkaColors.frost,
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 1,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AlbumArtwork(page: page),
               ),
             ),
-          ),
-          if (artist.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _ArtistLine(page: page, name: artist),
-          ],
-          const SizedBox(height: 8),
-          _SourceLine(page: page),
-          if (summary.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 20),
             Text(
-              summary,
-              style: KalinkaTextStyles.trackRowSubtitle.copyWith(fontSize: 14),
+              'ALBUM',
+              style: KalinkaFonts.mono(
+                fontSize: 12,
+                letterSpacing: 2,
+                color: KalinkaColors.textSecondary,
+              ),
             ),
-          ],
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              PlayAllChip(trackIds: [page.id!], trackCount: trackCount),
-              AddAllChip(
-                trackIds: [page.id!],
-                trackCount: trackCount,
-                name: title,
+            const SizedBox(height: 8),
+            Semantics(
+              header: true,
+              child: Text(
+                title,
+                style: KalinkaFonts.display(
+                  fontSize: constraints.maxWidth < 300 ? 24 : 30,
+                  height: 1.15,
+                  letterSpacing: -0.5,
+                  fontWeight: FontWeight.w500,
+                  color: KalinkaColors.frost,
+                ),
+              ),
+            ),
+            if (artist.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _ArtistLine(page: page, name: artist),
+            ],
+            const SizedBox(height: 8),
+            _SourceLine(page: page),
+            if (summary.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                summary,
+                style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+                  fontSize: 14,
+                ),
               ),
             ],
-          ),
-        ],
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                PlayAllChip(trackIds: [page.id!], trackCount: trackCount),
+                AddAllChip(
+                  trackIds: [page.id!],
+                  trackCount: trackCount,
+                  name: title,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
