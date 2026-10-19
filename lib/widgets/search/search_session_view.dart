@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../data_model/browse_filters.dart';
+import '../../data_model/data_model.dart' show SearchSuggestion;
 import '../browse_filters/browse_filter_form.dart' show resultKindLabel;
 import '../../providers/catalog_cards_provider.dart';
 import '../../providers/collection_edit_provider.dart';
@@ -898,7 +899,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           suggestions: ref.watch(smartSearchAvailableProvider) == true
               ? [
                   for (final s in session.aiSuggestions)
-                    if (!s.experimental) s.query,
+                    if (!s.experimental) s,
                 ]
               : const [],
           onSuggestion: _submitFromTile,
@@ -1238,7 +1239,7 @@ class _DiscoverHero extends StatelessWidget {
   final String smartSources;
 
   /// Prompts that each run as a search as they stand.
-  final List<String> suggestions;
+  final List<SearchSuggestion> suggestions;
   final ValueChanged<String> onSuggestion;
   final VoidCallback onOpenSearch;
 
@@ -1292,15 +1293,15 @@ class _DiscoverHero extends StatelessWidget {
             ),
           ],
           if (suggestions.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 10,
+              runSpacing: 10,
               children: [
-                for (final query in suggestions)
+                for (final suggestion in suggestions)
                   _SuggestionChip(
-                    query: query,
-                    onTap: () => onSuggestion(query),
+                    suggestion: suggestion,
+                    onTap: () => onSuggestion(suggestion.query),
                   ),
               ],
             ),
@@ -1312,37 +1313,86 @@ class _DiscoverHero extends StatelessWidget {
 }
 
 /// A curated prompt under the search entry, as wide as its words, that runs
-/// as a search when tapped.
+/// as a search when tapped. Its mark comes from what it asks for, else the
+/// time of day it was offered for.
 class _SuggestionChip extends StatelessWidget {
-  final String query;
+  final SearchSuggestion suggestion;
   final VoidCallback onTap;
 
-  const _SuggestionChip({required this.query, required this.onTap});
+  const _SuggestionChip({required this.suggestion, required this.onTap});
+
+  /// First match wins: the activity is the more telling word.
+  static const _marks = <(List<String>, IconData)>[
+    (['focus', 'study', 'studying', 'work', 'read'], Icons.menu_book_outlined),
+    (['drive'], Icons.directions_car_outlined),
+    (['dinner'], Icons.restaurant_outlined),
+    (['coffee'], Icons.coffee_outlined),
+    (['run', 'workout'], Icons.directions_run_rounded),
+    (['sleep', 'asleep', 'wind down', 'quiet'], Icons.bedtime_outlined),
+    (
+      ['party', 'dance', 'celebrate', 'upbeat', 'energetic', 'anthems'],
+      Icons.equalizer_rounded,
+    ),
+    (['christmas', 'winter', 'festive', 'carols'], Icons.ac_unit_rounded),
+  ];
+
+  static const _dayparts = <String, IconData>{
+    'morning': Icons.wb_sunny_outlined,
+    'afternoon': Icons.light_mode_outlined,
+    'evening': Icons.bedtime_outlined,
+    'night': Icons.nights_stay_outlined,
+  };
+
+  IconData get _mark {
+    final words = suggestion.query.toLowerCase();
+    for (final (keys, icon) in _marks) {
+      if (keys.any((key) => RegExp('\\b$key\\b').hasMatch(words))) {
+        return icon;
+      }
+    }
+    if (suggestion.context.startsWith('holiday:')) {
+      return Icons.celebration_outlined;
+    }
+    return _dayparts[suggestion.context] ?? Icons.auto_awesome;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: 'Search for $query',
+      label: 'Search for ${suggestion.query}',
       excludeSemantics: true,
       child: Material(
         color: KalinkaColors.surfaceRaised,
-        shape: const StadiumBorder(
-          side: BorderSide(color: KalinkaColors.borderDefault),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: KalinkaColors.borderDefault),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
           overlayColor: kalinkaOverlay,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              query,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: KalinkaTextStyles.trackRowSubtitle.copyWith(
-                fontSize: KalinkaTypography.baseSize - 1,
-                color: KalinkaColors.textSecondary,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(_mark, size: 20, color: KalinkaColors.accentTint),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      suggestion.query,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+                        fontSize: KalinkaTypography.baseSize + 1,
+                        color: KalinkaColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
