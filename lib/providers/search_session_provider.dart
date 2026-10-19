@@ -66,6 +66,9 @@ const _fallbackSuggestions = <SearchSuggestion>[
 /// above Catalogs (there are no tabs).
 enum FindMusicView { catalogs, results }
 
+/// What an artist page lists: their releases, or their tracks.
+enum ArtistRelation { albums, tracks }
+
 /// A block expanded with View all, independently of saved filters.
 typedef ExpandedBlock = ({ResultKind kind, String? source});
 
@@ -391,6 +394,9 @@ class SearchSessionState {
   /// Shelf opened with View all; excluded from saved filters.
   final SearchType? expandedShelf;
 
+  /// The relation an artist page shows. Switching it adds no visit.
+  final ArtistRelation artistTab;
+
   final List<String> history;
 
   /// Context-aware suggestions fetched from `/ai_search/suggestions` —
@@ -417,6 +423,7 @@ class SearchSessionState {
     this.folderPath = const [],
     this.catalogFilter = const BrowseFilterQuery(),
     this.expandedShelf,
+    this.artistTab = ArtistRelation.albums,
     this.history = const [],
     this.aiSuggestions = const [],
   });
@@ -521,6 +528,7 @@ class SearchSessionState {
     BrowseFilterQuery? catalogFilter,
     SearchType? expandedShelf,
     bool clearExpandedShelf = false,
+    ArtistRelation? artistTab,
     List<String>? history,
     List<SearchSuggestion>? aiSuggestions,
   }) {
@@ -547,6 +555,7 @@ class SearchSessionState {
       expandedShelf: clearExpandedShelf
           ? null
           : (expandedShelf ?? this.expandedShelf),
+      artistTab: artistTab ?? this.artistTab,
       history: history ?? this.history,
       aiSuggestions: aiSuggestions ?? this.aiSuggestions,
     );
@@ -823,8 +832,15 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
             ) ??
             const BrowseFilterQuery(),
         clearExpandedShelf: true,
+        artistTab: ArtistRelation.albums,
       ),
     );
+  }
+
+  /// Show another of the artist page's relations in the same visit.
+  void setArtistTab(ArtistRelation tab) {
+    if (state.artistTab == tab) return;
+    state = state.copyWith(artistTab: tab);
   }
 
   void openBrowseItem(BrowseItem item) {
