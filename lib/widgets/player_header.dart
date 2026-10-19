@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import 'away.dart';
+import 'kalinka_top_bar.dart' show KalinkaWordmark;
 import 'kiosk/kiosk_enter_button.dart';
 import 'player_view_switch.dart';
 import 'queue_actions.dart';
@@ -36,32 +37,74 @@ class PlayerHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (isTablet) {
+      // The docked player's half of the bar it shares with browsing: the
+      // same height and inset as the top bar beside it, so the two read as
+      // one, their controls on one centre line.
+      final actions = showingQueue
+          // In queue mode the mini-player carries the output switcher.
+          ? const QueueMenuButton()
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const KioskEnterButton(),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: _output(
+                    RendererSwitcherDropdown(
+                      key: outputSwitcherKey,
+                      collapsible: true,
+                    ),
+                  ),
+                ),
+              ],
+            );
       return Padding(
-        padding: const EdgeInsets.all(16),
-        child: OverflowBar(
-          alignment: MainAxisAlignment.spaceBetween,
-          overflowAlignment: OverflowBarAlignment.start,
-          spacing: 16,
-          overflowSpacing: 8,
-          children: [
-            const PlayerViewSwitch(),
-            // In queue mode the mini-player carries the output switcher.
-            if (showingQueue)
-              const QueueMenuButton()
-            else
-              Row(
-                mainAxisSize: MainAxisSize.min,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: kKalinkaTopBarHeight),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const wordmark = Padding(
+                padding: EdgeInsets.only(left: 4),
+                child: KalinkaWordmark(),
+              );
+              const lead = 4 + KalinkaWordmark.width + 24;
+              final tabs = PlayerViewSwitch.preferredWidth(context);
+              // Enlarged labels that leave the actions no room put them on
+              // a row of their own, as the phone does.
+              if (constraints.maxWidth < lead + tabs + 16 + 88) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        wordmark,
+                        SizedBox(width: 24),
+                        Flexible(child: PlayerViewSwitch()),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    actions,
+                  ],
+                );
+              }
+              return Row(
                 children: [
-                  const KioskEnterButton(),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: _output(
-                      RendererSwitcherDropdown(key: outputSwitcherKey),
+                  wordmark,
+                  const SizedBox(width: 24),
+                  SizedBox(width: tabs, child: const PlayerViewSwitch()),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: actions,
                     ),
                   ),
                 ],
-              ),
-          ],
+              );
+            },
+          ),
         ),
       );
     }

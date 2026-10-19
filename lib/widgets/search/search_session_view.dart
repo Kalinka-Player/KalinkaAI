@@ -86,12 +86,17 @@ class SearchSessionView extends ConsumerStatefulWidget {
   /// PopScope on a route hears it, so both would unwind.
   final bool handlesBack;
 
+  /// False beside the docked player, whose header leads the shared bar with
+  /// the wordmark.
+  final bool showWordmark;
+
   const SearchSessionView({
     super.key,
     this.onServerTap,
     this.entryKey,
     this.connectionKey,
     this.handlesBack = true,
+    this.showWordmark = true,
   });
 
   @override
@@ -739,6 +744,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           children: [
             KalinkaTopBar(
               transparent: true,
+              showWordmark: widget.showWordmark,
               onServerChipTap: widget.onServerTap,
               connectionKey: widget.connectionKey,
             ),

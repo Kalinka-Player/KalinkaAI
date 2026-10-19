@@ -813,6 +813,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               entryKey: _searchEntryKey,
               connectionKey: _connectionDotKey,
               handlesBack: !covered,
+              showWordmark: !isTablet,
             ),
     );
   }
@@ -978,13 +979,36 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           return Stack(
             children: [
               browsing,
-              // Divider
+              // The panes' divider stops short of the bar they share and
+              // fades in below it.
               Positioned(
                 left: playerWidth,
-                top: 0,
+                top: MediaQuery.paddingOf(context).top + kKalinkaTopBarHeight,
                 bottom: 0,
                 width: 1,
-                child: const ColoredBox(color: KalinkaColors.borderSubtle),
+                child: const Column(
+                  children: [
+                    SizedBox(
+                      height: 48,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color(0x00000000),
+                              KalinkaColors.borderSubtle,
+                            ],
+                          ),
+                        ),
+                        child: SizedBox.expand(),
+                      ),
+                    ),
+                    Expanded(
+                      child: ColoredBox(color: KalinkaColors.borderSubtle),
+                    ),
+                  ],
+                ),
               ),
               // Left panel: Now Playing with local overlays.
               // SizedBox.expand() clamps infinity to the available size on both

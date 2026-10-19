@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/coach_marks_overlay.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
 import 'package:kalinka/widgets/mini_player.dart';
@@ -14,6 +15,7 @@ import 'package:kalinka/widgets/player_view_switch.dart';
 import 'package:kalinka/widgets/queue_zone.dart';
 import 'package:kalinka/widgets/search/search_composer.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
+import 'package:kalinka/widgets/server_chip.dart';
 
 import 'support/home_shell.dart';
 
@@ -311,6 +313,42 @@ void main() {
     expect(_queueView, findsNothing);
     expect(find.byType(PlayerViewSwitch), findsOneWidget);
   });
+
+  testWidgets(
+    'the panes share one top bar, and their divider starts below it',
+    (tester) async {
+      await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(3)),
+        size: const Size(1400, 900),
+      );
+
+      // One wordmark, leading the player's half of the bar.
+      final wordmark = find.byType(KalinkaWordmark);
+      expect(wordmark, findsOneWidget);
+      final player = tester.getRect(find.byType(NowPlayingContent));
+      expect(tester.getRect(wordmark).right, lessThan(player.right));
+
+      // The view tabs and the connection chip share a centre line.
+      final tabs = tester.getCenter(_side('PLAYING')).dy;
+      final chip = tester.getCenter(find.byType(ServerChip)).dy;
+      expect(tabs, closeTo(chip, 2));
+
+      // Nothing divides the panes across the bar itself.
+      final divider = find.byWidgetPredicate(
+        (w) =>
+            w is Positioned &&
+            w.width == 1 &&
+            w.left == player.width &&
+            (w.top ?? 0) > 0,
+      );
+      expect(divider, findsOneWidget);
+      expect(
+        tester.widget<Positioned>(divider).top,
+        greaterThanOrEqualTo(kKalinkaTopBarHeight),
+      );
+    },
+  );
 
   testWidgets('a wide window bounds the player; the queue bar spans it', (
     tester,
