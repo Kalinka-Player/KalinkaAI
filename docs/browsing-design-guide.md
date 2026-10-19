@@ -2,7 +2,7 @@
 
 Kalinka uses one browsing model across phones, tablets and desktops. Opening an item shows its page, explicit playback actions control the queue, and Back restores the previous visit. Larger screens use a bounded player panel and adapt the browsing content through artwork grids, metadata columns and multiple compact items per row.
 
-This is the implementation specification for the agreed redesign. The interaction rules and page responsibilities below are the target behavior. Dimensions marked as starting values need validation in rendered Flutter layouts before becoming shared tokens. The redesign is not yet implemented by adding this document.
+This is the implementation specification for the agreed redesign. The interaction rules and page responsibilities below are the target behavior. Dimensions marked as starting values need validation in rendered Flutter layouts before becoming shared tokens. The [implementation status](#implementation-status) section records what has landed.
 
 Use [PALETTE.md](../PALETTE.md) for colours, typography and Home controls, [the settings guide](settings-design-guide.md) for Configuration and Customise Home, and [the Home catalog contract](home-catalogs.md) for capabilities, pins and persistence. This guide supersedes the earlier prototype's navigation and fixed split-layout assumptions. Existing pin formats, source capabilities and settings behavior remain applicable.
 
@@ -293,7 +293,7 @@ Correct playback context is a gate for migrating any Play action in stages 3–6
 - [search_session_provider.dart](../lib/providers/search_session_provider.dart): query/filter preferences, local source, catalog metadata, expanded sections and history migration.
 - [search_session_view.dart](../lib/widgets/search/search_session_view.dart): browsing chrome, page hosting and search overlay anchors.
 - [ResultsView](../lib/widgets/search/results_view.dart), [NameMatchesBlock](../lib/widgets/search/name_matches_block.dart) and [InspiredBlock](../lib/widgets/search/inspired_block.dart): preserve the two response sections and their different source-selection scopes.
-- [BrowseNavigationScope](../lib/widgets/search_cards/browse_navigation_scope.dart) and [browse_navigation_provider.dart](../lib/providers/browse_navigation_provider.dart): replace mixed open/expand behavior and retire obsolete inline state after its consumers migrate.
+- [BrowseNavigationScope](../lib/widgets/search_cards/browse_navigation_scope.dart): `openBrowsable` is the one open action for every row and card.
 - [browse_detail_provider.dart](../lib/providers/browse_detail_provider.dart): audit page completeness; its bounded fetch cannot serve as proof that a container is fully loaded.
 - [data_model.dart](../lib/data_model/data_model.dart) and [browse_filters.dart](../lib/data_model/browse_filters.dart): typed metadata, capabilities, filters and shared contract extensions.
 
@@ -330,3 +330,22 @@ Run `flutter analyze` and targeted navigation, filter, paging, Home and playback
 - Search ranking and recommendation relevance, evaluated separately with real queries; this does not block a consistent navigation model.
 
 Do not reopen the agreed basics through these tuning decisions: combined Search, saved filter combinations, source-specific recommendations, Home ordering, capability-driven behavior and consistent page navigation remain the design foundation.
+
+## Implementation status
+
+Landed:
+
+- Shell: the player pane is bounded by `kalinkaPlayerPaneWidth` (30% of the window, 340–420dp) beside browsing at the existing 900dp boundary; dialogs, toasts and Customise Home use the same split. The player header's expand control widens the player over browsing, which stays mounted beneath it, and Back gives browsing its room again.
+- History: every page, folder, complete listing and search is a visit in `SearchSessionState.previousVisits`; Back restores the visit's page, filters, folder, query, results snapshot, local source shortcut and artist tab. The latest six visits stay built offstage, so their loaded rows and scroll survive. A search replaced while still loading is asked again on return. The title bar names the page instead of a `HOME ›` path.
+- Open and play: every row opens its page through `openBrowsable`; inline expansion, `rowExpansionProvider` and the focus-on-arrival shortcut are gone. Album, playlist and collection rows carry a separate Play. Tracks on album, playlist and collection pages queue the whole container by id and play from their place in it.
+- Collections: each collection has its own page with Play all, Enqueue, Edit and its menu. Editing runs there; Back while editing follows the discard guard and stays on the page. The listing keeps New.
+- Listings: album and artist catalogs default to an artwork grid with a Grid/List control remembered per family (`listingPresentationProvider`); List and the collections index put compact items two or three across on wide panes. Track rows give the album its own column from 560dp of row width.
+- Entity pages: albums set a square cover and their details beside the tracks from 860dp of pane width, with a linked artist where the album names one by id, and the source said once. Artists have a portrait header and an Albums or Tracks tab only when they hold both.
+- Home and Search: the search entry is bounded, source tiles stop at 260dp and add columns, collections go across a wide pane, and recommendation groups sit two across when both fit.
+
+Still open:
+
+- Splitting to one pane at large text sizes: the mini-player overflows at 2x text, so the split stays width-only for now.
+- Restoring the visible item when a grid's column count changes on resize; the scroll offset is kept, not the item anchor.
+- Metadata columns for mixed name matches beyond the track album column, and playlist or collection mosaics in the page header.
+- Resolving a complete ordered context for artist tracks and filtered container listings, which still queue the loaded rows.
