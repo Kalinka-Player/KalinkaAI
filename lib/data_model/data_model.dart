@@ -360,6 +360,10 @@ class Track {
   /// a replay after reconnect restores the flag but not the reason.
   String? unavailableReason;
 
+  /// The file's format as a MIME type, where the source knows it before
+  /// playback — `audio/flac`.
+  final String? mimeType;
+
   Track({
     required this.id,
     required this.title,
@@ -371,6 +375,7 @@ class Track {
     this.discNumber,
     this.unavailable = false,
     this.unavailableReason,
+    this.mimeType,
   });
 
   factory Track.fromJson(Map<String, dynamic> json) => Track(
@@ -385,6 +390,7 @@ class Track {
     trackNumber: _positivePosition(json["track_number"]),
     discNumber: _positivePosition(json["disc_number"]),
     unavailable: json["unavailable"] as bool? ?? false,
+    mimeType: json["mime_type"] as String?,
   );
 
   Map<String, dynamic> toJson() => {
@@ -397,6 +403,7 @@ class Track {
     if (trackNumber != null) "track_number": trackNumber,
     if (discNumber != null) "disc_number": discNumber,
     "unavailable": unavailable,
+    if (mimeType != null) "mime_type": mimeType,
   };
 
   /// Changing [unavailable] also replaces [unavailableReason], so a track
@@ -414,6 +421,7 @@ class Track {
     unavailableReason: unavailable == null
         ? this.unavailableReason
         : unavailableReason,
+    mimeType: mimeType,
   );
 
   static int? _positivePosition(Object? value) {

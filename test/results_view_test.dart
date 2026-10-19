@@ -34,22 +34,28 @@ BrowseItem _artist(String source, String id, String name, MatchTier tier) =>
       match: NameMatch(tier: tier, score: tier == MatchTier.exact ? 100 : 60),
     );
 
-BrowseItem _track(String source, String id, String title, {MatchTier? tier}) =>
-    BrowseItem(
-      id: 'kalinka:$source:track:$id',
-      canBrowse: false,
-      canAdd: true,
-      track: Track(
-        id: 'kalinka:$source:track:$id',
-        title: title,
-        duration: 200,
-        album: Album(id: 'kalinka:$source:album:al', title: 'An Album'),
-        performer: Artist(id: 'kalinka:$source:artist:ar', name: 'Someone'),
-      ),
-      match: tier == null
-          ? null
-          : NameMatch(tier: tier, score: tier == MatchTier.exact ? 100 : 60),
-    );
+BrowseItem _track(
+  String source,
+  String id,
+  String title, {
+  MatchTier? tier,
+  String? mimeType,
+}) => BrowseItem(
+  id: 'kalinka:$source:track:$id',
+  canBrowse: false,
+  canAdd: true,
+  track: Track(
+    id: 'kalinka:$source:track:$id',
+    title: title,
+    duration: 200,
+    album: Album(id: 'kalinka:$source:album:al', title: 'An Album'),
+    performer: Artist(id: 'kalinka:$source:artist:ar', name: 'Someone'),
+    mimeType: mimeType,
+  ),
+  match: tier == null
+      ? null
+      : NameMatch(tier: tier, score: tier == MatchTier.exact ? 100 : 60),
+);
 
 BrowseItemsList _list(List<BrowseItem> items) =>
     BrowseItemsList(0, items.length, items.length, items);
@@ -515,6 +521,37 @@ void main() {
     expect(artist, greaterThan(title));
     expect(tester.getTopLeft(find.text('An Album')).dx, greaterThan(artist));
     expect(find.byType(ColumnSeparator), findsWidgets);
+  });
+
+  testWidgets('the widest rows say the format after the source', (
+    tester,
+  ) async {
+    final api = _ScriptedApi(
+      matches: {
+        'qobuz': [
+          _track(
+            'qobuz',
+            'm',
+            'Named Song',
+            tier: MatchTier.exact,
+            mimeType: 'audio/flac',
+          ),
+          _track('qobuz', 'n', 'Other Song', tier: MatchTier.exact),
+        ],
+      },
+      inspired: const {},
+    );
+    tester.view.physicalSize = const Size(1300, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pump(tester, api);
+    await tester.pump(_settle);
+
+    expect(find.textContaining('FLAC'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.textContaining('FLAC')).dx,
+      greaterThan(tester.getTopLeft(find.text('An Album').first).dx),
+    );
   });
 
   testWidgets('a source\'s rows say the artist and album, not the kind again', (
