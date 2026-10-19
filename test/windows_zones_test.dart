@@ -26,6 +26,21 @@ void main() {
     expect(tzdataZoneFor('UTC-11', territory: 'AS'), 'Pacific/Pago_Pago');
   });
 
+  test('keeps Canada on the zone that follows the Windows one', () {
+    expect(
+      tzdataZoneFor('British Columbia Standard Time', territory: 'CA'),
+      'America/Vancouver',
+    );
+    expect(
+      tzdataZoneFor('Pacific Standard Time', territory: 'CA'),
+      'America/Los_Angeles',
+    );
+    expect(
+      tzdataZoneFor('Central Standard Time', territory: 'CA'),
+      'America/Rankin_Inlet',
+    );
+  });
+
   test('names no zone for an ID it does not know', () {
     expect(tzdataZoneFor('Mars Standard Time'), isNull);
     // tzutil appends _dstoff when daylight saving is turned off, which no
