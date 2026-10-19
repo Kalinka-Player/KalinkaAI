@@ -516,28 +516,38 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                       ),
                     ),
                   ],
-                  if (tier.index >= _MiniPlayerTier.source.index &&
-                      currentTrack != null) ...[
-                    const ColumnSeparator(),
-                    Expanded(
-                      flex: 2,
-                      child: _TrackDetails(
-                        track: currentTrack,
-                        withAlbum: tier.index >= _MiniPlayerTier.details.index,
-                      ),
-                    ),
-                  ],
+                  // The extras stack outward from the controls as the bar
+                  // widens: source nearest, then the album, then volume.
                   if (tier == _MiniPlayerTier.volume) ...[
                     const ColumnSeparator(),
                     SizedBox(
-                      width: 168,
+                      width: 140,
                       child: AwayLock(
                         away: isOffline,
-                        child: const NowPlayingVolumeControl(),
+                        child: const NowPlayingVolumeControl(
+                          showUnavailable: true,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 8),
                   ],
+                  if (tier.index >= _MiniPlayerTier.details.index &&
+                      currentTrack != null) ...[
+                    const ColumnSeparator(),
+                    SizedBox(
+                      width: 200,
+                      child: _AlbumDetails(track: currentTrack),
+                    ),
+                  ],
+                  if (tier.index >= _MiniPlayerTier.source.index &&
+                      currentTrack != null) ...[
+                    const ColumnSeparator(),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 150),
+                      child: _SourceLabel(track: currentTrack),
+                    ),
+                  ],
+                  if (tier.index >= _MiniPlayerTier.progress.index)
+                    const ColumnSeparator(gap: 8),
                   if (currentTrack != null) const BitPerfectBadge(),
                   const SizedBox(width: 4),
                   // Outside the gesture area too, for the same reason as the play
@@ -693,7 +703,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
 
 /// What the bar adds as it widens, each step keeping the ones before it:
 /// the output by name, a seekable slider in place of the top line, where the
-/// music comes from, the album and the stream's format, then volume.
+/// music comes from, the album and the stream's format, then volume. Each
+/// joins left of the one before, so the newest sits furthest from the
+/// controls.
 enum _MiniPlayerTier {
   compact,
   output,
@@ -715,49 +727,66 @@ enum _MiniPlayerTier {
       : compact;
 }
 
-/// The current track's details beside the bar's title: its source, and on a
-/// wider bar its album, year and stream format.
-class _TrackDetails extends ConsumerWidget {
+/// Where the current track comes from: the source's badge and name.
+class _SourceLabel extends ConsumerWidget {
   final Track track;
-  final bool withAlbum;
 
-  const _TrackDetails({required this.track, required this.withAlbum});
+  const _SourceLabel({required this.track});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final source = sourceOfId(track.id);
-    final sourceTitle = source == null
+    final title = source == null
         ? null
         : ref.watch(sourceDisplayInfoProvider)[source]?.title;
-    final format = withAlbum
-        ? ref.watch(
-            playerStateProvider.select(
-              (s) => [
-                mimeTypeLabel(s.mimeType),
-                audioQualityLabel(s.audioInfo),
-              ].where((part) => part.isNotEmpty).join(' '),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (sourceBadgeVisible(ref, track.id)) ...[
+          SourceBadge(entityId: track.id),
+          const SizedBox(width: 6),
+        ],
+        if (title != null && title.isNotEmpty)
+          Flexible(
+            child: Text(
+              title,
+              style: KalinkaTextStyles.miniPlayerArtist,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-          )
-        : '';
+          ),
+      ],
+    );
+  }
+}
+
+/// The current track's album and year over the stream's format.
+class _AlbumDetails extends ConsumerWidget {
+  final Track track;
+
+  const _AlbumDetails({required this.track});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final format = ref.watch(
+      playerStateProvider.select(
+        (s) => [
+          mimeTypeLabel(s.mimeType),
+          audioQualityLabel(s.audioInfo),
+        ].where((part) => part.isNotEmpty).join(' '),
+      ),
+    );
     final album = track.album;
-    final albumLine = !withAlbum || album == null || album.title.isEmpty
+    final albumLine = album == null || album.title.isEmpty
         ? null
         : album.year == null
         ? album.title
         : '${album.title} · ${album.year}';
-    final sourceLine = [
-      if (sourceTitle != null && sourceTitle.isNotEmpty) sourceTitle,
-      if (format.isNotEmpty) format,
-    ].join(' · ');
-    final badge = sourceBadgeVisible(ref, track.id);
-    if (albumLine == null && sourceLine.isEmpty && !badge) {
-      return const SizedBox.shrink();
-    }
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (albumLine != null) ...[
+        if (albumLine != null)
           Text(
             albumLine,
             style: KalinkaTextStyles.miniPlayerArtist.copyWith(
@@ -766,24 +795,14 @@ class _TrackDetails extends ConsumerWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 2),
-        ],
-        Row(
-          children: [
-            if (badge) ...[
-              SourceBadge(entityId: track.id),
-              const SizedBox(width: 6),
-            ],
-            Flexible(
-              child: Text(
-                sourceLine,
-                style: KalinkaTextStyles.miniPlayerArtist,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
+        if (albumLine != null && format.isNotEmpty) const SizedBox(height: 2),
+        if (format.isNotEmpty)
+          Text(
+            format,
+            style: KalinkaTextStyles.miniPlayerArtist,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
       ],
     );
   }

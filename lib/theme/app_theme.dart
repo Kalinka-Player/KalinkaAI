@@ -16,7 +16,7 @@ const double kKalinkaTabletBreakpoint = 900;
 /// The player's width beside browsing. Bounded, so a wider window gives its
 /// extra room to browsing rather than to a stretched player.
 double kalinkaPlayerPaneWidth(double windowWidth) =>
-    (windowWidth * 0.345).clamp(391.0, 483.0);
+    (windowWidth * 0.345).clamp(440.0, 483.0);
 
 /// Whether a window this wide holds the player and browsing side by side.
 bool kalinkaSplitLayout(double windowWidth) =>

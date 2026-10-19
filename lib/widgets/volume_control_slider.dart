@@ -13,7 +13,12 @@ import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
 
 class NowPlayingVolumeControl extends ConsumerStatefulWidget {
-  const NowPlayingVolumeControl({super.key});
+  /// Greys the control out rather than hiding it when there is no volume to
+  /// set: full while the output's volume is fixed, as last known while
+  /// nothing plays.
+  final bool showUnavailable;
+
+  const NowPlayingVolumeControl({super.key, this.showUnavailable = false});
 
   @override
   ConsumerState<NowPlayingVolumeControl> createState() =>
@@ -181,40 +186,56 @@ class _NowPlayingVolumeControlState
     with OptimisticVolume {
   @override
   Widget build(BuildContext context) {
-    if (!volumeAvailable) return const SizedBox.shrink();
+    final live = volumeAvailable;
+    if (!live && !widget.showUnavailable) return const SizedBox.shrink();
+    final fixed = !volume.supported;
 
-    return RepaintBoundary(
-      child: Row(
-        children: [
-          const Icon(
-            Icons.volume_down,
-            size: 20,
-            color: KalinkaColors.textSecondary,
-          ),
-          Expanded(
-            child: SliderTheme(
-              data: SliderThemeData(
-                trackHeight: 3,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                activeTrackColor: KalinkaColors.textPrimary,
-                inactiveTrackColor: KalinkaColors.borderDefault,
-                thumbColor: KalinkaColors.textPrimary,
-                overlayColor: KalinkaColors.textPrimary.withValues(alpha: 0.1),
-              ),
-              child: Slider(
-                value: volumeProgress,
-                onChanged: adjustVolume,
-                onChangeEnd: commitVolume,
-              ),
+    final row = Row(
+      children: [
+        const Icon(
+          Icons.volume_down,
+          size: 20,
+          color: KalinkaColors.textSecondary,
+        ),
+        Expanded(
+          child: SliderTheme(
+            data: SliderThemeData(
+              trackHeight: 3,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              activeTrackColor: KalinkaColors.textPrimary,
+              inactiveTrackColor: KalinkaColors.borderDefault,
+              thumbColor: KalinkaColors.textPrimary,
+              overlayColor: KalinkaColors.textPrimary.withValues(alpha: 0.1),
+            ),
+            // Never a null onChanged: greyed out, the control is shut by
+            // the IgnorePointer below instead, keeping its semantics' shape.
+            child: Slider(
+              value: live || !fixed ? volumeProgress : 1.0,
+              onChanged: (value) {
+                if (live) adjustVolume(value);
+              },
+              onChangeEnd: (value) {
+                if (live) commitVolume(value);
+              },
             ),
           ),
-          const Icon(
-            Icons.volume_up,
-            size: 20,
-            color: KalinkaColors.textSecondary,
-          ),
-        ],
+        ),
+        const Icon(
+          Icons.volume_up,
+          size: 20,
+          color: KalinkaColors.textSecondary,
+        ),
+      ],
+    );
+    if (live) return RepaintBoundary(child: row);
+    return Semantics(
+      label: fixed ? 'Volume fixed' : 'Volume unavailable',
+      excludeSemantics: true,
+      child: IgnorePointer(
+        child: ExcludeFocus(
+          child: Opacity(opacity: 0.4, child: RepaintBoundary(child: row)),
+        ),
       ),
     );
   }

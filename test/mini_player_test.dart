@@ -19,6 +19,7 @@ import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/playback_progress_slider.dart';
 import 'package:kalinka/widgets/transport_button.dart';
+import 'package:kalinka/widgets/volume_control_slider.dart';
 
 import 'support/focus.dart';
 import 'support/haptic_recorder.dart';
@@ -872,4 +873,43 @@ void main() {
     expect(find.byType(GradientProgressLine), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'the widest bar stacks its extras outward and greys a fixed volume',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      tester.view.physicalSize = const Size(1500, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await pumpMiniPlayer(
+        tester,
+        queueState: PlayQueueState(
+          playbackState: PlaybackState(
+            index: 0,
+            state: PlayerStateType.playing,
+          ),
+          trackList: [
+            Track(
+              id: 'kalinka:qobuz:track:t0',
+              title: 'Blue in Green',
+              duration: 300,
+              album: Album(id: 'a', title: 'Kind of Blue', year: 1959),
+            ),
+          ],
+          playbackMode: PlaybackMode.empty,
+          seq: 0,
+        ),
+      );
+
+      // Nothing to set on an output whose volume is fixed: shown, not live.
+      expect(find.bySemanticsLabel('Volume fixed'), findsOneWidget);
+      final volume = tester.getCenter(find.byType(NowPlayingVolumeControl)).dx;
+      final album = tester.getCenter(find.text('Kind of Blue · 1959')).dx;
+      final play = tester.getCenter(find.byType(TransportButton).last).dx;
+      expect(volume, lessThan(album));
+      expect(album, lessThan(play));
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    },
+  );
 }
