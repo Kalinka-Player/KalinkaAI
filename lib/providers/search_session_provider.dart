@@ -911,20 +911,19 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// Return one visit; see [goBack].
   void backFromCatalog() => goBack();
 
-  /// Show [folder], listed in the folder shown now, as a visit of its own
-  /// under the same page, so its trail is the folders that hold it.
+  /// Show [folder], listed in the folder shown now, in its place: moving
+  /// between folders stays one visit, so Back leaves the page rather than
+  /// retracing them. The trail is the folders that hold it.
   void openFolder(BrowseItem folder) {
     if (!state.catalogPage.folderLayout) {
       openBrowseItem(folder);
       return;
     }
-    _visit(
-      state.copyWith(
-        folderPath: [
-          ...state.folderPath,
-          CatalogPage.fromItem(folder, provider: state.catalogPage.provider),
-        ],
-      ),
+    state = state.copyWith(
+      folderPath: [
+        ...state.folderPath,
+        CatalogPage.fromItem(folder, provider: state.catalogPage.provider),
+      ],
     );
     _rememberFolderPath();
   }
@@ -932,7 +931,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// Show the folder [depth] steps in from the page's top, which zero is.
   void showFolderAt(int depth) {
     if (depth < 0 || depth >= state.folderPath.length) return;
-    _visit(state.copyWith(folderPath: state.folderPath.sublist(0, depth)));
+    state = state.copyWith(folderPath: state.folderPath.sublist(0, depth));
     _rememberFolderPath();
   }
 

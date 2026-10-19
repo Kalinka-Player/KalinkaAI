@@ -103,8 +103,12 @@ void main() {
   test('back leaves the page, not one folder', () {
     session().openFolder(_folder('Jazz'));
     session().openFolder(_folder('Miles Davis'));
+    session().showEnclosingFolder();
+    session().openFolder(_folder('Coltrane'));
+    // Moving between folders adds nothing to Back.
+    expect(state().previousVisits, isEmpty);
 
-    session().backToCatalogsRoot();
+    session().goBack();
 
     expect(state().catalogPage.isRoot, isTrue);
     expect(state().folderPath, isEmpty);
