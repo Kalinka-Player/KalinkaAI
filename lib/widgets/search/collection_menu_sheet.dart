@@ -121,7 +121,7 @@ Future<void> _deleteCollection(
   final go = await showKalinkaDialog<bool>(
     context: context,
     builder: (dialog) => KalinkaDialog(
-      side: KalinkaDialogSide.right,
+      side: KalinkaDialogSide.browsing,
       icon: Icons.delete_outline_rounded,
       iconColor: KalinkaColors.actionDelete,
       title: 'Delete $name?',

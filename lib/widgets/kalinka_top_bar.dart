@@ -19,16 +19,11 @@ class KalinkaTopBar extends StatelessWidget {
   /// bloom does.
   final bool transparent;
 
-  /// False where the player's header beside it already leads with the
-  /// wordmark, the two reading as one bar.
-  final bool showWordmark;
-
   const KalinkaTopBar({
     super.key,
     this.onServerChipTap,
     this.connectionKey,
     this.transparent = false,
-    this.showWordmark = true,
   });
 
   @override
@@ -64,9 +59,9 @@ class KalinkaTopBar extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (showWordmark) const KalinkaWordmark(),
+            const KalinkaWordmark(),
             if (!kReleaseMode) ...[
-              if (showWordmark) const SizedBox(width: 10),
+              const SizedBox(width: 10),
               Flexible(child: _buildDebugBadge()),
             ],
           ],

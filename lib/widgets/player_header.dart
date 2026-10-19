@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
-import 'kalinka_top_bar.dart' show KalinkaWordmark;
 import 'kiosk/kiosk_enter_button.dart';
 import 'player_view_switch.dart';
 import 'queue_actions.dart';
@@ -27,13 +26,13 @@ class PlayerHeader extends StatelessWidget {
     if (isTablet) {
       // The docked player's half of the bar it shares with browsing: the
       // same height and inset as the top bar beside it, so the two read as
-      // one, their controls on one centre line.
-      final actions = showingQueue
-          ? const QueueMenuButton()
-          : const KioskEnterButton();
-      const wordmark = Padding(
-        padding: EdgeInsets.only(left: 4),
-        child: KalinkaWordmark(),
+      // one, their controls on one centre line. Browsing's half, at the
+      // window's start, leads with the wordmark.
+      final actions = Align(
+        alignment: Alignment.centerRight,
+        child: showingQueue
+            ? const QueueMenuButton()
+            : const KioskEnterButton(),
       );
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -41,9 +40,9 @@ class PlayerHeader extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: kKalinkaTopBarHeight),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              // What each end keeps clear of the centred tabs: the
-              // wordmark's room, which the actions at the other end fit in.
-              const side = 4 + KalinkaWordmark.width + 16;
+              // What each end keeps clear of the centred tabs: the actions'
+              // room.
+              const side = 36 + 8;
               final tabs = PlayerViewSwitch.preferredWidth(context);
               // Enlarged labels that would reach either end take a row of
               // their own, as the phone's do.
@@ -51,10 +50,7 @@ class PlayerHeader extends StatelessWidget {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [wordmark, actions],
-                    ),
+                    actions,
                     const SizedBox(height: 8),
                     const Center(child: PlayerViewSwitch()),
                   ],
@@ -64,8 +60,7 @@ class PlayerHeader extends StatelessWidget {
                 alignment: Alignment.center,
                 children: [
                   const Center(child: PlayerViewSwitch()),
-                  const Align(alignment: Alignment.centerLeft, child: wordmark),
-                  Align(alignment: Alignment.centerRight, child: actions),
+                  actions,
                 ],
               );
             },

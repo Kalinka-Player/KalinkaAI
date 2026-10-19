@@ -48,7 +48,7 @@ Future<void> _resizeTo(WidgetTester tester, Size size) async {
 void main() {
   testWidgets('phone width: the card spans the window', (tester) async {
     await _resizeTo(tester, const Size(400, 800));
-    await _open(tester, KalinkaDialogSide.right);
+    await _open(tester, KalinkaDialogSide.browsing);
 
     final rect = tester.getRect(find.byKey(_card));
     expect(rect.left, 20);
@@ -60,35 +60,36 @@ void main() {
   ) async {
     // Default test window is 800x600 — wider than the card, below the tablet
     // breakpoint, so there is no panel to pick.
-    await _open(tester, KalinkaDialogSide.right);
+    await _open(tester, KalinkaDialogSide.browsing);
 
     final rect = tester.getRect(find.byKey(_card));
     expect(rect.left, 170);
     expect(rect.right, 630);
   });
 
-  testWidgets('tablet width: a right-side dialog sits in the right panel', (
+  testWidgets('tablet width: a browsing dialog sits in the browsing pane', (
     tester,
   ) async {
     await _resizeTo(tester, const Size(1200, 800));
-    await _open(tester, KalinkaDialogSide.right);
+    await _open(tester, KalinkaDialogSide.browsing);
 
-    // Capped at 460 and centred in the browsing panel (497.8..1200).
+    // Capped at 460 and centred in the browsing pane (0..702.2).
     final rect = tester.getRect(find.byKey(_card));
-    expect(rect.left, closeTo(618.9, 0.01));
-    expect(rect.right, closeTo(1078.9, 0.01));
+    expect(rect.left, closeTo(121.1, 0.01));
+    expect(rect.right, closeTo(581.1, 0.01));
   });
 
-  testWidgets('tablet width: a left-side dialog sits in the left panel', (
+  testWidgets('tablet width: a player dialog sits in the player pane', (
     tester,
   ) async {
     await _resizeTo(tester, const Size(1200, 800));
-    await _open(tester, KalinkaDialogSide.left);
+    await _open(tester, KalinkaDialogSide.player);
 
-    // The player panel is 496.8 wide here, so the card fills it to its margins.
+    // The player's pane is the right 496.8 here, so the card fills it to its
+    // margins.
     final rect = tester.getRect(find.byKey(_card));
-    expect(rect.left, 20);
-    expect(rect.right, closeTo(476.8, 0.01));
+    expect(rect.left, closeTo(723.2, 0.01));
+    expect(rect.right, 1180);
   });
 
   testWidgets('tablet width: a full-width dialog centres in the window', (
@@ -106,8 +107,8 @@ void main() {
     'an open dialog re-homes when the window crosses the breakpoint',
     (tester) async {
       await _resizeTo(tester, const Size(1200, 800));
-      await _open(tester, KalinkaDialogSide.right);
-      expect(tester.getRect(find.byKey(_card)).left, closeTo(618.9, 0.01));
+      await _open(tester, KalinkaDialogSide.browsing);
+      expect(tester.getRect(find.byKey(_card)).left, closeTo(121.1, 0.01));
 
       // Tablet → phone: the card re-centres on the (now single) layout rather
       // than staying pinned to a half that no longer exists.
@@ -115,12 +116,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.getRect(find.byKey(_card)).center.dx, 400);
 
-      // Phone → tablet: back into the right panel.
+      // Phone → tablet: back into the browsing pane.
       await _resizeTo(tester, const Size(1200, 800));
       await tester.pumpAndSettle();
       final rect = tester.getRect(find.byKey(_card));
-      expect(rect.left, closeTo(618.9, 0.01));
-      expect(rect.right, closeTo(1078.9, 0.01));
+      expect(rect.left, closeTo(121.1, 0.01));
+      expect(rect.right, closeTo(581.1, 0.01));
     },
   );
 
@@ -128,15 +129,15 @@ void main() {
     tester,
   ) async {
     await _resizeTo(tester, const Size(1200, 800));
-    await _open(tester, KalinkaDialogSide.right);
+    await _open(tester, KalinkaDialogSide.browsing);
 
-    await tester.tapAt(const Offset(200, 400)); // left panel, no scrim
+    await tester.tapAt(const Offset(1000, 400)); // player pane, no scrim
     await tester.pumpAndSettle();
     expect(find.byKey(_card), findsNothing);
   });
 
   testWidgets('tapping the card itself keeps the dialog open', (tester) async {
-    await _open(tester, KalinkaDialogSide.right);
+    await _open(tester, KalinkaDialogSide.browsing);
 
     await tester.tapAt(tester.getCenter(find.byKey(_card)));
     await tester.pumpAndSettle();

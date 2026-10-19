@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// Which panel of the tablet layout a dialog belongs to.
+/// Which pane of the tablet layout a dialog belongs to.
 enum KalinkaDialogSide {
-  /// Left panel — Now Playing and the Settings overlay, so settings
-  /// confirmations (restart, upgrade) belong here.
-  left,
+  /// The player's pane, at the window's right — Now Playing and the queue,
+  /// so queue and playback confirmations belong here.
+  player,
 
-  /// Right panel — the queue and the search session, so queue confirmations
-  /// (clear all) belong here.
-  right,
+  /// Browsing, at the window's left — Home, its pages and the management
+  /// overlays.
+  browsing,
 
   /// Screens with no split layout, such as onboarding: the dialog owns the
   /// whole window at every width.
@@ -105,16 +105,17 @@ class KalinkaDialog extends StatelessWidget {
             !kalinkaSplitLayout(constraints.maxWidth)) {
           return panel;
         }
-        // The player panel has a bounded width; browsing takes the rest.
+        // The player's pane has a bounded width at the right; browsing
+        // takes the rest.
         final player = kalinkaPlayerPaneWidth(constraints.maxWidth);
         final away = _buildTapToDismiss(context, dimmed: false);
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: side == KalinkaDialogSide.left
-              ? [SizedBox(width: player, child: panel), Expanded(child: away)]
+          children: side == KalinkaDialogSide.player
+              ? [Expanded(child: away), SizedBox(width: player, child: panel)]
               : [
-                  SizedBox(width: player + 1, child: away),
                   Expanded(child: panel),
+                  SizedBox(width: player + 1, child: away),
                 ],
         );
       },

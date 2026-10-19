@@ -63,6 +63,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // One key serves both: the layouts are mutually exclusive, so only ever one
   // is mounted, and a resize re-parents the key to the other.
   final _outputSwitcherKey = GlobalKey();
+  final _playerPaneKey = GlobalKey();
   // Same trick for the settings panel, so a resize moves it rather than
   // remounting it (which would reload config and drop staged edits).
   final _settingsKey = GlobalKey();
@@ -263,7 +264,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       context,
       ref,
       BoxAction.powerOff,
-      dialogSide: KalinkaDialogSide.right,
+      dialogSide: KalinkaDialogSide.browsing,
     );
   }
 
@@ -536,10 +537,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   !_serverSheetOpen &&
                   rendererSettings == null)
                 Positioned(
-                  left: isTablet
+                  left: 0,
+                  right: isTablet
                       ? kalinkaPlayerPaneWidth(constraints.maxWidth) + 1
                       : 0,
-                  right: 0,
                   top: 0,
                   bottom: 0,
                   child: SheetAnchor(
@@ -686,8 +687,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
             ],
           ),
           // Settings — full-screen overlay on phone (slides in from the right).
-          // The same flag renders it in the right panel on tablet, so resizing
-          // across the breakpoint just re-homes it.
+          // The same flag renders it in the browsing pane on tablet, so
+          // resizing across the breakpoint just re-homes it.
           if (_settingsOpen)
             Positioned.fill(
               child: SettingsScreen(
@@ -813,7 +814,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               entryKey: _searchEntryKey,
               connectionKey: _connectionDotKey,
               handlesBack: !covered,
-              showWordmark: !isTablet,
             ),
     );
   }
@@ -897,7 +897,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                 : kMiniPlayerHideDuration,
             curve: Curves.easeOutCubic,
             builder: (context, bottom, child) => Positioned(
-              left: playerWidth + 1,
+              left: 0,
               top: 0,
               bottom: bottom,
               width: width - playerWidth - 1,
@@ -931,7 +931,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                               onPowerOff: _powerOffServer,
                             ),
                           ),
-                        // Management overlays share the right-hand bounds,
+                        // Management overlays share browsing's bounds,
                         // including their sheets and slide motion.
                         if (_settingsOpen)
                           Positioned.fill(
@@ -982,7 +982,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               // The panes' divider stops short of the bar they share and
               // fades in below it.
               Positioned(
-                left: playerWidth,
+                left: width - playerWidth - 1,
                 top: MediaQuery.paddingOf(context).top + kKalinkaTopBarHeight,
                 bottom: 0,
                 width: 1,
@@ -1013,26 +1013,28 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   ],
                 ),
               ),
-              // Left panel: Now Playing with local overlays.
+              // The player's pane, at the window's right: Now Playing with
+              // local overlays.
               // SizedBox.expand() clamps infinity to the available size on both
               // axes, giving RepaintBoundary tight constraints so it becomes a
               // Flutter relayout boundary. Without this, layout invalidations
               // (e.g. progress slider ticks) propagate up to the Row and cause
-              // the right panel to relayout and repaint unnecessarily.
+              // the browsing pane to relayout and repaint unnecessarily.
               // SheetAnchor aligns modal bottom sheets launched from this
               // panel (e.g. the output switcher) with its bounds.
               Positioned(
-                left: 0,
+                right: 0,
                 top: 0,
                 bottom: 0,
                 width: playerWidth,
                 child: SizedBox.expand(
                   child: RepaintBoundary(
                     child: SheetAnchor(
+                      key: _playerPaneKey,
                       child: Stack(
                         children: [
                           // Playback stays visible and interactive while the
-                          // management panels cover the right panel.
+                          // management panels cover browsing.
                           SafeArea(
                             child: AnimatedSwitcher(
                               duration: const Duration(milliseconds: 200),
@@ -1077,7 +1079,13 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  child: QueueMiniPlayer(outputSwitcherKey: _outputSwitcherKey),
+                  // The bar is the player's, so its sheets open over its pane.
+                  child: SheetAnchor(
+                    target: _playerPaneKey,
+                    child: QueueMiniPlayer(
+                      outputSwitcherKey: _outputSwitcherKey,
+                    ),
+                  ),
                 ),
               // The same one-time tour as the phone. It used to be phone-only, so
               // anyone who first ran the app on a wide window never saw it.
@@ -1092,7 +1100,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
 /// Full-screen Now Playing shown as a modal sheet in the phone layout. It
 /// self-dismisses once the window grows past the tablet breakpoint, where the
-/// player instead lives permanently in the left panel — otherwise the sheet
+/// player instead lives permanently in its own pane — otherwise the sheet
 /// would float on top of the tablet layout.
 class _ExpandedPlayerSheet extends StatefulWidget {
   final VoidCallback onFindMusic;

@@ -14,10 +14,10 @@ enum ToastScope {
   /// Every toast (phone).
   all,
 
-  /// Only toasts not raised inside a panel (tablet, right half).
+  /// Only toasts not raised inside a panel (tablet, over browsing).
   window,
 
-  /// Only toasts raised inside a panel (tablet, left half).
+  /// Only toasts raised inside a panel (tablet, over the player's pane).
   panel,
 }
 
@@ -117,9 +117,10 @@ class KalinkaToastHost extends ConsumerWidget {
           children: [
             child,
             if (isTablet)
-              // Bottom-right, over the browsing panel.
+              // Bottom-right of browsing, which ends where the player's pane
+              // begins.
               Positioned(
-                right: 20,
+                right: kalinkaPlayerPaneWidth(constraints.maxWidth) + 1 + 20,
                 bottom: inset,
                 child: _layer(
                   const SizedBox(

@@ -56,7 +56,7 @@ Future<bool?> askLeavingSilentSoundcard(
 }) => showKalinkaDialog<bool>(
   context: context,
   builder: (context) => KalinkaDialog(
-    side: KalinkaDialogSide.left,
+    side: KalinkaDialogSide.player,
     icon: Icons.speaker_outlined,
     iconColor: KalinkaColors.statusPending,
     iconGlyphColor: KalinkaColors.statusPending,

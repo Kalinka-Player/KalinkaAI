@@ -86,17 +86,12 @@ class SearchSessionView extends ConsumerStatefulWidget {
   /// PopScope on a route hears it, so both would unwind.
   final bool handlesBack;
 
-  /// False beside the docked player, whose header leads the shared bar with
-  /// the wordmark.
-  final bool showWordmark;
-
   const SearchSessionView({
     super.key,
     this.onServerTap,
     this.entryKey,
     this.connectionKey,
     this.handlesBack = true,
-    this.showWordmark = true,
   });
 
   @override
@@ -269,7 +264,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   void _openSearch() {
     if (_focused) return;
     // Measure the entry in THIS surface's local space (not global): on tablet
-    // the search surface is only the right panel, and the overlay positions
+    // the search surface is only the browsing pane, and the overlay positions
     // itself within it, so the origin must be panel-relative.
     final selfBox = context.findRenderObject() as RenderBox?;
     final entryBox = _entryKey.currentContext?.findRenderObject() as RenderBox?;
@@ -744,7 +739,6 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           children: [
             KalinkaTopBar(
               transparent: true,
-              showWordmark: widget.showWordmark,
               onServerChipTap: widget.onServerTap,
               connectionKey: widget.connectionKey,
             ),

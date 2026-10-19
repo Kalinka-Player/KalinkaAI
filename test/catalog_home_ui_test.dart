@@ -165,8 +165,11 @@ void main() {
       void expectPanelBounds(double width) {
         final choices = find.byType(HomePreviewChoices);
         final rect = tester.getRect(choices);
-        expect(rect.left, closeTo(kalinkaPlayerPaneWidth(width) + 1, 1));
-        expect(rect.right, closeTo(width, 1));
+        expect(rect.left, closeTo(0, 1));
+        expect(
+          rect.right,
+          closeTo(width - kalinkaPlayerPaneWidth(width) - 1, 1),
+        );
         final scroll = find.ancestor(
           of: choices,
           matching: find.byType(SingleChildScrollView),
@@ -189,8 +192,9 @@ void main() {
       await tester.pumpAndSettle();
       expectPanelBounds(size.width + 100);
 
-      // Tapping beside the sheet dismisses it without pinning anything.
-      await tester.tapAt(Offset(20, size.height - 20));
+      // Tapping beside the sheet, over the player, dismisses it without
+      // pinning anything.
+      await tester.tapAt(Offset(size.width + 80, size.height - 20));
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsNothing);
       expect(container.read(pinnedCatalogsProvider), isEmpty);
@@ -807,7 +811,7 @@ void main() {
   }
 
   testWidgets(
-    'customisation occupies the tablet right panel and follows resizing',
+    'customisation occupies the tablet browsing pane and follows resizing',
     (tester) async {
       final container = await pump(tester, size: const Size(1200, 900));
       await container
@@ -827,8 +831,8 @@ void main() {
       await tester.tap(find.byTooltip('Customise Home'));
       await tester.pumpAndSettle();
       final panel = find.byType(CustomiseHomeScreen);
-      // The player keeps 496.8 of the 1200; Home takes the rest.
-      expect(tester.getRect(panel).left, closeTo(497.8, 0.01));
+      // The player keeps the right 496.8 of the 1200; Home takes the rest.
+      expect(tester.getRect(panel).left, 0);
       expect(tester.getSize(panel).width, closeTo(702.2, 0.01));
       expect(find.byType(NowPlayingContent), findsOneWidget);
       await tester.tap(find.byTooltip('Preview for Editorial'));
@@ -837,7 +841,7 @@ void main() {
         tester
             .getRect(find.byKey(const ValueKey('home-preview-switch-menu')))
             .left,
-        greaterThanOrEqualTo(497.79),
+        greaterThanOrEqualTo(0),
       );
       expect(
         tester
@@ -850,11 +854,11 @@ void main() {
       await tester.tap(find.byTooltip('Unpin Editorial'));
       await tester.pumpAndSettle();
       expect(
-        tester.getRect(find.byKey(KalinkaDialog.cardKey)).left,
-        greaterThanOrEqualTo(497.79),
+        tester.getRect(find.byKey(KalinkaDialog.cardKey)).right,
+        lessThanOrEqualTo(702.21),
       );
       final card = tester.getCenter(find.byKey(KalinkaDialog.cardKey));
-      expect(card.dx, closeTo(848.9, 0.01));
+      expect(card.dx, closeTo(351.1, 0.01));
       expect(card.dy, 450);
       tester.view.physicalSize = const Size(375, 812);
       await tester.pumpAndSettle();

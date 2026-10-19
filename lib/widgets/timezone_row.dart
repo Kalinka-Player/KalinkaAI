@@ -21,7 +21,7 @@ class TimezoneRow extends ConsumerStatefulWidget {
   final BoxTimezone box;
   final IconData? leading;
 
-  /// Set when shown in the tablet layout's left panel.
+  /// Set when shown in a pane of the tablet layout.
   final bool inPanel;
 
   const TimezoneRow({
@@ -276,7 +276,7 @@ class _ConfirmTimezone extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return KalinkaDialog(
-      side: KalinkaDialogSide.left,
+      side: KalinkaDialogSide.player,
       icon: Icons.schedule,
       iconColor: KalinkaColors.accent,
       iconGlyphColor: KalinkaColors.accentTint,

@@ -30,7 +30,7 @@ import '../widgets/soundcard_row.dart';
 /// by path, and apply without restarting the server.
 ///
 /// Hosted the same way as [SettingsScreen] — a [SlideInPanel] the host places
-/// over the whole screen on phone and inside the right panel on tablet.
+/// over the whole screen on phone and inside the browsing pane on tablet.
 class RendererSettingsScreen extends ConsumerStatefulWidget {
   final String rendererId;
   final String rendererName;

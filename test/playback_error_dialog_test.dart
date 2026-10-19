@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/playback_error_dialog.dart';
 
@@ -49,14 +50,13 @@ void main() {
       expect(find.text('Dismiss'), findsOneWidget);
     });
 
-    testWidgets('falls back to default text when message is null',
-        (tester) async {
+    testWidgets('falls back to default text when message is null', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: _overrides(),
-          child: const MaterialApp(
-            home: Scaffold(body: PlaybackErrorDialog()),
-          ),
+          child: const MaterialApp(home: Scaffold(body: PlaybackErrorDialog())),
         ),
       );
       await tester.pump();
@@ -84,10 +84,10 @@ void main() {
 
       expect(find.text('Playback error'), findsOneWidget);
       expect(find.text('Boom'), findsOneWidget);
-      // Left half of the window — the Now Playing side.
+      // The player's pane, at the window's right.
       expect(
-        tester.getRect(find.byKey(KalinkaDialog.cardKey)).right,
-        lessThanOrEqualTo(600),
+        tester.getRect(find.byKey(KalinkaDialog.cardKey)).left,
+        greaterThanOrEqualTo(1200 - kalinkaPlayerPaneWidth(1200)),
       );
     });
   });

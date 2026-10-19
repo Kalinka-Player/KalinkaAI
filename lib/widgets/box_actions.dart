@@ -60,7 +60,7 @@ class BoxActionDialog extends StatelessWidget {
   const BoxActionDialog({
     super.key,
     required this.action,
-    this.side = KalinkaDialogSide.left,
+    this.side = KalinkaDialogSide.player,
   });
 
   @override
@@ -96,14 +96,14 @@ class BoxActionDialog extends StatelessWidget {
 /// Confirms [action], then asks the connected server's box to carry it out.
 /// Returns whether the streamer accepted it; a refusal is reported in a toast.
 ///
-/// Set [inPanel] when called from the tablet layout's left panel.
+/// Set [inPanel] when called from a pane of the tablet layout.
 /// [dialogSide] keeps the confirmation over the panel that opened it.
 Future<bool> runBoxAction(
   BuildContext context,
   WidgetRef ref,
   BoxAction action, {
   bool inPanel = false,
-  KalinkaDialogSide dialogSide = KalinkaDialogSide.left,
+  KalinkaDialogSide dialogSide = KalinkaDialogSide.player,
 }) async {
   final control = ref.read(boxControlProvider).value;
   final api = ref.read(supervisorApiProvider);

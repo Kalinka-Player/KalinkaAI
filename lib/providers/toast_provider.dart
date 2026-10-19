@@ -16,8 +16,8 @@ class ToastEntry {
   /// Render as a compact right-aligned pill rather than a full-width toast.
   final bool compact;
 
-  /// Raised by something that happened inside a panel — the tablet layout's
-  /// left half — so the answer appears where the question was asked rather
+  /// Raised by something that happened inside a panel — shown over the
+  /// tablet layout's player pane — so the answer appears there rather
   /// than in the opposite corner of a wide window. Ignored on phone, which
   /// has one place to put a toast.
   final bool inPanel;
@@ -89,8 +89,9 @@ class ToastNotifier extends Notifier<List<ToastEntry>> {
 
   /// Show a toast. Success toasts dismiss after 2 s; error toasts after 5 s.
   ///
-  /// Set [inPanel] when the action was taken inside the tablet layout's left
-  /// panel, so the toast lands over that panel instead of across the window.
+  /// Set [inPanel] when the action was taken inside a pane of the tablet
+  /// layout, so the toast lands over the player's pane instead of browsing's
+  /// corner.
   void show(String message, {bool isError = false, bool inPanel = false}) {
     if (_isDisposed) return;
     final id = _appendToast(

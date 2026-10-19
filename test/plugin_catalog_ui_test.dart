@@ -2805,7 +2805,7 @@ void main() {
         final panelRect = tester.getRect(panel);
         expect(panelRect.left, queue.left);
         expect(panelRect.right, queue.right);
-        expect(panelRect.left, greaterThan(nowPlaying.right));
+        expect(panelRect.right, lessThan(nowPlaying.left));
         expect(tester.getRect(find.byType(NowPlayingContent)), nowPlaying);
         expect(
           find.byType(RendererSwitcherDropdown).hitTestable(),
@@ -2813,8 +2813,11 @@ void main() {
         );
         expect(find.byType(ServerChip).hitTestable(), findsNothing);
         final anchor = SheetAnchor.elementOf(tester.element(panel));
-        expect(SheetAnchor.paddingFor(anchor, 1280).left, panelRect.left);
-        expect(SheetAnchor.paddingFor(anchor, 1280).right, 0);
+        expect(SheetAnchor.paddingFor(anchor, 1280).left, 0);
+        expect(
+          SheetAnchor.paddingFor(anchor, 1280).right,
+          1280 - panelRect.right,
+        );
 
         final settings = container.read(settingsProvider.notifier) as _Settings;
         settings.stageChange('base_config.server.name', 'Staged name');
@@ -2849,8 +2852,8 @@ void main() {
           await tester.pumpAndSettle();
           expect(tester.state(panel), same(panelState));
           final rect = tester.getRect(panel);
-          expect(rect.left, size.width == 400 ? 0 : queue.left);
-          expect(rect.right, size.width);
+          expect(rect.left, 0);
+          expect(rect.right, size.width == 400 ? size.width : queue.right);
           expect(settings.loads, loads);
           expect(
             container

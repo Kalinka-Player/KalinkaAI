@@ -18,7 +18,7 @@ class ClearAllConfirmDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return KalinkaDialog(
-      side: KalinkaDialogSide.left,
+      side: KalinkaDialogSide.player,
       icon: Icons.delete_outline,
       iconColor: KalinkaColors.actionDelete,
       title: 'Clear entire queue?',
