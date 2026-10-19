@@ -915,7 +915,8 @@ void main() {
       expect(volume, lessThan(album));
       expect(album, lessThan(play));
 
-      // The slider sits centred between the track and the first extra.
+      // The slider sits centred between the track and a 16 gap before the
+      // first extra.
       final track = tester.getRect(
         find
             .ancestor(
@@ -930,7 +931,7 @@ void main() {
       final firstExtra = tester.getRect(find.byType(ColumnSeparator).first);
       expect(
         tester.getCenter(find.byType(PlaybackProgressSlider)).dx,
-        closeTo((track.right + firstExtra.left) / 2, 1),
+        closeTo((track.right + firstExtra.left - 16) / 2, 1),
       );
       expect(tester.takeException(), isNull);
       semantics.dispose();
