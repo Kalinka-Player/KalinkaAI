@@ -40,6 +40,17 @@ class InfiniteListView<T> extends StatefulWidget {
   final Widget Function(BuildContext context, int index, T above)?
   separatorBuilder;
 
+  /// How many items share a row. Above one, items read left to right and
+  /// then down, in equal columns, [rowGap] apart; a row is as tall as its
+  /// tallest item and [separatorBuilder] is not used.
+  final int columns;
+  final double columnGap;
+  final double rowGap;
+
+  /// Insets the rows of a multi-column listing, which the header does not
+  /// share.
+  final EdgeInsets rowPadding;
+
   /// How many items to request per chunk.
   final int chunkSize;
   final EdgeInsets padding;
@@ -77,6 +88,10 @@ class InfiniteListView<T> extends StatefulWidget {
     required this.fetchChunk,
     required this.itemBuilder,
     this.separatorBuilder,
+    this.columns = 1,
+    this.columnGap = 16,
+    this.rowGap = 16,
+    this.rowPadding = EdgeInsets.zero,
     this.chunkSize = 30,
     this.padding = EdgeInsets.zero,
     this.header,
@@ -307,17 +322,47 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
         (_loadingMore && widget.loadMorePlaceholder != null) || _loadMoreFailed
         ? 1
         : 0;
+    final columns = widget.columns.clamp(1, 12);
+    final rows = (_items.length / columns).ceil();
 
     return ListView.builder(
       controller: _controller,
       padding: widget.padding,
-      itemCount: headerCount + _items.length + footerCount,
+      itemCount: headerCount + rows + footerCount,
       itemBuilder: (context, index) {
         var i = index;
         if (hasHeader) {
           if (i == 0) return widget.header!;
           i -= 1;
         }
+
+        if (columns > 1 && i < rows) {
+          final first = i * columns;
+          return Padding(
+            padding: widget.rowPadding.copyWith(
+              top: widget.rowPadding.top + (i == 0 ? 0 : widget.rowGap),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var c = 0; c < columns; c++) ...[
+                  if (c > 0) SizedBox(width: widget.columnGap),
+                  Expanded(
+                    child: first + c < _items.length
+                        ? widget.itemBuilder(
+                            context,
+                            _items[first + c],
+                            first + c,
+                            _items,
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }
+        if (columns > 1) i -= rows - _items.length;
 
         if (i < _items.length) {
           final item = widget.itemBuilder(context, _items[i], i, _items);
