@@ -73,10 +73,10 @@ void main() {
     await _resizeTo(tester, const Size(1200, 800));
     await _open(tester, KalinkaDialogSide.right);
 
-    // Capped at 460 and centred in the right half (600..1200).
+    // Capped at 460 and centred in the browsing panel (361..1200).
     final rect = tester.getRect(find.byKey(_card));
-    expect(rect.left, 670);
-    expect(rect.right, 1130);
+    expect(rect.left, 550.5);
+    expect(rect.right, 1010.5);
   });
 
   testWidgets('tablet width: a left-side dialog sits in the left panel', (
@@ -85,9 +85,10 @@ void main() {
     await _resizeTo(tester, const Size(1200, 800));
     await _open(tester, KalinkaDialogSide.left);
 
+    // The player panel is 360 wide here, so the card fills it to its margins.
     final rect = tester.getRect(find.byKey(_card));
-    expect(rect.left, 70);
-    expect(rect.right, 530);
+    expect(rect.left, 20);
+    expect(rect.right, 340);
   });
 
   testWidgets('tablet width: a full-width dialog centres in the window', (
@@ -106,7 +107,7 @@ void main() {
     (tester) async {
       await _resizeTo(tester, const Size(1200, 800));
       await _open(tester, KalinkaDialogSide.right);
-      expect(tester.getRect(find.byKey(_card)).left, 670);
+      expect(tester.getRect(find.byKey(_card)).left, 550.5);
 
       // Tablet → phone: the card re-centres on the (now single) layout rather
       // than staying pinned to a half that no longer exists.
@@ -118,8 +119,8 @@ void main() {
       await _resizeTo(tester, const Size(1200, 800));
       await tester.pumpAndSettle();
       final rect = tester.getRect(find.byKey(_card));
-      expect(rect.left, 670);
-      expect(rect.right, 1130);
+      expect(rect.left, 550.5);
+      expect(rect.right, 1010.5);
     },
   );
 
@@ -129,7 +130,7 @@ void main() {
     await _resizeTo(tester, const Size(1200, 800));
     await _open(tester, KalinkaDialogSide.right);
 
-    await tester.tapAt(const Offset(300, 400)); // left panel, no scrim
+    await tester.tapAt(const Offset(200, 400)); // left panel, no scrim
     await tester.pumpAndSettle();
     expect(find.byKey(_card), findsNothing);
   });

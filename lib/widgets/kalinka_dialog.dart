@@ -20,10 +20,10 @@ enum KalinkaDialogSide {
 /// The app's dialog surface: a card over its own scrim.
 /// Defaults to bottom-anchored; [centered] uses a regular centered dialog.
 ///
-/// Below [kKalinkaTabletBreakpoint] the dialog owns the window. At or above
-/// it, card *and* scrim confine themselves to the [side] panel, so a queue
-/// confirmation sits over the queue and a settings confirmation over
-/// settings instead of stretching across both. The other panel stays
+/// In a single-pane window the dialog owns the window. Split
+/// ([kalinkaSplitLayout]), card *and* scrim confine themselves to the [side]
+/// panel, so a queue confirmation sits over the player and a settings
+/// confirmation over settings instead of stretching across both. The other panel stays
 /// undimmed but inert — tapping it dismisses. That choice is re-made from
 /// layout constraints on every build, so a window resized across the
 /// breakpoint while the dialog is open re-homes the card.
@@ -102,19 +102,20 @@ class KalinkaDialog extends StatelessWidget {
           ],
         );
         if (side == KalinkaDialogSide.full ||
-            constraints.maxWidth < kKalinkaTabletBreakpoint) {
+            !kalinkaSplitLayout(constraints.maxWidth)) {
           return panel;
         }
-        // The two panels are equal halves, so half the window is the dialog's
-        // home.
-        final away = Expanded(
-          child: _buildTapToDismiss(context, dimmed: false),
-        );
+        // The player panel has a bounded width; browsing takes the rest.
+        final player = kalinkaPlayerPaneWidth(constraints.maxWidth);
+        final away = _buildTapToDismiss(context, dimmed: false);
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: side == KalinkaDialogSide.left
-              ? [Expanded(child: panel), away]
-              : [away, Expanded(child: panel)],
+              ? [SizedBox(width: player, child: panel), Expanded(child: away)]
+              : [
+                  SizedBox(width: player + 1, child: away),
+                  Expanded(child: panel),
+                ],
         );
       },
     );

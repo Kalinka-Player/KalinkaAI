@@ -13,6 +13,15 @@ const double kKalinkaWordmarkHeight = 30;
 /// the same number, so it lives here rather than in each screen.
 const double kKalinkaTabletBreakpoint = 900;
 
+/// The player's width beside browsing. Bounded, so a wider window gives its
+/// extra room to browsing rather than to a stretched player.
+double kalinkaPlayerPaneWidth(double windowWidth) =>
+    (windowWidth * 0.3).clamp(340.0, 420.0);
+
+/// Whether a window this wide holds the player and browsing side by side.
+bool kalinkaSplitLayout(double windowWidth) =>
+    windowWidth >= kKalinkaTabletBreakpoint;
+
 /// Decoration shared by the queue and search top bars so both
 /// read identically — solid surface, a hairline bottom rule, and a soft drop
 /// shadow. Applied via [Container] (not DecoratedBox) so the border also insets
