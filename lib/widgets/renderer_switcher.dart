@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -142,19 +140,15 @@ class RendererSwitcherDropdown extends ConsumerWidget {
   /// Longer names are ellipsised; the header has a centred label to respect.
   final double maxNameWidth;
 
-  /// Within a bounded width the name gives way first, and where too little
-  /// is left even for a few letters — or for the whole empty-state message,
-  /// which is never cut — the switch folds to the plain cast button.
-  final bool collapsible;
+  /// Drawn in a grey rounded frame, standing on its own under the transport
+  /// rather than in a row of controls.
+  final bool framed;
 
   const RendererSwitcherDropdown({
     super.key,
     this.maxNameWidth = 140,
-    this.collapsible = false,
+    this.framed = false,
   });
-
-  /// The dropdown's own icon, chevron and padding beside the name.
-  static const double _chrome = 6 + 22 + 7 + 2 + 18 + 6;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -176,72 +170,57 @@ class RendererSwitcherDropdown extends ConsumerWidget {
         ? idleLabel
         : rendererDisplayName(active, isSelf: active.rendererId == ownId);
 
-    Widget dropdown({required bool shrinkName}) {
-      // The empty-state message must never ellipsise; names may.
-      final label = ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: empty ? 200 : maxNameWidth),
-        child: Text(
-          name,
-          style: KalinkaTextStyles.trayRowSublabel,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      );
-      return Semantics(
-        label: active == null ? name : 'Output: $name',
-        button: true,
-        child: Tooltip(
-          message: idleLabel,
-          excludeFromSemantics: true,
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () {
-                showRendererPicker(context, ref);
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _CastGlyph(size: 18, live: outputLive),
-                    const SizedBox(width: 7),
-                    if (shrinkName) Flexible(child: label) else label,
-                    const SizedBox(width: 2),
-                    const Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 18,
-                      color: KalinkaColors.textMuted,
+    return Semantics(
+      label: active == null ? name : 'Output: $name',
+      button: true,
+      child: Tooltip(
+        message: idleLabel,
+        excludeFromSemantics: true,
+        child: Material(
+          color: Colors.transparent,
+          shape: framed
+              ? const StadiumBorder(
+                  side: BorderSide(color: KalinkaColors.borderDefault),
+                )
+              : RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () {
+              showRendererPicker(context, ref);
+            },
+            child: Padding(
+              padding: framed
+                  ? const EdgeInsets.fromLTRB(14, 10, 10, 10)
+                  : const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _CastGlyph(size: 18, live: outputLive),
+                  const SizedBox(width: 7),
+                  ConstrainedBox(
+                    // The empty-state message must never ellipsise; names may.
+                    constraints: BoxConstraints(
+                      maxWidth: empty ? 200 : maxNameWidth,
                     ),
-                  ],
-                ),
+                    child: Text(
+                      name,
+                      style: KalinkaTextStyles.trayRowSublabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  const Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 18,
+                    color: KalinkaColors.textMuted,
+                  ),
+                ],
               ),
             ),
           ),
         ),
-      );
-    }
-
-    if (!collapsible) return dropdown(shrinkName: false);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (!constraints.hasBoundedWidth) return dropdown(shrinkName: false);
-        final painter = TextPainter(
-          text: TextSpan(text: name, style: KalinkaTextStyles.trayRowSublabel),
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-          maxLines: 1,
-        )..layout();
-        final nameWidth = painter.width;
-        painter.dispose();
-        final needed = _chrome + (empty ? nameWidth : math.min(nameWidth, 40));
-        if (constraints.maxWidth >= needed) {
-          return dropdown(shrinkName: true);
-        }
-        return const RendererSwitcherButton(hitDiameter: 40, iconSize: 20);
-      },
+      ),
     );
   }
 }

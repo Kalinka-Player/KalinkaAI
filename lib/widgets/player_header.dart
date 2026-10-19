@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
-import 'away.dart';
 import 'kalinka_top_bar.dart' show KalinkaWordmark;
 import 'kiosk/kiosk_enter_button.dart';
 import 'player_view_switch.dart';
 import 'queue_actions.dart';
-import 'renderer_switcher.dart';
 
 /// Keeps the player's view labels at their requested text size. When the
 /// controls and labels no longer fit together, they get separate rows.
@@ -14,25 +12,15 @@ class PlayerHeader extends StatelessWidget {
   final bool isTablet;
   final bool showingQueue;
   final VoidCallback? onClose;
-  final Key? outputSwitcherKey;
 
-  /// The server is away: the output switcher takes no input, as the
-  /// mini-player's does. Closing and switching views still work.
-  final bool away;
-
+  /// The output switch is the player's, under its transport, not the
+  /// header's.
   const PlayerHeader({
     super.key,
     required this.isTablet,
     required this.showingQueue,
     this.onClose,
-    this.outputSwitcherKey,
-    this.away = false,
   });
-
-  Widget _output(Widget switcher) => AwayDim(
-    away: away,
-    child: AwayLock(away: away, child: switcher),
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -41,66 +29,43 @@ class PlayerHeader extends StatelessWidget {
       // same height and inset as the top bar beside it, so the two read as
       // one, their controls on one centre line.
       final actions = showingQueue
-          // In queue mode the mini-player carries the output switcher.
           ? const QueueMenuButton()
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const KioskEnterButton(),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: _output(
-                    RendererSwitcherDropdown(
-                      key: outputSwitcherKey,
-                      collapsible: true,
-                    ),
-                  ),
-                ),
-              ],
-            );
+          : const KioskEnterButton();
+      const wordmark = Padding(
+        padding: EdgeInsets.only(left: 4),
+        child: KalinkaWordmark(),
+      );
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: kKalinkaTopBarHeight),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              const wordmark = Padding(
-                padding: EdgeInsets.only(left: 4),
-                child: KalinkaWordmark(),
-              );
-              const lead = 4 + KalinkaWordmark.width + 24;
+              // What each end keeps clear of the centred tabs: the
+              // wordmark's room, which the actions at the other end fit in.
+              const side = 4 + KalinkaWordmark.width + 16;
               final tabs = PlayerViewSwitch.preferredWidth(context);
-              // Enlarged labels that leave the actions no room put them on
-              // a row of their own, as the phone does.
-              if (constraints.maxWidth < lead + tabs + 16 + 88) {
+              // Enlarged labels that would reach either end take a row of
+              // their own, as the phone's do.
+              if (constraints.maxWidth < tabs + 2 * side) {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
-                      children: [
-                        wordmark,
-                        SizedBox(width: 24),
-                        Flexible(child: PlayerViewSwitch()),
-                      ],
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [wordmark, actions],
                     ),
                     const SizedBox(height: 8),
-                    actions,
+                    const Center(child: PlayerViewSwitch()),
                   ],
                 );
               }
-              return Row(
+              return Stack(
+                alignment: Alignment.center,
                 children: [
-                  wordmark,
-                  const SizedBox(width: 24),
-                  SizedBox(width: tabs, child: const PlayerViewSwitch()),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: actions,
-                    ),
-                  ),
+                  const Center(child: PlayerViewSwitch()),
+                  const Align(alignment: Alignment.centerLeft, child: wordmark),
+                  Align(alignment: Alignment.centerRight, child: actions),
                 ],
               );
             },
@@ -134,7 +99,7 @@ class PlayerHeader extends StatelessWidget {
     );
     final trailing = showingQueue
         ? const QueueMenuButton()
-        : _output(const RendererSwitcherButton(hitDiameter: 36, iconSize: 20));
+        : const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
