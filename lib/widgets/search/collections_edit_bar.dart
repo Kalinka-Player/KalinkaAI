@@ -63,7 +63,7 @@ Future<bool> _confirmDiscard(BuildContext context, int changes) async {
   final go = await showKalinkaDialog<bool>(
     context: context,
     builder: (dialog) => KalinkaDialog(
-      side: KalinkaDialogSide.right,
+      side: KalinkaDialogSide.browsing,
       icon: Icons.undo_rounded,
       iconColor: KalinkaColors.statusPending,
       title: 'Discard ${_changes(changes)}?',
@@ -215,7 +215,7 @@ class _CollectionEditingBarState extends ConsumerState<CollectionEditingBar> {
     final go = await showKalinkaDialog<bool>(
       context: context,
       builder: (dialog) => KalinkaDialog(
-        side: KalinkaDialogSide.right,
+        side: KalinkaDialogSide.browsing,
         icon: Icons.remove_circle_outline_rounded,
         iconColor: KalinkaColors.actionDelete,
         title: 'Remove $tracks ${tracks == 1 ? 'track' : 'tracks'}?',

@@ -146,7 +146,7 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     final choice = await showKalinkaDialog<String>(
       context: context,
       builder: (context) => KalinkaDialog(
-        side: KalinkaDialogSide.right,
+        side: KalinkaDialogSide.browsing,
         icon: Icons.tune,
         title: 'Apply your changes?',
         message: 'You have changes that have not been applied. Applying them restarts Kalinka and briefly stops the music.',
@@ -199,7 +199,7 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       final confirmed = await showKalinkaDialog<bool>(
         context: context,
         builder: (context) => KalinkaDialog(
-          side: KalinkaDialogSide.right,
+          side: KalinkaDialogSide.browsing,
           icon: Icons.delete_outline,
           iconColor: KalinkaColors.actionDelete,
           title: 'Uninstall ${plugin.name}?',

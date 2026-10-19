@@ -6,15 +6,15 @@ import 'kalinka_dialog.dart';
 /// Confirmation dialog for restarting the server.
 ///
 /// Returns `true` when the user confirms, `false`/`null` when cancelled —
-/// the caller performs the restart. Launched from Settings, which lives in
-/// the left panel on tablet. Show via [showKalinkaDialog].
+/// the caller performs the restart. Launched from Settings; over the player's
+/// pane on tablet. Show via [showKalinkaDialog].
 class RestartConfirmDialog extends StatelessWidget {
   const RestartConfirmDialog({super.key});
 
   @override
   Widget build(BuildContext context) {
     return KalinkaDialog(
-      side: KalinkaDialogSide.left,
+      side: KalinkaDialogSide.player,
       icon: Icons.restart_alt,
       iconGlyphColor: KalinkaColors.accentTint,
       title: 'Restart server?',

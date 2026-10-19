@@ -17,15 +17,15 @@ Future<bool> refusedAsDemo(BuildContext context, WidgetRef ref) async {
 }
 
 /// Says why settings cannot be applied on the demo server, in place of the
-/// save or restart the user asked for. Launched from Settings, which lives in
-/// the left panel on tablet. Show via [showKalinkaDialog].
+/// save or restart the user asked for. Launched from Settings; over the
+/// player's pane on tablet. Show via [showKalinkaDialog].
 class DemoReadOnlyDialog extends StatelessWidget {
   const DemoReadOnlyDialog({super.key});
 
   @override
   Widget build(BuildContext context) {
     return KalinkaDialog(
-      side: KalinkaDialogSide.left,
+      side: KalinkaDialogSide.player,
       icon: Icons.lock_outline_rounded,
       iconGlyphColor: KalinkaColors.accentTint,
       title: 'This is the demo server',

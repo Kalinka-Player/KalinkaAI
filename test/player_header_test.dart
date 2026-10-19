@@ -175,7 +175,8 @@ void main() {
     tester,
   ) async {
     await _pumpHeader(tester, tablet: true);
-    expect(find.byType(KalinkaWordmark), findsOneWidget);
+    // Browsing's half of the bar leads with the wordmark.
+    expect(find.byType(KalinkaWordmark), findsNothing);
     expect(
       tester.getCenter(find.byType(PlayerViewSwitch)).dx,
       closeTo(240, .01),
@@ -187,17 +188,17 @@ void main() {
   testWidgets('tablet header gives enlarged view labels a row of their own', (
     tester,
   ) async {
-    await _pumpHeader(tester, width: 450, scale: 2, tablet: true);
+    await _pumpHeader(tester, width: 300, scale: 2, tablet: true);
     expect(tester.takeException(), isNull);
     final viewSwitch = tester.getRect(find.byType(PlayerViewSwitch));
-    expect(
-      viewSwitch.top,
-      greaterThan(tester.getRect(find.byType(KalinkaWordmark)).bottom),
-    );
     await tester.tap(find.text('QUEUE'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(tester.getRect(find.byType(PlayerViewSwitch)), viewSwitch);
+    expect(
+      viewSwitch.top,
+      greaterThan(tester.getRect(find.byTooltip('Queue options')).bottom),
+    );
   });
 
   testWidgets('keyboard activation and selected semantics survive reflow', (

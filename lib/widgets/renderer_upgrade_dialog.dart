@@ -25,7 +25,7 @@ class RendererUpgradeDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return KalinkaDialog(
-      side: KalinkaDialogSide.left,
+      side: KalinkaDialogSide.player,
       icon: Icons.system_update_alt,
       iconGlyphColor: blocked
           ? KalinkaColors.statusPending

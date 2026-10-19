@@ -8,7 +8,8 @@ import 'kalinka_dialog.dart';
 /// Confirmation for the software components included in one installer run.
 ///
 /// Returns `true` when the user confirms — the caller starts the upgrade.
-/// Launched from the update banner in Settings (left panel on tablet).
+/// Launched from the update banner in Settings; over the player's pane on
+/// tablet.
 /// Show via [showKalinkaDialog].
 class UpgradeConfirmDialog extends StatelessWidget {
   final ServerUpdateInfo update;
@@ -18,7 +19,7 @@ class UpgradeConfirmDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return KalinkaDialog(
-      side: KalinkaDialogSide.left,
+      side: KalinkaDialogSide.player,
       icon: Icons.system_update_alt,
       iconGlyphColor: KalinkaColors.accentTint,
       title: 'Update player software?',

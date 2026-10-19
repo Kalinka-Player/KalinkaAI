@@ -41,7 +41,7 @@ final musicSourcesSettingsRequestProvider =
       MusicSourcesSettingsRequest.new,
     );
 
-/// Hosted by the player shell so tablet customisation stays in the right panel.
+/// Hosted by the player shell so tablet customisation stays in browsing.
 class HomeCustomisationNotifier extends Notifier<bool> {
   @override
   bool build() => false;

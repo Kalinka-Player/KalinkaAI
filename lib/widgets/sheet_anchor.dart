@@ -12,18 +12,28 @@ import 'package:flutter/material.dart';
 /// tracks the panel across live resizes. With no anchor in scope (phone
 /// layout) the padding is zero and the default placement is kept.
 class SheetAnchor extends InheritedWidget {
-  const SheetAnchor({super.key, required super.child});
+  /// Where sheets launched from inside this anchor go instead: a bar spanning
+  /// the window sends them to the pane it belongs to.
+  final GlobalKey? target;
 
-  /// The nearest enclosing anchor. Must be captured from the launching
-  /// context — the sheet route itself builds outside the anchor's subtree.
-  static InheritedElement? elementOf(BuildContext context) =>
-      context.getElementForInheritedWidgetOfExactType<SheetAnchor>();
+  const SheetAnchor({super.key, this.target, required super.child});
+
+  /// The nearest enclosing anchor, or the pane it sends sheets to. Must be
+  /// captured from the launching context — the sheet route itself builds
+  /// outside the anchor's subtree.
+  static Element? elementOf(BuildContext context) {
+    final element = context
+        .getElementForInheritedWidgetOfExactType<SheetAnchor>();
+    final target = (element?.widget as SheetAnchor?)?.target;
+    if (target == null) return element;
+    return target.currentContext as Element?;
+  }
 
   /// Horizontal insets that place a window-wide sheet over [anchor]. Zero
   /// when there is no anchor or it is gone (e.g. the layout re-homed across
   /// the tablet breakpoint mid-resize), letting the sheet fall back to full
   /// width.
-  static EdgeInsets paddingFor(InheritedElement? anchor, double windowWidth) {
+  static EdgeInsets paddingFor(Element? anchor, double windowWidth) {
     if (anchor == null || !anchor.mounted) return EdgeInsets.zero;
     var active = true;
     // findRenderObject asserts on deactivated elements in debug builds

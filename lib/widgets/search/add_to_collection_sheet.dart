@@ -154,7 +154,7 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
     final go = await showKalinkaDialog<bool>(
       context: context,
       builder: (dialog) => KalinkaDialog(
-        side: KalinkaDialogSide.right,
+        side: KalinkaDialogSide.browsing,
         icon: Icons.swap_horiz_rounded,
         iconColor: KalinkaColors.actionDelete,
         title: 'Replace ${_nameOf(chosen)}?',

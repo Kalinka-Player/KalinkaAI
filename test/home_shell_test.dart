@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
+import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/coach_marks_overlay.dart';
@@ -13,11 +15,30 @@ import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/player_queue_view.dart';
 import 'package:kalinka/widgets/player_view_switch.dart';
 import 'package:kalinka/widgets/queue_zone.dart';
+import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/search/search_composer.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 import 'package:kalinka/widgets/server_chip.dart';
 
 import 'support/home_shell.dart';
+
+class _Renderers extends RendererListNotifier {
+  @override
+  RendererListState build() => const RendererListState(
+    loaded: true,
+    renderers: [
+      RendererInfo(
+        rendererId: 'smsl',
+        friendlyName: 'SMSL SU-1',
+        status: 'connected',
+        active: true,
+      ),
+    ],
+  );
+
+  @override
+  Future<void> refresh() async {}
+}
 
 /// Records whether the system back left the app.
 List<String> _recordSystemCalls() {
@@ -302,8 +323,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(_queueView, findsOneWidget);
     expect(
-      tester.getRect(_queueView).right,
-      lessThanOrEqualTo(tester.getRect(find.byType(SearchSessionView)).left),
+      tester.getRect(_queueView).left,
+      greaterThanOrEqualTo(
+        tester.getRect(find.byType(SearchSessionView)).right,
+      ),
     );
     // A panel, not a sheet: Home stays usable beside it.
     expect(find.byType(SearchSessionView).hitTestable(), findsOneWidget);
@@ -323,11 +346,12 @@ void main() {
         size: const Size(1400, 900),
       );
 
-      // One wordmark, leading the player's half of the bar.
+      // One wordmark, leading browsing's half at the window's start.
       final wordmark = find.byType(KalinkaWordmark);
       expect(wordmark, findsOneWidget);
       final player = tester.getRect(find.byType(NowPlayingContent));
-      expect(tester.getRect(wordmark).right, lessThan(player.right));
+      expect(player.right, 1400);
+      expect(tester.getRect(wordmark).right, lessThan(player.left));
 
       // The view tabs and the connection chip share a centre line.
       final tabs = tester.getCenter(_side('PLAYING')).dy;
@@ -339,7 +363,7 @@ void main() {
         (w) =>
             w is Positioned &&
             w.width == 1 &&
-            w.left == player.width &&
+            w.left == player.left - 1 &&
             (w.top ?? 0) > 0,
       );
       expect(divider, findsOneWidget);
@@ -365,9 +389,14 @@ void main() {
       size: const Size(1600, 900),
     );
 
-    // Browsing takes the room the player does not need.
-    expect(tester.getSize(find.byType(NowPlayingContent)).width, 580);
-    expect(tester.getRect(find.byType(SearchSessionView)).left, 581);
+    // Browsing takes the room the player does not need, the player the
+    // window's right.
+    final player = tester.getRect(find.byType(NowPlayingContent));
+    expect(player.width, 580);
+    expect(player.right, 1600);
+    final browsing = tester.getRect(find.byType(SearchSessionView));
+    expect(browsing.left, 0);
+    expect(browsing.right, 1019);
 
     await tester.tap(_side('QUEUE'));
     await tester.pumpAndSettle();
@@ -379,6 +408,39 @@ void main() {
       tester.getRect(find.byType(SearchSessionView)).bottom,
       lessThanOrEqualTo(bar.top + 1),
     );
+  });
+
+  testWidgets('the output sheet opens over the player, from it or its bar', (
+    tester,
+  ) async {
+    await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(3)),
+      size: const Size(1400, 900),
+      overrides: [rendererListProvider.overrideWith(_Renderers.new)],
+    );
+    final player = tester.getRect(find.byType(NowPlayingContent));
+
+    void expectOverPlayer() {
+      final sheet = tester.getRect(find.byType(RendererPickerContent));
+      expect(sheet.left, greaterThanOrEqualTo(player.left));
+      expect(sheet.right, lessThanOrEqualTo(player.right));
+    }
+
+    await tester.tap(find.text('SMSL SU-1'));
+    await tester.pumpAndSettle();
+    expectOverPlayer();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(RendererPickerContent), findsNothing);
+
+    await tester.tap(_side('QUEUE'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(of: _queueMiniPlayer, matching: find.text('SMSL SU-1')),
+    );
+    await tester.pumpAndSettle();
+    expectOverPlayer();
   });
 
   testWidgets('the first-run tour starts at the search entry', (tester) async {

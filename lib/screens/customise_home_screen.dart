@@ -239,7 +239,7 @@ Future<void> _confirmUnpin(
   final confirmed = await showKalinkaDialog<bool>(
     context: context,
     builder: (dialogContext) => KalinkaDialog(
-      side: KalinkaDialogSide.right,
+      side: KalinkaDialogSide.browsing,
       centered: true,
       icon: CupertinoIcons.pin_slash,
       iconGlyphColor: KalinkaColors.accentTint,

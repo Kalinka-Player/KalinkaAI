@@ -33,7 +33,7 @@ class SoundcardRow extends ConsumerWidget {
   final SoundcardBox box;
   final SoundcardReport report;
 
-  /// Set when shown in the tablet layout's left panel.
+  /// Set when shown in a pane of the tablet layout.
   final bool inPanel;
 
   /// Runs the change, when the row is hosted by one that does.
@@ -239,7 +239,7 @@ class _ConfirmSoundcard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return KalinkaDialog(
-      side: KalinkaDialogSide.left,
+      side: KalinkaDialogSide.player,
       icon: Icons.speaker_outlined,
       iconColor: KalinkaColors.accent,
       iconGlyphColor: KalinkaColors.accentTint,

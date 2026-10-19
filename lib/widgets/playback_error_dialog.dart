@@ -22,7 +22,7 @@ class PlaybackErrorDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return KalinkaDialog(
-      side: KalinkaDialogSide.left,
+      side: KalinkaDialogSide.player,
       // Greyscale, not accent — this reports a state, it isn't a CTA.
       icon: Icons.warning_rounded,
       iconColor: KalinkaColors.textMuted,

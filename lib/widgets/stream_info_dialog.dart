@@ -112,7 +112,7 @@ class StreamInfoDialog extends ConsumerWidget {
     );
 
     return KalinkaDialog(
-      side: KalinkaDialogSide.left,
+      side: KalinkaDialogSide.player,
       // Greyscale, not accent — this reports, it isn't a CTA.
       icon: Icons.info_outline,
       iconColor: KalinkaColors.textMuted,
