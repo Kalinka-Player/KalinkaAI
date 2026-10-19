@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../providers/artist_relations_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
@@ -18,7 +19,10 @@ class ArtistPageHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final name = page.title ?? '';
     final albums = page.item?.artist?.albumCount;
-    final path = page.item?.image?.large ?? page.artPath;
+    final path =
+        imagePathOf(page.item?.image) ??
+        page.artPath ??
+        ref.watch(artistPortraitProvider(page.id!)).value;
     final url = path == null ? null : ref.read(urlResolverProvider).abs(path);
     final provider = page.provider?.trim() ?? '';
 

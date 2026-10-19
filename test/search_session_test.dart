@@ -646,6 +646,31 @@ void main() {
       expect(state().previousVisits, isEmpty);
     });
 
+    test('opening a page already in the history goes back to it', () {
+      final container = makeContainer(_FakeApi());
+      final notifier = container.read(searchSessionProvider.notifier);
+      SearchSessionState state() => container.read(searchSessionProvider);
+      BrowseItem item(String id) =>
+          BrowseItem(id: id, name: id, canBrowse: true, canAdd: false);
+      const album = 'kalinka:qobuz:album:a';
+      const artist = 'kalinka:qobuz:artist:b';
+
+      notifier.openBrowseItem(item(album));
+      notifier.openBrowseItem(item(artist));
+      notifier.openBrowseItem(item(album));
+      expect(state().catalogPage.id, album);
+      expect(state().previousVisits, isEmpty);
+
+      // However often the two link to each other, Back stays one deep.
+      for (var i = 0; i < 3; i++) {
+        notifier.openBrowseItem(item(artist));
+        notifier.openBrowseItem(item(album));
+      }
+      notifier.openBrowseItem(item(artist));
+      expect(state().catalogPage.id, artist);
+      expect(state().previousVisits, hasLength(1));
+    });
+
     test('a complete listing is a visit of its own', () async {
       final container = makeContainer(_FakeApi());
       final notifier = container.read(searchSessionProvider.notifier);

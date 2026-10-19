@@ -803,6 +803,23 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     bool restoreFolder = true,
     BrowseItem? item,
   }) {
+    // An item's page already in the history is returned to rather than
+    // stacked again, so album → artist → album cannot grow Back without end.
+    if (item != null && initialFilter == null) {
+      bool shows(SearchSessionState visit) =>
+          visit.activeView == FindMusicView.catalogs &&
+          visit.catalogPage.id == id &&
+          visit.catalogPage.folderLayout == folderLayout &&
+          visit.expandedShelf == null;
+      final earlier = state.previousVisits.lastIndexWhere(shows);
+      if (earlier >= 0) {
+        state = state.copyWith(
+          previousVisits: state.previousVisits.sublist(0, earlier + 1),
+        );
+        goBack();
+        return;
+      }
+    }
     final page = CatalogPage.category(
       id: id,
       title: title,
