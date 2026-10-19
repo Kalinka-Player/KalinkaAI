@@ -10,11 +10,11 @@ import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/shell_nav_provider.dart';
 import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/kalinka_top_bar.dart';
 import 'package:kalinka/widgets/player_header.dart';
 import 'package:kalinka/widgets/player_view_switch.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
 
-import 'support/focus.dart';
 import 'support/home_shell.dart';
 
 class _Connected extends ConnectionStateNotifier {
@@ -33,7 +33,6 @@ Future<void> _pumpHeader(
   double scale = 1,
   bool tablet = false,
   bool reduceMotion = false,
-  bool away = false,
   VoidCallback? onClose,
 }) async {
   tester.view.physicalSize = Size(width, 600);
@@ -75,7 +74,6 @@ Future<void> _pumpHeader(
                 isTablet: tablet,
                 showingQueue: ref.watch(playerViewProvider) == PlayerView.queue,
                 onClose: onClose ?? () {},
-                away: away,
               ),
             ),
           ),
@@ -111,13 +109,10 @@ void main() {
         final header = tester.getRect(find.byType(PlayerHeader));
         final viewSwitch = tester.getRect(find.byType(PlayerViewSwitch));
         final collapse = tester.getRect(find.byTooltip('Minimise player'));
-        final output = tester.getRect(find.byType(RendererSwitcherButton));
         expect(header.contains(viewSwitch.topLeft), isTrue);
         expect(header.contains(viewSwitch.bottomRight), isTrue);
         expect(viewSwitch.overlaps(collapse), isFalse);
-        expect(viewSwitch.overlaps(output), isFalse);
         expect(collapse.height, 36);
-        expect(output.height, 36);
         if (scale == 1) {
           expect(viewSwitch.height, 48);
           if (width >= 375) {
@@ -176,15 +171,29 @@ void main() {
     );
   });
 
-  testWidgets('tablet header wraps its actions around enlarged view labels', (
+  testWidgets('tablet header centres its tabs and leaves the output below', (
+    tester,
+  ) async {
+    await _pumpHeader(tester, tablet: true);
+    expect(find.byType(KalinkaWordmark), findsOneWidget);
+    expect(
+      tester.getCenter(find.byType(PlayerViewSwitch)).dx,
+      closeTo(240, .01),
+    );
+    expect(find.byType(RendererSwitcherDropdown), findsNothing);
+    expect(find.byType(RendererSwitcherButton), findsNothing);
+  });
+
+  testWidgets('tablet header gives enlarged view labels a row of their own', (
     tester,
   ) async {
     await _pumpHeader(tester, width: 450, scale: 2, tablet: true);
     expect(tester.takeException(), isNull);
     final viewSwitch = tester.getRect(find.byType(PlayerViewSwitch));
-    final output = tester.getRect(find.byType(RendererSwitcherDropdown));
-    expect(viewSwitch.overlaps(output), isFalse);
-    expect(output.top, greaterThan(viewSwitch.bottom));
+    expect(
+      viewSwitch.top,
+      greaterThan(tester.getRect(find.byType(KalinkaWordmark)).bottom),
+    );
     await tester.tap(find.text('QUEUE'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -211,38 +220,25 @@ void main() {
   });
 
   for (final tablet in [false, true]) {
-    for (final away in [false, true]) {
-      testWidgets('${tablet ? 'tablet' : 'phone'} header '
-          '${away ? 'while the server is away' : 'when connected'}: the '
-          'output switcher ${away ? 'takes no input' : 'takes input'}, and '
-          'the view switch still works', (tester) async {
-        var closed = false;
-        await _pumpHeader(
-          tester,
-          tablet: tablet,
-          away: away,
-          onClose: () => closed = true,
-        );
-        final output = find.byType(
-          tablet ? RendererSwitcherDropdown : RendererSwitcherButton,
-        );
+    testWidgets('${tablet ? 'tablet' : 'phone'} header carries no output '
+        'switch, and its view switch works', (tester) async {
+      var closed = false;
+      await _pumpHeader(tester, tablet: tablet, onClose: () => closed = true);
+      // The output switch is the player's, under its transport.
+      expect(find.byType(RendererSwitcherButton), findsNothing);
+      expect(find.byType(RendererSwitcherDropdown), findsNothing);
 
-        expect(output, findsOneWidget);
-        expect(output.hitTestable(), away ? findsNothing : findsOneWidget);
-        expect(await tabTo(tester, output), !away);
-
-        await tester.tap(_segment('QUEUE'));
-        await tester.pumpAndSettle();
-        final container = ProviderScope.containerOf(
-          tester.element(find.byType(PlayerViewSwitch)),
-        );
-        expect(container.read(playerViewProvider), PlayerView.queue);
-        if (!tablet) {
-          await tester.tap(find.byTooltip('Minimise player'));
-          expect(closed, isTrue);
-        }
-      });
-    }
+      await tester.tap(_segment('QUEUE'));
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(PlayerViewSwitch)),
+      );
+      expect(container.read(playerViewProvider), PlayerView.queue);
+      if (!tablet) {
+        await tester.tap(find.byTooltip('Minimise player'));
+        expect(closed, isTrue);
+      }
+    });
   }
 
   testWidgets('collapse action remains accessible after reflow', (

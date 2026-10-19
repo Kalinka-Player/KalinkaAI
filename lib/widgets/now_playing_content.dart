@@ -27,7 +27,6 @@ import 'transport_controls.dart';
 import 'procedural_album_art.dart';
 import 'source_badge.dart';
 import 'stream_info_dialog.dart';
-import 'volume_control_slider.dart';
 
 /// Core now-playing UI: album art, track info, transport controls, volume.
 /// Used embedded in tablet layout and wrapped with animation in phone overlay.
@@ -233,7 +232,18 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                   const SizedBox(height: 20),
                   AwayLock(away: away, child: const _TransportControls()),
                   const SizedBox(height: 16),
-                  AwayLock(away: away, child: const NowPlayingVolumeControl()),
+                  // Where sound goes, under the transport; the headers carry no
+                  // output switch, and volume is left to the output itself.
+                  AwayLock(
+                    away: away,
+                    child: Center(
+                      child: RendererSwitcherDropdown(
+                        key: widget.outputSwitcherKey,
+                        framed: true,
+                        maxNameWidth: 220,
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -360,12 +370,10 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         isTablet: widget.isTablet && !widget.showOverlayHeader,
         showingQueue: showingQueue,
         onClose: widget.onClose,
-        outputSwitcherKey: widget.outputSwitcherKey,
-        away: away,
       );
     }
 
-    // Embedded mode: label centred, switcher pinned right.
+    // Embedded mode: label centred, kiosk entry pinned right.
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Stack(
@@ -374,10 +382,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           Text('NOW PLAYING', style: KalinkaTextStyles.nowPlayingLabel),
           const Align(
             alignment: Alignment.centerRight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [KioskEnterButton(), RendererSwitcherDropdown()],
-            ),
+            child: KioskEnterButton(),
           ),
         ],
       ),

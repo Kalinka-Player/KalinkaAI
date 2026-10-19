@@ -7,9 +7,10 @@ import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
-import 'package:kalinka/widgets/player_header.dart';
+import 'package:kalinka/widgets/away.dart';
 import 'package:kalinka/widgets/player_view_switch.dart';
 import 'package:kalinka/widgets/procedural_album_art.dart';
+import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/transport_button.dart';
 
 import 'support/focus.dart';
@@ -83,9 +84,17 @@ void main() {
               .mode,
           mode,
         );
+        // The output switch under the transport takes no input either.
         expect(
           tester
-              .widget<PlayerHeader>(_inPlayer(find.byType(PlayerHeader)))
+              .widget<AwayLock>(
+                find
+                    .ancestor(
+                      of: _inPlayer(find.byType(RendererSwitcherDropdown)),
+                      matching: find.byType(AwayLock),
+                    )
+                    .first,
+              )
               .away,
           isTrue,
         );
