@@ -8,6 +8,7 @@ import '../../theme/app_theme.dart';
 import '../browse_filters/active_filter_chips.dart';
 import '../browse_filters/browse_filter_form.dart' show resultKindLabel;
 import '../browse_filters/filters_match_nothing.dart';
+import 'browse_visit_scope.dart';
 import 'inspired_block.dart';
 import 'name_matches_block.dart';
 import 'search_loading_indicator.dart';
@@ -23,7 +24,7 @@ class ResultsView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(searchSessionProvider);
+    final session = visitOf(context, ref);
     final notifier = ref.read(searchSessionProvider.notifier);
     final results = session.results;
 

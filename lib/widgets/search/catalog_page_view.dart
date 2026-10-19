@@ -28,6 +28,7 @@ import '../search_cards/search_track_row.dart';
 import '../shelf_heading.dart';
 import '../source_badge.dart';
 import 'album_page_header.dart';
+import 'browse_visit_scope.dart';
 import 'catalog_sections_view.dart';
 import 'collections_edit_bar.dart';
 import 'collections_section.dart';
@@ -117,6 +118,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
 
   /// The folder's actions have scrolled up to the trail and are held there.
   bool _actionsHeld = false;
+  String? _shownListingId;
 
   static const _heldInset = 8.0;
 
@@ -184,9 +186,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     // Parses the id; read once rather than per row.
     final isAlbum = page.isAlbum;
     final capabilities = page.filterCapabilities;
-    final (filter, expandedShelf) = ref.watch(
-      searchSessionProvider.select((s) => (s.catalogFilter, s.expandedShelf)),
-    );
+    final visit = visitOf(context, ref);
+    final filter = visit.catalogFilter;
+    final expandedShelf = visit.expandedShelf;
     final query = filter.copyWith(type: expandedShelf);
     // A listing the server takes writes for can change under the page, so a
     // write restarts it the way a filter does.
@@ -201,14 +203,13 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     final notifier = ref.read(searchSessionProvider.notifier);
     void setQuery(BrowseFilterQuery next) => notifier.setCatalogFilter(next);
 
-    final listing = page.folderLayout
-        ? ref.watch(searchSessionProvider.select((s) => s.shownListing))
-        : page;
+    final listing = page.folderLayout ? visit.shownListing : page;
     // Any folder shown, the same one again included, opens at its top.
-    ref.listen(searchSessionProvider.select((s) => s.shownListing), (_, _) {
+    if (listing.id != _shownListingId) {
+      _shownListingId = listing.id;
       _actionsTop = null;
-      if (_actionsHeld) setState(() => _actionsHeld = false);
-    });
+      _actionsHeld = false;
+    }
 
     final Widget header = isAlbum
         ? MeasureSize(

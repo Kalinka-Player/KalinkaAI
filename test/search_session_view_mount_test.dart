@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -408,7 +407,7 @@ void main() {
         );
     await tester.pumpAndSettle();
     expect(backdrop, findsNothing);
-    await tester.tap(find.text('HOME'));
+    await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
 
     expect(rootPosition(tester).pixels, offset);
@@ -537,7 +536,7 @@ void main() {
     expect(find.textContaining('mood'), findsNothing);
   });
 
-  testWidgets('the HOME crumb goes back, like the arrow', (tester) async {
+  testWidgets('the bar names the page, not a path to it', (tester) async {
     final container = await pumpSurface(tester);
     container
         .read(searchSessionProvider.notifier)
@@ -546,14 +545,12 @@ void main() {
           title: 'My Albums',
         );
     await tester.pumpAndSettle();
-    expect(container.read(searchSessionProvider).catalogPage.isRoot, isFalse);
 
-    await tester.tap(find.text('HOME'));
-    await tester.pumpAndSettle();
-    expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
+    expect(find.text('MY ALBUMS'), findsOneWidget);
+    expect(find.text('HOME'), findsNothing);
   });
 
-  testWidgets('a page of folders keeps the bar\'s crumb, its trail below', (
+  testWidgets('a page of folders keeps its title, its trail below', (
     tester,
   ) async {
     final container = await pumpSurface(tester);
@@ -566,45 +563,12 @@ void main() {
         );
     await tester.pumpAndSettle();
 
-    expect(find.text('HOME'), findsOneWidget);
     expect(find.text('MY LIBRARY'), findsOneWidget);
     expect(find.byType(FolderTrail), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.arrow_back));
     await tester.pumpAndSettle();
     expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
-  });
-
-  testWidgets('the HOME crumb highlights under the pointer', (tester) async {
-    final container = await pumpSurface(tester);
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(
-          id: 'kalinka:localfiles:catalog:albums',
-          title: 'My Albums',
-        );
-    await tester.pumpAndSettle();
-
-    Color? crumbFill() {
-      final box = tester.widget<AnimatedContainer>(
-        find
-            .ancestor(
-              of: find.text('HOME'),
-              matching: find.byType(AnimatedContainer),
-            )
-            .first,
-      );
-      return (box.decoration as BoxDecoration).color;
-    }
-
-    expect(crumbFill(), Colors.transparent);
-
-    final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await pointer.addPointer(location: Offset.zero);
-    addTearDown(pointer.removePointer);
-    await pointer.moveTo(tester.getCenter(find.text('HOME')));
-    await tester.pumpAndSettle();
-    expect(crumbFill()!.a, greaterThan(0));
   });
 
   testWidgets('back leaves the app only from the top level', (tester) async {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../crumb_trail.dart';
+import 'browse_visit_scope.dart';
 
 export '../crumb_trail.dart' show foldedTailStart;
 
@@ -19,10 +20,9 @@ class FolderTrail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final path = ref.watch(searchSessionProvider.select((s) => s.folderPath));
-    final top = ref.watch(
-      searchSessionProvider.select((s) => s.catalogPage.title),
-    );
+    final visit = visitOf(context, ref);
+    final path = visit.folderPath;
+    final top = visit.catalogPage.title;
     final notifier = ref.read(searchSessionProvider.notifier);
 
     return DecoratedBox(
