@@ -453,8 +453,8 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     required bool exclusive,
   }) {
     // Once the bar has buttons to skip with, swiping no longer does.
-    final canSwipe =
-        _latchedCurrentTrack == null && tier.index < _MiniPlayerTier.skip.index;
+    final transport = tier.index >= _MiniPlayerTier.skip.index;
+    final canSwipe = _latchedCurrentTrack == null && !transport;
     return AwayDim(
       away: isOffline,
       child: SizedBox(
@@ -578,43 +578,54 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                             iconSize: 20,
                           ),
                   ),
-                  const SizedBox(width: 4),
                   // Skipping joins play first, then shuffle and repeat
-                  // outside them, as on the player.
-                  if (tier.index >= _MiniPlayerTier.modes.index)
+                  // outside them, as on the player; once it has them the
+                  // transport takes larger buttons, spaced apart and set off
+                  // from the output.
+                  SizedBox(width: transport ? 16 : 4),
+                  if (tier.index >= _MiniPlayerTier.modes.index) ...[
                     AwayLock(
                       away: isOffline,
-                      child: const ShuffleButton(hitDiameter: 36, iconSize: 18),
+                      child: const ShuffleButton(hitDiameter: 40, iconSize: 20),
                     ),
-                  if (tier.index >= _MiniPlayerTier.skip.index)
+                    const SizedBox(width: _transportGap),
+                  ],
+                  if (transport) ...[
                     AwayLock(
                       away: isOffline,
                       child: const SkipButton(
                         next: false,
-                        hitDiameter: 40,
-                        iconSize: 26,
+                        hitDiameter: 44,
+                        iconSize: 30,
                       ),
                     ),
+                    const SizedBox(width: _transportGap),
+                  ],
                   _buildPlayPauseButton(
                     playerState: playerState,
                     isOffline: isOffline,
                     hasTrack: currentTrack != null,
                     exclusive: exclusive,
+                    large: transport,
                   ),
-                  if (tier.index >= _MiniPlayerTier.skip.index)
+                  if (transport) ...[
+                    const SizedBox(width: _transportGap),
                     AwayLock(
                       away: isOffline,
                       child: const SkipButton(
                         next: true,
-                        hitDiameter: 40,
-                        iconSize: 26,
+                        hitDiameter: 44,
+                        iconSize: 30,
                       ),
                     ),
-                  if (tier.index >= _MiniPlayerTier.modes.index)
+                  ],
+                  if (tier.index >= _MiniPlayerTier.modes.index) ...[
+                    const SizedBox(width: _transportGap),
                     AwayLock(
                       away: isOffline,
-                      child: const RepeatButton(hitDiameter: 36, iconSize: 18),
+                      child: const RepeatButton(hitDiameter: 40, iconSize: 20),
                     ),
+                  ],
                 ],
               );
             },
@@ -698,7 +709,11 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     );
   }
 
-  /// Stationary 46×46 play/pause control sharing the now-playing
+  /// Room between the wide bar's transport buttons.
+  static const double _transportGap = 8;
+
+  /// Stationary 46×46 play/pause control — 52×52 among the wide bar's
+  /// transport — sharing the now-playing
   /// [TransportButton] (InkWell ripple + press-scale feedback). Disabled when
   /// the player state doesn't allow toggling, fully ignored while offline, and
   /// greyed out when there's no track loaded.
@@ -707,7 +722,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     required bool isOffline,
     required bool hasTrack,
     required bool exclusive,
+    bool large = false,
   }) {
+    final glyph = large ? 30.0 : 26.0;
     final disabled =
         !hasTrack || isPlayPauseDisabled(playerState, exclusive: exclusive);
     return AwayLock(
@@ -715,7 +732,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
       child: Opacity(
         opacity: hasTrack ? 1.0 : 0.4,
         child: TransportButton(
-          hitDiameter: 46,
+          hitDiameter: large ? 52 : 46,
           background: Colors.white,
           // Ripple has to read against the white face, so use a dark tint.
           splashColor: KalinkaColors.background.withValues(alpha: 0.18),
@@ -727,15 +744,15 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                   playerState,
                   exclusive: exclusive,
                 ),
-          // Fixed 26×26 glyph slot keeps visual weight stable across states
-          // and prevents the spinner from appearing offset against the icon.
+          // Fixed glyph slot keeps visual weight stable across states and
+          // prevents the spinner from appearing offset against the icon.
           child: SizedBox(
-            width: 26,
-            height: 26,
+            width: glyph,
+            height: glyph,
             child: PlayPauseGlyph(
               playerState: playerState,
-              iconSize: 26,
-              spinnerSize: 22,
+              iconSize: glyph,
+              spinnerSize: glyph - 4,
             ),
           ),
         ),
@@ -760,11 +777,11 @@ enum _MiniPlayerTier {
   details,
   volume;
 
-  static _MiniPlayerTier of(double width) => width >= 1650
+  static _MiniPlayerTier of(double width) => width >= 1750
       ? volume
-      : width >= 1450
+      : width >= 1550
       ? details
-      : width >= 1150
+      : width >= 1250
       ? source
       : width >= 1000
       ? progress
