@@ -73,18 +73,36 @@ class PinnedCatalogPreview extends ConsumerWidget {
         false;
     final notifier = ref.read(searchSessionProvider.notifier);
     void open() => notifier.openPage(pin.page, filter: pin.filter);
-    final sourceDescription = [
-      sourceTitle,
-      if (pin.filterDescription.isNotEmpty) pin.filterDescription,
-      if (!available) 'Unavailable',
-    ].join(' · ');
+    CatalogSectionRequest requestOf(int limit) {
+      // A finished scan may have changed what a library catalog holds.
+      final libraryRevision = source == 'localfiles'
+          ? ref.watch(indexerStatusProvider.select((s) => s.libraryRevision))
+          : 0;
+      return (
+        id: pin.page.id!,
+        filter: pin.filter.encoded(pin.page.filterCapabilities),
+        limit: limit,
+        revision: ref.watch(collectionsRevisionProvider) + libraryRevision,
+      );
+    }
+
     if (pin.preview == HomePreviewType.compact) {
       if (loadingSources) {
         return const CatalogTileShimmer(hasSubtitle: true);
       }
+      // A sectioned catalog's own total counts its shelves, not its items.
+      final total = available && pin.page.sections.isEmpty
+          ? ref.watch(pinnedPreviewProvider(requestOf(1))).value?.total
+          : null;
       return CatalogTile(
         title: pin.page.title ?? 'Catalog',
-        subtitle: sourceDescription,
+        subtitle: [
+          sourceTitle,
+          if (pin.filterDescription.isNotEmpty) pin.filterDescription,
+          if (total != null && total >= 0)
+            _countLabel(total, pin.page.preview?.contentType),
+          if (!available) 'Unavailable',
+        ].join(' · '),
         icon: info?.icon ?? Icons.library_music_outlined,
         tint: info?.color ?? colorForSourceName(source),
         onTap: available ? open : null,
@@ -130,16 +148,7 @@ class PinnedCatalogPreview extends ConsumerWidget {
         child: heading,
       );
     }
-    // A finished scan may have changed what a library catalog holds.
-    final libraryRevision = sourceOfId(pin.page.id!) == 'localfiles'
-        ? ref.watch(indexerStatusProvider.select((s) => s.libraryRevision))
-        : 0;
-    final request = (
-      id: pin.page.id!,
-      filter: pin.filter.encoded(pin.page.filterCapabilities),
-      limit: pin.preview == HomePreviewType.cards ? 8 : 5,
-      revision: ref.watch(collectionsRevisionProvider) + libraryRevision,
-    );
+    final request = requestOf(pin.preview == HomePreviewType.cards ? 8 : 5);
     final preview = Preview(
       type: pin.preview == HomePreviewType.cards
           ? PreviewType.imageText
@@ -189,4 +198,15 @@ class PinnedCatalogPreview extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _countLabel(int count, PreviewContentType? kind) {
+  final (one, many) = switch (kind) {
+    PreviewContentType.album => ('album', 'albums'),
+    PreviewContentType.artist => ('artist', 'artists'),
+    PreviewContentType.playlist => ('playlist', 'playlists'),
+    PreviewContentType.track => ('track', 'tracks'),
+    _ => ('item', 'items'),
+  };
+  return '$count ${count == 1 ? one : many}';
 }

@@ -886,7 +886,7 @@ void main() {
   );
 
   testWidgets(
-    'Compact tiles use source tint, preserve mixed order and open saved filters without fetching previews',
+    'Compact tiles use source tint, preserve mixed order, count their items and open saved filters',
     (tester) async {
       final api = CatalogHomeApi();
       final container = await pump(
@@ -916,10 +916,16 @@ void main() {
         await container.read(pinnedCatalogsProvider.notifier).pin(pin);
       }
       await tester.pumpAndSettle();
-      expect(
-        api.calls.where((call) => pins.any((pin) => pin.page.id == call.id)),
-        isEmpty,
+      // Only the compact tiles fetch, and only enough to learn the count.
+      final pinCalls = api.calls.where(
+        (call) => pins.any((pin) => pin.page.id == call.id),
       );
+      expect(pinCalls.map((call) => call.id).toSet(), {
+        for (final pin in pins)
+          if (pin.preview == HomePreviewType.compact) pin.page.id,
+      });
+      expect(pinCalls.every((call) => call.limit == 1), isTrue);
+      expect(pinCalls.every((call) => call.filter != null), isTrue);
       final tiles = find.descendant(
         of: find.byType(PinnedCatalogsSection),
         matching: find.byType(CatalogTile),
@@ -931,7 +937,7 @@ void main() {
       );
       expect(
         tester.widget<CatalogTile>(tiles.first).subtitle,
-        'alpha music · Jazz',
+        'alpha music · Jazz · 0 items',
       );
       final surface = tester.widget<Material>(
         find.descendant(of: tiles.first, matching: find.byType(Material)).first,
