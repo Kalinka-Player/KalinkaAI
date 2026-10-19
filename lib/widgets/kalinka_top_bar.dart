@@ -19,11 +19,16 @@ class KalinkaTopBar extends StatelessWidget {
   /// bloom does.
   final bool transparent;
 
+  /// False where the player's header beside it already leads with the
+  /// wordmark, the two reading as one bar.
+  final bool showWordmark;
+
   const KalinkaTopBar({
     super.key,
     this.onServerChipTap,
     this.connectionKey,
     this.transparent = false,
+    this.showWordmark = true,
   });
 
   @override
@@ -59,13 +64,9 @@ class KalinkaTopBar extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SvgPicture.asset(
-              'assets/images/kalinka_logo.svg',
-              height: kKalinkaWordmarkHeight,
-              fit: BoxFit.contain,
-            ),
+            if (showWordmark) const KalinkaWordmark(),
             if (!kReleaseMode) ...[
-              const SizedBox(width: 10),
+              if (showWordmark) const SizedBox(width: 10),
               Flexible(child: _buildDebugBadge()),
             ],
           ],
@@ -93,6 +94,24 @@ class KalinkaTopBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The Kalinka wordmark at the top bar's size.
+class KalinkaWordmark extends StatelessWidget {
+  const KalinkaWordmark({super.key});
+
+  /// Its width at that size, from the artwork's proportions.
+  static const double width = kKalinkaWordmarkHeight * 18.378336 / 8.1929674;
+
+  @override
+  Widget build(BuildContext context) {
+    return SvgPicture.asset(
+      'assets/images/kalinka_logo.svg',
+      height: kKalinkaWordmarkHeight,
+      width: width,
+      fit: BoxFit.contain,
     );
   }
 }
