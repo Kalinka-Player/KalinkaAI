@@ -312,10 +312,9 @@ void main() {
     expect(find.byType(PlayerViewSwitch), findsOneWidget);
   });
 
-  testWidgets('a wide window bounds the player and can widen it', (
+  testWidgets('a wide window bounds the player; the queue bar spans it', (
     tester,
   ) async {
-    final calls = _recordSystemCalls();
     await pumpHomeShell(
       tester,
       queue: SettableQueue(queueOf(3)),
@@ -323,21 +322,19 @@ void main() {
     );
 
     // Browsing takes the room the player does not need.
-    expect(tester.getSize(find.byType(NowPlayingContent)).width, 420);
-    expect(tester.getRect(find.byType(SearchSessionView)).left, 421);
+    expect(tester.getSize(find.byType(NowPlayingContent)).width, 483);
+    expect(tester.getRect(find.byType(SearchSessionView)).left, 484);
 
-    await tester.tap(find.byTooltip('Expand player'));
+    await tester.tap(_side('QUEUE'));
     await tester.pumpAndSettle();
-    expect(find.byType(SearchSessionView).hitTestable(), findsNothing);
-    // Home stays mounted under the player, so its visit survives.
-    expect(find.byType(SearchSessionView, skipOffstage: false), findsOneWidget);
-
-    // Back gives browsing its room again before it leaves anything.
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    expect(find.byType(SearchSessionView).hitTestable(), findsOneWidget);
-    expect(calls, isNot(contains('SystemNavigator.pop')));
-    expect(find.byTooltip('Expand player'), findsOneWidget);
+    final bar = tester.getRect(_queueMiniPlayer);
+    expect(bar.left, 0);
+    expect(bar.right, 1600);
+    // Browsing ends above the bar rather than running under it.
+    expect(
+      tester.getRect(find.byType(SearchSessionView)).bottom,
+      lessThanOrEqualTo(bar.top + 1),
+    );
   });
 
   testWidgets('the first-run tour starts at the search entry', (tester) async {

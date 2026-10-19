@@ -50,10 +50,6 @@ class NowPlayingContent extends ConsumerStatefulWidget {
   /// Offered by the queue view while the queue is empty.
   final VoidCallback? onFindMusic;
 
-  /// The docked player's expand control; see [PlayerHeader.onToggleExpanded].
-  final VoidCallback? onToggleExpanded;
-  final bool expanded;
-
   const NowPlayingContent({
     super.key,
     this.isTablet = false,
@@ -61,8 +57,6 @@ class NowPlayingContent extends ConsumerStatefulWidget {
     this.onClose,
     this.outputSwitcherKey,
     this.onFindMusic,
-    this.onToggleExpanded,
-    this.expanded = false,
   });
 
   @override
@@ -369,8 +363,6 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         onClose: widget.onClose,
         outputSwitcherKey: widget.outputSwitcherKey,
         away: away,
-        onToggleExpanded: widget.onToggleExpanded,
-        expanded: widget.expanded,
       );
     }
 

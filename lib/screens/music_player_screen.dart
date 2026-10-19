@@ -86,10 +86,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   bool _settingsCovering = false;
   bool _discoveryOpen = false;
 
-  // The docked player widened over browsing for focused listening. Browsing
-  // stays mounted beneath it, so its visit and scroll survive.
-  bool _playerExpanded = false;
-
   // The wizard connects, which fires `connected` — these keep the
   // connected-listener from stacking a second wizard or racing itself.
   bool _wizardOpen = false;
@@ -272,7 +268,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }
 
   void _openSettings() => setState(() {
-    _playerExpanded = false;
     _pluginsOpen = false;
     _settingsCovering = false;
     _settingsOpen = true;
@@ -282,7 +277,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     if (!ref.read(pluginCatalogEnabledProvider)) return;
     ref.read(rendererSettingsRouteProvider.notifier).close();
     setState(() {
-      _playerExpanded = false;
       _settingsOpen = false;
       _settingsCovering = false;
       _pluginsOpen = true;
@@ -301,7 +295,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   );
 
   void _requestHomeSearch() {
-    if (_playerExpanded) setState(() => _playerExpanded = false);
     ref.read(homeSearchRequestProvider.notifier).request();
   }
 
@@ -480,17 +473,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   @override
   Widget build(BuildContext context) {
     ref.listen(musicSourcesSettingsRequestProvider, (_, _) => _openPlugins());
-    // What opens in the browsing pane brings the pane back into view.
-    void showBrowsing() {
-      if (_playerExpanded) setState(() => _playerExpanded = false);
-    }
-
-    ref.listen(homeCustomisationProvider, (_, open) {
-      if (open) showBrowsing();
-    });
-    ref.listen(rendererSettingsRouteProvider, (_, route) {
-      if (route != null) showBrowsing();
-    });
     final customiseOpen = ref.watch(homeCustomisationProvider);
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
     // Arm the failure recorder from app start. Left to the queue rows that
@@ -807,7 +789,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         _pluginsOpen ||
         _discoveryOpen ||
         rendererSettings != null ||
-        (isTablet && (_serverSheetOpen || _playerExpanded));
+        (isTablet && _serverSheetOpen);
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 200),
       layoutBuilder: _topmostScreenLayout,
@@ -883,17 +865,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           !_settingsOpen &&
           !_pluginsOpen &&
           !_serverSheetOpen &&
-          !_playerExpanded &&
           rendererSettings == null,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // Settings, renderer settings and Home own their back via internal
         // PopScopes.
         if (_settingsOpen || _pluginsOpen || rendererSettings != null) return;
-        if (_playerExpanded) {
-          setState(() => _playerExpanded = false);
-          return;
-        }
         if (_serverSheetOpen) {
           setState(() => _serverSheetOpen = false);
           return;
@@ -903,88 +880,95 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         builder: (context, constraints) {
           final width = constraints.maxWidth;
           final playerWidth = kalinkaPlayerPaneWidth(width);
-          final expanded = _playerExpanded && !disconnected;
-          final motion = MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 220);
-          // Browsing keeps its own width and state under an expanded player,
-          // so giving it back restores the same visit.
-          final browsing = Positioned(
-            left: playerWidth + 1,
-            top: 0,
-            bottom: 0,
-            width: width - playerWidth - 1,
-            child: Offstage(
-              offstage: expanded,
-              child: TickerMode(
-                enabled: !expanded,
-                child: SizedBox.expand(
-                  child: RepaintBoundary(
-                    child: SheetAnchor(
-                      child: Stack(
-                        children: [
-                          Visibility(
-                            visible: !_settingsCovering,
-                            maintainState: true,
-                            maintainAnimation: true,
-                            maintainSize: true,
-                            child: _buildHome(isTablet: true),
+          // The queue's mini-player spans the window, so browsing ends above
+          // it while it shows.
+          final barShowing =
+              !disconnected &&
+              ref.watch(playerViewProvider) == PlayerView.queue;
+          final barHeight =
+              kMiniPlayerHeight + MediaQuery.paddingOf(context).bottom;
+          // Only the foot animates: the sides follow the window at once, so
+          // sheets anchored here track a resize.
+          final browsing = TweenAnimationBuilder<double>(
+            tween: Tween(end: barShowing ? barHeight : 0),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : kMiniPlayerHideDuration,
+            curve: Curves.easeOutCubic,
+            builder: (context, bottom, child) => Positioned(
+              left: playerWidth + 1,
+              top: 0,
+              bottom: bottom,
+              width: width - playerWidth - 1,
+              child: child!,
+            ),
+            child: MediaQuery.removePadding(
+              context: context,
+              removeBottom: barShowing,
+              child: SizedBox.expand(
+                child: RepaintBoundary(
+                  child: SheetAnchor(
+                    child: Stack(
+                      children: [
+                        Visibility(
+                          visible: !_settingsCovering,
+                          maintainState: true,
+                          maintainAnimation: true,
+                          maintainSize: true,
+                          child: _buildHome(isTablet: true),
+                        ),
+                        _buildEscalation(isTablet: true),
+                        if (_serverSheetOpen)
+                          Positioned.fill(
+                            child: ServerSheet(
+                              onClose: () =>
+                                  setState(() => _serverSheetOpen = false),
+                              onOpenDiscovery: () =>
+                                  setState(() => _discoveryOpen = true),
+                              onOpenSettings: _openSettings,
+                              onOpenPlugins: _openPlugins,
+                              onPowerOff: _powerOffServer,
+                            ),
                           ),
-                          _buildEscalation(isTablet: true),
-                          if (_serverSheetOpen)
-                            Positioned.fill(
-                              child: ServerSheet(
-                                onClose: () =>
-                                    setState(() => _serverSheetOpen = false),
-                                onOpenDiscovery: () =>
-                                    setState(() => _discoveryOpen = true),
-                                onOpenSettings: _openSettings,
-                                onOpenPlugins: _openPlugins,
-                                onPowerOff: _powerOffServer,
-                              ),
-                            ),
-                          // Management overlays share the right-hand bounds,
-                          // including their sheets and slide motion.
-                          if (_settingsOpen)
-                            Positioned.fill(
-                              child: SheetAnchor(
-                                child: ClipRect(
-                                  child: SettingsScreen(
-                                    key: _settingsKey,
-                                    handlesBack: rendererSettings == null,
-                                    onClose: () => setState(() {
-                                      _settingsOpen = false;
-                                      _settingsCovering = false;
-                                    }),
-                                    onCoverageChanged: (covering) => setState(
-                                      () => _settingsCovering = covering,
-                                    ),
+                        // Management overlays share the right-hand bounds,
+                        // including their sheets and slide motion.
+                        if (_settingsOpen)
+                          Positioned.fill(
+                            child: SheetAnchor(
+                              child: ClipRect(
+                                child: SettingsScreen(
+                                  key: _settingsKey,
+                                  handlesBack: rendererSettings == null,
+                                  onClose: () => setState(() {
+                                    _settingsOpen = false;
+                                    _settingsCovering = false;
+                                  }),
+                                  onCoverageChanged: (covering) => setState(
+                                    () => _settingsCovering = covering,
                                   ),
                                 ),
                               ),
                             ),
-                          if (_pluginsOpen)
-                            Positioned.fill(
-                              child: SheetAnchor(
-                                child: ClipRect(
-                                  child: _buildPlugins(
-                                    handlesBack: rendererSettings == null,
-                                  ),
+                          ),
+                        if (_pluginsOpen)
+                          Positioned.fill(
+                            child: SheetAnchor(
+                              child: ClipRect(
+                                child: _buildPlugins(
+                                  handlesBack: rendererSettings == null,
                                 ),
                               ),
                             ),
-                          if (rendererSettings != null)
-                            Positioned.fill(
-                              child: SheetAnchor(
-                                child: ClipRect(
-                                  child: _buildRendererSettings(
-                                    rendererSettings,
-                                  ),
-                                ),
+                          ),
+                        if (rendererSettings != null)
+                          Positioned.fill(
+                            child: SheetAnchor(
+                              child: ClipRect(
+                                child: _buildRendererSettings(rendererSettings),
                               ),
                             ),
-                        ],
-                      ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -1010,13 +994,11 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               // the right panel to relayout and repaint unnecessarily.
               // SheetAnchor aligns modal bottom sheets launched from this
               // panel (e.g. the output switcher) with its bounds.
-              AnimatedPositioned(
-                duration: motion,
-                curve: Curves.easeOutCubic,
+              Positioned(
                 left: 0,
                 top: 0,
                 bottom: 0,
-                width: expanded ? width : playerWidth,
+                width: playerWidth,
                 child: SizedBox.expand(
                   child: RepaintBoundary(
                     child: SheetAnchor(
@@ -1036,32 +1018,14 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                                         actions: false,
                                       ),
                                     )
-                                  : _boundedWhenExpanded(
-                                      NowPlayingContent(
-                                        key: const ValueKey('player'),
-                                        isTablet: true,
-                                        outputSwitcherKey: _outputSwitcherKey,
-                                        onFindMusic: _requestHomeSearch,
-                                        expanded: expanded,
-                                        onToggleExpanded: () => setState(
-                                          () => _playerExpanded =
-                                              !_playerExpanded,
-                                        ),
-                                      ),
+                                  : NowPlayingContent(
+                                      key: const ValueKey('player'),
+                                      isTablet: true,
+                                      outputSwitcherKey: _outputSwitcherKey,
+                                      onFindMusic: _requestHomeSearch,
                                     ),
                             ),
                           ),
-                          if (!disconnected)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              child: _boundedWhenExpanded(
-                                QueueMiniPlayer(
-                                  outputSwitcherKey: _outputSwitcherKey,
-                                ),
-                              ),
-                            ),
                           // Sheets opened here are anchored to this panel,
                           // so their answers belong over it too.
                           Positioned(
@@ -1081,24 +1045,19 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   ),
                 ),
               ),
+              if (!disconnected)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: QueueMiniPlayer(outputSwitcherKey: _outputSwitcherKey),
+                ),
               // The same one-time tour as the phone. It used to be phone-only, so
               // anyone who first ran the app on a wide window never saw it.
               if (_showCoachMarks) _buildCoachMarks(),
             ],
           );
         },
-      ),
-    );
-  }
-
-  /// The player's own column when it is widened over browsing: centred and
-  /// no wider than its controls read well.
-  Widget _boundedWhenExpanded(Widget child) {
-    if (!_playerExpanded) return child;
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
-        child: child,
       ),
     );
   }

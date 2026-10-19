@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/data_model.dart';
 import '../data_model/kalinka_ws_api.dart';
 import '../data_model/playqueue_events.dart';
@@ -10,18 +11,21 @@ import '../providers/app_state_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_ws_api_provider.dart';
 import '../providers/playback_time_provider.dart';
+import '../providers/source_modules_provider.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
 import '../utils/playback_utils.dart';
 import 'away.dart';
 import 'bit_perfect_badge.dart';
+import 'column_separator.dart';
 import 'gradient_progress_line.dart';
 import 'play_pause_glyph.dart';
 import 'procedural_album_art.dart';
 import 'renderer_switcher.dart';
 import 'source_badge.dart';
 import 'transport_button.dart';
+import 'volume_control_slider.dart';
 
 /// How long the mini-player takes to slide down out of view when the search
 /// entry overlay opens (and to slide back up on close). The search view holds
@@ -437,65 +441,102 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
         height: 70,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              // Only art + text take the tap-to-open / swipe gestures; the
-              // play button stays outside so the swipe recognizer can't steal
-              // its taps.
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: widget.onTap,
-                  onHorizontalDragStart: canSwipe
-                      ? _onHorizontalDragStart
-                      : null,
-                  onHorizontalDragUpdate: canSwipe
-                      ? _onHorizontalDragUpdate
-                      : null,
-                  onHorizontalDragEnd: canSwipe ? _onHorizontalDragEnd : null,
-                  onHorizontalDragCancel: canSwipe
-                      ? _onHorizontalDragCancel
-                      : null,
-                  onVerticalDragEnd: (d) {
-                    // Swipe up → open now-playing
-                    if ((d.primaryVelocity ?? 0) < -200) widget.onTap?.call();
-                  },
-                  child: Row(
-                    children: [
-                      _buildAlbumArt(
-                        resolvedImageUrl: resolvedImageUrl,
-                        trackId: currentTrack?.id ?? '',
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final tier = _MiniPlayerTier.of(constraints.maxWidth);
+              return Row(
+                children: [
+                  // Only art + text take the tap-to-open / swipe gestures; the
+                  // play button stays outside so the swipe recognizer can't steal
+                  // its taps.
+                  Expanded(
+                    flex: 3,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: widget.onTap,
+                      onHorizontalDragStart: canSwipe
+                          ? _onHorizontalDragStart
+                          : null,
+                      onHorizontalDragUpdate: canSwipe
+                          ? _onHorizontalDragUpdate
+                          : null,
+                      onHorizontalDragEnd: canSwipe
+                          ? _onHorizontalDragEnd
+                          : null,
+                      onHorizontalDragCancel: canSwipe
+                          ? _onHorizontalDragCancel
+                          : null,
+                      onVerticalDragEnd: (d) {
+                        // Swipe up → open now-playing
+                        if ((d.primaryVelocity ?? 0) < -200) {
+                          widget.onTap?.call();
+                        }
+                      },
+                      child: Row(
+                        children: [
+                          _buildAlbumArt(
+                            resolvedImageUrl: resolvedImageUrl,
+                            trackId: currentTrack?.id ?? '',
+                          ),
+                          const SizedBox(width: 10),
+                          _buildCarouselText(
+                            currentTrack: currentTrack,
+                            incomingTrack: incomingTrack,
+                            carouselOffset: carouselOffset,
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      _buildCarouselText(
-                        currentTrack: currentTrack,
-                        incomingTrack: incomingTrack,
-                        carouselOffset: carouselOffset,
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-              if (currentTrack != null) const BitPerfectBadge(),
-              const SizedBox(width: 4),
-              // Outside the gesture area too, for the same reason as the play
-              // button: the swipe recognizer must not steal its taps.
-              AwayLock(
-                away: isOffline,
-                child: RendererSwitcherButton(
-                  key: widget.outputSwitcherKey,
-                  hitDiameter: 40,
-                  iconSize: 20,
-                ),
-              ),
-              const SizedBox(width: 4),
-              _buildPlayPauseButton(
-                playerState: playerState,
-                isOffline: isOffline,
-                hasTrack: currentTrack != null,
-                exclusive: exclusive,
-              ),
-            ],
+                  if (tier.index >= _MiniPlayerTier.source.index &&
+                      currentTrack != null) ...[
+                    const ColumnSeparator(),
+                    Expanded(
+                      flex: 2,
+                      child: _TrackDetails(
+                        track: currentTrack,
+                        withAlbum: tier.index >= _MiniPlayerTier.details.index,
+                      ),
+                    ),
+                  ],
+                  if (tier == _MiniPlayerTier.volume) ...[
+                    const ColumnSeparator(),
+                    SizedBox(
+                      width: 168,
+                      child: AwayLock(
+                        away: isOffline,
+                        child: const NowPlayingVolumeControl(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  if (currentTrack != null) const BitPerfectBadge(),
+                  const SizedBox(width: 4),
+                  // Outside the gesture area too, for the same reason as the play
+                  // button: the swipe recognizer must not steal its taps.
+                  AwayLock(
+                    away: isOffline,
+                    child: tier.index >= _MiniPlayerTier.output.index
+                        ? RendererSwitcherDropdown(
+                            key: widget.outputSwitcherKey,
+                            maxNameWidth: 160,
+                          )
+                        : RendererSwitcherButton(
+                            key: widget.outputSwitcherKey,
+                            hitDiameter: 40,
+                            iconSize: 20,
+                          ),
+                  ),
+                  const SizedBox(width: 4),
+                  _buildPlayPauseButton(
+                    playerState: playerState,
+                    isOffline: isOffline,
+                    hasTrack: currentTrack != null,
+                    exclusive: exclusive,
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -618,6 +659,101 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
           ),
         ),
       ),
+    );
+  }
+}
+
+/// What the bar adds as it widens, each step keeping the ones before it:
+/// the output by name, then where the music comes from, then the album and
+/// the stream's format, then volume.
+enum _MiniPlayerTier {
+  compact,
+  output,
+  source,
+  details,
+  volume;
+
+  static _MiniPlayerTier of(double width) => width >= 1280
+      ? volume
+      : width >= 1000
+      ? details
+      : width >= 700
+      ? source
+      : width >= 520
+      ? output
+      : compact;
+}
+
+/// The current track's details beside the bar's title: its source, and on a
+/// wider bar its album, year and stream format.
+class _TrackDetails extends ConsumerWidget {
+  final Track track;
+  final bool withAlbum;
+
+  const _TrackDetails({required this.track, required this.withAlbum});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final source = sourceOfId(track.id);
+    final sourceTitle = source == null
+        ? null
+        : ref.watch(sourceDisplayInfoProvider)[source]?.title;
+    final format = withAlbum
+        ? ref.watch(
+            playerStateProvider.select(
+              (s) => [
+                mimeTypeLabel(s.mimeType),
+                audioQualityLabel(s.audioInfo),
+              ].where((part) => part.isNotEmpty).join(' '),
+            ),
+          )
+        : '';
+    final album = track.album;
+    final albumLine = !withAlbum || album == null || album.title.isEmpty
+        ? null
+        : album.year == null
+        ? album.title
+        : '${album.title} · ${album.year}';
+    final sourceLine = [
+      if (sourceTitle != null && sourceTitle.isNotEmpty) sourceTitle,
+      if (format.isNotEmpty) format,
+    ].join(' · ');
+    final badge = sourceBadgeVisible(ref, track.id);
+    if (albumLine == null && sourceLine.isEmpty && !badge) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (albumLine != null) ...[
+          Text(
+            albumLine,
+            style: KalinkaTextStyles.miniPlayerArtist.copyWith(
+              color: KalinkaColors.textPrimary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+        ],
+        Row(
+          children: [
+            if (badge) ...[
+              SourceBadge(entityId: track.id),
+              const SizedBox(width: 6),
+            ],
+            Flexible(
+              child: Text(
+                sourceLine,
+                style: KalinkaTextStyles.miniPlayerArtist,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
