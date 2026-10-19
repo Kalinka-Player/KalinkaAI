@@ -1294,16 +1294,24 @@ class _DiscoverHero extends StatelessWidget {
           ],
           if (suggestions.isNotEmpty) ...[
             const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final suggestion in suggestions)
-                  _SuggestionChip(
-                    suggestion: suggestion,
-                    onTap: () => onSuggestion(suggestion.query),
-                  ),
-              ],
+            // A phone's size up to 640 wide, then growing with the area to
+            // 1.3 times that.
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final scale = (constraints.maxWidth / 640).clamp(1.0, 1.3);
+                return Wrap(
+                  spacing: 10 * scale,
+                  runSpacing: 10 * scale,
+                  children: [
+                    for (final suggestion in suggestions)
+                      _SuggestionChip(
+                        suggestion: suggestion,
+                        scale: scale,
+                        onTap: () => onSuggestion(suggestion.query),
+                      ),
+                  ],
+                );
+              },
             ),
           ],
         ],
@@ -1317,9 +1325,16 @@ class _DiscoverHero extends StatelessWidget {
 /// time of day it was offered for.
 class _SuggestionChip extends StatelessWidget {
   final SearchSuggestion suggestion;
+
+  /// How much larger than on a phone it draws: its text, mark and padding.
+  final double scale;
   final VoidCallback onTap;
 
-  const _SuggestionChip({required this.suggestion, required this.onTap});
+  const _SuggestionChip({
+    required this.suggestion,
+    required this.onTap,
+    this.scale = 1,
+  });
 
   /// First match wins: the activity is the more telling word. Each set of
   /// words is one pattern, compiled once.
@@ -1369,7 +1384,7 @@ class _SuggestionChip extends StatelessWidget {
       child: Material(
         color: KalinkaColors.surfaceRaised,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(12 * scale),
           side: const BorderSide(color: KalinkaColors.borderDefault),
         ),
         clipBehavior: Clip.antiAlias,
@@ -1377,21 +1392,28 @@ class _SuggestionChip extends StatelessWidget {
           onTap: onTap,
           overlayColor: kalinkaOverlay,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48),
+            constraints: BoxConstraints(minHeight: 48 * scale),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: EdgeInsets.symmetric(
+                horizontal: 16 * scale,
+                vertical: 10 * scale,
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(_mark, size: 20, color: KalinkaColors.accentTint),
-                  const SizedBox(width: 12),
+                  Icon(
+                    _mark,
+                    size: 20 * scale,
+                    color: KalinkaColors.accentTint,
+                  ),
+                  SizedBox(width: 12 * scale),
                   Flexible(
                     child: Text(
                       suggestion.query,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: KalinkaTextStyles.trackRowSubtitle.copyWith(
-                        fontSize: KalinkaTypography.baseSize + 1,
+                        fontSize: (KalinkaTypography.baseSize + 1) * scale,
                         color: KalinkaColors.textPrimary,
                       ),
                     ),
