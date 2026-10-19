@@ -35,10 +35,6 @@ import 'results_view.dart';
 import 'search_composer.dart';
 import 'search_zero_state.dart';
 
-/// The resting search entry's widest: a readable field, not a bar across a
-/// desktop-wide pane. The overlay it lifts into keeps its width.
-const double _kSearchEntryMaxWidth = 600;
-
 /// How far a backdrop fades out before browsing's right edge, where it meets
 /// the player's pane, so it does not end in a cut.
 const double _kPaneEdgeFade = 165;
@@ -1004,12 +1000,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
         final surfaceWidth = constraints.maxWidth;
         final origin =
             _originRect ??
-            Rect.fromLTWH(
-              16,
-              targetTop + 120,
-              math.min(surfaceWidth - 32, _kSearchEntryMaxWidth),
-              56,
-            );
+            Rect.fromLTWH(16, targetTop + 120, surfaceWidth - 32, 56);
         return AnimatedBuilder(
           animation: _overlayCtrl,
           builder: (context, _) {
@@ -1261,8 +1252,9 @@ class _DiscoverHero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: _kSearchEntryMaxWidth),
+          // Across the area; the overlay it lifts into keeps its width.
+          SizedBox(
+            width: double.infinity,
             child: _SearchEntryButton(
               key: entryKey,
               hint: hint,
