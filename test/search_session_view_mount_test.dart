@@ -548,6 +548,21 @@ void main() {
 
       expect(find.text('upbeat indie'), findsOneWidget);
       expect(find.text('something unvetted'), findsNothing);
+      // Marked by what each asks for.
+      for (final (query, icon) in [
+        ('calm piano for deep focus', Icons.menu_book_outlined),
+        ('upbeat indie', Icons.equalizer_rounded),
+      ]) {
+        final chip = find.ancestor(
+          of: find.text(query),
+          matching: find.byType(InkWell),
+        );
+        expect(
+          find.descendant(of: chip, matching: find.byIcon(icon)),
+          findsOneWidget,
+        );
+        expect(tester.getSize(chip).height, greaterThanOrEqualTo(48));
+      }
       // Under the note on which sources answer.
       expect(
         tester.getTopLeft(find.text('upbeat indie')).dy,
