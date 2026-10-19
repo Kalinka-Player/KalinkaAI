@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart'
         NotifierProvider,
         Provider,
         ProviderListenableSelect;
+
 import '../data_model/data_model.dart' show PlayerStateType;
 import '../data_model/ext_device_events.dart';
 import '../data_model/playqueue_events.dart'
@@ -14,6 +15,7 @@ import '../data_model/playqueue_events.dart'
 import '../providers/monotonic_clock_provider.dart' show monotonicClockProvider;
 import '../providers/wire_event_provider.dart'
     show playQueueEventBusProvider, extDeviceEventBusProvider;
+
 import 'package:logger/logger.dart';
 
 final logger = Logger();
@@ -186,13 +188,21 @@ final volumeStateProvider = Provider(
 );
 
 /// Volume belongs to the renderer, and only playback holds one.
-final volumeAvailableProvider = Provider<bool>((ref) {
-  final supported = ref.watch(volumeStateProvider.select((v) => v.supported));
+final playbackHoldsVolumeProvider = Provider<bool>((ref) {
   final state = ref.watch(playerStateProvider.select((s) => s.state));
-  return supported &&
-      (state == PlayerStateType.playing ||
-          state == PlayerStateType.buffering ||
-          state == PlayerStateType.paused);
+  return state == PlayerStateType.playing ||
+      state == PlayerStateType.buffering ||
+      state == PlayerStateType.paused;
+});
+
+/// Whether the output's volume can be set: playback holds it and the device
+/// reports a range. A device delegated to a module that is not loaded reads
+/// as supported with no range, and its renderer plays at fixed full output.
+final volumeAvailableProvider = Provider<bool>((ref) {
+  final controllable = ref.watch(
+    volumeStateProvider.select((v) => v.supported && v.maxVolume > 0),
+  );
+  return controllable && ref.watch(playbackHoldsVolumeProvider);
 });
 
 final playbackModeProvider = Provider(

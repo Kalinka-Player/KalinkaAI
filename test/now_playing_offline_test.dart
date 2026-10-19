@@ -98,8 +98,9 @@ void main() {
           _inPlayer(find.byIcon(Icons.pause_rounded)),
           warnIfMissed: false,
         );
+        // The progress slider; the volume's, fixed here, comes after it.
         await tester.drag(
-          _inPlayer(find.byType(Slider)),
+          _inPlayer(find.byType(Slider)).first,
           const Offset(120, 0),
           warnIfMissed: false,
         );

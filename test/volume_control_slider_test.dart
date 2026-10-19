@@ -117,8 +117,38 @@ void main() {
       }
     });
 
-    testWidgets('hidden when volume is not supported', (tester) async {
-      await _pump(tester, initialState: _deviceState(supported: false));
+    for (final (why, state) in [
+      ('not supported', _deviceState(supported: false)),
+      // A device delegated to a module that is not loaded: the server says
+      // supported, with no range, while the renderer plays at full.
+      ('reported with no range', _deviceState(currentVolume: 0, maxVolume: 0)),
+    ]) {
+      testWidgets('a volume $why shows fixed at full and takes no drag', (
+        tester,
+      ) async {
+        final semantics = tester.ensureSemantics();
+        final container = await _pump(tester, initialState: state);
+
+        expect(find.bySemanticsLabel('Volume fixed'), findsOneWidget);
+        expect(tester.widget<Slider>(find.byType(Slider)).value, 1.0);
+        await tester.drag(find.byType(Slider), const Offset(-150, 0));
+        await tester.pump();
+        expect(
+          (container.read(kalinkaWsApiProvider) as _FakeWsApi).sentCommands,
+          isEmpty,
+        );
+        semantics.dispose();
+      });
+    }
+
+    testWidgets('a fixed volume stays hidden while nothing plays', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        initialState: _deviceState(supported: false),
+        player: PlayerStateType.stopped,
+      );
 
       expect(find.byType(Slider), findsNothing);
     });
@@ -196,9 +226,9 @@ void main() {
       await tester.pump();
       final held = tester.widget<Slider>(sliderFinder).value;
       final target = (held * 100).round();
-      final notifier =
-          container.read(extDeviceStateStoreProvider.notifier)
-              as _SettableExtDeviceNotifier;
+      final notifier = container.read(
+        extDeviceStateStoreProvider.notifier,
+      ) as _SettableExtDeviceNotifier;
       return (notifier, target, held);
     }
 
