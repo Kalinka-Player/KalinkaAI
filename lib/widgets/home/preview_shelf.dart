@@ -87,7 +87,7 @@ class _TileRail extends StatelessWidget {
   final int count;
   final int rows;
 
-  /// The tile's size on a phone; wider screens scale it up to twice that.
+  /// The tile's size on a phone; wider screens scale it up to 1.6 times that.
   final double tileSize;
   final Widget Function(int index, double size) tile;
   final bool scrollable;
@@ -140,7 +140,7 @@ class _TileRail extends StatelessWidget {
       builder: (context, constraints) {
         final size = (tileSize * constraints.maxWidth / _phoneWidth).clamp(
           tileSize,
-          tileSize * 2,
+          tileSize * 1.6,
         );
         final tileHeight = _tileHeight(context, size);
         final width = constraints.maxWidth + 2 * kHomeSideInset;
