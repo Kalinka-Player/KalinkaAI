@@ -347,6 +347,12 @@ void main() {
         tester.widget<Positioned>(divider).top,
         greaterThanOrEqualTo(kKalinkaTopBarHeight),
       );
+      // And it paints: a hairline down to the foot of the window.
+      final line = tester.getRect(
+        find.descendant(of: divider, matching: find.byType(ColoredBox)),
+      );
+      expect(line.width, 1);
+      expect(line.bottom, 900);
     },
   );
 

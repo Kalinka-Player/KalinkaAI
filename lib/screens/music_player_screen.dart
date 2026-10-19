@@ -986,7 +986,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                 top: MediaQuery.paddingOf(context).top + kKalinkaTopBarHeight,
                 bottom: 0,
                 width: 1,
+                // Stretched: an empty box in a column is otherwise as narrow
+                // as it may be, which is nothing.
                 child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     SizedBox(
                       height: 48,
