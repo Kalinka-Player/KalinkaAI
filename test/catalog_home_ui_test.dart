@@ -827,9 +827,9 @@ void main() {
       await tester.tap(find.byTooltip('Customise Home'));
       await tester.pumpAndSettle();
       final panel = find.byType(CustomiseHomeScreen);
-      // The player keeps 360 of the 1200; Home takes the rest.
-      expect(tester.getRect(panel).left, 361);
-      expect(tester.getSize(panel).width, 839);
+      // The player keeps 414 of the 1200; Home takes the rest.
+      expect(tester.getRect(panel).left, closeTo(415, 0.01));
+      expect(tester.getSize(panel).width, closeTo(785, 0.01));
       expect(find.byType(NowPlayingContent), findsOneWidget);
       await tester.tap(find.byTooltip('Preview for Editorial'));
       await tester.pumpAndSettle();
@@ -837,7 +837,7 @@ void main() {
         tester
             .getRect(find.byKey(const ValueKey('home-preview-switch-menu')))
             .left,
-        greaterThanOrEqualTo(361),
+        greaterThanOrEqualTo(414.99),
       );
       expect(
         tester
@@ -851,12 +851,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester.getRect(find.byKey(KalinkaDialog.cardKey)).left,
-        greaterThanOrEqualTo(361),
+        greaterThanOrEqualTo(414.99),
       );
-      expect(
-        tester.getCenter(find.byKey(KalinkaDialog.cardKey)),
-        const Offset(780.5, 450),
-      );
+      final card = tester.getCenter(find.byKey(KalinkaDialog.cardKey));
+      expect(card.dx, closeTo(807.5, 0.01));
+      expect(card.dy, 450);
       tester.view.physicalSize = const Size(375, 812);
       await tester.pumpAndSettle();
       expect(

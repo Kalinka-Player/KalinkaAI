@@ -6,7 +6,6 @@ import 'kiosk/kiosk_enter_button.dart';
 import 'player_view_switch.dart';
 import 'queue_actions.dart';
 import 'renderer_switcher.dart';
-import 'tap_highlight.dart';
 
 /// Keeps the player's view labels at their requested text size. When the
 /// controls and labels no longer fit together, they get separate rows.
@@ -20,11 +19,6 @@ class PlayerHeader extends StatelessWidget {
   /// mini-player's does. Closing and switching views still work.
   final bool away;
 
-  /// Widens the docked player over browsing, or gives browsing its room
-  /// back; null where the player has no pane to widen.
-  final VoidCallback? onToggleExpanded;
-  final bool expanded;
-
   const PlayerHeader({
     super.key,
     required this.isTablet,
@@ -32,8 +26,6 @@ class PlayerHeader extends StatelessWidget {
     this.onClose,
     this.outputSwitcherKey,
     this.away = false,
-    this.onToggleExpanded,
-    this.expanded = false,
   });
 
   Widget _output(Widget switcher) => AwayDim(
@@ -54,26 +46,12 @@ class PlayerHeader extends StatelessWidget {
           children: [
             const PlayerViewSwitch(),
             // In queue mode the mini-player carries the output switcher.
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (onToggleExpanded != null)
-                  IconButton(
-                    key: const ValueKey('player-expand-button'),
-                    tooltip: expanded ? 'Show browsing' : 'Expand player',
-                    style: kalinkaIconButtonStyle,
-                    color: KalinkaColors.textSecondary,
-                    onPressed: onToggleExpanded,
-                    icon: Icon(
-                      expanded
-                          ? Icons.close_fullscreen_rounded
-                          : Icons.open_in_full_rounded,
-                      size: 18,
-                    ),
-                  ),
-                if (showingQueue)
-                  const QueueMenuButton()
-                else ...[
+            if (showingQueue)
+              const QueueMenuButton()
+            else
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   const KioskEnterButton(),
                   const SizedBox(width: 8),
                   Flexible(
@@ -82,8 +60,7 @@ class PlayerHeader extends StatelessWidget {
                     ),
                   ),
                 ],
-              ],
-            ),
+              ),
           ],
         ),
       );

@@ -173,9 +173,9 @@ void main() {
         'play next ${duringAnimation ? 'during' : 'after'} a swipe cannot leave a stale preview',
         (tester) async {
           final container = await mount(tester);
-          final notifier =
-              container.read(playQueueStateStoreProvider.notifier)
-                  as _SettableQueueNotifier;
+          final notifier = container.read(
+            playQueueStateStoreProvider.notifier,
+          ) as _SettableQueueNotifier;
           final api = container.read(kalinkaWsApiProvider) as _FakeWsApi;
 
           await swipeNext(tester);
@@ -219,9 +219,9 @@ void main() {
       tester,
     ) async {
       final container = await mount(tester);
-      final notifier =
-          container.read(playQueueStateStoreProvider.notifier)
-              as _SettableQueueNotifier;
+      final notifier = container.read(
+        playQueueStateStoreProvider.notifier,
+      ) as _SettableQueueNotifier;
       final queue = initialQueue().copyWith(
         trackList: [current, next, inserted],
         seq: 1,
@@ -621,20 +621,20 @@ void main() {
 
       // Simulate the server clearing the queue: empty trackList + stopped state,
       // stale currentTrack still present in playbackState.
-      (container.read(playQueueStateStoreProvider.notifier)
-              as _SettableQueueNotifier)
-          .emit(
-            PlayQueueState(
-              playbackState: PlaybackState(
-                state: PlayerStateType.stopped,
-                currentTrack: track, // stale — never cleared by copyWith
-                index: 0,
-              ),
-              trackList: const [],
-              playbackMode: PlaybackMode.empty,
-              seq: 1,
-            ),
-          );
+      (container.read(
+        playQueueStateStoreProvider.notifier,
+      ) as _SettableQueueNotifier).emit(
+        PlayQueueState(
+          playbackState: PlaybackState(
+            state: PlayerStateType.stopped,
+            currentTrack: track, // stale — never cleared by copyWith
+            index: 0,
+          ),
+          trackList: const [],
+          playbackMode: PlaybackMode.empty,
+          seq: 1,
+        ),
+      );
       await tester.pump();
 
       expect(find.text('Now Playing'), findsNothing);
@@ -695,7 +695,12 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: Scaffold(body: MiniPlayer())),
+          // A phone's bar: the source is the badge on the artist line.
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Center(child: SizedBox(width: 390, child: MiniPlayer())),
+            ),
+          ),
         ),
       );
       await tester.pump();
