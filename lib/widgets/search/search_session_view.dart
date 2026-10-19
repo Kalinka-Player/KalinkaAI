@@ -25,6 +25,7 @@ import '../mini_player.dart';
 import '../overlay_card.dart';
 import '../selection_overlay.dart';
 import '../server_chip.dart';
+import '../tap_highlight.dart' show kalinkaOverlay;
 import 'album_page_header.dart';
 import 'browse_visit_scope.dart';
 import 'catalog_page_view.dart';
@@ -892,6 +893,15 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           hint: _hintText(session, smart: smart),
           smartSearch: smart,
           smartSources: smart ? ref.watch(smartSearchSourcesProvider) : '',
+          // The server's curated prompts, not the static stand-ins or the
+          // unvalidated pick, and only once smart search is known to answer.
+          suggestions: ref.watch(smartSearchAvailableProvider) == true
+              ? [
+                  for (final s in session.aiSuggestions)
+                    if (!s.experimental) s.query,
+                ]
+              : const [],
+          onSuggestion: _submitFromTile,
           onOpenSearch: _openSearch,
         ),
         const SizedBox(height: kHomeSectionGap),
@@ -1226,6 +1236,10 @@ class _DiscoverHero extends StatelessWidget {
 
   /// Which sources answer smart search; empty hides the note.
   final String smartSources;
+
+  /// Prompts that each run as a search as they stand.
+  final List<String> suggestions;
+  final ValueChanged<String> onSuggestion;
   final VoidCallback onOpenSearch;
 
   const _DiscoverHero({
@@ -1233,6 +1247,8 @@ class _DiscoverHero extends StatelessWidget {
     required this.hint,
     required this.smartSearch,
     required this.smartSources,
+    required this.suggestions,
+    required this.onSuggestion,
     required this.onOpenSearch,
   });
 
@@ -1275,7 +1291,62 @@ class _DiscoverHero extends StatelessWidget {
               ),
             ),
           ],
+          if (suggestions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final query in suggestions)
+                  _SuggestionChip(
+                    query: query,
+                    onTap: () => onSuggestion(query),
+                  ),
+              ],
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// A curated prompt under the search entry, as wide as its words, that runs
+/// as a search when tapped.
+class _SuggestionChip extends StatelessWidget {
+  final String query;
+  final VoidCallback onTap;
+
+  const _SuggestionChip({required this.query, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Search for $query',
+      excludeSemantics: true,
+      child: Material(
+        color: KalinkaColors.surfaceRaised,
+        shape: const StadiumBorder(
+          side: BorderSide(color: KalinkaColors.borderDefault),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          overlayColor: kalinkaOverlay,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              query,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+                fontSize: KalinkaTypography.baseSize - 1,
+                color: KalinkaColors.textSecondary,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
