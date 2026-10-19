@@ -5,6 +5,7 @@ import '../../data_model/data_model.dart';
 import '../../providers/collection_edit_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/kalinka_player_api_provider.dart';
+import '../../providers/search_session_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../theme/app_theme.dart';
 import '../kalinka_bottom_sheet.dart';
@@ -153,6 +154,12 @@ Future<void> _deleteCollection(
     // collection that no longer exists.
     ref.read(collectionEditProvider.notifier).reset(item.id);
     ref.read(collectionsRevisionProvider.notifier).bump();
+    // Its own page has nothing left to show.
+    final session = ref.read(searchSessionProvider);
+    if (session.activeView == FindMusicView.catalogs &&
+        session.catalogPage.id == item.id) {
+      ref.read(searchSessionProvider.notifier).goBack();
+    }
     toast.show('$name deleted');
   } catch (e) {
     toast.show('Could not delete $name: $e', isError: true);

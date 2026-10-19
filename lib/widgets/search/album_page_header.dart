@@ -2,13 +2,213 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data_model/data_model.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../fitted_title.dart';
 import '../procedural_album_art.dart';
 import '../search_cards/track_row_support.dart';
+import '../source_badge.dart';
 import 'track_group_actions.dart';
+
+/// Below this pane width an album stacks its cover over its tracks; at or
+/// above it the cover and what it says stand in a column beside them.
+const double kAlbumSideLayoutWidth = 860;
+
+/// The artist an album page can open: only one its listing named by a full
+/// id, so the link keeps the album's source and never looks a name up.
+BrowseItem? albumArtistLink(CatalogPage page) {
+  final artist = page.item?.album?.artist;
+  if (artist == null) return null;
+  try {
+    if (EntityId.fromString(artist.id).type != EntityType.artist) return null;
+  } catch (_) {
+    return null;
+  }
+  return BrowseItem(
+    id: artist.id,
+    name: artist.name,
+    canBrowse: true,
+    canAdd: false,
+    artist: artist,
+  );
+}
+
+/// The album's artist, opening the artist's page where the album says which
+/// one it is; plain text otherwise.
+class _ArtistLine extends ConsumerWidget {
+  final CatalogPage page;
+  final String name;
+
+  const _ArtistLine({required this.page, required this.name});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final style = KalinkaFonts.sans(
+      fontSize: 16,
+      height: 1.4,
+      color: KalinkaColors.textPrimary,
+    );
+    final link = albumArtistLink(page);
+    if (link == null) return Text(name, style: style);
+    return Semantics(
+      link: true,
+      label: 'Open $name',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: () =>
+            ref.read(searchSessionProvider.notifier).openBrowseItem(link),
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  name,
+                  style: style.copyWith(
+                    decoration: TextDecoration.underline,
+                    decorationColor: KalinkaColors.textMuted,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: KalinkaColors.textSecondary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The album's source, said once for the page.
+class _SourceLine extends ConsumerWidget {
+  final CatalogPage page;
+
+  const _SourceLine({required this.page});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final provider = page.provider?.trim() ?? '';
+    if (provider.isEmpty) return const SizedBox.shrink();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SourceBadge(entityId: page.id!),
+        if (sourceBadgeVisible(ref, page.id!)) const SizedBox(width: 7),
+        Flexible(
+          child: Text(
+            provider,
+            style: KalinkaTextStyles.trackRowSubtitle.copyWith(fontSize: 14),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// What an album is, beside its tracks on a wide pane: the square cover,
+/// title, artist, source, extent and the actions on the whole of it. Its own
+/// scroll, so a long title or enlarged text never clips.
+class AlbumIdentityColumn extends StatelessWidget {
+  final CatalogPage page;
+  final int? trackCount;
+  final int? totalDurationSeconds;
+
+  const AlbumIdentityColumn({
+    super.key,
+    required this.page,
+    this.trackCount,
+    this.totalDurationSeconds,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final title = page.title ?? '';
+    final artist = page.description?.trim() ?? '';
+    final summary = _summary(
+      trackCount,
+      totalDurationSeconds ?? page.totalDurationSeconds,
+    );
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 1,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: AlbumArtwork(page: page),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'ALBUM',
+            style: KalinkaFonts.mono(
+              fontSize: 12,
+              letterSpacing: 2,
+              color: KalinkaColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Semantics(
+            header: true,
+            child: Text(
+              title,
+              style: KalinkaFonts.display(
+                fontSize: 30,
+                height: 1.15,
+                letterSpacing: -0.5,
+                fontWeight: FontWeight.w500,
+                color: KalinkaColors.frost,
+              ),
+            ),
+          ),
+          if (artist.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _ArtistLine(page: page, name: artist),
+          ],
+          const SizedBox(height: 8),
+          _SourceLine(page: page),
+          if (summary.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              summary,
+              style: KalinkaTextStyles.trackRowSubtitle.copyWith(fontSize: 14),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              PlayAllChip(trackIds: [page.id!], trackCount: trackCount),
+              AddAllChip(
+                trackIds: [page.id!],
+                trackCount: trackCount,
+                name: title,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _summary(int? trackCount, int? duration) => [
+  if (trackCount != null) '$trackCount ${trackCount == 1 ? 'track' : 'tracks'}',
+  if (duration != null && duration > 0) formatTotalDuration(duration),
+].join(' · ');
 
 /// The cover is the album's backdrop. Its shade follows the text block, so
 /// even long titles and enlarged system text stay on a dark enough surface.
@@ -33,12 +233,10 @@ class AlbumPageHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final title = page.title ?? '';
     final artist = page.description?.trim() ?? '';
-    final duration = totalDurationSeconds ?? page.totalDurationSeconds;
-    final summary = [
-      if (trackCount != null)
-        '$trackCount ${trackCount == 1 ? 'track' : 'tracks'}',
-      if (duration != null && duration > 0) formatTotalDuration(duration),
-    ].join(' · ');
+    final summary = _summary(
+      trackCount,
+      totalDurationSeconds ?? page.totalDurationSeconds,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -114,16 +312,11 @@ class AlbumPageHeader extends ConsumerWidget {
                           ),
                         ),
                         if (artist.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            artist,
-                            style: KalinkaFonts.sans(
-                              fontSize: 16,
-                              height: 1.4,
-                              color: KalinkaColors.textPrimary,
-                            ),
-                          ),
+                          const SizedBox(height: 8),
+                          _ArtistLine(page: page, name: artist),
                         ],
+                        const SizedBox(height: 4),
+                        _SourceLine(page: page),
                         if (summary.isNotEmpty) ...[
                           const SizedBox(height: 6),
                           Text(

@@ -3,27 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart';
 import '../../providers/collection_edit_provider.dart';
-import '../../providers/kalinka_player_api_provider.dart';
-import '../../providers/row_expansion_provider.dart';
-import '../../providers/search_session_provider.dart';
 import '../../providers/selection_state_provider.dart';
-import '../../providers/toast_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/click_cursor.dart';
-import '../search/add_queue_chip.dart';
 import '../search/collection_menu_sheet.dart';
 import 'action_pill_button.dart';
 import 'browse_navigation_scope.dart';
 import 'collection_identity.dart';
-import 'editable_track_list.dart';
-import 'expand_chevron_button.dart';
-import 'expanded_track_list.dart';
+import 'open_chevron_button.dart';
+import 'row_play_button.dart';
 import 'track_row_support.dart';
 
-/// A collection on the Collections screen: its cover, what it holds, and its
-/// tracks when it is unrolled. The listing is where you look at one and edit
-/// it, so this row opens downwards there. In a Home preview that disallows
-/// inline expansion, the row and chevron open the item instead.
+/// A collection in a listing: its cover, what it holds, and the way into its
+/// own page, where its tracks are played and edited. Play starts it without
+/// opening it.
 ///
 /// Long-press takes it into the selection, as every other container row does.
 class CollectionRow extends ConsumerStatefulWidget {
@@ -36,74 +28,14 @@ class CollectionRow extends ConsumerStatefulWidget {
 }
 
 class _CollectionRowState extends ConsumerState<CollectionRow>
-    with SingleTickerProviderStateMixin, LongPressRingMixin {
-  late final AnimationController _glow = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1400),
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    _glow.addListener(() => setState(() {}));
-    WidgetsBinding.instance.addPostFrameCallback((_) => _greetIfFocused());
-  }
-
-  @override
-  void dispose() {
-    _glow.dispose();
-    super.dispose();
-  }
-
-  /// Brings the row the screen was opened on into view and marks it, so the
-  /// jump from a Discover card reads as having landed somewhere. The focus is
-  /// spent here: it is an instruction for the arrival, not a page state.
-  void _greetIfFocused() {
-    if (!mounted) return;
-    final session = ref.read(searchSessionProvider.notifier);
-    if (ref.read(searchSessionProvider).catalogPage.focusItemId !=
-        widget.item.id) {
-      return;
-    }
-    session.catalogFocusReached();
-    Scrollable.ensureVisible(
-      context,
-      duration: const Duration(milliseconds: 320),
-      curve: Curves.easeOut,
-      alignment: 0.1,
-    );
-    if (!MediaQuery.of(context).disableAnimations) _glow.forward(from: 0);
-  }
-
-  void _toggle() {
-    ref.read(rowExpansionProvider.notifier).toggleUnrolled(widget.item.id);
-  }
-
+    with LongPressRingMixin {
   void _select() =>
       ref.read(selectionStateProvider.notifier).toggleContainer(widget.item.id);
 
   @override
   Widget build(BuildContext context) {
-    final navigation = BrowseNavigationScope.maybeOf(context);
-    final allowInline = navigation?.allowInline ?? true;
-    final expanded =
-        allowInline &&
-        ref.watch(
-          rowExpansionProvider.select(
-            (s) => s.unrolled.contains(widget.item.id),
-          ),
-        );
-    void activate() {
-      if (allowInline) {
-        _toggle();
-      } else {
-        navigation!.onOpen(widget.item);
-      }
-    }
-
-    // An editing session takes the row's gestures over: what a tap and a long
-    // press mean while one is running is decided by the session, not by
-    // whatever selection was going on before it.
+    void open() => openBrowsable(context, ref, widget.item);
+    // An editing session holds its own gestures; a row only opens then.
     final editing = ref.watch(collectionEditProvider.select((s) => s.active));
     final changes = ref.watch(
       collectionEditProvider.select((s) => s.of(widget.item.id)?.changes ?? 0),
@@ -122,73 +54,30 @@ class _CollectionRowState extends ConsumerState<CollectionRow>
         (s) => s.isContainerPartial(widget.item.id),
       ),
     );
+    final empty = (widget.item.playlist?.trackCount ?? 0) == 0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        CollectionFace(
-          item: widget.item,
-          raised: expanded,
-          glow: _glow.isAnimating ? 1 - _glow.value : 0,
-          selected: selected && !editing,
-          partial: partial,
-          pressProgress: longPressing ? longPressProgress : 0,
-          nameAction: editing && widget.item.canEdit
-              ? _CollectionMenuButton(item: widget.item)
-              : null,
-          onTap: selecting && !editing ? _select : activate,
-          onSelectPressStart: selecting || editing
-              ? null
-              : () => startLongPressRing(_select),
-          onSelectPressStop: selecting || editing ? null : cancelLongPressRing,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (editing && changes > 0) _ChangesChip(count: changes),
-              ExpandChevronButton(
-                isExpanded: expanded,
-                onTap: activate,
-                canExpand: allowInline,
-              ),
-            ],
+    return CollectionFace(
+      item: widget.item,
+      selected: selected && !editing,
+      partial: partial,
+      pressProgress: longPressing ? longPressProgress : 0,
+      onTap: selecting && !editing ? _select : open,
+      onSelectPressStart: selecting || editing
+          ? null
+          : () => startLongPressRing(_select),
+      onSelectPressStop: selecting || editing ? null : cancelLongPressRing,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (editing && changes > 0) _ChangesChip(count: changes),
+          if (!empty && !selecting && widget.item.canAdd)
+            RowPlayButton(item: widget.item),
+          OpenChevronButton(
+            name: widget.item.playlist?.name ?? widget.item.name,
+            onTap: open,
           ),
-        ),
-        AnimatedCrossFade(
-          firstChild: const SizedBox.shrink(),
-          secondChild: expanded
-              ? Container(
-                  margin: const EdgeInsets.only(left: 16),
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      left: BorderSide(
-                        color: KalinkaColors.borderSubtle,
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  child: editing
-                      ? EditableTrackList(item: widget.item)
-                      : ExpandedContainerTracks(
-                          item: widget.item,
-                          emptyLabel: 'Nothing in this collection yet',
-                          headerAction: widget.item.canEdit
-                              ? _CollectionMenuButton(item: widget.item)
-                              : null,
-                          emptyAction: widget.item.canEdit
-                              ? AddQueueChip(item: widget.item)
-                              : null,
-                        ),
-                )
-              : const SizedBox.shrink(),
-          crossFadeState: expanded
-              ? CrossFadeState.showSecond
-              : CrossFadeState.showFirst,
-          duration: const Duration(milliseconds: 200),
-          firstCurve: Curves.easeOut,
-          secondCurve: Curves.easeOut,
-          sizeCurve: Curves.easeOut,
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -228,14 +117,12 @@ class _ChangesChip extends StatelessWidget {
 }
 
 /// Opens what can be done to the collection itself rather than to its music:
-/// renaming it, and deleting it. At rest it sits at the trailing end of the
-/// unrolled action row, apart from Play all and Enqueue for that reason; while
-/// editing it moves up beside the name, that row having been given over to the
-/// tracks.
-class _CollectionMenuButton extends ConsumerWidget {
+/// renaming it, and deleting it. It sits at the trailing end of the
+/// collection page's actions, apart from Play all and Enqueue for that reason.
+class CollectionMenuButton extends ConsumerWidget {
   final BrowseItem item;
 
-  const _CollectionMenuButton({required this.item});
+  const CollectionMenuButton({super.key, required this.item});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -248,73 +135,34 @@ class _CollectionMenuButton extends ConsumerWidget {
   }
 }
 
-/// A collection on the Discover root: a shortcut, not a row that opens here.
-/// Tapping it goes to the Collections screen and lands on this collection;
-/// the play button starts it without going anywhere.
-class CollectionShelfRow extends ConsumerStatefulWidget {
+/// A collection on Home: tapping it opens the collection's page; the play
+/// button starts it without going anywhere.
+class CollectionShelfRow extends ConsumerWidget {
   final BrowseItem item;
 
-  /// Opens the Collections screen on this collection.
-  final VoidCallback onOpen;
-
-  const CollectionShelfRow({
-    super.key,
-    required this.item,
-    required this.onOpen,
-  });
+  const CollectionShelfRow({super.key, required this.item});
 
   @override
-  ConsumerState<CollectionShelfRow> createState() => _CollectionShelfRowState();
-}
-
-class _CollectionShelfRowState extends ConsumerState<CollectionShelfRow> {
-  bool _starting = false;
-
-  Future<void> _play() async {
-    if (_starting) return;
-    setState(() => _starting = true);
-    final api = ref.read(kalinkaProxyProvider);
-    await runQueueActivity(
-      pending: 'Starting playback…',
-      action: () async {
-        final added = await api.replace([widget.item.id]);
-        await api.play(0);
-        return added;
-      },
-      done: (r) {
-        final n = r.count ?? widget.item.playlist?.trackCount ?? 0;
-        return 'Playing $_name — $n ${n == 1 ? 'track' : 'tracks'}';
-      },
-      failed: (e) => 'Failed to play: $e',
-    );
-    if (mounted) setState(() => _starting = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final empty = (widget.item.playlist?.trackCount ?? 0) == 0;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final empty = (item.playlist?.trackCount ?? 0) == 0;
+    void open() => openBrowsable(context, ref, item);
 
     return CollectionFace(
-      item: widget.item,
-      onTap: widget.onOpen,
+      item: item,
+      onTap: open,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Nothing to start when there is nothing in it.
-          if (!empty)
-            _PlayCircleButton(busy: _starting, onTap: _play, name: _name),
-          const Icon(
-            Icons.chevron_right_rounded,
-            size: 24,
-            color: KalinkaColors.textMuted,
+          if (!empty && item.canAdd) RowPlayButton(item: item),
+          OpenChevronButton(
+            name: item.playlist?.name ?? item.name,
+            onTap: open,
           ),
         ],
       ),
     );
   }
-
-  String get _name =>
-      widget.item.playlist?.name ?? widget.item.name ?? 'collection';
 }
 
 /// The look of a collection wherever it is listed: cover, name, the sources
@@ -325,12 +173,6 @@ class CollectionFace extends ConsumerWidget {
   final BrowseItem item;
   final Widget trailing;
   final VoidCallback onTap;
-
-  /// Drawn as an unrolled row — raised ground, crimson edge.
-  final bool raised;
-
-  /// Strength of the arrival mark, 0 when the row was not jumped to.
-  final double glow;
 
   /// Drawn as taken by the selection, and [partial] where some of its tracks
   /// have since been dropped from it.
@@ -352,8 +194,6 @@ class CollectionFace extends ConsumerWidget {
     required this.item,
     required this.trailing,
     required this.onTap,
-    this.raised = false,
-    this.glow = 0,
     this.selected = false,
     this.partial = false,
     this.pressProgress = 0,
@@ -364,8 +204,6 @@ class CollectionFace extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final marked = raised || glow > 0 || selected;
-
     return Semantics(
       button: true,
       label: item.playlist?.name ?? item.name ?? 'Unknown',
@@ -381,27 +219,16 @@ class CollectionFace extends ConsumerWidget {
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          // The 3px the edge takes comes out of the inset, so unrolling does
+          // The 3px the edge takes comes out of the inset, so selecting does
           // not nudge the row sideways.
-          padding: EdgeInsets.only(top: 10, bottom: 10, left: marked ? 0 : 3),
+          padding: EdgeInsets.only(top: 10, bottom: 10, left: selected ? 0 : 3),
           decoration: BoxDecoration(
             color: selected
                 ? KalinkaColors.accent.withValues(alpha: 0.07)
-                : Color.lerp(
-                    raised ? KalinkaColors.surfaceRaised : Colors.transparent,
-                    KalinkaColors.accent.withValues(alpha: 0.18),
-                    glow,
-                  ),
-            border: marked
-                ? Border(
-                    left: BorderSide(
-                      color: selected
-                          ? KalinkaColors.accent
-                          : KalinkaColors.accent.withValues(
-                              alpha: 0.40 + 0.6 * glow,
-                            ),
-                      width: 3,
-                    ),
+                : Colors.transparent,
+            border: selected
+                ? const Border(
+                    left: BorderSide(color: KalinkaColors.accent, width: 3),
                   )
                 : null,
           ),
@@ -421,81 +248,6 @@ class CollectionFace extends ConsumerWidget {
               const SizedBox(width: 6),
               trailing,
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The one live action on a Discover collection card. Hover warms the circle
-/// so it reads as its own control rather than as part of the row it sits on.
-class _PlayCircleButton extends StatefulWidget {
-  final bool busy;
-  final VoidCallback onTap;
-  final String name;
-
-  const _PlayCircleButton({
-    required this.busy,
-    required this.onTap,
-    required this.name,
-  });
-
-  @override
-  State<_PlayCircleButton> createState() => _PlayCircleButtonState();
-}
-
-class _PlayCircleButtonState extends State<_PlayCircleButton> {
-  bool _hovering = false;
-
-  void _setHover(bool value) {
-    if (value == _hovering) return;
-    setState(() => _hovering = value);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hot = _hovering && !widget.busy;
-
-    return Semantics(
-      button: true,
-      label: 'Play ${widget.name}',
-      child: MouseRegion(
-        cursor: clickCursor(interactive: !widget.busy),
-        onEnter: (_) => _setHover(true),
-        onExit: (_) => _setHover(false),
-        child: GestureDetector(
-          onTap: widget.busy ? null : widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Center(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                width: 32,
-                height: 32,
-                // Grey: a shortcut on a row, not the screen's one decision.
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: hot
-                      ? KalinkaColors.surfaceOverlay
-                      : KalinkaColors.surfaceElevated,
-                  border: Border.all(
-                    color: hot
-                        ? KalinkaColors.textMuted
-                        : KalinkaColors.borderDefault,
-                  ),
-                ),
-                child: Icon(
-                  widget.busy
-                      ? Icons.hourglass_empty_rounded
-                      : Icons.play_arrow_rounded,
-                  size: 18,
-                  color: KalinkaColors.textPrimary,
-                ),
-              ),
-            ),
           ),
         ),
       ),

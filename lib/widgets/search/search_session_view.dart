@@ -9,9 +9,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../data_model/browse_filters.dart';
 import '../browse_filters/browse_filter_form.dart' show resultKindLabel;
 import '../../providers/catalog_cards_provider.dart';
+import '../../providers/collection_edit_provider.dart';
 import '../../providers/connection_state_provider.dart';
 import '../../providers/indexer_status_provider.dart';
-import '../../providers/row_expansion_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../providers/selection_state_provider.dart';
@@ -28,6 +28,7 @@ import '../server_chip.dart';
 import 'album_page_header.dart';
 import 'browse_visit_scope.dart';
 import 'catalog_page_view.dart';
+import 'collections_edit_bar.dart' show leaveCollectionEditing;
 import '../home/catalog_pin_button.dart';
 import '../home/home_layout.dart';
 import 'results_view.dart';
@@ -332,17 +333,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   }
 
   /// Open a catalog page directly from a card tap — deterministic browse, never
-  /// the AI router, and never recorded in search history. With [focusItemId]
-  /// the page opens on that row, unrolled: a shortcut into a listing, not a
-  /// screen of its own.
-  void _openCatalog(
-    CatalogCardPlan plan,
-    String provider, {
-    String? focusItemId,
-  }) {
-    if (focusItemId != null) {
-      ref.read(rowExpansionProvider.notifier).unroll(focusItemId);
-    }
+  /// the AI router, and never recorded in search history.
+  void _openCatalog(CatalogCardPlan plan, String provider) {
     ref
         .read(searchSessionProvider.notifier)
         .openCatalog(
@@ -355,7 +347,6 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           filters: plan.filters,
           sections: plan.sections,
           canEdit: plan.canEdit,
-          focusItemId: focusItemId,
           folderLayout: plan.folderLayout,
           canAdd: plan.canAdd,
           preview: plan.preview,
@@ -422,10 +413,14 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
 
   /// Whether nothing is left to unwind: the system back may leave the app.
   bool _atTopLevel(SearchSessionState session, {required bool selecting}) =>
-      !_focused && !_filtersOpen && !selecting && session.atHome;
+      !_focused &&
+      !_filtersOpen &&
+      !selecting &&
+      !ref.watch(collectionEditProvider.select((s) => s.active)) &&
+      session.atHome;
 
   /// One back press unwinds one layer: the search overlay, the filter card,
-  /// a selection, then the previous visit. Shared by the title-bar arrow and
+  /// a selection or a collection edit, then the previous visit. Shared by the title-bar arrow and
   /// the system back gesture; at Home the back leaves the app.
   void _handleBack() {
     if (_focused) {
@@ -442,13 +437,18 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
       selection.exitSelectionMode();
       return;
     }
+    if (ref.read(collectionEditProvider).active) {
+      // Asks first when anything is staged; the page stays either way.
+      leaveCollectionEditing(context, ref);
+      return;
+    }
     ref.read(searchSessionProvider.notifier).goBack();
   }
 
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(searchSessionProvider);
-    final onAlbum =
+    final albumPage =
         session.activeView == FindMusicView.catalogs &&
         session.catalogPage.isAlbum;
     ref.listen(searchSessionProvider.select((s) => s.visitId), (_, visit) {
@@ -504,131 +504,139 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && widget.handlesBack) _handleBack();
       },
-      child: ColoredBox(
-        color: KalinkaColors.background,
-        child: Stack(
-          children: [
-            if (onAlbum)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: AlbumPageBackdrop(
-                  page: session.catalogPage,
-                  headerHeight: _albumHeaderHeight,
-                  scrollOffset: _albumOffset,
-                ),
-              ),
-            // The backdrop behind the Discover root, full surface width and
-            // rising behind the bar and the status-bar inset so the two read
-            // as one surface. It moves one-for-one with the introduction,
-            // including overscroll, without rebuilding the content below.
-            if (session.atHome)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height:
-                    MediaQuery.paddingOf(context).top +
-                    _kDiscoverBackdropHeight,
-                child: IgnorePointer(
-                  child: ValueListenableBuilder<double>(
-                    valueListenable: _discoverOffset,
-                    builder: (context, offset, child) => Transform.translate(
-                      offset: Offset(0, -offset),
-                      child: child,
-                    ),
-                    child: RepaintBoundary(
-                      key: const ValueKey('discover-backdrop'),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: _kDiscoverBloom,
-                            ),
-                          ),
-                          DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: _kDiscoverFadeOut,
-                            ),
-                          ),
-                          const IgnorePointer(
-                            child: ExcludeSemantics(child: _HeroArtwork()),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            // On a catalog page the card's blurred art backs the whole top of
-            // the screen — status inset and title bar included — fading into
-            // the canvas before the rows (same layer as the bloom above).
-            if (session.activeView == FindMusicView.catalogs &&
-                !session.catalogPage.isRoot &&
-                !onAlbum &&
-                session.shownListing.artPath != null)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: IgnorePointer(
-                  child: CatalogArtBackdrop(
-                    artPath: session.shownListing.artPath!,
-                    // A folder uses cover art; albums carry their own
-                    // crisp backdrop inside the scrolling header.
-                    fromCover: session.folderPath.isNotEmpty,
-                  ),
-                ),
-              ),
-            Column(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // A wide album sets its cover beside the tracks, not behind them.
+          final onAlbum =
+              albumPage && constraints.maxWidth < kAlbumSideLayoutWidth;
+          return ColoredBox(
+            color: KalinkaColors.background,
+            child: Stack(
               children: [
                 if (onAlbum)
-                  AnnotatedRegion<SystemUiOverlayStyle>(
-                    value: const SystemUiOverlayStyle(
-                      statusBarColor: Colors.transparent,
-                      statusBarIconBrightness: Brightness.light,
-                      statusBarBrightness: Brightness.dark,
-                      systemStatusBarContrastEnforced: false,
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: AlbumPageBackdrop(
+                      page: session.catalogPage,
+                      headerHeight: _albumHeaderHeight,
+                      scrollOffset: _albumOffset,
                     ),
-                    child: ValueListenableBuilder<double>(
-                      valueListenable: _albumOffset,
-                      builder: (context, offset, child) => ColoredBox(
-                        key: const ValueKey('album-header-surface'),
-                        color: KalinkaColors.background.withValues(
-                          alpha: (offset / kKalinkaTopBarHeight).clamp(
-                            0.0,
-                            1.0,
+                  ),
+                // The backdrop behind the Discover root, full surface width and
+                // rising behind the bar and the status-bar inset so the two read
+                // as one surface. It moves one-for-one with the introduction,
+                // including overscroll, without rebuilding the content below.
+                if (session.atHome)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height:
+                        MediaQuery.paddingOf(context).top +
+                        _kDiscoverBackdropHeight,
+                    child: IgnorePointer(
+                      child: ValueListenableBuilder<double>(
+                        valueListenable: _discoverOffset,
+                        builder: (context, offset, child) =>
+                            Transform.translate(
+                              offset: Offset(0, -offset),
+                              child: child,
+                            ),
+                        child: RepaintBoundary(
+                          key: const ValueKey('discover-backdrop'),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: _kDiscoverBloom,
+                                ),
+                              ),
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: _kDiscoverFadeOut,
+                                ),
+                              ),
+                              const IgnorePointer(
+                                child: ExcludeSemantics(child: _HeroArtwork()),
+                              ),
+                            ],
                           ),
                         ),
-                        child: child,
                       ),
-                      child: _buildHeader(session),
                     ),
-                  )
-                else
-                  _buildHeader(session),
-                Expanded(child: _buildVisits(session)),
+                  ),
+                // On a catalog page the card's blurred art backs the whole top of
+                // the screen — status inset and title bar included — fading into
+                // the canvas before the rows (same layer as the bloom above).
+                if (session.activeView == FindMusicView.catalogs &&
+                    !session.catalogPage.isRoot &&
+                    !onAlbum &&
+                    session.shownListing.artPath != null)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: IgnorePointer(
+                      child: CatalogArtBackdrop(
+                        artPath: session.shownListing.artPath!,
+                        // A folder uses cover art; albums carry their own
+                        // crisp backdrop inside the scrolling header.
+                        fromCover: session.folderPath.isNotEmpty,
+                      ),
+                    ),
+                  ),
+                Column(
+                  children: [
+                    if (onAlbum)
+                      AnnotatedRegion<SystemUiOverlayStyle>(
+                        value: const SystemUiOverlayStyle(
+                          statusBarColor: Colors.transparent,
+                          statusBarIconBrightness: Brightness.light,
+                          statusBarBrightness: Brightness.dark,
+                          systemStatusBarContrastEnforced: false,
+                        ),
+                        child: ValueListenableBuilder<double>(
+                          valueListenable: _albumOffset,
+                          builder: (context, offset, child) => ColoredBox(
+                            key: const ValueKey('album-header-surface'),
+                            color: KalinkaColors.background.withValues(
+                              alpha: (offset / kKalinkaTopBarHeight).clamp(
+                                0.0,
+                                1.0,
+                              ),
+                            ),
+                            child: child,
+                          ),
+                          child: _buildHeader(session),
+                        ),
+                      )
+                    else
+                      _buildHeader(session),
+                    Expanded(child: _buildVisits(session)),
+                  ],
+                ),
+                // Only while there is something to narrow: a reconnect can reset
+                // the session under an open card.
+                if (_filtersOpen && !_filterCapabilities(session).isEmpty)
+                  _buildFiltersOverlay(session),
+                // The animated search overlay floats above the header too, so its
+                // dim scrim covers the top bar — the in-field arrow is the
+                // only back affordance while it is up.
+                if (_focused) _buildSearchOverlay(session),
+                if (selectionActive)
+                  const Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: MultiSelectBottomBar(),
+                  ),
               ],
             ),
-            // Only while there is something to narrow: a reconnect can reset
-            // the session under an open card.
-            if (_filtersOpen && !_filterCapabilities(session).isEmpty)
-              _buildFiltersOverlay(session),
-            // The animated search overlay floats above the header too, so its
-            // dim scrim covers the top bar — the in-field arrow is the
-            // only back affordance while it is up.
-            if (_focused) _buildSearchOverlay(session),
-            if (selectionActive)
-              const Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: MultiSelectBottomBar(),
-              ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -1187,11 +1195,15 @@ class _DiscoverHero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          _SearchEntryButton(
-            key: entryKey,
-            hint: hint,
-            smart: smartSearch,
-            onTap: onOpenSearch,
+          // A readable field, not a bar across a desktop-wide pane.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: _SearchEntryButton(
+              key: entryKey,
+              hint: hint,
+              smart: smartSearch,
+              onTap: onOpenSearch,
+            ),
           ),
           if (smartSources.isNotEmpty) ...[
             const SizedBox(height: 8),

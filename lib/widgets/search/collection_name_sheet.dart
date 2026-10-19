@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data_model/data_model.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/kalinka_player_api_provider.dart';
+import '../../providers/search_session_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/field_decoration.dart';
@@ -78,6 +79,7 @@ Future<void> showRenameCollectionSheet(
   try {
     await api.renameCollection(item.id, name);
     ref.read(collectionsRevisionProvider.notifier).bump();
+    ref.read(searchSessionProvider.notifier).retitlePage(item.id, name);
     toast.show('Renamed to $name');
   } catch (e) {
     toast.show('Could not rename the collection: $e', isError: true);

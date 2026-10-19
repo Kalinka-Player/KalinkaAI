@@ -206,9 +206,10 @@ void main() {
     );
     expect(find.textContaining('Disc '), findsNothing);
 
+    // The whole album queues by its id, so pages not loaded yet come too.
     await tester.tap(find.text('Song 2'));
     await tester.pumpAndSettle();
-    expect(api.replaced.single, tracks.map((t) => t.id).toList());
+    expect(api.replaced.single, [_page.id]);
     expect(api.played.single, 1);
 
     container

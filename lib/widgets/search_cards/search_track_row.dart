@@ -42,6 +42,14 @@ class SearchTrackRow extends ConsumerStatefulWidget {
   /// row.
   final int? folderTrackNumber;
 
+  /// The album, playlist or collection this row is a place in, and which
+  /// place. Tapping then queues the whole container, which the server
+  /// expands in order, and plays from this place — the same whether the row
+  /// was on the first page loaded or a later one, and whichever of two
+  /// identical tracks it is.
+  final String? containerId;
+  final int? containerIndex;
+
   /// Fits three digits of the 14px mono numeral; longer numbers scale down.
   static const double folderNumberWidth = 28;
 
@@ -53,6 +61,8 @@ class SearchTrackRow extends ConsumerStatefulWidget {
     this.albumTrackNumber,
     this.albumArtist,
     this.folderTrackNumber,
+    this.containerId,
+    this.containerIndex,
   });
 
   @override
@@ -106,11 +116,19 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     final api = ref.read(kalinkaProxyProvider);
     final ctx = widget.queueContextIds ?? const <String>[];
     final ctxIndex = ctx.indexOf(widget.item.id);
-    final useContext = ctx.length > 1 && ctxIndex >= 0;
+    final container = widget.containerId;
+    final place = widget.containerIndex;
+    final inContainer = container != null && place != null;
+    final useContext = inContainer || (ctx.length > 1 && ctxIndex >= 0);
     final toast = ref.read(toastProvider.notifier);
     if (useContext) toast.beginQueueActivity('Starting playback…');
     try {
-      if (useContext) {
+      if (inContainer) {
+        final added = await api.replace([container]);
+        await api.play(place);
+        final n = added.count ?? 0;
+        toast.endQueueActivity('Playing $n ${n == 1 ? 'track' : 'tracks'}');
+      } else if (useContext) {
         final added = await api.replace(ctx);
         await api.play(await _queuedIndex(api, ctx, ctxIndex, added.count));
         final n = added.count ?? ctx.length;
