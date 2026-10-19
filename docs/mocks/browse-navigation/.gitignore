@@ -1,0 +1,2 @@
+# Keep the standalone review prototype despite the repository's generated-JS rule.
+!prototype.js

@@ -14,7 +14,7 @@ Home sections share a muted shimmer treatment for loading. Source tiles reserve 
 
 Saved previews carry a format version. Original, unversioned Artwork selections become Cards to preserve their horizontal layout. Compact and List selections, filters and pin order are retained. Versioned Artwork selections continue to show the catalog's own image.
 
-Catalog rows open pages. Media row titles on those pages also open pages, while the right-hand chevron expands one level inline. Nested media inside an expanded artist opens a page rather than creating another inline level. Back restores the parent catalog, its filters and folder navigation.
+The current implementation still mixes page navigation with one-level inline expansion on catalog pages. The [browsing design guide](browsing-design-guide.md) defines the replacement: media row titles and right-facing chevrons open the same entity page, and Back restores the originating visit, filters and position. Migrate those interactions through that guide while retaining the pin and capability contracts here.
 
 ## Backend capability and pagination contract
 

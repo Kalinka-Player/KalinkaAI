@@ -2,6 +2,8 @@
 
 High-contrast grayscale with **berry** & **brass** accents. Source of truth: `KalinkaColors` in [lib/theme/app_theme.dart](lib/theme/app_theme.dart).
 
+For the target navigation model, adaptive player/browsing layout, grids and wide lists, follow the [browsing design guide](docs/browsing-design-guide.md). The palette and detailed Home control rules below remain its visual foundation.
+
 Flutter colors are `0xAARRGGBB`. Below they're translated to CSS: opaque values as `#RRGGBB`, alpha values as `rgba()` (with the source alpha byte noted).
 
 ## Backgrounds
