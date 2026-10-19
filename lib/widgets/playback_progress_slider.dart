@@ -30,10 +30,15 @@ class PlaybackProgressSlider extends ConsumerStatefulWidget {
   /// draggable.
   final bool enabled;
 
+  /// Times either side of the bar on one line, for the wide mini-player,
+  /// rather than under it.
+  final bool inline;
+
   const PlaybackProgressSlider({
     super.key,
     required this.durationMs,
     this.enabled = true,
+    this.inline = false,
   });
 
   @override
@@ -226,99 +231,117 @@ class _PlaybackProgressSliderState extends ConsumerState<PlaybackProgressSlider>
         opacity: widget.enabled ? 1.0 : 0.4,
         child: IgnorePointer(
           ignoring: !interactive,
-          child: Column(
-            children: [
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Hidden, not removed, so the row keeps its height and the
-                  // slider's semantics their shape.
-                  Visibility.maintain(
-                    visible: !away,
-                    child: ExcludeFocus(
-                      excluding: away,
-                      child: SliderTheme(
-                        data: SliderThemeData(
-                          trackHeight: _trackHeight,
-                          thumbShape: seekable
-                              ? const RoundSliderThumbShape(
-                                  enabledThumbRadius: 6,
-                                )
-                              : SliderComponentShape.noThumb,
-                          overlayShape: const RoundSliderOverlayShape(
-                            overlayRadius: _overlayRadius,
-                          ),
-                          activeTrackColor: seekable
-                              ? KalinkaColors.accent
-                              : KalinkaColors.textMuted,
-                          inactiveTrackColor: KalinkaColors.borderDefault,
-                          thumbColor: Colors.white,
-                          overlayColor: KalinkaColors.accent.withValues(
-                            alpha: 0.25,
-                          ),
+          child: _layout(
+            bar: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Hidden, not removed, so the row keeps its height and the
+                // slider's semantics their shape.
+                Visibility.maintain(
+                  visible: !away,
+                  child: ExcludeFocus(
+                    excluding: away,
+                    child: SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: _trackHeight,
+                        thumbShape: seekable
+                            ? const RoundSliderThumbShape(enabledThumbRadius: 6)
+                            : SliderComponentShape.noThumb,
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: _overlayRadius,
                         ),
-                        // Disabled via the IgnorePointer above, never a null
-                        // onChanged: that restructures the Slider's semantics,
-                        // which asserts in flushSemantics if a dialog pops the
-                        // same frame (Clear all).
-                        child: Slider(
-                          value: progress,
-                          onChangeStart: (value) {
-                            if (interactive) beginSeek(value);
-                          },
-                          onChanged: (value) {
-                            if (interactive) seekTo(value);
-                          },
-                          onChangeEnd: (value) {
-                            if (interactive) commitSeek(value);
-                          },
+                        activeTrackColor: seekable
+                            ? KalinkaColors.accent
+                            : KalinkaColors.textMuted,
+                        inactiveTrackColor: KalinkaColors.borderDefault,
+                        thumbColor: Colors.white,
+                        overlayColor: KalinkaColors.accent.withValues(
+                          alpha: 0.25,
                         ),
                       ),
-                    ),
-                  ),
-                  // The slider insets its track by the overlay radius.
-                  if (away)
-                    Positioned(
-                      left: _overlayRadius,
-                      right: _overlayRadius,
-                      child: GradientProgressLine(
-                        progress: progress,
-                        mode: lineMode,
-                        height: _trackHeight,
+                      // Disabled via the IgnorePointer above, never a null
+                      // onChanged: that restructures the Slider's semantics,
+                      // which asserts in flushSemantics if a dialog pops the
+                      // same frame (Clear all).
+                      child: Slider(
+                        value: progress,
+                        onChangeStart: (value) {
+                          if (interactive) beginSeek(value);
+                        },
+                        onChanged: (value) {
+                          if (interactive) seekTo(value);
+                        },
+                        onChangeEnd: (value) {
+                          if (interactive) commitSeek(value);
+                        },
                       ),
                     ),
-                ],
-              ),
-              // SizedBox gives tight constraints (tight width from Column + fixed
-              // height here), making the Row a Flutter relayout boundary. This
-              // prevents RenderParagraph.markNeedsLayout() from propagating up
-              // through the RepaintBoundary and causing a full-screen relayout on
-              // every playback-time tick.
-              SizedBox(
-                width: double
-                    .infinity, // combined with height → tight on both axes → relayout boundary
-                height: 20,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        formatClock(Duration(milliseconds: positionMs)),
-                        style: KalinkaTextStyles.timeLabel,
-                      ),
-                      Text(
-                        formatClock(Duration(milliseconds: widget.durationMs)),
-                        style: KalinkaTextStyles.timeLabel,
-                      ),
-                    ],
                   ),
                 ),
-              ),
-            ],
+                // The slider insets its track by the overlay radius.
+                if (away)
+                  Positioned(
+                    left: _overlayRadius,
+                    right: _overlayRadius,
+                    child: GradientProgressLine(
+                      progress: progress,
+                      mode: lineMode,
+                      height: _trackHeight,
+                    ),
+                  ),
+              ],
+            ),
+            position: Text(
+              formatClock(Duration(milliseconds: positionMs)),
+              style: KalinkaTextStyles.timeLabel,
+            ),
+            duration: Text(
+              formatClock(Duration(milliseconds: widget.durationMs)),
+              style: KalinkaTextStyles.timeLabel,
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _layout({
+    required Widget bar,
+    required Widget position,
+    required Widget duration,
+  }) {
+    if (widget.inline) {
+      return Row(
+        children: [
+          SizedBox(
+            width: 44,
+            child: Align(alignment: Alignment.centerRight, child: position),
+          ),
+          Expanded(child: bar),
+          SizedBox(width: 44, child: duration),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        bar,
+        // SizedBox gives tight constraints (tight width from Column + fixed
+        // height here), making the Row a Flutter relayout boundary. This
+        // prevents RenderParagraph.markNeedsLayout() from propagating up
+        // through the RepaintBoundary and causing a full-screen relayout on
+        // every playback-time tick.
+        SizedBox(
+          width: double.infinity,
+          height: 20,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [position, duration],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

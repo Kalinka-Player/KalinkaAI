@@ -17,6 +17,7 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/mini_player.dart';
+import 'package:kalinka/widgets/playback_progress_slider.dart';
 import 'package:kalinka/widgets/transport_button.dart';
 
 import 'support/focus.dart';
@@ -854,5 +855,21 @@ void main() {
       );
       expect(line.mode, GradientProgressLineMode.offline);
     });
+  });
+
+  testWidgets('a window-wide bar seeks in a slider of its own, not the line', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await pumpMiniPlayer(
+      tester,
+      queueState: _queueWithState(state: PlayerStateType.playing),
+    );
+
+    expect(find.byType(PlaybackProgressSlider), findsOneWidget);
+    expect(find.byType(GradientProgressLine), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -21,6 +21,7 @@ import 'bit_perfect_badge.dart';
 import 'column_separator.dart';
 import 'gradient_progress_line.dart';
 import 'play_pause_glyph.dart';
+import 'playback_progress_slider.dart';
 import 'procedural_album_art.dart';
 import 'renderer_switcher.dart';
 import 'source_badge.dart';
@@ -387,20 +388,32 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
       ),
       child: SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildProgressLine(progressLineMode, durationMs),
-            _buildMainContent(
-              resolvedImageUrl: resolvedImageUrl,
-              currentTrack: effectiveCurrentTrack,
-              incomingTrack: incomingTrack,
-              carouselOffset: carouselOffset,
-              isOffline: isOffline,
-              playerState: playerState,
-              exclusive: exclusive,
-            ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final tier = _MiniPlayerTier.of(constraints.maxWidth);
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // A wide bar has a slider of its own instead; the line's
+                // height stays, so the bar keeps its size.
+                if (tier.index >= _MiniPlayerTier.progress.index)
+                  const SizedBox(height: 2)
+                else
+                  _buildProgressLine(progressLineMode, durationMs),
+                _buildMainContent(
+                  tier: tier,
+                  durationMs: durationMs,
+                  resolvedImageUrl: resolvedImageUrl,
+                  currentTrack: effectiveCurrentTrack,
+                  incomingTrack: incomingTrack,
+                  carouselOffset: carouselOffset,
+                  isOffline: isOffline,
+                  playerState: playerState,
+                  exclusive: exclusive,
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -426,6 +439,8 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
   /// play/pause button. Owns the horizontal/vertical gesture detection that
   /// drives the carousel and the swipe-up-to-open gesture.
   Widget _buildMainContent({
+    required _MiniPlayerTier tier,
+    required int durationMs,
     required String? resolvedImageUrl,
     required Track? currentTrack,
     required Track? incomingTrack,
@@ -441,9 +456,8 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
         height: 70,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final tier = _MiniPlayerTier.of(constraints.maxWidth);
+          child: Builder(
+            builder: (context) {
               return Row(
                 children: [
                   // Only art + text take the tap-to-open / swipe gestures; the
@@ -488,6 +502,20 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                       ),
                     ),
                   ),
+                  if (tier.index >= _MiniPlayerTier.progress.index) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 4,
+                      child: AwayLock(
+                        away: isOffline,
+                        child: PlaybackProgressSlider(
+                          durationMs: durationMs,
+                          enabled: currentTrack != null,
+                          inline: true,
+                        ),
+                      ),
+                    ),
+                  ],
                   if (tier.index >= _MiniPlayerTier.source.index &&
                       currentTrack != null) ...[
                     const ColumnSeparator(),
@@ -664,21 +692,24 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
 }
 
 /// What the bar adds as it widens, each step keeping the ones before it:
-/// the output by name, then where the music comes from, then the album and
-/// the stream's format, then volume.
+/// the output by name, a seekable slider in place of the top line, where the
+/// music comes from, the album and the stream's format, then volume.
 enum _MiniPlayerTier {
   compact,
   output,
+  progress,
   source,
   details,
   volume;
 
-  static _MiniPlayerTier of(double width) => width >= 1280
+  static _MiniPlayerTier of(double width) => width >= 1400
       ? volume
-      : width >= 1000
+      : width >= 1150
       ? details
-      : width >= 700
+      : width >= 1000
       ? source
+      : width >= 900
+      ? progress
       : width >= 520
       ? output
       : compact;
