@@ -513,7 +513,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                   if (wide)
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.only(right: 16),
                         child: Center(
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 560),
@@ -571,6 +571,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                         ? RendererSwitcherDropdown(
                             key: widget.outputSwitcherKey,
                             maxNameWidth: 140,
+                            framed: true,
                           )
                         : RendererSwitcherButton(
                             key: widget.outputSwitcherKey,
