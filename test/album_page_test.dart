@@ -355,7 +355,10 @@ void main() {
       final paragraph = tester.renderObject<RenderParagraph>(
         find.descendant(of: title, matching: find.byType(RichText)),
       );
-      expect(tester.widget<Text>(title).style!.fontSize, lessThan(shortTitleSize));
+      expect(
+        tester.widget<Text>(title).style!.fontSize,
+        lessThan(shortTitleSize),
+      );
       expect(paragraph.didExceedMaxLines, isFalse);
       expect(
         tester.getSize(title).height,
@@ -376,7 +379,13 @@ void main() {
           textScale: scale,
         );
         expect(tester.takeException(), isNull);
-        await tester.scrollUntilVisible(find.text('Song 1'), 300);
+        // Wider than a phone, the cover's column scrolls on its own beside
+        // the tracks.
+        await tester.scrollUntilVisible(
+          find.text('Song 1'),
+          300,
+          scrollable: find.byType(Scrollable).last,
+        );
         expect(tester.takeException(), isNull);
       });
     }

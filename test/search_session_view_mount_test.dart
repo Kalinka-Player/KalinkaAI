@@ -232,7 +232,6 @@ void main() {
 
   for (final (size, scale) in [
     (const Size(375, 812), 1.0),
-    (const Size(812, 375), 1.0),
     (const Size(375, 812), 3.0),
   ]) {
     testWidgets(

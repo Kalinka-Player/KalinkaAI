@@ -33,37 +33,20 @@ class PresentationToggle extends ConsumerWidget {
           message: '$label view',
           child: InkWell(
             onTap: () => notifier.set(family, presentation),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(6),
             focusColor: KalinkaColors.surfaceOverlay,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 120),
-              constraints: const BoxConstraints(minHeight: 40, minWidth: 48),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              constraints: const BoxConstraints(minHeight: 26, minWidth: 34),
+              alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: on ? KalinkaColors.surfaceOverlay : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    icon,
-                    size: 17,
-                    color: on
-                        ? KalinkaColors.textPrimary
-                        : KalinkaColors.textMuted,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: KalinkaTextStyles.trackRowSubtitle.copyWith(
-                      color: on
-                          ? KalinkaColors.textPrimary
-                          : KalinkaColors.textMuted,
-                    ),
-                  ),
-                ],
+              child: Icon(
+                icon,
+                size: 15,
+                color: on ? KalinkaColors.textPrimary : KalinkaColors.textMuted,
               ),
             ),
           ),
@@ -72,10 +55,10 @@ class PresentationToggle extends ConsumerWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.all(3),
+      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         color: KalinkaColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(11),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: KalinkaColors.borderDefault),
       ),
       child: Row(
