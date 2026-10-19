@@ -15,6 +15,7 @@ import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
+import 'package:kalinka/widgets/column_separator.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/playback_progress_slider.dart';
@@ -908,6 +909,24 @@ void main() {
       final play = tester.getCenter(find.byType(TransportButton).last).dx;
       expect(volume, lessThan(album));
       expect(album, lessThan(play));
+
+      // The slider sits centred between the track and the first extra.
+      final track = tester.getRect(
+        find
+            .ancestor(
+              of: find.text('Blue in Green'),
+              matching: find.byWidgetPredicate(
+                (w) =>
+                    w is SizedBox && (w.width ?? 0) >= 220 && w.width!.isFinite,
+              ),
+            )
+            .first,
+      );
+      final firstExtra = tester.getRect(find.byType(ColumnSeparator).first);
+      expect(
+        tester.getCenter(find.byType(PlaybackProgressSlider)).dx,
+        closeTo((track.right + firstExtra.left) / 2, 1),
+      );
       expect(tester.takeException(), isNull);
       semantics.dispose();
     },

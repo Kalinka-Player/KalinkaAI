@@ -456,66 +456,74 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
         height: 70,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Builder(
-            builder: (context) {
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final wide = tier.index >= _MiniPlayerTier.progress.index;
+              // Only art + text take the tap-to-open / swipe gestures; the
+              // play button stays outside so the swipe recognizer can't steal
+              // its taps.
+              final track = GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onTap,
+                onHorizontalDragStart: canSwipe ? _onHorizontalDragStart : null,
+                onHorizontalDragUpdate: canSwipe
+                    ? _onHorizontalDragUpdate
+                    : null,
+                onHorizontalDragEnd: canSwipe ? _onHorizontalDragEnd : null,
+                onHorizontalDragCancel: canSwipe
+                    ? _onHorizontalDragCancel
+                    : null,
+                onVerticalDragEnd: (d) {
+                  // Swipe up → open now-playing
+                  if ((d.primaryVelocity ?? 0) < -200) {
+                    widget.onTap?.call();
+                  }
+                },
+                child: Row(
+                  children: [
+                    _buildAlbumArt(
+                      resolvedImageUrl: resolvedImageUrl,
+                      trackId: currentTrack?.id ?? '',
+                    ),
+                    const SizedBox(width: 10),
+                    _buildCarouselText(
+                      currentTrack: currentTrack,
+                      incomingTrack: incomingTrack,
+                      carouselOffset: carouselOffset,
+                    ),
+                  ],
+                ),
+              );
               return Row(
                 children: [
-                  // Only art + text take the tap-to-open / swipe gestures; the
-                  // play button stays outside so the swipe recognizer can't steal
-                  // its taps.
-                  Expanded(
-                    flex: 3,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: widget.onTap,
-                      onHorizontalDragStart: canSwipe
-                          ? _onHorizontalDragStart
-                          : null,
-                      onHorizontalDragUpdate: canSwipe
-                          ? _onHorizontalDragUpdate
-                          : null,
-                      onHorizontalDragEnd: canSwipe
-                          ? _onHorizontalDragEnd
-                          : null,
-                      onHorizontalDragCancel: canSwipe
-                          ? _onHorizontalDragCancel
-                          : null,
-                      onVerticalDragEnd: (d) {
-                        // Swipe up → open now-playing
-                        if ((d.primaryVelocity ?? 0) < -200) {
-                          widget.onTap?.call();
-                        }
-                      },
-                      child: Row(
-                        children: [
-                          _buildAlbumArt(
-                            resolvedImageUrl: resolvedImageUrl,
-                            trackId: currentTrack?.id ?? '',
-                          ),
-                          const SizedBox(width: 10),
-                          _buildCarouselText(
-                            currentTrack: currentTrack,
-                            incomingTrack: incomingTrack,
-                            carouselOffset: carouselOffset,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (tier.index >= _MiniPlayerTier.progress.index) ...[
-                    const SizedBox(width: 12),
+                  // A wide bar holds the track to a bounded width and centres
+                  // the slider in what is left before the extras.
+                  if (wide)
+                    SizedBox(
+                      width: (constraints.maxWidth * 0.24).clamp(220.0, 340.0),
+                      child: track,
+                    )
+                  else
+                    Expanded(child: track),
+                  if (wide)
                     Expanded(
-                      flex: 4,
-                      child: AwayLock(
-                        away: isOffline,
-                        child: PlaybackProgressSlider(
-                          durationMs: durationMs,
-                          enabled: currentTrack != null,
-                          inline: true,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 560),
+                            child: AwayLock(
+                              away: isOffline,
+                              child: PlaybackProgressSlider(
+                                durationMs: durationMs,
+                                enabled: currentTrack != null,
+                                inline: true,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ],
                   // The extras stack outward from the controls as the bar
                   // widens: source nearest, then the album, then volume.
                   if (tier == _MiniPlayerTier.volume) ...[
