@@ -56,27 +56,65 @@ class InspiredBlock extends StatelessWidget {
   static bool _groupVisible(InspiredGroup group) =>
       group.state is! LegReady || group.tracks.isNotEmpty;
 
+  /// The narrowest a group reads well at, and the room between two side by
+  /// side.
+  static const groupMinWidth = 400.0;
+  static const groupGutter = 28.0;
+
   @override
   Widget build(BuildContext context) {
     final groups = narrowed.groups.where(_groupVisible).toList();
     final expanded = filter.kind == ResultKind.recommendations;
+    Widget groupOf(InspiredGroup group) => _SourceGroup(
+      group: group,
+      title: results.sources.titleOf(group.source),
+      expanded: expanded,
+      onViewAll: () => onViewAll(group.source),
+      onRetry: () => onRetry(group.source),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _InspiredHeading(gutter: gutter),
-        // A later source stands further off the rows above it than rows
-        // stand off each other, so it reads as a group, not the next row.
-        for (final (i, group) in groups.indexed) ...[
-          if (i > 0) const SizedBox(height: 14),
-          _SourceGroup(
-            group: group,
-            title: results.sources.titleOf(group.source),
-            expanded: expanded,
-            onViewAll: () => onViewAll(group.source),
-            onRetry: () => onRetry(group.source),
-          ),
-        ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            // Two sources side by side where both fit; a third starts the
+            // next row at the same width, in source order. Each keeps its
+            // own list, so nothing is merged or reflowed between them.
+            final columns =
+                !expanded &&
+                    constraints.maxWidth >= groupMinWidth * 2 + groupGutter
+                ? 2
+                : 1;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // A later source stands further off the rows above it than
+                // rows stand off each other, so it reads as a group, not the
+                // next row.
+                for (var i = 0; i < groups.length; i += columns) ...[
+                  if (i > 0) const SizedBox(height: 14),
+                  if (columns == 1)
+                    groupOf(groups[i])
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: groupOf(groups[i])),
+                        const SizedBox(width: groupGutter),
+                        Expanded(
+                          child: i + 1 < groups.length
+                              ? groupOf(groups[i + 1])
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
+                    ),
+                ],
+              ],
+            );
+          },
+        ),
       ],
     );
   }
