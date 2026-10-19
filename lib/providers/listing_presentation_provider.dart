@@ -6,65 +6,96 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data_model/data_model.dart';
 import 'connection_settings_provider.dart';
 
-const _presentationKey = 'Kalinka.listingPresentation';
+const _presentationKey = 'Kalinka.listingPresentation.v2';
 
-/// How a listing of one kind of item is laid out: artwork in a grid, or rows.
+/// Where choices were kept per kind of item, before each listing had its own.
+const _familyPresentationKey = 'Kalinka.listingPresentation';
+
+/// How many listings' choices are kept; the least recently changed go first.
+const _remembered = 200;
+
+/// How a listing is laid out: artwork in a grid, or rows.
 enum ListingPresentation { grid, list }
 
-/// Listings whose Grid/List choice is remembered together. A choice made on
-/// one album catalog holds for every album catalog; filters and Home previews
-/// keep their own settings.
-enum ListingFamily {
-  albums(ListingPresentation.grid),
-  artists(ListingPresentation.grid),
-  playlists(ListingPresentation.list);
+/// A listing that can be laid out either way, by the browse item it is.
+class ListingLayout {
+  /// The browse item the listing is, under which a choice is kept.
+  final String id;
 
+  /// What its items are, as its catalog declares; null when it does not.
+  final PreviewContentType? contentType;
+
+  /// How it is laid out until a choice is made for it on this device.
   final ListingPresentation byDefault;
 
-  const ListingFamily(this.byDefault);
+  const ListingLayout(this.id, {this.contentType, required this.byDefault});
 
-  /// The family a listing of [kind] belongs to; null for mixed or unknown
-  /// listings, which keep their rows.
-  static ListingFamily? of(PreviewContentType? kind) => switch (kind) {
-    PreviewContentType.album => albums,
-    PreviewContentType.artist => artists,
-    PreviewContentType.playlist => playlists,
-    _ => null,
+  /// From the preview its catalog declares: image cards and carousels open as
+  /// a grid, anything else as rows. Null for a listing of tracks, which only
+  /// rows show.
+  static ListingLayout? of(String id, Preview? preview) {
+    final contentType = preview?.contentType;
+    if (contentType == PreviewContentType.track) return null;
+    return ListingLayout(
+      id,
+      contentType: contentType,
+      byDefault: switch (preview?.type) {
+        PreviewType.imageText ||
+        PreviewType.carousel => ListingPresentation.grid,
+        _ => ListingPresentation.list,
+      },
+    );
+  }
+
+  /// Whether its rows are compact enough to set two or three across a wide
+  /// pane: a listing of one kind of album, artist or playlist.
+  bool get rowsAcross => switch (contentType) {
+    PreviewContentType.album ||
+    PreviewContentType.artist ||
+    PreviewContentType.playlist => true,
+    _ => false,
   };
 }
 
-/// The device's Grid/List choice per [ListingFamily].
+/// The device's Grid/List choice per listing, by browse item id.
 class ListingPresentationNotifier
-    extends Notifier<Map<ListingFamily, ListingPresentation>> {
+    extends Notifier<Map<String, ListingPresentation>> {
   late SharedPreferences _prefs;
 
   @override
-  Map<ListingFamily, ListingPresentation> build() {
+  Map<String, ListingPresentation> build() {
     _prefs = ref.read(sharedPrefsProvider);
+    _prefs.remove(_familyPresentationKey);
     final json = _prefs.getString(_presentationKey);
     if (json == null) return const {};
     try {
       final decoded = jsonDecode(json) as Map<String, dynamic>;
+      final names = ListingPresentation.values.asNameMap();
       return {
-        for (final family in ListingFamily.values)
-          family: ?ListingPresentation.values.asNameMap()[decoded[family.name]],
+        for (final MapEntry(:key, :value) in decoded.entries)
+          key: ?names[value],
       };
     } catch (_) {
       return const {};
     }
   }
 
-  ListingPresentation of(ListingFamily family) =>
-      state[family] ?? family.byDefault;
+  ListingPresentation of(ListingLayout layout) =>
+      state[layout.id] ?? layout.byDefault;
 
-  void set(ListingFamily family, ListingPresentation presentation) {
-    if (of(family) == presentation) return;
-    state = {...state, family: presentation};
+  void set(ListingLayout layout, ListingPresentation presentation) {
+    if (state[layout.id] == presentation) return;
+    // Re-inserted, so the most recently changed are the ones kept.
+    final next = {...state}..remove(layout.id);
+    next[layout.id] = presentation;
+    while (next.length > _remembered) {
+      next.remove(next.keys.first);
+    }
+    state = next;
     _prefs.setString(
       _presentationKey,
       jsonEncode({
-        for (final MapEntry(:key, :value) in state.entries)
-          key.name: value.name,
+        for (final MapEntry(:key, :value) in next.entries) key: value.name,
       }),
     );
   }
@@ -73,5 +104,5 @@ class ListingPresentationNotifier
 final listingPresentationProvider =
     NotifierProvider<
       ListingPresentationNotifier,
-      Map<ListingFamily, ListingPresentation>
+      Map<String, ListingPresentation>
     >(ListingPresentationNotifier.new);
