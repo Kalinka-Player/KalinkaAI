@@ -1321,8 +1321,14 @@ class _SuggestionChip extends StatelessWidget {
 
   const _SuggestionChip({required this.suggestion, required this.onTap});
 
-  /// First match wins: the activity is the more telling word.
-  static const _marks = <(List<String>, IconData)>[
+  /// First match wins: the activity is the more telling word. Each set of
+  /// words is one pattern, compiled once.
+  static final _marks = [
+    for (final (words, icon) in _markWords)
+      (RegExp('\\b(?:${words.join('|')})\\b'), icon),
+  ];
+
+  static const _markWords = <(List<String>, IconData)>[
     (['focus', 'study', 'studying', 'work', 'read'], Icons.menu_book_outlined),
     (['drive'], Icons.directions_car_outlined),
     (['dinner'], Icons.restaurant_outlined),
@@ -1345,10 +1351,8 @@ class _SuggestionChip extends StatelessWidget {
 
   IconData get _mark {
     final words = suggestion.query.toLowerCase();
-    for (final (keys, icon) in _marks) {
-      if (keys.any((key) => RegExp('\\b$key\\b').hasMatch(words))) {
-        return icon;
-      }
+    for (final (pattern, icon) in _marks) {
+      if (pattern.hasMatch(words)) return icon;
     }
     if (suggestion.context.startsWith('holiday:')) {
       return Icons.celebration_outlined;

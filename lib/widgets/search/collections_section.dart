@@ -268,6 +268,13 @@ class CollectionsEmptyCard extends ConsumerWidget {
   }
 }
 
+const _compactGap = 16.0;
+
+/// Compact rows two or three across, [_compactGap] apart, where each keeps
+/// room for its art, name, detail and actions; one column otherwise.
+int compactColumnsFor(double width, double scale) =>
+    ((width + _compactGap) / (360 * scale + _compactGap)).floor().clamp(1, 3);
+
 /// Collections in compact rows: one under another on a narrow pane, two or
 /// three across a wide one in reading order, so a lone collection keeps a
 /// row's width instead of stretching across the pane.
@@ -276,16 +283,14 @@ class _CollectionColumns extends StatelessWidget {
 
   const _CollectionColumns({required this.items});
 
-  static const _gap = 16.0;
+  static const _gap = _compactGap;
 
   @override
   Widget build(BuildContext context) {
     final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = ((constraints.maxWidth + _gap) / (360 * scale + _gap))
-            .floor()
-            .clamp(1, 3);
+        final columns = compactColumnsFor(constraints.maxWidth, scale);
         if (columns == 1) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

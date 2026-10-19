@@ -52,6 +52,10 @@ class SearchTrackRow extends ConsumerStatefulWidget {
   final String? containerId;
   final int? containerIndex;
 
+  /// How many tracks the container lists, where known. Fewer queued means
+  /// the server left some out, and this one's place is looked up instead.
+  final int? containerSize;
+
   /// Fits three digits of the 14px mono numeral; longer numbers scale down.
   static const double folderNumberWidth = 28;
 
@@ -65,6 +69,7 @@ class SearchTrackRow extends ConsumerStatefulWidget {
     this.folderTrackNumber,
     this.containerId,
     this.containerIndex,
+    this.containerSize,
   });
 
   @override
@@ -127,7 +132,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     try {
       if (inContainer) {
         final added = await api.replace([container]);
-        await api.play(place);
+        await api.play(await _containerIndex(api, place, added.count));
         final n = added.count ?? 0;
         toast.endQueueActivity('Playing $n ${n == 1 ? 'track' : 'tracks'}');
       } else if (useContext) {
@@ -153,6 +158,26 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
         showSafeToast('Failed to play: $e', isError: true);
       }
     }
+  }
+
+  // The server leaves out tracks it can't resolve, which moves this row's
+  // place up; if the tapped one went, play the nearest kept one.
+  Future<int> _containerIndex(
+    KalinkaPlayerProxy api,
+    int place,
+    int? kept,
+  ) async {
+    final size = widget.containerSize;
+    if (kept != null && size != null && kept >= size) return place;
+    final queued = (await api.listTracks(limit: place + 1)).items;
+    if (place < queued.length && queued[place].id == widget.item.id) {
+      return place;
+    }
+    final at = queued.lastIndexWhere((t) => t.id == widget.item.id);
+    if (at >= 0) return at;
+    return queued.isEmpty
+        ? 0
+        : (place < queued.length ? place : queued.length - 1);
   }
 
   // The server leaves out tracks it can't resolve. If the tapped one went,
