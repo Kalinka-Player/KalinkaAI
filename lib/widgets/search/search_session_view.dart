@@ -48,17 +48,36 @@ const double _kPaneEdgeFade = 165;
 /// bottom, so this is the bloom's reach and not an edge anything can see.
 const double _kDiscoverBackdropHeight = 340;
 
+const _kBloomCentre = Alignment(-0.85, -0.75);
+const double _kBloomRadius = 1.35;
+
 /// The crimson bloom over the Discover root: off the top-left corner, at the
 /// window's edge rather than the player's pane, rising behind the title bar
-/// and the status-bar inset.
+/// and the status-bar inset, and across a wide pane to near its right edge.
 final _kDiscoverBloom = RadialGradient(
-  center: const Alignment(-0.85, -0.75),
-  radius: 1.35,
+  center: _kBloomCentre,
+  radius: _kBloomRadius,
+  transform: const _AcrossPane(),
   colors: [
     KalinkaColors.accent.withValues(alpha: 0.26),
     KalinkaColors.accent.withValues(alpha: 0),
   ],
 );
+
+/// Widens the bloom about its centre, so on a pane wider than its circle
+/// reaches it is gone just short of the right edge.
+class _AcrossPane extends GradientTransform {
+  const _AcrossPane();
+
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
+    final stretch = 0.95 * bounds.width / (_kBloomRadius * bounds.shortestSide);
+    if (stretch <= 1) return null;
+    final centre = _kBloomCentre.withinRect(bounds).dx;
+    return Matrix4.diagonal3Values(stretch, 1, 1)
+      ..setTranslationRaw(centre * (1 - stretch), 0, 0);
+  }
+}
 
 /// What ends the bloom: the ground colour brought up over it just under the
 /// search entry, in about sixty pixels. The bloom is still tinted where its
@@ -1270,8 +1289,10 @@ class _DiscoverHero extends StatelessWidget {
   }
 }
 
-/// The header artwork, from the top of the bar at the window's left edge;
-/// mirrored, so it fades out rightwards and downwards.
+/// The header artwork, from the top of the bar across the pane from its left
+/// edge; mirrored, so it fades out rightwards, near the right edge, and
+/// downwards. A pane wider than 16:9 allows stretches it rather than growing
+/// it taller than the hero.
 class _HeroArtwork extends StatelessWidget {
   const _HeroArtwork();
 
@@ -1279,7 +1300,7 @@ class _HeroArtwork extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = math.min(constraints.maxWidth * 0.64, 440.0);
+        final width = constraints.maxWidth;
         return Align(
           alignment: Alignment.topLeft,
           child: Padding(
@@ -1288,7 +1309,7 @@ class _HeroArtwork extends StatelessWidget {
               flipX: true,
               child: SizedBox(
                 width: width,
-                height: width * 9 / 16,
+                height: math.min(width * 9 / 16, 300.0),
                 // Toned in the bloom's family: deep berry where it fades in,
                 // warming to blush on the bright threads.
                 child: ShaderMask(
@@ -1309,7 +1330,7 @@ class _HeroArtwork extends StatelessWidget {
                   ).createShader(bounds),
                   child: SvgPicture.asset(
                     'assets/images/header_artwork.svg',
-                    fit: BoxFit.contain,
+                    fit: BoxFit.fill,
                   ),
                 ),
               ),
