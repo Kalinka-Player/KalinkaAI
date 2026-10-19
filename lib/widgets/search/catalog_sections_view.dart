@@ -10,6 +10,7 @@ import '../browse_rows_shimmer.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/browse_navigation_scope.dart';
 import '../shelf_heading.dart';
+import 'browse_visit_scope.dart';
 
 /// Items a shelf shows when its source did not say.
 const _defaultPreviewLimit = 5;
@@ -179,15 +180,13 @@ class _SectionShelf extends ConsumerWidget {
     final title = section.name ?? catalog.title;
     final type = CatalogPage.typeOf(section);
     final navigation = BrowseNavigationScope.maybeOf(context);
+    final visit = visitOf(context, ref);
     void openSection() {
       final page = CatalogPage.fromItem(
         section,
-        provider: ref.read(searchSessionProvider).catalogPage.provider,
+        provider: visit.catalogPage.provider,
       );
-      final filter = ref
-          .read(searchSessionProvider)
-          .catalogFilter
-          .fittedTo(page.filterCapabilities);
+      final filter = visit.catalogFilter.fittedTo(page.filterCapabilities);
       ref.read(searchSessionProvider.notifier).openPage(page, filter: filter);
     }
 

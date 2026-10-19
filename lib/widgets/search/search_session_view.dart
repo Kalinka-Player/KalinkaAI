@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../data_model/browse_filters.dart';
+import '../browse_filters/browse_filter_form.dart' show resultKindLabel;
 import '../../providers/catalog_cards_provider.dart';
 import '../../providers/connection_state_provider.dart';
 import '../../providers/indexer_status_provider.dart';
@@ -16,7 +17,6 @@ import '../../providers/source_modules_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../providers/shell_nav_provider.dart';
 import '../../theme/app_theme.dart';
-import '../breadcrumb_crumb.dart';
 import '../connection_banner.dart';
 import '../kalinka_top_bar.dart';
 import '../browse_filters/search_filter_button.dart';
@@ -26,6 +26,7 @@ import '../overlay_card.dart';
 import '../selection_overlay.dart';
 import '../server_chip.dart';
 import 'album_page_header.dart';
+import 'browse_visit_scope.dart';
 import 'catalog_page_view.dart';
 import '../home/catalog_pin_button.dart';
 import '../home/home_layout.dart';
@@ -110,8 +111,15 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   // catalog replaces the root, and the list comes back at it.
   final _discoverOffset = ValueNotifier<double>(0);
   late final ScrollController _discoverScroll;
+  // The album backdrop follows the shown visit's scroll and header; each
+  // retained visit keeps its own, so Back lands with them as they were.
   final _albumOffset = ValueNotifier<double>(0);
   final _albumHeaderHeight = ValueNotifier<double>(0);
+  final _albumOffsets = <int, double>{};
+  final _albumHeaderHeights = <int, double>{};
+
+  /// How many of the latest visits stay built under the shown one.
+  static const _retainedVisits = 6;
 
   // Whether the animated search overlay is up. Driven by _openSearch /
   // _closeSearch (not by raw focus), so dismissing the keyboard alone keeps
@@ -413,15 +421,12 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
       : session.catalogFilter;
 
   /// Whether nothing is left to unwind: the system back may leave the app.
-  bool _atTopLevel(SearchSessionState session) =>
-      !_focused &&
-      !_filtersOpen &&
-      session.activeView == FindMusicView.catalogs &&
-      session.catalogPage.isRoot;
+  bool _atTopLevel(SearchSessionState session, {required bool selecting}) =>
+      !_focused && !_filtersOpen && !selecting && session.atHome;
 
-  /// One back press unwinds one layer (MD §11): overlay → Results/catalog
-  /// page → Catalogs root. Shared by the title-bar arrow and the system back
-  /// gesture; at the root the back leaves the app.
+  /// One back press unwinds one layer: the search overlay, the filter card,
+  /// a selection, then the previous visit. Shared by the title-bar arrow and
+  /// the system back gesture; at Home the back leaves the app.
   void _handleBack() {
     if (_focused) {
       _closeSearch();
@@ -432,27 +437,12 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
       _closeFilters();
       return;
     }
-    final session = ref.read(searchSessionProvider);
-    if (session.activeView == FindMusicView.results) {
-      ref
-          .read(searchSessionProvider.notifier)
-          .selectView(FindMusicView.catalogs);
+    final selection = ref.read(selectionStateProvider.notifier);
+    if (ref.read(selectionStateProvider).isActive) {
+      selection.exitSelectionMode();
       return;
     }
-    if (!session.catalogPage.isRoot) {
-      ref.read(searchSessionProvider.notifier).backFromCatalog();
-    }
-  }
-
-  /// The HOME crumb skips the page stack that the back arrow unwinds.
-  void _goHome() {
-    if (_focused || _filtersOpen) {
-      _handleBack();
-      return;
-    }
-    ref.read(searchSessionProvider.notifier)
-      ..backToCatalogsRoot()
-      ..selectView(FindMusicView.catalogs);
+    ref.read(searchSessionProvider.notifier).goBack();
   }
 
   @override
@@ -461,9 +451,16 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     final onAlbum =
         session.activeView == FindMusicView.catalogs &&
         session.catalogPage.isAlbum;
-    ref.listen(searchSessionProvider.select((s) => s.catalogPage.id), (_, _) {
-      _albumOffset.value = 0;
-      _albumHeaderHeight.value = 0;
+    ref.listen(searchSessionProvider.select((s) => s.visitId), (_, visit) {
+      _albumOffset.value = _albumOffsets[visit] ?? 0;
+      _albumHeaderHeight.value = _albumHeaderHeights[visit] ?? 0;
+      final kept = {
+        for (final previous in ref.read(searchSessionProvider).previousVisits)
+          previous.visitId,
+        visit,
+      };
+      _albumOffsets.removeWhere((id, _) => !kept.contains(id));
+      _albumHeaderHeights.removeWhere((id, _) => !kept.contains(id));
     });
 
     // ...and drop the flag too, so back does not spend a press closing a card
@@ -478,7 +475,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     // listing — for another catalog, the root or the results — ends it
     // rather than keeping a batch bar over rows nothing on screen still shows.
     ref.listen(
-      searchSessionProvider.select((s) => (s.activeView, s.shownListing.id)),
+      searchSessionProvider.select((s) => s.visitId),
       (_, _) => ref.read(selectionStateProvider.notifier).exitSelectionMode(),
     );
 
@@ -501,7 +498,9 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     // in-screen layer can still unwind (the parent screen's PopScope leaves it
     // alone).
     return PopScope(
-      canPop: !widget.handlesBack || _atTopLevel(session),
+      canPop:
+          !widget.handlesBack ||
+          _atTopLevel(session, selecting: selectionActive),
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && widget.handlesBack) _handleBack();
       },
@@ -524,8 +523,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
             // rising behind the bar and the status-bar inset so the two read
             // as one surface. It moves one-for-one with the introduction,
             // including overscroll, without rebuilding the content below.
-            if (session.activeView == FindMusicView.catalogs &&
-                session.catalogPage.isRoot)
+            if (session.atHome)
               Positioned(
                 top: 0,
                 left: 0,
@@ -611,19 +609,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                   )
                 else
                   _buildHeader(session),
-                // Both views stay mounted (IndexedStack) so scroll and inline
-                // expansion survive view switches without a refetch.
-                Expanded(
-                  child: IndexedStack(
-                    index: session.activeView == FindMusicView.results ? 1 : 0,
-                    children: [
-                      _buildCatalogsTab(session),
-                      session.resultsAvailable
-                          ? const ResultsView()
-                          : const SizedBox.shrink(),
-                    ],
-                  ),
-                ),
+                Expanded(child: _buildVisits(session)),
               ],
             ),
             // Only while there is something to narrow: a reconnect can reset
@@ -647,40 +633,81 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     );
   }
 
-  /// The Catalogs view: its root (search invitation + cards) or the one open
-  /// catalog page.
-  Widget _buildCatalogsTab(SearchSessionState session) {
-    if (!session.catalogPage.isRoot) {
-      // Metrics notifications also cover a list replaced by its loading,
-      // empty or error state, which starts at the top without scrolling.
-      return NotificationListener<Notification>(
-        onNotification: (notification) {
-          final (depth, metrics) = switch (notification) {
-            ScrollNotification n => (n.depth, n.metrics),
-            ScrollMetricsNotification n => (n.depth, n.metrics),
-            _ => (-1, null),
-          };
-          if (session.catalogPage.isAlbum &&
-              depth == 0 &&
-              metrics != null &&
-              metrics.axis == Axis.vertical) {
-            // Overscroll at the top keeps the cover in place.
-            _albumOffset.value = math.max(0, metrics.pixels);
-          }
-          return false;
-        },
-        child: CatalogPageView(
-          key: ValueKey(session.catalogPage.id),
-          page: session.catalogPage,
-          onAlbumHeaderHeight: session.catalogPage.isAlbum
-              ? (height) => _albumHeaderHeight.value = height
-              : null,
-          onBackToCatalogs: () =>
-              ref.read(searchSessionProvider.notifier).backToCatalogsRoot(),
-        ),
-      );
+  /// Home, with the latest visits built over it and only the shown one on
+  /// screen. A visit Back returns to keeps its loaded rows, filters and
+  /// scroll; older ones are built again when reached.
+  Widget _buildVisits(SearchSessionState session) {
+    final visits = [
+      for (final visit in [...session.previousVisits, session])
+        if (!visit.atHome) visit,
+    ];
+    final retained = visits.length > _retainedVisits
+        ? visits.sublist(visits.length - _retainedVisits)
+        : visits;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _shownIf(session.atHome, _buildCatalogsRoot(session)),
+        for (final visit in retained)
+          KeyedSubtree(
+            key: ValueKey(visit.visitId),
+            child: _shownIf(
+              visit.visitId == session.visitId,
+              BrowseVisitScope(visit: visit, child: _buildVisit(visit)),
+            ),
+          ),
+      ],
+    );
+  }
+
+  static Widget _shownIf(bool shown, Widget child) => Offstage(
+    offstage: !shown,
+    child: TickerMode(enabled: shown, child: child),
+  );
+
+  bool _isShown(int visitId) =>
+      ref.read(searchSessionProvider).visitId == visitId;
+
+  Widget _buildVisit(SearchSessionState visit) {
+    if (visit.activeView == FindMusicView.results) {
+      return visit.resultsAvailable
+          ? const ResultsView()
+          : const SizedBox.shrink();
     }
-    return _buildCatalogsRoot(session);
+    final page = visit.catalogPage;
+    final id = visit.visitId;
+    // Metrics notifications also cover a list replaced by its loading,
+    // empty or error state, which starts at the top without scrolling.
+    return NotificationListener<Notification>(
+      onNotification: (notification) {
+        final (depth, metrics) = switch (notification) {
+          ScrollNotification n => (n.depth, n.metrics),
+          ScrollMetricsNotification n => (n.depth, n.metrics),
+          _ => (-1, null),
+        };
+        if (page.isAlbum &&
+            depth == 0 &&
+            metrics != null &&
+            metrics.axis == Axis.vertical) {
+          // Overscroll at the top keeps the cover in place.
+          final offset = math.max(0.0, metrics.pixels);
+          _albumOffsets[id] = offset;
+          if (_isShown(id)) _albumOffset.value = offset;
+        }
+        return false;
+      },
+      child: CatalogPageView(
+        page: page,
+        onAlbumHeaderHeight: page.isAlbum
+            ? (height) {
+                _albumHeaderHeights[id] = height;
+                if (_isShown(id)) _albumHeaderHeight.value = height;
+              }
+            : null,
+        onBackToCatalogs: () =>
+            ref.read(searchSessionProvider.notifier).backToCatalogsRoot(),
+      ),
+    );
   }
 
   /// The top level's bar is the app's own: wordmark and connection chip.
@@ -688,7 +715,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// arrow being the one navigation control (layered back, [_handleBack]).
   Widget _buildHeader(SearchSessionState session) {
     final onResults = session.activeView == FindMusicView.results;
-    if (!onResults && session.catalogPage.isRoot) {
+    if (session.atHome) {
       return ValueListenableBuilder<double>(
         valueListenable: _discoverOffset,
         builder: (context, offset, child) => ColoredBox(
@@ -740,10 +767,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                   ),
                 ),
               ),
-              // 2, not 8: the DISCOVER crumb brings 6 of its own so its
-              // hover outline has somewhere to sit.
-              const SizedBox(width: 2),
-              Expanded(child: _buildBreadcrumb(session, onResults)),
+              const SizedBox(width: 8),
+              Expanded(child: _buildTitle(session)),
               if (!onResults && session.shownListing.isCatalog)
                 CatalogPinButton(
                   page: session.shownListing,
@@ -773,43 +798,32 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     );
   }
 
-  /// The navigation trail (`HOME › CATEGORY`); the muted HOME segment is a
-  /// target that returns straight to the root, past any page stack.
-  Widget _buildBreadcrumb(SearchSessionState session, bool onResults) {
-    final String? current = onResults
-        ? 'RESULTS'
-        : (session.catalogPage.isRoot
-              ? null
-              : (session.catalogPage.title ?? '').toUpperCase());
-    final style = KalinkaTextStyles.trayTitle;
-
-    return Row(
-      children: [
-        BreadcrumbCrumb(
-          label: 'HOME',
-          semanticsLabel: 'Back to Home',
-          style: style,
-          // At the root there is nowhere to go: HOME is the page itself.
-          onTap: current == null ? null : _goHome,
+  /// What the shown visit is, and nothing about how it was reached: Back
+  /// returns along the way it came, which a fixed path would misstate.
+  Widget _buildTitle(SearchSessionState session) {
+    final String title;
+    if (session.activeView == FindMusicView.results) {
+      title = switch (session.expandedBlock) {
+        null => 'Results',
+        (:final kind, :final source) => [
+          resultKindLabel(kind),
+          if (source != null && (session.results?.sources.length ?? 0) > 1)
+            session.results!.sources.titleOf(source),
+        ].join(' · '),
+      };
+    } else {
+      title = session.catalogPage.title ?? '';
+    }
+    return Semantics(
+      header: true,
+      child: Text(
+        title.toUpperCase(),
+        style: KalinkaTextStyles.trayTitle.copyWith(
+          color: KalinkaColors.textPrimary,
         ),
-        if (current != null) ...[
-          Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: Text(
-              '›',
-              style: style.copyWith(color: KalinkaColors.textMuted),
-            ),
-          ),
-          Flexible(
-            child: Text(
-              current,
-              style: style.copyWith(color: KalinkaColors.textPrimary),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ],
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 
