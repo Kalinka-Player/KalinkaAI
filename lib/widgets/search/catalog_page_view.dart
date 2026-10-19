@@ -11,6 +11,7 @@ import '../../providers/collection_edit_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/indexer_status_provider.dart';
 import '../../providers/kalinka_player_api_provider.dart';
+import '../../providers/listing_presentation_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../providers/url_resolver.dart';
@@ -18,11 +19,14 @@ import '../../theme/app_theme.dart';
 import '../browse_filters/active_filter_chips.dart';
 import '../browse_filters/browse_filter_form.dart' show filterTypeLabel;
 import '../browse_filters/filters_match_nothing.dart';
+import '../browse_filters/presentation_toggle.dart';
 import '../browse_rows_shimmer.dart';
 import '../infinite_list_view.dart';
+import '../loading_shimmer.dart';
 import '../measure_size.dart';
 import '../page_banner.dart';
 import '../search_cards/action_pill_button.dart';
+import '../search_cards/artwork_grid_card.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/browse_navigation_scope.dart';
 import '../search_cards/editable_track_list.dart';
@@ -206,6 +210,17 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     void setQuery(BrowseFilterQuery next) => notifier.setCatalogFilter(next);
 
     final listing = page.folderLayout ? visit.shownListing : page;
+    // A listing of one kind of item — declared by its source, or chosen to
+    // narrow it to — lays out as that family's chosen Grid or List.
+    final family = page.folderLayout || isAlbum || page.isPlaylist
+        ? null
+        : ListingFamily.of(
+            _contentTypeOf(expandedShelf) ?? page.preview?.contentType,
+          );
+    final grid =
+        family != null &&
+        (ref.watch(listingPresentationProvider)[family] ?? family.byDefault) ==
+            ListingPresentation.grid;
     // Any folder shown, the same one again included, opens at its top.
     if (listing.id != _shownListingId) {
       _shownListingId = listing.id;
@@ -238,6 +253,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             expandedShelf: expandedShelf,
             onCollapse: () => notifier.expandShelf(null),
             total: _total < 0 ? null : _total,
+            family: family,
           );
 
     // A collection being edited lists its tracks to be moved and dropped
@@ -278,7 +294,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     bool numberedInFolder(BrowseItem item) =>
         page.folderLayout && item.track != null;
 
-    InfiniteListView<BrowseItem> listOf(Widget? head) => InfiniteListView(
+    InfiniteListView<BrowseItem> listOf(
+      Widget? head, {
+      int columns = 1,
+      bool grid = false,
+    }) => InfiniteListView(
       key: page.folderLayout
           ? ValueKey(listing.id)
           : PageStorageKey(listing.id),
@@ -291,6 +311,10 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       // separators carry their own 16px inset instead.
       padding: const EdgeInsets.only(bottom: 24),
       header: head,
+      columns: columns,
+      rowPadding: EdgeInsets.symmetric(horizontal: grid ? 10 : 16),
+      columnGap: grid ? 8 : 16,
+      rowGap: grid ? 12 : 6,
       fetchChunk: (offset, limit) async {
         final api = ref.read(kalinkaProxyProvider);
         final list = await api.browse(
@@ -321,6 +345,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         ),
       ),
       itemBuilder: (context, item, index, loaded) {
+        if (grid && _inGrid(item)) return ArtworkGridCard(item: item);
         // Track rows play the whole loaded list as a queue from the
         // tapped row; as more chunks scroll in, the context grows.
         final trackIds = trackIdsMemo.of(loaded);
@@ -360,6 +385,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             : page.folderLayout
             ? _groupHeading(index, loaded)
             : null;
+        // Rows across columns are already inset by the listing.
+        if (columns > 1) return row;
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: heading == null
@@ -370,14 +397,18 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                 ),
         );
       },
-      initialPlaceholder: const Padding(
-        padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
-        child: BrowseRowsShimmer(count: 8),
-      ),
-      loadMorePlaceholder: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16),
-        child: BrowseRowsShimmer(count: 3, leadingDivider: true),
-      ),
+      initialPlaceholder: grid
+          ? _GridShimmer(columns: columns, rows: 3)
+          : const Padding(
+              padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: BrowseRowsShimmer(count: 8),
+            ),
+      loadMorePlaceholder: grid
+          ? _GridShimmer(columns: columns, rows: 1)
+          : const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: BrowseRowsShimmer(count: 3, leadingDivider: true),
+            ),
       emptyBuilder: (context) => _emptyState(page, filter, onReset: setQuery),
       // The error state replaces only the rows, never the header — a filter
       // that failed has to stay reachable to be undone.
@@ -410,6 +441,21 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               ),
               Expanded(child: listOf(null)),
             ],
+          );
+        },
+      );
+    }
+    if (family != null || (page.canEdit && !page.isPlaylist)) {
+      final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          return listOf(
+            header,
+            grid: grid,
+            columns: grid
+                ? _gridColumns(width - 20, scale)
+                : _compactColumns(width - 32, scale),
           );
         },
       );
@@ -456,6 +502,35 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         ),
       ],
     );
+  }
+
+  static PreviewContentType? _contentTypeOf(SearchType? type) => switch (type) {
+    SearchType.album => PreviewContentType.album,
+    SearchType.artist => PreviewContentType.artist,
+    SearchType.playlist => PreviewContentType.playlist,
+    _ => null,
+  };
+
+  /// What an artwork grid shows as a card; anything else keeps its row.
+  static bool _inGrid(BrowseItem item) => switch (item.browseType) {
+    BrowseType.album || BrowseType.artist || BrowseType.playlist => true,
+    _ => false,
+  };
+
+  /// Covers of about 180–220 across, more columns as the pane grows, never
+  /// narrower than a readable caption.
+  static int _gridColumns(double width, double scale) {
+    const gap = 8.0;
+    final wanted = ((width + gap) / (220 * scale + gap)).ceil();
+    final fits = ((width + gap) / (140 * scale + gap)).floor();
+    return wanted.clamp(1, fits < 1 ? 1 : fits).clamp(1, 10);
+  }
+
+  /// Compact items two or three across where each keeps room for its art,
+  /// name, detail and actions; one column otherwise.
+  static int _compactColumns(double width, double scale) {
+    const gap = 16.0;
+    return ((width + gap) / (360 * scale + gap)).floor().clamp(1, 3);
   }
 
   Widget? _discHeading(int index, List<BrowseItem> loaded, bool multiDisc) {
@@ -566,6 +641,10 @@ class _CatalogHeader extends StatelessWidget {
   /// How many items the listing holds, once its source has said.
   final int? total;
 
+  /// The family whose Grid/List choice lays the listing out; null where the
+  /// listing has only rows.
+  final ListingFamily? family;
+
   const _CatalogHeader({
     required this.page,
     required this.capabilities,
@@ -574,6 +653,7 @@ class _CatalogHeader extends StatelessWidget {
     required this.expandedShelf,
     required this.onCollapse,
     required this.total,
+    this.family,
   });
 
   @override
@@ -585,6 +665,14 @@ class _CatalogHeader extends StatelessWidget {
           page: page,
           showLibraryRescan: LibraryRescanControl.isLibraryPage(page.id),
         ),
+        if (family case final family?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: PresentationToggle(family: family),
+            ),
+          ),
         if (page.isPlaylist)
           ContainerPageActions(page: page, total: total)
         else if (page.canEdit)
@@ -1089,6 +1177,60 @@ class _CatalogEmpty extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text('Nothing here yet', style: KalinkaTextStyles.cardTitle),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Where a grid's covers will be, while they load.
+class _GridShimmer extends StatelessWidget {
+  final int columns;
+  final int rows;
+
+  const _GridShimmer({required this.columns, required this.rows});
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerPulse(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+        child: Column(
+          children: [
+            for (var r = 0; r < rows; r++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var c = 0; c < columns; c++) ...[
+                      if (c > 0) const SizedBox(width: 20),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AspectRatio(
+                              aspectRatio: 1,
+                              child: ShimmerBlock(radius: 10),
+                            ),
+                            SizedBox(height: 10),
+                            FractionallySizedBox(
+                              widthFactor: 0.7,
+                              child: ShimmerBlock(height: 14, radius: 4),
+                            ),
+                            SizedBox(height: 6),
+                            FractionallySizedBox(
+                              widthFactor: 0.45,
+                              child: ShimmerBlock(height: 12, radius: 4),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
           ],
         ),
       ),
