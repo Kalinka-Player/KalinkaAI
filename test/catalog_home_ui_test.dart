@@ -25,6 +25,7 @@ import 'package:kalinka/widgets/home/catalog_tile.dart';
 import 'package:kalinka/widgets/home/preview_shelf.dart';
 import 'package:kalinka/widgets/home/home_preview_choices.dart';
 import 'package:kalinka/widgets/home/home_preview_illustration.dart';
+import 'package:kalinka/widgets/kalinka_bottom_sheet.dart' show kSheetMaxWidth;
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/search/search_zero_state.dart';
 import 'package:kalinka/widgets/search_cards/search_album_row.dart';
@@ -165,11 +166,12 @@ void main() {
       void expectPanelBounds(double width) {
         final choices = find.byType(HomePreviewChoices);
         final rect = tester.getRect(choices);
-        expect(rect.left, closeTo(0, 1));
-        expect(
-          rect.right,
-          closeTo(width - kalinkaPlayerPaneWidth(width) - 1, 1),
-        );
+        // Over the Home panel, centred on it, and no wider than a sheet gets.
+        final panel = width - kalinkaPlayerPaneWidth(width) - 1;
+        expect(rect.left, greaterThanOrEqualTo(-1));
+        expect(rect.right, lessThanOrEqualTo(panel + 1));
+        expect(rect.width, lessThanOrEqualTo(kSheetMaxWidth));
+        expect(rect.center.dx, closeTo(panel / 2, 1));
         final scroll = find.ancestor(
           of: choices,
           matching: find.byType(SingleChildScrollView),

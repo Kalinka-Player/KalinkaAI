@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
 import 'sheet_anchor.dart';
 import 'tap_highlight.dart';
+
+/// The widest a sheet grows: Material's own cap, kept for one anchored to a
+/// wide panel too, so its rows stay a readable length.
+const double kSheetMaxWidth = 640;
 
 /// Shows a modal bottom sheet styled with the Kalinka visual identity.
 ///
@@ -10,7 +15,8 @@ import 'tap_highlight.dart';
 /// The [contentBuilder] receives the sheet context and should return the
 /// sheet body (rows, cards, etc.) — the chrome is added automatically.
 /// When launched from inside a [SheetAnchor] (the tablet layout's panels),
-/// the sheet slides up over that panel instead of the window centre.
+/// the sheet slides up over that panel instead of the window centre, at most
+/// [kSheetMaxWidth] wide and centred on it.
 ///
 /// The body is bounded by the room there is, so a part of it that scrolls
 /// can be [Flexible]. [mayFillScreen] gives it the whole screen below the
@@ -75,6 +81,14 @@ Future<T?> showKalinkaBottomSheet<T>({
         ),
       );
       if (anchor == null) return sheet;
+      final capped = Align(
+        alignment: Alignment.bottomCenter,
+        heightFactor: 1,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: kSheetMaxWidth),
+          child: sheet,
+        ),
+      );
       // LayoutBuilder re-runs at layout time, after the page below (and so
       // the anchor panel) has laid out for the current window size — the
       // inset tracks live resizes, and falls back to full width if the
@@ -82,14 +96,13 @@ Future<T?> showKalinkaBottomSheet<T>({
       return LayoutBuilder(
         builder: (_, constraints) {
           final padding = SheetAnchor.paddingFor(anchor, constraints.maxWidth);
-          if (padding == EdgeInsets.zero) return sheet;
-          // The window-wide sheet's Material claims taps in the strip
-          // beside the panel, so the route's own barrier never sees them —
-          // this one restores tap-outside-to-close there.
+          // The window-wide sheet's Material claims taps beside the sheet,
+          // so the route's own barrier never sees them — this one restores
+          // tap-outside-to-close there.
           return Stack(
             children: [
               const Positioned.fill(child: ModalBarrier(color: null)),
-              Padding(padding: padding, child: sheet),
+              Padding(padding: padding, child: capped),
             ],
           );
         },
