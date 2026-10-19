@@ -454,7 +454,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: (width * 0.34).clamp(220.0, 380.0),
+                width: (width * 0.4).clamp(220.0, 520.0),
                 child: AlbumIdentityColumn(
                   page: page,
                   trackCount: _total < 0 ? null : _total,
