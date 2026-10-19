@@ -24,3 +24,16 @@ final artistRelationsProvider =
 /// A release on an artist's page: something with a page of its own. Loose
 /// tracks are the rest.
 bool isArtistRelease(BrowseItem item) => item.canBrowse;
+
+/// The artist's portrait, asked of the source for a page that was opened
+/// without one — from an album's artist line, say.
+final artistPortraitProvider = FutureProvider.family<String?, String>((
+  ref,
+  id,
+) async {
+  final item = await ref.watch(kalinkaProxyProvider).getMetadata(id);
+  return imagePathOf(item.image);
+});
+
+String? imagePathOf(AlbumImage? image) =>
+    image?.large ?? image?.small ?? image?.thumbnail;
