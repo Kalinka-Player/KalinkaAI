@@ -48,10 +48,11 @@ const double _kPaneEdgeFade = 165;
 /// bottom, so this is the bloom's reach and not an edge anything can see.
 const double _kDiscoverBackdropHeight = 340;
 
-/// The crimson bloom over the Discover root: off the top-right corner,
-/// rising behind the title bar and the status-bar inset.
+/// The crimson bloom over the Discover root: off the top-left corner, at the
+/// window's edge rather than the player's pane, rising behind the title bar
+/// and the status-bar inset.
 final _kDiscoverBloom = RadialGradient(
-  center: const Alignment(0.85, -0.75),
+  center: const Alignment(-0.85, -0.75),
   radius: 1.35,
   colors: [
     KalinkaColors.accent.withValues(alpha: 0.26),
@@ -558,28 +559,23 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
                             ),
                         child: RepaintBoundary(
                           key: const ValueKey('discover-backdrop'),
-                          child: _PaneEdgeFade(
-                            enabled: besidePlayer,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    gradient: _kDiscoverBloom,
-                                  ),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: _kDiscoverBloom,
                                 ),
-                                DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    gradient: _kDiscoverFadeOut,
-                                  ),
+                              ),
+                              DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: _kDiscoverFadeOut,
                                 ),
-                                const IgnorePointer(
-                                  child: ExcludeSemantics(
-                                    child: _HeroArtwork(),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                              const IgnorePointer(
+                                child: ExcludeSemantics(child: _HeroArtwork()),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -1208,7 +1204,7 @@ class _PaneEdgeFade extends StatelessWidget {
 }
 
 /// The Discover hero: the Playfair question and the resting
-/// search entry, over the tinted header artwork on the right. The text keeps
+/// search entry, over the tinted header artwork on the left. The text keeps
 /// to the left half (wrapping as needed); the crimson bloom behind it is
 /// painted once at the surface level, not here.
 class _DiscoverHero extends StatelessWidget {
@@ -1274,8 +1270,8 @@ class _DiscoverHero extends StatelessWidget {
   }
 }
 
-/// The header artwork, from the top of the bar to the window's right edge;
-/// it fades out leftwards and downwards, so the text reads over it.
+/// The header artwork, from the top of the bar at the window's left edge;
+/// mirrored, so it fades out rightwards and downwards.
 class _HeroArtwork extends StatelessWidget {
   const _HeroArtwork();
 
@@ -1285,33 +1281,36 @@ class _HeroArtwork extends StatelessWidget {
       builder: (context, constraints) {
         final width = math.min(constraints.maxWidth * 0.64, 440.0);
         return Align(
-          alignment: Alignment.topRight,
+          alignment: Alignment.topLeft,
           child: Padding(
             padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
-            child: SizedBox(
-              width: width,
-              height: width * 9 / 16,
-              // Toned in the bloom's family: deep berry where it fades in,
-              // warming to blush on the bright threads.
-              child: ShaderMask(
-                blendMode: BlendMode.srcIn,
-                shaderCallback: (bounds) => LinearGradient(
-                  begin: Alignment.bottomLeft,
-                  end: Alignment.topRight,
-                  colors: [
-                    KalinkaColors.accent.withValues(alpha: 0.7),
-                    KalinkaColors.accentTint.withValues(alpha: 0.75),
-                    Color.lerp(
-                      KalinkaColors.accentTint,
-                      KalinkaColors.textPrimary,
-                      0.6,
-                    )!.withValues(alpha: 0.8),
-                  ],
-                  stops: const [0, 0.5, 1],
-                ).createShader(bounds),
-                child: SvgPicture.asset(
-                  'assets/images/header_artwork.svg',
-                  fit: BoxFit.contain,
+            child: Transform.flip(
+              flipX: true,
+              child: SizedBox(
+                width: width,
+                height: width * 9 / 16,
+                // Toned in the bloom's family: deep berry where it fades in,
+                // warming to blush on the bright threads.
+                child: ShaderMask(
+                  blendMode: BlendMode.srcIn,
+                  shaderCallback: (bounds) => LinearGradient(
+                    begin: Alignment.bottomLeft,
+                    end: Alignment.topRight,
+                    colors: [
+                      KalinkaColors.accent.withValues(alpha: 0.7),
+                      KalinkaColors.accentTint.withValues(alpha: 0.75),
+                      Color.lerp(
+                        KalinkaColors.accentTint,
+                        KalinkaColors.textPrimary,
+                        0.6,
+                      )!.withValues(alpha: 0.8),
+                    ],
+                    stops: const [0, 0.5, 1],
+                  ).createShader(bounds),
+                  child: SvgPicture.asset(
+                    'assets/images/header_artwork.svg',
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
             ),
