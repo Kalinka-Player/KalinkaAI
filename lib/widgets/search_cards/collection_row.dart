@@ -256,10 +256,19 @@ class CollectionFace extends ConsumerWidget {
                           ? (partial ? Icons.remove : Icons.check)
                           : null,
                       pressProgress: pressProgress,
+                      columns: columns,
                     ),
                   ),
                   const SizedBox(width: 6),
-                  RowColumnCells(columns: columns),
+                  RowColumnCells(
+                    columns: columns,
+                    detail: collectionSummary(item),
+                    sourceCell: Row(
+                      children: collectionSources(
+                        item.catalog?.sources ?? const <String>[],
+                      ),
+                    ),
+                  ),
                   RowTrailing(columns: columns, child: trailing),
                 ],
               ),

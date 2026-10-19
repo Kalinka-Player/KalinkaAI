@@ -153,7 +153,10 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
                             ],
                             Expanded(
                               child: Text.rich(
-                                entityTypeSubtitle('Artist', stats),
+                                entityTypeSubtitle(
+                                  'Artist',
+                                  columns.detail ? '' : stats,
+                                ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -164,7 +167,11 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  RowColumnCells(columns: columns, sourceOf: widget.item.id),
+                  RowColumnCells(
+                    columns: columns,
+                    detail: stats,
+                    sourceOf: widget.item.id,
+                  ),
                   RowTrailing(
                     columns: columns,
                     child: IgnorePointer(

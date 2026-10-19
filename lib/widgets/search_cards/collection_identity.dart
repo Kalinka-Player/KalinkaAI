@@ -8,6 +8,7 @@ import '../../theme/app_theme.dart';
 import '../collection_art_tile.dart';
 import '../source_badge.dart';
 import 'long_press_ring_painter.dart';
+import 'row_columns.dart';
 import 'track_row_support.dart';
 
 /// Which collection a row is about: its cover, its name, and under it the
@@ -33,6 +34,10 @@ class CollectionIdentity extends ConsumerWidget {
   /// over to the tracks.
   final Widget? nameAction;
 
+  /// The listing's columns, which take its summary and its sources off the
+  /// second line as they appear.
+  final RowColumns columns;
+
   const CollectionIdentity({
     super.key,
     required this.item,
@@ -40,6 +45,7 @@ class CollectionIdentity extends ConsumerWidget {
     this.coverMark,
     this.pressProgress = 0,
     this.nameAction,
+    this.columns = RowColumns.none,
   });
 
   static const _thumb = 64.0;
@@ -109,23 +115,22 @@ class CollectionIdentity extends ConsumerWidget {
                   ?nameAction,
                 ],
               ),
-              const SizedBox(height: 5),
-              Row(
-                children: [
-                  for (final source in sources) ...[
-                    SourceTile(source: source, size: 18),
-                    const SizedBox(width: 5),
-                  ],
-                  Expanded(
-                    child: Text(
-                      collectionSummary(item),
-                      style: KalinkaTextStyles.trackRowSubtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+              if (!columns.detail || !columns.source) ...[
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    if (!columns.source) ...collectionSources(sources),
+                    Expanded(
+                      child: Text(
+                        columns.detail ? '' : collectionSummary(item),
+                        style: KalinkaTextStyles.trackRowSubtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -133,6 +138,14 @@ class CollectionIdentity extends ConsumerWidget {
     );
   }
 }
+
+/// The sources a collection's tracks came from, each in its own colour.
+List<Widget> collectionSources(List<String> sources) => [
+  for (final source in sources) ...[
+    SourceTile(source: source, size: 18),
+    const SizedBox(width: 5),
+  ],
+];
 
 /// What a collection holds, in one line: how many tracks and how long it
 /// runs. Which sources they came from is said beside it, in their own

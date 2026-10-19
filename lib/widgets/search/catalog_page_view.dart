@@ -31,6 +31,7 @@ import '../search_cards/artwork_grid_card.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/browse_navigation_scope.dart';
 import '../search_cards/editable_track_list.dart';
+import '../search_cards/row_columns.dart';
 import '../search_cards/search_track_row.dart';
 import '../shelf_heading.dart';
 import '../source_badge.dart';
@@ -390,13 +391,15 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             : null;
         // Rows across columns are already inset by the listing.
         if (columns > 1) return row;
+        // An album's numbered rows keep no columns to name.
+        final titles = index == 0 && !isAlbum ? _columnTitles(loaded) : null;
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: heading == null
+          child: heading == null && titles == null
               ? row
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [heading, row],
+                  children: [?titles, ?heading, row],
                 ),
         );
       },
@@ -616,7 +619,12 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             if (columns > 1) return row;
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: row,
+              child: index == 0
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [_columnTitles(loaded), row],
+                    )
+                  : row,
             );
           },
           initialPlaceholder: grid
@@ -661,6 +669,13 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
 
   /// Covers of about 180–220 across, more columns as the pane grows, never
   /// narrower than a readable caption.
+  /// The names of the listing's columns, over its first row; nothing while
+  /// its rows are too narrow for any.
+  static Widget _columnTitles(List<BrowseItem> loaded) => RowColumnsHeader(
+    tracks: loaded.every((item) => item.browseType == BrowseType.track),
+    titleInset: BrowseItemRows.textInsetOf(loaded.first),
+  );
+
   static int _gridColumns(double width, double scale) {
     const gap = 8.0;
     final wanted = ((width + gap) / (220 * scale + gap)).ceil();

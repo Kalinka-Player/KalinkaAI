@@ -1,9 +1,11 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+
 import '../../data_model/data_model.dart';
 import '../../theme/app_theme.dart';
 import 'collection_row.dart';
+import 'row_columns.dart';
 import 'search_album_row.dart';
 import 'search_artist_row.dart';
 import 'search_catalog_row.dart';
@@ -58,7 +60,13 @@ class BrowseItemRows extends StatelessWidget {
         : min(limit, items.length);
     final displayed = items.take(shownCount).toList();
 
-    final children = <Widget>[];
+    // The columns' names over the first row, while the rows have columns.
+    final children = <Widget>[
+      RowColumnsHeader(
+        tracks: displayed.every((item) => item.browseType == BrowseType.track),
+        titleInset: textInsetOf(displayed.first),
+      ),
+    ];
     for (int i = 0; i < displayed.length; i++) {
       // Per-row RepaintBoundary: each row becomes its own composited layer
       // so scroll just shifts layers instead of re-rasterising the whole

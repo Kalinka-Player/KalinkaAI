@@ -30,12 +30,10 @@ class _SearchFolderRowState extends ConsumerState<SearchFolderRow>
     final item = widget.item;
     final subname = item.subname ?? '';
     // What is directly inside, as the source words it: "2 folders · 5 tracks
-    // · 45 min". Wide rows set it in their columns, subfolders first.
+    // · 45 min". A wide row sets it in its details column in place of the
+    // count its second line gives.
     final contents = item.catalog?.description ?? '';
-    final parts = contents.split(' · ').where((p) => p.isNotEmpty).toList();
-    bool isFolders(String part) => RegExp(r'\bfolders?$').hasMatch(part);
-    final folders = parts.where(isFolders).join(' · ');
-    final rest = parts.where((p) => !isFolders(p)).join(' · ');
+    final details = contents.isNotEmpty ? contents : subname;
     final selectionMode = ref.watch(
       selectionStateProvider.select((s) => s.isActive),
     );
@@ -131,7 +129,9 @@ class _SearchFolderRowState extends ConsumerState<SearchFolderRow>
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          subname.isEmpty ? 'Folder' : 'Folder · $subname',
+                          subname.isEmpty || columns.detail
+                              ? 'Folder'
+                              : 'Folder · $subname',
                           style: KalinkaTextStyles.trackRowSubtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -142,8 +142,7 @@ class _SearchFolderRowState extends ConsumerState<SearchFolderRow>
                   const SizedBox(width: 12),
                   RowColumnCells(
                     columns: columns,
-                    artist: columns.artist ? folders : null,
-                    album: columns.artist ? rest : contents,
+                    detail: details,
                     sourceOf: item.id,
                   ),
                   RowTrailing(

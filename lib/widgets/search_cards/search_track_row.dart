@@ -388,7 +388,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
               Expanded(child: details),
               RowColumnCells(
                 columns: columns,
-                album: album,
+                detail: album,
                 artist: artist,
                 sourceOf: widget.item.id,
                 format: mimeTypeLabel(track?.mimeType),
