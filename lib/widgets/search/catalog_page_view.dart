@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data_model/browse_filters.dart';
 import '../../data_model/data_model.dart';
 import '../../providers/catalog_cards_provider.dart';
+import '../../providers/artist_relations_provider.dart';
 import '../../providers/collection_edit_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/indexer_status_provider.dart';
@@ -35,6 +36,7 @@ import '../shelf_heading.dart';
 import '../source_badge.dart';
 import 'add_queue_chip.dart';
 import 'album_page_header.dart';
+import 'artist_page_header.dart';
 import 'browse_visit_scope.dart';
 import 'catalog_sections_view.dart';
 import 'collections_edit_bar.dart';
@@ -209,6 +211,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     final notifier = ref.read(searchSessionProvider.notifier);
     void setQuery(BrowseFilterQuery next) => notifier.setCatalogFilter(next);
 
+    if (page.isArtist) return _buildArtist(page, visit);
     final listing = page.folderLayout ? visit.shownListing : page;
     // A listing of one kind of item — declared by its source, or chosen to
     // narrow it to — lays out as that family's chosen Grid or List.
@@ -501,6 +504,145 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           ),
         ),
       ],
+    );
+  }
+
+  /// How far into the artist's mixed listing each relation has read.
+  final _relationOffsets = <ArtistRelation, int>{};
+
+  /// One of an artist's relations as a listing of its own, paged through the
+  /// artist's mixed listing so its order is the source's.
+  ChunkFetcher<BrowseItem> _relationFetch(String id, ArtistRelation relation) {
+    bool keep(BrowseItem item) =>
+        isArtistRelease(item) == (relation == ArtistRelation.albums);
+    return (offset, limit) async {
+      if (offset == 0) _relationOffsets[relation] = 0;
+      final api = ref.read(kalinkaProxyProvider);
+      final kept = <BrowseItem>[];
+      while (kept.length < limit) {
+        final from = _relationOffsets[relation] ?? 0;
+        final list = await api.browse(id, offset: from, limit: limit);
+        _relationOffsets[relation] = from + list.items.length;
+        kept.addAll(list.items.where(keep));
+        if (list.items.isEmpty || from + list.items.length >= list.total) {
+          // Read to its end: what is kept is all there is.
+          return ItemChunk(items: kept, total: offset + kept.length);
+        }
+      }
+      return ItemChunk(items: kept);
+    };
+  }
+
+  /// An artist's page: who they are, then their releases or their tracks,
+  /// a tab apiece only where they have both.
+  Widget _buildArtist(CatalogPage page, SearchSessionState visit) {
+    final relations = ref.watch(artistRelationsProvider(page.id!));
+    final notifier = ref.read(searchSessionProvider.notifier);
+    final available =
+        relations.value ??
+        (relations.hasError ? ArtistRelation.values : const <ArtistRelation>[]);
+    final shown = available.contains(visit.artistTab)
+        ? visit.artistTab
+        : (available.firstOrNull ?? ArtistRelation.albums);
+    final releases = shown == ArtistRelation.albums;
+    const family = ListingFamily.albums;
+    final grid =
+        releases &&
+        (ref.watch(listingPresentationProvider)[family] ?? family.byDefault) ==
+            ListingPresentation.grid;
+    final header = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ArtistPageHeader(page: page),
+        if (available.isNotEmpty)
+          ArtistRelationTabs(
+            relations: available.length > 1 ? available : const [],
+            shown: shown,
+            onShow: notifier.setArtistTab,
+            trailing: releases
+                ? const PresentationToggle(family: family)
+                : null,
+          ),
+      ],
+    );
+    if (relations.isLoading) {
+      return ListView(
+        children: [
+          header,
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: BrowseRowsShimmer(count: 6),
+          ),
+        ],
+      );
+    }
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    final trackIdsMemo = _TrackIdsMemo();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final columns = !releases
+            ? 1
+            : grid
+            ? _gridColumns(width - 20, scale)
+            : _compactColumns(width - 32, scale);
+        return InfiniteListView<BrowseItem>(
+          key: ValueKey('${page.id}|$shown'),
+          padding: const EdgeInsets.only(bottom: 24),
+          header: header,
+          columns: columns,
+          rowPadding: EdgeInsets.symmetric(horizontal: grid ? 10 : 16),
+          columnGap: grid ? 8 : 16,
+          rowGap: grid ? 12 : 6,
+          fetchChunk: _relationFetch(page.id!, shown),
+          separatorBuilder: (context, _, above) => Padding(
+            padding: EdgeInsets.only(
+              left: 16 + BrowseItemRows.textInsetOf(above),
+              right: 16,
+            ),
+            child: const Divider(
+              color: KalinkaColors.borderSubtle,
+              thickness: 1,
+              height: 14,
+            ),
+          ),
+          itemBuilder: (context, item, index, loaded) {
+            if (grid && _inGrid(item)) return ArtworkGridCard(item: item);
+            final trackIds = trackIdsMemo.of(loaded);
+            final row = BrowseItemRows.buildRow(
+              item,
+              queueContextIds: trackIds.isEmpty ? null : trackIds,
+            );
+            if (columns > 1) return row;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: row,
+            );
+          },
+          initialPlaceholder: grid
+              ? _GridShimmer(columns: columns, rows: 2)
+              : const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
+                  child: BrowseRowsShimmer(count: 6),
+                ),
+          loadMorePlaceholder: grid
+              ? _GridShimmer(columns: columns, rows: 1)
+              : const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: BrowseRowsShimmer(count: 3, leadingDivider: true),
+                ),
+          emptyBuilder: (context) => const _CatalogEmpty(),
+          errorBuilder: (context, _) => CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: header),
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _CatalogError(onReturn: widget.onBackToCatalogs),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
