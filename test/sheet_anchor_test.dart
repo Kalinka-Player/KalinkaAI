@@ -49,6 +49,22 @@ void main() {
     expect(rect.right, 400);
   });
 
+  testWidgets('a sheet over a wide panel keeps to its width, centred', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(2000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_host(anchored: true));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    // The panel is the left 1000.
+    final rect = tester.getRect(find.byKey(_sheetKey));
+    expect(rect.width, kSheetMaxWidth);
+    expect(rect.center.dx, 500);
+  });
+
   testWidgets('tap beside the anchored sheet still dismisses it', (
     tester,
   ) async {
