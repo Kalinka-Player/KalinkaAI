@@ -277,14 +277,30 @@ void main() {
       ];
       expect(lines(folderRow), isNotEmpty);
       expect(lines(_trackRow('So What')), lines(folderRow));
-      // Named once, over the first row, on the same lines.
+      // Named under each group's heading, in its terms, on the same lines.
       final titles = find.byType(RowColumnsHeader);
-      expect(titles, findsOneWidget);
+      expect(titles, findsNWidgets(2));
       expect(find.text('DETAILS'), findsOneWidget);
-      expect(lines(titles), lines(folderRow));
+      expect(find.text('ALBUM'), findsOneWidget);
+      expect(lines(titles.first), lines(folderRow));
+      expect(lines(titles.last), lines(folderRow));
+      final folders = tester.getRect(_heading('FOLDERS'));
       expect(
-        tester.getRect(titles).bottom,
+        tester.getRect(titles.first).top,
+        greaterThanOrEqualTo(folders.bottom),
+      );
+      expect(
+        tester.getRect(titles.first).bottom,
         lessThanOrEqualTo(tester.getRect(folderRow).top),
+      );
+      final tracks = tester.getRect(_heading('TRACKS'));
+      expect(
+        tester.getRect(titles.last).top,
+        greaterThanOrEqualTo(tracks.bottom),
+      );
+      expect(
+        tester.getRect(titles.last).bottom,
+        lessThanOrEqualTo(tester.getRect(_trackRow('So What')).top),
       );
     },
   );
