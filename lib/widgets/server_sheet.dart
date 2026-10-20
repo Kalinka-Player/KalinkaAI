@@ -296,7 +296,8 @@ class _DemoPill extends StatelessWidget {
   }
 }
 
-/// Tablet-only: server sheet with its own animation and scrim.
+/// Tablet-only: server sheet with its own animation and scrim, at most
+/// [kSheetMaxWidth] wide and centred on the pane like the other sheets.
 ///
 /// On phone, use [showKalinkaBottomSheet] with [ServerSheetContent] instead.
 class ServerSheet extends ConsumerStatefulWidget {
@@ -373,69 +374,72 @@ class _ServerSheetState extends ConsumerState<ServerSheet>
               Flexible(
                 child: SlideTransition(
                   position: _slideAnimation,
-                  child: GestureDetector(
-                    onTap: () {}, // Prevent backdrop tap from passing through
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: KalinkaColors.surfaceRaised,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(24),
-                        ),
-                        border: const Border(
-                          top: BorderSide(color: KalinkaColors.borderDefault),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.7),
-                            blurRadius: 60,
-                            offset: const Offset(0, -20),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: kSheetMaxWidth),
+                    child: GestureDetector(
+                      onTap: () {}, // Prevent backdrop tap from passing through
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: KalinkaColors.surfaceRaised,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(24),
                           ),
-                        ],
-                      ),
-                      child: SafeArea(
-                        top: false,
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // Drag handle
-                              Center(
-                                child: Container(
-                                  width: 36,
-                                  height: 4,
-                                  margin: const EdgeInsets.only(top: 12),
-                                  decoration: BoxDecoration(
-                                    color: KalinkaColors.surfaceOverlay,
-                                    borderRadius: BorderRadius.circular(2),
+                          border: const Border(
+                            top: BorderSide(color: KalinkaColors.borderDefault),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.7),
+                              blurRadius: 60,
+                              offset: const Offset(0, -20),
+                            ),
+                          ],
+                        ),
+                        child: SafeArea(
+                          top: false,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // Drag handle
+                                Center(
+                                  child: Container(
+                                    width: 36,
+                                    height: 4,
+                                    margin: const EdgeInsets.only(top: 12),
+                                    decoration: BoxDecoration(
+                                      color: KalinkaColors.surfaceOverlay,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
                                   ),
                                 ),
-                              ),
-                              Flexible(
-                                child: SingleChildScrollView(
-                                  child: _TabletServerSheetContent(
-                                    onClose: _animateClose,
-                                    onOpenPlugins: () async {
-                                      await _animateClose();
-                                      widget.onOpenPlugins();
-                                    },
-                                    onOpenSettings: () async {
-                                      await _animateClose();
-                                      widget.onOpenSettings();
-                                    },
-                                    onOpenDiscovery: () async {
-                                      await _animateClose();
-                                      widget.onOpenDiscovery();
-                                    },
-                                    onPowerOff: () async {
-                                      await _animateClose();
-                                      widget.onPowerOff();
-                                    },
+                                Flexible(
+                                  child: SingleChildScrollView(
+                                    child: _TabletServerSheetContent(
+                                      onClose: _animateClose,
+                                      onOpenPlugins: () async {
+                                        await _animateClose();
+                                        widget.onOpenPlugins();
+                                      },
+                                      onOpenSettings: () async {
+                                        await _animateClose();
+                                        widget.onOpenSettings();
+                                      },
+                                      onOpenDiscovery: () async {
+                                        await _animateClose();
+                                        widget.onOpenDiscovery();
+                                      },
+                                      onPowerOff: () async {
+                                        await _animateClose();
+                                        widget.onPowerOff();
+                                      },
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
