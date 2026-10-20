@@ -144,6 +144,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
   final _albumHeaderHeight = ValueNotifier<double>(0);
   final _albumOffsets = <int, double>{};
   final _albumHeaderHeights = <int, double>{};
+  final _visitPages = <int, (SearchSessionState, Widget)>{};
 
   /// How many of the latest visits stay built under the shown one.
   static const _retainedVisits = 6;
@@ -685,6 +686,8 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     final retained = visits.length > _retainedVisits
         ? visits.sublist(visits.length - _retainedVisits)
         : visits;
+    final kept = {for (final visit in retained) visit.visitId};
+    _visitPages.removeWhere((id, _) => !kept.contains(id));
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -694,16 +697,30 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
             key: ValueKey(visit.visitId),
             child: _shownIf(
               visit.visitId == session.visitId,
-              BrowseVisitScope(visit: visit, child: _buildVisit(visit)),
+              _visitPage(visit),
             ),
           ),
       ],
     );
   }
 
+  /// A visit's page, reused while its visit is unchanged, so a kept visit is
+  /// not rebuilt each time the shown one changes.
+  Widget _visitPage(SearchSessionState visit) {
+    final cached = _visitPages[visit.visitId];
+    if (cached != null && identical(cached.$1, visit)) return cached.$2;
+    final page = BrowseVisitScope(visit: visit, child: _buildVisit(visit));
+    _visitPages[visit.visitId] = (visit, page);
+    return page;
+  }
+
+  // ExcludeFocus, as IndexedStack does: keys must not reach a hidden visit.
   static Widget _shownIf(bool shown, Widget child) => Offstage(
     offstage: !shown,
-    child: TickerMode(enabled: shown, child: child),
+    child: TickerMode(
+      enabled: shown,
+      child: ExcludeFocus(excluding: !shown, child: child),
+    ),
   );
 
   bool _isShown(int visitId) =>

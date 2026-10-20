@@ -230,9 +230,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         : _layoutOf(page, expandedShelf);
     final grid =
         layout != null &&
-        (ref.watch(listingPresentationProvider)[layout.id] ??
-                layout.byDefault) ==
-            ListingPresentation.grid;
+        watchPresentation(ref, layout) == ListingPresentation.grid;
     // Any folder shown, the same one again included, opens at its top.
     if (listing.id != _shownListingId) {
       _shownListingId = listing.id;
@@ -557,7 +555,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         final list = await api.browse(id, offset: from, limit: limit);
         from += list.items.length;
         kept.addAll(list.items.where(keep));
-        if (list.items.isEmpty || from >= list.total) {
+        // A source that does not say its total ends on a short page.
+        final ended = list.total < 0
+            ? list.items.length < limit
+            : from >= list.total;
+        if (list.items.isEmpty || ended) {
           _relationOffsets[relation] = from;
           // Read to its end: what is kept is all there is.
           return ItemChunk(items: kept, total: offset + kept.length);
@@ -588,10 +590,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       byDefault: ListingPresentation.grid,
     );
     final grid =
-        releases &&
-        (ref.watch(listingPresentationProvider)[layout.id] ??
-                layout.byDefault) ==
-            ListingPresentation.grid;
+        releases && watchPresentation(ref, layout) == ListingPresentation.grid;
     final header = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

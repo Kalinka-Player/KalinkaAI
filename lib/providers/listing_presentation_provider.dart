@@ -80,9 +80,6 @@ class ListingPresentationNotifier
     }
   }
 
-  ListingPresentation of(ListingLayout layout) =>
-      state[layout.id] ?? layout.byDefault;
-
   void set(ListingLayout layout, ListingPresentation presentation) {
     if (state[layout.id] == presentation) return;
     // Re-inserted, so the most recently changed are the ones kept.
@@ -106,3 +103,8 @@ final listingPresentationProvider =
       ListingPresentationNotifier,
       Map<String, ListingPresentation>
     >(ListingPresentationNotifier.new);
+
+/// How [layout] is laid out now, rebuilding only when its own choice changes.
+ListingPresentation watchPresentation(WidgetRef ref, ListingLayout layout) =>
+    ref.watch(listingPresentationProvider.select((m) => m[layout.id])) ??
+    layout.byDefault;

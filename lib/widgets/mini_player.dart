@@ -584,7 +584,8 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                   // transport takes larger buttons, spaced apart and set off
                   // from the output.
                   SizedBox(width: transport ? 16 : 4),
-                  if (tier.index >= _MiniPlayerTier.modes.index) ...[
+                  if (tier.index >= _MiniPlayerTier.modes.index &&
+                      !exclusive) ...[
                     AwayLock(
                       away: isOffline,
                       child: const ShuffleButton(hitDiameter: 40, iconSize: 20),
@@ -620,7 +621,8 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                       ),
                     ),
                   ],
-                  if (tier.index >= _MiniPlayerTier.modes.index) ...[
+                  if (tier.index >= _MiniPlayerTier.modes.index &&
+                      !exclusive) ...[
                     const SizedBox(width: _transportGap),
                     AwayLock(
                       away: isOffline,
