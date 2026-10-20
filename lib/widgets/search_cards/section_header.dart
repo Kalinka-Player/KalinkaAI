@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
 
 /// Section header for search result chunks.
@@ -73,13 +74,16 @@ class SectionHeader extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               if (onOnlyTap != null)
-                GestureDetector(
-                  onTap: onOnlyTap,
-                  behavior: HitTestBehavior.opaque,
-                  child: Text(
-                    'Only $label ›',
-                    style: KalinkaTextStyles.trackRowSubtitle.copyWith(
-                      color: KalinkaColors.accent,
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: onOnlyTap,
+                    behavior: HitTestBehavior.opaque,
+                    child: Text(
+                      'Only $label ›',
+                      style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+                        color: KalinkaColors.accent,
+                      ),
                     ),
                   ),
                 )

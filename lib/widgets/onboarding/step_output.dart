@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../providers/renderer_host_provider.dart'
     show rendererIdentityProvider;
 import '../../providers/renderer_provider.dart';
@@ -156,6 +157,7 @@ class _OutputRow extends StatelessWidget {
               // lights the whole row.
               Positioned.fill(
                 child: InkWell(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
                   onTap: canChoose ? onTap : null,
                   // Selected and offline rows aren't targets; without this
                   // they would still light up under the pointer.

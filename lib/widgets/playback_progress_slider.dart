@@ -243,6 +243,7 @@ class _PlaybackProgressSliderState extends ConsumerState<PlaybackProgressSlider>
                     excluding: away,
                     child: SliderTheme(
                       data: SliderThemeData(
+                        mouseCursor: WidgetStateMouseCursor.clickable,
                         trackHeight: _trackHeight,
                         thumbShape: seekable
                             ? const RoundSliderThumbShape(enabledThumbRadius: 6)

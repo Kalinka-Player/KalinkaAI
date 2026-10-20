@@ -754,6 +754,9 @@ class AppTheme {
     final baseTextTheme = KalinkaFonts.sansTextTheme(
       ThemeData.dark().textTheme,
     );
+    const buttonCursor = ButtonStyle(
+      mouseCursor: WidgetStateMouseCursor.clickable,
+    );
 
     return ThemeData(
       useMaterial3: true,
@@ -773,6 +776,17 @@ class AppTheme {
       scaffoldBackgroundColor: KalinkaColors.background,
       splashFactory: NoSplash.splashFactory,
       highlightColor: Colors.transparent,
+      textButtonTheme: TextButtonThemeData(style: buttonCursor),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: buttonCursor),
+      filledButtonTheme: FilledButtonThemeData(style: buttonCursor),
+      elevatedButtonTheme: ElevatedButtonThemeData(style: buttonCursor),
+      iconButtonTheme: IconButtonThemeData(style: buttonCursor),
+      listTileTheme: const ListTileThemeData(
+        mouseCursor: WidgetStateMouseCursor.clickable,
+      ),
+      switchTheme: const SwitchThemeData(
+        mouseCursor: WidgetStateMouseCursor.clickable,
+      ),
       textTheme: baseTextTheme.copyWith(
         titleMedium: KalinkaFonts.sans(
           fontSize: KalinkaTypography.baseSize + 6,
@@ -801,6 +815,7 @@ class AppTheme {
         space: 1,
       ),
       sliderTheme: SliderThemeData(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         activeTrackColor: KalinkaColors.accent,
         inactiveTrackColor: KalinkaColors.borderDefault,
         thumbColor: Colors.white,

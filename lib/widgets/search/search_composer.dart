@@ -76,16 +76,19 @@ class _SearchComposerState extends State<SearchComposer> {
             Semantics(
               label: 'Close search',
               button: true,
-              child: GestureDetector(
-                onTap: widget.onBack,
-                behavior: HitTestBehavior.opaque,
-                child: const SizedBox(
-                  width: 38,
-                  height: 32,
-                  child: Icon(
-                    Icons.arrow_back,
-                    size: 20,
-                    color: KalinkaColors.textSecondary,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: widget.onBack,
+                  behavior: HitTestBehavior.opaque,
+                  child: const SizedBox(
+                    width: 38,
+                    height: 32,
+                    child: Icon(
+                      Icons.arrow_back,
+                      size: 20,
+                      color: KalinkaColors.textSecondary,
+                    ),
                   ),
                 ),
               ),
@@ -161,16 +164,19 @@ class _SearchComposerState extends State<SearchComposer> {
               Semantics(
                 label: 'Clear search text',
                 button: true,
-                child: GestureDetector(
-                  onTap: _clear,
-                  behavior: HitTestBehavior.opaque,
-                  child: const SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: Icon(
-                      Icons.close_rounded,
-                      size: 20,
-                      color: KalinkaColors.textSecondary,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: _clear,
+                    behavior: HitTestBehavior.opaque,
+                    child: const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 20,
+                        color: KalinkaColors.textSecondary,
+                      ),
                     ),
                   ),
                 ),
@@ -179,16 +185,19 @@ class _SearchComposerState extends State<SearchComposer> {
               Semantics(
                 label: 'Send',
                 button: true,
-                child: GestureDetector(
-                  onTap: _submit,
-                  behavior: HitTestBehavior.opaque,
-                  child: const SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: Icon(
-                      Icons.arrow_downward_rounded,
-                      size: 22,
-                      color: KalinkaColors.accent,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: _submit,
+                    behavior: HitTestBehavior.opaque,
+                    child: const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: Icon(
+                        Icons.arrow_downward_rounded,
+                        size: 22,
+                        color: KalinkaColors.accent,
+                      ),
                     ),
                   ),
                 ),

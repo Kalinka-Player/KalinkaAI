@@ -1386,6 +1386,7 @@ class _SuggestionChip extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           onTap: onTap,
           overlayColor: kalinkaOverlay,
           child: ConstrainedBox(
@@ -1527,6 +1528,7 @@ class _SearchEntryButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(22),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
+            mouseCursor: WidgetStateMouseCursor.clickable,
             onTap: onTap,
             child: Container(
               height: 54,

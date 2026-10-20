@@ -5,6 +5,7 @@ import '../../providers/app_state_provider.dart';
 import '../../providers/connection_state_provider.dart';
 import '../../providers/playback_time_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/click_cursor.dart';
 import '../../utils/playback_utils.dart';
 import '../gradient_progress_line.dart';
 import '../playback_progress_slider.dart' show OptimisticSeek;
@@ -96,7 +97,7 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
             final width = constraints.maxWidth;
             // The labels are part of the touch zone: the bar is drawn thin
             // but is reached anywhere in the block.
-            return IgnorePointer(
+            final slider = IgnorePointer(
               ignoring: !canSeek,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
@@ -155,6 +156,10 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
                   ],
                 ),
               ),
+            );
+            return MouseRegion(
+              cursor: clickCursor(interactive: canSeek),
+              child: slider,
             );
           },
         ),

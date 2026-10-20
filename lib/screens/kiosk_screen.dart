@@ -1324,6 +1324,7 @@ class _ResumeButton extends ConsumerWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           onTap: () => api.sendQueueCommand(
             finished
                 ? const QueueCommand.play(index: 0)

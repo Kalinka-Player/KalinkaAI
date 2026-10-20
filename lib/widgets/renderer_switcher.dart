@@ -185,6 +185,7 @@ class RendererSwitcherDropdown extends ConsumerWidget {
               : RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
+            mouseCursor: clickCursor(interactive: true),
             onTap: () {
               showRendererPicker(context, ref);
             },

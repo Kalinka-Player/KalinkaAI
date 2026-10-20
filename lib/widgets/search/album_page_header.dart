@@ -57,6 +57,7 @@ class _ArtistLine extends ConsumerWidget {
       label: 'Open $name',
       excludeSemantics: true,
       child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         onTap: () =>
             ref.read(searchSessionProvider.notifier).openBrowseItem(link),
         borderRadius: BorderRadius.circular(6),

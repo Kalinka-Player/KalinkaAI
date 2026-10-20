@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../data_model/presentation_schema.dart' show OptionSpec;
 import '../../theme/app_theme.dart';
 import '../kalinka_bottom_sheet.dart';
@@ -55,6 +56,7 @@ class SettingsEnumDropdown extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         onTap: () => _openPicker(context),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),

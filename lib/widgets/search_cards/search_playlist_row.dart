@@ -99,7 +99,7 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
         ? urlResolver.abs(imageUrl)
         : null;
 
-    return SwipeToActRow(
+    final row = SwipeToActRow(
       enabled: !selectionMode,
       onAddToQueue: _addToQueue,
       onPlayNext: _playNext,
@@ -296,5 +296,6 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
         ),
       ),
     );
+    return MouseRegion(cursor: SystemMouseCursors.click, child: row);
   }
 }

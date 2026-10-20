@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
 
 /// Circular tappable wrapper for transport icons. Combines an InkWell ripple
@@ -54,6 +55,7 @@ class _TransportButtonState extends State<TransportButton> {
           shape: const CircleBorder(),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
+            mouseCursor: WidgetStateMouseCursor.clickable,
             onTap: widget.onTap,
             // Drive the scale animation off the highlight signal so the
             // press state matches what the ripple shows.

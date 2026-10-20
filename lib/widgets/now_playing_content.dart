@@ -27,6 +27,7 @@ import 'transport_controls.dart';
 import 'procedural_album_art.dart';
 import 'source_badge.dart';
 import 'stream_info_dialog.dart';
+import 'up_next_preview.dart';
 
 /// Core now-playing UI: album art, track info, transport controls, volume.
 /// Used embedded in tablet layout and wrapped with animation in phone overlay.
@@ -161,7 +162,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
             children: [
               // Header
               _buildHeader(showingQueue: false, away: away),
-              // Content — fills remaining space with controls pinned to bottom
+              // Content starts below the header; spare space can show Up Next.
               _buildBodyContent(
                 currentTrack: currentTrack,
                 resolvedImageUrl: resolvedImageUrl,
@@ -194,30 +195,43 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // A taller header or enlarged metadata must not push controls past
-            // the window. Normal portrait layouts retain flexible artwork;
-            // short windows and large text get a scrollable content column.
-            final scroll =
+            // Size the cover independently of spare vertical space, keeping
+            // artwork and metadata together at the top. Short screens and
+            // large text retain a smaller cover and can scroll their controls.
+            final compact =
                 constraints.maxHeight < 440 ||
                 MediaQuery.textScalerOf(context)
                         .scale(KalinkaTypography.baseSize) >
                     KalinkaTypography.baseSize * 1.3;
-            final artwork = _AlbumArtSection(
-              trackId: currentTrack?.id,
-              resolvedImageUrl: resolvedImageUrl,
-            );
+            final artSize = compact
+                ? (constraints.maxWidth * 0.72).clamp(0.0, 240.0)
+                : (constraints.maxWidth * 0.88).clamp(
+                    0.0,
+                    constraints.maxHeight * 0.52,
+                  );
+            // Outside compact mode the cover gives way so the controls fit.
+            final Widget artwork = compact
+                ? _AlbumArtSection(
+                    size: artSize,
+                    trackId: currentTrack?.id,
+                    resolvedImageUrl: resolvedImageUrl,
+                  )
+                : Flexible(
+                    child: LayoutBuilder(
+                      builder: (context, art) => _AlbumArtSection(
+                        size: artSize.clamp(0.0, art.maxHeight),
+                        trackId: currentTrack?.id,
+                        resolvedImageUrl: resolvedImageUrl,
+                      ),
+                    ),
+                  );
             final content = AwayDim(
               away: away,
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(height: 8),
-                  if (scroll)
-                    SizedBox(
-                      height: (constraints.maxWidth * 0.72).clamp(0.0, 240.0),
-                      child: Column(children: [artwork]),
-                    )
-                  else
-                    artwork,
+                  const SizedBox(height: 24),
+                  artwork,
                   const SizedBox(height: 20),
                   _buildTrackMetadataSection(
                     currentTrack: currentTrack,
@@ -249,16 +263,26 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                 ],
               ),
             );
-            if (scroll) return SingleChildScrollView(child: content);
-            // Centre a bounded group on tall windows. The artwork's spare
-            // height no longer separates the cover from its track identity.
-            return Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: constraints.maxWidth * 0.88 + 400,
+            return CustomScrollView(
+              key: const PageStorageKey('now-playing-content'),
+              // Bouncing physics would always claim vertical drags, taking
+              // the swipe-down away from the phone sheet even when it fits.
+              physics: const ClampingScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: compact
+                      ? content
+                      : ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: constraints.maxHeight,
+                          ),
+                          child: content,
+                        ),
                 ),
-                child: content,
-              ),
+                SliverUpNextPreview(
+                  canOpenQueue: widget.showOverlayHeader || widget.isTablet,
+                ),
+              ],
             );
           },
         ),
@@ -531,59 +555,44 @@ class _TransportControls extends ConsumerWidget {
   }
 }
 
-/// Album art section with a LayoutBuilder for size calculation.
-/// Extracted into its own widget so that LayoutBuilder._rebuildWithConstraints
-/// only rebuilds this element, not the parent _NowPlayingContentState.
+/// The cover keeps its natural square frame; spare height belongs below the
+/// playback controls, where it can hold a queue preview.
 class _AlbumArtSection extends StatelessWidget {
+  final double size;
   final String? trackId;
   final String? resolvedImageUrl;
 
   const _AlbumArtSection({
+    required this.size,
     required this.trackId,
     required this.resolvedImageUrl,
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: LayoutBuilder(
-        builder: (context, artConstraints) {
-          final artSize = (artConstraints.maxWidth * 0.88).clamp(
-            0.0,
-            artConstraints.maxHeight,
-          );
-          return Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              width: artSize,
-              height: artSize,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    blurRadius: 40,
-                    offset: const Offset(0, 20),
-                  ),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: resolvedImageUrl != null
-                  ? Image.network(
-                      resolvedImageUrl!,
-                      width: artSize,
-                      height: artSize,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => ProceduralAlbumArt(
-                        trackId: trackId ?? '',
-                        size: artSize,
-                      ),
-                    )
-                  : ProceduralAlbumArt(trackId: trackId ?? '', size: artSize),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('now-playing-artwork'),
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(22),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.5),
+          blurRadius: 40,
+          offset: const Offset(0, 20),
+        ),
+      ],
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: resolvedImageUrl != null
+        ? Image.network(
+            resolvedImageUrl!,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) =>
+                ProceduralAlbumArt(trackId: trackId ?? '', size: size),
+          )
+        : ProceduralAlbumArt(trackId: trackId ?? '', size: size),
+  );
 }

@@ -69,32 +69,25 @@ class PlayerHeader extends StatelessWidget {
       );
     }
 
-    final leading = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          tooltip: 'Minimise player',
-          onPressed: onClose,
-          style: IconButton.styleFrom(
-            minimumSize: const Size(48, 48),
-            padding: const EdgeInsets.all(10),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          icon: const Icon(
-            Icons.keyboard_arrow_down,
-            size: 28,
-            color: KalinkaColors.textSecondary,
-          ),
-        ),
-        if (!showingQueue) ...[
-          const SizedBox(width: 4),
-          const KioskEnterButton(),
-        ],
-      ],
+    final leading = IconButton(
+      tooltip: 'Minimise player',
+      onPressed: onClose,
+      style: IconButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.all(10),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      icon: const Icon(
+        Icons.keyboard_arrow_down,
+        size: 28,
+        color: KalinkaColors.textSecondary,
+      ),
     );
+    // Fullscreen stays on the same right edge as the docked player, even
+    // when the tabs need their own row. Queue options use that same slot.
     final trailing = showingQueue
         ? const QueueMenuButton()
-        : const SizedBox.shrink();
+        : const KioskEnterButton();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -114,9 +107,9 @@ class PlayerHeader extends StatelessWidget {
           const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {
-              // Reserve the same side space in both views, even when output
-              // selection is hidden, so switching views cannot move the tabs.
-              const sideSpace = 48 + 4 + 36 + 8;
+              // Reserve the larger action's width at both ends so the tabs
+              // stay centred and do not move when switching views.
+              const sideSpace = 48 + 8;
               final fits =
                   PlayerViewSwitch.preferredWidth(context) + 2 * sideSpace <=
                   constraints.maxWidth;

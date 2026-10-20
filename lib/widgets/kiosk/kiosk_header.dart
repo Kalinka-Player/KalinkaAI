@@ -13,6 +13,7 @@ import '../../providers/renderer_host_provider.dart'
 import '../../providers/renderer_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/local_platform.dart';
+import '../../utils/click_cursor.dart';
 import '../renderer_switcher.dart' show rendererDisplayName;
 import 'kiosk_track_text.dart' show kioskTextPolish;
 
@@ -87,7 +88,7 @@ class KioskLogo extends StatelessWidget {
       height: s(52),
       semanticsLabel: 'Kalinka',
     );
-    return GestureDetector(
+    final header = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Column(
@@ -138,6 +139,10 @@ class KioskLogo extends StatelessWidget {
           ],
         ],
       ),
+    );
+    return MouseRegion(
+      cursor: clickCursor(interactive: onTap != null),
+      child: header,
     );
   }
 }
@@ -284,10 +289,13 @@ class _Output extends ConsumerWidget {
       label: 'Output: ${here ? 'This device' : name}',
       button: onTap != null,
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: _Pill(scale: scale, child: row),
+      child: MouseRegion(
+        cursor: clickCursor(interactive: onTap != null),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: _Pill(scale: scale, child: row),
+        ),
       ),
     );
   }

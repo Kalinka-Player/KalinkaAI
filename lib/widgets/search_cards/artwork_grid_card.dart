@@ -90,6 +90,7 @@ class ArtworkGridCard extends ConsumerWidget {
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           onTap: activate,
           onLongPress: playable && !selecting ? select : null,
           borderRadius: BorderRadius.circular(12),

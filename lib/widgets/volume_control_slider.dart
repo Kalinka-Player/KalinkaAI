@@ -217,6 +217,7 @@ class _NowPlayingVolumeControlState
         Expanded(
           child: SliderTheme(
             data: SliderThemeData(
+              mouseCursor: WidgetStateMouseCursor.clickable,
               trackHeight: 3,
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
               overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),

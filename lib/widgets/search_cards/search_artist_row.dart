@@ -6,6 +6,7 @@ import '../../providers/selection_state_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/click_cursor.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
 import 'browse_navigation_scope.dart';
@@ -59,7 +60,7 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
     }
     final stats = statsParts.join(' \u00B7 ');
 
-    return GestureDetector(
+    final row = GestureDetector(
       onTap: selectionMode ? null : open,
       onLongPress: () {
         showSafeToast('Artists can’t be multi-selected');
@@ -185,6 +186,10 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
           ),
         ),
       ),
+    );
+    return MouseRegion(
+      cursor: clickCursor(interactive: !selectionMode),
+      child: row,
     );
   }
 }

@@ -88,7 +88,7 @@ class _TileRail extends StatelessWidget {
   final int count;
   final int rows;
 
-  /// The tile's size on a phone; wider screens scale it up to 2.08 times
+  /// The tile's size on a phone; wider screens scale it up to 1.768 times
   /// that.
   final double tileSize;
   final Widget Function(int index, double size) tile;
@@ -104,9 +104,10 @@ class _TileRail extends StatelessWidget {
     this.scrollable = true,
   });
 
-  /// Content width at which tiles show at [tileSize]; they grow in step
-  /// beyond it.
+  /// Content width at which tiles show at [tileSize]. Above it, cards grow
+  /// at half the proportional rate of the available width.
   static const _phoneWidth = 400.0;
+  static const _widthGrowth = 0.5;
 
   /// The art, then a line each of title and subtitle at the user's text size.
   double _tileHeight(BuildContext context, double tileSize) {
@@ -138,10 +139,9 @@ class _TileRail extends StatelessWidget {
     final columns = (count / rows).ceil();
     return LayoutBuilder(
       builder: (context, constraints) {
-        final size = (tileSize * constraints.maxWidth / _phoneWidth).clamp(
-          tileSize,
-          tileSize * 2.08,
-        );
+        final scale =
+            1 + (constraints.maxWidth / _phoneWidth - 1) * _widthGrowth;
+        final size = (tileSize * scale).clamp(tileSize, tileSize * 1.768);
         final tileHeight = _tileHeight(context, size);
         final width = constraints.maxWidth + 2 * kHomeSideInset;
         // The height first: an OverflowBox fills what it is offered, and a
@@ -306,6 +306,7 @@ class _TileState extends ConsumerState<_Tile> {
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           onTap: playable
               ? _play
               : item.canBrowse

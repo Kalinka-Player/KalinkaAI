@@ -31,6 +31,7 @@ class PresentationToggle extends ConsumerWidget {
         child: Tooltip(
           message: '$label view',
           child: InkWell(
+            mouseCursor: WidgetStateMouseCursor.clickable,
             onTap: () => notifier.set(layout, presentation),
             borderRadius: BorderRadius.circular(6),
             focusColor: KalinkaColors.surfaceOverlay,

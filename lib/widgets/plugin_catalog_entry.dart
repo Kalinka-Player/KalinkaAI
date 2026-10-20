@@ -232,6 +232,7 @@ class PluginRow extends StatelessWidget {
             value: summary,
             onTap: open,
             child: InkWell(
+              mouseCursor: WidgetStateMouseCursor.clickable,
               onTap: open,
               excludeFromSemantics: true,
               child: Padding(

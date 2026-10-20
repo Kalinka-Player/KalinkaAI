@@ -210,7 +210,7 @@ class CollectionFace extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Semantics(
+    final row = Semantics(
       button: true,
       label: item.playlist?.name ?? item.name ?? 'Unknown',
       child: GestureDetector(
@@ -277,5 +277,6 @@ class CollectionFace extends ConsumerWidget {
         ),
       ),
     );
+    return MouseRegion(cursor: SystemMouseCursors.click, child: row);
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/data_model.dart';
 import '../data_model/kalinka_ws_api.dart';
 import '../providers/kalinka_player_api_provider.dart';
@@ -341,7 +342,7 @@ class QueueItemRow extends ConsumerWidget {
               .show('Failed to remove: $e', isError: true);
         }
       },
-      child: rowContent,
+      child: MouseRegion(cursor: SystemMouseCursors.click, child: rowContent),
     );
   }
 }
@@ -417,14 +418,17 @@ class _DragHandle extends StatelessWidget {
   Widget build(BuildContext context) {
     return ReorderableDragStartListener(
       index: index,
-      child: const SizedBox(
-        width: 48,
-        height: 44,
-        child: Center(
-          child: Icon(
-            Icons.drag_handle,
-            size: 20,
-            color: KalinkaColors.textMuted,
+      child: const MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: SizedBox(
+          width: 48,
+          height: 44,
+          child: Center(
+            child: Icon(
+              Icons.drag_handle,
+              size: 20,
+              color: KalinkaColors.textMuted,
+            ),
           ),
         ),
       ),

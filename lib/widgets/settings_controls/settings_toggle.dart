@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
 
 /// Toggle switch control for settings.
@@ -16,7 +17,7 @@ class SettingsToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    final toggle = GestureDetector(
       onTap: () {
         onChanged(!value);
       },
@@ -46,5 +47,6 @@ class SettingsToggle extends StatelessWidget {
         ),
       ),
     );
+    return MouseRegion(cursor: SystemMouseCursors.click, child: toggle);
   }
 }

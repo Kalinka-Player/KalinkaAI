@@ -35,6 +35,7 @@ class QueueMenuButton extends ConsumerWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           onTap: () => showQueueManagementTray(context, ref),
           overlayColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.pressed)) {

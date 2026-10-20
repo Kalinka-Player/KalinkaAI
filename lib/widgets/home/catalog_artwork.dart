@@ -200,7 +200,10 @@ class _ArtworkImageState extends State<_ArtworkImage> {
                     Positioned.fill(
                       child: Material(
                         type: MaterialType.transparency,
-                        child: InkWell(onTap: widget.onOpen),
+                        child: InkWell(
+                          mouseCursor: WidgetStateMouseCursor.clickable,
+                          onTap: widget.onOpen,
+                        ),
                       ),
                     ),
                   ],

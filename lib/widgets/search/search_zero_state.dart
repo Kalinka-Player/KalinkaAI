@@ -495,6 +495,7 @@ class _HoverRow extends StatelessWidget {
     return Material(
       type: MaterialType.transparency,
       child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         onTap: onTap,
         onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(14),
