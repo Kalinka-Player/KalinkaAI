@@ -269,6 +269,7 @@ class _OtherOutput extends StatelessWidget {
       child: Opacity(
         opacity: usable ? 1 : 0.45,
         child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           onTap: usable ? onTap : null,
           borderRadius: BorderRadius.circular(s(12)),
           child: Padding(
@@ -332,6 +333,7 @@ class _CloseButton extends StatelessWidget {
       button: true,
       excludeSemantics: true,
       child: InkResponse(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         onTap: onTap,
         radius: 26 * scale,
         child: SizedBox.square(

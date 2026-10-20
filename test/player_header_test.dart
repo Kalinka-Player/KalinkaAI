@@ -109,9 +109,16 @@ void main() {
         final header = tester.getRect(find.byType(PlayerHeader));
         final viewSwitch = tester.getRect(find.byType(PlayerViewSwitch));
         final collapse = tester.getRect(find.byTooltip('Minimise player'));
+        final fullscreen = tester.getRect(
+          find.byTooltip('Now-playing display'),
+        );
         expect(header.contains(viewSwitch.topLeft), isTrue);
         expect(header.contains(viewSwitch.bottomRight), isTrue);
         expect(viewSwitch.overlaps(collapse), isFalse);
+        expect(viewSwitch.overlaps(fullscreen), isFalse);
+        expect(fullscreen.right, closeTo(header.right - 16, .01));
+        expect(collapse.left, closeTo(header.left + 16, .01));
+        expect(fullscreen.center.dy, closeTo(collapse.center.dy, .01));
         expect(collapse.size, const Size(48, 48));
         if (scale == 1) {
           expect(viewSwitch.height, 48);
@@ -164,7 +171,7 @@ void main() {
   });
 
   testWidgets('narrow header gives the switch a separate row', (tester) async {
-    await _pumpHeader(tester, width: 320);
+    await _pumpHeader(tester, width: 320, scale: 2);
     expect(
       tester.getTopLeft(find.byType(PlayerViewSwitch)).dy,
       greaterThan(tester.getBottomLeft(find.byTooltip('Minimise player')).dy),

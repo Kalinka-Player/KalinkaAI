@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/click_cursor.dart';
 
 /// Server status chip — top-right of the header.
 ///
@@ -66,7 +68,7 @@ class _ServerChipState extends ConsumerState<ServerChip>
     final chipData = _getChipData(connectionState, settings.name);
 
     if (widget.compact) {
-      return Semantics(
+      final chip = Semantics(
         label: chipData.label,
         button: widget.onTap != null,
         child: GestureDetector(
@@ -78,9 +80,13 @@ class _ServerChipState extends ConsumerState<ServerChip>
           ),
         ),
       );
+      return MouseRegion(
+        cursor: clickCursor(interactive: widget.onTap != null),
+        child: chip,
+      );
     }
 
-    return GestureDetector(
+    final chip = GestureDetector(
       onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
@@ -119,6 +125,10 @@ class _ServerChipState extends ConsumerState<ServerChip>
           ],
         ),
       ),
+    );
+    return MouseRegion(
+      cursor: clickCursor(interactive: widget.onTap != null),
+      child: chip,
     );
   }
 

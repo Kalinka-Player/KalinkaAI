@@ -69,6 +69,7 @@ class _RowPlayButtonState extends ConsumerState<RowPlayButton> {
             child: Material(
               type: MaterialType.transparency,
               child: InkWell(
+                mouseCursor: WidgetStateMouseCursor.clickable,
                 customBorder: const CircleBorder(),
                 onTap: _starting ? null : _play,
                 onHover: _setHover,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
 
 /// Connected segmented control for enum-like settings.
@@ -62,6 +63,7 @@ class _Segment extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         onTap: onTap,
         overlayColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.pressed)) {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../theme/app_theme.dart';
+import '../../utils/click_cursor.dart';
 import '../loading_shimmer.dart';
 
 /// Shared tile treatment for source roots and compact pinned catalogs.
@@ -158,9 +159,13 @@ class _CatalogTileSurface extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         onTap: onTap,
         // Keep icons close to the labels without crowding the text.
         child: ListTileTheme.merge(
+          mouseCursor: WidgetStatePropertyAll(
+            clickCursor(interactive: onTap != null),
+          ),
           contentPadding: EdgeInsetsDirectional.only(
             start: 12 * scale,
             end: 8 * scale,

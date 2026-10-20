@@ -110,7 +110,7 @@ class _KioskVolumeControlState extends ConsumerState<KioskVolumeControl>
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final height = constraints.maxHeight;
-                      return GestureDetector(
+                      final slider = GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTapUp: (d) {
                           final l = _levelAt(d.localPosition, height);
@@ -131,6 +131,10 @@ class _KioskVolumeControlState extends ConsumerState<KioskVolumeControl>
                             ),
                           ),
                         ),
+                      );
+                      return MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: slider,
                       );
                     },
                   ),
@@ -208,7 +212,7 @@ class _KioskVolumeSliderState extends ConsumerState<KioskVolumeSlider>
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
-                return GestureDetector(
+                final slider = GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTapUp: (d) {
                     final l = _levelAt(d.localPosition, width);
@@ -230,6 +234,10 @@ class _KioskVolumeSliderState extends ConsumerState<KioskVolumeSlider>
                       ),
                     ),
                   ),
+                );
+                return MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: slider,
                 );
               },
             ),

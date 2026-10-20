@@ -14,6 +14,7 @@ import '../providers/playback_time_provider.dart';
 import '../providers/source_modules_provider.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
+import '../utils/click_cursor.dart';
 import '../utils/haptics.dart';
 import '../utils/playback_utils.dart';
 import 'away.dart';
@@ -471,36 +472,41 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
               // Only art + text take the tap-to-open / swipe gestures; the
               // play button stays outside so the swipe recognizer can't steal
               // its taps.
-              final track = GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: widget.onTap,
-                onHorizontalDragStart: canSwipe ? _onHorizontalDragStart : null,
-                onHorizontalDragUpdate: canSwipe
-                    ? _onHorizontalDragUpdate
-                    : null,
-                onHorizontalDragEnd: canSwipe ? _onHorizontalDragEnd : null,
-                onHorizontalDragCancel: canSwipe
-                    ? _onHorizontalDragCancel
-                    : null,
-                onVerticalDragEnd: (d) {
-                  // Swipe up → open now-playing
-                  if ((d.primaryVelocity ?? 0) < -200) {
-                    widget.onTap?.call();
-                  }
-                },
-                child: Row(
-                  children: [
-                    _buildAlbumArt(
-                      resolvedImageUrl: resolvedImageUrl,
-                      trackId: currentTrack?.id ?? '',
-                    ),
-                    const SizedBox(width: 10),
-                    _buildCarouselText(
-                      currentTrack: currentTrack,
-                      incomingTrack: incomingTrack,
-                      carouselOffset: carouselOffset,
-                    ),
-                  ],
+              final track = MouseRegion(
+                cursor: clickCursor(interactive: widget.onTap != null),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onTap,
+                  onHorizontalDragStart: canSwipe
+                      ? _onHorizontalDragStart
+                      : null,
+                  onHorizontalDragUpdate: canSwipe
+                      ? _onHorizontalDragUpdate
+                      : null,
+                  onHorizontalDragEnd: canSwipe ? _onHorizontalDragEnd : null,
+                  onHorizontalDragCancel: canSwipe
+                      ? _onHorizontalDragCancel
+                      : null,
+                  onVerticalDragEnd: (d) {
+                    // Swipe up → open now-playing
+                    if ((d.primaryVelocity ?? 0) < -200) {
+                      widget.onTap?.call();
+                    }
+                  },
+                  child: Row(
+                    children: [
+                      _buildAlbumArt(
+                        resolvedImageUrl: resolvedImageUrl,
+                        trackId: currentTrack?.id ?? '',
+                      ),
+                      const SizedBox(width: 10),
+                      _buildCarouselText(
+                        currentTrack: currentTrack,
+                        incomingTrack: incomingTrack,
+                        carouselOffset: carouselOffset,
+                      ),
+                    ],
+                  ),
                 ),
               );
               return Row(

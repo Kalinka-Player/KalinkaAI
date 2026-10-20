@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/data_model.dart';
 import '../providers/browse_detail_provider.dart';
 import '../providers/selection_state_provider.dart';
@@ -360,6 +361,7 @@ class _BatchActionButton extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           onTap: onTap,
           // On the crimson fill an accent wash would vanish — use white.
           overlayColor: look == _BatchLook.filled

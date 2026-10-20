@@ -75,6 +75,7 @@ class ServerUpdateBanner extends ConsumerWidget {
             child: Material(
               color: Colors.transparent,
               child: InkWell(
+                mouseCursor: WidgetStateMouseCursor.clickable,
                 onTap: () => _confirmUpgrade(context, ref, update),
                 hoverColor: KalinkaColors.surfaceOverlay,
                 highlightColor: KalinkaColors.surfaceOverlay,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
 import '../../utils/haptics.dart';
 
@@ -114,6 +115,7 @@ class _SettingsSliderState extends State<SettingsSlider> {
 
     final sliderControl = SliderTheme(
       data: SliderThemeData(
+        mouseCursor: WidgetStateMouseCursor.clickable,
         activeTrackColor: KalinkaColors.accent,
         inactiveTrackColor: KalinkaColors.surfaceElevated,
         thumbColor: Colors.white,

@@ -249,6 +249,7 @@ void main() {
       200,
       scrollable: find.byType(Scrollable),
     );
+    await tester.pumpAndSettle();
     expect(find.byIcon(Icons.skip_next_rounded).hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

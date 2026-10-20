@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
 
 /// Bits the three sound-related wizard steps (output, amplifier control,
@@ -59,6 +60,7 @@ class TestSoundButton extends StatelessWidget {
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
           onTap: enabled ? onTap : null,
           overlayColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.pressed) ||

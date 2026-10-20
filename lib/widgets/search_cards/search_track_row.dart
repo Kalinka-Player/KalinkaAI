@@ -505,7 +505,9 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
         ),
       ),
     );
-    if (number == null) return row;
+    if (number == null) {
+      return MouseRegion(cursor: SystemMouseCursors.click, child: row);
+    }
 
     return FocusableActionDetector(
       mouseCursor: SystemMouseCursors.click,

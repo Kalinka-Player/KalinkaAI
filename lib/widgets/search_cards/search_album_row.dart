@@ -105,7 +105,7 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
       if (details.isNotEmpty && !columns.detail) details,
     ].join(' \u00B7 ');
 
-    return SwipeToActRow(
+    final row = SwipeToActRow(
       enabled: !selectionMode,
       onAddToQueue: _addToQueue,
       onPlayNext: _playNext,
@@ -304,5 +304,6 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
         ),
       ),
     );
+    return MouseRegion(cursor: SystemMouseCursors.click, child: row);
   }
 }

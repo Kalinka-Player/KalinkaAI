@@ -145,6 +145,7 @@ class ArtistRelationTabs extends StatelessWidget {
               excludeSemantics: true,
               onTap: () => onShow(relation),
               child: InkWell(
+                mouseCursor: WidgetStateMouseCursor.clickable,
                 onTap: () => onShow(relation),
                 borderRadius: BorderRadius.circular(6),
                 child: Container(
