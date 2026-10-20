@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart';
+import '../../providers/artist_relations_provider.dart' show imagePathOf;
 import '../../providers/selection_state_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
@@ -77,8 +78,7 @@ class ArtworkGridCard extends ConsumerWidget {
       }
     }
 
-    final path =
-        item.image?.large ?? item.image?.small ?? item.image?.thumbnail;
+    final path = imagePathOf(item.image);
     final url = path == null ? null : ref.read(urlResolverProvider).abs(path);
 
     final card = Semantics(

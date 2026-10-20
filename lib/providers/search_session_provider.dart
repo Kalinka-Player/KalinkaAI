@@ -706,9 +706,6 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     );
   }
 
-  /// Whether Back has a visit to return to before Home.
-  bool get canGoBack => !state.atHome;
-
   /// Return to the previous visit as it was left: its page, filters,
   /// folder, query, results and source shortcut. With none left, Home.
   void goBack() {
@@ -771,8 +768,10 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
             if (previous.results!.legsOf(leg)[source.name] is LegLoading)
               (leg: leg, source: source.name),
       ];
-      next = next.copyWith(queryGen: gen, searchLoading: false);
-      if (previous.searchLoading && previous.searchQuery.isNotEmpty) {
+      final asking = previous.searchLoading && previous.searchQuery.isNotEmpty;
+      // Still loading while it is asked again, as on submit.
+      next = next.copyWith(queryGen: gen, searchLoading: asking);
+      if (asking) {
         state = next;
         _runQuery(previous.searchQuery, gen);
         return;

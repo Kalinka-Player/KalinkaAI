@@ -17,8 +17,7 @@ class PresentationToggle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final chosen =
-        ref.watch(listingPresentationProvider)[layout.id] ?? layout.byDefault;
+    final chosen = watchPresentation(ref, layout);
     final notifier = ref.read(listingPresentationProvider.notifier);
 
     Widget side(ListingPresentation presentation, IconData icon, String label) {
