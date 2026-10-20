@@ -20,6 +20,7 @@ import 'away.dart';
 import 'bit_perfect_badge.dart';
 import 'column_separator.dart';
 import 'gradient_progress_line.dart';
+import 'kalinka_toast_overlay.dart' show kalinkaMiniPlayerHeight;
 import 'play_pause_glyph.dart';
 import 'playback_progress_slider.dart';
 import 'procedural_album_art.dart';
@@ -34,7 +35,8 @@ import 'volume_control_slider.dart';
 /// the keyboard back by this long so the bar clears first.
 const Duration kMiniPlayerHideDuration = Duration(milliseconds: 260);
 
-/// Fixed bottom mini player — 72px tall plus safe area inset. Sits under Home
+/// Bottom mini player — at least 72dp tall, growing with system text size,
+/// plus the safe area inset. Sits under Home
 /// and under the player's queue view, where a tap turns back to the track.
 ///
 /// Swipe gestures:
@@ -393,7 +395,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
         top: false,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final tier = _MiniPlayerTier.of(constraints.maxWidth);
+            final textScale = (MediaQuery.textScalerOf(context).scale(16) / 16)
+                .clamp(1.0, double.infinity);
+            final tier = _MiniPlayerTier.of(constraints.maxWidth / textScale);
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -458,7 +462,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     return AwayDim(
       away: isOffline,
       child: SizedBox(
-        height: 70,
+        height: kalinkaMiniPlayerHeight(context) - 2,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: LayoutBuilder(

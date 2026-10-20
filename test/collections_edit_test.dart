@@ -230,7 +230,7 @@ void main() {
   testWidgets('Back leaves editing, not the page', (tester) async {
     final container = await pumpEditing(tester, _EditApi());
 
-    await tester.tap(find.bySemanticsLabel('Back'));
+    await tester.tap(find.byTooltip('Back'));
     await settle(tester);
 
     expect(container.read(collectionEditProvider).active, isFalse);
@@ -245,7 +245,7 @@ void main() {
     final container = await pumpEditing(tester, _EditApi());
     await toggleRemoval(tester, 'Second Wind');
 
-    await tester.tap(find.bySemanticsLabel('Back'));
+    await tester.tap(find.byTooltip('Back'));
     await settle(tester);
     expect(find.text('Discard 1 change?'), findsOneWidget);
     await tester.tap(find.text('Keep editing'));

@@ -34,16 +34,12 @@ class CatalogTile extends StatelessWidget {
         leading: Icon(icon, color: tint, size: 24 * scale),
         title: Text(
           title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
           style: _scaled(KalinkaTextStyles.trackRowTitle, scale),
         ),
         subtitle: subtitle == null || subtitle!.isEmpty
             ? null
             : Text(
                 subtitle!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
                 style: _scaled(KalinkaTextStyles.trackRowSubtitle, scale),
               ),
         trailing: onTap == null
@@ -58,7 +54,8 @@ TextStyle _scaled(TextStyle style, double scale) =>
     scale == 1 ? style : style.copyWith(fontSize: style.fontSize! * scale);
 
 /// How much larger than a compact catalog's a tile in a filling
-/// [CatalogTileGrid] draws: its text, icons and padding grow with its width.
+/// [CatalogTileGrid] draws. Width adds only a little emphasis; system text
+/// scaling remains independent and labels can wrap to their full height.
 class _TileScale extends InheritedWidget {
   final double scale;
 
@@ -162,8 +159,7 @@ class _CatalogTileSurface extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        // Tighter than ListTile's defaults, so a half-width phone tile keeps
-        // room for its title.
+        // Keep icons close to the labels without crowding the text.
         child: ListTileTheme.merge(
           contentPadding: EdgeInsetsDirectional.only(
             start: 12 * scale,
@@ -186,7 +182,7 @@ class _CatalogTileSurface extends StatelessWidget {
 ///
 /// With [fill], as for the music sources, the tiles share the whole width
 /// instead — a lone one spans it — in as few rows as fit, as evenly filled
-/// as their count allows, and draw larger as they widen.
+/// as their count allows, with modest growth capped at 10%.
 class CatalogTileGrid extends StatelessWidget {
   final List<Widget> children;
   final bool fill;
@@ -198,21 +194,22 @@ class CatalogTileGrid extends StatelessWidget {
     builder: (context, constraints) {
       final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
       const gap = _RenderEqualHeightTileGrid._gap;
-      // Two to a row on a 360dp phone, with room for "My Library".
-      final fit = ((constraints.maxWidth + gap) / (160 * scale + gap))
+      // Reserve room for a label, metadata and both icons before adding a
+      // column. Phone layouts use one full-width tile per row.
+      final fit = ((constraints.maxWidth + gap) / (240 * scale + gap))
           .floor()
           .clamp(1, 6);
       final columns = fill ? _balanced(fit) : fit;
       final grid = _EqualHeightTileGrid(
         columns: columns,
-        maxTileWidth: fill ? double.infinity : 260 * scale,
+        maxTileWidth: fill || columns == 1 ? double.infinity : 260 * scale,
         textDirection: Directionality.of(context),
         children: children,
       );
       if (!fill) return grid;
       final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
       return _TileScale(
-        scale: (width / 180 / scale).clamp(1.15, 1.6),
+        scale: (width / 180 / scale).clamp(1.0, 1.1),
         child: grid,
       );
     },

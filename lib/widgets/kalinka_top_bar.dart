@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/app_theme.dart';
 import 'server_chip.dart';
+import 'tap_highlight.dart';
 
 /// Slim top app bar for the main screen: Kalinka wordmark on the left,
 /// connection chip (via [ServerChip], which carries the green status dot) on
@@ -11,6 +12,7 @@ import 'server_chip.dart';
 /// breadcrumb (see SearchSessionView).
 class KalinkaTopBar extends StatelessWidget {
   final VoidCallback? onServerChipTap;
+  final VoidCallback? onResultsTap;
 
   /// Anchor for the first-run coach-mark spotlight on the connection chip.
   final GlobalKey? connectionKey;
@@ -22,6 +24,7 @@ class KalinkaTopBar extends StatelessWidget {
   const KalinkaTopBar({
     super.key,
     this.onServerChipTap,
+    this.onResultsTap,
     this.connectionKey,
     this.transparent = false,
   });
@@ -36,14 +39,37 @@ class KalinkaTopBar extends StatelessWidget {
           height: kKalinkaTopBarHeight,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Expanded(child: _buildLeading()),
-                KeyedSubtree(
-                  key: connectionKey,
-                  child: ServerChip(onTap: onServerChipTap),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final compact =
+                    constraints.maxWidth < 300 ||
+                    MediaQuery.textScalerOf(context).scale(12) > 18;
+                return Row(
+                  children: [
+                    Expanded(child: _buildLeading()),
+                    if (onResultsTap != null)
+                      IconButton(
+                        tooltip: 'Back to search results',
+                        style: kalinkaIconButtonStyle,
+                        onPressed: onResultsTap,
+                        icon: const Icon(Icons.manage_search, size: 24),
+                      ),
+                    KeyedSubtree(
+                      key: connectionKey,
+                      child: SizedBox(
+                        height: 48,
+                        width: compact ? 48 : null,
+                        child: Center(
+                          child: ServerChip(
+                            onTap: onServerChipTap,
+                            compact: compact,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -56,15 +82,17 @@ class KalinkaTopBar extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: Padding(
         padding: const EdgeInsets.only(left: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const KalinkaWordmark(),
-            if (!kReleaseMode) ...[
-              const SizedBox(width: 10),
-              Flexible(child: _buildDebugBadge()),
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Flexible(child: KalinkaWordmark()),
+              if (!kReleaseMode && constraints.maxWidth > 160) ...[
+                const SizedBox(width: 10),
+                Flexible(child: _buildDebugBadge()),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

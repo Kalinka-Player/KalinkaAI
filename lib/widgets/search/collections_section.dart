@@ -57,7 +57,20 @@ class CollectionsSection extends ConsumerWidget {
         if (shelf.isEmpty) {
           return _section(
             heading: ShelfHeading(title: shelf.plan.title.toUpperCase()),
-            body: const CollectionsEmptyRow(),
+            body: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth:
+                      440 *
+                      (MediaQuery.textScalerOf(context).scale(16) / 16).clamp(
+                        1.0,
+                        double.infinity,
+                      ),
+                ),
+                child: const CollectionsEmptyRow(),
+              ),
+            ),
           );
         }
         return _section(

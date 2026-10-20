@@ -7,6 +7,7 @@ import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/plugin_catalog.dart';
 import 'package:kalinka/providers/modules_state_provider.dart';
+import 'package:kalinka/providers/catalog_sources_provider.dart';
 import 'package:kalinka/providers/pinned_catalogs_provider.dart';
 import 'package:kalinka/providers/plugin_catalog_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
@@ -20,6 +21,7 @@ import 'package:kalinka/providers/shell_nav_provider.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/home/pinned_catalogs_section.dart';
+import 'package:kalinka/widgets/home/home_customisation_banner.dart';
 import 'package:kalinka/widgets/home/catalog_artwork.dart';
 import 'package:kalinka/widgets/home/catalog_tile.dart';
 import 'package:kalinka/widgets/home/preview_shelf.dart';
@@ -28,6 +30,7 @@ import 'package:kalinka/widgets/home/home_preview_illustration.dart';
 import 'package:kalinka/widgets/kalinka_bottom_sheet.dart' show kSheetMaxWidth;
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/search/search_zero_state.dart';
+import 'package:kalinka/widgets/search/search_session_view.dart';
 import 'package:kalinka/widgets/search_cards/search_album_row.dart';
 import 'package:kalinka/widgets/shelf_heading.dart';
 
@@ -145,6 +148,106 @@ class _QuietSettings extends SettingsNotifier {
 }
 
 void main() {
+  testWidgets(
+    'first pin guidance opens Configuration when no sources are enabled',
+    (tester) async {
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(0)),
+        size: const Size(375, 812),
+        sources: const [],
+        overrides: [
+          catalogSourcesProvider.overrideWith((ref) async => []),
+          serverInfoProvider.overrideWith(
+            (ref) async => const ServerInfo(
+              version: 'test',
+              latencyMs: 1,
+              pluginCatalogEnabled: true,
+            ),
+          ),
+          modulesStateProvider.overrideWith(
+            (ref) async =>
+                ModulesAndDevices(inputModules: const [], devices: const []),
+          ),
+          pluginCatalogProvider.overrideWith(
+            (ref) async => const PluginCatalog(status: 'available'),
+          ),
+          serverUpdateProvider.overrideWith((ref) async => null),
+          settingsProvider.overrideWith(_QuietSettings.new),
+        ],
+      );
+      final invitation = find.byKey(
+        const ValueKey('customise-home-invitation'),
+      );
+      await tester.ensureVisible(invitation);
+      await tester.tap(invitation);
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Enable a music source in Configuration to start pinning catalogs.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Configure music sources'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PluginCatalogScreen), findsOneWidget);
+      expect(container.read(pinnedCatalogsProvider), isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final size in [const Size(375, 812), const Size(1200, 800)]) {
+    testWidgets(
+      'Home invitation leads to a first pin and returns after unpin at $size',
+      (tester) async {
+        final container = await pump(tester, size: size);
+        final invitation = find.byKey(
+          const ValueKey('customise-home-invitation'),
+        );
+        await tester.ensureVisible(invitation);
+        await tester.pumpAndSettle();
+        expect(find.byType(HomeCustomisationBanner), findsOneWidget);
+        expect(find.text('PINNED CATALOGS'), findsNothing);
+        expect(tester.getSize(invitation).height, greaterThanOrEqualTo(48));
+        await tester.tap(invitation);
+        await tester.pumpAndSettle();
+        final customisation = find.byType(CustomiseHomeScreen);
+        expect(customisation, findsOneWidget);
+        final source = find.descendant(
+          of: customisation,
+          matching: find.byKey(const ValueKey('catalog-source-alpha')),
+        );
+        await tester.ensureVisible(source);
+        await tester.tap(source);
+        await tester.pumpAndSettle();
+        expect(customisation, findsNothing);
+        expect(
+          container.read(searchSessionProvider).catalogPage.id,
+          'kalinka:alpha:catalog:root',
+        );
+        await tester.tap(find.text('Editorial'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Pin catalog to Home'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('home-preview-option-cards')),
+        );
+        await tester.pumpAndSettle();
+        container.read(searchSessionProvider.notifier).backToCatalogsRoot();
+        await tester.pumpAndSettle();
+        expect(find.byType(HomeCustomisationBanner), findsNothing);
+        expect(find.text('PINNED CATALOGS'), findsOneWidget);
+        final pin = container.read(pinnedCatalogsProvider).single;
+        await container.read(pinnedCatalogsProvider.notifier).unpin(pin.key);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(invitation);
+        expect(find.byType(HomeCustomisationBanner), findsOneWidget);
+        expect(find.text('PINNED CATALOGS'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   for (final size in [
     const Size(900, 1100),
     const Size(1200, 800),
@@ -154,7 +257,7 @@ void main() {
       tester,
     ) async {
       final container = await pump(tester, size: size);
-      final source = find.byKey(const ValueKey('catalog-source-alpha'));
+      final source = find.byKey(const ValueKey('navigation-source-alpha'));
       await tester.ensureVisible(source);
       await tester.tap(source);
       await tester.pumpAndSettle();
@@ -163,15 +266,15 @@ void main() {
       await tester.tap(find.byTooltip('Pin catalog to Home'));
       await tester.pumpAndSettle();
 
-      void expectPanelBounds(double width) {
+      void expectPanelBounds() {
         final choices = find.byType(HomePreviewChoices);
         final rect = tester.getRect(choices);
         // Over the Home panel, centred on it, and no wider than a sheet gets.
-        final panel = width - kalinkaPlayerPaneWidth(width) - 1;
-        expect(rect.left, greaterThanOrEqualTo(-1));
-        expect(rect.right, lessThanOrEqualTo(panel + 1));
+        final panel = tester.getRect(find.byType(SearchSessionView));
+        expect(rect.left, greaterThanOrEqualTo(panel.left - 1));
+        expect(rect.right, lessThanOrEqualTo(panel.right + 1));
         expect(rect.width, lessThanOrEqualTo(kSheetMaxWidth));
-        expect(rect.center.dx, closeTo(panel / 2, 1));
+        expect(rect.center.dx, closeTo(panel.center.dx, 1));
         final scroll = find.ancestor(
           of: choices,
           matching: find.byType(SingleChildScrollView),
@@ -188,11 +291,11 @@ void main() {
         expect(tester.takeException(), isNull);
       }
 
-      expectPanelBounds(size.width);
+      expectPanelBounds();
       // Follow the actual Home panel as the window changes size.
       tester.view.physicalSize = Size(size.width + 100, size.height);
       await tester.pumpAndSettle();
-      expectPanelBounds(size.width + 100);
+      expectPanelBounds();
 
       // Tapping beside the sheet, over the player, dismisses it without
       // pinning anything.
@@ -235,6 +338,15 @@ void main() {
         ],
       );
 
+      if (size.width >= 720) {
+        expect(find.text('MUSIC SOURCES'), findsNothing);
+        final invitation = find.byKey(
+          const ValueKey('customise-home-invitation'),
+        );
+        await tester.ensureVisible(invitation);
+        await tester.tap(invitation);
+        await tester.pumpAndSettle();
+      }
       expect(find.text('MUSIC SOURCES'), findsOneWidget);
       expect(find.text('BROWSE SOURCES'), findsNothing);
       expect(find.text('LISTENING ON'), findsNothing);
@@ -249,7 +361,10 @@ void main() {
 
       final settings = find.byType(PluginCatalogScreen);
       expect(settings, findsOneWidget);
-      expect(find.text('Configuration'), findsOneWidget);
+      expect(
+        find.descendant(of: settings, matching: find.text('Configuration')),
+        findsOneWidget,
+      );
       final sourceTab = find
           .descendant(
             of: find.byKey(const ValueKey('catalog-tab-sources')),
@@ -319,13 +434,13 @@ void main() {
       expect(saved.preview, HomePreviewType.cards);
       expect(saved.genreNames['jazz'], 'Jazz');
       expect(find.byIcon(CupertinoIcons.pin_slash), findsOneWidget);
-      await tester.tap(find.bySemanticsLabel('Back').first);
+      await tester.tap(find.byTooltip('Back').first);
       await tester.pumpAndSettle();
       expect(
         container.read(searchSessionProvider).catalogPage.id,
         'kalinka:alpha:catalog:root',
       );
-      await tester.tap(find.bySemanticsLabel('Back').first);
+      await tester.tap(find.byTooltip('Back').first);
       await tester.pumpAndSettle();
       expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
       expect(find.byType(PinnedCatalogPreview), findsOneWidget);
@@ -714,6 +829,18 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(compactTile, findsOneWidget);
+      // A fully wrapped compact title can put its heading outside the short
+      // landscape viewport; it must remain reachable by scrolling back.
+      await tester.scrollUntilVisible(
+        find.byTooltip('Customise Home'),
+        -100,
+        scrollable: find
+            .descendant(
+              of: find.byType(SearchZeroState),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       expect(find.byTooltip('Customise Home'), findsOneWidget);
       expect(tester.takeException(), isNull);
       final pin = container.read(pinnedCatalogsProvider).single;
@@ -833,9 +960,9 @@ void main() {
       await tester.tap(find.byTooltip('Customise Home'));
       await tester.pumpAndSettle();
       final panel = find.byType(CustomiseHomeScreen);
-      // The player keeps the right 496.8 of the 1200; Home takes the rest.
-      expect(tester.getRect(panel).left, 0);
-      expect(tester.getSize(panel).width, closeTo(702.2, 0.01));
+      final browsing = tester.getRect(find.byType(SearchSessionView));
+      expect(tester.getRect(panel).left, browsing.left);
+      expect(tester.getSize(panel).width, browsing.width);
       expect(find.byType(NowPlayingContent), findsOneWidget);
       await tester.tap(find.byTooltip('Preview for Editorial'));
       await tester.pumpAndSettle();
@@ -857,10 +984,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester.getRect(find.byKey(KalinkaDialog.cardKey)).right,
-        lessThanOrEqualTo(702.21),
+        lessThanOrEqualTo(browsing.right),
       );
       final card = tester.getCenter(find.byKey(KalinkaDialog.cardKey));
-      expect(card.dx, closeTo(351.1, 0.01));
+      expect(card.dx, closeTo(browsing.center.dx, 0.01));
       expect(card.dy, 450);
       tester.view.physicalSize = const Size(375, 812);
       await tester.pumpAndSettle();
@@ -951,11 +1078,11 @@ void main() {
         tester.getTopLeft(tiles.last).dy,
         greaterThan(tester.getTopLeft(find.text('art')).dy),
       );
-      // Sources share the whole row; pinned compact tiles keep tile size.
-      final sourceTile = find.byKey(const ValueKey('catalog-source-alpha'));
+      // The rail supplies source navigation; only pinned tiles occupy Home.
+      expect(find.byKey(const ValueKey('catalog-source-alpha')), findsNothing);
       expect(
-        tester.getSize(sourceTile).width,
-        greaterThan(tester.getSize(tiles.first).width),
+        find.byKey(const ValueKey('navigation-source-alpha')),
+        findsOneWidget,
       );
       await tester.ensureVisible(tiles.first);
       await tester.pumpAndSettle();
@@ -1028,7 +1155,7 @@ void main() {
         expect(container.read(searchSessionProvider).catalogPage.id, id);
         expect(find.byType(PreviewShelf), findsNothing);
 
-        await tester.tap(find.bySemanticsLabel('Back').first);
+        await tester.tap(find.byTooltip('Back').first);
         await tester.pumpAndSettle();
         expect(
           container.read(searchSessionProvider).catalogPage.isRoot,

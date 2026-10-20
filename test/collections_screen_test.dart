@@ -491,7 +491,7 @@ void main() {
     expect(find.text('Signals'), findsOneWidget);
 
     // Back returns to the listing it was opened from.
-    await tester.tap(find.bySemanticsLabel('Back'));
+    await tester.tap(find.byTooltip('Back'));
     await settle(tester);
     expect(container.read(searchSessionProvider).catalogPage.id, _shelfId);
   });

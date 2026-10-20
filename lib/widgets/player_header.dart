@@ -76,8 +76,8 @@ class PlayerHeader extends StatelessWidget {
           tooltip: 'Minimise player',
           onPressed: onClose,
           style: IconButton.styleFrom(
-            minimumSize: const Size(36, 36),
-            padding: const EdgeInsets.all(4),
+            minimumSize: const Size(48, 48),
+            padding: const EdgeInsets.all(10),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
           icon: const Icon(
@@ -116,7 +116,7 @@ class PlayerHeader extends StatelessWidget {
             builder: (context, constraints) {
               // Reserve the same side space in both views, even when output
               // selection is hidden, so switching views cannot move the tabs.
-              const sideSpace = 36 + 4 + 36 + 8;
+              const sideSpace = 48 + 4 + 36 + 8;
               final fits =
                   PlayerViewSwitch.preferredWidth(context) + 2 * sideSpace <=
                   constraints.maxWidth;
