@@ -14,7 +14,7 @@ const double kKalinkaTabletBreakpoint = 900;
 double kalinkaNavigationRailWidth(
   double windowWidth, {
   TextScaler textScaler = TextScaler.noScaling,
-}) => windowWidth >= 720 && textScaler.scale(12) <= 18 ? 80 : 0;
+}) => windowWidth >= 720 && textScaler.scale(12) <= 18 ? 88 : 0;
 
 /// Leave room for navigation and music browsing while keeping useful artwork.
 double kalinkaPlayerPaneWidth(double windowWidth) =>

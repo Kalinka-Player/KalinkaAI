@@ -62,8 +62,8 @@ void main() {
     await _open(tester, KalinkaDialogSide.browsing);
 
     final rect = tester.getRect(find.byKey(_card));
-    expect(rect.left, 210);
-    expect(rect.right, 670);
+    expect(rect.left, 214);
+    expect(rect.right, 674);
   });
 
   testWidgets('tablet width: a browsing dialog sits in the browsing pane', (
@@ -72,10 +72,10 @@ void main() {
     await _resizeTo(tester, const Size(1200, 800));
     await _open(tester, KalinkaDialogSide.browsing);
 
-    // Capped at 460 and centred in the browsing pane (80..839).
+    // Capped at 460 and centred in the browsing pane (88..839).
     final rect = tester.getRect(find.byKey(_card));
-    expect(rect.left, closeTo(229.5, 0.01));
-    expect(rect.right, closeTo(689.5, 0.01));
+    expect(rect.left, closeTo(233.5, 0.01));
+    expect(rect.right, closeTo(693.5, 0.01));
   });
 
   testWidgets('tablet width: a player dialog sits in the player pane', (
@@ -107,19 +107,19 @@ void main() {
     (tester) async {
       await _resizeTo(tester, const Size(1200, 800));
       await _open(tester, KalinkaDialogSide.browsing);
-      expect(tester.getRect(find.byKey(_card)).left, closeTo(229.5, 0.01));
+      expect(tester.getRect(find.byKey(_card)).left, closeTo(233.5, 0.01));
 
       // Split → rail and browsing: the card centres beside the rail.
       await _resizeTo(tester, const Size(800, 800));
       await tester.pumpAndSettle();
-      expect(tester.getRect(find.byKey(_card)).center.dx, 440);
+      expect(tester.getRect(find.byKey(_card)).center.dx, 444);
 
       // Phone → tablet: back into the browsing pane.
       await _resizeTo(tester, const Size(1200, 800));
       await tester.pumpAndSettle();
       final rect = tester.getRect(find.byKey(_card));
-      expect(rect.left, closeTo(229.5, 0.01));
-      expect(rect.right, closeTo(689.5, 0.01));
+      expect(rect.left, closeTo(233.5, 0.01));
+      expect(rect.right, closeTo(693.5, 0.01));
     },
   );
 
