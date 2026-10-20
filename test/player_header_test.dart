@@ -112,10 +112,10 @@ void main() {
         expect(header.contains(viewSwitch.topLeft), isTrue);
         expect(header.contains(viewSwitch.bottomRight), isTrue);
         expect(viewSwitch.overlaps(collapse), isFalse);
-        expect(collapse.height, 36);
+        expect(collapse.size, const Size(48, 48));
         if (scale == 1) {
           expect(viewSwitch.height, 48);
-          if (width >= 375) {
+          if (width >= 480) {
             expect(viewSwitch.center.dy, closeTo(collapse.center.dy, .01));
           }
         }

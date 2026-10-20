@@ -2,14 +2,18 @@ import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/catalog_sources_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/pinned_catalogs_provider.dart';
+import '../providers/server_info_provider.dart';
+import '../providers/shell_nav_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/configuration_appearance.dart';
 import '../widgets/home/catalog_pin_button.dart';
 import '../widgets/home/home_preview_switch.dart';
 import '../widgets/kalinka_button.dart';
 import '../widgets/kalinka_dialog.dart';
+import '../widgets/search/catalog_cards_section.dart';
 import '../widgets/settings_top_bar.dart';
 import '../widgets/slide_in_panel.dart';
 import '../widgets/tap_highlight.dart';
@@ -50,6 +54,9 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final pins = ref.watch(pinnedCatalogsProvider);
+    final noSources =
+        pins.isEmpty &&
+        ref.watch(catalogSourcesProvider).asData?.value.isEmpty == true;
     final notifier = ref.read(pinnedCatalogsProvider.notifier);
     final gutter = ConfigurationAppearance.gutter(context);
     // The background slides in with the panel; outside it, Home would go
@@ -70,10 +77,13 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                 Expanded(
                   child: ReorderableListView.builder(
                     padding: const EdgeInsets.only(bottom: 32),
-                    header: const _HomeLayoutIntro(),
+                    header: pins.isEmpty ? null : const _HomeLayoutIntro(),
                     footer: pins.isEmpty
                         ? Padding(
-                            padding: EdgeInsets.symmetric(horizontal: gutter),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: gutter,
+                              vertical: 20,
+                            ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -83,9 +93,33 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Open a source, browse to a catalog and pin it to Home.',
+                                  noSources
+                                      ? 'Enable a music source in Configuration to start pinning catalogs.'
+                                      : 'Choose a source below, browse to a catalog and use '
+                                            '“Pin catalog to Home” to choose its preview.',
                                   style: KalinkaTextStyles.settingsDescription,
                                 ),
+                                const SizedBox(height: 24),
+                                Builder(
+                                  builder: (panelContext) =>
+                                      CatalogCardsSection(
+                                        onSourceOpened: () =>
+                                            SlideInPanel.closeOf(panelContext),
+                                      ),
+                                ),
+                                if (noSources &&
+                                    ref.watch(pluginCatalogEnabledProvider))
+                                  KalinkaButton(
+                                    label: 'Configure music sources',
+                                    variant: KalinkaButtonVariant.neutral,
+                                    fullWidth: true,
+                                    onTap: () => ref
+                                        .read(
+                                          musicSourcesSettingsRequestProvider
+                                              .notifier,
+                                        )
+                                        .open(),
+                                  ),
                               ],
                             ),
                           )

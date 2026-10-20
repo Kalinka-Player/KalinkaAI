@@ -101,21 +101,32 @@ class KalinkaDialog extends StatelessWidget {
             _buildCard(context),
           ],
         );
+        final split = kalinkaSplitLayout(
+          constraints.maxWidth,
+          textScaler: MediaQuery.textScalerOf(context),
+        );
         if (side == KalinkaDialogSide.full ||
-            !kalinkaSplitLayout(constraints.maxWidth)) {
+            (!split && side == KalinkaDialogSide.player)) {
           return panel;
         }
         // The player's pane has a bounded width at the right; browsing
         // takes the rest.
-        final player = kalinkaPlayerPaneWidth(constraints.maxWidth);
+        final player = split
+            ? kalinkaPlayerPaneWidth(constraints.maxWidth)
+            : 0.0;
+        final rail = kalinkaNavigationRailWidth(
+          constraints.maxWidth,
+          textScaler: MediaQuery.textScalerOf(context),
+        );
         final away = _buildTapToDismiss(context, dimmed: false);
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: side == KalinkaDialogSide.player
               ? [Expanded(child: away), SizedBox(width: player, child: panel)]
               : [
+                  if (rail > 0) SizedBox(width: rail, child: away),
                   Expanded(child: panel),
-                  SizedBox(width: player + 1, child: away),
+                  if (split) SizedBox(width: player + 1, child: away),
                 ],
         );
       },

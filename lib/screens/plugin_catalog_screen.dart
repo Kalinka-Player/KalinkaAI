@@ -57,11 +57,10 @@ class PluginCatalogScreen extends ConsumerStatefulWidget {
     this.handlesBack = true,
   });
   @override
-  ConsumerState<PluginCatalogScreen> createState() =>
-      _PluginCatalogScreenState();
+  PluginCatalogScreenState createState() => PluginCatalogScreenState();
 }
 
-class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
+class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   final _scroll = ScrollController();
   PluginTab _tab = PluginTab.sources;
   CatalogPlugin? _settingsFor;
@@ -184,6 +183,10 @@ class _PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     }
     return choice == 'apply' ? _onApply() : false;
   }
+
+  /// Shell destinations use the same pending-change and operation guard as
+  /// Back, including when a nested Configuration page is open.
+  Future<bool> prepareToNavigate() => _beforeClose();
 
   Future<void> _onRestart() async {
     final confirmed = await showKalinkaDialog<bool>(

@@ -7,20 +7,30 @@ const double kKalinkaTopBarHeight = 52;
 /// Wordmark height inside the top bar, shared by every screen that shows it.
 const double kKalinkaWordmarkHeight = 30;
 
-/// Window width at/above which the app switches to the two-panel tablet
-/// layout (Now Playing + Settings on the left, queue + search on the right).
-/// Anything that has to line up with that split — dialogs, sheets — must read
-/// the same number, so it lives here rather than in each screen.
+/// Existing tablet boundary, also used by settings for their wider gutters.
 const double kKalinkaTabletBreakpoint = 900;
 
-/// The player's width beside browsing. Bounded, so a wider window gives its
-/// extra room to browsing rather than to a stretched player.
-double kalinkaPlayerPaneWidth(double windowWidth) =>
-    (windowWidth * 0.414).clamp(440.0, 580.0);
+/// Persistent navigation fits beside a useful single browsing pane from here.
+double kalinkaNavigationRailWidth(
+  double windowWidth, {
+  TextScaler textScaler = TextScaler.noScaling,
+}) => windowWidth >= 720 && textScaler.scale(12) <= 18 ? 80 : 0;
 
-/// Whether a window this wide holds the player and browsing side by side.
-bool kalinkaSplitLayout(double windowWidth) =>
-    windowWidth >= kKalinkaTabletBreakpoint;
+/// Leave room for navigation and music browsing while keeping useful artwork.
+double kalinkaPlayerPaneWidth(double windowWidth) =>
+    (windowWidth * 0.30).clamp(360.0, 440.0);
+
+/// All shell overlays use the same space budget, including enlarged text.
+bool kalinkaSplitLayout(
+  double windowWidth, {
+  TextScaler textScaler = TextScaler.noScaling,
+}) =>
+    windowWidth >= kKalinkaTabletBreakpoint &&
+    windowWidth -
+            kalinkaNavigationRailWidth(windowWidth, textScaler: textScaler) -
+            kalinkaPlayerPaneWidth(windowWidth) -
+            1 >=
+        480 * (textScaler.scale(16) / 16).clamp(1.0, double.infinity);
 
 /// Decoration shared by the queue and search top bars so both
 /// read identically — solid surface, a hairline bottom rule, and a soft drop
@@ -340,12 +350,14 @@ class KalinkaTextStyles {
   // Mini player
   static TextStyle miniPlayerTitle = KalinkaFonts.sans(
     fontSize: KalinkaTypography.baseSize + 4,
+    height: 1.4,
     fontWeight: FontWeight.w500,
     color: KalinkaColors.textPrimary,
   );
 
   static TextStyle miniPlayerArtist = KalinkaFonts.sans(
     fontSize: KalinkaTypography.baseSize + 1,
+    height: 1.4,
     color: KalinkaColors.textSecondary,
   );
 

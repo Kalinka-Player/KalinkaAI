@@ -5,13 +5,13 @@ import 'package:kalinka/widgets/home/catalog_tile.dart';
 
 void main() {
   for (final (width, scale, columns, direction) in [
-    (960.0, 1.0, 5, TextDirection.ltr),
+    (960.0, 1.0, 3, TextDirection.ltr),
     (1600.0, 1.0, 6, TextDirection.ltr),
-    (600.0, 1.0, 3, TextDirection.ltr),
-    (375.0, 1.0, 2, TextDirection.ltr),
-    (960.0, 2.0, 2, TextDirection.ltr),
+    (600.0, 1.0, 2, TextDirection.ltr),
+    (375.0, 1.0, 1, TextDirection.ltr),
+    (960.0, 2.0, 1, TextDirection.ltr),
     (375.0, 2.0, 1, TextDirection.ltr),
-    (960.0, 1.0, 5, TextDirection.rtl),
+    (960.0, 1.0, 3, TextDirection.rtl),
   ]) {
     testWidgets('equal tiles at $width, text scale $scale, $direction', (
       tester,
@@ -63,8 +63,12 @@ void main() {
       for (var i = 0; i < rects.length; i++) {
         // Fractional column widths round differently per tile.
         expect(rects[i].width, moreOrLessEquals(first.width));
-        // A wide pane adds columns rather than stretching tiles.
-        expect(rects[i].width, lessThanOrEqualTo(260 * scale));
+        // One column fills the available width; wide panes keep compact tiles.
+        if (columns == 1) {
+          expect(rects[i].width, width);
+        } else {
+          expect(rects[i].width, lessThanOrEqualTo(260 * scale));
+        }
         expect(rects[i].height, moreOrLessEquals(first.height));
         expect(
           rects[i].top,

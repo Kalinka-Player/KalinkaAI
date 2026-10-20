@@ -112,19 +112,23 @@ class SearchSessionView extends ConsumerStatefulWidget {
   /// PopScope on a route hears it, so both would unwind.
   final bool handlesBack;
 
+  /// The shell supplies this from its actual layout, not the browsing width.
+  final bool navigationVisible;
+
   const SearchSessionView({
     super.key,
     this.onServerTap,
     this.entryKey,
     this.connectionKey,
     this.handlesBack = true,
+    this.navigationVisible = false,
   });
 
   @override
-  ConsumerState<SearchSessionView> createState() => _SearchSessionViewState();
+  SearchSessionViewState createState() => SearchSessionViewState();
 }
 
-class _SearchSessionViewState extends ConsumerState<SearchSessionView>
+class SearchSessionViewState extends ConsumerState<SearchSessionView>
     with
         IndexerPollHolder,
         // Two controllers: the search overlay and the filter card.
@@ -188,10 +192,28 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
 
   // Hit-box height for the back button and connection dot, centred in the bar
   // (whose height is the shared kKalinkaTopBarHeight).
-  static const double _kBarMinHeight = 46;
+  static const double _kBarMinHeight = 48;
 
   // Read up front: `ref` is off limits in dispose, where it is needed.
   late final SearchEntryModeNotifier _entryMode;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    _overlayCtrl.duration = reduced
+        ? Duration.zero
+        : const Duration(milliseconds: 300);
+    _overlayCtrl.reverseDuration = reduced
+        ? Duration.zero
+        : const Duration(milliseconds: 230);
+    _filtersCtrl.duration = reduced
+        ? Duration.zero
+        : const Duration(milliseconds: 240);
+    _filtersCtrl.reverseDuration = reduced
+        ? Duration.zero
+        : const Duration(milliseconds: 180);
+  }
 
   @override
   void initState() {
@@ -472,6 +494,27 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     ref.read(searchSessionProvider.notifier).goBack();
   }
 
+  /// Global navigation must honour editing guards and discard only transient
+  /// overlays, leaving the current visit available to Back.
+  Future<bool> prepareToNavigate() async {
+    if (ref.read(collectionEditProvider).active &&
+        !await leaveCollectionEditing(context, ref)) {
+      return false;
+    }
+    if (!mounted) return false;
+    ref.read(selectionStateProvider.notifier).exitSelectionMode();
+    _composerFocus.unfocus();
+    _composerController.clear();
+    _overlayCtrl.value = 0;
+    _filtersCtrl.value = 0;
+    _entryMode.set(false);
+    setState(() {
+      _focused = false;
+      _filtersOpen = false;
+    });
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(searchSessionProvider);
@@ -539,6 +582,7 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           // Beside the player's pane, backdrops fade out before meeting it.
           final besidePlayer = kalinkaSplitLayout(
             MediaQuery.sizeOf(context).width,
+            textScaler: MediaQuery.textScalerOf(context),
           );
           return ColoredBox(
             color: KalinkaColors.background,
@@ -790,6 +834,15 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
             KalinkaTopBar(
               transparent: true,
               onServerChipTap: widget.onServerTap,
+              onResultsTap:
+                  session.resultsAvailable && !widget.navigationVisible
+                  ? () async {
+                      if (!await prepareToNavigate() || !mounted) return;
+                      ref
+                          .read(searchSessionProvider.notifier)
+                          .selectView(FindMusicView.results);
+                    }
+                  : null,
               connectionKey: widget.connectionKey,
             ),
             const ConnectionBanner(),
@@ -805,24 +858,17 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
       child: SizedBox(
         height: kKalinkaTopBarHeight,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(6, 3, 6, 3),
+          padding: const EdgeInsets.fromLTRB(6, 2, 6, 2),
           child: Row(
             children: [
-              Semantics(
-                label: 'Back',
-                button: true,
-                child: GestureDetector(
-                  onTap: _handleBack,
-                  behavior: HitTestBehavior.opaque,
-                  child: const SizedBox(
-                    width: 42,
-                    height: _kBarMinHeight,
-                    child: Icon(
-                      Icons.arrow_back,
-                      size: 22,
-                      color: KalinkaColors.textPrimary,
-                    ),
-                  ),
+              IconButton(
+                tooltip: 'Back',
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                onPressed: _handleBack,
+                icon: const Icon(
+                  Icons.arrow_back,
+                  size: 22,
+                  color: KalinkaColors.textPrimary,
                 ),
               ),
               const SizedBox(width: 8),
@@ -892,35 +938,32 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     final smart = ref.watch(smartSearchAvailableProvider) ?? true;
     return SearchZeroState(
       controller: _discoverScroll,
+      showMusicSources: !widget.navigationVisible,
       onOpenCatalog: _openCatalog,
       leading: [
         // Only present while the library pipeline is still running.
         const _IndexerProgressCard(),
-        // The only way back into the last search after backing out of it.
-        if (session.resultsAvailable && session.searchQuery.isNotEmpty)
-          _ResultsReturnPill(
-            query: session.searchQuery,
-            onTap: () {
-              ref
-                  .read(searchSessionProvider.notifier)
-                  .selectView(FindMusicView.results);
-            },
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kHomeSearchMaxWidth),
+            child: _DiscoverHero(
+              entryKey: _entryKey,
+              hint: _hintText(session, smart: smart),
+              smartSearch: smart,
+              smartSources: smart ? ref.watch(smartSearchSourcesProvider) : '',
+              // The server's curated prompts, not the static stand-ins or the
+              // unvalidated pick, and only once smart search is known to answer.
+              suggestions: ref.watch(smartSearchAvailableProvider) == true
+                  ? [
+                      for (final s in session.aiSuggestions)
+                        if (!s.experimental) s,
+                    ]
+                  : const [],
+              onSuggestion: _submitFromTile,
+              onOpenSearch: _openSearch,
+            ),
           ),
-        _DiscoverHero(
-          entryKey: _entryKey,
-          hint: _hintText(session, smart: smart),
-          smartSearch: smart,
-          smartSources: smart ? ref.watch(smartSearchSourcesProvider) : '',
-          // The server's curated prompts, not the static stand-ins or the
-          // unvalidated pick, and only once smart search is known to answer.
-          suggestions: ref.watch(smartSearchAvailableProvider) == true
-              ? [
-                  for (final s in session.aiSuggestions)
-                    if (!s.experimental) s,
-                ]
-              : const [],
-          onSuggestion: _submitFromTile,
-          onOpenSearch: _openSearch,
         ),
         const SizedBox(height: kHomeSectionGap),
       ],
@@ -1026,9 +1069,13 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
     return LayoutBuilder(
       builder: (context, constraints) {
         final surfaceWidth = constraints.maxWidth;
-        final origin =
-            _originRect ??
-            Rect.fromLTWH(16, targetTop + 120, surfaceWidth - 32, 56);
+        // Remeasure the width on resize, including while the composer is open.
+        final origin = Rect.fromLTWH(
+          16,
+          _originRect?.top ?? targetTop + 120,
+          (surfaceWidth - 32).clamp(0.0, kHomeSearchMaxWidth),
+          _originRect?.height ?? 56,
+        );
         return AnimatedBuilder(
           animation: _overlayCtrl,
           builder: (context, _) {
@@ -1143,73 +1190,6 @@ class _SearchSessionViewState extends ConsumerState<SearchSessionView>
           },
         );
       },
-    );
-  }
-}
-
-/// Return-to-results pill on the Catalogs root; re-enters the Results layer
-/// without re-running the query.
-class _ResultsReturnPill extends StatelessWidget {
-  final String query;
-  final VoidCallback onTap;
-
-  const _ResultsReturnPill({required this.query, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 4, bottom: 14),
-      child: Semantics(
-        label: 'Back to results',
-        button: true,
-        child: Material(
-          color: KalinkaColors.surfaceRaised,
-          borderRadius: BorderRadius.circular(12),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onTap,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(14, 11, 10, 11),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: KalinkaColors.borderDefault),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.auto_awesome,
-                    size: 15,
-                    color: KalinkaColors.gold,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      query,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: KalinkaTextStyles.trackRowSubtitle.copyWith(
-                        color: KalinkaColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'RESULTS',
-                    style: KalinkaTextStyles.sectionLabel.copyWith(
-                      color: KalinkaColors.textSecondary,
-                    ),
-                  ),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    size: 18,
-                    color: KalinkaColors.textSecondary,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

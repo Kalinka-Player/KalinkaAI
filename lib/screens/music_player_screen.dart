@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
 import '../providers/app_state_provider.dart';
+import '../providers/catalog_sources_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/demo_mode.dart';
@@ -13,6 +14,7 @@ import '../providers/playback_failure_provider.dart';
 import '../providers/renderer_host_provider.dart' show rendererIdentityProvider;
 import '../providers/renderer_provider.dart';
 import '../providers/renderer_settings_route_provider.dart';
+import '../providers/restart_provider.dart';
 import '../providers/search_session_provider.dart';
 import '../providers/server_connect.dart';
 import '../providers/settings_provider.dart';
@@ -20,6 +22,7 @@ import '../providers/shell_nav_provider.dart';
 import '../providers/server_info_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../providers/toast_provider.dart';
+import '../providers/upgrade_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/renderer_fault_text.dart';
 import '../widgets/box_actions.dart';
@@ -46,6 +49,7 @@ import 'settings_screen.dart';
 import 'plugin_catalog_screen.dart';
 import '../widgets/kalinka_toast_overlay.dart';
 import '../widgets/sheet_anchor.dart';
+import '../widgets/shell_navigation.dart';
 
 class MusicPlayerScreen extends ConsumerStatefulWidget {
   const MusicPlayerScreen({super.key});
@@ -64,10 +68,13 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // is mounted, and a resize re-parents the key to the other.
   final _outputSwitcherKey = GlobalKey();
   final _playerPaneKey = GlobalKey();
+  final _browsingPaneKey = GlobalKey();
+  final _homeKey = GlobalKey<SearchSessionViewState>();
   // Same trick for the settings panel, so a resize moves it rather than
   // remounting it (which would reload config and drop staged edits).
   final _settingsKey = GlobalKey();
-  final _pluginsKey = GlobalKey();
+  final _pluginsKey = GlobalKey<PluginCatalogScreenState>();
+  bool _navigating = false;
 
   // Drives the mini-player sliding down out of view while the search entry
   // overlay is up (0 = shown, 1 = hidden). The keyboard is held back until
@@ -299,6 +306,72 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     ref.read(homeSearchRequestProvider.notifier).request();
   }
 
+  Widget _navigation() => ShellNavigation(
+    configurationOpen:
+        _pluginsOpen ||
+        _settingsOpen ||
+        ref.watch(rendererSettingsRouteProvider) != null,
+    enabled:
+        !_navigating &&
+        !_discoveryOpen &&
+        !ref.watch(upgradeProvider).isUpgrading &&
+        !ref.watch(
+          restartProvider.select(
+            (state) => state.isRestarting && !state.isDone,
+          ),
+        ),
+    onNavigate: _navigate,
+  );
+
+  Future<void> _navigate(
+    ShellDestination destination,
+    CatalogSource? source,
+  ) async {
+    if (_navigating) return;
+    if (destination == ShellDestination.configuration && _pluginsOpen) return;
+    setState(() => _navigating = true);
+    try {
+      if (_pluginsOpen &&
+          !await (_pluginsKey.currentState?.prepareToNavigate() ??
+              Future.value(false))) {
+        return;
+      }
+      if (!mounted) return;
+      final home = _homeKey.currentState;
+      if (home != null && !await home.prepareToNavigate()) return;
+      if (!mounted) return;
+      ref.read(homeCustomisationProvider.notifier).close();
+      ref.read(rendererSettingsRouteProvider.notifier).close();
+      setState(() {
+        _serverSheetOpen = false;
+        _settingsOpen = false;
+        _settingsCovering = false;
+        _pluginsOpen = false;
+      });
+      final browsing = ref.read(searchSessionProvider.notifier);
+      switch (destination) {
+        case ShellDestination.home:
+          browsing.backToCatalogsRoot();
+        case ShellDestination.results:
+          browsing.selectView(FindMusicView.results);
+        case ShellDestination.source:
+          if (source != null &&
+              (ref.read(searchSessionProvider).activeView !=
+                      FindMusicView.catalogs ||
+                  ref.read(searchSessionProvider).shownListing.id !=
+                      source.root.id)) {
+            browsing.openPage(
+              CatalogPage.fromItem(source.root, provider: source.module.title),
+            );
+          }
+        case ShellDestination.configuration:
+          _openPlugins();
+      }
+    } finally {
+      if (mounted) setState(() => _navigating = false);
+    }
+  }
+
   void _showExpandedPlayer() {
     ref.read(playerViewProvider.notifier).show(PlayerView.nowPlaying);
     final navigator = Navigator.of(context);
@@ -512,6 +585,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     // when it closes. Driven here (not in the phone layout) so the animation
     // survives a tablet⇄phone rebuild.
     ref.listen(searchEntryModeProvider, (_, hidden) {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _miniPlayerHide.value = hidden ? 1 : 0;
+        return;
+      }
       if (hidden) {
         _miniPlayerHide.forward();
       } else {
@@ -519,48 +596,89 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       }
     });
 
-    return Scaffold(
-      backgroundColor: KalinkaColors.background,
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isTablet = kalinkaSplitLayout(constraints.maxWidth);
-          return Stack(
-            // Tight constraints keep the layout root a relayout boundary.
-            fit: StackFit.expand,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final windowWidth = constraints.maxWidth;
+        final railWidth = kalinkaNavigationRailWidth(
+          windowWidth,
+          textScaler: MediaQuery.textScalerOf(context),
+        );
+        final isTablet = kalinkaSplitLayout(
+          windowWidth,
+          textScaler: MediaQuery.textScalerOf(context),
+        );
+        return Scaffold(
+          backgroundColor: KalinkaColors.background,
+          body: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              isTablet
-                  ? _buildTabletLayout(context)
-                  : _buildPhoneLayout(context),
-              if (customiseOpen &&
-                  !_settingsOpen &&
-                  !_pluginsOpen &&
-                  !_serverSheetOpen &&
-                  rendererSettings == null)
-                Positioned(
-                  left: 0,
-                  right: isTablet
-                      ? kalinkaPlayerPaneWidth(constraints.maxWidth) + 1
-                      : 0,
-                  top: 0,
-                  bottom: 0,
-                  child: SheetAnchor(
-                    child: ClipRect(
-                      child: CustomiseHomeScreen(
-                        handlesBack: !_discoveryOpen,
-                        onClose: () => ref
-                            .read(homeCustomisationProvider.notifier)
-                            .close(),
+              if (railWidth > 0)
+                SizedBox(
+                  key: const ValueKey('navigation-rail'),
+                  width: railWidth,
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        right: BorderSide(color: KalinkaColors.borderSubtle),
                       ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 1),
+                      child: _navigation(),
                     ),
                   ),
                 ),
-              // Hosted above the phone/tablet switch so an in-progress scan
-              // (and its state) survives resizing across the breakpoint.
-              if (_discoveryOpen) _buildDiscoveryOverlay(isTablet),
+              Expanded(
+                child: Stack(
+                  // Tight constraints keep the layout root a relayout boundary.
+                  fit: StackFit.expand,
+                  children: [
+                    isTablet
+                        ? _buildTabletLayout(
+                            context,
+                            windowWidth,
+                            railWidth > 0,
+                          )
+                        : _buildPhoneLayout(context, railWidth > 0),
+                    if (customiseOpen &&
+                        !_settingsOpen &&
+                        !_pluginsOpen &&
+                        !_serverSheetOpen &&
+                        rendererSettings == null)
+                      Positioned(
+                        left: 0,
+                        right: isTablet
+                            ? kalinkaPlayerPaneWidth(constraints.maxWidth) + 1
+                            : 0,
+                        top: 0,
+                        bottom:
+                            !isTablet &&
+                                ref.watch(connectionStateProvider) !=
+                                    ConnectionStatus.none
+                            ? kalinkaMiniPlayerHeight(context) +
+                                  MediaQuery.paddingOf(context).bottom
+                            : 0,
+                        child: SheetAnchor(
+                          child: ClipRect(
+                            child: CustomiseHomeScreen(
+                              handlesBack: !_discoveryOpen,
+                              onClose: () => ref
+                                  .read(homeCustomisationProvider.notifier)
+                                  .close(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    // Hosted above the phone/tablet switch so an in-progress scan
+                    // (and its state) survives resizing across the breakpoint.
+                    if (_discoveryOpen) _buildDiscoveryOverlay(isTablet),
+                  ],
+                ),
+              ),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -609,7 +727,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
   }
 
-  Widget _buildPhoneLayout(BuildContext context) {
+  Widget _buildPhoneLayout(BuildContext context, bool navigationVisible) {
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
     final showCoachMarks = _showCoachMarks;
     // Without a server there is no track for the mini-player to show.
@@ -617,7 +735,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         ref.watch(connectionStateProvider) != ConnectionStatus.none;
     // Clear the mini-player, and the escalation card when it is up.
     _publishToastInset(
-      (miniPlayer ? kMiniPlayerHeight : 0) + _escalationHeight,
+      (miniPlayer ? kalinkaMiniPlayerHeight(context) : 0) + _escalationHeight,
     );
 
     // Settings, configuration and renderer panels handle their own layered
@@ -629,37 +747,43 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           Column(
             children: [
               Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Visibility(
-                      visible: !_settingsCovering,
-                      maintainState: true,
-                      maintainAnimation: true,
-                      maintainSize: true,
-                      child: _buildHome(isTablet: false),
-                    ),
-                    _buildEscalation(isTablet: false),
-                    // Configuration and every nested page share the space
-                    // above the mini-player, including its safe-area inset.
-                    if (_pluginsOpen)
-                      MediaQuery.removePadding(
-                        context: context,
-                        removeBottom: true,
-                        child: ClipRect(
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              _buildPlugins(
-                                handlesBack: rendererSettings == null,
-                              ),
-                              if (rendererSettings != null)
-                                _buildRendererSettings(rendererSettings),
-                            ],
-                          ),
+                child: SheetAnchor(
+                  key: _browsingPaneKey,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Visibility(
+                        visible: !_settingsCovering,
+                        maintainState: true,
+                        maintainAnimation: true,
+                        maintainSize: true,
+                        child: _buildHome(
+                          isTablet: false,
+                          navigationVisible: navigationVisible,
                         ),
                       ),
-                  ],
+                      _buildEscalation(isTablet: false),
+                      // Configuration and every nested page share the space
+                      // above the mini-player, including its safe-area inset.
+                      if (_pluginsOpen)
+                        MediaQuery.removePadding(
+                          context: context,
+                          removeBottom: true,
+                          child: ClipRect(
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                _buildPlugins(
+                                  handlesBack: rendererSettings == null,
+                                ),
+                                if (rendererSettings != null)
+                                  _buildRendererSettings(rendererSettings),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               if (miniPlayer)
@@ -776,7 +900,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }
 
   /// Home, or what stands in for it without a server.
-  Widget _buildHome({required bool isTablet}) {
+  Widget _buildHome({required bool isTablet, required bool navigationVisible}) {
     final disconnected =
         ref.watch(connectionStateProvider) == ConnectionStatus.none;
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
@@ -809,11 +933,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               ),
             )
           : SearchSessionView(
-              key: const ValueKey('home'),
+              key: _homeKey,
               onServerTap: onServerTap,
               entryKey: _searchEntryKey,
               connectionKey: _connectionDotKey,
               handlesBack: !covered,
+              navigationVisible: navigationVisible,
             ),
     );
   }
@@ -856,7 +981,11 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
   }
 
-  Widget _buildTabletLayout(BuildContext context) {
+  Widget _buildTabletLayout(
+    BuildContext context,
+    double windowWidth,
+    bool navigationVisible,
+  ) {
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
     final disconnected =
         ref.watch(connectionStateProvider) == ConnectionStatus.none;
@@ -880,14 +1009,15 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
-          final playerWidth = kalinkaPlayerPaneWidth(width);
+          final playerWidth = kalinkaPlayerPaneWidth(windowWidth);
           // The queue's mini-player spans the window, so browsing ends above
           // it while it shows.
           final barShowing =
               !disconnected &&
               ref.watch(playerViewProvider) == PlayerView.queue;
           final barHeight =
-              kMiniPlayerHeight + MediaQuery.paddingOf(context).bottom;
+              kalinkaMiniPlayerHeight(context) +
+              MediaQuery.paddingOf(context).bottom;
           // Only the foot animates: the sides follow the window at once, so
           // sheets anchored here track a resize.
           final browsing = TweenAnimationBuilder<double>(
@@ -909,6 +1039,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               child: SizedBox.expand(
                 child: RepaintBoundary(
                   child: SheetAnchor(
+                    key: _browsingPaneKey,
                     child: Stack(
                       children: [
                         Visibility(
@@ -916,7 +1047,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           maintainState: true,
                           maintainAnimation: true,
                           maintainSize: true,
-                          child: _buildHome(isTablet: true),
+                          child: _buildHome(
+                            isTablet: true,
+                            navigationVisible: navigationVisible,
+                          ),
                         ),
                         _buildEscalation(isTablet: true),
                         if (_serverSheetOpen)
@@ -1119,7 +1253,11 @@ class _ExpandedPlayerSheetState extends State<_ExpandedPlayerSheet> {
     // Dismiss exactly once when crossing into the tablet layout. Scheduling a
     // pop on every resize frame re-ran after the route was gone and threw
     // "No element" (Navigator.pop on empty history) mid-resize.
-    if (!_dismissing && kalinkaSplitLayout(MediaQuery.sizeOf(context).width)) {
+    if (!_dismissing &&
+        kalinkaSplitLayout(
+          MediaQuery.sizeOf(context).width,
+          textScaler: MediaQuery.textScalerOf(context),
+        )) {
       _dismissing = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {

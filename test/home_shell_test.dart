@@ -363,7 +363,7 @@ void main() {
         (w) =>
             w is Positioned &&
             w.width == 1 &&
-            w.left == player.left - 1 &&
+            w.left == player.left - kalinkaNavigationRailWidth(1400) - 1 &&
             (w.top ?? 0) > 0,
       );
       expect(divider, findsOneWidget);
@@ -392,16 +392,16 @@ void main() {
     // Browsing takes the room the player does not need, the player the
     // window's right.
     final player = tester.getRect(find.byType(NowPlayingContent));
-    expect(player.width, 580);
+    expect(player.width, 440);
     expect(player.right, 1600);
     final browsing = tester.getRect(find.byType(SearchSessionView));
-    expect(browsing.left, 0);
-    expect(browsing.right, 1019);
+    expect(browsing.left, 80);
+    expect(browsing.right, 1159);
 
     await tester.tap(_side('QUEUE'));
     await tester.pumpAndSettle();
     final bar = tester.getRect(_queueMiniPlayer);
-    expect(bar.left, 0);
+    expect(bar.left, browsing.left);
     expect(bar.right, 1600);
     // Browsing ends above the bar rather than running under it.
     expect(

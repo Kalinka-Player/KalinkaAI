@@ -18,7 +18,10 @@ import '../tap_highlight.dart';
 /// Compact source tiles. Catalog selection belongs to the listener, so Home
 /// never fetches or promotes arbitrary children of these roots.
 class CatalogCardsSection extends ConsumerWidget {
-  const CatalogCardsSection({super.key});
+  /// A host can dismiss its onboarding panel after a source opens.
+  final VoidCallback? onSourceOpened;
+
+  const CatalogCardsSection({super.key, this.onSourceOpened});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -74,14 +77,17 @@ class CatalogCardsSection extends ConsumerWidget {
                       icon:
                           iconNamed(source.module.icon) ??
                           Icons.library_music_outlined,
-                      onTap: () => ref
-                          .read(searchSessionProvider.notifier)
-                          .openPage(
-                            CatalogPage.fromItem(
-                              source.root,
-                              provider: source.module.title,
-                            ),
-                          ),
+                      onTap: () {
+                        ref
+                            .read(searchSessionProvider.notifier)
+                            .openPage(
+                              CatalogPage.fromItem(
+                                source.root,
+                                provider: source.module.title,
+                              ),
+                            );
+                        onSourceOpened?.call();
+                      },
                     ),
                 ],
               ),

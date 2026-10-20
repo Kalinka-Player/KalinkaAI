@@ -15,7 +15,7 @@ import 'away.dart';
 import 'bit_perfect_badge.dart';
 import 'kalinka_dialog.dart';
 import 'kiosk/kiosk_enter_button.dart';
-import 'kalinka_toast_overlay.dart' show kMiniPlayerHeight;
+import 'kalinka_toast_overlay.dart' show kalinkaMiniPlayerHeight;
 import 'play_pause_glyph.dart';
 import 'playback_progress_slider.dart';
 import 'player_queue_view.dart';
@@ -142,7 +142,8 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                   onFindMusic: widget.onFindMusic,
                   isTablet: widget.isTablet,
                   bottomPadding:
-                      kMiniPlayerHeight + MediaQuery.paddingOf(context).bottom,
+                      kalinkaMiniPlayerHeight(context) +
+                      MediaQuery.paddingOf(context).bottom,
                 ),
               ),
             ],
@@ -248,7 +249,17 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                 ],
               ),
             );
-            return scroll ? SingleChildScrollView(child: content) : content;
+            if (scroll) return SingleChildScrollView(child: content);
+            // Centre a bounded group on tall windows. The artwork's spare
+            // height no longer separates the cover from its track identity.
+            return Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: constraints.maxWidth * 0.88 + 400,
+                ),
+                child: content,
+              ),
+            );
           },
         ),
       ),
@@ -541,7 +552,8 @@ class _AlbumArtSection extends StatelessWidget {
             0.0,
             artConstraints.maxHeight,
           );
-          return Center(
+          return Align(
+            alignment: Alignment.bottomCenter,
             child: Container(
               width: artSize,
               height: artSize,

@@ -18,6 +18,7 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
 import 'package:kalinka/screens/music_player_screen.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -115,6 +116,11 @@ Future<ProviderContainer> pumpHomeShell(
   bool coachMarksShown = true,
   List<ModuleInfo> sources = const [],
   List<Override> overrides = const [],
+  CollectionsShelf? collections,
+  TextScaler? textScaler,
+  bool? reducedMotion,
+  bool themed = false,
+  Key? captureKey,
 }) async {
   SharedPreferences.setMockInitialValues({
     'Kalinka.host': 'localhost',
@@ -138,7 +144,7 @@ Future<ProviderContainer> pumpHomeShell(
       indexerStatusProvider.overrideWith(_IdleIndexer.new),
       sourceModulesProvider.overrideWith((ref) => sources),
       sourceCountProvider.overrideWithValue(1),
-      collectionsShelfProvider.overrideWith((ref) async => null),
+      collectionsShelfProvider.overrideWith((ref) async => collections),
       // The real family dials a socket and arms a 5s connect timeout that
       // outlives the test; a never-completing future keeps it inert.
       webSocketProvider.overrideWith(
@@ -153,7 +159,21 @@ Future<ProviderContainer> pumpHomeShell(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: MusicPlayerScreen()),
+      child: RepaintBoundary(
+        key: captureKey,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: themed ? AppTheme.dark() : null,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: textScaler,
+              disableAnimations: reducedMotion,
+            ),
+            child: child!,
+          ),
+          home: const MusicPlayerScreen(),
+        ),
+      ),
     ),
   );
   if (coachMarksShown) {

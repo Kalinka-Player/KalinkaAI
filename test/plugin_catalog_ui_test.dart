@@ -2338,7 +2338,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byType(ServerChip));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Configuration'));
+      await tester.tap(find.text('Configuration').hitTestable());
       await tester.pumpAndSettle();
       await _open(tester, 'jamendo');
       final panel = tester.state(find.byType(PluginCatalogScreen));
@@ -2376,7 +2376,7 @@ void main() {
       // The Settings-style arrow must dismiss the same panel as system Back.
       await tester.tap(find.byType(ServerChip));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Configuration'));
+      await tester.tap(find.text('Configuration').hitTestable());
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-back')));
       await tester.pumpAndSettle();
@@ -2790,7 +2790,12 @@ void main() {
         final nowPlaying = tester.getRect(find.byType(NowPlayingContent));
         await tester.tap(find.byType(ServerChip));
         await tester.pumpAndSettle();
-        await tester.tap(find.text(label));
+        await tester.tap(
+          find.descendant(
+            of: find.byType(ServerSheet),
+            matching: find.text(label),
+          ),
+        );
         // The incoming management panel never blocks the left-hand controls.
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 160));
@@ -2813,7 +2818,7 @@ void main() {
         );
         expect(find.byType(ServerChip).hitTestable(), findsNothing);
         final anchor = SheetAnchor.elementOf(tester.element(panel));
-        expect(SheetAnchor.paddingFor(anchor, 1280).left, 0);
+        expect(SheetAnchor.paddingFor(anchor, 1280).left, panelRect.left);
         expect(
           SheetAnchor.paddingFor(anchor, 1280).right,
           1280 - panelRect.right,
@@ -2852,7 +2857,7 @@ void main() {
           await tester.pumpAndSettle();
           expect(tester.state(panel), same(panelState));
           final rect = tester.getRect(panel);
-          expect(rect.left, 0);
+          expect(rect.left, size.width == 400 ? 0 : queue.left);
           expect(rect.right, size.width == 400 ? size.width : queue.right);
           expect(settings.loads, loads);
           expect(

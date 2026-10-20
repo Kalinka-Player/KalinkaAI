@@ -7,6 +7,26 @@ import '../theme/app_theme.dart';
 /// Height of the MiniPlayer (not including SafeArea bottom inset).
 const double kMiniPlayerHeight = 72.0;
 
+/// Keep both metadata lines readable at the system text size. The shell and
+/// queue reserve the same measured height as the bar, excluding safe insets.
+double kalinkaMiniPlayerHeight(BuildContext context) {
+  var textHeight = 0.0;
+  for (final style in [
+    KalinkaTextStyles.miniPlayerTitle,
+    KalinkaTextStyles.miniPlayerArtist,
+  ]) {
+    final painter = TextPainter(
+      text: TextSpan(text: 'Ag', style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    textHeight += painter.height;
+    painter.dispose();
+  }
+  return (textHeight + 28).clamp(kMiniPlayerHeight, double.infinity);
+}
+
 /// Which toasts an overlay is responsible for. The tablet layout mounts two —
 /// one per half — so an answer appears where its question was asked; the phone
 /// mounts one that takes everything.
@@ -112,7 +132,10 @@ class KalinkaToastHost extends ConsumerWidget {
     final inset = ref.watch(toastBottomInsetProvider);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isTablet = kalinkaSplitLayout(constraints.maxWidth);
+        final isTablet = kalinkaSplitLayout(
+          constraints.maxWidth,
+          textScaler: MediaQuery.textScalerOf(context),
+        );
         return Stack(
           children: [
             child,
@@ -134,7 +157,10 @@ class KalinkaToastHost extends ConsumerWidget {
               )
             else
               Positioned(
-                left: 0,
+                left: kalinkaNavigationRailWidth(
+                  constraints.maxWidth,
+                  textScaler: MediaQuery.textScalerOf(context),
+                ),
                 right: 0,
                 bottom: 0,
                 child: _layer(KalinkaToastOverlay(bottomOffset: inset)),
