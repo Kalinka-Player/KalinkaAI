@@ -58,7 +58,6 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
         pins.isEmpty &&
         ref.watch(catalogSourcesProvider).asData?.value.isEmpty == true;
     final notifier = ref.read(pinnedCatalogsProvider.notifier);
-    final gutter = ConfigurationAppearance.gutter(context);
     // The background slides in with the panel; outside it, Home would go
     // black before the panel arrives.
     return SlideInPanel(
@@ -68,168 +67,179 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
       child: Scaffold(
         backgroundColor: KalinkaColors.background,
         body: ConfigurationAppearance(
-          child: SafeArea(
-            top: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SettingsTopBar(title: 'Customise Home'),
-                Expanded(
-                  child: ReorderableListView.builder(
-                    padding: const EdgeInsets.only(bottom: 32),
-                    header: pins.isEmpty ? null : const _HomeLayoutIntro(),
-                    footer: pins.isEmpty
-                        ? Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: gutter,
-                              vertical: 20,
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'No pinned catalogs yet',
-                                  style: KalinkaTextStyles.trayRowLabel,
+          child: Builder(
+            builder: (context) {
+              // Under the appearance, which sets how wide the gutter is.
+              final gutter = ConfigurationAppearance.gutter(context);
+              return SafeArea(
+                top: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SettingsTopBar(title: 'Customise Home'),
+                    Expanded(
+                      child: ReorderableListView.builder(
+                        padding: const EdgeInsets.only(bottom: 32),
+                        header: pins.isEmpty ? null : const _HomeLayoutIntro(),
+                        footer: pins.isEmpty
+                            ? Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: gutter,
+                                  vertical: 20,
                                 ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  noSources
-                                      ? 'Enable a music source in Configuration to start pinning catalogs.'
-                                      : 'Choose a source below, browse to a catalog and use '
-                                            '“Pin catalog to Home” to choose its preview.',
-                                  style: KalinkaTextStyles.settingsDescription,
-                                ),
-                                const SizedBox(height: 24),
-                                Builder(
-                                  builder: (panelContext) =>
-                                      CatalogCardsSection(
-                                        onSourceOpened: () =>
-                                            SlideInPanel.closeOf(panelContext),
-                                      ),
-                                ),
-                                if (noSources &&
-                                    ref.watch(pluginCatalogEnabledProvider))
-                                  KalinkaButton(
-                                    label: 'Configure music sources',
-                                    variant: KalinkaButtonVariant.neutral,
-                                    fullWidth: true,
-                                    onTap: () => ref
-                                        .read(
-                                          musicSourcesSettingsRequestProvider
-                                              .notifier,
-                                        )
-                                        .open(),
-                                  ),
-                              ],
-                            ),
-                          )
-                        : null,
-                    buildDefaultDragHandles: false,
-                    itemCount: pins.length,
-                    onReorderItem: (oldIndex, newIndex) => saveHomeChange(
-                      context,
-                      notifier.reorder(
-                        oldIndex,
-                        newIndex > oldIndex ? newIndex + 1 : newIndex,
-                      ),
-                    ),
-                    itemBuilder: (_, index) {
-                      final pin = pins[index];
-                      final title = pin.page.title ?? 'Catalog';
-                      return Material(
-                        key: ValueKey(pin.key),
-                        color: KalinkaColors.background,
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: gutter),
-                          child: Column(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                ),
-                                child: Row(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    ReorderableDragStartListener(
-                                      index: index,
-                                      child: Semantics(
-                                        label: 'Reorder $title',
-                                        child: Tooltip(
-                                          message: 'Drag to reorder $title',
-                                          child: const MouseRegion(
-                                            cursor: SystemMouseCursors.grab,
-                                            child: ColoredBox(
-                                              color: Colors.transparent,
-                                              child: SizedBox(
-                                                width: 48,
-                                                height: 48,
-                                                child: Icon(
-                                                  Icons.drag_indicator,
-                                                  size: 22,
-                                                  color:
-                                                      KalinkaColors.textMuted,
+                                    Text(
+                                      'No pinned catalogs yet',
+                                      style: KalinkaTextStyles.trayRowLabel,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      noSources
+                                          ? 'Enable a music source in Configuration to start pinning catalogs.'
+                                          : 'Choose a source below, browse to a catalog and use '
+                                                '“Pin catalog to Home” to choose its preview.',
+                                      style:
+                                          KalinkaTextStyles.settingsDescription,
+                                    ),
+                                    const SizedBox(height: 24),
+                                    Builder(
+                                      builder: (panelContext) =>
+                                          CatalogCardsSection(
+                                            onSourceOpened: () =>
+                                                SlideInPanel.closeOf(
+                                                  panelContext,
+                                                ),
+                                          ),
+                                    ),
+                                    if (noSources &&
+                                        ref.watch(pluginCatalogEnabledProvider))
+                                      KalinkaButton(
+                                        label: 'Configure music sources',
+                                        variant: KalinkaButtonVariant.neutral,
+                                        fullWidth: true,
+                                        onTap: () => ref
+                                            .read(
+                                              musicSourcesSettingsRequestProvider
+                                                  .notifier,
+                                            )
+                                            .open(),
+                                      ),
+                                  ],
+                                ),
+                              )
+                            : null,
+                        buildDefaultDragHandles: false,
+                        itemCount: pins.length,
+                        onReorderItem: (oldIndex, newIndex) => saveHomeChange(
+                          context,
+                          notifier.reorder(
+                            oldIndex,
+                            newIndex > oldIndex ? newIndex + 1 : newIndex,
+                          ),
+                        ),
+                        itemBuilder: (_, index) {
+                          final pin = pins[index];
+                          final title = pin.page.title ?? 'Catalog';
+                          return Material(
+                            key: ValueKey(pin.key),
+                            color: KalinkaColors.background,
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: gutter),
+                              child: Column(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        ReorderableDragStartListener(
+                                          index: index,
+                                          child: Semantics(
+                                            label: 'Reorder $title',
+                                            child: Tooltip(
+                                              message: 'Drag to reorder $title',
+                                              child: const MouseRegion(
+                                                cursor: SystemMouseCursors.grab,
+                                                child: ColoredBox(
+                                                  color: Colors.transparent,
+                                                  child: SizedBox(
+                                                    width: 48,
+                                                    height: 48,
+                                                    child: Icon(
+                                                      Icons.drag_indicator,
+                                                      size: 22,
+                                                      color: KalinkaColors
+                                                          .textMuted,
+                                                    ),
+                                                  ),
                                                 ),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            title,
-                                            style:
-                                                KalinkaTextStyles.trayRowLabel,
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                title,
+                                                style: KalinkaTextStyles
+                                                    .trayRowLabel,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                [
+                                                  if (pin
+                                                      .description
+                                                      .isNotEmpty)
+                                                    pin.description,
+                                                  '${pin.preview.label} preview',
+                                                ].join(' · '),
+                                                style: KalinkaTextStyles
+                                                    .trayRowSublabel,
+                                              ),
+                                            ],
                                           ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            [
-                                              if (pin.description.isNotEmpty)
-                                                pin.description,
-                                              '${pin.preview.label} preview',
-                                            ].join(' · '),
-                                            style: KalinkaTextStyles
-                                                .trayRowSublabel,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        HomePreviewSwitch(
+                                          pin: pin,
+                                          onMenuChanged: (close) =>
+                                              _menuChanged(pin.key, close),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Unpin $title',
+                                          style: kalinkaIconButtonStyle,
+                                          icon: const Icon(
+                                            CupertinoIcons.pin_slash,
+                                            size: 20,
                                           ),
-                                        ],
-                                      ),
+                                          onPressed: () =>
+                                              _confirmUnpin(context, ref, pin),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 8),
-                                    HomePreviewSwitch(
-                                      pin: pin,
-                                      onMenuChanged: (close) =>
-                                          _menuChanged(pin.key, close),
-                                    ),
-                                    IconButton(
-                                      tooltip: 'Unpin $title',
-                                      style: kalinkaIconButtonStyle,
-                                      icon: const Icon(
-                                        CupertinoIcons.pin_slash,
-                                        size: 20,
-                                      ),
-                                      onPressed: () =>
-                                          _confirmUnpin(context, ref, pin),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                  const Divider(
+                                    height: 1,
+                                    color: KalinkaColors.borderSubtle,
+                                  ),
+                                ],
                               ),
-                              const Divider(
-                                height: 1,
-                                color: KalinkaColors.borderSubtle,
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),

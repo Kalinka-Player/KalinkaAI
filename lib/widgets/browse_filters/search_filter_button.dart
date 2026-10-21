@@ -66,26 +66,26 @@ class _SearchFilterButtonState extends State<SearchFilterButton> {
           behavior: HitTestBehavior.opaque,
           child: Padding(
             // Room for the badge to sit proud of the pill without clipping.
-            padding: const EdgeInsets.only(top: 6, right: 6, bottom: 6),
+            padding: const EdgeInsets.only(top: 4, right: 6, bottom: 4),
             child: Stack(
               clipBehavior: Clip.none,
               children: [
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 130),
                   curve: Curves.easeOut,
-                  height: 36,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  height: kKalinkaPillHeight,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
                     color: bg,
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(kKalinkaPillRadius),
                     border: Border.all(color: border, width: 1),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.search_rounded, size: 18, color: fg),
-                      const SizedBox(width: 6),
-                      Icon(Icons.tune_rounded, size: 18, color: fg),
+                      Icon(Icons.search_rounded, size: 20, color: fg),
+                      const SizedBox(width: 8),
+                      Icon(Icons.tune_rounded, size: 20, color: fg),
                     ],
                   ),
                 ),

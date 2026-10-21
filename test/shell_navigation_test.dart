@@ -23,16 +23,17 @@ import 'package:kalinka/providers/server_info_provider.dart';
 import 'package:kalinka/providers/server_update_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/screens/plugin_catalog_screen.dart';
+import 'package:kalinka/widgets/home/home_source_list.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/search/search_composer.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 import 'package:kalinka/widgets/search/catalog_cards_section.dart';
+import 'package:kalinka/widgets/search/collections_section.dart';
 import 'package:kalinka/widgets/search/results_view.dart';
 import 'package:kalinka/widgets/shell_navigation.dart';
 import 'package:kalinka/widgets/server_chip.dart';
 import 'package:kalinka/widgets/server_sheet.dart';
-import 'package:kalinka/widgets/home/catalog_tile.dart';
 
 import 'support/home_shell.dart';
 
@@ -199,7 +200,7 @@ void main() {
     }
   });
 
-  testWidgets('source shortcuts share history and never change playback', (
+  testWidgets('each source keeps its own history and never changes playback', (
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
@@ -234,9 +235,14 @@ void main() {
       container.read(searchSessionProvider).catalogPage.id,
       'kalinka:tidal:catalog:root',
     );
-    await tester.tap(find.byTooltip('Back'));
+    // A source comes back as it was left.
+    await tester.tap(_nav('source-localfiles'));
     await tester.pumpAndSettle();
     expect(container.read(searchSessionProvider).visitId, local.visitId);
+    // Its first page goes Home, not to the source shown before it.
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(container.read(searchSessionProvider).atHome, isTrue);
     expect(container.read(playQueueStateStoreProvider), same(queue));
     expect(tester.takeException(), isNull);
     semantics.dispose();
@@ -257,7 +263,9 @@ void main() {
             if (id == 'results') {
               await tester.tap(find.byTooltip('Back to search results'));
             } else if (id == 'source-localfiles') {
-              await tester.tap(find.widgetWithText(CatalogTile, 'My Library'));
+              await tester.tap(
+                find.byKey(const ValueKey('home-source-localfiles')),
+              );
             }
           } else {
             await tester.tap(_nav(id));
@@ -318,16 +326,10 @@ void main() {
           expect(find.byType(ResultsView).hitTestable(), findsOneWidget);
           expect(find.byType(SearchComposer), findsNothing);
         }
+        // Results' first page goes Home, at every width.
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
-        if (size.width < 720) {
-          expect(container.read(searchSessionProvider).atHome, isTrue);
-        } else {
-          expect(
-            container.read(searchSessionProvider).catalogPage.id,
-            'kalinka:localfiles:catalog:root',
-          );
-        }
+        expect(container.read(searchSessionProvider).atHome, isTrue);
         expect(tester.takeException(), isNull);
       },
     );
@@ -518,11 +520,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('phone source tiles open pages; resize retains the visit', (
+  testWidgets('phone source names open pages; resize retains the visit', (
     tester,
   ) async {
     final container = await _pump(tester, size: const Size(375, 812));
-    await tester.tap(find.widgetWithText(CatalogTile, 'TIDAL'));
+    await tester.tap(find.byKey(const ValueKey('home-source-tidal')));
     await tester.pumpAndSettle();
     final visit = container.read(searchSessionProvider).visitId;
     final state = tester.state(find.byType(SearchSessionView));
@@ -542,7 +544,7 @@ void main() {
     }
   });
 
-  testWidgets('Home source section follows rail visibility when resizing', (
+  testWidgets('Home leaves sources and collections to the rail', (
     tester,
   ) async {
     await _pump(tester);
@@ -550,10 +552,22 @@ void main() {
     for (final width in [900.0, 720.0, 719.0, 375.0, 1440.0]) {
       tester.view.physicalSize = Size(width, 900);
       await tester.pumpAndSettle();
-      final sources = width >= 720 ? findsNothing : findsOneWidget;
-      expect(find.byType(CatalogCardsSection), sources);
-      expect(find.text('MUSIC SOURCES'), sources);
-      expect(find.byTooltip('Configure music sources'), sources);
+      final rail = width >= 720;
+      expect(
+        find.byType(ShellNavigation),
+        rail ? findsOneWidget : findsNothing,
+      );
+      expect(find.byType(HomeSourceList), rail ? findsNothing : findsOneWidget);
+      expect(
+        find.byType(CollectionsSection),
+        rail ? findsNothing : findsOneWidget,
+      );
+      expect(_nav('collections'), rail ? findsOneWidget : findsNothing);
+      expect(find.byType(CatalogCardsSection), findsNothing);
+      expect(
+        find.byTooltip('Configure music sources'),
+        rail ? findsNothing : findsOneWidget,
+      );
       expect(tester.state(find.byType(SearchSessionView)), same(homeState));
       expect(find.byType(Drawer), findsNothing);
       expect(tester.takeException(), isNull);
@@ -655,7 +669,7 @@ void main() {
       await capture('$name-customise-banner');
       final source = hasRail
           ? _nav('source-tidal')
-          : find.widgetWithText(CatalogTile, 'TIDAL');
+          : find.byKey(const ValueKey('home-source-tidal'));
       await tester.scrollUntilVisible(
         source,
         -100,
@@ -670,10 +684,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(source.hitTestable(), findsOneWidget);
-      expect(
-        find.byType(CatalogCardsSection),
-        hasRail ? findsNothing : findsOneWidget,
-      );
+      expect(find.byType(CatalogCardsSection), findsNothing);
       expect(tester.takeException(), isNull);
       if (size.width >= 720 && size.width <= 900 || scale > 1) {
         expect(find.byType(NowPlayingContent), findsNothing);

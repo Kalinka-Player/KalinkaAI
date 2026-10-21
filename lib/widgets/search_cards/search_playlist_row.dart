@@ -11,6 +11,7 @@ import '../../utils/play_next.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
 import '../swipe_to_act_row.dart';
+import '../tap_highlight.dart';
 import 'browse_navigation_scope.dart';
 import 'long_press_ring_painter.dart';
 import 'open_chevron_button.dart';
@@ -238,29 +239,27 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
                         overflow: TextOverflow.ellipsis,
                       ),
                       // Its details move to their column, its badge to the
-                      // source's, as the row widens.
-                      if (subtitle.isNotEmpty &&
-                          (!columns.detail ||
-                              !columns.source &&
-                                  sourceBadgeVisible(ref, widget.item.id)))
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            if (!columns.source &&
-                                sourceBadgeVisible(ref, widget.item.id)) ...[
-                              SourceBadge(entityId: widget.item.id),
-                              const SizedBox(width: 6),
-                            ],
-                            Expanded(
-                              child: Text(
-                                columns.detail ? '' : subtitle,
-                                style: KalinkaTextStyles.trackRowSubtitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
+                      // source's, as the row widens; the type stays.
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          if (!columns.source &&
+                              sourceBadgeVisible(ref, widget.item.id)) ...[
+                            SourceBadge(entityId: widget.item.id),
+                            const SizedBox(width: 6),
                           ],
-                        ),
+                          Expanded(
+                            child: Text.rich(
+                              entityTypeSubtitle(
+                                'Playlist',
+                                columns.detail ? '' : subtitle,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -296,6 +295,6 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
         ),
       ),
     );
-    return MouseRegion(cursor: SystemMouseCursors.click, child: row);
+    return HoverHighlight(child: row);
   }
 }

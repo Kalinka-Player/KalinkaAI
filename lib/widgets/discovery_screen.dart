@@ -13,6 +13,7 @@ import '../providers/server_address.dart';
 import '../providers/server_connect.dart';
 import '../theme/app_theme.dart';
 import 'kalinka_button.dart';
+import 'onboarding/onboarding_step_scaffold.dart' show kSetupColumnMaxWidth;
 import 'sonar_animation.dart';
 
 /// Full-screen discovery overlay for finding and connecting to Kalinka servers.
@@ -24,7 +25,6 @@ class DiscoveryScreen extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
   final bool allowCancel;
   final String? currentServerHost;
-  final bool isTablet;
 
   /// When false, the selected server is held in memory only (no
   /// SharedPreferences write). Used by the setup wizard so an interrupted
@@ -40,7 +40,6 @@ class DiscoveryScreen extends ConsumerStatefulWidget {
     this.onClose,
     this.allowCancel = true,
     this.currentServerHost,
-    this.isTablet = false,
     this.persistConnection = true,
     this.onConnected,
   });
@@ -175,37 +174,26 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
               : null,
         ),
         child: SafeArea(
-          child: Row(
-            children: [
-              if (widget.isTablet)
-                const Flexible(
-                  flex: 5,
-                  child: SizedBox(width: double.infinity),
-                ),
-              Flexible(
-                flex: 10,
-                child: Column(
-                  children: [
-                    // Top bar with optional cancel
-                    _buildTopBar(),
-                    Expanded(
-                      child: _isConnecting
-                          ? _buildConnectingOverlay()
-                          : discoveryState.isScanning
-                          ? _buildScanningState()
-                          : discoveryState.servers.isEmpty
-                          ? _buildEmptyState()
-                          : _buildServerList(discoveryState),
-                    ),
-                  ],
-                ),
+          // The column every setup screen shares.
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kSetupColumnMaxWidth),
+              child: Column(
+                children: [
+                  // Top bar with optional cancel
+                  _buildTopBar(),
+                  Expanded(
+                    child: _isConnecting
+                        ? _buildConnectingOverlay()
+                        : discoveryState.isScanning
+                        ? _buildScanningState()
+                        : discoveryState.servers.isEmpty
+                        ? _buildEmptyState()
+                        : _buildServerList(discoveryState),
+                  ),
+                ],
               ),
-              if (widget.isTablet)
-                const Flexible(
-                  flex: 5,
-                  child: SizedBox(width: double.infinity),
-                ),
-            ],
+            ),
           ),
         ),
       ),
@@ -225,7 +213,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
 
   Widget _buildTopBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -481,7 +469,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
         const SizedBox(height: 24),
         // Server list — settings-style adjacent rows in a single card
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Container(
             decoration: BoxDecoration(
               color: KalinkaColors.surfaceRaised,
@@ -517,7 +505,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
         // dropped, and the wizard embed has no other way back into scanning.
         if (!_showManualEntry) ...[
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
             child: Row(
               children: [
                 KalinkaButton(
@@ -559,7 +547,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
         ],
         if (_showManualEntry) ...[
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
             child: _buildManualEntryFields(),
           ),
         ],

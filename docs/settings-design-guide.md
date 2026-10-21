@@ -103,7 +103,7 @@ Use the bundled IBM Plex families. System text scaling is respected, not clamped
 
 The header's 6dp outer inset places the Back glyph within the visual page gutter while retaining its full touch target. Its title aligns after Back; body sections align to the page gutter. Do not indent all body content to the title's x-position.
 
-The 25dp tablet gutter is an existing Kalinka layout token. Keep it consistent across settings instead of independently rounding individual pages. Content layout still responds to the **actual panel width**, not just the window breakpoint.
+The 25dp tablet gutter is an existing Kalinka layout token. Keep it consistent across settings instead of independently rounding individual pages. Content layout still responds to the **actual panel width**, not just the window breakpoint. On a wider panel the gutter grows, so settings and Customise Home content stays at most 560dp wide (`kKalinkaContentMaxWidth`), centred, while backgrounds, scroll areas and the top bar's Back keep to the panel's edges. Read the gutter below `ConfigurationAppearance`, which measures the panel. Setup screens — server discovery, Bluetooth and hotspot setup, and every setup step — share one centred 600dp column with 20dp sides: the same 560dp of content.
 
 ## Plugin identity, status and description
 

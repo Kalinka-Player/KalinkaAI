@@ -48,11 +48,16 @@ final _label = KalinkaTextStyles.sectionHeaderMuted.copyWith(
 /// Configuration for music sources, the server and hi-fi controls.
 class PluginCatalogScreen extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
+
+  /// Whether its top bar offers Back; off beside the navigation rail, which
+  /// is how it is left there.
+  final bool showBack;
   final ValueChanged<bool>? onCoverageChanged;
   final bool handlesBack;
   const PluginCatalogScreen({
     super.key,
     this.onClose,
+    this.showBack = true,
     this.onCoverageChanged,
     this.handlesBack = true,
   });
@@ -288,7 +293,6 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     final info = ref.watch(serverInfoProvider);
     final catalog = enabled ? ref.watch(pluginCatalogProvider) : null;
     final settings = ref.watch(settingsProvider);
-    final gutter = ConfigurationAppearance.gutter(context);
     final upgrading = ref.watch(upgradeProvider).isUpgrading;
 
     final issuePaths = settings.issues.entries
@@ -300,223 +304,232 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         : '${configurationIssueLabel(settings.schema, issuePaths.first)}'
               '${issuePaths.length > 1 ? ' and ${issuePaths.length - 1} more' : ''}';
     return ConfigurationAppearance(
-      child: Column(
-        children: [
-          Expanded(
-            child: SlideInPanel(
-              onClose: widget.onClose,
-              beforeClose: _beforeClose,
-              onCoverageChanged: widget.onCoverageChanged,
-              handlesBack:
-                  widget.handlesBack &&
-                  _settingsFor == null &&
-                  _aboutFor == null &&
-                  !_advancedOpen &&
-                  !_logsOpen &&
-                  !_networkOpen &&
-                  _reviewPaths == null &&
-                  !_restartOverlayOpen &&
-                  !upgrading,
-              overlays: [
-                if (_settingsFor case final plugin?)
-                  PluginSettingsScreen(
-                    key: ValueKey('plugin-settings-${plugin.id}'),
-                    plugin: plugin,
-                    actions: _actionsFor(plugin),
-                    // About, over it, owns Back while open.
-                    handlesBack:
-                        widget.handlesBack &&
-                        _aboutFor == null &&
-                        _reviewPaths == null &&
-                        !_restartOverlayOpen &&
-                        !upgrading,
-                    onClose: () => setState(() => _settingsFor = null),
-                  ),
-                if (_aboutFor case final plugin?)
-                  PluginAboutScreen(
-                    key: ValueKey('plugin-about-${plugin.id}'),
-                    plugin: plugin,
-                    actions: _actionsFor(plugin),
-                    handlesBack:
-                        widget.handlesBack &&
-                        _reviewPaths == null &&
-                        !_restartOverlayOpen &&
-                        !upgrading,
-                    onClose: () => setState(() => _aboutFor = null),
-                  ),
-                if (_advancedOpen)
-                  ConfigurationPage(
-                    key: const ValueKey('server-expert'),
-                    title: 'Advanced settings',
-                    description:
-                        'All player settings. Search for the setting you need.',
-                    onClose: () => setState(() => _advancedOpen = false),
-                    handlesBack:
-                        widget.handlesBack &&
-                        _reviewPaths == null &&
-                        !_restartOverlayOpen &&
-                        !upgrading,
-                    bodyBuilder: (heading) =>
-                        ExpertSettingsScreen(heading: heading),
-                  ),
-                if (_networkOpen)
-                  ConfigurationPage(
-                    key: const ValueKey('server-network'),
-                    title: 'Network',
-                    description:
-                        'How your streamer connects to your home network, '
-                        'and the Wi-Fi network it joins.',
-                    onClose: () => setState(() => _networkOpen = false),
-                    handlesBack:
-                        widget.handlesBack &&
-                        _reviewPaths == null &&
-                        !_restartOverlayOpen &&
-                        !upgrading,
-                    bodyBuilder: (heading) => ListView(
-                      padding: const EdgeInsets.only(bottom: 32),
-                      children: [
-                        heading,
-                        // The panel brings its own 20dp inset.
-                        Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: gutter - 20,
-                          ),
-                          child: NetworkSetupPanel(
-                            endpoint: ref
-                                .read(connectionSettingsProvider)
-                                .baseUrl
-                                .replace(port: supervisorPort),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (_logsOpen)
-                  LogExportScreen(
-                    key: const ValueKey('server-logs'),
-                    onClose: () => setState(() => _logsOpen = false),
-                    handlesBack:
-                        widget.handlesBack &&
-                        _reviewPaths == null &&
-                        !_restartOverlayOpen &&
-                        !upgrading,
-                  ),
-                if (_reviewPaths case final paths?)
-                  ConfigurationReviewScreen(
-                    key: const ValueKey('configuration-review'),
-                    paths: paths,
-                    onClose: () => setState(() => _reviewPaths = null),
-                    handlesBack:
-                        widget.handlesBack &&
-                        !_restartOverlayOpen &&
-                        !upgrading,
-                  ),
-                if (_restartOverlayOpen)
-                  RestartOverlay(
-                    onDismiss: () {
-                      setState(() => _restartOverlayOpen = false);
-                      ref.invalidate(modulesStateProvider);
-                      ref.invalidate(pluginUpdatesProvider);
-                    },
-                  ),
-                if (upgrading)
-                  UpgradeOverlay(
-                    onDismiss: () {
-                      if (!ref.read(settingsProvider).hasPendingChanges) {
-                        ref.read(settingsProvider.notifier).loadConfig();
-                      }
-                    },
-                  ),
-              ],
-              child: Material(
-                color: KalinkaColors.background,
-                child: SafeArea(
-                  top: false,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SettingsTopBar(title: 'Configuration'),
-                      ColoredBox(
-                        color: KalinkaColors.background,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [const ConnectionBanner()],
+      child: Builder(
+        builder: (context) {
+          // Under the appearance, which sets how wide the gutter is.
+          final gutter = ConfigurationAppearance.gutter(context);
+          return Column(
+            children: [
+              Expanded(
+                child: SlideInPanel(
+                  onClose: widget.onClose,
+                  beforeClose: _beforeClose,
+                  onCoverageChanged: widget.onCoverageChanged,
+                  handlesBack:
+                      widget.handlesBack &&
+                      _settingsFor == null &&
+                      _aboutFor == null &&
+                      !_advancedOpen &&
+                      !_logsOpen &&
+                      !_networkOpen &&
+                      _reviewPaths == null &&
+                      !_restartOverlayOpen &&
+                      !upgrading,
+                  overlays: [
+                    if (_settingsFor case final plugin?)
+                      PluginSettingsScreen(
+                        key: ValueKey('plugin-settings-${plugin.id}'),
+                        plugin: plugin,
+                        actions: _actionsFor(plugin),
+                        // About, over it, owns Back while open.
+                        handlesBack:
+                            widget.handlesBack &&
+                            _aboutFor == null &&
+                            _reviewPaths == null &&
+                            !_restartOverlayOpen &&
+                            !upgrading,
+                        onClose: () => setState(() => _settingsFor = null),
+                      ),
+                    if (_aboutFor case final plugin?)
+                      PluginAboutScreen(
+                        key: ValueKey('plugin-about-${plugin.id}'),
+                        plugin: plugin,
+                        actions: _actionsFor(plugin),
+                        handlesBack:
+                            widget.handlesBack &&
+                            _reviewPaths == null &&
+                            !_restartOverlayOpen &&
+                            !upgrading,
+                        onClose: () => setState(() => _aboutFor = null),
+                      ),
+                    if (_advancedOpen)
+                      ConfigurationPage(
+                        key: const ValueKey('server-expert'),
+                        title: 'Advanced settings',
+                        description: 'All player settings. Search for the setting you need.',
+                        onClose: () => setState(() => _advancedOpen = false),
+                        handlesBack:
+                            widget.handlesBack &&
+                            _reviewPaths == null &&
+                            !_restartOverlayOpen &&
+                            !upgrading,
+                        bodyBuilder: (heading) =>
+                            ExpertSettingsScreen(heading: heading),
+                      ),
+                    if (_networkOpen)
+                      ConfigurationPage(
+                        key: const ValueKey('server-network'),
+                        title: 'Network',
+                        description:
+                            'How your streamer connects to your home network, '
+                            'and the Wi-Fi network it joins.',
+                        onClose: () => setState(() => _networkOpen = false),
+                        handlesBack:
+                            widget.handlesBack &&
+                            _reviewPaths == null &&
+                            !_restartOverlayOpen &&
+                            !upgrading,
+                        bodyBuilder: (heading) => ListView(
+                          padding: const EdgeInsets.only(bottom: 32),
+                          children: [
+                            heading,
+                            // The panel brings its own 20dp inset.
+                            Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: gutter - 20,
+                              ),
+                              child: NetworkSetupPanel(
+                                endpoint: ref
+                                    .read(connectionSettingsProvider)
+                                    .baseUrl
+                                    .replace(port: supervisorPort),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      Expanded(
-                        child: RefreshIndicator(
-                          onRefresh: _refresh,
-                          color: KalinkaColors.accent,
-                          backgroundColor: KalinkaColors.surfaceRaised,
-                          child: CustomScrollView(
-                            key: const ValueKey('catalog-scroll'),
-                            controller: _scroll,
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            slivers: [
-                              _tabs(_tab, gutter),
-                              if (_sectionDescription(_tab, gutter)
-                                  case final description?)
-                                SliverToBoxAdapter(child: description),
-                              if (_tab == PluginTab.server)
-                                ..._serverSlivers()
-                              else if (info.isLoading)
-                                const SliverFillRemaining(
-                                  hasScrollBody: false,
-                                  child: Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                )
-                              else if (!enabled)
-                                const SliverFillRemaining(
-                                  hasScrollBody: false,
-                                  child: _Notice(
-                                    'Plugin catalog preview is off or unavailable on this server. Enable it in Streamer → Advanced settings.',
-                                  ),
-                                )
-                              else
-                                ...catalog!.when<List<Widget>>(
-                                  skipLoadingOnRefresh: false,
-                                  data: (data) => _catalogSlivers(data, gutter),
-                                  loading: () => const [
-                                    SliverFillRemaining(
+                    if (_logsOpen)
+                      LogExportScreen(
+                        key: const ValueKey('server-logs'),
+                        onClose: () => setState(() => _logsOpen = false),
+                        handlesBack:
+                            widget.handlesBack &&
+                            _reviewPaths == null &&
+                            !_restartOverlayOpen &&
+                            !upgrading,
+                      ),
+                    if (_reviewPaths case final paths?)
+                      ConfigurationReviewScreen(
+                        key: const ValueKey('configuration-review'),
+                        paths: paths,
+                        onClose: () => setState(() => _reviewPaths = null),
+                        handlesBack:
+                            widget.handlesBack &&
+                            !_restartOverlayOpen &&
+                            !upgrading,
+                      ),
+                    if (_restartOverlayOpen)
+                      RestartOverlay(
+                        onDismiss: () {
+                          setState(() => _restartOverlayOpen = false);
+                          ref.invalidate(modulesStateProvider);
+                          ref.invalidate(pluginUpdatesProvider);
+                        },
+                      ),
+                    if (upgrading)
+                      UpgradeOverlay(
+                        onDismiss: () {
+                          if (!ref.read(settingsProvider).hasPendingChanges) {
+                            ref.read(settingsProvider.notifier).loadConfig();
+                          }
+                        },
+                      ),
+                  ],
+                  child: Material(
+                    color: KalinkaColors.background,
+                    child: SafeArea(
+                      top: false,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SettingsTopBar(
+                            title: 'Configuration',
+                            showBack: widget.showBack,
+                          ),
+                          ColoredBox(
+                            color: KalinkaColors.background,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [const ConnectionBanner()],
+                            ),
+                          ),
+                          Expanded(
+                            child: RefreshIndicator(
+                              onRefresh: _refresh,
+                              color: KalinkaColors.accent,
+                              backgroundColor: KalinkaColors.surfaceRaised,
+                              child: CustomScrollView(
+                                key: const ValueKey('catalog-scroll'),
+                                controller: _scroll,
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                slivers: [
+                                  _tabs(_tab, gutter),
+                                  if (_sectionDescription(_tab, gutter)
+                                      case final description?)
+                                    SliverToBoxAdapter(child: description),
+                                  if (_tab == PluginTab.server)
+                                    ..._serverSlivers()
+                                  else if (info.isLoading)
+                                    const SliverFillRemaining(
                                       hasScrollBody: false,
                                       child: Center(
                                         child: CircularProgressIndicator(),
                                       ),
-                                    ),
-                                  ],
-                                  error: (error, _) => [
-                                    SliverFillRemaining(
+                                    )
+                                  else if (!enabled)
+                                    const SliverFillRemaining(
                                       hasScrollBody: false,
                                       child: _Notice(
-                                        error is PluginCatalogException
-                                            ? error.message
-                                            : 'Could not read the plugin catalog. Try again.',
-                                        onRetry: _reload,
+                                        'Plugin catalog preview is off or unavailable on this server. Enable it in Streamer → Advanced settings.',
                                       ),
+                                    )
+                                  else
+                                    ...catalog!.when<List<Widget>>(
+                                      skipLoadingOnRefresh: false,
+                                      data: (data) =>
+                                          _catalogSlivers(data, gutter),
+                                      loading: () => const [
+                                        SliverFillRemaining(
+                                          hasScrollBody: false,
+                                          child: Center(
+                                            child: CircularProgressIndicator(),
+                                          ),
+                                        ),
+                                      ],
+                                      error: (error, _) => [
+                                        SliverFillRemaining(
+                                          hasScrollBody: false,
+                                          child: _Notice(
+                                            error is PluginCatalogException
+                                                ? error.message
+                                                : 'Could not read the plugin catalog. Try again.',
+                                            onRetry: _reload,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                            ],
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          ConfigurationChangesBar(
-            key: const ValueKey('configuration-changes'),
-            count: settings.pendingCount,
-            busy: _applying || _restartOverlayOpen || upgrading,
-            issueLabel: issueLabel,
-            onReview: () => setState(() => _reviewPaths = issuePaths),
-            onDiscard: ref.read(settingsProvider.notifier).discardAll,
-            onApply: _onApply,
-          ),
-        ],
+              ConfigurationChangesBar(
+                key: const ValueKey('configuration-changes'),
+                count: settings.pendingCount,
+                busy: _applying || _restartOverlayOpen || upgrading,
+                issueLabel: issueLabel,
+                onReview: () => setState(() => _reviewPaths = issuePaths),
+                onDiscard: ref.read(settingsProvider.notifier).discardAll,
+                onApply: _onApply,
+              ),
+            ],
+          );
+        },
       ),
     );
   }

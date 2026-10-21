@@ -12,6 +12,7 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search_cards/artwork_grid_card.dart';
 import 'package:kalinka/widgets/search_cards/search_album_row.dart';
+import 'package:kalinka/widgets/source_badge.dart';
 
 BrowseItem _album(int n) => BrowseItem(
   id: 'kalinka:demo:album:a$n',
@@ -22,6 +23,9 @@ BrowseItem _album(int n) => BrowseItem(
 );
 
 class _AlbumsApi implements KalinkaPlayerProxy {
+  final bool catalogs;
+  final bool mixed;
+  _AlbumsApi({this.catalogs = false, this.mixed = false});
   @override
   Future<BrowseItemsList> browse(
     String id, {
@@ -30,7 +34,24 @@ class _AlbumsApi implements KalinkaPlayerProxy {
     String? filter,
   }) async {
     final items = [
-      for (var n = offset; n < 7 && n < offset + limit; n++) _album(n),
+      for (var n = offset; n < 7 && n < offset + limit; n++)
+        if (catalogs)
+          BrowseItem(
+            id: 'kalinka:demo:catalog:$n',
+            name: 'Category $n',
+            canBrowse: true,
+            canAdd: false,
+            catalog: Catalog(id: '$n', title: 'Category $n'),
+          )
+        else if (mixed && n == 1)
+          BrowseItem(
+            id: 'kalinka:other:album:$n',
+            canBrowse: true,
+            canAdd: true,
+            album: Album(id: '$n', title: 'Album $n'),
+          )
+        else
+          _album(n),
     ];
     return BrowseItemsList(offset, limit, 7, items);
   }
@@ -43,6 +64,7 @@ class _AlbumsApi implements KalinkaPlayerProxy {
 final _page = CatalogPage.category(
   id: 'kalinka:demo:catalog:new',
   title: 'New Releases',
+  provider: 'demo',
   preview: Preview(
     type: PreviewType.imageText,
     contentType: PreviewContentType.album,
@@ -53,6 +75,7 @@ Future<ProviderContainer> _pump(
   WidgetTester tester,
   Size size, {
   CatalogPage? page,
+  _AlbumsApi? api,
 }) async {
   final shown = page ?? _page;
   tester.view.physicalSize = size;
@@ -60,11 +83,21 @@ Future<ProviderContainer> _pump(
   addTearDown(tester.view.reset);
   final container = ProviderContainer(
     overrides: [
-      kalinkaProxyProvider.overrideWithValue(_AlbumsApi()),
+      kalinkaProxyProvider.overrideWithValue(api ?? _AlbumsApi()),
       sharedPrefsProvider.overrideWithValue(
         await SharedPreferences.getInstance(),
       ),
-      sourceModulesProvider.overrideWith((ref) => const <ModuleInfo>[]),
+      sourceModulesProvider.overrideWith(
+        (ref) => [
+          for (final name in ['demo', 'other'])
+            ModuleInfo(
+              name: name,
+              title: name,
+              enabled: true,
+              state: ModuleState.ready,
+            ),
+        ],
+      ),
     ],
   );
   addTearDown(container.dispose);
@@ -179,6 +212,80 @@ void main() {
     final first = tester.getRect(find.byType(SearchAlbumRow).at(0));
     final second = tester.getRect(find.byType(SearchAlbumRow).at(1));
     expect(second.top, greaterThan(first.bottom - 1));
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final declared in [true, false]) {
+    testWidgets('category banners have room with metadata=$declared', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const Size(516, 800),
+        api: _AlbumsApi(catalogs: true),
+        page: CatalogPage.category(
+          id: 'kalinka:demo:catalog:home',
+          title: 'Home',
+          provider: 'demo',
+          preview: Preview(
+            type: PreviewType.imageText,
+            contentType: declared ? PreviewContentType.catalog : null,
+          ),
+        ),
+      );
+      final cards = find.byType(ArtworkGridCard);
+      expect(tester.getSize(cards.first).width, greaterThanOrEqualTo(220));
+      final first = tester.getRect(cards.at(0));
+      final second = tester.getRect(cards.at(1));
+      expect(second.top, first.top);
+      expect(second.left, greaterThan(first.left));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final mixed in [false, true]) {
+    testWidgets('source attribution in grid and list: mixed=$mixed', (
+      tester,
+    ) async {
+      await _pump(tester, const Size(516, 800), api: _AlbumsApi(mixed: mixed));
+      for (final rows in [false, true]) {
+        if (rows) {
+          await tester.tap(find.bySemanticsLabel('List view'));
+          await tester.pumpAndSettle();
+        }
+        final items = find.byType(rows ? SearchAlbumRow : ArtworkGridCard);
+        final badges = find.descendant(
+          of: items,
+          matching: find.byType(SourceBadge),
+        );
+        expect(badges, mixed ? findsWidgets : findsNothing);
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
+
+  testWidgets('wide single-source rows omit the redundant Source column', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      const Size(1200, 800),
+      page: CatalogPage.category(
+        id: 'kalinka:demo:catalog:wide',
+        title: 'Albums',
+        provider: 'demo',
+        preview: Preview(type: PreviewType.tile),
+      ),
+    );
+    expect(find.text('SOURCE'), findsNothing);
+    expect(find.text('ARTIST'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(SearchAlbumRow),
+        matching: find.byType(SourceBadge),
+      ),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 }

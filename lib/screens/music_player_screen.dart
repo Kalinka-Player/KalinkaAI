@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/catalog_sources_provider.dart';
+import '../providers/collections_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/demo_mode.dart';
@@ -291,9 +292,15 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     });
   }
 
-  Widget _buildPlugins({required bool handlesBack}) => PluginCatalogScreen(
+  /// Beside the rail it is left by another destination, so it offers no
+  /// Back of its own; the system back still returns where it came from.
+  Widget _buildPlugins({
+    required bool handlesBack,
+    required bool navigationVisible,
+  }) => PluginCatalogScreen(
     key: _pluginsKey,
     handlesBack: handlesBack,
+    showBack: !navigationVisible,
     onClose: () => setState(() {
       _pluginsOpen = false;
       _settingsCovering = false;
@@ -306,7 +313,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     ref.read(homeSearchRequestProvider.notifier).request();
   }
 
-  Widget _navigation() => ShellNavigation(
+  Widget _navigation({required bool extended}) => ShellNavigation(
+    extended: extended,
     configurationOpen:
         _pluginsOpen ||
         _settingsOpen ||
@@ -321,13 +329,33 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           ),
         ),
     onNavigate: _navigate,
+    onAction: _onShellAction,
   );
+
+  void _onShellAction(ShellAction action) {
+    _closeExpandedPlayer();
+    switch (action) {
+      case ShellAction.restart:
+        runBoxAction(
+          context,
+          ref,
+          BoxAction.reboot,
+          dialogSide: KalinkaDialogSide.browsing,
+        );
+      case ShellAction.changeServer:
+        setState(() => _discoveryOpen = true);
+      case ShellAction.powerOff:
+        _powerOffServer();
+    }
+  }
 
   Future<void> _navigate(
     ShellDestination destination,
     CatalogSource? source,
   ) async {
     if (_navigating) return;
+    // The phone's player sits beside the rail; where the rail goes shows.
+    _closeExpandedPlayer();
     if (destination == ShellDestination.configuration && _pluginsOpen) return;
     setState(() => _navigating = true);
     try {
@@ -348,22 +376,19 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         _settingsCovering = false;
         _pluginsOpen = false;
       });
+      // Each destination comes back as it was left; the one shown stays
+      // as it is.
       final browsing = ref.read(searchSessionProvider.notifier);
       switch (destination) {
         case ShellDestination.home:
-          browsing.backToCatalogsRoot();
+          browsing.showHome();
         case ShellDestination.results:
-          browsing.selectView(FindMusicView.results);
+          browsing.showResults();
         case ShellDestination.source:
-          if (source != null &&
-              (ref.read(searchSessionProvider).activeView !=
-                      FindMusicView.catalogs ||
-                  ref.read(searchSessionProvider).shownListing.id !=
-                      source.root.id)) {
-            browsing.openPage(
-              CatalogPage.fromItem(source.root, provider: source.module.title),
-            );
-          }
+          if (source != null) browsing.openSource(source);
+        case ShellDestination.collections:
+          final plan = ref.read(collectionsShelfProvider).value?.plan;
+          if (plan != null) browsing.openCollections(plan);
         case ShellDestination.configuration:
           _openPlugins();
       }
@@ -624,7 +649,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                     ),
                     child: Padding(
                       padding: const EdgeInsets.only(right: 1),
-                      child: _navigation(),
+                      child: _navigation(
+                        extended: railWidth > kKalinkaRailWidth,
+                      ),
                     ),
                   ),
                 ),
@@ -671,7 +698,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                       ),
                     // Hosted above the phone/tablet switch so an in-progress scan
                     // (and its state) survives resizing across the breakpoint.
-                    if (_discoveryOpen) _buildDiscoveryOverlay(isTablet),
+                    if (_discoveryOpen) _buildDiscoveryOverlay(),
                   ],
                 ),
               ),
@@ -775,6 +802,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                               children: [
                                 _buildPlugins(
                                   handlesBack: rendererSettings == null,
+                                  navigationVisible: navigationVisible,
                                 ),
                                 if (rendererSettings != null)
                                   _buildRendererSettings(rendererSettings),
@@ -963,7 +991,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
   }
 
-  Widget _buildDiscoveryOverlay(bool isTablet) {
+  Widget _buildDiscoveryOverlay() {
     return Positioned.fill(
       // Consumer keeps settings churn from the overlay's own connect flow
       // from rebuilding the occluded layout below.
@@ -974,7 +1002,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
             allowCancel: settings.isSet,
             currentServerHost: settings.isSet ? settings.host : null,
             onClose: () => setState(() => _discoveryOpen = false),
-            isTablet: isTablet,
           );
         },
       ),
@@ -1091,6 +1118,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                               child: ClipRect(
                                 child: _buildPlugins(
                                   handlesBack: rendererSettings == null,
+                                  navigationVisible: navigationVisible,
                                 ),
                               ),
                             ),

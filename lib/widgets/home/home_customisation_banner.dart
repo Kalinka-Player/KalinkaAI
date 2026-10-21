@@ -12,9 +12,8 @@ class HomeCustomisationBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Align(
-    alignment: AlignmentDirectional.centerStart,
     child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: kHomeSearchMaxWidth),
+      constraints: const BoxConstraints(maxWidth: kHomeBannerMaxWidth),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: KalinkaColors.surfaceRaised,
@@ -25,12 +24,12 @@ class HomeCustomisationBanner extends ConsumerWidget {
           builder: (context, constraints) {
             final horizontal =
                 constraints.maxWidth >=
-                640 * MediaQuery.textScalerOf(context).scale(14) / 14;
+                480 * MediaQuery.textScalerOf(context).scale(14) / 14;
             final illustration = ExcludeSemantics(
               child: SvgPicture.asset(
                 'assets/images/home_customisation_collage.svg',
-                width: horizontal ? 300 : 280,
-                height: horizontal ? 180 : 124,
+                width: 200,
+                height: horizontal ? 120 : 88,
                 fit: BoxFit.contain,
               ),
             );
@@ -40,17 +39,17 @@ class HomeCustomisationBanner extends ConsumerWidget {
                 Text(
                   'Make Home your own',
                   style: KalinkaFonts.display(
-                    fontSize: 26,
+                    fontSize: 22,
                     height: 1.2,
                     color: KalinkaColors.frost,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text(
                   'Pin your favourite catalogs and choose how each section looks.',
                   style: KalinkaTextStyles.settingsDescription,
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 OutlinedButton.icon(
                   key: const ValueKey('customise-home-invitation'),
                   onPressed: () =>
@@ -59,13 +58,11 @@ class HomeCustomisationBanner extends ConsumerWidget {
                     foregroundColor: KalinkaColors.textPrimary,
                     minimumSize: const Size(48, 48),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
+                      horizontal: 20,
                       vertical: 12,
                     ),
                     side: const BorderSide(color: KalinkaColors.borderDefault),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: const StadiumBorder(),
                     textStyle: KalinkaFonts.sans(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -77,14 +74,12 @@ class HomeCustomisationBanner extends ConsumerWidget {
               ],
             );
             return Padding(
-              // Trim the artwork and vertical space for a roughly 15% shorter
-              // banner, keeping text and the button free to grow at large text.
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               child: horizontal
                   ? Row(
                       children: [
                         Expanded(child: invitation),
-                        const SizedBox(width: 24),
+                        const SizedBox(width: 20),
                         illustration,
                       ],
                     )

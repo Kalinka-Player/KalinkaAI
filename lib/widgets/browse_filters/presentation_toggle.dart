@@ -11,6 +11,7 @@ import '../../theme/app_theme.dart';
 /// Grey on purpose: it is chrome that stays for the whole visit, so the
 /// chosen side is lifted in the depth scale rather than marked in berry.
 class PresentationToggle extends ConsumerWidget {
+  static const width = 2 * kKalinkaPillTarget;
   final ListingLayout layout;
 
   const PresentationToggle({super.key, required this.layout});
@@ -33,20 +34,42 @@ class PresentationToggle extends ConsumerWidget {
           child: InkWell(
             mouseCursor: WidgetStateMouseCursor.clickable,
             onTap: () => notifier.set(layout, presentation),
-            borderRadius: BorderRadius.circular(6),
+            customBorder: const StadiumBorder(),
             focusColor: KalinkaColors.surfaceOverlay,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              constraints: const BoxConstraints(minHeight: 26, minWidth: 34),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: on ? KalinkaColors.surfaceOverlay : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(
-                icon,
-                size: 15,
-                color: on ? KalinkaColors.textPrimary : KalinkaColors.textMuted,
+            child: SizedBox(
+              width: kKalinkaPillTarget,
+              height: kKalinkaPillTarget,
+              child: Padding(
+                // 3dp inside the pill's edge on every side.
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 3,
+                  vertical: (kKalinkaPillTarget - kKalinkaPillHeight) / 2 + 3,
+                ),
+                child: AnimatedContainer(
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 120),
+                  alignment: Alignment.center,
+                  decoration: ShapeDecoration(
+                    color: on
+                        ? KalinkaColors.surfaceOverlay
+                        : Colors.transparent,
+                    shape: StadiumBorder(
+                      side: BorderSide(
+                        color: on
+                            ? KalinkaColors.textMuted
+                            : Colors.transparent,
+                      ),
+                    ),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 18,
+                    color: on
+                        ? KalinkaColors.textPrimary
+                        : KalinkaColors.textSecondary,
+                  ),
+                ),
               ),
             ),
           ),
@@ -54,18 +77,31 @@ class PresentationToggle extends ConsumerWidget {
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: KalinkaColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: KalinkaColors.borderDefault),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+    // The Play all pill's chrome and height, centred in the choices' targets.
+    return SizedBox(
+      width: width,
+      height: kKalinkaPillTarget,
+      child: Stack(
         children: [
-          side(ListingPresentation.grid, Icons.grid_view_rounded, 'Grid'),
-          side(ListingPresentation.list, Icons.view_list_rounded, 'List'),
+          const Positioned.fill(
+            top: (kKalinkaPillTarget - kKalinkaPillHeight) / 2,
+            bottom: (kKalinkaPillTarget - kKalinkaPillHeight) / 2,
+            child: DecoratedBox(
+              decoration: ShapeDecoration(
+                color: KalinkaColors.surfaceElevated,
+                shape: StadiumBorder(
+                  side: BorderSide(color: KalinkaColors.borderDefault),
+                ),
+              ),
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              side(ListingPresentation.grid, Icons.grid_view_rounded, 'Grid'),
+              side(ListingPresentation.list, Icons.view_list_rounded, 'List'),
+            ],
+          ),
         ],
       ),
     );

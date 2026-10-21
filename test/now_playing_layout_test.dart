@@ -49,6 +49,8 @@ class _Renderers extends RendererListNotifier {
 
 final _preview = find.byKey(const ValueKey('now-playing-up-next'));
 final _art = find.byKey(const ValueKey('now-playing-artwork'));
+final _presentation = find.byKey(const ValueKey('now-playing-presentation'));
+final _metadata = find.byKey(const ValueKey('now-playing-metadata'));
 Finder _row(int index) => find.byKey(ValueKey('up-next-track-$index'));
 Finder get _rows => find.byWidgetPredicate(
   (widget) =>
@@ -61,14 +63,22 @@ PlayQueueState _queue({
   int count = 10,
   bool exclusive = false,
   int seq = 1,
+  bool longNames = false,
 }) => PlayQueueState(
   trackList: [
     for (var i = 0; i < count; i++)
       Track(
         id: 'track-$i',
-        title: 'Evening track $i',
+        title: longNames
+            ? 'Evening track $i — a live recording from the northern coast'
+            : 'Evening track $i',
         duration: 200,
-        performer: Artist(id: 'artist', name: 'A favourite artist'),
+        performer: Artist(
+          id: 'artist',
+          name: longNames
+              ? 'A favourite artist with the late night orchestra'
+              : 'A favourite artist',
+        ),
         album: Album(id: 'album', title: 'Evening sessions', year: 2026),
       ),
   ],
@@ -83,7 +93,7 @@ PlayQueueState _queue({
 Future<ProviderContainer> _pump(
   WidgetTester tester, {
   required SettableQueue queue,
-  Size size = const Size(432, 1200),
+  Size size = const Size(432, 1280),
   double scale = 1,
   Key? captureKey,
 }) async {
@@ -342,7 +352,7 @@ void main() {
   );
 
   testWidgets(
-    'offline preview stays readable and inactive; exclusive or empty queue hides it',
+    'offline preview stays readable and inactive; exclusive or empty queue hides it, and its end says so',
     (tester) async {
       final queue = SettableQueue(_queue());
       final container = await _pump(tester, queue: queue);
@@ -360,9 +370,14 @@ void main() {
       queue.set(_queue(exclusive: true, seq: 2));
       await tester.pumpAndSettle();
       expect(_preview, findsNothing);
+      // At the end of the queue it says the queue is empty, as the queue does.
       queue.set(_queue(index: 9, seq: 3));
       await tester.pumpAndSettle();
-      expect(_preview, findsNothing);
+      expect(_preview, findsOneWidget);
+      expect(
+        find.descendant(of: _preview, matching: find.text('Queue is empty')),
+        findsOneWidget,
+      );
       queue.set(PlayQueueState.empty);
       await tester.pumpAndSettle();
       expect(_preview, findsNothing);
@@ -370,31 +385,108 @@ void main() {
     },
   );
 
-  for (final (name, size, scale) in [
-    ('short', const Size(432, 720), 1.0),
-    ('desktop', const Size(432, 1080), 1.0),
-    ('tall', const Size(432, 1200), 1.0),
-    ('large-text', const Size(375, 812), 2.0),
-    ('landscape', const Size(812, 375), 1.0),
+  testWidgets('resizing rearranges the cover without changing playback', (
+    tester,
+  ) async {
+    final container = await _pump(
+      tester,
+      queue: SettableQueue(_queue()),
+      size: const Size(432, 900),
+    );
+    final original = container.read(playQueueStateStoreProvider);
+    final title = find.text('Evening track 0');
+    expect(tester.getRect(title).top, greaterThan(tester.getRect(_art).bottom));
+    tester.view.physicalSize = const Size(432, 500);
+    await tester.pumpAndSettle();
+    expect(tester.getRect(title).left, greaterThan(tester.getRect(_art).right));
+    expect(
+      tester.getCenter(_metadata).dy,
+      closeTo(
+        tester
+            .getCenter(find.byKey(const ValueKey('now-playing-metadata-area')))
+            .dy,
+        0.1,
+      ),
+    );
+    tester.view.physicalSize = const Size(432, 900);
+    await tester.pumpAndSettle();
+    expect(tester.getRect(title).top, greaterThan(tester.getRect(_art).bottom));
+    expect(container.read(playQueueStateStoreProvider), same(original));
+    expect((container.read(kalinkaWsApiProvider) as _Api).sent, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final (name, size, scale, sideBySide) in [
+    ('short', const Size(432, 720), 1.0, false),
+    ('desktop', const Size(432, 1080), 1.0, false),
+    ('tall', const Size(432, 1200), 1.0, false),
+    ('large-text', const Size(375, 812), 2.0, false),
+    ('landscape', const Size(812, 375), 1.0, true),
+    ('near-square', const Size(432, 540), 1.0, true),
+    ('square', const Size(800, 800), 1.0, true),
+    ('square-long-text', const Size(640, 640), 2.0, true),
+    ('square-large-text', const Size(432, 500), 2.0, false),
+    ('narrow-square', const Size(320, 400), 1.0, false),
   ]) {
-    testWidgets('$name keeps artwork at the top and controls reachable', (
+    testWidgets('$name fits artwork, details and controls without scrolling', (
       tester,
     ) async {
       final captureKey = GlobalKey();
+      final queue = _queue(longNames: name == 'square-long-text');
       await _pump(
         tester,
-        queue: SettableQueue(_queue()),
+        queue: SettableQueue(queue),
         size: size,
         scale: scale,
         captureKey: captureKey,
       );
       expect(
-        tester.getRect(_art).top,
-        closeTo(tester.getRect(find.byType(PlayerHeader)).bottom + 24, 0.1),
+        tester.getTopLeft(_presentation).dy,
+        closeTo(tester.getRect(find.byType(PlayerHeader)).bottom + 32, 0.1),
       );
+      final title = find.text(queue.trackList.first.title);
+      final titleBounds = tester.getRect(title);
+      final artBounds = tester.getRect(_art);
+      final output = find.byType(RendererSwitcherDropdown);
+      expect(output, findsOneWidget);
+      if (sideBySide) {
+        expect(titleBounds.left, greaterThan(artBounds.right));
+        expect(
+          tester.getCenter(_metadata).dy,
+          closeTo(
+            tester
+                .getCenter(
+                  find.byKey(const ValueKey('now-playing-metadata-area')),
+                )
+                .dy,
+            0.1,
+          ),
+        );
+        final outputBounds = tester.getRect(output);
+        expect(outputBounds.left, closeTo(titleBounds.left, 0.1));
+        expect(
+          outputBounds.bottom,
+          closeTo(tester.getRect(_presentation).bottom, 0.1),
+        );
+        expect(
+          artBounds.center.dy,
+          closeTo(tester.getRect(_presentation).center.dy, 0.1),
+        );
+        expect(outputBounds.top, greaterThan(tester.getRect(_metadata).bottom));
+        expect(outputBounds.right, lessThanOrEqualTo(size.width - 16));
+        expect(tester.widget<Text>(title).textAlign, TextAlign.left);
+        for (final text in [
+          queue.trackList.first.performer!.name,
+          'Evening sessions · 2026',
+        ]) {
+          expect(tester.getRect(find.text(text).first).left, titleBounds.left);
+        }
+      } else {
+        expect(titleBounds.top, greaterThanOrEqualTo(artBounds.bottom));
+      }
       if (size.height >= 1080) {
         expect(_preview, findsOneWidget);
-        expect(_rows.evaluate().length, inInclusiveRange(3, 5));
+        expect(_rows.evaluate().length, inInclusiveRange(1, 5));
         expect(tester.getRect(_preview).bottom, lessThanOrEqualTo(size.height));
         expect(
           tester.getRect(_rows.first).top,
@@ -402,8 +494,12 @@ void main() {
             tester.getRect(find.byType(RendererSwitcherDropdown)).bottom,
           ),
         );
-      } else {
+      } else if (!sideBySide) {
         expect(_preview, findsNothing);
+      }
+      if (name == 'square') {
+        expect(_rows.evaluate().length, inInclusiveRange(1, 5));
+        expect(tester.getRect(_preview).bottom, lessThanOrEqualTo(size.height));
       }
       if (captures != null) {
         await tester.runAsync(() async {
@@ -418,11 +514,29 @@ void main() {
           image.dispose();
         });
       }
-      await tester.ensureVisible(find.byType(RendererSwitcherDropdown));
+      final scroll = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byType(NowPlayingContent),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(scroll.position.maxScrollExtent, closeTo(0, 0.1));
+      expect(scroll.position.pixels, closeTo(0, 0.1));
+      final before = tester.getRect(_presentation);
+      await tester.dragFrom(
+        tester.getTopLeft(_presentation) + const Offset(4, 4),
+        const Offset(0, -150),
+      );
       await tester.pumpAndSettle();
+      expect(tester.getRect(_presentation), before);
+      expect(scroll.position.pixels, closeTo(0, 0.1));
       expect(
         find.byType(RendererSwitcherDropdown).hitTestable(),
         findsOneWidget,
+      );
+      expect(
+        tester.getBottomRight(find.byType(RendererSwitcherDropdown)).dy,
+        lessThanOrEqualTo(size.height),
       );
       expect(tester.takeException(), isNull);
     });

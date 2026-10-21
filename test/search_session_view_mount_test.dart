@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -121,6 +123,32 @@ class _IdleIndexer extends IndexerStatusNotifier {
   void release() {}
 }
 
+Future<void> _captureHome(
+  WidgetTester tester,
+  GlobalKey key,
+  String name,
+) async {
+  final dir = Platform.environment['KALINKA_REVIEW_DIR'];
+  if (dir == null) return;
+  await tester.runAsync(() async {
+    final artwork = tester.widget<Image>(
+      find.byKey(const ValueKey('home-header-artwork')),
+    );
+    await precacheImage(artwork.image, key.currentContext!);
+  });
+  await tester.pump();
+  await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+    final image = await boundary.toImage();
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    final file = File('$dir/$name.png');
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+  });
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
@@ -132,6 +160,15 @@ void main() {
       final loader = FontLoader(family)
         ..addFont(rootBundle.load('assets/fonts/$file'));
       await loader.load();
+    }
+    final material = File(
+      '${Platform.environment['FLUTTER_ROOT']}/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+    );
+    if (material.existsSync()) {
+      await (FontLoader('MaterialIcons')..addFont(
+            Future.value(ByteData.sublistView(material.readAsBytesSync())),
+          ))
+          .load();
     }
   });
 
@@ -192,6 +229,7 @@ void main() {
     bool reduceMotion = false,
     double topInset = 0,
     List<SearchSuggestion> suggestions = const [],
+    GlobalKey? captureKey,
   }) async {
     final container = makeContainer(
       modules: modules,
@@ -204,6 +242,7 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
+          theme: AppTheme.dark(),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(textScale),
@@ -212,7 +251,10 @@ void main() {
             ),
             child: child!,
           ),
-          home: const Scaffold(body: SearchSessionView()),
+          home: RepaintBoundary(
+            key: captureKey,
+            child: const Scaffold(body: SearchSessionView()),
+          ),
         ),
       ),
     );
@@ -312,13 +354,7 @@ void main() {
   final rootList = find.byKey(const PageStorageKey('discoverRoot'));
   final backdrop = find.byKey(const ValueKey('discover-backdrop'));
   final headerSurface = find.byKey(const ValueKey('discover-header-surface'));
-  final artwork = find.byWidgetPredicate(
-    (widget) =>
-        widget is SvgPicture &&
-        widget.bytesLoader is SvgAssetLoader &&
-        (widget.bytesLoader as SvgAssetLoader).assetName ==
-            'assets/images/header_artwork.svg',
-  );
+  final artwork = find.byKey(const ValueKey('home-header-artwork'));
 
   ScrollPosition rootPosition(WidgetTester tester) => tester
       .state<ScrollableState>(
@@ -328,6 +364,7 @@ void main() {
 
   for (final (size, scale, reduceMotion) in [
     (const Size(375, 812), 1.0, false),
+    (const Size(768, 1024), 1.0, false),
     (const Size(812, 375), 1.0, false),
     (const Size(1200, 800), 1.0, false),
     (const Size(375, 812), 2.0, true),
@@ -338,12 +375,14 @@ void main() {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
+      final captureKey = GlobalKey();
       await pumpSurface(
         tester,
         withHomeContent: true,
         textScale: scale,
         reduceMotion: reduceMotion,
         topInset: 24,
+        captureKey: captureKey,
       );
       await tester.pumpAndSettle();
 
@@ -351,8 +390,13 @@ void main() {
       final backdropRect = tester.getRect(backdrop);
       final artRect = tester.getRect(artwork);
       final titleRect = tester.getRect(find.text('What shall we play?'));
+      expect(artwork, findsOneWidget);
+      expect(artRect.left, 0);
+      expect(artRect.width, size.width);
+      expect(artRect.top, 0);
       expect(headerRect.height, kKalinkaTopBarHeight + 24);
       expect(tester.widget<ColoredBox>(headerSurface).color.a, 0);
+      await _captureHome(tester, captureKey, 'home-${size.width}-$scale');
 
       // One frame is enough: decoration moves with the list without easing.
       rootPosition(tester).jumpTo(80);
@@ -440,21 +484,28 @@ void main() {
               kind: FilterKind.text,
               label: 'Search albums and artists',
             ),
+            FilterSpec(
+              id: 'genre',
+              kind: FilterKind.choice,
+              label: 'Genre',
+              ops: [FilterOp.any],
+            ),
           ],
         );
     await tester.pumpAndSettle();
 
-    expect(find.byType(SearchFilterButton), findsOneWidget);
+    expect(find.byType(SearchFilterButton), findsNothing);
+    expect(find.byTooltip('Filters'), findsOneWidget);
 
-    await tester.tap(find.byType(SearchFilterButton));
+    await tester.tap(find.byTooltip('Filters'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.text('SEARCH & FILTERS'), findsOneWidget);
+    expect(find.text('FILTERS'), findsOneWidget);
 
     // Cancel folds it away again without touching the applied filter.
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-    expect(find.text('SEARCH & FILTERS'), findsNothing);
+    expect(find.text('FILTERS'), findsNothing);
     expect(container.read(searchSessionProvider).catalogFilter.isEmpty, isTrue);
   });
 
@@ -561,7 +612,21 @@ void main() {
           find.descendant(of: chip, matching: find.byIcon(icon)),
           findsOneWidget,
         );
-        expect(tester.getSize(chip).height, greaterThanOrEqualTo(48));
+        // No taller than the search entry above them.
+        expect(
+          tester.getSize(chip).height,
+          lessThanOrEqualTo(
+            tester
+                .getSize(
+                  find
+                      .byWidgetPredicate(
+                        (w) => w is Semantics && w.properties.label == 'Search',
+                      )
+                      .first,
+                )
+                .height,
+          ),
+        );
       }
       // Under the note on which sources answer.
       expect(
@@ -600,7 +665,9 @@ void main() {
     expect(find.textContaining('mood'), findsNothing);
   });
 
-  testWidgets('the bar names the page, not a path to it', (tester) async {
+  testWidgets('the expanded catalog keeps its title in the page only', (
+    tester,
+  ) async {
     final container = await pumpSurface(tester);
     container
         .read(searchSessionProvider.notifier)
@@ -610,7 +677,8 @@ void main() {
         );
     await tester.pumpAndSettle();
 
-    expect(find.text('MY ALBUMS'), findsOneWidget);
+    expect(find.text('My Albums'), findsOneWidget);
+    expect(find.byKey(const ValueKey('catalog-collapsed-title')), findsNothing);
     expect(find.text('HOME'), findsNothing);
   });
 
@@ -627,7 +695,7 @@ void main() {
         );
     await tester.pumpAndSettle();
 
-    expect(find.text('MY LIBRARY'), findsOneWidget);
+    expect(find.text('My Library'), findsOneWidget);
     expect(find.byType(FolderTrail), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.arrow_back));

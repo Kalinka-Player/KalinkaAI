@@ -327,13 +327,17 @@ class _PlaybackProgressSliderState extends ConsumerState<PlaybackProgressSlider>
       children: [
         bar,
         // SizedBox gives tight constraints (tight width from Column + fixed
-        // height here), making the Row a Flutter relayout boundary. This
-        // prevents RenderParagraph.markNeedsLayout() from propagating up
+        // height for the current text scale), making the Row a Flutter relayout
+        // boundary. This prevents RenderParagraph.markNeedsLayout() from propagating up
         // through the RepaintBoundary and causing a full-screen relayout on
         // every playback-time tick.
         SizedBox(
           width: double.infinity,
-          height: 20,
+          height:
+              (MediaQuery.textScalerOf(context)
+                          .scale(KalinkaTextStyles.timeLabel.fontSize!) *
+                      1.5)
+                  .clamp(20.0, double.infinity),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Row(

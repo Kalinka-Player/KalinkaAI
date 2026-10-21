@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
+import '../configuration_appearance.dart';
 
 /// Muted footer text displayed below the last card in a tab section.
 class FooterNote extends StatelessWidget {
@@ -9,8 +11,9 @@ class FooterNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final inset = ConfigurationAppearance.sideInset(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+      padding: EdgeInsets.fromLTRB(inset, 10, inset, 0),
       child: Text(
         text,
         style: KalinkaTextStyles.trayRowSublabel.copyWith(

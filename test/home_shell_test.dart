@@ -396,7 +396,7 @@ void main() {
     expect(player.width, 440);
     expect(player.right, 1600);
     final browsing = tester.getRect(find.byType(SearchSessionView));
-    expect(browsing.left, 88);
+    expect(browsing.left, 200);
     expect(browsing.right, 1159);
 
     await tester.tap(_side('QUEUE'));

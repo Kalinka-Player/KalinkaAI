@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalinka/widgets/home/preview_shelf.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/browse_filters.dart';
@@ -299,10 +300,12 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.byType(BrowseRowsShimmer), findsWidgets);
+      // Albums shimmer as the rail of covers they will be.
+      expect(find.byType(PreviewShelfShimmer), findsWidgets);
 
       gate.complete();
       await tester.pumpAndSettle();
+      expect(find.byType(PreviewShelfShimmer), findsNothing);
       expect(find.byType(BrowseRowsShimmer), findsNothing);
       expect(find.text('Moon Safari'), findsOneWidget);
     });

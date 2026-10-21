@@ -12,6 +12,8 @@ import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
 import '../utils/playback_utils.dart';
 import 'procedural_album_art.dart';
+import 'column_separator.dart';
+import 'queue_columns.dart';
 import 'source_badge.dart';
 import 'swipe_to_delete_row.dart';
 import 'track_tile_layout.dart';
@@ -29,6 +31,7 @@ class QueueItemRow extends ConsumerWidget {
   final bool isDragging;
   final bool showDragHandle;
   final VoidCallback? onDelete;
+  final QueueColumns? columns;
 
   /// Total number of UP NEXT rows (excluding the now-playing tile). Used by
   /// the left accent strip to know how far the fade should reach.
@@ -44,6 +47,7 @@ class QueueItemRow extends ConsumerWidget {
     this.isDragging = false,
     this.showDragHandle = true,
     this.onDelete,
+    this.columns,
     this.upNextCount = 0,
   });
 
@@ -192,6 +196,38 @@ class QueueItemRow extends ConsumerWidget {
     final rowPadding = isNowPlaying
         ? const EdgeInsets.symmetric(horizontal: 12, vertical: 12)
         : kTrackTilePadding;
+    final columns = this.columns;
+    final showAlbum = columns?.showAlbum ?? false;
+    final time = isNowPlaying
+        ? _NowPlayingTimer(durationSec: track.duration)
+        : Text(
+            formatClock(Duration(seconds: track.duration)),
+            style: KalinkaTextStyles.queueItemDuration.copyWith(
+              color: isHistory
+                  ? KalinkaColors.textMuted
+                  : KalinkaColors.textSecondary,
+            ),
+          );
+
+    Widget withAlbum(Widget details) => !showAlbum
+        ? details
+        : Row(
+            children: [
+              Expanded(child: details),
+              const ColumnSeparator(),
+              SizedBox(
+                width: columns!.albumWidth,
+                child: Text(
+                  track.album?.title ?? '',
+                  style: KalinkaTextStyles.queueItemArtist.copyWith(
+                    color: artistColor,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          );
 
     final rowContent = GestureDetector(
       onTap: () {
@@ -205,87 +241,99 @@ class QueueItemRow extends ConsumerWidget {
               leading: artwork,
               artworkSize: rowArtworkSize,
               padding: rowPadding,
-              content: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      if (track.unavailable || playbackFailed) ...[
-                        Tooltip(
-                          message: track.unavailable
-                              ? (track.unavailableReason ??
-                                    'Unavailable — could not load this track')
-                              : 'Playback failed — press play to try again',
-                          child: const Icon(
-                            Icons.error_outline,
-                            size: 16,
-                            color: KalinkaColors.actionDelete,
+              content: withAlbum(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (track.unavailable || playbackFailed) ...[
+                          Tooltip(
+                            message: track.unavailable
+                                ? (track.unavailableReason ??
+                                      'Unavailable — could not load this track')
+                                : 'Playback failed — press play to try again',
+                            child: const Icon(
+                              Icons.error_outline,
+                              size: 16,
+                              color: KalinkaColors.actionDelete,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Expanded(
+                          child: Text(
+                            track.title,
+                            style: titleStyle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
                           ),
                         ),
-                        const SizedBox(width: 4),
                       ],
-                      Expanded(
-                        child: Text(
-                          track.title,
-                          style: titleStyle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          softWrap: false,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: isNowPlaying ? 4 : 2),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      if (sourceBadgeVisible(ref, track.id)) ...[
-                        SourceBadge(
-                          entityId: track.id,
-                          size: SourceBadgeSize.small,
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                      Expanded(
-                        child: Text(
-                          track.performer?.name ?? 'Unknown Artist',
-                          style: KalinkaTextStyles.queueItemArtist.copyWith(
-                            color: artistColor,
+                    ),
+                    SizedBox(height: isNowPlaying ? 4 : 2),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (sourceBadgeVisible(ref, track.id)) ...[
+                          SourceBadge(
+                            entityId: track.id,
+                            size: SourceBadgeSize.small,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          softWrap: false,
+                          const SizedBox(width: 4),
+                        ],
+                        Expanded(
+                          child: Text(
+                            track.performer?.name ?? 'Unknown Artist',
+                            style: KalinkaTextStyles.queueItemArtist.copyWith(
+                              color: artistColor,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              trailing: isHistory
+              trailing: showAlbum
+                  ? SizedBox(
+                      width: columns!.trailingWidth,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: columns.timeWidth,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: time,
+                            ),
+                          ),
+                          SizedBox(
+                            width: QueueColumns.handleWidth,
+                            child: showDragHandle && !isHistory
+                                ? Padding(
+                                    padding: const EdgeInsets.only(left: 7),
+                                    child: _DragHandle(index: displayIndex),
+                                  )
+                                : null,
+                          ),
+                        ],
+                      ),
+                    )
+                  : isHistory
                   ? Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text(
-                        formatClock(Duration(seconds: track.duration)),
-                        style: KalinkaTextStyles.queueItemDuration.copyWith(
-                          color: KalinkaColors.textMuted,
-                        ),
-                      ),
+                      child: time,
                     )
                   : Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (isNowPlaying)
-                          _NowPlayingTimer(durationSec: track.duration)
-                        else
-                          Text(
-                            formatClock(Duration(seconds: track.duration)),
-                            // Keep Up Next duration fixed for fast scanning.
-                            style: KalinkaTextStyles.queueItemDuration.copyWith(
-                              color: KalinkaColors.textSecondary,
-                            ),
-                          ),
+                        time,
                         if (showDragHandle) ...[
                           const SizedBox(width: 7),
                           _DragHandle(index: displayIndex),

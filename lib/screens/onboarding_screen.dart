@@ -490,7 +490,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         persistConnection: false,
         currentServerHost: null,
         onConnected: _onConnected,
-        isTablet: MediaQuery.of(context).size.width >= kKalinkaTabletBreakpoint,
         // Re-entering after "Back": preselect nothing, fresh scan.
         key: ValueKey('oobe_discovery_${connection.host}'),
       );

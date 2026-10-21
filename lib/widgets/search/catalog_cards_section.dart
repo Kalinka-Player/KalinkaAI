@@ -78,14 +78,17 @@ class CatalogCardsSection extends ConsumerWidget {
                           iconNamed(source.module.icon) ??
                           Icons.library_music_outlined,
                       onTap: () {
+                        // Its own destination, as the rail opens it; with no
+                        // rail to return through, at its own page.
+                        final rail =
+                            kalinkaNavigationRailWidth(
+                              MediaQuery.sizeOf(context).width,
+                              textScaler: MediaQuery.textScalerOf(context),
+                            ) >
+                            0;
                         ref
                             .read(searchSessionProvider.notifier)
-                            .openPage(
-                              CatalogPage.fromItem(
-                                source.root,
-                                provider: source.module.title,
-                              ),
-                            );
+                            .openSource(source, restore: rail);
                         onSourceOpened?.call();
                       },
                     ),

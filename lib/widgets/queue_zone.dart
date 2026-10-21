@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/data_model.dart';
 import '../data_model/kalinka_ws_api.dart' show QueueCommand;
 import '../providers/app_state_provider.dart';
@@ -11,15 +12,13 @@ import 'empty_queue_state.dart';
 import 'exclusive_queue_card.dart';
 import 'player_sheet.dart';
 import 'queue_item_row.dart';
+import 'queue_columns.dart';
 import 'queue_section_header.dart';
 import 'search_cards/action_pill_button.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// Height of the pinned section header.
-const double _kHeaderHeight = QueueSectionHeader.height;
 
 /// The saved queue while a plugin plays: set back, yet not as far as the
 /// offline queue, since it can still be edited and played from.
@@ -277,116 +276,140 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
     int currentIndex,
     bool shuffleEnabled,
   ) {
-    return CustomScrollView(
-      controller: _scrollController,
-      slivers: [
-        // ── NOW PLAYING ────────────────────────────────────────────────────
-        if (nowPlayingTrack != null)
-          SliverMainAxisGroup(
-            slivers: [
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: const _NowPlayingHeaderDelegate(),
-              ),
-              SliverToBoxAdapter(
-                child: QueueItemRow(
-                  key: ValueKey('nowplaying_${nowPlayingTrack.id}'),
-                  track: nowPlayingTrack,
-                  index: currentIndex,
-                  displayIndex: 0,
-                  isCurrentTrack: true,
-                  showDragHandle: false,
-                  isDragging: _isDragging,
-                ),
-              ),
-            ],
+    final hasAlbums =
+        (nowPlayingTrack?.album?.title.trim().isNotEmpty ?? false) ||
+        queueTracks.any(
+          (track) => track.album?.title.trim().isNotEmpty ?? false,
+        ) ||
+        previousTracks.any(
+          (track) => track.album?.title.trim().isNotEmpty ?? false,
+        );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = QueueColumns(
+          width: constraints.maxWidth,
+          textScale: (MediaQuery.textScalerOf(context).scale(14) / 14).clamp(
+            1.0,
+            double.infinity,
           ),
-
-        // ── UP NEXT ────────────────────────────────────────────────────────
-        SliverMainAxisGroup(
+          hasAlbums: hasAlbums,
+        );
+        return CustomScrollView(
+          controller: _scrollController,
           slivers: [
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _UpNextHeaderDelegate(
-                trackCount: queueTracks.length,
-                showShuffleBadge: shuffleEnabled,
+            // ── NOW PLAYING ────────────────────────────────────────────────────
+            if (nowPlayingTrack != null)
+              SliverMainAxisGroup(
+                slivers: [
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _NowPlayingHeaderDelegate(columns: columns),
+                  ),
+                  SliverToBoxAdapter(
+                    child: QueueItemRow(
+                      key: ValueKey('nowplaying_${nowPlayingTrack.id}'),
+                      columns: columns,
+                      track: nowPlayingTrack,
+                      index: currentIndex,
+                      displayIndex: 0,
+                      isCurrentTrack: true,
+                      showDragHandle: false,
+                      isDragging: _isDragging,
+                    ),
+                  ),
+                ],
               ),
+
+            // ── UP NEXT ────────────────────────────────────────────────────────
+            SliverMainAxisGroup(
+              slivers: [
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _UpNextHeaderDelegate(
+                    trackCount: queueTracks.length,
+                    showShuffleBadge: shuffleEnabled,
+                    columns: columns,
+                  ),
+                ),
+                if (queueTracks.isEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 24,
+                      ),
+                      child: Text(
+                        'Queue is empty',
+                        style: KalinkaTextStyles.queueItemArtist,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+                else
+                  SliverReorderableList(
+                    itemCount: queueTracks.length,
+                    onReorderItem: _onReorderItem,
+                    onReorderStart: (i) => setState(() => _isDragging = true),
+                    onReorderEnd: (i) => setState(() => _isDragging = false),
+                    proxyDecorator: _proxyDecorator,
+                    itemBuilder: (context, i) {
+                      final track = queueTracks[i];
+                      final absoluteIndex = currentIndex + 1 + i;
+                      return QueueItemRow(
+                        key: ValueKey('upnext_${track.id}'),
+                        columns: columns,
+                        track: track,
+                        index: absoluteIndex,
+                        displayIndex: i,
+                        isDragging: _isDragging,
+                        upNextCount: queueTracks.length,
+                      );
+                    },
+                  ),
+                if (previousTracks.isNotEmpty)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Divider(color: Color(0x26FFFFFF)),
+                    ),
+                  ),
+              ],
             ),
-            if (queueTracks.isEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 24,
-                  ),
-                  child: Text(
-                    'Queue is empty',
-                    style: KalinkaTextStyles.queueItemArtist,
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              )
-            else
-              SliverReorderableList(
-                itemCount: queueTracks.length,
-                onReorderItem: _onReorderItem,
-                onReorderStart: (i) => setState(() => _isDragging = true),
-                onReorderEnd: (i) => setState(() => _isDragging = false),
-                proxyDecorator: _proxyDecorator,
-                itemBuilder: (context, i) {
-                  final track = queueTracks[i];
-                  final absoluteIndex = currentIndex + 1 + i;
-                  return QueueItemRow(
-                    key: ValueKey('upnext_${track.id}'),
-                    track: track,
-                    index: absoluteIndex,
-                    displayIndex: i,
-                    isDragging: _isDragging,
-                    upNextCount: queueTracks.length,
-                  );
-                },
-              ),
+
+            // ── PREVIOUSLY PLAYED ──────────────────────────────────────────────
             if (previousTracks.isNotEmpty)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Divider(color: Color(0x26FFFFFF)),
-                ),
+              SliverMainAxisGroup(
+                slivers: [
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _HistoryHeaderDelegate(columns: columns),
+                  ),
+                  SliverList.builder(
+                    itemCount: previousTracks.length,
+                    itemBuilder: (context, i) {
+                      final track = previousTracks[i];
+                      final queueIndex = currentIndex - 1 - i;
+                      return QueueItemRow(
+                        key: ValueKey('history_${track.id}_$i'),
+                        columns: columns,
+                        track: track,
+                        index: queueIndex,
+                        displayIndex: i,
+                        isHistory: true,
+                        isDragging: _isDragging,
+                      );
+                    },
+                  ),
+                ],
               ),
+
+            // Bottom padding
+            SliverPadding(
+              padding: EdgeInsets.only(bottom: widget.bottomPadding + 16),
+            ),
           ],
-        ),
-
-        // ── PREVIOUSLY PLAYED ──────────────────────────────────────────────
-        if (previousTracks.isNotEmpty)
-          SliverMainAxisGroup(
-            slivers: [
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: const _HistoryHeaderDelegate(),
-              ),
-              SliverList.builder(
-                itemCount: previousTracks.length,
-                itemBuilder: (context, i) {
-                  final track = previousTracks[i];
-                  final queueIndex = currentIndex - 1 - i;
-                  return QueueItemRow(
-                    key: ValueKey('history_${track.id}_$i'),
-                    track: track,
-                    index: queueIndex,
-                    displayIndex: i,
-                    isHistory: true,
-                    isDragging: _isDragging,
-                  );
-                },
-              ),
-            ],
-          ),
-
-        // Bottom padding
-        SliverPadding(
-          padding: EdgeInsets.only(bottom: widget.bottomPadding + 16),
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -461,17 +484,19 @@ class _SavedQueueHeader extends StatelessWidget {
 class _UpNextHeaderDelegate extends SliverPersistentHeaderDelegate {
   final int trackCount;
   final bool showShuffleBadge;
+  final QueueColumns columns;
 
   const _UpNextHeaderDelegate({
     required this.trackCount,
     required this.showShuffleBadge,
+    required this.columns,
   });
 
   @override
-  double get minExtent => _kHeaderHeight;
+  double get minExtent => columns.headerHeight;
 
   @override
-  double get maxExtent => _kHeaderHeight;
+  double get maxExtent => columns.headerHeight;
 
   @override
   Widget build(
@@ -481,7 +506,7 @@ class _UpNextHeaderDelegate extends SliverPersistentHeaderDelegate {
   ) {
     final hasRows = trackCount > 0;
     return SizedBox(
-      height: _kHeaderHeight,
+      height: columns.headerHeight,
       child: ColoredBox(
         color: KalinkaColors.background,
         child: Stack(
@@ -490,6 +515,8 @@ class _UpNextHeaderDelegate extends SliverPersistentHeaderDelegate {
               label: 'UP NEXT',
               trackCount: trackCount,
               showShuffleBadge: showShuffleBadge,
+              columns: columns,
+              showColumnLegend: true,
             ),
             // Continuation of the now-playing accent bar. Solid through the
             // header when at least one UP NEXT row exists; otherwise the fade
@@ -526,7 +553,9 @@ class _UpNextHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(_UpNextHeaderDelegate old) =>
-      trackCount != old.trackCount || showShuffleBadge != old.showShuffleBadge;
+      trackCount != old.trackCount ||
+      showShuffleBadge != old.showShuffleBadge ||
+      columns != old.columns;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -534,13 +563,15 @@ class _UpNextHeaderDelegate extends SliverPersistentHeaderDelegate {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _NowPlayingHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _NowPlayingHeaderDelegate();
+  final QueueColumns columns;
+
+  const _NowPlayingHeaderDelegate({required this.columns});
 
   @override
-  double get minExtent => _kHeaderHeight;
+  double get minExtent => columns.titleHeight;
 
   @override
-  double get maxExtent => _kHeaderHeight;
+  double get maxExtent => columns.titleHeight;
 
   @override
   Widget build(
@@ -549,19 +580,19 @@ class _NowPlayingHeaderDelegate extends SliverPersistentHeaderDelegate {
     bool overlapsContent,
   ) {
     // The top of the queue drags the phone sheet; the list below scrolls.
-    return const SheetDragArea(
+    return SheetDragArea(
       child: SizedBox(
-        height: _kHeaderHeight,
+        height: columns.titleHeight,
         child: ColoredBox(
           color: KalinkaColors.background,
-          child: _NowPlayingHeaderContent(),
+          child: _NowPlayingHeaderContent(columns: columns),
         ),
       ),
     );
   }
 
   @override
-  bool shouldRebuild(_NowPlayingHeaderDelegate old) => false;
+  bool shouldRebuild(_NowPlayingHeaderDelegate old) => columns != old.columns;
 }
 
 /// Header label + format suffix for the NOW PLAYING section.
@@ -572,7 +603,9 @@ class _NowPlayingHeaderDelegate extends SliverPersistentHeaderDelegate {
 /// because it persists until someone acts on it, and it is the one state the
 /// transport controls deliberately don't advertise.
 class _NowPlayingHeaderContent extends ConsumerStatefulWidget {
-  const _NowPlayingHeaderContent();
+  final QueueColumns columns;
+
+  const _NowPlayingHeaderContent({required this.columns});
 
   @override
   ConsumerState<_NowPlayingHeaderContent> createState() =>
@@ -619,6 +652,7 @@ class _NowPlayingHeaderContentState
 
     return QueueSectionHeader(
       label: _label,
+      columns: widget.columns,
       suffix: _buildFormatSuffix(
         mimeType: fmt.mimeType,
         bitsPerSample: fmt.bitsPerSample,
@@ -673,17 +707,19 @@ String? _buildFormatSuffix({
 // ─────────────────────────────────────────────────────────────────────────────
 // _HistoryHeaderDelegate — pinned "PREVIOUSLY PLAYED" header.
 //
-// Fixed minExtent=maxExtent=_kHeaderHeight.
+// Only Up Next carries column labels; history keeps a title-only header.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _HistoryHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _HistoryHeaderDelegate();
+  final QueueColumns columns;
+
+  const _HistoryHeaderDelegate({required this.columns});
 
   @override
-  double get minExtent => _kHeaderHeight;
+  double get minExtent => columns.titleHeight;
 
   @override
-  double get maxExtent => _kHeaderHeight;
+  double get maxExtent => columns.titleHeight;
 
   @override
   Widget build(
@@ -692,14 +728,14 @@ class _HistoryHeaderDelegate extends SliverPersistentHeaderDelegate {
     bool overlapsContent,
   ) {
     return SizedBox(
-      height: _kHeaderHeight,
+      height: columns.titleHeight,
       child: ColoredBox(
         color: KalinkaColors.background,
-        child: const QueueSectionHeader(label: 'PREVIOUSLY PLAYED'),
+        child: QueueSectionHeader(label: 'PREVIOUSLY PLAYED', columns: columns),
       ),
     );
   }
 
   @override
-  bool shouldRebuild(_HistoryHeaderDelegate old) => false;
+  bool shouldRebuild(_HistoryHeaderDelegate old) => columns != old.columns;
 }

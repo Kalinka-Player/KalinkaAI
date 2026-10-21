@@ -289,6 +289,54 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'wide albums scroll together from either column and keep pagination',
+    (tester) async {
+      final api = _AlbumApi([for (var i = 1; i <= 40; i++) _track(i)]);
+      await pumpPage(tester, api, size: const Size(812, 375));
+      expect(find.byType(Scrollable), findsOneWidget);
+      expect(api.offsets, [0]);
+      expect(find.byType(SearchTrackRow).evaluate().length, lessThan(30));
+      final scroll = tester.state<ScrollableState>(find.byType(Scrollable));
+      final artwork = find.byType(AlbumArtwork);
+      final track = find.text('Song 5');
+      for (final x in [100.0, 700.0]) {
+        final offset = scroll.position.pixels;
+        final artTop = tester.getTopLeft(artwork).dy;
+        final trackTop = tester.getTopLeft(track).dy;
+        await tester.dragFrom(Offset(x, 300), const Offset(0, -100));
+        await tester.pumpAndSettle();
+        final moved = scroll.position.pixels - offset;
+        expect(moved, greaterThan(0));
+        expect(tester.getTopLeft(artwork).dy, closeTo(artTop - moved, 0.1));
+        expect(tester.getTopLeft(track).dy, closeTo(trackTop - moved, 0.1));
+      }
+      await tester.scrollUntilVisible(find.text('Song 35'), 400);
+      await tester.pumpAndSettle();
+      expect(api.offsets, [0, 30]);
+      await tester.tap(find.text('Song 35'));
+      await tester.pumpAndSettle();
+      expect(api.replaced.single, [_page.id]);
+      expect(api.played.single, 34);
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 30));
+    },
+  );
+
+  testWidgets('resizing an album preserves its loaded tracks', (tester) async {
+    final api = _AlbumApi([for (var i = 1; i <= 40; i++) _track(i)]);
+    await pumpPage(tester, api, size: const Size(812, 375));
+    await tester.scrollUntilVisible(find.text('Song 35'), 400);
+    await tester.pumpAndSettle();
+    for (final size in [const Size(390, 900), const Size(812, 375)]) {
+      tester.view.physicalSize = size;
+      await tester.pumpAndSettle();
+      expect(find.byType(Scrollable), findsOneWidget);
+      expect(api.offsets, [0, 30]);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   testWidgets('complete album duration is shown beside its track count', (
     tester,
   ) async {
@@ -386,35 +434,40 @@ void main() {
           textScale: scale,
         );
         expect(tester.takeException(), isNull);
-        // Wider than a phone, the cover's column scrolls on its own beside
-        // the tracks.
-        await tester.scrollUntilVisible(
-          find.text('Song 1'),
-          300,
-          scrollable: find.byType(Scrollable).last,
-        );
+        expect(find.byType(Scrollable), findsOneWidget);
+        // The full album page scrolls, in both stacked and side layouts.
+        await tester.scrollUntilVisible(find.text('Song 1'), 300);
+        if (size.width >= kAlbumSideLayoutWidth) {
+          await tester.ensureVisible(find.byType(AddAllChip));
+          await tester.pumpAndSettle();
+          expect(find.byType(AddAllChip).hitTestable(), findsOneWidget);
+        }
         expect(tester.takeException(), isNull);
       });
     }
   }
 
-  for (final fail in [false, true]) {
-    testWidgets(
-      'tall album header scrolls with ${fail ? 'an error' : 'no tracks'}',
-      (tester) async {
-        await pumpPage(
-          tester,
-          _AlbumApi([], fail: fail),
-          size: const Size(375, 400),
-          textScale: 3,
-        );
-        expect(tester.takeException(), isNull);
-        await tester.scrollUntilVisible(
-          find.text(fail ? 'Return to Catalogs' : 'Nothing here yet'),
-          300,
-        );
-        expect(tester.takeException(), isNull);
-      },
-    );
+  for (final size in [const Size(375, 400), const Size(812, 375)]) {
+    for (final fail in [false, true]) {
+      testWidgets(
+        'tall album header scrolls with ${fail ? 'an error' : 'no tracks'} at $size',
+        (tester) async {
+          await pumpPage(
+            tester,
+            _AlbumApi([], fail: fail),
+            size: size,
+            textScale: 3,
+          );
+          expect(tester.takeException(), isNull);
+          expect(find.byType(Scrollable), findsOneWidget);
+          expect(find.text(_page.title!), findsOneWidget);
+          await tester.scrollUntilVisible(
+            find.text(fail ? 'Return to Catalogs' : 'Nothing here yet'),
+            300,
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
   }
 }

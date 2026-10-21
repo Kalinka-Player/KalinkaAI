@@ -73,7 +73,8 @@ void main() {
 
         expect(_dimmed(_inPlayer(find.text('Track t0'))), findsOneWidget);
         expect(
-          _dimmed(_inPlayer(find.byType(ProceduralAlbumArt))),
+          // The cover, ahead of Up Next's thumbnails.
+          _dimmed(_inPlayer(find.byType(ProceduralAlbumArt)).first),
           findsOneWidget,
         );
         expect(

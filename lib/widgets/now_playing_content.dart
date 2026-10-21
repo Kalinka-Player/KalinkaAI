@@ -42,8 +42,8 @@ class NowPlayingContent extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
 
   /// Marks the output switcher for the first-run tour. Used by the tablet
-  /// layout, where the header's is the only one on screen while the track
-  /// shows; the queue's [QueueMiniPlayer] takes the key while the queue does.
+  /// layout, where this is the only output selector while the track shows;
+  /// the queue's [QueueMiniPlayer] takes the key while the queue does.
   final Key? outputSwitcherKey;
 
   /// Offered by the queue view while the queue is empty.
@@ -153,7 +153,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
       );
     }
 
-    // All of it drags the phone sheet but what scrolls at large text.
+    // The fitted player can drag the phone sheet from anywhere in its body.
     return SheetDragArea(
       child: Container(
         color: KalinkaColors.background,
@@ -195,90 +195,161 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // Size the cover independently of spare vertical space, keeping
-            // artwork and metadata together at the top. Short screens and
-            // large text retain a smaller cover and can scroll their controls.
+            final textScaler = MediaQuery.textScalerOf(context);
+            const metadataGap = 24.0;
+            final metadataMinWidth = textScaler.scale(200);
+            // Near-square and wider player panes can keep the cover beside
+            // the details. Reserve readable text space before choosing this
+            // arrangement, including when the system text size is enlarged.
+            final sideBySide =
+                constraints.maxWidth >= constraints.maxHeight * 0.8 &&
+                constraints.maxWidth >= 144 + metadataGap + metadataMinWidth;
+            // Start with a comfortable cover size, then give space back to
+            // the controls and metadata when the viewport is short.
             final compact =
                 constraints.maxHeight < 440 ||
-                MediaQuery.textScalerOf(context)
-                        .scale(KalinkaTypography.baseSize) >
+                textScaler.scale(KalinkaTypography.baseSize) >
                     KalinkaTypography.baseSize * 1.3;
-            final artSize = compact
+            final artSize = sideBySide
+                ? (constraints.maxWidth * 0.42).clamp(
+                    0.0,
+                    (constraints.maxWidth - metadataGap - metadataMinWidth)
+                        .clamp(0.0, 320.0),
+                  )
+                : compact
                 ? (constraints.maxWidth * 0.72).clamp(0.0, 240.0)
                 : (constraints.maxWidth * 0.88).clamp(
                     0.0,
                     constraints.maxHeight * 0.52,
                   );
-            // Outside compact mode the cover gives way so the controls fit.
-            final Widget artwork = compact
-                ? _AlbumArtSection(
-                    size: artSize,
-                    trackId: currentTrack?.id,
-                    resolvedImageUrl: resolvedImageUrl,
-                  )
-                : Flexible(
-                    child: LayoutBuilder(
-                      builder: (context, art) => _AlbumArtSection(
-                        size: artSize.clamp(0.0, art.maxHeight),
-                        trackId: currentTrack?.id,
-                        resolvedImageUrl: resolvedImageUrl,
-                      ),
-                    ),
-                  );
+            final metadata = _buildTrackMetadataSection(
+              currentTrack: currentTrack,
+              sourceInfo: sourceInfo,
+              mimeLabel: mimeLabel,
+              qualityLabel: qualityLabel,
+              leftAligned: sideBySide,
+            );
+            final short = constraints.maxHeight < 400;
+            Widget output() => AwayLock(
+              away: away,
+              child: RendererSwitcherDropdown(
+                key: widget.outputSwitcherKey,
+                framed: true,
+                maxNameWidth: 220,
+              ),
+            );
             final content = AwayDim(
               away: away,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(height: 24),
-                  artwork,
-                  const SizedBox(height: 20),
-                  _buildTrackMetadataSection(
-                    currentTrack: currentTrack,
-                    sourceInfo: sourceInfo,
-                    mimeLabel: mimeLabel,
-                    qualityLabel: qualityLabel,
+                  const SizedBox(height: 32),
+                  Flexible(
+                    child: LayoutBuilder(
+                      builder: (context, available) {
+                        // Controls are laid out first by the Column. Only
+                        // the cover/details group adapts to what remains.
+                        final coverHeight = sideBySide
+                            ? available.maxHeight
+                            : available.maxHeight -
+                                  _metadataHeight(
+                                    currentTrack,
+                                    available.maxWidth,
+                                  ) -
+                                  20;
+                        final fittedArtSize = coverHeight.clamp(0.0, artSize);
+                        final artwork = _AlbumArtSection(
+                          size: fittedArtSize,
+                          trackId: currentTrack?.id,
+                          resolvedImageUrl: resolvedImageUrl,
+                        );
+                        // The cover yields first. Exceptionally short windows
+                        // can scale the presentation without shrinking the
+                        // progress slider or transport controls.
+                        return FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.topCenter,
+                          child: SizedBox(
+                            key: const ValueKey('now-playing-presentation'),
+                            width: available.maxWidth,
+                            child: sideBySide
+                                ? IntrinsicHeight(
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: artwork,
+                                        ),
+                                        const SizedBox(width: metadataGap),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: Align(
+                                                  key: const ValueKey(
+                                                    'now-playing-metadata-area',
+                                                  ),
+                                                  alignment:
+                                                      Alignment.centerLeft,
+                                                  child: metadata,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 16),
+                                              output(),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      artwork,
+                                      if (fittedArtSize > 0)
+                                        const SizedBox(height: 20),
+                                      metadata,
+                                    ],
+                                  ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 32),
                   PlaybackProgressSlider(
                     durationMs: durationMs,
                     enabled: currentTrack != null,
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: short ? 8 : 20),
                   AwayLock(away: away, child: const _TransportControls()),
-                  const SizedBox(height: 24),
-                  // Where sound goes, under the transport; the headers carry no
-                  // output switch, and volume is left to the output itself.
-                  AwayLock(
-                    away: away,
-                    child: Center(
-                      child: RendererSwitcherDropdown(
-                        key: widget.outputSwitcherKey,
-                        framed: true,
-                        maxNameWidth: 220,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                  if (!sideBySide) ...[
+                    SizedBox(height: short ? 12 : 24),
+                    Center(child: output()),
+                  ],
+                  SizedBox(height: short ? 12 : 24),
                 ],
               ),
             );
+            // Slivers measure any space left for Up Next, but the player
+            // itself never scrolls. Vertical drags belong to the phone sheet.
             return CustomScrollView(
-              key: const PageStorageKey('now-playing-content'),
-              // Bouncing physics would always claim vertical drags, taking
-              // the swipe-down away from the phone sheet even when it fits.
-              physics: const ClampingScrollPhysics(),
+              primary: false,
+              physics: const NeverScrollableScrollPhysics(),
               slivers: [
                 SliverToBoxAdapter(
-                  child: compact
-                      ? content
-                      : ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight: constraints.maxHeight,
-                          ),
-                          child: content,
-                        ),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: constraints.maxHeight,
+                    ),
+                    child: content,
+                  ),
                 ),
+                // Optional: omit the preview when even one row cannot fit.
                 SliverUpNextPreview(
                   canOpenQueue: widget.showOverlayHeader || widget.isTablet,
                 ),
@@ -290,18 +361,60 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     );
   }
 
+  /// Space reserved for stacked metadata before sizing the cover. Measuring
+  /// these few labels keeps long names and system text from pushing controls
+  /// below the viewport; it runs only when the presentation is laid out.
+  double _metadataHeight(Track? track, double width) {
+    double line(String text, TextStyle style, int maxLines) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: maxLines,
+      )..layout(maxWidth: width);
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    var height =
+        line(track?.title ?? 'No track', KalinkaTextStyles.expandedTitle, 2) +
+        6 +
+        line(
+          track?.performer?.name ?? '\u2014',
+          KalinkaTextStyles.expandedArtist,
+          2,
+        );
+    if (track?.album != null) {
+      height +=
+          4 + line(track!.album!.title, KalinkaTextStyles.expandedAlbum, 1);
+    }
+    if (track != null) {
+      height +=
+          12 + line('Stream info', KalinkaTextStyles.expandedAttribution, 1);
+    }
+    return height;
+  }
+
   Widget _buildTrackMetadataSection({
     required Track? currentTrack,
     required SourceDisplayInfo? sourceInfo,
     required String mimeLabel,
     required String qualityLabel,
+    bool leftAligned = false,
   }) {
+    final textAlign = leftAligned ? TextAlign.left : TextAlign.center;
     return Column(
+      key: const ValueKey('now-playing-metadata'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: leftAligned
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
       children: [
         Text(
           currentTrack?.title ?? 'No track',
           style: KalinkaTextStyles.expandedTitle,
-          textAlign: TextAlign.center,
+          textAlign: textAlign,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -309,7 +422,9 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         Text(
           currentTrack?.performer?.name ?? '\u2014',
           style: KalinkaTextStyles.expandedArtist,
-          textAlign: TextAlign.center,
+          textAlign: textAlign,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
         if (currentTrack?.album != null) ...[
           const SizedBox(height: 4),
@@ -320,7 +435,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
               return year != null ? '${album.title} · $year' : album.title;
             }(),
             style: KalinkaTextStyles.expandedAlbum,
-            textAlign: TextAlign.center,
+            textAlign: textAlign,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -332,9 +447,10 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
             sourceInfo: sourceInfo,
             mimeLabel: mimeLabel,
             qualityLabel: qualityLabel,
+            leftAligned: leftAligned,
           ),
           const _PlaybackErrorNote(),
-          const _ExclusivePlaybackNote(),
+          _ExclusivePlaybackNote(textAlign: textAlign),
         ],
       ],
     );
@@ -345,6 +461,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     required SourceDisplayInfo? sourceInfo,
     required String mimeLabel,
     required String qualityLabel,
+    required bool leftAligned,
   }) {
     final List<String> parts = [if (sourceInfo != null) sourceInfo.title];
     final List<String> fmtParts = [
@@ -373,7 +490,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
             );
           },
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            padding: EdgeInsets.fromLTRB(leftAligned ? 0 : 6, 4, 6, 4),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -469,7 +586,9 @@ class _PlaybackErrorNote extends ConsumerWidget {
 /// Inline note under the track metadata while a plugin plays exclusively, so
 /// it is plain the controls reach that playback and not Kalinka's queue.
 class _ExclusivePlaybackNote extends ConsumerWidget {
-  const _ExclusivePlaybackNote();
+  final TextAlign textAlign;
+
+  const _ExclusivePlaybackNote({required this.textAlign});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -490,7 +609,7 @@ class _ExclusivePlaybackNote extends ConsumerWidget {
             child: Text(
               'Playing via ${control.title}',
               style: KalinkaTextStyles.expandedAttribution,
-              textAlign: TextAlign.center,
+              textAlign: textAlign,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),

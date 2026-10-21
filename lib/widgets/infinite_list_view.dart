@@ -58,6 +58,15 @@ class InfiniteListView<T> extends StatefulWidget {
   /// Scrolls above the items (title, attribution, …).
   final Widget? header;
 
+  /// A pinned/collapsible header, preceding [header] in the same viewport.
+  /// With this set, [errorBuilder] supplies a non-scrolling body.
+  final Widget? sliverHeader;
+
+  /// An alternative header beside the items, sharing their scroll offset.
+  /// Supply non-scrolling content here and in [errorBuilder] when used.
+  final Widget? sideHeader;
+  final double sideHeaderWidth;
+
   /// Shown while the first chunk loads (typically a shimmer list).
   final Widget? initialPlaceholder;
 
@@ -78,10 +87,17 @@ class InfiniteListView<T> extends StatefulWidget {
   /// staying up, where a restart would drop them to the placeholder.
   final Object? refreshKey;
 
-  /// Told how many items are loaded once a fetch settles, so a page can shape
-  /// chrome it draws outside the list — a header action with nothing to act
-  /// on. Never called during a build.
-  final ValueChanged<int>? onLoadedCount;
+  /// Told how many items are loaded once a fetch settles, and whether that
+  /// fetch only added to them, so a page can shape chrome it draws outside
+  /// the list — a header action with nothing to act on. Never called during
+  /// a build.
+  final void Function(int count, bool appended)? onLoadedCount;
+
+  /// What, of the loaded items, a row depends on beyond its own. Given, rows
+  /// already built are kept while more items only arrive — a chunk landing
+  /// rebuilds none of them — until this changes or the list is rebuilt from
+  /// outside. Null rebuilds every row whenever the list does.
+  final Object? Function(List<T> loaded)? rowsDependOn;
 
   const InfiniteListView({
     super.key,
@@ -95,6 +111,9 @@ class InfiniteListView<T> extends StatefulWidget {
     this.chunkSize = 30,
     this.padding = EdgeInsets.zero,
     this.header,
+    this.sliverHeader,
+    this.sideHeader,
+    this.sideHeaderWidth = 0,
     this.initialPlaceholder,
     this.loadMorePlaceholder,
     this.emptyBuilder,
@@ -103,7 +122,10 @@ class InfiniteListView<T> extends StatefulWidget {
     this.reloadKey,
     this.refreshKey,
     this.onLoadedCount,
-  });
+    this.rowsDependOn,
+  }) : assert(header == null || sideHeader == null),
+       assert(sideHeader == null || sideHeaderWidth > 0),
+       assert(sideHeader == null || sliverHeader == null);
 
   @override
   State<InfiniteListView<T>> createState() => _InfiniteListViewState<T>();
@@ -121,6 +143,11 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
   int _generation = 0;
   bool _reachedShortChunk = false;
 
+  /// Rows kept for [InfiniteListView.rowsDependOn], by row, with the items
+  /// they were built from.
+  final _kept = <int, ({List<T> items, Widget row})>{};
+  Object? _keptFor;
+
   bool get _hasMore =>
       _total < 0 ? !_reachedShortChunk : _items.length < _total;
 
@@ -134,6 +161,8 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
   @override
   void didUpdateWidget(covariant InfiniteListView<T> old) {
     super.didUpdateWidget(old);
+    // Its builders may read anything that changed.
+    _kept.clear();
     if (old.reloadKey != widget.reloadKey) {
       _restart();
     } else if (old.refreshKey != widget.refreshKey) {
@@ -151,6 +180,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
   void _restart() {
     setState(() {
       _items.clear();
+      _kept.clear();
       _total = -1;
       _reachedShortChunk = false;
       _initialLoading = true;
@@ -174,7 +204,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
         _reachedShortChunk = chunk.items.length < widget.chunkSize;
         _initialLoading = false;
       });
-      widget.onLoadedCount?.call(_items.length);
+      widget.onLoadedCount?.call(_items.length, false);
       _maybeFillViewport();
     } catch (e) {
       if (!mounted || gen != _generation) return;
@@ -183,7 +213,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
         _initialLoading = false;
       });
       // A listing that failed holds nothing, whatever it held before.
-      widget.onLoadedCount?.call(0);
+      widget.onLoadedCount?.call(0, false);
     }
   }
 
@@ -211,6 +241,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
       return;
     }
     setState(() {
+      _kept.clear();
       _items
         ..clear()
         ..addAll(fresh);
@@ -219,7 +250,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
       _loadingMore = false;
       _loadMoreFailed = false;
     });
-    widget.onLoadedCount?.call(_items.length);
+    widget.onLoadedCount?.call(_items.length, false);
     _maybeFillViewport();
   }
 
@@ -236,7 +267,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
         if (chunk.items.length < widget.chunkSize) _reachedShortChunk = true;
         _loadingMore = false;
       });
-      widget.onLoadedCount?.call(_items.length);
+      widget.onLoadedCount?.call(_items.length, true);
       _maybeFillViewport();
     } catch (_) {
       if (!mounted || gen != _generation) return;
@@ -254,7 +285,9 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
   }
 
   void _onScroll() {
-    if (!_controller.hasClients) return;
+    if (_initialLoading || _initialError != null || !_controller.hasClients) {
+      return;
+    }
     final pos = _controller.position;
     if (pos.pixels >= pos.maxScrollExtent - widget.prefetchExtent) {
       _loadMore();
@@ -271,9 +304,43 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
     });
   }
 
+  /// Both columns are slivers in one viewport, so the track list remains
+  /// lazy and pagination follows scrolling over either column.
+  bool get _customLayout =>
+      widget.sideHeader != null || widget.sliverHeader != null;
+
+  Widget _customScroll(Widget items) => CustomScrollView(
+    controller: _controller,
+    slivers: [
+      ?widget.sliverHeader,
+      SliverPadding(
+        padding: widget.padding,
+        sliver: widget.sideHeader == null
+            ? items
+            : SliverCrossAxisGroup(
+                slivers: [
+                  SliverConstrainedCrossAxis(
+                    maxExtent: widget.sideHeaderWidth,
+                    sliver: SliverToBoxAdapter(child: widget.sideHeader!),
+                  ),
+                  items,
+                ],
+              ),
+      ),
+    ],
+  );
+
+  Widget _stateSliver(Widget body) =>
+      SliverList.list(children: [?widget.header, body]);
+
   @override
   Widget build(BuildContext context) {
     if (_initialLoading) {
+      if (_customLayout) {
+        return _customScroll(
+          _stateSliver(widget.initialPlaceholder ?? const SizedBox.shrink()),
+        );
+      }
       return ListView(
         padding: widget.padding,
         children: [
@@ -285,12 +352,18 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
 
     if (_initialError != null && _items.isEmpty) {
       final err = widget.errorBuilder;
-      return err != null ? err(context, _restart) : const SizedBox.shrink();
+      final body = err != null
+          ? err(context, _restart)
+          : const SizedBox.shrink();
+      return _customLayout ? _customScroll(_stateSliver(body)) : body;
     }
 
     if (_items.isEmpty) {
       final empty =
           widget.emptyBuilder?.call(context) ?? const SizedBox.shrink();
+      if (_customLayout) {
+        return _customScroll(_stateSliver(empty));
+      }
       // Keep a short empty state centred in the remaining viewport, but let
       // a tall header scroll on small screens and with enlarged system text.
       if (widget.header == null) return empty;
@@ -324,47 +397,71 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
         : 0;
     final columns = widget.columns.clamp(1, 12);
     final rows = (_items.length / columns).ceil();
+    final dependsOn = widget.rowsDependOn;
+    final depends = dependsOn?.call(_items);
+    if (dependsOn == null || depends != _keptFor) {
+      _kept.clear();
+      _keptFor = depends;
+    }
 
-    return ListView.builder(
-      controller: _controller,
-      padding: widget.padding,
-      itemCount: headerCount + rows + footerCount,
-      itemBuilder: (context, index) {
-        var i = index;
-        if (hasHeader) {
-          if (i == 0) return widget.header!;
-          i -= 1;
+    /// Row [key] as built before from the items [from] to [to], while they
+    /// are the same items; otherwise [build]'s, kept for next time.
+    Widget kept(int key, int from, int to, Widget Function() build) {
+      if (dependsOn == null) return build();
+      final entry = _kept[key];
+      if (entry != null && entry.items.length == to - from) {
+        var same = true;
+        for (var k = from; k < to && same; k++) {
+          same = identical(entry.items[k - from], _items[k]);
         }
+        if (same) return entry.row;
+      }
+      final row = build();
+      _kept[key] = (items: _items.sublist(from, to), row: row);
+      return row;
+    }
 
-        if (columns > 1 && i < rows) {
-          final first = i * columns;
-          return Padding(
-            padding: widget.rowPadding.copyWith(
-              top: widget.rowPadding.top + (i == 0 ? 0 : widget.rowGap),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var c = 0; c < columns; c++) ...[
-                  if (c > 0) SizedBox(width: widget.columnGap),
-                  Expanded(
-                    child: first + c < _items.length
-                        ? widget.itemBuilder(
-                            context,
-                            _items[first + c],
-                            first + c,
-                            _items,
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                ],
+    Widget buildItem(BuildContext context, int index) {
+      var i = index;
+      if (hasHeader) {
+        if (i == 0) return widget.header!;
+        i -= 1;
+      }
+
+      if (columns > 1 && i < rows) {
+        final first = i * columns;
+        Widget line() => Padding(
+          padding: widget.rowPadding.copyWith(
+            top: widget.rowPadding.top + (i == 0 ? 0 : widget.rowGap),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var c = 0; c < columns; c++) ...[
+                if (c > 0) SizedBox(width: widget.columnGap),
+                Expanded(
+                  child: first + c < _items.length
+                      ? widget.itemBuilder(
+                          context,
+                          _items[first + c],
+                          first + c,
+                          _items,
+                        )
+                      : const SizedBox.shrink(),
+                ),
               ],
-            ),
-          );
-        }
-        if (columns > 1) i -= rows - _items.length;
+            ],
+          ),
+        );
+        // A line still short of items gains them as more arrive.
+        return first + columns <= _items.length
+            ? kept(i, first, first + columns, line)
+            : line();
+      }
+      if (columns > 1) i -= rows - _items.length;
 
-        if (i < _items.length) {
+      if (i < _items.length) {
+        Widget row() {
           final item = widget.itemBuilder(context, _items[i], i, _items);
           if (widget.separatorBuilder != null && i > 0) {
             return Column(
@@ -378,12 +475,28 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
           return item;
         }
 
-        // Footer: retry link on failure, otherwise the load-more placeholder.
-        if (_loadMoreFailed) {
-          return _RetryFooter(onRetry: _retryLoadMore);
-        }
-        return widget.loadMorePlaceholder!;
-      },
+        // The separator is drawn from the item above.
+        return kept(i, i > 0 ? i - 1 : 0, i + 1, row);
+      }
+
+      // Footer: retry link on failure, otherwise the load-more placeholder.
+      if (_loadMoreFailed) {
+        return _RetryFooter(onRetry: _retryLoadMore);
+      }
+      return widget.loadMorePlaceholder!;
+    }
+
+    final itemCount = headerCount + rows + footerCount;
+    if (_customLayout) {
+      return _customScroll(
+        SliverList.builder(itemCount: itemCount, itemBuilder: buildItem),
+      );
+    }
+    return ListView.builder(
+      controller: _controller,
+      padding: widget.padding,
+      itemCount: itemCount,
+      itemBuilder: buildItem,
     );
   }
 }

@@ -16,14 +16,14 @@ void main() {
     ),
   );
 
-  testWidgets('the step column is half the window on a tablet', (tester) async {
+  testWidgets('a wide window keeps the shared setup column', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(wrap());
-    // A 700-wide column centered in 1400, plus the 20px header padding.
-    expect(tester.getRect(find.text('Audio output')).left, closeTo(370, 1));
+    // A 600-wide column centered in 1400, plus the 20px header padding.
+    expect(tester.getRect(find.text('Audio output')).left, closeTo(420, 1));
   });
 
   testWidgets('a narrow window keeps the 600 cap', (tester) async {

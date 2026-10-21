@@ -486,7 +486,7 @@ void main() {
     expect(page.id, _c1);
     expect(page.isPlaylist, isTrue);
     expect(page.canEdit, isTrue);
-    expect(find.text('LATE NIGHT SIGNALS'), findsOneWidget);
+    expect(find.text('Late Night Signals'), findsOneWidget);
     expect(find.text('Night Drive'), findsOneWidget);
     expect(find.text('Signals'), findsOneWidget);
 
@@ -617,7 +617,7 @@ void main() {
       container.read(searchSessionProvider).catalogPage.title,
       'Sunday Mornings',
     );
-    expect(find.text('SUNDAY MORNINGS'), findsOneWidget);
+    expect(find.text('Sunday Mornings'), findsOneWidget);
     // The confirmation toast retires itself on a timer the container
     // outlives; left pending, it fails the test after the tree is gone.
     await tester.pump(const Duration(seconds: 30));

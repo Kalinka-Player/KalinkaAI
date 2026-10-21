@@ -116,6 +116,8 @@ class BrowseItemRows extends StatelessWidget {
 
     return RowColumnsListing(
       details: RowColumnsListing.anyDetails(displayed),
+      artists: RowColumnsListing.anyArtists(displayed),
+      tracks: displayed.every((item) => item.browseType == BrowseType.track),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,

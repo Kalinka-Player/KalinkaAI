@@ -16,9 +16,8 @@ import 'package:kalinka/widgets/player_header.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/volume_control_slider.dart';
 
-// Where sound goes is said under the transport, in a framed switch, on the
-// phone's sheet and the docked player alike; neither header carries one, and
-// the volume is left to the output.
+// In stacked layouts, the output sits under transport on the phone sheet and
+// docked player alike. Neither header carries one; volume lives in the picker.
 
 class _Queue extends PlayQueueStateStore {
   @override

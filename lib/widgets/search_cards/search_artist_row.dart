@@ -6,9 +6,9 @@ import '../../providers/selection_state_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/click_cursor.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
+import '../tap_highlight.dart';
 import 'browse_navigation_scope.dart';
 import 'open_chevron_button.dart';
 import 'row_columns.dart';
@@ -187,10 +187,7 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
         ),
       ),
     );
-    return MouseRegion(
-      cursor: clickCursor(interactive: !selectionMode),
-      child: row,
-    );
+    return HoverHighlight(enabled: !selectionMode, child: row);
   }
 }
 

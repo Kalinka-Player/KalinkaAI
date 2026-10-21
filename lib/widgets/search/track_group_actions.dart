@@ -196,8 +196,8 @@ class SelectAllButton extends ConsumerWidget {
         (s) => trackIds.every(s.selectedIds.contains),
       ),
     );
-    // Same 44px slot as the Play all / Enqueue pills it replaces, so the
-    // header height doesn't jump when selection mode toggles.
+    // The same pill as the Play all / Enqueue it replaces, so the header
+    // height doesn't jump when selection mode toggles.
     return Center(
       child: ActionPillButton(
         label: allSelected ? 'Clear' : 'Select all',

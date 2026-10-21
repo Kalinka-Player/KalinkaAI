@@ -1,10 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
+import '../kalinka_button.dart' show PillTarget;
 
-/// Compact pill button for the search-results batch actions ("Play all",
-/// "Enqueue", and the expanded album/playlist header's Play / Add to queue).
+/// Pill button for batch actions ("Play all", "Enqueue", a page's Edit) and
+/// the choices beside them, 40dp tall in a 48dp target.
 ///
 /// [accent] marks the default action with the subtle crimson idiom
 /// (accentSubtle fill, accentBorder edge, berry-tint label) — never a solid
@@ -23,10 +26,7 @@ class ActionPillButton extends StatelessWidget {
   /// one being read. See the palette's outline treatment.
   final bool accent;
 
-  /// Minimum touch target height when the surrounding layout has room.
-  final double minHeight;
-
-  static const _padding = EdgeInsets.symmetric(horizontal: 10, vertical: 6);
+  static const _vertical = 8.0;
 
   /// Reported to a screen reader for a pill that stands for a choice rather
   /// than an action. Null leaves it unsaid.
@@ -46,7 +46,6 @@ class ActionPillButton extends StatelessWidget {
     this.icon,
     this.leading,
     this.accent = false,
-    this.minHeight = 0,
     this.selected,
     this.enabled = true,
     this.onTap,
@@ -67,39 +66,45 @@ class ActionPillButton extends StatelessWidget {
         borderOverride ??
         (accent ? KalinkaColors.accentBorder : KalinkaColors.borderDefault);
     final labelStyle = KalinkaFonts.sans(
-      fontSize: KalinkaTypography.baseSize + 1,
+      fontSize: KalinkaTypography.baseSize + 2,
       fontWeight: FontWeight.w600,
       color: fg,
     );
+    final mark = icon != null || leading != null;
+    // A glyph alone sits in a circle; one ahead of a label takes some of
+    // that side's room.
+    final padding = label == null
+        ? const EdgeInsets.symmetric(horizontal: 11, vertical: _vertical)
+        : EdgeInsets.fromLTRB(mark ? 13 : 18, _vertical, 18, _vertical);
+    final interactive = enabled && onTap != null;
 
-    Widget button = Material(
-      color: bg,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: border, width: 1),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        mouseCursor: clickCursor(interactive: enabled && onTap != null),
-        child: Padding(
-          padding: _padding,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: (minHeight - _padding.vertical).clamp(
-                _lineHeightOf(context, labelStyle),
-                double.infinity,
+    Widget button = PillTarget(
+      onTap: interactive ? onTap : null,
+      child: Material(
+        color: bg,
+        shape: StadiumBorder(side: BorderSide(color: border, width: 1)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          mouseCursor: clickCursor(interactive: interactive),
+          child: Padding(
+            padding: padding,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: math.max(
+                  kKalinkaPillHeight - 2 * _vertical,
+                  _lineHeightOf(context, labelStyle),
+                ),
               ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ?leading,
-                if (icon != null) Icon(icon, size: 16, color: fg),
-                if ((icon != null || leading != null) && label != null)
-                  const SizedBox(width: 5),
-                if (label != null) Text(label!, style: labelStyle),
-              ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ?leading,
+                  if (icon != null) Icon(icon, size: 18, color: fg),
+                  if (mark && label != null) const SizedBox(width: 6),
+                  if (label != null) Text(label!, style: labelStyle),
+                ],
+              ),
             ),
           ),
         ),

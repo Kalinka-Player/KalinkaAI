@@ -15,7 +15,15 @@ class SettingsTopBar extends ConsumerWidget {
   /// At most one icon action. Other controls belong in [SettingsToolbar].
   final Widget? action;
 
-  const SettingsTopBar({super.key, required this.title, this.action});
+  /// Off where the page is left another way, such as the navigation rail.
+  final bool showBack;
+
+  const SettingsTopBar({
+    super.key,
+    required this.title,
+    this.action,
+    this.showBack = true,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -73,20 +81,24 @@ class SettingsTopBar extends ConsumerWidget {
                       children: [
                         Row(
                           children: [
-                            IconButton(
-                              key: const ValueKey('settings-back'),
-                              tooltip: 'Back',
-                              onPressed: () => SlideInPanel.closeOf(context),
-                              constraints: const BoxConstraints(
-                                minWidth: 48,
-                                minHeight: 48,
-                              ),
-                              icon: const Icon(
-                                Icons.arrow_back,
-                                size: 22,
-                                color: KalinkaColors.textPrimary,
-                              ),
-                            ),
+                            if (showBack)
+                              IconButton(
+                                key: const ValueKey('settings-back'),
+                                tooltip: 'Back',
+                                onPressed: () => SlideInPanel.closeOf(context),
+                                constraints: const BoxConstraints(
+                                  minWidth: 48,
+                                  minHeight: 48,
+                                ),
+                                icon: const Icon(
+                                  Icons.arrow_back,
+                                  size: 22,
+                                  color: KalinkaColors.textPrimary,
+                                ),
+                              )
+                            else
+                              // The title on the content's gutter.
+                              SizedBox(width: gutter - 14),
                             if (stacked)
                               const Spacer()
                             else ...[
