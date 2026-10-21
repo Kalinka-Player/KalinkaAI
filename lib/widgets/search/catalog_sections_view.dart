@@ -21,6 +21,10 @@ const _defaultPreviewLimit = 5;
 /// How many tracks a shelf of them lists before VIEW ALL.
 const _trackPreviewLimit = 5;
 
+/// The fewest covers a rail of them asks for: it scrolls, and builds only
+/// the cards in view.
+const _coverPreviewLimit = 12;
+
 /// Albums, artists and playlists, which a shelf shows as covers.
 bool _coverKind(BrowseType type) =>
     type == BrowseType.album ||
@@ -29,19 +33,33 @@ bool _coverKind(BrowseType type) =>
 
 /// Whether a shelf of [catalog] shows covers on a sideways rail, as a pinned
 /// Cards preview does, rather than rows: by what it holds, whatever layout
-/// its source suggests. Where the catalog does not say, its [items] do; null
-/// until they have loaded.
+/// its source suggests. Where the catalog does not say, its first item does;
+/// null until that has loaded.
 bool? _coverShelf(Catalog catalog, [List<BrowseItem>? items]) =>
     switch (catalog.previewConfig?.contentType) {
       PreviewContentType.album ||
       PreviewContentType.artist ||
       PreviewContentType.playlist => true,
-      PreviewContentType.track => false,
+      PreviewContentType.track || PreviewContentType.catalog => false,
       _ =>
         items == null || items.isEmpty
             ? null
-            : items.every((item) => _coverKind(item.browseType)),
+            : _coverKind(items.first.browseType),
     };
+
+/// How many rows a shelf shows: what its source asked for, tracks at most
+/// [_trackPreviewLimit].
+int _rowLimit(Catalog catalog, [List<BrowseItem>? items]) {
+  final asked = catalog.previewConfig?.itemsCount ?? _defaultPreviewLimit;
+  final declared = catalog.previewConfig?.contentType;
+  final tracks =
+      declared == PreviewContentType.track ||
+      ((declared == null || declared == PreviewContentType.unknown) &&
+          items != null &&
+          items.isNotEmpty &&
+          items.first.browseType == BrowseType.track);
+  return tracks ? math.min(asked, _trackPreviewLimit) : asked;
+}
 
 /// A catalog made of several shelves — one per entity kind it holds — each
 /// filled by its own browse request.
@@ -186,12 +204,11 @@ _ShelfPlan? _plan(BrowseItem section, BrowseFilterQuery query, int revision) {
     request: (
       id: section.id,
       filter: query.encoded(capabilities),
-      limit: catalog.previewConfig?.contentType == PreviewContentType.track
-          ? math.min(
-              catalog.previewConfig?.itemsCount ?? _trackPreviewLimit,
-              _trackPreviewLimit,
-            )
-          : catalog.previewConfig?.itemsCount ?? _defaultPreviewLimit,
+      // Enough for a rail wherever it may be one; rows are trimmed to their
+      // own limit once loaded.
+      limit: _coverShelf(catalog) == false
+          ? _rowLimit(catalog)
+          : math.max(_rowLimit(catalog), _coverPreviewLimit),
       revision: revision,
     ),
   );
@@ -256,9 +273,13 @@ class _SectionShelf extends ConsumerWidget {
     return preview.when(
       loading: () => _Shelf(
         title: title,
-        child: _coverShelf(catalog) == true
-            ? PreviewShelfShimmer(preview: covers(shelf.request.limit))
-            : const BrowseRowsShimmer(count: 3),
+        // A shelf that does not say what it holds waits on a spinner rather
+        // than shimmer in a shape it may not take.
+        child: switch (_coverShelf(catalog)) {
+          true => PreviewShelfShimmer(preview: covers(shelf.request.limit)),
+          false => const BrowseRowsShimmer(count: 3),
+          null => const LoadingSpinner(),
+        },
       ),
       // A shelf that failed says so in its own space; the rest of the page,
       // and the filters that could undo it, stay usable.
@@ -279,12 +300,10 @@ class _SectionShelf extends ConsumerWidget {
           return const SizedBox.shrink();
         }
         final cover = _coverShelf(catalog, list.items) ?? false;
-        // A shelf of tracks is a short list; VIEW ALL has the rest.
-        final shown =
-            !cover &&
-                list.items.every((item) => item.browseType == BrowseType.track)
-            ? list.items.take(_trackPreviewLimit).toList()
-            : list.items;
+        // Rows are a short list; VIEW ALL has the rest.
+        final shown = cover
+            ? list.items
+            : list.items.take(_rowLimit(catalog, list.items)).toList();
         final trackIds = <String>[
           for (final item in shown)
             if (item.track != null) item.id,

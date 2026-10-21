@@ -177,9 +177,17 @@ Future<ProviderContainer> _pumpLibrary(
       child: MaterialApp(
         home: Scaffold(
           body: Consumer(
-            builder: (context, ref, _) => CatalogPageView(
-              page: ref.watch(searchSessionProvider).catalogPage,
-              onBackToCatalogs: () {},
+            // The trail sits in the bar above the page, as Find Music sets it.
+            builder: (context, ref, _) => Column(
+              children: [
+                const SizedBox(height: 48, child: FolderTrail()),
+                Expanded(
+                  child: CatalogPageView(
+                    page: ref.watch(searchSessionProvider).catalogPage,
+                    onBackToCatalogs: () {},
+                  ),
+                ),
+              ],
             ),
           ),
         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../modifier_click.dart';
 
 /// The right chevron at a row's end: it opens the same page as the row's
 /// title, with a target of its own so it can be aimed at and reached by
@@ -15,14 +16,16 @@ class OpenChevronButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: name == null ? 'Open' : 'Open $name',
-      onPressed: onTap,
-      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-      icon: const Icon(
-        Icons.chevron_right,
-        size: 20,
-        color: KalinkaColors.textSecondary,
+    return ClickAtOnce(
+      child: IconButton(
+        tooltip: name == null ? 'Open' : 'Open $name',
+        onPressed: onTap,
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        icon: const Icon(
+          Icons.chevron_right,
+          size: 20,
+          color: KalinkaColors.textSecondary,
+        ),
       ),
     );
   }

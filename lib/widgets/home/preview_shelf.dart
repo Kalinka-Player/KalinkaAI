@@ -8,8 +8,10 @@ import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../browse_rows_shimmer.dart';
+import '../edge_fading_rail.dart';
 import '../loading_shimmer.dart';
 import '../procedural_album_art.dart';
+import '../scroll_edge_fade.dart';
 import '../search/search_zero_state.dart' show kHomeSideInset;
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/track_row_support.dart' show CornerGlyph;
@@ -28,25 +30,34 @@ class PreviewShelf extends StatelessWidget {
   /// Opens a browsable item as a page of its own.
   final ValueChanged<BrowseItem> onOpenItem;
 
+  /// The items are a folder's, which draws the folders it holds as such.
+  final bool inFolder;
+
   const PreviewShelf({
     super.key,
     required this.items,
     required this.preview,
     required this.storageId,
     required this.onOpenItem,
+    this.inFolder = false,
   });
 
   @override
   Widget build(BuildContext context) {
     if (preview?.type != PreviewType.imageText) {
-      return BrowseItemRows(items: items);
+      return BrowseItemRows(items: items, inFolder: inFolder);
     }
     return _TileRail(
       count: items.length,
       rows: _rowsOf(preview),
       tileSize: _tileSizeOf(preview),
       storageId: storageId,
-      tile: (i, size) => _Tile(item: items[i], size: size, onOpen: onOpenItem),
+      tile: (i, size) => _Tile(
+        item: items[i],
+        size: size,
+        onOpen: onOpenItem,
+        inFolder: inFolder,
+      ),
     );
   }
 
@@ -153,32 +164,38 @@ class _TileRail extends StatelessWidget {
           child: OverflowBox(
             minWidth: width,
             maxWidth: width,
-            child: ScrollConfiguration(
-              // A mouse can drag it too; the wheel keeps scrolling the page.
-              behavior: ScrollConfiguration.of(context)
-                  .copyWith(dragDevices: PointerDeviceKind.values.toSet()),
-              // Frames abut, so two highlighted side by side meet exactly;
-              // the art keeps two insets apart.
-              child: ListView.builder(
-                // Its own key: without one it would take Home's vertical
-                // offset as its own when it scrolls back into view.
-                key: PageStorageKey<String>('rail:$storageId'),
-                scrollDirection: Axis.horizontal,
-                physics: scrollable
-                    ? null
-                    : const NeverScrollableScrollPhysics(),
-                // The first tile's art, not its frame, lines up with the
-                // list's inset.
-                padding: const EdgeInsets.symmetric(
-                  horizontal: kHomeSideInset - _Tile.inset,
-                ),
-                itemCount: columns,
-                itemBuilder: (context, column) => Column(
-                  children: [
-                    for (var row = 0; row < rows; row++)
-                      if (column * rows + row < count)
-                        tile(column * rows + row, size),
-                  ],
+            // Faded at either edge with more to scroll that way, as Home's
+            // other lines are.
+            child: ScrollEdgeFade(
+              axis: Axis.horizontal,
+              extent: EdgeFadingRail.fade,
+              child: ScrollConfiguration(
+                // A mouse can drag it too; the wheel keeps scrolling the page.
+                behavior: ScrollConfiguration.of(context)
+                    .copyWith(dragDevices: PointerDeviceKind.values.toSet()),
+                // Frames abut, so two highlighted side by side meet exactly;
+                // the art keeps two insets apart.
+                child: ListView.builder(
+                  // Its own key: without one it would take Home's vertical
+                  // offset as its own when it scrolls back into view.
+                  key: PageStorageKey<String>('rail:$storageId'),
+                  scrollDirection: Axis.horizontal,
+                  physics: scrollable
+                      ? null
+                      : const NeverScrollableScrollPhysics(),
+                  // The first tile's art, not its frame, lines up with the
+                  // list's inset.
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: kHomeSideInset - _Tile.inset,
+                  ),
+                  itemCount: columns,
+                  itemBuilder: (context, column) => Column(
+                    children: [
+                      for (var row = 0; row < rows; row++)
+                        if (column * rows + row < count)
+                          tile(column * rows + row, size),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -226,8 +243,14 @@ class _Tile extends ConsumerStatefulWidget {
   final BrowseItem item;
   final double size;
   final ValueChanged<BrowseItem> onOpen;
+  final bool inFolder;
 
-  const _Tile({required this.item, required this.size, required this.onOpen});
+  const _Tile({
+    required this.item,
+    required this.size,
+    required this.onOpen,
+    required this.inFolder,
+  });
 
   /// Between the card's frame and its art and text: half the room between
   /// two cards' art.
@@ -260,7 +283,9 @@ class _TileState extends ConsumerState<_Tile> {
   /// The kind badge on the art, as the list rows show it. Artists need none:
   /// their round art says it.
   IconData? get _kind {
-    if (item.browseType == BrowseType.folder) return Icons.folder_outlined;
+    if (item.browseTypeIn(folder: widget.inFolder) == BrowseType.folder) {
+      return Icons.folder_outlined;
+    }
     if (item.album != null) return Icons.album_outlined;
     if (item.playlist != null) return Icons.queue_music;
     return null;

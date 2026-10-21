@@ -1217,6 +1217,10 @@ class BrowseItem {
     return album != null || track != null || artist != null || playlist != null;
   }
 
+  /// What the item is wherever it is listed. A catalog's own preview type
+  /// says how it shows once opened ([opensAsFolder]), not how its parent
+  /// draws it: only a folder's own listing draws the folders it holds as
+  /// such ([browseTypeIn]).
   BrowseType get browseType {
     if (album != null) {
       return BrowseType.album;
@@ -1225,14 +1229,20 @@ class BrowseItem {
     } else if (playlist != null) {
       return BrowseType.playlist;
     } else if (catalog != null) {
-      return catalog?.previewConfig?.type == PreviewType.folder
-          ? BrowseType.folder
-          : BrowseType.catalog;
+      return BrowseType.catalog;
     } else if (track != null) {
       return BrowseType.track;
     }
     return BrowseType.unknown;
   }
+
+  /// Opened, it lists as a folder: its subfolders, then its tracks.
+  bool get opensAsFolder => catalog?.previewConfig?.type == PreviewType.folder;
+
+  /// [browseType] as a listing draws it, [folder] where that listing is a
+  /// folder's.
+  BrowseType browseTypeIn({required bool folder}) =>
+      folder && opensAsFolder ? BrowseType.folder : browseType;
 
   String? get description {
     if (catalog != null) {

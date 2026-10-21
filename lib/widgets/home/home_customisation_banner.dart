@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../providers/shell_nav_provider.dart';
 import '../../theme/app_theme.dart';
@@ -14,26 +13,18 @@ class HomeCustomisationBanner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => Align(
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: kHomeBannerMaxWidth),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: KalinkaColors.surfaceRaised,
-          border: Border.all(color: KalinkaColors.borderSubtle),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final horizontal =
-                constraints.maxWidth >=
-                480 * MediaQuery.textScalerOf(context).scale(14) / 14;
-            final illustration = ExcludeSemantics(
-              child: SvgPicture.asset(
-                'assets/images/home_customisation_collage.svg',
-                width: 200,
-                height: horizontal ? 120 : 88,
-                fit: BoxFit.contain,
-              ),
-            );
-            final invitation = Column(
+      // As wide as it may be, words alone included, rather than hugging them.
+      child: SizedBox(
+        width: double.infinity,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: KalinkaColors.surfaceRaised,
+            border: Border.all(color: KalinkaColors.borderSubtle),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -72,27 +63,8 @@ class HomeCustomisationBanner extends ConsumerWidget {
                   label: const Text('Customise Home'),
                 ),
               ],
-            );
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: horizontal
-                  ? Row(
-                      children: [
-                        Expanded(child: invitation),
-                        const SizedBox(width: 20),
-                        illustration,
-                      ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Center(child: illustration),
-                        const SizedBox(height: 8),
-                        invitation,
-                      ],
-                    ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     ),

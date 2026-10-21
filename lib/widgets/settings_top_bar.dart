@@ -12,7 +12,7 @@ import 'slide_in_panel.dart';
 class SettingsTopBar extends ConsumerWidget {
   final String title;
 
-  /// At most one icon action. Other controls belong in [SettingsToolbar].
+  /// At most one icon action.
   final Widget? action;
 
   /// Off where the page is left another way, such as the navigation rail.
@@ -183,26 +183,3 @@ final settingsIconButtonStyle = ButtonStyle(
         : null,
   ),
 );
-
-/// Secondary controls below the common navigation bar. Wrap rather than
-/// squeezing a page title, device name or control at large text sizes.
-class SettingsToolbar extends StatelessWidget {
-  final List<Widget> children;
-  const SettingsToolbar({super.key, required this.children});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: EdgeInsets.symmetric(
-      horizontal: ConfigurationAppearance.gutter(context),
-      vertical: 8,
-    ),
-    child: Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 12,
-      runSpacing: 8,
-      children: children,
-    ),
-  );
-}

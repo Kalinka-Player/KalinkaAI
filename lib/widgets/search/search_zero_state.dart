@@ -1,8 +1,12 @@
+import 'dart:math' as math;
+
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart' show SearchSuggestion;
 import '../../providers/catalog_cards_provider.dart';
+import '../../providers/collections_provider.dart';
 import '../../providers/pinned_catalogs_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/shell_nav_provider.dart';
@@ -11,8 +15,10 @@ import '../../theme/app_theme.dart';
 import '../home/home_customisation_banner.dart';
 import '../home/home_layout.dart';
 import '../home/pinned_catalogs_section.dart';
-import '../shelf_heading.dart';
+import '../measure_size.dart';
 import '../tap_highlight.dart';
+import '../shelf_heading.dart';
+import '../modifier_click.dart';
 import 'collections_section.dart';
 
 /// The Catalogs root body: the search invitation (passed in via [leading]),
@@ -37,67 +43,264 @@ class SearchZeroState extends ConsumerWidget {
   /// Off where the navigation rail lists Collections instead.
   final bool showCollections;
 
+  /// The line of music sources under the search. Shown while [showSources],
+  /// and always while Home holds nothing of the listener's own: then it is
+  /// the way in, rail or not.
+  final Widget? sources;
+  final bool showSources;
+
+  /// How far down the search sits while centred, so the glow behind it
+  /// follows.
+  final ValueChanged<double>? onCentringShift;
+
   const SearchZeroState({
     super.key,
     required this.onOpenCatalog,
     this.controller,
     this.leading = const [],
     this.showCollections = true,
+    this.sources,
+    this.showSources = true,
+    this.onCentringShift,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pins = ref.watch(pinnedCatalogsProvider);
+    // Nothing of the listener's own yet: no pins and no collections. Still
+    // loading counts as none, so a new listener's Home never jumps.
+    final collections = ref.watch(collectionsShelfProvider).value;
+    final empty = pins.isEmpty && (collections == null || collections.isEmpty);
+    // Customise's 48dp target stands this far above and below the heading's
+    // line; the gaps around the heading give it back, so the heading sits
+    // where any other does.
+    final line = TextPainter(
+      text: TextSpan(text: 'Y', style: KalinkaTextStyles.sectionLabel),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final overhang = math.max(0.0, (48 - line.height) / 2);
+    line.dispose();
 
+    const top = 8.0;
     return RefreshIndicator(
       onRefresh: ref.read(searchSessionProvider.notifier).refreshAll,
       color: KalinkaColors.accent,
       backgroundColor: KalinkaColors.surfaceRaised,
-      child: ListView(
-        // Coming back from a catalog returns to where the root was left, not
-        // to its top — the shelf you came from is where you look next.
-        key: const PageStorageKey('discoverRoot'),
-        controller: controller,
-        // Pullable even when Home is shorter than the screen.
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
-          kHomeSideInset,
-          8,
-          kHomeSideInset,
-          kHomeSectionGap,
-        ),
-        children: [
-          ...leading,
-
-          if (showCollections) CollectionsSection(onOpenCatalog: onOpenCatalog),
-          if (pins.isEmpty) const HomeCustomisationBanner(),
-          if (pins.isNotEmpty) ...[
-            // One action for the whole pinned group, before any previews.
-            Row(
-              children: [
-                const Expanded(
-                  child: ShelfHeading(
-                    title: 'PINNED CATALOGS',
-                    titleColor: KalinkaColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  key: const ValueKey('customise-home-button'),
-                  tooltip: 'Customise Home',
-                  style: kalinkaIconButtonStyle,
-                  color: KalinkaColors.textSecondary,
-                  icon: const Icon(Icons.tune, size: 20),
-                  onPressed: () =>
-                      ref.read(homeCustomisationProvider.notifier).open(),
-                ),
-              ],
+      child: LayoutBuilder(
+        builder: (context, constraints) => ListView(
+          // Coming back from a catalog returns to where the root was left, not
+          // to its top — the shelf you came from is where you look next.
+          key: const PageStorageKey('discoverRoot'),
+          controller: controller,
+          // Pullable even when Home is shorter than the screen.
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(
+            kHomeSideInset,
+            top,
+            kHomeSideInset,
+            kHomeSectionGap,
+          ),
+          children: [
+            _Centring(
+              centred: empty,
+              room: constraints.maxHeight - top - kHomeSectionGap,
+              onShift: onCentringShift,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ...leading,
+                  if (sources != null && (showSources || empty)) ...[
+                    sources!,
+                    const SizedBox(height: kHomeSectionGap),
+                  ],
+                  if (empty)
+                    _PinHint(
+                      onCustomise: () =>
+                          ref.read(homeCustomisationProvider.notifier).open(),
+                    ),
+                ],
+              ),
             ),
-            const SizedBox(height: kHomeHeadingGap),
-            PinnedCatalogsSection(pins: pins),
+            if (!empty && showCollections)
+              CollectionsSection(
+                onOpenCatalog: onOpenCatalog,
+                gapAfter: pins.isEmpty
+                    ? kHomeSectionGap
+                    : kHomeSectionGap - overhang,
+              ),
+            if (!empty && pins.isEmpty) const HomeCustomisationBanner(),
+            if (pins.isNotEmpty) ...[
+              // One action for the whole pinned group, before any previews.
+              Row(
+                children: [
+                  const Expanded(
+                    child: ShelfHeading(
+                      title: 'YOUR PINS',
+                      titleColor: KalinkaColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    key: const ValueKey('customise-home-button'),
+                    tooltip: 'Customise Home',
+                    style: kalinkaIconButtonStyle,
+                    color: KalinkaColors.textSecondary,
+                    icon: const Icon(Icons.tune, size: 20),
+                    onPressed: () =>
+                        ref.read(homeCustomisationProvider.notifier).open(),
+                  ),
+                ],
+              ),
+              // A little air still, so the target never abuts the first preview.
+              SizedBox(height: math.max(4.0, kHomeHeadingGap - overhang)),
+              PinnedCatalogsSection(pins: pins),
+            ],
           ],
-        ],
+        ),
       ),
+    );
+  }
+}
+
+/// While Home holds nothing of the listener's own, its top — the question,
+/// the search and the sources — sits in the middle of the [room] it has;
+/// once a pin or a collection arrives it rises to the top, making room for
+/// them. [onShift] hears how far down it sits as it moves.
+class _Centring extends StatefulWidget {
+  final bool centred;
+  final double room;
+  final ValueChanged<double>? onShift;
+  final Widget child;
+
+  const _Centring({
+    required this.centred,
+    required this.room,
+    required this.onShift,
+    required this.child,
+  });
+
+  @override
+  State<_Centring> createState() => _CentringState();
+}
+
+class _CentringState extends State<_Centring>
+    with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 450),
+    value: widget.centred ? 1 : 0,
+  )..addListener(_report);
+  late final _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeInOutCubic,
+  );
+  double? _height;
+
+  /// How far below the top the child sits at [t] of the way to centred.
+  double _shiftAt(double t) {
+    final height = _height;
+    if (height == null) return 0;
+    return math.max(0.0, widget.room * t - height) * t / 2;
+  }
+
+  void _report() => widget.onShift?.call(_shiftAt(_curve.value));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _controller.duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 450);
+  }
+
+  @override
+  void didUpdateWidget(_Centring old) {
+    super.didUpdateWidget(old);
+    if (old.centred != widget.centred) {
+      widget.centred ? _controller.forward() : _controller.reverse();
+    }
+    if (old.room != widget.room) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _report();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _curve.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _curve,
+    builder: (context, child) {
+      final t = _curve.value;
+      return ConstrainedBox(
+        constraints: BoxConstraints(minHeight: math.max(0.0, widget.room * t)),
+        child: Align(alignment: Alignment(0, t - 1), child: child),
+      );
+    },
+    child: MeasureSize(
+      onChange: (size) {
+        _height = size.height;
+        _report();
+      },
+      child: widget.child,
+    ),
+  );
+}
+
+/// Under the sources while nothing is pinned: what pinning does, and the
+/// way to set Home up.
+class _PinHint extends StatelessWidget {
+  final VoidCallback onCustomise;
+
+  const _PinHint({required this.onCustomise});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const ValueKey('home-pin-hint'),
+      children: [
+        const Icon(
+          CupertinoIcons.pin,
+          size: 24,
+          color: KalinkaColors.textSecondary,
+        ),
+        const SizedBox(height: 10),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Text(
+            'Pin any catalogue or saved search to see it here.',
+            textAlign: TextAlign.center,
+            style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+              fontSize: KalinkaTypography.baseSize + 3,
+              color: KalinkaColors.textSecondary,
+              height: 1.45,
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        TextButton.icon(
+          key: const ValueKey('home-pin-hint-customise'),
+          onPressed: onCustomise,
+          style: TextButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            foregroundColor: KalinkaColors.textSecondary,
+            textStyle: KalinkaFonts.sans(
+              fontSize: KalinkaTypography.baseSize + 3,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          icon: const Icon(Icons.tune, size: 20),
+          label: const Text('Customise Home'),
+        ),
+      ],
     );
   }
 }
@@ -137,16 +340,19 @@ class SearchSuggestionsList extends ConsumerWidget {
     final offered = (ref.watch(smartSearchAvailableProvider) ?? true)
         ? session.suggestions
         : const <SearchSuggestion>[];
+    // A row saying only what the field already holds would be the entry
+    // twice over.
+    bool matches(String text) {
+      final folded = text.trim().toLowerCase();
+      return folded.contains(needle) && folded != needle;
+    }
+
     final suggestions = needle.isEmpty
         ? offered
-        : offered
-              .where((s) => s.query.toLowerCase().contains(needle))
-              .toList(growable: false);
+        : offered.where((s) => matches(s.query)).toList(growable: false);
     final history = needle.isEmpty
         ? session.history
-        : session.history
-              .where((q) => q.toLowerCase().contains(needle))
-              .toList(growable: false);
+        : session.history.where(matches).toList(growable: false);
 
     // While typing, headers and prompts drop away: just the matching rows.
     // At rest the curated suggestions sit under AI SUGGESTIONS and the
@@ -189,11 +395,7 @@ class SearchSuggestionsList extends ConsumerWidget {
       ],
     ];
 
-    // Nothing in either section matches the typed text: offer the free-typed
-    // query itself as the one action, so the field never dead-ends.
-    if (rows.isEmpty && needle.isNotEmpty) {
-      rows.add(_searchForTile(query.trim()));
-    }
+    // Nothing matching leaves no rows: the field's own arrow sends it.
 
     // shrinkWrap: the container hugs the rows and only scrolls if they outgrow
     // the space left above the keyboard.
@@ -206,55 +408,6 @@ class SearchSuggestionsList extends ConsumerWidget {
       ],
     );
   }
-
-  /// Fallback row when nothing matches: runs the free-typed query so the field
-  /// never dead-ends.
-  Widget _searchForTile(String text) => Semantics(
-    label: 'Search for $text',
-    button: true,
-    child: _Tile(
-      onTap: () => onSubmit(text),
-      child: Row(
-        children: [
-          const SizedBox(
-            width: 32,
-            child: Icon(
-              Icons.search_rounded,
-              size: 17,
-              color: KalinkaColors.textSecondary,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                style: KalinkaTextStyles.searchOverlayRow.copyWith(
-                  color: KalinkaColors.textSecondary,
-                ),
-                children: [
-                  const TextSpan(text: 'Search for '),
-                  TextSpan(
-                    text: '“$text”',
-                    style: const TextStyle(
-                      color: KalinkaColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const Icon(
-            Icons.arrow_forward_rounded,
-            size: 15,
-            color: KalinkaColors.textMuted,
-          ),
-        ],
-      ),
-    ),
-  );
 
   /// Overlay section heading: the mono section label, larger but dimmed.
   static TextStyle get _sectionTitle => KalinkaTextStyles.sectionLabel.copyWith(
@@ -490,19 +643,22 @@ class _HoverRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      type: MaterialType.transparency,
-      child: InkWell(
-        mouseCursor: WidgetStateMouseCursor.clickable,
-        onTap: onTap,
-        onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(14),
-        hoverColor: KalinkaColors.surfaceElevated,
-        highlightColor: KalinkaColors.surfaceOverlay,
-        splashColor: KalinkaColors.surfaceOverlay,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 11, 10, 11),
-          child: child,
+    return ModifierClick(
+      onModifiedClick: onLongPress,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
+          onTap: onTap,
+          onLongPress: onLongPress,
+          borderRadius: BorderRadius.circular(14),
+          hoverColor: KalinkaColors.surfaceElevated,
+          highlightColor: KalinkaColors.surfaceOverlay,
+          splashColor: KalinkaColors.surfaceOverlay,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 11, 10, 11),
+            child: child,
+          ),
         ),
       ),
     );

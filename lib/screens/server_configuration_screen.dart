@@ -25,14 +25,12 @@ import '../widgets/settings_renderer.dart';
 class ServerSettingsBody extends ConsumerWidget {
   final VoidCallback onRestart;
   final VoidCallback onDownloadLogs;
-  final VoidCallback onAdvanced;
   final VoidCallback? onNetwork;
 
   const ServerSettingsBody({
     super.key,
     required this.onRestart,
     required this.onDownloadLogs,
-    required this.onAdvanced,
     this.onNetwork,
   });
 
@@ -135,12 +133,6 @@ class ServerSettingsBody extends ConsumerWidget {
                 leading: Icons.description_outlined,
                 onTap: onDownloadLogs,
               ),
-              SettingsActionRow(
-                label: 'Advanced settings',
-                sublabel: 'Find every setting by name.',
-                leading: Icons.tune,
-                onTap: onAdvanced,
-              ),
             ],
           ),
         ],
@@ -208,7 +200,7 @@ class _ServerSummary extends ConsumerWidget {
               for (final field in details) ...[
                 const SizedBox(height: 8),
                 // The status itself stays visible, including failures. The
-                // schema's explanatory prose remains in Advanced settings.
+                // schema's explanatory prose remains in the expert list.
                 _ServerDetail(
                   label: field.label,
                   value:
@@ -285,8 +277,6 @@ class _AutomaticUpdates extends StatelessWidget {
               (binding.effectiveValue(field.path) ?? field.defaultValue) ==
               true,
           onChanged: (value) => binding.stage(field.path, value),
-          activeTrackColor: KalinkaColors.accent,
-          activeThumbColor: KalinkaColors.textPrimary,
           materialTapTargetSize: MaterialTapTargetSize.padded,
         ),
       ),

@@ -4,6 +4,7 @@ import '../../data_model/browse_filters.dart';
 import '../../theme/app_theme.dart';
 import '../kalinka_button.dart';
 import '../overlay_card.dart';
+import '../scroll_edge_fade.dart';
 import 'browse_filter_form.dart';
 
 /// The unfolded state of the search-and-filters control: a card resting under
@@ -82,18 +83,22 @@ class _SearchFilterOverlayState extends State<SearchFilterOverlay> {
                   ),
           ),
           Flexible(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-              child: BrowseFilterForm(
-                capabilities: _capabilities,
-                query: _staged,
-                searchHint: widget.searchHint,
-                searchCaption: widget.searchCaption,
-                showSearch: widget.showSearch,
-                // Staged: nothing is sent until Show results, so there is
-                // nothing to coalesce and the badge can track every key.
-                textDebounce: Duration.zero,
-                onChanged: (query) => setState(() => _staged = query),
+            // Faded where more lies above or below, so a card that scrolls
+            // looks it.
+            child: ScrollEdgeFade(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                child: BrowseFilterForm(
+                  capabilities: _capabilities,
+                  query: _staged,
+                  searchHint: widget.searchHint,
+                  searchCaption: widget.searchCaption,
+                  showSearch: widget.showSearch,
+                  // Staged: nothing is sent until Show results, so there is
+                  // nothing to coalesce and the badge can track every key.
+                  textDebounce: Duration.zero,
+                  onChanged: (query) => setState(() => _staged = query),
+                ),
               ),
             ),
           ),

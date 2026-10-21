@@ -283,8 +283,9 @@ void main() {
         'kalinka:localfiles:catalog:artists',
         'kalinka:localfiles:catalog:albums',
       ]);
-      // The shelf's own preview size, not the page's chunk size.
-      expect(harness.api.calls.first.limit, 2);
+      // A rail of covers asks for at least a dozen, not the page's chunk
+      // size.
+      expect(harness.api.calls.first.limit, 12);
       expect(find.text('ARTISTS'), findsOneWidget);
       expect(find.text('ALBUMS'), findsOneWidget);
     });

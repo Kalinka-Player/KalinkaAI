@@ -178,7 +178,7 @@ void main() {
         ],
       );
       final invitation = find.byKey(
-        const ValueKey('customise-home-invitation'),
+        const ValueKey('home-pin-hint-customise'),
       );
       await tester.ensureVisible(invitation);
       await tester.tap(invitation);
@@ -203,12 +203,14 @@ void main() {
       (tester) async {
         final container = await pump(tester, size: size);
         final invitation = find.byKey(
-          const ValueKey('customise-home-invitation'),
+          const ValueKey('home-pin-hint-customise'),
         );
         await tester.ensureVisible(invitation);
         await tester.pumpAndSettle();
-        expect(find.byType(HomeCustomisationBanner), findsOneWidget);
-        expect(find.text('PINNED CATALOGS'), findsNothing);
+        // An empty Home hints at pinning rather than carrying the banner.
+        expect(find.byKey(const ValueKey('home-pin-hint')), findsOneWidget);
+        expect(find.byType(HomeCustomisationBanner), findsNothing);
+        expect(find.text('YOUR PINS'), findsNothing);
         expect(tester.getSize(invitation).height, greaterThanOrEqualTo(48));
         await tester.tap(invitation);
         await tester.pumpAndSettle();
@@ -236,14 +238,14 @@ void main() {
         await tester.pumpAndSettle();
         container.read(searchSessionProvider.notifier).backToCatalogsRoot();
         await tester.pumpAndSettle();
-        expect(find.byType(HomeCustomisationBanner), findsNothing);
-        expect(find.text('PINNED CATALOGS'), findsOneWidget);
+        expect(find.byKey(const ValueKey('home-pin-hint')), findsNothing);
+        expect(find.text('YOUR PINS'), findsOneWidget);
         final pin = container.read(pinnedCatalogsProvider).single;
         await container.read(pinnedCatalogsProvider.notifier).unpin(pin.key);
         await tester.pumpAndSettle();
         await tester.ensureVisible(invitation);
-        expect(find.byType(HomeCustomisationBanner), findsOneWidget);
-        expect(find.text('PINNED CATALOGS'), findsNothing);
+        expect(find.byKey(const ValueKey('home-pin-hint')), findsOneWidget);
+        expect(find.text('YOUR PINS'), findsNothing);
         expect(tester.takeException(), isNull);
       },
     );
@@ -476,7 +478,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
       expect(find.byTooltip('Customise Home'), findsNothing);
-      expect(find.text('PINNED CATALOGS'), findsNothing);
+      expect(find.text('YOUR PINS'), findsNothing);
       expect(find.text('Pin catalogs to Home'), findsNothing);
       expect(find.byKey(const ValueKey('home-source-alpha')), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -521,7 +523,7 @@ void main() {
         buttonRect.right,
         tester.getRect(find.byType(SearchZeroState)).right - kHomeSideInset,
       );
-      expect(find.text('PINNED CATALOGS'), findsOneWidget);
+      expect(find.text('YOUR PINS'), findsOneWidget);
       expect(
         buttonRect.bottom,
         lessThan(tester.getTopLeft(find.byType(PinnedCatalogPreview).first).dy),
@@ -781,7 +783,7 @@ void main() {
       expect(find.text('alpha music'), findsOneWidget);
       expect(find.textContaining(sourceDescription), findsNothing);
       expect(find.byTooltip('Customise Home'), findsNothing);
-      expect(find.text('PINNED CATALOGS'), findsNothing);
+      expect(find.text('YOUR PINS'), findsNothing);
       expect(find.text('Pin catalogs to Home'), findsNothing);
       expect(tester.takeException(), isNull);
       await container
@@ -922,7 +924,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Unpin'));
       await tester.pumpAndSettle();
-      expect(find.text('No pinned catalogs yet'), findsOneWidget);
+      expect(find.text('Nothing pinned yet'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }

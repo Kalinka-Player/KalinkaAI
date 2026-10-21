@@ -190,6 +190,7 @@ class PinnedCatalogPreview extends ConsumerWidget {
                                 preview: preview,
                                 storageId: pin.key,
                                 onOpenItem: notifier.openBrowseItem,
+                                inFolder: pin.page.folderLayout,
                               ),
                             ),
                     ),

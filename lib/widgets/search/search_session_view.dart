@@ -2,12 +2,15 @@ import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/browse_filters.dart';
 import '../../data_model/data_model.dart' show SearchSuggestion;
-import '../browse_filters/browse_filter_form.dart' show resultKindLabel;
+import '../browse_filters/browse_filter_form.dart'
+    show FilterSearchField, resultKindLabel;
+import '../browse_filters/presentation_toggle.dart';
 import '../../providers/catalog_cards_provider.dart';
 import '../../providers/catalog_sources_provider.dart';
 import '../../providers/collection_edit_provider.dart';
@@ -19,6 +22,7 @@ import '../../providers/selection_state_provider.dart';
 import '../../providers/shell_nav_provider.dart';
 import '../../theme/app_theme.dart';
 import '../connection_banner.dart';
+import '../edge_fading_rail.dart';
 import '../kalinka_top_bar.dart';
 import '../browse_filters/search_filter_button.dart';
 import '../browse_filters/search_filter_overlay.dart';
@@ -31,6 +35,7 @@ import 'album_page_header.dart';
 import 'browse_visit_scope.dart';
 import 'catalog_page_view.dart';
 import 'catalog_sliver_header.dart';
+import 'folder_trail.dart';
 import 'collections_edit_bar.dart' show leaveCollectionEditing;
 import '../home/home_layout.dart';
 import '../home/catalog_pin_button.dart';
@@ -48,36 +53,49 @@ const double _kPaneEdgeFade = 165;
 /// bottom, so this is the bloom's reach and not an edge anything can see.
 const double _kDiscoverBackdropHeight = 340;
 
-const _kBloomCentre = Alignment(0, -0.8);
-const double _kBloomRadius = 1.0;
+/// Where the bloom centres below the status inset: between the search entry
+/// and the prompts under it. It reaches [_kBloomReach] up and down, so it
+/// is all but gone at the bar, and across to just short of the pane's
+/// sides, never more than the entry's widest.
+const double _kBloomDepth = 185;
+const double _kBloomReach = 155;
 
-/// The crimson bloom over the Discover root: centred at the top, rising
-/// behind the title bar and the status-bar inset, and fading out just short
-/// of both sides.
-final _kDiscoverBloom = RadialGradient(
-  center: _kBloomCentre,
-  radius: _kBloomRadius,
-  transform: const _AcrossPane(),
+/// The crimson bloom over the Discover root, around the search entry and
+/// its prompts.
+RadialGradient _discoverBloom(double topInset) => RadialGradient(
+  radius: 0.5,
+  transform: _AroundSearch(topInset),
   colors: [
     KalinkaColors.accent.withValues(alpha: 0.26),
     KalinkaColors.accent.withValues(alpha: 0),
   ],
 );
 
-/// Widens the bloom about its centre, so on a pane wider than its circle
-/// reaches it is gone just short of each side.
-class _AcrossPane extends GradientTransform {
-  const _AcrossPane();
+/// Moves the bloom's circle behind the search and shapes it to its reach.
+class _AroundSearch extends GradientTransform {
+  final double topInset;
+
+  const _AroundSearch(this.topInset);
 
   @override
   Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
-    final stretch =
-        0.95 * bounds.width / 2 / (_kBloomRadius * bounds.shortestSide);
-    if (stretch <= 1) return null;
-    final centre = _kBloomCentre.withinRect(bounds).dx;
-    return Matrix4.diagonal3Values(stretch, 1, 1)
-      ..setTranslationRaw(centre * (1 - stretch), 0, 0);
+    final circle = bounds.shortestSide / 2;
+    if (circle <= 0) return null;
+    final across = math.min(0.475 * bounds.width, kHomeSearchMaxWidth);
+    final sx = across / circle;
+    final sy = _kBloomReach / circle;
+    final from = bounds.center;
+    final to = Offset(from.dx, bounds.top + topInset + _kBloomDepth);
+    return Matrix4.diagonal3Values(sx, sy, 1)
+      ..setTranslationRaw(to.dx - sx * from.dx, to.dy - sy * from.dy, 0);
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _AroundSearch && other.topInset == topInset;
+
+  @override
+  int get hashCode => topInset.hashCode;
 }
 
 /// What ends the bloom: the ground colour brought up over it just under the
@@ -144,6 +162,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   // surface level but follows the list's exact offset. Retained while a
   // catalog replaces the root, and the list comes back at it.
   final _discoverOffset = ValueNotifier<double>(0);
+
+  /// How far Home's search sits below its top while centred on an empty
+  /// Home; the glow behind it follows.
+  final _discoverCentring = ValueNotifier<double>(0);
   late final ScrollController _discoverScroll;
   // The album backdrop follows the shown visit's scroll and header; each
   // retained visit keeps its own, so Back lands with them as they were.
@@ -153,6 +175,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   final _albumHeaderHeights = <int, double>{};
   final _visitPages = <int, (SearchSessionState, Widget)>{};
   final _catalogHeadersCollapsed = <int, bool>{};
+
+  // Whether the bar's search has unrolled its field under the bar.
+  bool _barSearchOpen = false;
   // A catalog's bar takes on its collapsing header's surface at the same
   // pace, so once collapsed the two read as one over the art.
   final _catalogSurface = ValueNotifier<double>(0);
@@ -209,6 +234,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   // Hit-box height for the back button and connection dot, centred in the bar
   // (whose height is the shared kKalinkaTopBarHeight).
   static const double _kBarMinHeight = 48;
+
+  // The Filters card's largest size, scaled with text size.
+  static const double _kFiltersMaxWidth = 480;
+  static const double _kFiltersMaxHeight = 640;
 
   // Read up front: `ref` is off limits in dispose, where it is needed.
   late final SearchEntryModeNotifier _entryMode;
@@ -280,6 +309,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     WidgetsBinding.instance.removeObserver(this);
     _discoverScroll.dispose();
     _discoverOffset.dispose();
+    _discoverCentring.dispose();
     _albumOffset.dispose();
     _catalogSurface.dispose();
     _albumHeaderHeight.dispose();
@@ -340,13 +370,20 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// Lift the search overlay out of the resting entry: measure where the entry
   /// sits, fade the scrim in, and forward the transition while the field takes
   /// focus.
-  void _openSearch() {
+  /// The smart search, risen from Home's entry, or from [from] holding
+  /// [prefill] — the query shown, to be edited into the next.
+  void _openSearch({BuildContext? from, String prefill = ''}) {
     if (_focused) return;
     // Measure the entry in THIS surface's local space (not global): on tablet
     // the search surface is only the browsing pane, and the overlay positions
     // itself within it, so the origin must be panel-relative.
     final selfBox = context.findRenderObject() as RenderBox?;
-    final entryBox = _entryKey.currentContext?.findRenderObject() as RenderBox?;
+    final entryBox =
+        (from ?? _entryKey.currentContext)?.findRenderObject() as RenderBox?;
+    _composerController.value = TextEditingValue(
+      text: prefill,
+      selection: TextSelection.collapsed(offset: prefill.length),
+    );
     _originRect =
         (selfBox != null &&
             selfBox.attached &&
@@ -367,6 +404,13 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       if (mounted && _focused) _composerFocus.requestFocus();
     });
   }
+
+  /// The shown results' query in the smart search, to be changed into a new
+  /// one, risen from [from].
+  void _editQuery(BuildContext from) => _openSearch(
+    from: from,
+    prefill: ref.read(searchSessionProvider).searchQuery,
+  );
 
   /// Reverse the overlay away. [animate] false when a query is being submitted
   /// (the screen swaps to results, so there is nothing to animate back to).
@@ -444,6 +488,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     if (_filtersOpen) return;
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
+      _barSearchOpen = false;
       _filtersOpen = true;
       _filtersOpenedOn = _appliedFilter(ref.read(searchSessionProvider));
     });
@@ -465,23 +510,8 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     final notifier = ref.read(searchSessionProvider.notifier);
     final session = ref.read(searchSessionProvider);
     if (session.activeView == FindMusicView.results) {
-      // The field holds the query: a changed one is a new search, an emptied
-      // one keeps the search and resets the facets.
-      final query = filter.text.trim();
-      if (query.isNotEmpty && query != session.searchQuery) {
-        notifier.submit(
-          query,
-          filter: filter,
-          shown: _filtersOpenedOn,
-          reset: reset,
-        );
-      } else {
-        notifier.setResultsFilter(
-          filter,
-          shown: _filtersOpenedOn,
-          reset: reset,
-        );
-      }
+      // The query is the smart search's, not the card's.
+      notifier.setResultsFilter(filter, shown: _filtersOpenedOn, reset: reset);
     } else {
       // The inline field can finish its debounce after this card opens.
       // Applying facets must preserve that text unless Reset was explicit.
@@ -518,6 +548,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   void _handleBack() {
     if (_focused) {
       _closeSearch();
+      return;
+    }
+    if (_barSearchOpen) {
+      setState(() => _barSearchOpen = false);
       return;
     }
     if (_filtersOpen) {
@@ -566,6 +600,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         session.activeView == FindMusicView.catalogs &&
         session.catalogPage.isAlbum;
     ref.listen(searchSessionProvider.select((s) => s.visitId), (_, visit) {
+      _barSearchOpen = false;
       _albumOffset.value = _albumOffsets[visit] ?? 0;
       _albumHeaderHeight.value = _albumHeaderHeights[visit] ?? 0;
       _catalogSurface.value = _catalogSurfaceOf(visit);
@@ -658,13 +693,18 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                         MediaQuery.paddingOf(context).top +
                         _kDiscoverBackdropHeight,
                     child: IgnorePointer(
-                      child: ValueListenableBuilder<double>(
-                        valueListenable: _discoverOffset,
-                        builder: (context, offset, child) =>
-                            Transform.translate(
-                              offset: Offset(0, -offset),
-                              child: child,
-                            ),
+                      child: AnimatedBuilder(
+                        animation: Listenable.merge([
+                          _discoverOffset,
+                          _discoverCentring,
+                        ]),
+                        builder: (context, child) => Transform.translate(
+                          offset: Offset(
+                            0,
+                            _discoverCentring.value - _discoverOffset.value,
+                          ),
+                          child: child,
+                        ),
                         child: RepaintBoundary(
                           key: const ValueKey('discover-backdrop'),
                           child: FadeTransition(
@@ -674,17 +714,14 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                               children: [
                                 DecoratedBox(
                                   decoration: BoxDecoration(
-                                    gradient: _kDiscoverBloom,
+                                    gradient: _discoverBloom(
+                                      MediaQuery.paddingOf(context).top,
+                                    ),
                                   ),
                                 ),
                                 DecoratedBox(
                                   decoration: BoxDecoration(
                                     gradient: _kDiscoverFadeOut,
-                                  ),
-                                ),
-                                const IgnorePointer(
-                                  child: ExcludeSemantics(
-                                    child: _HeroArtwork(),
                                   ),
                                 ),
                               ],
@@ -750,6 +787,8 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                     Expanded(child: _buildVisits(session)),
                   ],
                 ),
+                if (_barSearchOpen && _barSearchOf(session) != null)
+                  _buildUnrolledSearch(session),
                 // Only while there is something to narrow: a reconnect can reset
                 // the session under an open card.
                 if (_filtersOpen && !_filterCapabilities(session).isEmpty)
@@ -833,13 +872,30 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     ),
   );
 
+  /// The unrolled search goes with the first scroll the user makes, not
+  /// with the list moving as its results come in.
+  void _closeSearchOnScroll(int visitId, UserScrollNotification notification) {
+    if (_barSearchOpen &&
+        _isShown(visitId) &&
+        notification.depth == 0 &&
+        notification.direction != ScrollDirection.idle) {
+      setState(() => _barSearchOpen = false);
+    }
+  }
+
   bool _isShown(int visitId) =>
       ref.read(searchSessionProvider).visitId == visitId;
 
   Widget _buildVisit(SearchSessionState visit) {
     if (visit.activeView == FindMusicView.results) {
       return visit.resultsAvailable
-          ? const ResultsView()
+          ? NotificationListener<UserScrollNotification>(
+              onNotification: (notification) {
+                _closeSearchOnScroll(visit.visitId, notification);
+                return false;
+              },
+              child: const ResultsView(),
+            )
           : const SizedBox.shrink();
     }
     final page = visit.catalogPage;
@@ -868,11 +924,13 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           _catalogOffsets[id] = math.max(0.0, metrics.pixels);
           if (_isShown(id)) _catalogSurface.value = _catalogSurfaceOf(id);
         }
+        if (notification is UserScrollNotification) {
+          _closeSearchOnScroll(id, notification);
+        }
         return false;
       },
       child: CatalogPageView(
         page: page,
-        onOpenFilters: _openFilters,
         onHeaderCollapsed: (collapsed) {
           if (_catalogHeadersCollapsed[id] == collapsed) return;
           _catalogHeadersCollapsed[id] = collapsed;
@@ -916,11 +974,22 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     if (session.atHome) {
       return ValueListenableBuilder<double>(
         valueListenable: _discoverOffset,
-        builder: (context, offset, child) => ColoredBox(
+        // Directly tied to scroll, with no delayed animation or parallax:
+        // once the page passes under, the bar is opaque at the top of the
+        // status area and clear at its own foot, so the page shows through.
+        builder: (context, offset, child) => DecoratedBox(
           key: const ValueKey('discover-header-surface'),
-          // Directly tied to scroll, with no delayed animation or parallax.
-          color: KalinkaColors.background.withValues(
-            alpha: (offset / kKalinkaTopBarHeight).clamp(0.0, 1.0),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                KalinkaColors.background.withValues(
+                  alpha: (offset / kKalinkaTopBarHeight).clamp(0.0, 1.0),
+                ),
+                KalinkaColors.background.withValues(alpha: 0),
+              ],
+            ),
           ),
           child: child,
         ),
@@ -956,44 +1025,80 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         height: _barHeight(session),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(6, 2, 6, 2),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Back',
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                onPressed: _handleBack,
-                icon: const Icon(
-                  Icons.arrow_back,
-                  size: 22,
-                  color: KalinkaColors.textPrimary,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(child: _buildTitle(session)),
-              if (catalogChrome &&
-                  _catalogHeadersCollapsed[session.visitId] == true)
-                CatalogPinButton(
-                  page: session.shownListing,
-                  filter: session.catalogFilter.copyWith(
-                    type: session.expandedShelf,
+          child: LayoutBuilder(
+            builder: (context, constraints) => Row(
+              children: [
+                IconButton(
+                  tooltip: 'Back',
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
+                  onPressed: _handleBack,
+                  icon: const Icon(
+                    Icons.arrow_back,
+                    size: 22,
+                    color: KalinkaColors.textPrimary,
                   ),
                 ),
-              // Only where there is something to narrow: the Catalogs root
-              // has no listing of its own.
-              if (!catalogChrome && !_filterCapabilities(session).isEmpty)
-                SearchFilterButton(
-                  activeCount: _appliedFilter(session).activeCount,
-                  open: _filtersOpen,
-                  onTap: _openFilters,
+                const SizedBox(width: 8),
+                Expanded(child: _buildTitle(session)),
+                // What joins the bar on scroll comes in before what is always
+                // there, so Search and Grid/List never move under a finger.
+                if (catalogChrome &&
+                    _catalogHeadersCollapsed[session.visitId] == true)
+                  CatalogPinButton(
+                    page: session.shownListing,
+                    filter: session.catalogFilter.copyWith(
+                      type: session.expandedShelf,
+                    ),
+                  ),
+                ?_barSearch(session, width: constraints.maxWidth + 12),
+                // A new search, made as Home makes one rather than narrowed
+                // like a listing.
+                if (onResults && session.resultsAvailable)
+                  Builder(
+                    builder: (context) => CatalogSearchButton(
+                      key: const ValueKey('results-bar-search'),
+                      active: false,
+                      open: _focused,
+                      rowHeight: _kBarMinHeight,
+                      onTap: () => _editQuery(context),
+                    ),
+                  ),
+                ?_barFilters(session),
+                if (catalogChrome)
+                  if (_barPresentation(
+                        session,
+                        width: constraints.maxWidth + 12,
+                      )
+                      case final presentation?) ...[
+                    // Set apart from what narrows the listing: it only
+                    // changes how it is shown.
+                    if (_barSearchOf(session) != null ||
+                        _barFilters(session) != null)
+                      const SizedBox(width: 12),
+                    presentation,
+                  ],
+                // Only where there is something to narrow: the Catalogs root
+                // has no listing of its own.
+                if (!catalogChrome &&
+                    !onResults &&
+                    !_filterCapabilities(session).isEmpty)
+                  SearchFilterButton(
+                    activeCount: _appliedFilter(session).activeCount,
+                    open: _filtersOpen,
+                    onTap: _openFilters,
+                  ),
+                SizedBox(
+                  height: _kBarMinHeight,
+                  width: 42,
+                  child: Center(
+                    child: ServerChip(compact: true, onTap: widget.onServerTap),
+                  ),
                 ),
-              SizedBox(
-                height: _kBarMinHeight,
-                width: 42,
-                child: Center(
-                  child: ServerChip(compact: true, onTap: widget.onServerTap),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1003,7 +1108,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       valueListenable: _catalogSurface,
       builder: (context, surface, child) => ColoredBox(
         key: const ValueKey('catalog-bar-surface'),
-        color: KalinkaColors.background.withValues(alpha: surface),
+        color: KalinkaColors.background.withValues(
+          alpha: _barSearchOpen ? 1 : surface,
+        ),
         child: child,
       ),
       child: bar,
@@ -1020,6 +1127,169 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     return (offset / extent).clamp(0.0, 1.0);
   }
 
+  /// Puts [text] in as the shown catalog's search, unless another visit has
+  /// been shown meanwhile.
+  void _searchCatalog(int visitId, String text) {
+    final now = ref.read(searchSessionProvider);
+    if (now.visitId != visitId) return;
+    ref
+        .read(searchSessionProvider.notifier)
+        .setCatalogFilter(now.catalogFilter.copyWith(text: text));
+  }
+
+  /// What the bar's search reads and writes: a catalog's text filter. Null
+  /// where the page has no search. Results have none: their query is a
+  /// search of its own, edited where it was made.
+  ({
+    String value,
+    String hint,
+    bool enabled,
+    bool applied,
+    ValueChanged<String> onSearch,
+  })?
+  _barSearchOf(SearchSessionState session) {
+    final visitId = session.visitId;
+    final page = session.catalogPage;
+    if (session.activeView != FindMusicView.catalogs ||
+        !CatalogSliverHeader.appliesTo(page) ||
+        !CatalogSliverHeader.searches(page.filterCapabilities)) {
+      return null;
+    }
+    return (
+      value: session.catalogFilter.text,
+      hint: 'Search ${page.title ?? 'catalog'}',
+      enabled: page.filterCapabilities.text == FacetSupport.supported,
+      applied: session.catalogFilter.text.isNotEmpty,
+      onSearch: (text) => _searchCatalog(visitId, text),
+    );
+  }
+
+  /// A catalog's search, the bar's own however far the page has scrolled,
+  /// so the list reloading under it never moves it: the field itself where
+  /// the bar has room, else a button that unrolls it under the bar. It
+  /// searches on Enter.
+  Widget? _barSearch(SearchSessionState session, {required double width}) {
+    final search = _barSearchOf(session);
+    if (search == null) return null;
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    if (!CatalogSliverHeader.searchInBar(width, scale)) {
+      return CatalogSearchButton(
+        key: const ValueKey('catalog-bar-search'),
+        active: search.applied,
+        open: _barSearchOpen,
+        rowHeight: _kBarMinHeight,
+        onTap: () => setState(() => _barSearchOpen = !_barSearchOpen),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(start: 8, end: 4),
+      child: SizedBox(
+        width: math.min(
+          CatalogSliverHeader.searchMaxWidth * scale,
+          width * 0.4,
+        ),
+        // A field of each visit's own, so text typed and not sent on one
+        // page is never sent on the next.
+        child: KeyedSubtree(
+          key: ValueKey(session.visitId),
+          child: FilterSearchField(
+            key: const ValueKey('catalog-bar-field'),
+            enabled: search.enabled,
+            value: search.value,
+            hint: search.hint,
+            neutral: true,
+            submitOnly: true,
+            onChanged: search.onSearch,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Filters, the bar's own on a catalog and on results alike, wherever the
+  /// page has scrolled. Null where there is nothing to narrow.
+  Widget? _barFilters(SearchSessionState session) {
+    final BrowseFilterQuery filter;
+    if (session.activeView == FindMusicView.results) {
+      if (_filterCapabilities(session).isEmpty) return null;
+      filter = session.resultsFilter;
+    } else {
+      final page = session.catalogPage;
+      if (!CatalogSliverHeader.appliesTo(page) ||
+          !CatalogSliverHeader.filters(page.filterCapabilities)) {
+        return null;
+      }
+      filter = session.catalogFilter.copyWith(type: session.expandedShelf);
+    }
+    return CatalogFiltersButton(
+      key: const ValueKey('bar-filters'),
+      count: filter.copyWith(text: '').activeCount,
+      labelled: false,
+      rowHeight: _kBarMinHeight,
+      onTap: _openFilters,
+    );
+  }
+
+  /// A catalog's Grid/List, the bar's own however far the page has
+  /// scrolled: one button where the pane is narrow.
+  Widget? _barPresentation(
+    SearchSessionState session, {
+    required double width,
+  }) {
+    final layout = CatalogPageView.presentationLayoutOf(session);
+    if (layout == null) return null;
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    return PresentationToggle(
+      key: const ValueKey('catalog-bar-presentation'),
+      layout: layout,
+      compact: width < 600 * scale,
+    );
+  }
+
+  /// The bar's search, unrolled under it across the pane where the bar has
+  /// no room for it: focused, searching on Enter, and gone again then, on
+  /// scroll or on Back.
+  Widget _buildUnrolledSearch(SearchSessionState session) {
+    final search = _barSearchOf(session)!;
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    return Positioned(
+      top: MediaQuery.paddingOf(context).top + _barHeight(session),
+      left: 0,
+      right: 0,
+      // Widened to room in the bar, the field is there instead.
+      child: LayoutBuilder(
+        builder: (context, constraints) =>
+            CatalogSliverHeader.searchInBar(constraints.maxWidth, scale)
+            ? const SizedBox.shrink()
+            : _Unroll(
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    color: KalinkaColors.background,
+                    border: Border(
+                      bottom: BorderSide(color: KalinkaColors.borderDefault),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: FilterSearchField(
+                      key: const ValueKey('catalog-unrolled-search'),
+                      enabled: search.enabled,
+                      value: search.value,
+                      hint: search.hint,
+                      neutral: true,
+                      autofocus: true,
+                      submitOnly: true,
+                      onChanged: search.onSearch,
+                      onSubmitted: (_) =>
+                          setState(() => _barSearchOpen = false),
+                    ),
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+
   /// What the shown visit is, and nothing about how it was reached: Back
   /// returns along the way it came, which a fixed path would misstate.
   Widget _buildTitle(SearchSessionState session) {
@@ -1027,20 +1297,50 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         session.activeView == FindMusicView.catalogs &&
         CatalogSliverHeader.appliesTo(session.catalogPage);
     final String title;
+    if (session.activeView == FindMusicView.catalogs &&
+        session.catalogPage.folderLayout) {
+      return const FolderTrail();
+    }
     if (catalogChrome) {
       if (_catalogHeadersCollapsed[session.visitId] != true) {
         return const SizedBox.shrink();
       }
       title = session.shownListing.title ?? '';
+    } else if (session.activeView == FindMusicView.results &&
+        session.expandedBlock != null) {
+      // A block opened in full is a page of its own, named for it.
+      final (:kind, :source) = session.expandedBlock!;
+      final sources = session.results?.sources;
+      title = [
+        resultKindLabel(kind),
+        if (source != null && sources != null && sources.length > 1)
+          sources.titleOf(source),
+      ].join(' · ');
     } else if (session.activeView == FindMusicView.results) {
-      title = switch (session.expandedBlock) {
-        null => 'Results',
-        (:final kind, :final source) => [
-          resultKindLabel(kind),
-          if (source != null && (session.results?.sources.length ?? 0) > 1)
-            session.results!.sources.titleOf(source),
-        ].join(' · '),
-      };
+      // What the page answers. Tapping it changes it in the smart search.
+      return Builder(
+        builder: (context) => Semantics(
+          header: true,
+          button: true,
+          hint: 'Change the search',
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _editQuery(context),
+              child: Text(
+                '“${session.searchQuery.toUpperCase()}”',
+                key: const ValueKey('results-title'),
+                style: KalinkaTextStyles.trayTitle.copyWith(
+                  color: KalinkaColors.textPrimary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ),
+      );
     } else {
       title = session.catalogPage.title ?? '';
     }
@@ -1066,13 +1366,26 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     return SearchZeroState(
       controller: _discoverScroll,
       onOpenCatalog: _openCatalog,
-      // The rail carries sources and collections where it shows.
+      // The rail carries sources and collections where it shows; the
+      // sources stay on Home while it holds nothing else, the way in.
       showCollections: !widget.navigationVisible,
+      showSources: !widget.navigationVisible,
+      sources: HomeSourceList(onOpen: _openSourceFromHome),
+      onCentringShift: (shift) => _discoverCentring.value = shift,
       leading: [
         // Folds up under the bar as a source opens, the sources rising with it.
-        SizeTransition(
-          sizeFactor: ReverseAnimation(_fold),
-          alignment: const Alignment(-1, 1),
+        // Clipped above and below only: the prompts run out to the pane's
+        // edges.
+        AnimatedBuilder(
+          animation: _fold,
+          builder: (context, child) => ClipRect(
+            clipper: const _VerticalClip(),
+            child: Align(
+              alignment: const Alignment(-1, 1),
+              heightFactor: (1 - _fold.value).clamp(0.0, 1.0),
+              child: child,
+            ),
+          ),
           child: FadeTransition(
             opacity: ReverseAnimation(_fold),
             child: Column(
@@ -1104,10 +1417,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
             ),
           ),
         ),
-        if (!widget.navigationVisible) ...[
-          HomeSourceList(onOpen: _openSourceFromHome),
-          const SizedBox(height: kHomeSectionGap),
-        ],
       ],
     );
   }
@@ -1133,8 +1442,15 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     final topInset = MediaQuery.paddingOf(context).top;
     final targetTop = topInset + _barHeight(session);
 
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+
     return LayoutBuilder(
       builder: (context, constraints) {
+        // On a large pane it stays a card under the pill, not a page.
+        final width = math.min(
+          constraints.maxWidth - 32,
+          _kFiltersMaxWidth * scale,
+        );
         return AnimatedBuilder(
           animation: _filtersCtrl,
           builder: (context, _) {
@@ -1152,8 +1468,8 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                 ),
                 Positioned(
                   top: targetTop,
-                  left: 16,
                   right: 16,
+                  width: width,
                   child: Opacity(
                     opacity: t,
                     child: Transform.scale(
@@ -1163,26 +1479,24 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                       child: SearchFilterOverlay(
                         capabilities: _filterCapabilities(session),
                         applied: _filtersOpenedOn,
+                        // Search is the bar's on results and catalogs.
                         showSearch:
-                            onResults || !CatalogSliverHeader.appliesTo(page),
-                        title: onResults
-                            ? 'REFINE RESULTS'
-                            : CatalogSliverHeader.appliesTo(page)
+                            !onResults && !CatalogSliverHeader.appliesTo(page),
+                        title: onResults || CatalogSliverHeader.appliesTo(page)
                             ? 'FILTERS'
                             : 'SEARCH & FILTERS',
-                        searchHint:
-                            onResults ||
-                                page.title == null ||
-                                page.title!.isEmpty
+                        searchHint: page.title == null || page.title!.isEmpty
                             ? 'Search'
                             : 'Search ${page.title}',
-                        searchCaption: onResults
-                            ? 'A new query starts a new search.'
-                            : null,
                         // Clamped: a window short enough to make this
                         // negative would assert on the card's constraints.
-                        maxHeight: (constraints.maxHeight - targetTop - 24)
-                            .clamp(120.0, double.infinity),
+                        maxHeight: math.max(
+                          math.min(
+                            constraints.maxHeight - targetTop - 24,
+                            _kFiltersMaxHeight * scale,
+                          ),
+                          120.0,
+                        ),
                         onApply: _applyFilters,
                         onCancel: _closeFilters,
                       ),
@@ -1368,10 +1682,9 @@ class _PaneEdgeFade extends StatelessWidget {
   }
 }
 
-/// The Discover hero: the Playfair question and the resting
-/// search entry, over the tinted header artwork on the left. The text keeps
-/// to the left half (wrapping as needed); the crimson bloom behind it is
-/// painted once at the surface level, not here.
+/// The Discover hero: the Playfair question, the resting search entry and
+/// its prompts, centred. The crimson bloom behind them is painted once at
+/// the surface level, not here.
 class _DiscoverHero extends StatelessWidget {
   final Key entryKey;
   final String hint;
@@ -1442,27 +1755,35 @@ class _DiscoverHero extends StatelessWidget {
           ],
           if (suggestions.isNotEmpty) ...[
             const SizedBox(height: 14),
-            // Lower than the search entry, wrapping within its width.
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: kHomeSearchMaxWidth),
-              child: Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final suggestion in suggestions)
-                    _SuggestionChip(
-                      suggestion: suggestion,
-                      onTap: () => onSuggestion(suggestion.query),
-                    ),
-                ],
-              ),
+            // One line across the pane, scrolled and faded at its edges.
+            EdgeFadingRail(
+              storageId: 'discover-suggestions',
+              gutter: kHomeSideInset,
+              children: [
+                for (final suggestion in suggestions)
+                  _SuggestionChip(
+                    suggestion: suggestion,
+                    onTap: () => onSuggestion(suggestion.query),
+                  ),
+              ],
             ),
           ],
         ],
       ),
     );
   }
+}
+
+/// Clips above and below only, leaving the sides to what runs past them.
+class _VerticalClip extends CustomClipper<Rect> {
+  const _VerticalClip();
+
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTRB(-size.width, 0, 2 * size.width, size.height);
+
+  @override
+  bool shouldReclip(_VerticalClip oldClipper) => false;
 }
 
 /// A curated prompt under the search entry, as wide as its words, that runs
@@ -1557,54 +1878,6 @@ class _SuggestionChip extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// One continuous panorama, with quiet space behind the central search entry.
-/// Keep both sides visible as the pane changes shape and fade into the page.
-class _HeroArtwork extends StatelessWidget {
-  const _HeroArtwork();
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final height = (width / 3).clamp(200.0, 300.0);
-        return Align(
-          alignment: Alignment.topCenter,
-          child: SizedBox(
-            width: width,
-            // Continue behind the status bar without a seam at the safe inset.
-            height: height + MediaQuery.paddingOf(context).top,
-            child: ShaderMask(
-              blendMode: BlendMode.dstIn,
-              shaderCallback: (bounds) => const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xBFFFFFFF),
-                  Color(0xBFFFFFFF),
-                  Colors.transparent,
-                ],
-                stops: [0, 0.65, 1],
-              ).createShader(bounds),
-              child: Image.asset(
-                'assets/images/home_header_artwork.png',
-                key: const ValueKey('home-header-artwork'),
-                // Stretch abstract ribbons rather than crop away the sides
-                // and the negative space composed for the search controls.
-                fit: BoxFit.fill,
-                cacheWidth: (width * MediaQuery.devicePixelRatioOf(context))
-                    .ceil()
-                    .clamp(1, 2172),
-                excludeFromSemantics: true,
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }
@@ -1839,4 +2112,51 @@ class _TopPart extends CustomClipper<Rect> {
 
   @override
   bool shouldReclip(_TopPart oldClipper) => oldClipper.reveal != reveal;
+}
+
+/// Unrolls its child down from its top edge as it appears.
+class _Unroll extends StatefulWidget {
+  final Widget child;
+
+  const _Unroll({required this.child});
+
+  @override
+  State<_Unroll> createState() => _UnrollState();
+}
+
+class _UnrollState extends State<_Unroll> with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 160),
+  );
+  late final _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_controller.isDismissed) {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _controller.value = 1;
+      } else {
+        _controller.forward();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _curve.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizeTransition(
+    sizeFactor: _curve,
+    alignment: Alignment.topCenter,
+    child: widget.child,
+  );
 }

@@ -65,59 +65,70 @@ class InspiredBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final groups = narrowed.groups.where(_groupVisible).toList();
     final expanded = filter.kind == ResultKind.recommendations;
-    Widget groupOf(InspiredGroup group) => _SourceGroup(
+    Widget groupOf(InspiredGroup group, {bool sliver = false}) => _SourceGroup(
       group: group,
       title: results.sources.titleOf(group.source),
       expanded: expanded,
+      sliver: sliver,
       onViewAll: () => onViewAll(group.source),
       onRetry: () => onRetry(group.source),
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _InspiredHeading(gutter: gutter),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            // Two sources side by side where both fit; a third starts the
-            // next row at the same width, in source order. Each keeps its
-            // own list, so nothing is merged or reflowed between them.
-            final columns =
-                !expanded &&
-                    constraints.maxWidth >= groupMinWidth * 2 + groupGutter
-                ? 2
-                : 1;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // A later source stands further off the rows above it than
-                // rows stand off each other, so it reads as a group, not the
-                // next row.
-                for (var i = 0; i < groups.length; i += columns) ...[
-                  if (i > 0) const SizedBox(height: 14),
-                  if (columns == 1)
-                    groupOf(groups[i])
-                  else
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: groupOf(groups[i])),
-                        const SizedBox(width: groupGutter),
-                        Expanded(
-                          child: i + 1 < groups.length
-                              ? groupOf(groups[i + 1])
-                              : const SizedBox.shrink(),
-                        ),
-                      ],
-                    ),
-                ],
-              ],
-            );
-          },
-        ),
+    // A sliver: a group opened in full lists its tracks lazily, one after
+    // another; previews keep their grid.
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(child: _InspiredHeading(gutter: gutter)),
+        if (expanded)
+          for (var i = 0; i < groups.length; i++) ...[
+            if (i > 0) const SliverToBoxAdapter(child: SizedBox(height: 14)),
+            groupOf(groups[i], sliver: true),
+          ]
+        else
+          SliverToBoxAdapter(child: _previews(groups, groupOf)),
       ],
     );
   }
+
+  Widget _previews(
+    List<InspiredGroup> groups,
+    Widget Function(InspiredGroup) groupOf,
+  ) => LayoutBuilder(
+    builder: (context, constraints) {
+      // Two sources side by side where both fit; a third starts the
+      // next row at the same width, in source order. Each keeps its
+      // own list, so nothing is merged or reflowed between them.
+      final columns = constraints.maxWidth >= groupMinWidth * 2 + groupGutter
+          ? 2
+          : 1;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // A later source stands further off the rows above it than
+          // rows stand off each other, so it reads as a group, not the
+          // next row.
+          for (var i = 0; i < groups.length; i += columns) ...[
+            if (i > 0) const SizedBox(height: 14),
+            if (columns == 1)
+              groupOf(groups[i])
+            else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: groupOf(groups[i])),
+                  const SizedBox(width: groupGutter),
+                  Expanded(
+                    child: i + 1 < groups.length
+                        ? groupOf(groups[i + 1])
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ),
+          ],
+        ],
+      );
+    },
+  );
 }
 
 /// What the block is and then its name, in the shape a page title takes: an
@@ -196,6 +207,9 @@ class _SourceGroup extends StatelessWidget {
   final InspiredGroup group;
   final String title;
   final bool expanded;
+
+  /// Built as a sliver, its rows only as they come into view.
+  final bool sliver;
   final VoidCallback onViewAll;
   final VoidCallback onRetry;
 
@@ -205,17 +219,19 @@ class _SourceGroup extends StatelessWidget {
     required this.expanded,
     required this.onViewAll,
     required this.onRetry,
+    this.sliver = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final state = group.state;
     if (state is LegFailed) {
-      return SourceUnavailableRow(
+      final row = SourceUnavailableRow(
         source: group.source,
         title: title,
         onRetry: onRetry,
       );
+      return sliver ? SliverToBoxAdapter(child: row) : row;
     }
     final tracks = group.tracks;
     final trackIds = [for (final item in tracks) item.id];
@@ -226,49 +242,74 @@ class _SourceGroup extends StatelessWidget {
         ? tracks
         : tracks.take(InspiredBlock.previewCount).toList();
 
+    final head = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            SourceTile(source: group.source),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      title.toUpperCase(),
+                      style: KalinkaTextStyles.sectionLabel.copyWith(
+                        color: KalinkaColors.textPrimary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (count != null) ...[
+                    const SizedBox(width: 8),
+                    ShelfTally(count),
+                  ],
+                ],
+              ),
+            ),
+            if (more) ...[
+              const SizedBox(width: 12),
+              ViewAllAction(label: 'VIEW ALL', onTap: onViewAll),
+            ],
+          ],
+        ),
+        // Its own row under the name, like an unrolled album's actions.
+        if (tracks.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          TrackGroupActions(trackIds: trackIds),
+        ],
+        const SizedBox(height: 8),
+      ],
+    );
+    const shimmer = BrowseRowsShimmer(count: InspiredBlock.previewCount);
+    if (sliver) {
+      return SliverMainAxisGroup(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.only(top: 16),
+            sliver: SliverToBoxAdapter(child: head),
+          ),
+          if (state is LegLoading)
+            const SliverToBoxAdapter(child: shimmer)
+          else
+            SliverBrowseItemRows(
+              items: shown,
+              queueContextIds: trackIds,
+              labelled: false,
+            ),
+        ],
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              SourceTile(source: group.source),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        title.toUpperCase(),
-                        style: KalinkaTextStyles.sectionLabel.copyWith(
-                          color: KalinkaColors.textPrimary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (count != null) ...[
-                      const SizedBox(width: 8),
-                      ShelfTally(count),
-                    ],
-                  ],
-                ),
-              ),
-              if (more) ...[
-                const SizedBox(width: 12),
-                ViewAllAction(label: 'VIEW ALL', onTap: onViewAll),
-              ],
-            ],
-          ),
-          // Its own row under the name, like an unrolled album's actions.
-          if (tracks.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            TrackGroupActions(trackIds: trackIds),
-          ],
-          const SizedBox(height: 8),
+          head,
           if (state is LegLoading)
-            const BrowseRowsShimmer(count: InspiredBlock.previewCount)
+            shimmer
           else
             // Tapping a track plays the group from it: the group is the
             // queue, which gives it a coherent identity. The heading already

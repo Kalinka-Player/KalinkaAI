@@ -33,11 +33,6 @@ class LegFailed extends LegState {
   const LegFailed(this.reason);
 }
 
-/// Skipped because the filter hides everything this leg would return.
-class LegNotRequested extends LegState {
-  const LegNotRequested();
-}
-
 /// One source's recommendations: its standing, and the tracks it suggested
 /// once it answered.
 class InspiredGroup {
@@ -95,35 +90,6 @@ class SearchResults {
     ResultsLeg.matches => matches,
     ResultsLeg.inspired => inspired,
   };
-
-  static bool reaches(
-    BrowseFilterQuery filter,
-    ResultsLeg leg,
-    String source,
-  ) => filter.shows(leg.kind, source);
-
-  SearchResults askingOnly(BrowseFilterQuery filter) {
-    Map<String, LegState> only(ResultsLeg leg, Map<String, LegState> legs) => {
-      for (final MapEntry(key: source, value: state) in legs.entries)
-        source: reaches(filter, leg, source) ? state : const LegNotRequested(),
-    };
-    return SearchResults(
-      query: query,
-      sources: sources,
-      matches: only(ResultsLeg.matches, matches),
-      inspired: only(ResultsLeg.inspired, inspired),
-    );
-  }
-
-  List<({ResultsLeg leg, String source})> unaskedUnder(
-    BrowseFilterQuery filter,
-  ) => [
-    for (final source in sourceNames)
-      for (final leg in ResultsLeg.values)
-        if (legsOf(leg)[source] is LegNotRequested &&
-            reaches(filter, leg, source))
-          (leg: leg, source: source),
-  ];
 
   SearchResults withLeg(ResultsLeg leg, String source, LegState state) {
     final next = Map<String, LegState>.from(legsOf(leg))..[source] = state;
@@ -202,7 +168,7 @@ class SearchResults {
   /// standing.
   List<InspiredGroup> get inspiredGroups => [
     for (final source in sourceNames)
-      if (inspired[source] case final state? when state is! LegNotRequested)
+      if (inspired[source] case final state?)
         InspiredGroup(source: source, state: state, tracks: _tracksOf(state)),
   ];
 

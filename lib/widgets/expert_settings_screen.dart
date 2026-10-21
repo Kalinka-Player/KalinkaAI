@@ -8,11 +8,12 @@ import 'expert_field_list.dart';
 
 /// The server's own settings as the about:config-style flat list.
 ///
-/// Reached via the EXPERT toggle in the settings header. All the rendering
-/// lives in [ExpertFieldList]; this only points it at `/server/config`.
+/// Shown while the Expert settings switch is on. All the rendering lives in
+/// [ExpertFieldList]; this only points it at `/server/config`.
 class ExpertSettingsScreen extends ConsumerWidget {
-  final Widget? heading;
-  const ExpertSettingsScreen({super.key, this.heading});
+  /// Built as a sliver, for the Streamer tab's own scroll view.
+  final bool sliver;
+  const ExpertSettingsScreen({super.key, this.sliver = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -22,7 +23,7 @@ class ExpertSettingsScreen extends ConsumerWidget {
         fields.any((f) => boxPowerOffPaths.contains(f.path)) &&
         ref.watch(boxPowerOffTimerAvailableProvider);
     return ExpertFieldList(
-      heading: heading,
+      sliver: sliver,
       fields: fields
           .where((f) => timerAvailable || !boxPowerOffPaths.contains(f.path))
           .toList(),

@@ -91,7 +91,7 @@ static void my_application_activate(GApplication *application) {
 
   set_window_icon(window);
 
-  gtk_window_set_default_size(window, 1280, 720);
+  gtk_window_set_default_size(window, 1024, 637);
   if (kiosk_requested()) {
     gtk_window_fullscreen(window);
   }

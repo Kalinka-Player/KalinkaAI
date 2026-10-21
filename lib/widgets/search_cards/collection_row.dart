@@ -6,6 +6,7 @@ import '../../providers/collection_edit_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../theme/app_theme.dart';
 import '../search/collection_menu_sheet.dart';
+import '../modifier_click.dart';
 import '../tap_highlight.dart';
 import 'action_pill_button.dart';
 import 'browse_navigation_scope.dart';
@@ -69,6 +70,7 @@ class _CollectionRowState extends ConsumerState<CollectionRow>
           ? null
           : () => startLongPressRing(_select),
       onSelectPressStop: selecting || editing ? null : cancelLongPressRing,
+      onSelectAtOnce: selecting || editing ? null : _select,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -189,6 +191,9 @@ class CollectionFace extends ConsumerWidget {
   final VoidCallback? onSelectPressStart;
   final VoidCallback? onSelectPressStop;
 
+  /// What completing that press does, for a mouse's Ctrl- or ⌘-click.
+  final VoidCallback? onSelectAtOnce;
+
   /// An action drawn beside the name, where the row carries one.
   final Widget? nameAction;
 
@@ -205,76 +210,83 @@ class CollectionFace extends ConsumerWidget {
     this.pressProgress = 0,
     this.onSelectPressStart,
     this.onSelectPressStop,
+    this.onSelectAtOnce,
     this.nameAction,
     this.listed = false,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final row = Semantics(
-      button: true,
-      label: item.playlist?.name ?? item.name ?? 'Unknown',
-      child: GestureDetector(
-        onTap: onTap,
-        onLongPressStart: onSelectPressStart == null
-            ? null
-            : (_) => onSelectPressStart!(),
-        onLongPressEnd: onSelectPressStop == null
-            ? null
-            : (_) => onSelectPressStop!(),
-        onLongPressCancel: onSelectPressStop,
-        behavior: HitTestBehavior.opaque,
-        child: RowColumnsScope(
-          builder: (context, measured) {
-            final columns = listed ? measured : RowColumns.none;
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              // The 3px the edge takes comes out of the inset, so selecting does
-              // not nudge the row sideways.
-              padding: EdgeInsets.only(
-                top: 10,
-                bottom: 10,
-                left: selected ? 0 : 3,
-              ),
-              decoration: BoxDecoration(
-                color: selected
-                    ? KalinkaColors.accent.withValues(alpha: 0.07)
-                    : Colors.transparent,
-                border: selected
-                    ? const Border(
-                        left: BorderSide(color: KalinkaColors.accent, width: 3),
-                      )
-                    : null,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: CollectionIdentity(
-                      item: item,
-                      chosen: selected,
-                      nameAction: nameAction,
-                      coverMark: selected
-                          ? (partial ? Icons.remove : Icons.check)
-                          : null,
-                      pressProgress: pressProgress,
-                      columns: columns,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  RowColumnCells(
-                    columns: columns,
-                    detail: collectionSummary(item),
-                    sourceCell: Row(
-                      children: collectionSources(
-                        item.catalog?.sources ?? const <String>[],
+    final row = ModifierClick(
+      onModifiedClick: onSelectAtOnce,
+      child: Semantics(
+        button: true,
+        label: item.playlist?.name ?? item.name ?? 'Unknown',
+        child: GestureDetector(
+          onTap: onTap,
+          onLongPressStart: onSelectPressStart == null
+              ? null
+              : (_) => onSelectPressStart!(),
+          onLongPressEnd: onSelectPressStop == null
+              ? null
+              : (_) => onSelectPressStop!(),
+          onLongPressCancel: onSelectPressStop,
+          behavior: HitTestBehavior.opaque,
+          child: RowColumnsScope(
+            builder: (context, measured) {
+              final columns = listed ? measured : RowColumns.none;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                // The 3px the edge takes comes out of the inset, so selecting does
+                // not nudge the row sideways.
+                padding: EdgeInsets.only(
+                  top: 10,
+                  bottom: 10,
+                  left: selected ? 0 : 3,
+                ),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? KalinkaColors.accent.withValues(alpha: 0.07)
+                      : Colors.transparent,
+                  border: selected
+                      ? const Border(
+                          left: BorderSide(
+                            color: KalinkaColors.accent,
+                            width: 3,
+                          ),
+                        )
+                      : null,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: CollectionIdentity(
+                        item: item,
+                        chosen: selected,
+                        nameAction: nameAction,
+                        coverMark: selected
+                            ? (partial ? Icons.remove : Icons.check)
+                            : null,
+                        pressProgress: pressProgress,
+                        columns: columns,
                       ),
                     ),
-                  ),
-                  RowTrailing(columns: columns, child: trailing),
-                ],
-              ),
-            );
-          },
+                    const SizedBox(width: 6),
+                    RowColumnCells(
+                      columns: columns,
+                      detail: collectionSummary(item),
+                      sourceCell: Row(
+                        children: collectionSources(
+                          item.catalog?.sources ?? const <String>[],
+                        ),
+                      ),
+                    ),
+                    RowTrailing(columns: columns, child: trailing),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
     );

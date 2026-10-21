@@ -50,8 +50,14 @@ class TrackGroupActions extends ConsumerWidget {
 class PlayAllChip extends ConsumerStatefulWidget {
   final List<String> trackIds;
   final int? trackCount;
+  final bool enabled;
 
-  const PlayAllChip({super.key, required this.trackIds, this.trackCount});
+  const PlayAllChip({
+    super.key,
+    required this.trackIds,
+    this.trackCount,
+    this.enabled = true,
+  });
 
   @override
   ConsumerState<PlayAllChip> createState() => _PlayAllChipState();
@@ -87,15 +93,18 @@ class _PlayAllChipState extends ConsumerState<PlayAllChip> {
       label: 'Play all',
       icon: Icons.play_arrow_rounded,
       accent: true,
-      enabled: !_busy,
+      enabled: widget.enabled && !_busy,
       onTap: _playAll,
       semanticsLabel: 'Play all tracks',
     );
   }
 }
 
+/// How long an enqueue control shows it has added, and takes no more.
+const kEnqueuedHold = Duration(seconds: 3);
+
 /// Enqueue every track in a section, reporting via the shared activity toast.
-/// Idle → busy (request in flight) → added (3s confirmation) → idle.
+/// Idle → busy (request in flight) → added ([kEnqueuedHold]) → idle.
 enum _AddStatus { idle, busy, added }
 
 class AddAllChip extends ConsumerStatefulWidget {
@@ -105,12 +114,14 @@ class AddAllChip extends ConsumerStatefulWidget {
   /// What was enqueued, where the toast can name it — a container has a name,
   /// a section of results is only "these tracks".
   final String? name;
+  final bool enabled;
 
   const AddAllChip({
     super.key,
     required this.trackIds,
     this.trackCount,
     this.name,
+    this.enabled = true,
   });
 
   @override
@@ -148,7 +159,7 @@ class _AddAllChipState extends ConsumerState<AddAllChip> {
       if (!mounted) return;
       setState(() => _status = _AddStatus.added);
       _resetTimer?.cancel();
-      _resetTimer = Timer(const Duration(seconds: 3), () {
+      _resetTimer = Timer(kEnqueuedHold, () {
         if (mounted) setState(() => _status = _AddStatus.idle);
       });
     } catch (e) {
@@ -165,7 +176,7 @@ class _AddAllChipState extends ConsumerState<AddAllChip> {
       label: added ? 'Added' : 'Enqueue',
       icon: added ? Icons.check_rounded : Icons.playlist_add_rounded,
       // Enabled only when idle — no re-add while adding or confirming.
-      enabled: _status == _AddStatus.idle,
+      enabled: widget.enabled && _status == _AddStatus.idle,
       onTap: _enqueue,
       foregroundOverride: added ? KalinkaColors.gold : null,
       borderOverride: added ? KalinkaColors.gold.withValues(alpha: 0.4) : null,

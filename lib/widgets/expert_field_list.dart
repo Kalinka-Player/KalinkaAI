@@ -10,6 +10,7 @@ import 'settings_controls/settings_binding.dart';
 import 'settings_renderer.dart' show buildFieldControl;
 import 'configuration_appearance.dart';
 import 'settings_controls/issue_notes.dart';
+import 'settings_controls/settings_row.dart' show kSettingsGutter;
 
 /// About:config-style flat search across every settable field of one store.
 ///
@@ -18,10 +19,10 @@ import 'settings_controls/issue_notes.dart';
 /// two stores with different transports and save semantics, one power-user
 /// surface.
 ///
-/// Deliberately styled so users can't confuse it with the simple page:
-/// monospaced full dotted paths as row titles, flat continuous list (no cards),
-/// tighter vertical rhythm. Editing semantics are identical to simple settings
-/// — same control widgets, same staging flow, same amber pending pill.
+/// Drawn as the simple page draws its settings — rows in one card, the same
+/// colours, gutters and staged marking — with each row's full dotted path in
+/// mono under its name, which is what this view is for. Editing semantics are
+/// identical to simple settings: same control widgets, same staging flow.
 class ExpertFieldList extends StatefulWidget {
   /// Every settable field, both tiers, in the order they should be listed.
   final List<FieldSpec> fields;
@@ -29,13 +30,16 @@ class ExpertFieldList extends StatefulWidget {
   /// The store the rows read and stage against. A new instance means the rows
   /// below should rebuild.
   final SettingsBinding binding;
-  final Widget? heading;
+
+  /// Built as a sliver, for a scroll view of the host's own (its search bar
+  /// pinned under whatever the host pins); else a scroll view of its own.
+  final bool sliver;
 
   const ExpertFieldList({
     super.key,
     required this.fields,
     required this.binding,
-    this.heading,
+    this.sliver = false,
   });
 
   @override
@@ -101,71 +105,81 @@ class _ExpertFieldListState extends State<ExpertFieldList> {
     final filtered = terms.isEmpty
         ? all
         : all.where((f) => _matches(f, terms)).toList();
+    final gutter = ConfigurationAppearance.active(context)
+        ? ConfigurationAppearance.gutter(context)
+        : 16.0;
 
-    final searchBar = _SearchBar(
-      controller: _searchController,
-      focusNode: _searchFocusNode,
-      // Tiny match counter inside the search field only when the
-      // query is actually narrowing things — avoids permanent
-      // chrome that adds visual noise the rest of the time.
-      matchCount: _query.trim().isEmpty
-          ? null
-          : '${filtered.length} / ${all.length}',
-    );
-    if (widget.heading != null) {
-      return CustomScrollView(
-        scrollCacheExtent: const ScrollCacheExtent.pixels(600),
-        slivers: [
-          SliverToBoxAdapter(child: widget.heading!),
-          PinnedHeaderSliver(child: searchBar),
-          if (filtered.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
+    final list = SliverMainAxisGroup(
+      slivers: [
+        PinnedHeaderSliver(
+          child: _SearchBar(
+            controller: _searchController,
+            focusNode: _searchFocusNode,
+            gutter: gutter,
+            // Tiny match counter inside the search field only when the
+            // query is actually narrowing things — avoids permanent
+            // chrome that adds visual noise the rest of the time.
+            matchCount: _query.trim().isEmpty
+                ? null
+                : '${filtered.length} / ${all.length}',
+          ),
+        ),
+        if (filtered.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 48),
               child: _EmptyState(query: _query),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.only(top: 12, bottom: 32),
+            ),
+          )
+        else
+          // One card, as the simple page groups its rows, drawn around
+          // however much of the list is laid out.
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(gutter, 4, gutter, 32),
+            sliver: DecoratedSliver(
+              decoration: BoxDecoration(
+                color: KalinkaColors.surfaceRaised,
+                borderRadius: BorderRadius.circular(_cardRadius),
+                border: Border.all(color: KalinkaColors.borderSubtle),
+              ),
               sliver: SliverList.separated(
                 itemCount: filtered.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 8),
-                itemBuilder: (_, i) => _ExpertRow(
-                  key: ValueKey(filtered[i].path),
-                  field: filtered[i],
-                  binding: widget.binding,
+                separatorBuilder: (_, _) => const Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: KalinkaColors.borderSubtle,
                 ),
-              ),
-            ),
-        ],
-      );
-    }
-    return Column(
-      children: [
-        searchBar,
-        Expanded(
-          child: filtered.isEmpty
-              ? _EmptyState(query: _query)
-              : ListView.separated(
-                  // Cache more than the default — paths are mono and
-                  // the rows are stable, so caching a generous window
-                  // avoids re-init of TextInput controllers when the
-                  // user scrolls back to a row they just touched.
-                  scrollCacheExtent: ScrollCacheExtent.pixels(600),
-                  padding: const EdgeInsets.fromLTRB(0, 12, 0, 32),
-                  itemCount: filtered.length,
-                  // 8 px gap between rows; each row carries its own
-                  // horizontal margin so it reads as a discrete card.
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) => _ExpertRow(
+                itemBuilder: (_, i) => ClipRRect(
+                  // Inside the card's rounded ends, so a staged row's tint
+                  // keeps to them.
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(i == 0 ? _cardRadius - 1 : 0),
+                    bottom: Radius.circular(
+                      i == filtered.length - 1 ? _cardRadius - 1 : 0,
+                    ),
+                  ),
+                  child: _ExpertRow(
                     key: ValueKey(filtered[i].path),
                     field: filtered[i],
                     binding: widget.binding,
                   ),
                 ),
-        ),
+              ),
+            ),
+          ),
       ],
     );
+    if (widget.sliver) return list;
+    return CustomScrollView(
+      // Cache more than the default — the rows are stable, so caching a
+      // generous window avoids re-init of TextInput controllers when the
+      // user scrolls back to a row they just touched.
+      scrollCacheExtent: const ScrollCacheExtent.pixels(600),
+      slivers: [list],
+    );
   }
+
+  static const _cardRadius = 14.0;
 }
 
 // ---------------------------------------------------------------------------
@@ -176,25 +190,20 @@ class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final String? matchCount;
+  final double gutter;
   const _SearchBar({
     required this.controller,
     required this.focusNode,
+    required this.gutter,
     this.matchCount,
   });
 
   @override
   Widget build(BuildContext context) {
+    // The page's own ground, opaque so rows scroll under it unseen.
     return Container(
-      decoration: const BoxDecoration(
-        color: KalinkaColors.surfaceBase,
-        border: Border(bottom: BorderSide(color: KalinkaColors.borderSubtle)),
-      ),
-      padding: EdgeInsets.symmetric(
-        vertical: 12,
-        horizontal: ConfigurationAppearance.active(context)
-            ? ConfigurationAppearance.gutter(context)
-            : 16,
-      ),
+      color: KalinkaColors.background,
+      padding: EdgeInsets.symmetric(vertical: 12, horizontal: gutter),
       child: Container(
         decoration: BoxDecoration(
           color: KalinkaColors.surfaceElevated,
@@ -305,20 +314,13 @@ class _EmptyState extends StatelessWidget {
 // One expert row
 // ---------------------------------------------------------------------------
 
-/// Dense flat row for one field. Layout (all stacked, full-width):
+/// One field as a settings row (SettingsRow's padding, type and staged
+/// marking), stacked so a long dotted path never squashes its control:
 ///
-///     ┃ base_config.output.alsa.device         ← mono path, top
-///     ┃ Audio device                           ← human label
-///     ┃ Hardware output…                       ← optional help
-///     ┃ [ control — full width ]               ← editable input
-///
-/// The path always occupies the full row width — keeps long dotted
-/// paths from being squashed against an inline control, and means the
-/// vertical rhythm is the same no matter which widget kind the field
-/// uses (no inline-vs-stacked branching). Each row sits on a
-/// surfaceRaised slab with a small gap to its neighbours, supplying
-/// the visual separation without inheriting the simple-page card
-/// chrome. A staged row takes an amber tint and outline.
+///     Audio device                           ← its name
+///     base_config.output.alsa.device         ← mono path
+///     Hardware output…                       ← optional help
+///     [ control — full width ]               ← editable input
 class _ExpertRow extends StatelessWidget {
   final FieldSpec field;
   final SettingsBinding binding;
@@ -329,22 +331,6 @@ class _ExpertRow extends StatelessWidget {
     final value = binding.effectiveValue(field.path) ?? field.defaultValue;
     final isStaged = binding.isStaged(field.path);
     final isReadonly = field.readonly;
-
-    final pathStyle = KalinkaFonts.mono(
-      fontSize: KalinkaTypography.baseSize + 1,
-      color: KalinkaColors.textPrimary,
-      letterSpacing: -0.1,
-      height: 1.3,
-    );
-    final labelStyle = KalinkaTextStyles.trayRowLabel.copyWith(
-      fontSize: KalinkaTypography.baseSize,
-      color: KalinkaColors.textSecondary,
-      fontWeight: FontWeight.w400,
-    );
-    final helpStyle = KalinkaTextStyles.trayRowSublabel.copyWith(
-      fontSize: KalinkaTypography.baseSize - 1,
-      color: KalinkaColors.textMuted,
-    );
 
     final control = isReadonly
         ? _ReadOnlyValue(value: value)
@@ -361,48 +347,49 @@ class _ExpertRow extends StatelessWidget {
           );
 
     return Container(
-      // Horizontal margin + rounded corners mirror the simple-page
-      // cards' shape so each row reads as a discrete tile rather
-      // than a slab spanning the full viewport edge to edge.
-      margin: EdgeInsets.symmetric(
-        horizontal: ConfigurationAppearance.active(context)
-            ? ConfigurationAppearance.gutter(context)
-            : 16,
-      ),
-      decoration: BoxDecoration(
-        color: isStaged
-            ? KalinkaColors.statusPending.withValues(alpha: 0.06)
-            : KalinkaColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isStaged
-              ? KalinkaColors.statusPending.withValues(alpha: 0.4)
-              : KalinkaColors.borderSubtle,
+      color: isStaged
+          ? KalinkaColors.statusPending.withValues(alpha: 0.04)
+          : Colors.transparent,
+      // As SettingsRow marks a staged row: painted over it, so staging never
+      // shifts the content, and kept present so the control never remounts.
+      foregroundDecoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(
+            color: isStaged ? KalinkaColors.statusPending : Colors.transparent,
+          ),
         ),
       ),
-      // Clip so the staged tint and any selection highlights stay
-      // inside the rounded outline.
-      clipBehavior: Clip.antiAlias,
-      padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
+      padding: const EdgeInsets.symmetric(
+        horizontal: kSettingsGutter,
+        vertical: 12,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SelectableText(field.path, style: pathStyle),
-          const SizedBox(height: 4),
           Wrap(
             spacing: 8,
+            runSpacing: 2,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(field.label, style: labelStyle),
+              Text(field.label, style: KalinkaTextStyles.trayRowLabel),
               if (isStaged && ConfigurationAppearance.active(context))
                 const ChangedSettingLabel(),
             ],
           ),
+          const SizedBox(height: 2),
+          SelectableText(
+            field.path,
+            style: KalinkaFonts.mono(
+              fontSize: KalinkaTypography.baseSize,
+              color: KalinkaColors.textMuted,
+              height: 1.3,
+            ),
+          ),
           if (field.help != null && field.help!.isNotEmpty) ...[
-            const SizedBox(height: 3),
-            Text(field.help!, style: helpStyle),
+            const SizedBox(height: 2),
+            Text(field.help!, style: KalinkaTextStyles.trayRowSublabel),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           control,
           IssueNotes(issues: binding.issuesFor(field.path)),
         ],

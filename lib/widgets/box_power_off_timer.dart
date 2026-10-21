@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/box_power_off_timer_provider.dart';
 import '../providers/settings_provider.dart';
-import '../theme/app_theme.dart';
 import 'settings_controls/settings_binding.dart';
 import 'settings_controls/settings_row.dart';
 import 'settings_renderer.dart';
@@ -46,8 +45,6 @@ class BoxPowerOffTimer extends ConsumerWidget {
                         FocusScope.of(context).unfocus();
                         binding.stage(boxPowerOffEnabledPath, value);
                       },
-                activeTrackColor: KalinkaColors.accent,
-                activeThumbColor: KalinkaColors.textPrimary,
                 materialTapTargetSize: MaterialTapTargetSize.padded,
               ),
             ),

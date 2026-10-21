@@ -65,7 +65,7 @@ bool kalinkaSplitLayout(
             kalinkaNavigationRailWidth(windowWidth, textScaler: textScaler) -
             kalinkaPlayerPaneWidth(windowWidth) -
             1 >=
-        480 * (textScaler.scale(16) / 16).clamp(1.0, double.infinity);
+        520 * (textScaler.scale(16) / 16).clamp(1.0, double.infinity);
 
 /// Decoration shared by the queue and search top bars so both
 /// read identically — solid surface, a hairline bottom rule, and a soft drop
@@ -819,8 +819,34 @@ class AppTheme {
       listTileTheme: const ListTileThemeData(
         mouseCursor: WidgetStateMouseCursor.clickable,
       ),
-      switchTheme: const SwitchThemeData(
+      // As SettingsToggle draws it. Material's off thumb takes the scheme's
+      // outline, which here is the card's own edge colour, so it vanished.
+      switchTheme: SwitchThemeData(
         mouseCursor: WidgetStateMouseCursor.clickable,
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          final on = states.contains(WidgetState.selected);
+          final color = on
+              ? KalinkaColors.textPrimary
+              : KalinkaColors.textSecondary;
+          return states.contains(WidgetState.disabled)
+              ? color.withValues(alpha: 0.4)
+              : color;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          final on = states.contains(WidgetState.selected);
+          final color = on
+              ? KalinkaColors.accent
+              : KalinkaColors.surfaceElevated;
+          return states.contains(WidgetState.disabled)
+              ? color.withValues(alpha: on ? 0.4 : 0.6)
+              : color;
+        }),
+        trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return Colors.transparent;
+          return states.contains(WidgetState.disabled)
+              ? KalinkaColors.borderSubtle
+              : KalinkaColors.borderDefault;
+        }),
       ),
       textTheme: baseTextTheme.copyWith(
         titleMedium: KalinkaFonts.sans(

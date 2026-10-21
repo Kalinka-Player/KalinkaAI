@@ -40,6 +40,9 @@ class BrowseItemRows extends StatelessWidget {
   /// already does (a source's group of tracks). Only the track row reads it.
   final bool labelled;
 
+  /// The rows are a folder's, which draws the folders it holds as such.
+  final bool inFolder;
+
   const BrowseItemRows({
     super.key,
     required this.items,
@@ -48,6 +51,7 @@ class BrowseItemRows extends StatelessWidget {
     this.onToggleExpand,
     this.queueContextIds,
     this.labelled = true,
+    this.inFolder = false,
   });
 
   @override
@@ -64,7 +68,7 @@ class BrowseItemRows extends StatelessWidget {
     final children = <Widget>[
       RowColumnsHeader(
         tracks: displayed.every((item) => item.browseType == BrowseType.track),
-        titleInset: textInsetOf(displayed.first),
+        titleInset: textInsetOf(displayed.first, inFolder: inFolder),
       ),
     ];
     for (int i = 0; i < displayed.length; i++) {
@@ -78,22 +82,12 @@ class BrowseItemRows extends StatelessWidget {
             displayed[i],
             queueContextIds: queueContextIds,
             labelled: labelled,
+            inFolder: inFolder,
           ),
         ),
       );
       if (i < displayed.length - 1) {
-        // Inset by the row above it: the hairline is that row's bottom edge,
-        // so it starts where that row's words do.
-        children.add(
-          Padding(
-            padding: EdgeInsets.only(left: textInsetOf(displayed[i])),
-            child: const Divider(
-              color: KalinkaColors.borderSubtle,
-              thickness: 1,
-              height: 14,
-            ),
-          ),
-        );
+        children.add(separatorUnder(displayed[i], inFolder: inFolder));
       }
     }
 
@@ -118,12 +112,25 @@ class BrowseItemRows extends StatelessWidget {
       details: RowColumnsListing.anyDetails(displayed),
       artists: RowColumnsListing.anyArtists(displayed),
       tracks: displayed.every((item) => item.browseType == BrowseType.track),
+      table: RowColumnsListing.oneKind(displayed),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,
       ),
     );
   }
+
+  /// The hairline under [above], inset by it: the hairline is that row's
+  /// bottom edge, so it starts where that row's words do.
+  static Widget separatorUnder(BrowseItem above, {bool inFolder = false}) =>
+      Padding(
+        padding: EdgeInsets.only(left: textInsetOf(above, inFolder: inFolder)),
+        child: const Divider(
+          color: KalinkaColors.borderSubtle,
+          thickness: 1,
+          height: 14,
+        ),
+      );
 
   /// Where a row's text column begins, so a hairline drawn under it starts
   /// past the artwork instead of cutting the column of thumbnails in two.
@@ -133,13 +140,14 @@ class BrowseItemRows extends StatelessWidget {
   /// every thumbnail and stays against every text column. Measured, and held
   /// to the measurement by a test — a row that changes its leading geometry
   /// has to say so here.
-  static double textInsetOf(BrowseItem item) => switch (item.browseType) {
-    BrowseType.track => 57,
-    BrowseType.album || BrowseType.artist || BrowseType.catalog => 75,
-    BrowseType.folder => 84,
-    BrowseType.playlist => item.canEdit ? 81 : 71,
-    BrowseType.unknown => 57,
-  };
+  static double textInsetOf(BrowseItem item, {bool inFolder = false}) =>
+      switch (item.browseTypeIn(folder: inFolder)) {
+        BrowseType.track => 57,
+        BrowseType.album || BrowseType.artist || BrowseType.catalog => 75,
+        BrowseType.folder => 84,
+        BrowseType.playlist => item.canEdit ? 81 : 71,
+        BrowseType.unknown => 57,
+      };
 
   /// Maps a single [BrowseItem] to its Search*Row widget. Public so lazy
   /// lists (e.g. paged/infinite-scroll surfaces) can build one row at a time
@@ -149,8 +157,9 @@ class BrowseItemRows extends StatelessWidget {
     BrowseItem item, {
     List<String>? queueContextIds,
     bool labelled = true,
+    bool inFolder = false,
   }) {
-    switch (item.browseType) {
+    switch (item.browseTypeIn(folder: inFolder)) {
       case BrowseType.track:
         return SearchTrackRow(
           item: item,
@@ -174,5 +183,57 @@ class BrowseItemRows extends StatelessWidget {
       case BrowseType.unknown:
         return const SizedBox.shrink();
     }
+  }
+}
+
+/// [BrowseItemRows] as a sliver that builds only the rows in view, for lists
+/// long enough that building them whole would stall a frame, and with it a
+/// resize.
+class SliverBrowseItemRows extends StatelessWidget {
+  final List<BrowseItem> items;
+  final List<String>? queueContextIds;
+  final bool labelled;
+
+  const SliverBrowseItemRows({
+    super.key,
+    required this.items,
+    this.queueContextIds,
+    this.labelled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SliverToBoxAdapter();
+    final tracks = items.every((item) => item.browseType == BrowseType.track);
+    return RowColumnsListing(
+      details: RowColumnsListing.anyDetails(items),
+      artists: RowColumnsListing.anyArtists(items),
+      tracks: tracks,
+      table: RowColumnsListing.oneKind(items),
+      child: SliverList.builder(
+        itemCount: items.length + 1,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return RowColumnsHeader(
+              tracks: tracks,
+              titleInset: BrowseItemRows.textInsetOf(items.first),
+            );
+          }
+          final i = index - 1;
+          final row = RepaintBoundary(
+            child: BrowseItemRows.buildRow(
+              items[i],
+              queueContextIds: queueContextIds,
+              labelled: labelled,
+            ),
+          );
+          if (i == 0) return row;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [BrowseItemRows.separatorUnder(items[i - 1]), row],
+          );
+        },
+      ),
+    );
   }
 }

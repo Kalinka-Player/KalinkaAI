@@ -104,7 +104,8 @@ class PlayerHeader extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          // The chevron's own padding already sets it off from the handle.
+          const SizedBox(height: 2),
           LayoutBuilder(
             builder: (context, constraints) {
               // Reserve the larger action's width at both ends so the tabs

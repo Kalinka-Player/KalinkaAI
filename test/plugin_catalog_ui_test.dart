@@ -46,7 +46,7 @@ import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/page_banner.dart';
-import 'package:kalinka/widgets/configuration_changes_bar.dart';
+import 'package:kalinka/widgets/pending_changes_banner.dart';
 import 'package:kalinka/widgets/configuration_appearance.dart';
 import 'package:kalinka/widgets/settings_controls/settings_action_row.dart';
 import 'package:kalinka/screens/configuration_review_screen.dart';
@@ -602,6 +602,9 @@ List<InlineSpan> _headingSpans(WidgetTester tester, String text) =>
 Finder _onPage<T>(Finder matching) =>
     find.descendant(of: find.byType(T), matching: matching);
 
+/// Configuration's changes bar, under every page it opens.
+final _changesBar = find.byKey(const ValueKey('configuration-changes'));
+
 void main() {
   for (final withSettings in [true, false]) {
     testWidgets(
@@ -769,10 +772,12 @@ void main() {
         'Restart streamer',
         'Power off streamer',
         'Download server logs',
-        'Advanced settings',
       ]) {
         expect(find.text(label), findsOneWidget);
       }
+      // Expert is the tab's own switch, not a page of its own.
+      expect(find.text('Advanced settings'), findsNothing);
+      expect(find.byKey(const ValueKey('expert-mode-toggle')), findsOneWidget);
       final summary = find.byKey(const ValueKey('server-summary'));
       final summaryRect = tester.getRect(summary);
       expect(
@@ -864,7 +869,7 @@ void main() {
       expect(container.read(settingsProvider).stagedChanges, {
         ConfigurationSections.namePath: 'Living room',
       });
-      await tester.tap(find.byKey(const ValueKey('configuration-bar-discard')));
+      await tester.tap(find.byKey(const ValueKey('pending-changes-discard')));
       await tester.pumpAndSettle();
       expect(find.text('RPi 4B'), findsOneWidget);
       expect(container.read(settingsProvider).hasPendingChanges, isFalse);
@@ -921,11 +926,8 @@ void main() {
         settings: settings,
       );
       await _screen(tester, container);
-      expect(
-        find.text('Check Service name before applying your changes.'),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('Review changes'));
+      expect(find.text('1 change staged · check Service name'), findsOneWidget);
+      await tester.tap(find.text('REVIEW'));
       await tester.pumpAndSettle();
       expect(find.byType(ConfigurationReviewScreen), findsOneWidget);
       expect(
@@ -960,24 +962,18 @@ void main() {
         ),
       );
       await _screen(tester, container, size: const Size(320, 640), scale: 1.8);
-      expect(find.text('1 change not applied'), findsOneWidget);
-      final explanation = tester.widget<Text>(
-        find.text(
-          'Applying them will restart your player and briefly stop music.',
-        ),
+      final summary = tester.widget<Text>(
+        find.text('1 change staged · restart required'),
       );
-      expect(explanation.maxLines, isNull);
-      for (final key in [
-        'configuration-bar-discard',
-        'configuration-bar-apply',
-      ]) {
+      expect(summary.maxLines, isNull);
+      for (final key in ['pending-changes-discard', 'pending-changes-apply']) {
         expect(
           tester.getSize(find.byKey(ValueKey(key))).height,
           greaterThanOrEqualTo(48),
         );
         expect(find.byKey(ValueKey(key)).hitTestable(), findsOneWidget);
       }
-      expect(tester.getRect(find.byType(ConfigurationChangesBar)).bottom, 640);
+      expect(tester.getRect(_changesBar).bottom, 640);
       expect(tester.takeException(), isNull);
     },
   );
@@ -1179,7 +1175,7 @@ void main() {
     });
   }
 
-  testWidgets('device automation is editable only in Advanced settings', (
+  testWidgets('device automation is editable only in expert settings', (
     tester,
   ) async {
     final api = _CatalogApi(_catalog())
@@ -1215,9 +1211,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Advanced settings'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Advanced settings'));
+    await tester.tap(find.byKey(const ValueKey('expert-mode-toggle')));
     await tester.pumpAndSettle();
     await tester.enterText(
       _onPage<ExpertSettingsScreen>(find.byType(TextField)).first,
@@ -1246,7 +1240,7 @@ void main() {
     await tester.enterText(timeout, '60');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('settings-back')).last);
+    await tester.tap(find.byKey(const ValueKey('expert-mode-toggle')));
     await tester.pumpAndSettle();
     expect(find.byType(ExpertSettingsScreen), findsNothing);
     expect(find.text('Auto power on'), findsNothing);
@@ -1303,7 +1297,6 @@ void main() {
         'Power off streamer',
         'Listening room',
         'Automatic updates',
-        'Advanced settings',
       ]) {
         await tester.ensureVisible(find.text(label));
         await tester.pumpAndSettle();
@@ -1342,7 +1335,7 @@ void main() {
   }
 
   testWidgets(
-    'Streamer opens support pages directly and Back retains the tab and scroll',
+    'Streamer support rows lead with their icons, and expert swaps the body',
     (tester) async {
       final container = await _container(
         _Proxy({'enabled': true, 'catalog_browsing': true}),
@@ -1355,7 +1348,6 @@ void main() {
       expect(find.text('Now-playing display'), findsNothing);
       for (final (label, icon, navigates) in [
         ('Restart Kalinka', Icons.restart_alt, false),
-        ('Advanced settings', Icons.tune, true),
         ('Download server logs', Icons.description_outlined, true),
       ]) {
         final text = find.text(label);
@@ -1373,34 +1365,14 @@ void main() {
           navigates ? findsOneWidget : findsNothing,
         );
       }
-      await tester.ensureVisible(find.text('Advanced settings'));
-      await tester.pumpAndSettle();
-      final scroll = tester
-          .widget<CustomScrollView>(
-            find.byKey(const ValueKey('catalog-scroll')),
-          )
-          .controller!;
-      final offset = scroll.offset;
-      await tester.tap(find.text('Advanced settings'));
+      // Expert swaps the tab's body for the flat list, and back.
+      await tester.tap(find.byKey(const ValueKey('expert-mode-toggle')));
       await tester.pumpAndSettle();
       expect(find.byType(ExpertSettingsScreen), findsOneWidget);
-      expect(
-        tester.widget<SettingsTopBar>(find.byType(SettingsTopBar).last).title,
-        'Advanced settings',
-      );
-      expect(find.byType(BreadcrumbCrumb), findsNothing);
-      await tester.tap(find.byKey(const ValueKey('settings-back')).last);
+      expect(find.byType(ServerSettingsBody), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('expert-mode-toggle')));
       await tester.pumpAndSettle();
-      expect(find.byType(ExpertSettingsScreen), findsNothing);
       expect(find.byType(ServerSettingsBody), findsOneWidget);
-      expect(scroll.offset, offset);
-      await tester.tap(find.text('Advanced settings'));
-      await tester.pumpAndSettle();
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.byType(ExpertSettingsScreen), findsNothing);
-      expect(find.byType(ServerSettingsBody), findsOneWidget);
-      expect(scroll.offset, offset);
       expect(tester.takeException(), isNull);
     },
   );
@@ -2246,7 +2218,7 @@ void main() {
             .read(settingsProvider.notifier)
             .stageChange('input_modules.localfiles.region', 'gb');
         await tester.pumpAndSettle();
-        final changes = find.byType(ConfigurationChangesBar);
+        final changes = _changesBar;
         final footerRect = tester.getRect(changes);
         expect(footerRect.bottom, playerRect.top);
         expect(
@@ -2260,9 +2232,7 @@ void main() {
           footerRect.top,
         );
         expect(tester.getRect(miniPlayer), playerRect);
-        await tester.tap(
-          find.byKey(const ValueKey('configuration-bar-discard')),
-        );
+        await tester.tap(find.byKey(const ValueKey('pending-changes-discard')));
         await tester.pumpAndSettle();
         expect(container.read(settingsProvider).hasPendingChanges, isFalse);
         expectAbovePlayer(find.byType(PluginAboutScreen));
@@ -2281,17 +2251,13 @@ void main() {
         await tester.pumpAndSettle();
 
         await _tapTab(tester, PluginTab.server);
-        for (final label in ['Advanced settings', 'Download server logs']) {
+        for (final label in ['Download server logs']) {
           final row = find.text(label);
           await tester.ensureVisible(row);
           await tester.pumpAndSettle();
           await tester.tap(row);
           await tester.pumpAndSettle();
-          expectAbovePlayer(
-            label == 'Advanced settings'
-                ? find.byKey(const ValueKey('server-expert')).last
-                : find.byType(LogExportScreen),
-          );
+          expectAbovePlayer(find.byType(LogExportScreen));
           await tester.binding.handlePopRoute();
           await tester.pumpAndSettle();
           expect(find.byType(ServerSettingsBody), findsOneWidget);
@@ -3155,9 +3121,8 @@ void main() {
         settings: _settingsWith({'localfiles': true, 'jamendo': false}),
       );
       await _screen(tester, container);
-      int pending() => tester
-          .widget<ConfigurationChangesBar>(find.byType(ConfigurationChangesBar))
-          .count;
+      int pending() =>
+          tester.widget<PendingChangesBanner>(_changesBar).pendingCount;
       expect(pending(), 0);
 
       await _open(tester, 'jamendo');
@@ -3173,11 +3138,9 @@ void main() {
         _onPage<PluginSettingsScreen>(find.text('Turns on after restart')),
         findsOneWidget,
       );
-      final banner = tester.widget<ConfigurationChangesBar>(
-        find.byType(ConfigurationChangesBar),
-      );
-      expect(banner.count, 1);
-      expect(find.text('Apply & restart'), findsOneWidget);
+      final banner = tester.widget<PendingChangesBanner>(_changesBar);
+      expect(banner.pendingCount, 1);
+      expect(find.text('APPLY'), findsOneWidget);
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -3287,14 +3250,7 @@ void main() {
       expect(container.read(settingsProvider).stagedChanges, {
         'input_modules.localfiles.region': 'nl',
       });
-      expect(
-        tester
-            .widget<ConfigurationChangesBar>(
-              find.byType(ConfigurationChangesBar),
-            )
-            .count,
-        1,
-      );
+      expect(tester.widget<PendingChangesBanner>(_changesBar).pendingCount, 1);
 
       // The Back button returns to the overview and keeps staged edits.
       await tester.tap(find.byKey(const ValueKey('settings-back')).last);

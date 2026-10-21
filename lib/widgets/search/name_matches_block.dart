@@ -5,6 +5,7 @@ import '../../data_model/browse_filters.dart';
 import '../../data_model/search_results.dart';
 import '../../providers/source_modules_provider.dart';
 import '../browse_rows_shimmer.dart';
+import '../edge_fading_rail.dart';
 import '../search_cards/action_pill_button.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../shelf_heading.dart';
@@ -30,6 +31,10 @@ class NameMatchesBlock extends StatelessWidget {
   final VoidCallback onViewAll;
   final ValueChanged<String> onRetry;
 
+  /// How far the pane's edge lies past the block's: the source line runs
+  /// out to it.
+  final double gutter;
+
   /// How many lead the block before VIEW ALL.
   static const previewCount = 4;
 
@@ -42,6 +47,7 @@ class NameMatchesBlock extends StatelessWidget {
     required this.onSource,
     required this.onViewAll,
     required this.onRetry,
+    this.gutter = 0,
   });
 
   /// Whether the block has anything to say under [filter]: rows, rows still
@@ -100,28 +106,50 @@ class NameMatchesBlock extends StatelessWidget {
         if (picked == null || failed == picked) failed,
     ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ShelfHeading(
-          title: 'MATCHES BY NAME',
-          count: settled ? all.length : null,
-          onViewAll: settled && shown.length < all.length ? onViewAll : null,
+    // A sliver: opened in full it can hold hundreds of rows, and only those
+    // in view are built.
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ShelfHeading(
+                title: 'MATCHES BY NAME',
+                count: settled ? all.length : null,
+                onViewAll: settled && shown.length < all.length
+                    ? onViewAll
+                    : null,
+              ),
+              if (settled && present.length > 1) ...[
+                const SizedBox(height: 10),
+                _SourceChoices(
+                  sources: present,
+                  picked: picked,
+                  onPick: onSource,
+                  gutter: gutter,
+                ),
+              ],
+              const SizedBox(height: 10),
+            ],
+          ),
         ),
-        if (settled && present.length > 1) ...[
-          const SizedBox(height: 10),
-          _SourceChoices(sources: present, picked: picked, onPick: onSource),
-        ],
-        const SizedBox(height: 10),
         if (!settled)
-          const BrowseRowsShimmer(count: previewCount)
+          const SliverToBoxAdapter(
+            child: BrowseRowsShimmer(count: previewCount),
+          )
         else
-          BrowseItemRows(items: shown),
-        for (final failed in unavailable)
-          SourceUnavailableRow(
-            source: failed,
-            title: results.sources.titleOf(failed),
-            onRetry: () => onRetry(failed),
+          SliverBrowseItemRows(items: shown),
+        if (unavailable.isNotEmpty)
+          SliverList.list(
+            children: [
+              for (final failed in unavailable)
+                SourceUnavailableRow(
+                  source: failed,
+                  title: results.sources.titleOf(failed),
+                  onRetry: () => onRetry(failed),
+                ),
+            ],
           ),
       ],
     );
@@ -132,46 +160,58 @@ class NameMatchesBlock extends StatelessWidget {
 /// wears on its rows, the one being read highlighted like a Play all beside
 /// a plain Enqueue. All is on when no source is.
 ///
-/// A line that scrolls rather than wraps — the names are as long as the
-/// sources are, and a control that reflows as sources come and go is harder
-/// to aim at than one that runs off the edge.
+/// All stays put; the sources after it scroll rather than wrap, out to the
+/// pane's edge and fading wherever there are more — the names are as long
+/// as the sources are, and a control that reflows as sources come and go is
+/// harder to aim at than one that runs off the edge.
 class _SourceChoices extends ConsumerWidget {
   final List<String> sources;
   final String? picked;
   final ValueChanged<String?> onPick;
 
+  /// How far the pane's edge lies past the line's end.
+  final double gutter;
+
   const _SourceChoices({
     required this.sources,
     required this.picked,
     required this.onPick,
+    required this.gutter,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final info = ref.watch(sourceDisplayInfoProvider);
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        spacing: 8,
-        children: [
-          ActionPillButton(
-            label: 'All',
-            accent: picked == null,
-            selected: picked == null,
-            onTap: () => onPick(null),
-            semanticsLabel: 'All sources',
+    return Row(
+      children: [
+        ActionPillButton(
+          label: 'All',
+          accent: picked == null,
+          selected: picked == null,
+          onTap: () => onPick(null),
+          semanticsLabel: 'All sources',
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: EdgeFadingRail(
+            storageId: 'results-match-sources',
+            gutter: gutter,
+            centred: false,
+            bleedStart: false,
+            children: [
+              for (final source in sources)
+                ActionPillButton(
+                  leading: SourceTile(source: source, size: 18),
+                  label: info[source]?.title ?? source,
+                  accent: picked == source,
+                  selected: picked == source,
+                  onTap: () => onPick(source),
+                ),
+            ],
           ),
-          for (final source in sources)
-            ActionPillButton(
-              leading: SourceTile(source: source, size: 18),
-              label: info[source]?.title ?? source,
-              accent: picked == source,
-              selected: picked == source,
-              onTap: () => onPick(source),
-            ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

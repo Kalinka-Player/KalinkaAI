@@ -585,15 +585,15 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                           )
                         : RendererSwitcherButton(
                             key: widget.outputSwitcherKey,
-                            hitDiameter: 40,
-                            iconSize: 20,
+                            hitDiameter: 44,
+                            iconSize: 24,
                           ),
                   ),
                   // Skipping joins play first, then shuffle and repeat
                   // outside them, as on the player; once it has them the
                   // transport takes larger buttons, spaced apart and set off
                   // from the output.
-                  SizedBox(width: transport ? 16 : 4),
+                  SizedBox(width: transport ? 16 : 12),
                   if (tier.index >= _MiniPlayerTier.modes.index &&
                       !exclusive) ...[
                     AwayLock(

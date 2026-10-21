@@ -10,17 +10,31 @@ import '../search_cards/collection_row.dart';
 import 'collections_edit_bar.dart';
 import 'track_group_actions.dart';
 
-/// What a playlist's or a collection's page does with the whole of it: Play
-/// all and Enqueue, and for a collection, editing its tracks and the menu that
-/// renames or deletes it. While collections are being edited, the editing bar
-/// takes the row over.
+/// What a playlist's, a collection's or a queueable catalog's page does with
+/// the whole of it: Play all and Enqueue, and for a collection, editing its
+/// tracks and the menu that renames or deletes it. While collections are
+/// being edited, the editing bar takes the row over.
 class ContainerPageActions extends ConsumerWidget {
   final CatalogPage page;
 
-  /// How many tracks it holds, as its source said; null until known.
+  /// How many items it lists, as its source said; null until known.
   final int? total;
 
-  const ContainerPageActions({super.key, required this.page, this.total});
+  /// A filter, search or chosen kind narrows the listing. The server queues
+  /// a catalog whole, so its actions wait until the listing is whole again.
+  final bool narrowed;
+
+  const ContainerPageActions({
+    super.key,
+    required this.page,
+    this.total,
+    this.narrowed = false,
+  });
+
+  /// Play all and Enqueue belong on [page]: a playlist, or a catalog the
+  /// server can queue, other than the collections screen with its own.
+  static bool appliesTo(CatalogPage page) =>
+      page.isPlaylist || (page.isCatalog && page.canAdd && !page.canEdit);
 
   /// A collection: a playlist the server will edit for you.
   static bool isCollection(CatalogPage page) => page.isPlaylist && page.canEdit;
@@ -45,6 +59,9 @@ class ContainerPageActions extends ConsumerWidget {
         collection && ref.watch(collectionEditProvider.select((s) => s.active));
     final empty = total == 0;
     final name = item.playlist?.name ?? item.name ?? page.title;
+    // A playlist lists tracks; a catalog's items may each hold many.
+    final tracks = page.isPlaylist ? total : null;
+    final queueable = !page.isCatalog || !narrowed;
 
     return Padding(
       padding: kKalinkaActionRowPadding,
@@ -56,14 +73,28 @@ class ContainerPageActions extends ConsumerWidget {
                   child: Wrap(
                     spacing: 8,
                     children: [
-                      if (item.canAdd && !empty) ...[
-                        PlayAllChip(trackIds: [item.id], trackCount: total),
-                        AddAllChip(
-                          trackIds: [item.id],
-                          trackCount: total,
-                          name: name,
-                        ),
-                      ],
+                      if (item.canAdd && !empty)
+                        for (final chip in [
+                          PlayAllChip(
+                            trackIds: [item.id],
+                            trackCount: tracks,
+                            enabled: queueable,
+                          ),
+                          AddAllChip(
+                            trackIds: [item.id],
+                            trackCount: tracks,
+                            name: name,
+                            enabled: queueable,
+                          ),
+                        ])
+                          queueable
+                              ? chip
+                              : Tooltip(
+                                  message:
+                                      'Clear the filters to queue all of '
+                                      '${name ?? 'the catalog'}',
+                                  child: chip,
+                                ),
                       if (collection)
                         ActionPillButton(
                           label: 'Edit',

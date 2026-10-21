@@ -46,15 +46,6 @@ class ListingLayout {
       },
     );
   }
-
-  /// Whether its rows are compact enough to set two or three across a wide
-  /// pane: a listing of one kind of album, artist or playlist.
-  bool get rowsAcross => switch (contentType) {
-    PreviewContentType.album ||
-    PreviewContentType.artist ||
-    PreviewContentType.playlist => true,
-    _ => false,
-  };
 }
 
 /// The device's Grid/List choice per listing, by browse item id.

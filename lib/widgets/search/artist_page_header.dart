@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/artist_relations_provider.dart';
+import '../../providers/listing_presentation_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../browse_filters/presentation_toggle.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
 
@@ -13,7 +15,11 @@ import '../source_badge.dart';
 class ArtistPageHeader extends ConsumerWidget {
   final CatalogPage page;
 
-  const ArtistPageHeader({super.key, required this.page});
+  /// The releases' Grid/List, at the far end level with the portrait's
+  /// foot; one switching button where the pane is narrow.
+  final ListingLayout? presentation;
+
+  const ArtistPageHeader({super.key, required this.page, this.presentation});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,6 +35,7 @@ class ArtistPageHeader extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = (constraints.maxWidth * 0.28).clamp(96.0, 168.0);
+        final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
         final stand = ProceduralAlbumArt(trackId: page.id!, size: size);
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
@@ -100,6 +107,26 @@ class ArtistPageHeader extends ConsumerWidget {
                   ],
                 ),
               ),
+              if (presentation case final layout?) ...[
+                const SizedBox(width: 12),
+                SizedBox(
+                  height: size,
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    // Its pill, not its target, ends with the portrait.
+                    child: Transform.translate(
+                      offset: const Offset(
+                        0,
+                        (kKalinkaPillTarget - kKalinkaPillHeight) / 2,
+                      ),
+                      child: PresentationToggle(
+                        layout: layout,
+                        compact: constraints.maxWidth < 600 * scale,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         );
@@ -115,15 +142,11 @@ class ArtistRelationTabs extends StatelessWidget {
   final ArtistRelation shown;
   final ValueChanged<ArtistRelation> onShow;
 
-  /// Sits at the row's far end — the listing's Grid/List control.
-  final Widget? trailing;
-
   const ArtistRelationTabs({
     super.key,
     required this.relations,
     required this.shown,
     required this.onShow,
-    this.trailing,
   });
 
   static String labelOf(ArtistRelation relation) => switch (relation) {
@@ -176,8 +199,6 @@ class ArtistRelationTabs extends StatelessWidget {
                 ),
               ),
             ),
-          const Spacer(),
-          ?trailing,
         ],
       ),
     );

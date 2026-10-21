@@ -26,6 +26,8 @@ import 'package:kalinka/widgets/overlay_card.dart';
 import 'package:kalinka/widgets/search/folder_trail.dart';
 import 'package:kalinka/widgets/search/album_page_header.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
+import 'package:kalinka/widgets/search/catalog_sliver_header.dart';
+import 'package:kalinka/widgets/search/search_composer.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 
 /// Mounting the whole Find Music surface is the only thing that exercises its
@@ -130,13 +132,6 @@ Future<void> _captureHome(
 ) async {
   final dir = Platform.environment['KALINKA_REVIEW_DIR'];
   if (dir == null) return;
-  await tester.runAsync(() async {
-    final artwork = tester.widget<Image>(
-      find.byKey(const ValueKey('home-header-artwork')),
-    );
-    await precacheImage(artwork.image, key.currentContext!);
-  });
-  await tester.pump();
   await tester.runAsync(() async {
     final boundary =
         key.currentContext!.findRenderObject() as RenderRepaintBoundary;
@@ -354,7 +349,16 @@ void main() {
   final rootList = find.byKey(const PageStorageKey('discoverRoot'));
   final backdrop = find.byKey(const ValueKey('discover-backdrop'));
   final headerSurface = find.byKey(const ValueKey('discover-header-surface'));
-  final artwork = find.byKey(const ValueKey('home-header-artwork'));
+  // Opaque at the top of the status area, clear at the bar's foot.
+  List<Color> headerColors(WidgetTester tester) =>
+      ((tester.widget<DecoratedBox>(headerSurface).decoration as BoxDecoration)
+                  .gradient!
+              as LinearGradient)
+          .colors;
+  final scrolledHeader = [
+    KalinkaColors.background,
+    KalinkaColors.background.withValues(alpha: 0),
+  ];
 
   ScrollPosition rootPosition(WidgetTester tester) => tester
       .state<ScrollableState>(
@@ -388,14 +392,12 @@ void main() {
 
       final headerRect = tester.getRect(find.byType(KalinkaTopBar));
       final backdropRect = tester.getRect(backdrop);
-      final artRect = tester.getRect(artwork);
       final titleRect = tester.getRect(find.text('What shall we play?'));
-      expect(artwork, findsOneWidget);
-      expect(artRect.left, 0);
-      expect(artRect.width, size.width);
-      expect(artRect.top, 0);
+      expect(backdropRect.left, 0);
+      expect(backdropRect.width, size.width);
+      expect(backdropRect.top, 0);
       expect(headerRect.height, kKalinkaTopBarHeight + 24);
-      expect(tester.widget<ColoredBox>(headerSurface).color.a, 0);
+      expect(headerColors(tester).first.a, 0);
       await _captureHome(tester, captureKey, 'home-${size.width}-$scale');
 
       // One frame is enough: decoration moves with the list without easing.
@@ -405,16 +407,12 @@ void main() {
         tester.getRect(backdrop),
         backdropRect.shift(const Offset(0, -80)),
       );
-      expect(tester.getRect(artwork), artRect.shift(const Offset(0, -80)));
       expect(
         tester.getRect(find.text('What shall we play?')),
         titleRect.shift(const Offset(0, -80)),
       );
       expect(tester.getRect(find.byType(KalinkaTopBar)), headerRect);
-      expect(
-        tester.widget<ColoredBox>(headerSurface).color,
-        KalinkaColors.background,
-      );
+      expect(headerColors(tester), scrolledHeader);
 
       expect(
         rootPosition(tester).maxScrollExtent,
@@ -428,7 +426,7 @@ void main() {
       rootPosition(tester).jumpTo(0);
       await tester.pump();
       expect(tester.getRect(backdrop), backdropRect);
-      expect(tester.widget<ColoredBox>(headerSurface).color.a, 0);
+      expect(headerColors(tester).first.a, 0);
     });
   }
 
@@ -459,10 +457,7 @@ void main() {
 
     expect(rootPosition(tester).pixels, offset);
     expect(tester.getRect(backdrop), rect);
-    expect(
-      tester.widget<ColoredBox>(headerSurface).color,
-      KalinkaColors.background,
-    );
+    expect(headerColors(tester), scrolledHeader);
     expect(tester.takeException(), isNull);
   });
 
@@ -509,7 +504,7 @@ void main() {
     expect(container.read(searchSessionProvider).catalogFilter.isEmpty, isTrue);
   });
 
-  testWidgets('the Results view carries the filter control, and it opens', (
+  testWidgets('a search is changed in the smart search, not filtered', (
     tester,
   ) async {
     final container = await pumpSurface(
@@ -520,6 +515,7 @@ void main() {
           title: 'Qobuz',
           enabled: true,
           state: ModuleState.ready,
+          capabilities: const [ModuleCapability.catalogs],
         ),
       ],
     );
@@ -527,19 +523,28 @@ void main() {
     // Past the minimum loading hold, so the legs have landed.
     await tester.pump(const Duration(milliseconds: 700));
 
-    expect(find.byType(SearchFilterButton), findsOneWidget);
+    // The query is the bar's title, a search button beside it, no field.
+    // Filters narrow by genre alone, and these results hold none.
+    expect(find.text('“THE BEATLES”'), findsOneWidget);
+    expect(find.byType(SearchFilterButton), findsNothing);
+    expect(find.byKey(const ValueKey('catalog-bar-field')), findsNothing);
+    expect(find.byType(CatalogFiltersButton), findsNothing);
 
-    await tester.tap(find.byType(SearchFilterButton));
+    // Search opens Home's smart search, holding the query to change.
+    await tester.tap(find.byKey(const ValueKey('results-bar-search')));
     await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(find.text('REFINE RESULTS'), findsOneWidget);
-    // The field re-searches rather than narrowing, and says so.
-    expect(find.text('A new query starts a new search.'), findsOneWidget);
+    final composer = find.descendant(
+      of: find.byType(SearchComposer),
+      matching: find.byType(TextField),
+    );
+    expect(tester.widget<TextField>(composer).controller!.text, 'the beatles');
 
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(find.text('REFINE RESULTS'), findsNothing);
-    expect(container.read(searchSessionProvider).resultsFilter.isEmpty, isTrue);
+    await tester.enterText(composer, 'abbey road');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump();
+    expect(container.read(searchSessionProvider).searchQuery, 'abbey road');
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.text('“ABBEY ROAD”'), findsOneWidget);
   });
 
   Future<void> openSearch(WidgetTester tester) async {
@@ -682,9 +687,7 @@ void main() {
     expect(find.text('HOME'), findsNothing);
   });
 
-  testWidgets('a page of folders keeps its title, its trail below', (
-    tester,
-  ) async {
+  testWidgets('a page of folders shows its trail in the bar', (tester) async {
     final container = await pumpSurface(tester);
     container
         .read(searchSessionProvider.notifier)

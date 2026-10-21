@@ -14,12 +14,65 @@ class PresentationToggle extends ConsumerWidget {
   static const width = 2 * kKalinkaPillTarget;
   final ListingLayout layout;
 
-  const PresentationToggle({super.key, required this.layout});
+  /// One round button that switches to the other presentation, for a bar
+  /// with no room for both choices.
+  final bool compact;
+
+  const PresentationToggle({
+    super.key,
+    required this.layout,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final chosen = watchPresentation(ref, layout);
     final notifier = ref.read(listingPresentationProvider.notifier);
+    if (compact) {
+      final grid = chosen == ListingPresentation.grid;
+      final label = grid ? 'List view' : 'Grid view';
+      return Semantics(
+        button: true,
+        label: label,
+        excludeSemantics: true,
+        onTap: () => notifier.set(
+          layout,
+          grid ? ListingPresentation.list : ListingPresentation.grid,
+        ),
+        child: Tooltip(
+          message: label,
+          child: InkWell(
+            mouseCursor: WidgetStateMouseCursor.clickable,
+            onTap: () => notifier.set(
+              layout,
+              grid ? ListingPresentation.list : ListingPresentation.grid,
+            ),
+            customBorder: const CircleBorder(),
+            focusColor: KalinkaColors.surfaceOverlay,
+            child: SizedBox.square(
+              dimension: kKalinkaPillTarget,
+              child: Center(
+                child: Container(
+                  width: kKalinkaPillHeight,
+                  height: kKalinkaPillHeight,
+                  decoration: const ShapeDecoration(
+                    color: KalinkaColors.surfaceElevated,
+                    shape: CircleBorder(
+                      side: BorderSide(color: KalinkaColors.borderDefault),
+                    ),
+                  ),
+                  child: Icon(
+                    grid ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                    size: 18,
+                    color: KalinkaColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     Widget side(ListingPresentation presentation, IconData icon, String label) {
       final on = presentation == chosen;

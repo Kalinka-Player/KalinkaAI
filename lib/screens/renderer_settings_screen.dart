@@ -77,14 +77,14 @@ class _RendererSettingsScreenState
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SettingsTopBar(title: 'Output settings'),
-        SettingsToolbar(
-          children: [
-            Text(widget.rendererName, style: KalinkaTextStyles.trayRowLabel),
-            const ExpertModeToggle(),
-          ],
+        // The renderer is what the page is for, so it is the title.
+        SettingsTopBar(
+          title: widget.rendererName,
+          action: const ExpertModeToggle(),
         ),
         const ConnectionBanner(),
+        Expanded(child: _buildBody(state, expertMode)),
+        // At the foot, under the page rather than over it.
         PendingChangesBanner(
           pendingCount: state.pendingCount,
           consequence: state.pendingCost.warning,
@@ -94,7 +94,6 @@ class _RendererSettingsScreenState
             if (!await refusedAsDemo(context, ref)) await _notifier.save();
           },
         ),
-        Expanded(child: _buildBody(state, expertMode)),
       ],
     );
     return SlideInPanel(
@@ -184,7 +183,7 @@ class _RendererSettingsScreenState
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons.tune,
+              ExpertModeToggle.icon,
               color: KalinkaColors.textSecondary,
               size: 32,
             ),
@@ -192,8 +191,8 @@ class _RendererSettingsScreenState
             Text('Expert settings only', style: KalinkaTextStyles.cardTitle),
             const SizedBox(height: 8),
             Text(
-              'This output keeps all of its settings behind EXPERT. Turn it on '
-              'above to see them by path.',
+              'This output keeps all of its settings in expert view. Turn on '
+              'Expert settings at the top to see them by path.',
               textAlign: TextAlign.center,
               style: KalinkaTextStyles.trayRowSublabel,
             ),

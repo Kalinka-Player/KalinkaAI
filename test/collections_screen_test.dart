@@ -271,6 +271,7 @@ final _modules = [
     title: 'Local Library',
     enabled: true,
     state: ModuleState.ready,
+    capabilities: const [ModuleCapability.catalogs],
   ),
   ModuleInfo(
     name: 'collections',
