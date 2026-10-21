@@ -119,7 +119,7 @@ Keep a backend message with its status. An Error/Warning with an explanation get
 
 ## Streamer content
 
-The Streamer tab ends the tab row with the Expert settings switch, the same round `{}` button a renderer's page has in its top bar, and the same setting: one switch for the whole app, kept on the device so it survives switching tabs, leaving and restarting. On, the tab's body is the expert list in place of the groups below; there is no separate Advanced settings page.
+On the Streamer tab, the Expert settings switch ends Configuration's top bar, as on a renderer's page; where the top bar is hidden beside the navigation rail, it ends the tab row instead. It is the same round `{}` button and the same setting: one switch for the whole app, kept on the device so it survives switching tabs, leaving and restarting. On, the tab's body is the expert list in place of the groups below; there is no separate Advanced settings page.
 
 The expert list is drawn as the simple page draws settings: a search field alone at the top (no introduction above it), pinned under the tabs on the page's own background, then every field as a standard setting row in one card (`surfaceRaised`, 14dp radius, 1dp `borderSubtle` border and dividers; rows 16dp × 12dp, `trayRowLabel` name, the dotted path in `textMuted` mono under it, `trayRowSublabel` help, the control 10dp below; staged rows tinted and ruled in amber as elsewhere). A renderer's expert list is the same.
 
