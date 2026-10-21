@@ -436,7 +436,14 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                           // Beside the rail, which names it and is how it is
                           // left, the tabs start at the top.
                           if (widget.showBack)
-                            const SettingsTopBar(title: 'Configuration'),
+                            SettingsTopBar(
+                              title: 'Configuration',
+                              // With its bar, the Expert switch moves up into
+                              // it.
+                              action: _tab == PluginTab.server
+                                  ? const ExpertModeToggle()
+                                  : null,
+                            ),
                           ColoredBox(
                             color: KalinkaColors.background,
                             child: Column(
@@ -705,7 +712,8 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       // Each tab as wide as its label, an even gap apart, from the content's
       // inset, with no rule under them. Short of room, all three truncate
       // alike: the labels are monospace, so their shares follow their
-      // lengths. The Streamer tab ends the row with the Expert switch.
+      // lengths. Without the top bar, the Streamer tab ends the row with the
+      // Expert switch.
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: gutter),
         child: Row(
@@ -738,7 +746,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                 ),
               ),
             ),
-            if (tab == PluginTab.server) ...[
+            if (tab == PluginTab.server && !widget.showBack) ...[
               const SizedBox(width: 8),
               const ExpertModeToggle(),
             ],
