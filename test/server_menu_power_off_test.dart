@@ -137,7 +137,11 @@ Future<void> _openMenu(WidgetTester tester) async {
 
 Future<void> _askToPowerOff(WidgetTester tester) async {
   await _openMenu(tester);
-  final powerOff = find.text('Power off');
+  // The menu's row: a wide rail has a Power off of its own.
+  final powerOff = find.descendant(
+    of: find.byType(SheetRow),
+    matching: find.text('Power off'),
+  );
   await tester.ensureVisible(powerOff);
   await tester.tap(powerOff);
   await tester.pumpAndSettle();
@@ -145,6 +149,11 @@ Future<void> _askToPowerOff(WidgetTester tester) async {
   expect(find.byType(ServerSheet), findsNothing);
   expect(find.text('Power off streamer?'), findsOneWidget);
 }
+
+final _confirm = find.descendant(
+  of: find.byType(BoxActionDialog),
+  matching: find.text('Power off'),
+);
 
 void main() {
   for (final size in [
@@ -237,7 +246,7 @@ void main() {
       expect(box.runs, isEmpty);
 
       await _askToPowerOff(tester);
-      await tester.tap(find.text('Power off'));
+      await tester.tap(_confirm);
       await tester.pumpAndSettle();
       expect(box.runs, [(BoxAction.powerOff, 'server-1')]);
       expect(find.textContaining('Powering off.'), findsOneWidget);
@@ -251,7 +260,7 @@ void main() {
         ..refusal = const BoxActionException('busy', 'The streamer is busy.');
       await _pumpPlayer(tester, size: size, box: box);
       await _askToPowerOff(tester);
-      await tester.tap(find.text('Power off'));
+      await tester.tap(_confirm);
       await tester.pumpAndSettle();
 
       expect(box.runs, [(BoxAction.powerOff, 'server-1')]);

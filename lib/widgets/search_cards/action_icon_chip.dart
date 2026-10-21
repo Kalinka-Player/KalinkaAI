@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
 
 /// Icon-only action chip (section title rows, the multi-select batch bar): a
-/// rounded square in a 44dp hit target, echoing [ExpandChevronButton]'s chrome
-/// so header actions and row chevrons read as one control family.
+/// 40dp circle in a 48dp hit target, the shape an icon-only pill takes.
 ///
 /// [accent] fills the chip solid crimson with a white icon — the same
 /// treatment as [KalinkaButton]'s accent variant — marking the default,
@@ -69,14 +69,14 @@ class _ActionIconChipState extends State<ActionIconChip> {
 
     Widget chip = AnimatedContainer(
       duration: const Duration(milliseconds: 120),
-      width: 32,
-      height: 32,
+      width: kKalinkaPillHeight,
+      height: kKalinkaPillHeight,
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(6),
+        shape: BoxShape.circle,
         border: Border.all(color: border),
       ),
-      child: Icon(widget.icon, size: 24, color: iconColor),
+      child: Icon(widget.icon, size: 22, color: iconColor),
     );
     // Dim while busy/confirming so it reads as disabled.
     if (!widget.enabled) {
@@ -97,13 +97,16 @@ class _ActionIconChipState extends State<ActionIconChip> {
           child: InkResponse(
             onTap: interactive ? widget.onTap : null,
             mouseCursor: clickCursor(interactive: interactive),
-            radius: 24,
+            radius: kKalinkaPillTarget / 2,
             hoverColor: Colors.transparent,
             splashColor: accent
                 ? Colors.white.withValues(alpha: 0.18)
                 : KalinkaColors.textPrimary.withValues(alpha: 0.10),
             highlightColor: KalinkaColors.textPrimary.withValues(alpha: 0.05),
-            child: SizedBox(width: 44, height: 44, child: Center(child: chip)),
+            child: SizedBox.square(
+              dimension: kKalinkaPillTarget,
+              child: Center(child: chip),
+            ),
           ),
         ),
       ),

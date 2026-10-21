@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../utils/click_cursor.dart';
@@ -27,6 +30,102 @@ final kalinkaIconButtonStyle = ButtonStyle(
   shape: const WidgetStatePropertyAll(CircleBorder()),
   overlayColor: kalinkaOverlay,
 );
+
+/// A flat highlight across the entire row on hover, press or focus, without
+/// a frame or extra padding. Rows retain their own gestures and their
+/// selected or playing surface remains visible through the overlay.
+class HoverHighlight extends StatefulWidget {
+  final Widget child;
+  final bool enabled;
+
+  const HoverHighlight({super.key, required this.child, this.enabled = true});
+
+  @override
+  State<HoverHighlight> createState() => _HoverHighlightState();
+}
+
+class _HoverHighlightState extends State<HoverHighlight> {
+  bool _hovered = false;
+  bool _focused = false;
+  bool _pressed = false;
+
+  /// A touch lights the row only once it has stayed put, so a scroll does
+  /// not flash every row it starts on.
+  Timer? _pressTimer;
+  Offset? _downAt;
+
+  @override
+  void dispose() {
+    _pressTimer?.cancel();
+    super.dispose();
+  }
+
+  void _press(bool value) {
+    if (value != _pressed) setState(() => _pressed = value);
+  }
+
+  void _down(PointerDownEvent event) {
+    _downAt = event.position;
+    _pressTimer?.cancel();
+    if (event.kind == PointerDeviceKind.mouse) {
+      _press(true);
+    } else {
+      _pressTimer = Timer(kPressTimeout, () => _press(true));
+    }
+  }
+
+  void _move(PointerMoveEvent event) {
+    final from = _downAt;
+    if (from != null && (event.position - from).distance > kTouchSlop) {
+      _release();
+    }
+  }
+
+  void _release([PointerEvent? _]) {
+    _pressTimer?.cancel();
+    _downAt = null;
+    _press(false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final live = widget.enabled;
+    final lit = live && (_hovered || _focused || _pressed);
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (value) => setState(() => _focused = value),
+      child: MouseRegion(
+        cursor: clickCursor(interactive: live),
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Listener(
+          onPointerDown: live ? _down : null,
+          onPointerMove: live ? _move : null,
+          onPointerUp: live ? _release : null,
+          onPointerCancel: live ? _release : null,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              widget.child,
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: ColoredBox(
+                    color: !lit
+                        ? Colors.transparent
+                        : _pressed
+                        ? _kPressed
+                        : _kHovered,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// Makes a row answer the pointer: the click cursor where there is somewhere
 /// to go, a lift under the pointer, and a stronger one while it is held.

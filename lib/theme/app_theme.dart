@@ -7,18 +7,53 @@ const double kKalinkaTopBarHeight = 52;
 /// Wordmark height inside the top bar, shared by every screen that shows it.
 const double kKalinkaWordmarkHeight = 30;
 
+/// Settings, Customise Home and setup keep their content to this measure,
+/// centred in anything wider.
+const double kKalinkaContentMaxWidth = 560;
+
+/// Buttons and chips are pills this tall at standard text size, each in a
+/// target of [kKalinkaPillTarget].
+const double kKalinkaPillHeight = 40;
+const double kKalinkaPillTarget = 48;
+
+/// Corners for a pill-like control that may wrap onto a second line.
+const double kKalinkaPillRadius = kKalinkaPillHeight / 2;
+
+/// Around a page's row of actions (Play all, Enqueue, Edit…), whose 48dp
+/// targets already add 4dp above and below the pills.
+const EdgeInsets kKalinkaActionRowPadding = EdgeInsets.fromLTRB(16, 8, 16, 20);
+
+/// What a card's or a row's highlight frame leaves around its content.
+const double kKalinkaFrameInset = 11;
+
 /// Existing tablet boundary, also used by settings for their wider gutters.
 const double kKalinkaTabletBreakpoint = 900;
+
+/// The rail's widths: icons over short labels, or icons beside full names
+/// once the window has room to spare.
+const double kKalinkaRailWidth = 88;
+const double kKalinkaWideRailWidth = 200;
+
+/// The rail names each destination beside its icon from here.
+const double kKalinkaWideRailBreakpoint = 1280;
 
 /// Persistent navigation fits beside a useful single browsing pane from here.
 double kalinkaNavigationRailWidth(
   double windowWidth, {
   TextScaler textScaler = TextScaler.noScaling,
-}) => windowWidth >= 720 && textScaler.scale(12) <= 18 ? 88 : 0;
+}) {
+  if (windowWidth < 720 || textScaler.scale(12) > 18) return 0;
+  final text = textScaler.scale(14) / 14;
+  if (windowWidth < kKalinkaWideRailBreakpoint || text > 1.3) {
+    return kKalinkaRailWidth;
+  }
+  // Grows with the text so the names keep their room.
+  return kKalinkaWideRailWidth * text.clamp(1.0, 1.3);
+}
 
 /// Leave room for navigation and music browsing while keeping useful artwork.
 double kalinkaPlayerPaneWidth(double windowWidth) =>
-    (windowWidth * 0.30).clamp(360.0, 440.0);
+    (windowWidth * 0.30).clamp(432.0, 440.0);
 
 /// All shell overlays use the same space budget, including enlarged text.
 bool kalinkaSplitLayout(

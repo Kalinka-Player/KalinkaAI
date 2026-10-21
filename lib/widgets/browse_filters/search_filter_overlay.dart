@@ -35,6 +35,7 @@ class SearchFilterOverlay extends StatefulWidget {
   /// One quiet line under the search field, where what that field does needs
   /// saying — on results it starts a new search rather than narrowing one.
   final String? searchCaption;
+  final bool showSearch;
 
   const SearchFilterOverlay({
     super.key,
@@ -46,6 +47,7 @@ class SearchFilterOverlay extends StatefulWidget {
     this.searchHint = 'Search',
     this.title = 'SEARCH & FILTERS',
     this.searchCaption,
+    this.showSearch = true,
   });
 
   @override
@@ -87,6 +89,7 @@ class _SearchFilterOverlayState extends State<SearchFilterOverlay> {
                 query: _staged,
                 searchHint: widget.searchHint,
                 searchCaption: widget.searchCaption,
+                showSearch: widget.showSearch,
                 // Staged: nothing is sent until Show results, so there is
                 // nothing to coalesce and the badge can track every key.
                 textDebounce: Duration.zero,

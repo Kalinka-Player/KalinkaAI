@@ -7,11 +7,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/data_model/playqueue_events.dart';
 import 'package:kalinka/data_model/renderer_config.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
+import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/providers/renderer_host_provider.dart';
 import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/renderer_settings_route_provider.dart';
@@ -19,8 +22,10 @@ import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/providers/wire_event_provider.dart';
 import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/screens/renderer_settings_screen.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/slide_in_panel.dart';
+import 'package:kalinka/widgets/volume_control_slider.dart';
 
 /// A `/renderer/list` body shaped like the server's, so the wire format is
 /// pinned (ids vs names, status strings, the active/selected pair, and the
@@ -53,17 +58,24 @@ List<RendererInfo> _parse(String body) => [
 ];
 
 /// The picker row carrying [name]. Its Stack is the item's full extent — the
-/// play target underneath and the gear over it.
+/// play target underneath and any upgrade action over it.
 Finder _rowOf(String name) =>
     find.ancestor(of: find.text(name), matching: find.byType(Stack)).first;
 
 /// That row's gear, which is its own target rather than part of the row tap.
-Finder _gearOf(String name) => find
-    .descendant(
-      of: _rowOf(name),
-      matching: find.byIcon(Icons.settings_outlined),
-    )
-    .first;
+Finder _gearOf(String name) => find.byWidgetPredicate(
+  (widget) =>
+      widget is Semantics && widget.properties.label == '$name settings',
+);
+
+class _VolumeApi extends KalinkaWsApi {
+  _VolumeApi(super.ref);
+  final sent = <DeviceCommand>[];
+
+  @override
+  Future<void> sendDeviceCommand(DeviceCommand command) async =>
+      sent.add(command);
+}
 
 /// Serves the captured list and records selections; everything else throws.
 class _FakeApi implements KalinkaPlayerProxy {
@@ -138,6 +150,8 @@ class _FakeConnectionNotifier extends ConnectionStateNotifier {
 
   @override
   ConnectionStatus build() => _status;
+
+  void set(ConnectionStatus status) => state = status;
 }
 
 void main() {
@@ -160,10 +174,15 @@ void main() {
     KalinkaPlayerProxy api, {
     ConnectionStatus status = ConnectionStatus.connected,
     Stream<PlayQueueEvent>? events,
+    DeviceVolume? volume,
+    bool holdsVolume = false,
   }) => [
     sharedPrefsProvider.overrideWithValue(prefs),
     kalinkaProxyProvider.overrideWithValue(api),
     connectionStateProvider.overrideWith(() => _FakeConnectionNotifier(status)),
+    volumeStateProvider.overrideWithValue(volume ?? DeviceVolume.empty),
+    playbackHoldsVolumeProvider.overrideWithValue(holdsVolume),
+    kalinkaWsApiProvider.overrideWith(_VolumeApi.new),
     // The notifier subscribes to the queue socket; tests feed it directly
     // instead of letting the provider chain dial a real websocket.
     playQueueEventBusProvider.overrideWith(
@@ -175,9 +194,17 @@ void main() {
     KalinkaPlayerProxy api, {
     ConnectionStatus status = ConnectionStatus.connected,
     Stream<PlayQueueEvent>? events,
+    DeviceVolume? volume,
+    bool holdsVolume = false,
   }) {
     final container = ProviderContainer(
-      overrides: overrides(api, status: status, events: events),
+      overrides: overrides(
+        api,
+        status: status,
+        events: events,
+        volume: volume,
+        holdsVolume: holdsVolume,
+      ),
     );
     addTearDown(container.dispose);
     return container;
@@ -280,7 +307,13 @@ void main() {
   /// Mirrors how MusicPlayerScreen hosts the renderer settings panel: an
   /// overlay driven by the route provider, not a pushed route — that is what
   /// lets the tablet layout put it in the left panel.
-  Widget switcherTree() => MaterialApp(
+  Widget switcherTree({double textScale = 1}) => MaterialApp(
+    theme: AppTheme.dark(),
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context)
+          .copyWith(textScaler: TextScaler.linear(textScale)),
+      child: child!,
+    ),
     home: Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -310,11 +343,15 @@ void main() {
     KalinkaPlayerProxy api, {
     Stream<PlayQueueEvent>? events,
     ProviderContainer? container,
+    double textScale = 1,
   }) => container != null
-      ? UncontrolledProviderScope(container: container, child: switcherTree())
+      ? UncontrolledProviderScope(
+          container: container,
+          child: switcherTree(textScale: textScale),
+        )
       : ProviderScope(
           overrides: overrides(api, events: events),
-          child: switcherTree(),
+          child: switcherTree(textScale: textScale),
         );
 
   testWidgets('no renderers → crossed icon, sheet says so', (tester) async {
@@ -356,6 +393,57 @@ void main() {
     expect(inDropdown, findsOneWidget);
   });
 
+  for (final empty in [false, true]) {
+    testWidgets(
+      '${empty ? 'empty' : 'long-name'} dropdown fits a narrow metadata column and opens the picker',
+      (tester) async {
+        const longName = 'Living room amplifier by the window';
+        final api = _FakeApi()
+          ..renderers = empty
+              ? const []
+              : const [
+                  RendererInfo(
+                    rendererId: 'r-living',
+                    friendlyName: longName,
+                    status: 'connected',
+                    active: true,
+                  ),
+                ];
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: overrides(api),
+            child: MaterialApp(
+              theme: AppTheme.dark(),
+              home: const Scaffold(
+                body: Center(
+                  child: SizedBox(
+                    width: 200,
+                    child: RendererSwitcherDropdown(
+                      framed: true,
+                      maxNameWidth: 220,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final output = find.byType(RendererSwitcherDropdown);
+        expect(tester.getSize(output).width, lessThanOrEqualTo(200));
+        expect(tester.takeException(), isNull);
+        await tester.tap(output);
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Close output picker'), findsOneWidget);
+        expect(
+          find.text(empty ? 'No renderer available' : 'PLAYING ON'),
+          findsWidgets,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('a server without /renderer/* renders nothing', (tester) async {
     final api = _FakeApi(unsupported: true);
     await tester.pumpWidget(wrap(api));
@@ -390,7 +478,7 @@ void main() {
     expect(inButton, findsOneWidget);
   });
 
-  testWidgets('the picker lists friendly names and ticks the active one', (
+  testWidgets('the picker separates the current output from other outputs', (
     tester,
   ) async {
     final api = _FakeApi();
@@ -400,13 +488,202 @@ void main() {
     await tester.tap(find.byIcon(Icons.cast));
     await tester.pumpAndSettle();
 
-    expect(find.text('PLAY ON'), findsOneWidget);
+    expect(find.text('PLAYING ON'), findsOneWidget);
+    expect(find.text('OTHER OUTPUTS'), findsOneWidget);
     expect(find.text('Kitchen'), findsOneWidget);
     expect(find.text('Living Room'), findsOneWidget);
     expect(find.text('Study'), findsOneWidget);
-    // One filled mark, on the renderer playback is running on.
-    expect(find.byIcon(Icons.check), findsOneWidget);
+    final currentBottom = tester.getBottomLeft(find.text('Living Room')).dy;
+    final volumeTop = tester
+        .getTopLeft(find.byType(NowPlayingVolumeControl))
+        .dy;
+    final othersTop = tester.getTopLeft(find.text('OTHER OUTPUTS')).dy;
+    expect(currentBottom, lessThan(volumeTop));
+    expect(volumeTop, lessThan(othersTop));
+    expect(othersTop, lessThan(tester.getTopLeft(find.text('Kitchen')).dy));
+    expect(
+      find.ancestor(
+        of: find.text('Living Room'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Semantics && widget.properties.selected == true,
+        ),
+      ),
+      findsOneWidget,
+    );
   });
+
+  testWidgets(
+    'volume adjusts in the picker and becomes inert when disconnected',
+    (tester) async {
+      final api = _FakeApi();
+      final container = makeContainer(
+        api,
+        volume: DeviceVolume(
+          supported: true,
+          currentVolume: 18,
+          maxVolume: 100,
+          volumeGain: 0,
+        ),
+        holdsVolume: true,
+      );
+      final semantics = tester.ensureSemantics();
+      await tester.pumpWidget(wrap(api, container: container));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.cast));
+      await tester.pumpAndSettle();
+      expect(find.text('18%'), findsOneWidget);
+      expect(tester.widget<Slider>(find.byType(Slider)).value, 0.18);
+      await tester.dragFrom(
+        tester.getCenter(find.byType(Slider)),
+        const Offset(70, 0),
+      );
+      await tester.pump();
+      final commands =
+          (container.read(kalinkaWsApiProvider) as _VolumeApi).sent;
+      expect(commands, isNotEmpty);
+      expect(commands, everyElement(isA<SetVolumeCommand>()));
+      expect(find.text('18%'), findsNothing);
+      expect(
+        api.selected,
+        isEmpty,
+        reason: 'changing volume does not select an output',
+      );
+      final sentCount = commands.length;
+      (container.read(
+        connectionStateProvider.notifier,
+      ) as _FakeConnectionNotifier).set(ConnectionStatus.offline);
+      await tester.pump();
+      expect(find.bySemanticsLabel('Volume unavailable'), findsOneWidget);
+      await tester.dragFrom(
+        tester.getCenter(find.byType(Slider)),
+        const Offset(70, 0),
+      );
+      await tester.pump();
+      expect(commands, hasLength(sentCount));
+      await tester.tap(find.byTooltip('Close output picker'));
+      await tester.pumpAndSettle();
+      expect(find.byType(RendererPickerContent), findsNothing);
+      semantics.dispose();
+    },
+  );
+
+  for (final unavailable in [
+    'fixed',
+    'no range',
+    'idle',
+    'no active output',
+    'offline output',
+  ]) {
+    testWidgets('$unavailable keeps a grey, inactive volume slider visible', (
+      tester,
+    ) async {
+      final api = _FakeApi();
+      if (unavailable == 'no active output') {
+        api.renderers = [
+          for (final r in api.renderers) r.copyWith(active: false),
+        ];
+      } else if (unavailable == 'offline output') {
+        api.renderers = [
+          for (final r in api.renderers)
+            r.active
+                ? RendererInfo(
+                    rendererId: r.rendererId,
+                    friendlyName: r.friendlyName,
+                    status: 'offline',
+                    active: true,
+                  )
+                : r,
+        ];
+      }
+      final container = makeContainer(
+        api,
+        volume: DeviceVolume(
+          supported: unavailable != 'fixed',
+          currentVolume: 18,
+          maxVolume: unavailable == 'no range' ? 0 : 100,
+          volumeGain: 0,
+        ),
+        holdsVolume: unavailable != 'idle',
+      );
+      await tester.pumpWidget(wrap(api, container: container));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.cast));
+      await tester.pumpAndSettle();
+      expect(find.byType(Slider), findsOneWidget);
+      final dim = tester.widget<Opacity>(
+        find
+            .descendant(
+              of: find.byType(NowPlayingVolumeControl),
+              matching: find.byType(Opacity),
+            )
+            .first,
+      );
+      expect(dim.opacity, lessThan(1));
+      await tester.dragFrom(
+        tester.getCenter(find.byType(Slider)),
+        const Offset(70, 0),
+      );
+      await tester.pump();
+      expect(
+        (container.read(kalinkaWsApiProvider) as _VolumeApi).sent,
+        isEmpty,
+      );
+      expect(api.selected, isEmpty);
+    });
+  }
+
+  for (final (size, scale) in [
+    (const Size(375, 812), 1.0),
+    (const Size(320, 568), 2.0),
+    (const Size(812, 375), 1.0),
+    (const Size(640, 900), 3.2),
+  ]) {
+    testWidgets(
+      'picker scrolls while Close stays reachable at $size and ${scale}x text',
+      (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final api = _FakeApi();
+        api.renderers = [
+          RendererInfo(
+            rendererId: 'r-living',
+            friendlyName: 'Living room amplifier beside the window',
+            status: 'connected',
+            active: true,
+          ),
+          for (var i = 0; i < 12; i++)
+            RendererInfo(
+              rendererId: 'room-$i',
+              friendlyName: 'Listening room $i',
+              status: 'connected',
+            ),
+        ];
+        await tester.pumpWidget(wrap(api, textScale: scale));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.cast));
+        await tester.pumpAndSettle();
+        final close = find.byTooltip('Close output picker');
+        final closeBounds = tester.getRect(close);
+        expect(close.hitTestable(), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.text('Listening room 11'),
+          180,
+          scrollable: find.descendant(
+            of: find.byType(RendererPickerContent),
+            matching: find.byType(Scrollable),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.getRect(close), closeBounds);
+        expect(close.hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.tap(close);
+        await tester.pumpAndSettle();
+        expect(find.byType(RendererPickerContent), findsNothing);
+      },
+    );
+  }
 
   testWidgets('each row says which host it is and how it plays', (
     tester,
@@ -556,29 +833,29 @@ void main() {
     expect(find.byIcon(Icons.settings_outlined), findsNothing);
   });
 
-  testWidgets(
-    'a renderer that works keeps its settings alongside the upgrade',
-    (tester) async {
-      final api = _FakeApi();
-      api.renderers = [
-        RendererInfo.fromJson(const {
-          'renderer_id': 'r-ok',
-          'friendly_name': 'Kitchen',
-          'status': 'connected',
-          'kind': 'native',
-          'update_available': true,
-        }),
-      ];
-      await tester.pumpWidget(wrap(api));
-      await tester.pumpAndSettle();
+  testWidgets('the current renderer keeps its settings alongside the upgrade', (
+    tester,
+  ) async {
+    final api = _FakeApi();
+    api.renderers = [
+      RendererInfo.fromJson(const {
+        'renderer_id': 'r-ok',
+        'active': true,
+        'friendly_name': 'Kitchen',
+        'status': 'connected',
+        'kind': 'native',
+        'update_available': true,
+      }),
+    ];
+    await tester.pumpWidget(wrap(api));
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.cast));
-      await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.cast));
+    await tester.pumpAndSettle();
 
-      expect(find.byIcon(Icons.system_update_alt), findsOneWidget);
-      expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
-    },
-  );
+    expect(find.byIcon(Icons.system_update_alt), findsOneWidget);
+    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+  });
 
   testWidgets('a refused upgrade says why', (tester) async {
     final api = _FakeApi();
@@ -848,7 +1125,11 @@ void main() {
 
     expect(api.selected, ['r-kitchen']);
     expect(api.selectedNames, ['Kitchen']);
-    expect(find.text('PLAY ON'), findsNothing, reason: 'sheet dismissed');
+    expect(
+      find.byType(RendererPickerContent),
+      findsNothing,
+      reason: 'sheet dismissed',
+    );
   });
 
   testWidgets('the whole row is the target, not just the label', (
@@ -863,7 +1144,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.cast));
     await tester.pumpAndSettle();
     final row = tester.getRect(_rowOf('Kitchen'));
-    // Left of the rule that fences off the gear, right of any text.
+    // Blank space to the right of the text remains part of the target.
     await tester.tapAt(Offset(row.right - 60, row.center.dy));
     await tester.pumpAndSettle();
 
@@ -877,8 +1158,9 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.cast));
     await tester.pumpAndSettle();
-    // One gear per row; take the active renderer's, which the row tap can't
-    // act on — proving the gear is its own target rather than the row's.
+    // Settings are available only for the current output.
+    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+    expect(_gearOf('Kitchen'), findsNothing);
     await tester.tap(_gearOf('Living Room'));
     await tester.pumpAndSettle();
 
@@ -938,8 +1220,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.cast));
     await tester.pumpAndSettle();
-    await tester.tap(_gearOf('Study'));
-    await tester.pumpAndSettle();
+    expect(_gearOf('Study'), findsNothing);
 
     expect(find.text('Output settings'), findsNothing);
     expect(api.configuredRenderer, isNull);
@@ -956,6 +1237,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.selected, isEmpty);
-    expect(find.text('PLAY ON'), findsOneWidget, reason: 'sheet stays open');
+    expect(
+      find.byType(RendererPickerContent),
+      findsOneWidget,
+      reason: 'sheet stays open',
+    );
   });
 }

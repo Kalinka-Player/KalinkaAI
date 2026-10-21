@@ -65,6 +65,23 @@ void _expectStatusBackground(WidgetTester tester, double height) {
 }
 
 void main() {
+  testWidgets(
+    'the fitted Playing body still pulls down to close the phone sheet',
+    (tester) async {
+      await _pumpPhone(tester);
+      await tester.tap(find.byType(MiniPlayer));
+      await tester.pumpAndSettle();
+      await tester.fling(
+        find.byKey(const ValueKey('now-playing-artwork')),
+        const Offset(0, 500),
+        1500,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(NowPlayingContent), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final scenario in [
     (size: const Size(375, 812), topInset: 44.0),
     (size: const Size(375, 812), topInset: 0.0),
@@ -91,9 +108,11 @@ void main() {
       _expectNoStripAboveHandle(tester);
       expect(tester.state(find.byType(NowPlayingContent)), same(contentState));
       if (scenario.topInset > 0) {
+        // Beside the rail, where a window is wide enough for one.
+        final rail = kalinkaNavigationRailWidth(scenario.size.width);
         expect(
           tester.getRect(_statusBar),
-          Rect.fromLTWH(0, 0, scenario.size.width, scenario.topInset),
+          Rect.fromLTWH(rail, 0, scenario.size.width - rail, scenario.topInset),
         );
       } else {
         expect(_statusBar, findsNothing);

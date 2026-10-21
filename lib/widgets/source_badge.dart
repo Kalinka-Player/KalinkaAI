@@ -1,10 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/data_model.dart';
 import '../providers/source_modules_provider.dart';
 import '../theme/app_theme.dart';
 
 enum SourceBadgeSize { standard, small }
+
+/// A listing whose source is already named by its page heading. Null keeps
+/// attribution on every item of a mixed-source listing.
+class SourceAttributionScope extends InheritedWidget {
+  final String? source;
+
+  const SourceAttributionScope({
+    super.key,
+    required this.source,
+    required super.child,
+  });
+
+  static String? of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<SourceAttributionScope>()
+      ?.source;
+
+  @override
+  bool updateShouldNotify(SourceAttributionScope oldWidget) =>
+      source != oldWidget.source;
+}
 
 /// Whether a [SourceBadge] for [entityId] renders anything — false for a
 /// single source, an unparseable id, or a source the server provides itself.
@@ -14,6 +35,7 @@ bool sourceBadgeVisible(WidgetRef ref, String entityId) {
   if (ref.watch(sourceCountProvider) <= 1) return false;
   final source = sourceOfId(entityId);
   if (source == null) return false;
+  if (SourceAttributionScope.of(ref.context) == source) return false;
   final info = ref.watch(sourceDisplayInfoProvider)[source];
   return info != null && !info.builtin;
 }

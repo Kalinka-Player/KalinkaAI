@@ -40,6 +40,7 @@ import 'album_page_header.dart';
 import 'artist_page_header.dart';
 import 'browse_visit_scope.dart';
 import 'catalog_sections_view.dart';
+import 'catalog_sliver_header.dart';
 import 'collections_edit_bar.dart';
 import 'collections_section.dart';
 import 'container_page_actions.dart';
@@ -60,6 +61,11 @@ class CatalogPageView extends ConsumerStatefulWidget {
   /// When supplied, Home owns the album cover behind the system inset and
   /// navigation. The header reports its height so that cover ends at the list.
   final ValueChanged<double>? onAlbumHeaderHeight;
+  final ValueChanged<bool>? onHeaderCollapsed;
+
+  /// How far a catalog's header scrolls before it is fully collapsed.
+  final ValueChanged<double>? onHeaderCollapseExtent;
+  final VoidCallback? onOpenFilters;
 
   /// Returns to the Catalogs root — used by the error state's action.
   final VoidCallback onBackToCatalogs;
@@ -69,6 +75,9 @@ class CatalogPageView extends ConsumerStatefulWidget {
     required this.page,
     required this.onBackToCatalogs,
     this.onAlbumHeaderHeight,
+    this.onHeaderCollapsed,
+    this.onHeaderCollapseExtent,
+    this.onOpenFilters,
   });
 
   @override
@@ -79,14 +88,26 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   /// The listing's size as the server last said, -1 before it has. The head
   /// shows it, and its actions have nothing to act on when it is 0.
   int _total = -1;
+  bool _catalogCardsOnly = false;
+  String? _catalogCardsRequest;
+
+  /// Whether the listing holds tracks, whose rows need wider grid columns.
+  bool _gridTracks = false;
 
   final _albumTrackDurations = <int, int>{};
   int? _reportedAlbumDuration;
   int? _albumDuration;
 
-  void _countRows(int rows) {
+  /// What this page's own build last read of what the fetches found.
+  Object? _builtFrom;
+  Object get _fetched =>
+      (_total, _albumDuration, _catalogCardsOnly, _gridTracks);
+
+  void _countRows(int rows, bool appended) {
     // The head reads the total and duration a fetch just read; a refresh may
-    // correct them without changing how many rows there are.
+    // correct them without changing how many rows there are. A chunk that
+    // only adds rows leaves the page, and the rows already built, alone.
+    if (appended && _fetched == _builtFrom) return;
     setState(() {});
   }
 
@@ -129,7 +150,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   bool _actionsHeld = false;
   String? _shownListingId;
 
-  static const _heldInset = 8.0;
+  static const _heldInset = 4.0;
 
   bool _holdActions(ScrollNotification notification) {
     if (notification.depth != 0 || notification.metrics.axis != Axis.vertical) {
@@ -194,11 +215,20 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     final page = widget.page;
     // Parses the id; read once rather than per row.
     final isAlbum = page.isAlbum;
+    final catalogChrome = CatalogSliverHeader.appliesTo(page);
     final capabilities = page.filterCapabilities;
     final visit = visitOf(context, ref);
     final filter = visit.catalogFilter;
     final expandedShelf = visit.expandedShelf;
     final query = filter.copyWith(type: expandedShelf);
+    final requestKey =
+        '${visit.shownListing.id}|${query.serverKey(capabilities)}';
+    if (_catalogCardsRequest != requestKey) {
+      _catalogCardsRequest = requestKey;
+      _catalogCardsOnly = false;
+      _gridTracks = false;
+    }
+    _builtFrom = _fetched;
     // A listing the server takes writes for can change under the page, so a
     // write restarts it the way a filter does.
     final revision = ref.watch(collectionsRevisionProvider);
@@ -210,7 +240,12 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     final trackIdsMemo = _TrackIdsMemo();
 
     final notifier = ref.read(searchSessionProvider.notifier);
-    void setQuery(BrowseFilterQuery next) => notifier.setCatalogFilter(next);
+    void setQuery(BrowseFilterQuery next) {
+      // A pending text debounce must not edit another visit after navigation.
+      if (ref.read(searchSessionProvider).visitId == visit.visitId) {
+        notifier.setCatalogFilter(next);
+      }
+    }
 
     if (page.isArtist) return _buildArtist(page, visit);
     final listing = page.folderLayout ? visit.shownListing : page;
@@ -221,6 +256,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     final shelves =
         !page.folderLayout &&
         !isAlbum &&
+        !page.isPlaylist &&
         page.sections.isNotEmpty &&
         query.type == null;
     // A listing laid out as its catalog's preview says, or as chosen for it
@@ -238,6 +274,26 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       _actionsHeld = false;
     }
 
+    final sliverHeader = catalogChrome
+        ? CatalogSliverHeader(
+            page: listing,
+            capabilities: capabilities,
+            query: query,
+            // The shown shelf is the visit's, not a facet to save.
+            onChanged: (next) => setQuery(
+              next.copyWith(type: filter.type, clearType: filter.type == null),
+            ),
+            onOpenFilters: widget.onOpenFilters,
+            onCollapsed: widget.onHeaderCollapsed,
+            onCollapseExtent: widget.onHeaderCollapseExtent,
+            presentation: layout == null
+                ? null
+                : PresentationToggle(layout: layout),
+            actions: page.folderLayout && _FolderActions.anyFor(page, listing)
+                ? _FolderActions(page: page, listing: listing)
+                : null,
+          )
+        : null;
     final Widget header = isAlbum
         ? MeasureSize(
             onChange: (size) => widget.onAlbumHeaderHeight?.call(size.height),
@@ -254,6 +310,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             page: page,
             listing: listing,
             actionsKey: _actionsKey,
+            showIdentity: !catalogChrome,
           )
         : _CatalogHeader(
             page: page,
@@ -263,7 +320,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             expandedShelf: expandedShelf,
             onCollapse: () => notifier.expandShelf(null),
             total: _total < 0 ? null : _total,
-            layout: layout,
+            layout: catalogChrome ? null : layout,
+            showBanner: !catalogChrome,
           );
 
     // A collection being edited lists its tracks to be moved and dropped
@@ -273,13 +331,22 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         ref.watch(collectionEditProvider.select((s) => s.active)) &&
         ref.watch(searchSessionProvider.select((s) => s.visitId)) ==
             visit.visitId) {
-      return ListView(
-        padding: const EdgeInsets.only(bottom: 24),
-        children: [
-          header,
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: EditableTrackList(item: ContainerPageActions.itemOf(page)),
+      return CustomScrollView(
+        slivers: [
+          ?sliverHeader,
+          SliverPadding(
+            padding: const EdgeInsets.only(bottom: 24),
+            sliver: SliverList.list(
+              children: [
+                header,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: EditableTrackList(
+                    item: ContainerPageActions.itemOf(page),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       );
@@ -291,6 +358,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         query: query,
         revision: revision + libraryRevision,
         header: header,
+        sliverHeader: sliverHeader,
         empty: _emptyState(page, filter, onReset: setQuery),
         onViewAll: notifier.expandShelf,
       );
@@ -304,6 +372,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       Widget? head, {
       int columns = 1,
       bool grid = false,
+      Widget? sideHeader,
+      double sideHeaderWidth = 0,
     }) => InfiniteListView(
       key: page.folderLayout
           ? ValueKey(listing.id)
@@ -313,14 +383,29 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       reloadKey: '${listing.id}|${query.serverKey(capabilities)}|$revision',
       refreshKey: (_artRefresh, libraryRevision),
       onLoadedCount: _countRows,
+      // Album and folder headings change as later chunks land.
+      rowsDependOn: isAlbum || page.folderLayout
+          ? null
+          : (loaded) => (
+              trackIdsMemo.source(loaded),
+              trackIdsMemo.details(loaded),
+              trackIdsMemo.artists(loaded),
+              trackIdsMemo.tracksOnly(loaded),
+            ),
       // No horizontal list padding — the banner bleeds edge to edge; rows and
       // separators carry their own 16px inset instead.
       padding: const EdgeInsets.only(bottom: 24),
       header: head,
+      sliverHeader: sliverHeader,
+      sideHeader: sideHeader,
+      sideHeaderWidth: sideHeaderWidth,
       columns: columns,
-      rowPadding: EdgeInsets.symmetric(horizontal: grid ? 10 : 16),
-      columnGap: grid ? 8 : 16,
-      rowGap: grid ? 12 : 6,
+      rowPadding: EdgeInsets.symmetric(
+        horizontal: grid ? 16 - ArtworkGridCard.inset : 16,
+      ),
+      // A grid's frames abut, as a Home rail's do.
+      columnGap: grid ? 0 : 16,
+      rowGap: grid ? 0 : 6,
       fetchChunk: (offset, limit) async {
         final api = ref.read(kalinkaProxyProvider);
         final list = await api.browse(
@@ -330,31 +415,78 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           filter: query.encoded(capabilities),
         );
         _pollWhileComposing(list.items);
+        // A response from an earlier filter must not change the active grid.
+        if (_catalogCardsRequest == requestKey) {
+          if (offset == 0) _catalogCardsOnly = list.items.isNotEmpty;
+          _catalogCardsOnly =
+              _catalogCardsOnly &&
+              list.items.every((item) => item.browseType == BrowseType.catalog);
+          _gridTracks =
+              (offset > 0 && _gridTracks) ||
+              list.items.any((item) => item.browseType == BrowseType.track);
+        }
         _total = list.total;
         if (isAlbum) _readAlbumDuration(list, offset);
         return ItemChunk(items: list.items, total: list.total);
       },
       // Inset past the artwork of the row it follows, so the thumbnails read
       // as one uninterrupted column down the page.
-      separatorBuilder: (context, _, above) => Padding(
-        padding: EdgeInsets.only(
-          left:
-              16 +
-              BrowseItemRows.textInsetOf(above) +
-              (numberedInFolder(above) ? SearchTrackRow.folderNumberWidth : 0),
-          right: 16,
-        ),
-        child: Divider(
-          color: KalinkaColors.borderSubtle,
-          thickness: 1,
-          height: isAlbum ? 1 : 14,
-        ),
-      ),
+      separatorBuilder: (context, _, above) => grid
+          ? const SizedBox.shrink()
+          : Padding(
+              padding: EdgeInsets.only(
+                left:
+                    16 +
+                    BrowseItemRows.textInsetOf(above) +
+                    (numberedInFolder(above)
+                        ? SearchTrackRow.folderNumberWidth
+                        : 0),
+                right: 16,
+              ),
+              child: Divider(
+                color: KalinkaColors.borderSubtle,
+                thickness: 1,
+                height: isAlbum ? 1 : 14,
+              ),
+            ),
       itemBuilder: (context, item, index, loaded) {
-        if (grid && _inGrid(item)) return ArtworkGridCard(item: item);
+        Widget attributed(Widget child) => SourceAttributionScope(
+          source:
+              page.isCatalog &&
+                  (listing.provider?.trim().isNotEmpty == true ||
+                      listing.description?.trim().isNotEmpty == true) &&
+                  trackIdsMemo.source(loaded) == sourceOfId(listing.id!)
+              ? sourceOfId(listing.id!)
+              : null,
+          child: child,
+        );
+        if (grid && _inGrid(item)) {
+          final card = ArtworkGridCard(
+            item: item,
+            catalogAspectRatio: page.preview?.aspectRatio,
+          );
+          return attributed(
+            columns == 1
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16 - ArtworkGridCard.inset,
+                    ),
+                    child: card,
+                  )
+                : card,
+          );
+        }
         // Track rows play the whole loaded list as a queue from the
         // tapped row; as more chunks scroll in, the context grows.
         final trackIds = trackIdsMemo.of(loaded);
+        if (grid && columns > 1) {
+          return attributed(
+            _GridTrack(
+              item: item,
+              queueContextIds: trackIds.isEmpty ? null : trackIds,
+            ),
+          );
+        }
         // Unfiltered, a row's place in the listing is its place in the
         // container, which then plays whole from it.
         final inContainer =
@@ -394,7 +526,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             ? _groupHeading(index, loaded)
             : null;
         // Rows across columns are already inset by the listing.
-        if (columns > 1) return row;
+        if (columns > 1) return attributed(row);
         // An album's numbered rows keep no columns to name; a folder names
         // them under each group's heading, in that group's terms.
         final titles = isAlbum
@@ -413,16 +545,21 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             : index == 0
             ? _columnTitles(loaded)
             : null;
-        return RowColumnsListing(
-          details: trackIdsMemo.details(loaded),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: heading == null && titles == null
-                ? row
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [?heading, ?titles, row],
-                  ),
+        return attributed(
+          RowColumnsListing(
+            details: trackIdsMemo.details(loaded),
+            artists: trackIdsMemo.artists(loaded),
+            tracks: trackIdsMemo.tracksOnly(loaded),
+            hideTrackType: trackIdsMemo.tracksOnly(loaded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: heading == null && titles == null
+                  ? row
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [?heading, ?titles, row],
+                    ),
+            ),
           ),
         );
       },
@@ -441,35 +578,33 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       emptyBuilder: (context) => _emptyState(page, filter, onReset: setQuery),
       // The error state replaces only the rows, never the header — a filter
       // that failed has to stay reachable to be undone.
-      errorBuilder: (context, _) => CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(child: header),
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: _CatalogError(onReturn: widget.onBackToCatalogs),
-          ),
-        ],
-      ),
+      errorBuilder: (context, _) => sideHeader != null || sliverHeader != null
+          ? _CatalogError(onReturn: widget.onBackToCatalogs)
+          : CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(child: header),
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _CatalogError(onReturn: widget.onBackToCatalogs),
+                ),
+              ],
+            ),
     );
     if (isAlbum) {
-      // A wide pane sets the album's cover and details beside its tracks.
+      // A wide pane sets the album's cover and details beside its tracks,
+      // with one viewport scrolling both columns.
       return LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
           if (width < kAlbumSideLayoutWidth) return listOf(header);
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                width: (width * 0.4).clamp(220.0, 520.0),
-                child: AlbumIdentityColumn(
-                  page: page,
-                  trackCount: _total < 0 ? null : _total,
-                  totalDurationSeconds: _albumDuration,
-                ),
-              ),
-              Expanded(child: listOf(null)),
-            ],
+          return listOf(
+            null,
+            sideHeaderWidth: (width * 0.4).clamp(220.0, 520.0),
+            sideHeader: AlbumIdentityColumn(
+              page: page,
+              trackCount: _total < 0 ? null : _total,
+              totalDurationSeconds: _albumDuration,
+            ),
           );
         },
       );
@@ -487,7 +622,15 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             header,
             grid: grid,
             columns: grid
-                ? _gridColumns(width - 20, scale)
+                ? _gridColumns(
+                    width - 2 * (16 - ArtworkGridCard.inset),
+                    scale,
+                    catalogs:
+                        layout.contentType == PreviewContentType.catalog ||
+                        (_catalogCardsRequest == requestKey &&
+                            _catalogCardsOnly),
+                    tracks: _catalogCardsRequest == requestKey && _gridTracks,
+                  )
                 : compactColumnsFor(width - 32, scale),
           );
         },
@@ -495,6 +638,14 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     }
     final listView = listOf(header);
     if (!page.folderLayout) return listView;
+    if (catalogChrome) {
+      return Column(
+        children: [
+          const FolderTrail(),
+          Expanded(child: listView),
+        ],
+      );
+    }
 
     // Outside the list, so the way back stays in reach however far it scrolls.
     return Column(
@@ -623,17 +774,24 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         final columns = !releases
             ? 1
             : grid
-            ? _gridColumns(width - 20, scale)
+            ? _gridColumns(width - 2 * (16 - ArtworkGridCard.inset), scale)
             : compactColumnsFor(width - 32, scale);
         return InfiniteListView<BrowseItem>(
           key: ValueKey('${page.id}|$shown'),
           padding: const EdgeInsets.only(bottom: 24),
           header: header,
           columns: columns,
-          rowPadding: EdgeInsets.symmetric(horizontal: grid ? 10 : 16),
-          columnGap: grid ? 8 : 16,
-          rowGap: grid ? 12 : 6,
+          rowPadding: EdgeInsets.symmetric(
+            horizontal: grid ? 16 - ArtworkGridCard.inset : 16,
+          ),
+          columnGap: grid ? 0 : 16,
+          rowGap: grid ? 0 : 6,
           fetchChunk: _relationFetch(page.id!, shown),
+          rowsDependOn: (loaded) => (
+            trackIdsMemo.details(loaded),
+            trackIdsMemo.artists(loaded),
+            trackIdsMemo.tracksOnly(loaded),
+          ),
           separatorBuilder: (context, _, above) => Padding(
             padding: EdgeInsets.only(
               left: 16 + BrowseItemRows.textInsetOf(above),
@@ -648,6 +806,12 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           itemBuilder: (context, item, index, loaded) {
             if (grid && _inGrid(item)) return ArtworkGridCard(item: item);
             final trackIds = trackIdsMemo.of(loaded);
+            if (grid && columns > 1) {
+              return _GridTrack(
+                item: item,
+                queueContextIds: trackIds.isEmpty ? null : trackIds,
+              );
+            }
             final row = BrowseItemRows.buildRow(
               item,
               queueContextIds: trackIds.isEmpty ? null : trackIds,
@@ -655,6 +819,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             if (columns > 1) return row;
             return RowColumnsListing(
               details: trackIdsMemo.details(loaded),
+              artists: trackIdsMemo.artists(loaded),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: index == 0
@@ -729,11 +894,21 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   );
 
   /// Covers of about 180–220 across, more columns as the pane grows, never
-  /// narrower than a readable caption.
-  static int _gridColumns(double width, double scale) {
-    const gap = 8.0;
-    final wanted = ((width + gap) / (220 * scale + gap)).ceil();
-    final fits = ((width + gap) / (140 * scale + gap)).floor();
+  /// narrower than a readable caption. A track keeps its row, which needs
+  /// 68% more room than a cover to read.
+  static int _gridColumns(
+    double width,
+    double scale, {
+    bool catalogs = false,
+    bool tracks = false,
+  }) {
+    // Each card is its cover with a frame inset either side.
+    const frame = 2 * ArtworkGridCard.inset;
+    final grow = tracks ? 1.68 : 1.0;
+    final wanted = (width / ((catalogs ? 340 : 220) * grow * scale + frame))
+        .ceil();
+    final fits = (width / ((catalogs ? 220 : 140) * grow * scale + frame))
+        .floor();
     return wanted.clamp(1, fits < 1 ? 1 : fits).clamp(1, 10);
   }
 
@@ -831,9 +1006,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   }
 }
 
-/// Banner plus the active-filter chips — the whole page head, shared by the
-/// list header and the error state. The filter *controls* live in the title
-/// bar; only what they produced shows here.
+/// Content following the catalog's pinned header: presentation, container
+/// actions and active filters. Other entity pages can retain a plain banner.
 class _CatalogHeader extends StatelessWidget {
   final CatalogPage page;
   final BrowseFilterCapabilities capabilities;
@@ -848,6 +1022,7 @@ class _CatalogHeader extends StatelessWidget {
   /// How the listing lays out, offered as a Grid/List choice; null where it
   /// has only rows.
   final ListingLayout? layout;
+  final bool showBanner;
 
   const _CatalogHeader({
     required this.page,
@@ -858,6 +1033,7 @@ class _CatalogHeader extends StatelessWidget {
     required this.onCollapse,
     required this.total,
     this.layout,
+    this.showBanner = true,
   });
 
   @override
@@ -865,13 +1041,16 @@ class _CatalogHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _CatalogBanner(
-          page: page,
-          showLibraryRescan: LibraryRescanControl.isLibraryPage(page.id),
-        ),
+        if (showBanner)
+          _CatalogBanner(
+            page: page,
+            showLibraryRescan: LibraryRescanControl.isLibraryPage(page.id),
+          )
+        else if (LibraryRescanControl.isLibraryPage(page.id))
+          const LibraryRescanControl(),
         if (layout case final layout?)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            padding: EdgeInsets.fromLTRB(16, showBanner ? 0 : 12, 16, 12),
             child: Align(
               alignment: Alignment.centerRight,
               child: PresentationToggle(layout: layout),
@@ -884,6 +1063,8 @@ class _CatalogHeader extends StatelessWidget {
         ActiveFilterChips(
           capabilities: capabilities,
           query: query,
+          showText: capabilities.text == FacetSupport.hidden,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
           onChanged: onQueryChanged,
           leading: [
             if (expandedShelf case final type?)
@@ -898,6 +1079,30 @@ class _CatalogHeader extends StatelessWidget {
   }
 }
 
+/// A track among a grid's artwork cards, which stays a row: in the cards'
+/// frame, so it keeps their gutters and the room between them.
+class _GridTrack extends StatelessWidget {
+  final BrowseItem item;
+  final List<String>? queueContextIds;
+
+  const _GridTrack({required this.item, this.queueContextIds});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      // Less what the row already keeps beside its cover and its duration,
+      // so both line up with the cards' art.
+      padding: const EdgeInsets.fromLTRB(
+        ArtworkGridCard.inset - 3,
+        ArtworkGridCard.inset,
+        ArtworkGridCard.inset - 8,
+        ArtworkGridCard.inset,
+      ),
+      child: SearchTrackRow(item: item, queueContextIds: queueContextIds),
+    );
+  }
+}
+
 /// The head of a page of folders under its breadcrumb: the folder shown's
 /// banner, its actions, and — at the page's own top — the page's shelves.
 class _FolderHeader extends StatelessWidget {
@@ -908,12 +1113,14 @@ class _FolderHeader extends StatelessWidget {
 
   /// Marks the actions, which are held under the trail once scrolled to it.
   final GlobalKey actionsKey;
+  final bool showIdentity;
 
   const _FolderHeader({
     super.key,
     required this.page,
     required this.listing,
     required this.actionsKey,
+    this.showIdentity = true,
   });
 
   @override
@@ -921,16 +1128,20 @@ class _FolderHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _CatalogBanner(
-          page: listing,
-          showLibraryRescan:
-              identical(page, listing) &&
-              LibraryRescanControl.isLibraryPage(page.id),
-        ),
-        if (_FolderActions.anyFor(page, listing))
+        if (showIdentity)
+          _CatalogBanner(
+            page: listing,
+            showLibraryRescan:
+                identical(page, listing) &&
+                LibraryRescanControl.isLibraryPage(page.id),
+          )
+        else if (identical(listing, page) &&
+            LibraryRescanControl.isLibraryPage(page.id))
+          const LibraryRescanControl(),
+        if (showIdentity && _FolderActions.anyFor(page, listing))
           Padding(
             key: actionsKey,
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            padding: kKalinkaActionRowPadding,
             child: _FolderActions(page: page, listing: listing),
           ),
         if (identical(listing, page) && page.sections.isNotEmpty)
@@ -981,8 +1192,36 @@ class _FolderActions extends ConsumerWidget {
 /// Caches the queue-context track ids per loaded-chunk count, so row builds
 /// share one list instead of rescanning all loaded items each time.
 class _TrackIdsMemo {
-  List<String> _ids = const [];
-  int _forLength = -1;
+  bool _tracksOnly = false;
+  int _tracksForLength = -1;
+
+  bool tracksOnly(List<BrowseItem> loaded) {
+    if (_tracksForLength != loaded.length) {
+      _tracksForLength = loaded.length;
+      _tracksOnly =
+          loaded.isNotEmpty &&
+          loaded.every((item) => item.browseType == BrowseType.track);
+    }
+    return _tracksOnly;
+  }
+
+  String? _source;
+  int _sourceForLength = -1;
+
+  String? source(List<BrowseItem> loaded) {
+    if (_sourceForLength != loaded.length) {
+      _sourceForLength = loaded.length;
+      final first = loaded.isEmpty ? null : sourceOfId(loaded.first.id);
+      _source =
+          first != null && loaded.every((item) => sourceOfId(item.id) == first)
+          ? first
+          : null;
+    }
+    return _source;
+  }
+
+  List<String> _ids = [];
+  int _forLength = 0;
   bool _details = true;
   int _detailsForLength = -1;
 
@@ -995,17 +1234,35 @@ class _TrackIdsMemo {
     return _details;
   }
 
+  bool _artists = true;
+  int _artistsForLength = -1;
+
+  /// Whether any loaded row would fill the Artist column.
+  bool artists(List<BrowseItem> loaded) {
+    if (loaded.length != _artistsForLength) {
+      _artistsForLength = loaded.length;
+      _artists = RowColumnsListing.anyArtists(loaded);
+    }
+    return _artists;
+  }
+
   List<int> _albumNumbers = const [];
   int _albumForLength = -1;
   bool _multiDisc = false;
 
+  /// Grown in place as more items arrive, so a row kept from before queues
+  /// them too.
   List<String> of(List<BrowseItem> loaded) {
+    if (loaded.length < _forLength) {
+      _ids = [];
+      _forLength = 0;
+    }
     if (loaded.length != _forLength) {
-      _forLength = loaded.length;
-      _ids = [
-        for (final i in loaded)
+      _ids.addAll([
+        for (final i in loaded.skip(_forLength))
           if (i.track != null) i.id,
-      ];
+      ]);
+      _forLength = loaded.length;
     }
     return _ids;
   }
@@ -1416,12 +1673,12 @@ class _GridShimmer extends StatelessWidget {
           children: [
             for (var r = 0; r < rows; r++)
               Padding(
-                padding: const EdgeInsets.only(bottom: 20),
+                padding: const EdgeInsets.only(bottom: 22),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     for (var c = 0; c < columns; c++) ...[
-                      if (c > 0) const SizedBox(width: 20),
+                      if (c > 0) const SizedBox(width: 22),
                       const Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

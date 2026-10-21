@@ -37,6 +37,7 @@ class BrowseFilterForm extends StatelessWidget {
   final String? searchCaption;
 
   final Duration textDebounce;
+  final bool showSearch;
 
   const BrowseFilterForm({
     super.key,
@@ -46,6 +47,7 @@ class BrowseFilterForm extends StatelessWidget {
     this.searchHint = 'Search',
     this.searchCaption,
     this.textDebounce = kFilterTextDebounce,
+    this.showSearch = true,
   });
 
   bool get _showTypes =>
@@ -58,7 +60,7 @@ class BrowseFilterForm extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (capabilities.text != FacetSupport.hidden) ...[
+        if (showSearch && capabilities.text != FacetSupport.hidden) ...[
           FilterSearchField(
             enabled: capabilities.text == FacetSupport.supported,
             value: query.text,
@@ -129,6 +131,13 @@ class BrowseFilterForm extends StatelessWidget {
 /// affordance a source will grow into, not a control that quietly does
 /// nothing.
 class FilterSearchField extends StatefulWidget {
+  /// The row the inline field and its adjacent Filters button share: a target
+  /// around their pills.
+  static double heightFor(BuildContext context) =>
+      (MediaQuery.textScalerOf(context).scale(14) * 1.5 + 16).clamp(
+        48.0,
+        double.infinity,
+      );
   final bool enabled;
   final String value;
   final String hint;
@@ -136,6 +145,7 @@ class FilterSearchField extends StatefulWidget {
 
   /// Zero reports every keystroke immediately (staged hosts want that).
   final Duration debounce;
+  final bool neutral;
 
   const FilterSearchField({
     super.key,
@@ -144,6 +154,7 @@ class FilterSearchField extends StatefulWidget {
     required this.hint,
     required this.onChanged,
     this.debounce = kFilterTextDebounce,
+    this.neutral = false,
   });
 
   @override
@@ -192,77 +203,111 @@ class _FilterSearchFieldState extends State<FilterSearchField> {
   @override
   Widget build(BuildContext context) {
     final enabled = widget.enabled;
-    final edge = enabled
+    final edge = enabled && !widget.neutral
         ? KalinkaColors.accentBorder
         : KalinkaColors.borderDefault;
-    final leadColor = enabled ? KalinkaColors.accent : KalinkaColors.textMuted;
+    final leadColor = enabled && !widget.neutral
+        ? KalinkaColors.accent
+        : KalinkaColors.textMuted;
+    final textStyle = widget.neutral
+        ? KalinkaFonts.sans(fontSize: 14, color: KalinkaColors.textPrimary)
+        : KalinkaFonts.mono(
+            fontSize: KalinkaTypography.baseSize + 2,
+            color: KalinkaColors.textPrimary,
+          );
 
+    // Neutral, it takes the Play all pill's shape and height, centred in the
+    // row's target.
+    final height = widget.neutral
+        ? FilterSearchField.heightFor(context) -
+              (kKalinkaPillTarget - kKalinkaPillHeight)
+        : 46.0;
+    final field = Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: KalinkaColors.surfaceInput,
+        borderRadius: BorderRadius.circular(height / 2),
+        border: Border.all(color: edge, width: 1),
+      ),
+      // Neutral, the clear button's own target supplies the right inset,
+      // so its glyph sits in the pill's rounded end.
+      padding: EdgeInsets.only(
+        left: 14,
+        right: widget.neutral && enabled ? 0 : 14,
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.search_rounded, size: 19, color: leadColor),
+          const SizedBox(width: 10),
+          Expanded(
+            // The field stays in the tree when disabled so the placeholder
+            // measures and aligns exactly like the live one.
+            child: TextField(
+              controller: _controller,
+              enabled: enabled,
+              onChanged: _onChanged,
+              textInputAction: TextInputAction.search,
+              style: textStyle,
+              cursorColor: KalinkaColors.accent,
+              decoration: InputDecoration(
+                isCollapsed: true,
+                border: InputBorder.none,
+                hintText: widget.hint,
+                hintStyle: textStyle.copyWith(color: KalinkaColors.textMuted),
+              ),
+            ),
+          ),
+          if (enabled)
+            // Listens to the controller rather than the reported query, so
+            // the clear affordance appears with the first keystroke.
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _controller,
+              builder: (context, value, _) {
+                if (value.text.isEmpty) {
+                  return SizedBox(width: widget.neutral ? 14 : 0);
+                }
+                if (widget.neutral) {
+                  return IconButton(
+                    tooltip: 'Clear text filter',
+                    onPressed: _clear,
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: KalinkaColors.textMuted,
+                    ),
+                  );
+                }
+                return GestureDetector(
+                  onTap: _clear,
+                  behavior: HitTestBehavior.opaque,
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: KalinkaColors.textMuted,
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
     return Semantics(
       textField: true,
       enabled: enabled,
       label: enabled
           ? widget.hint
           : '${widget.hint} — not supported by this source',
-      child: Container(
-        height: 46,
-        decoration: BoxDecoration(
-          color: KalinkaColors.surfaceInput,
-          borderRadius: BorderRadius.circular(23),
-          border: Border.all(color: edge, width: 1),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        child: Row(
-          children: [
-            Icon(Icons.search_rounded, size: 19, color: leadColor),
-            const SizedBox(width: 10),
-            Expanded(
-              // The field stays in the tree when disabled so the placeholder
-              // measures and aligns exactly like the live one.
-              child: TextField(
-                controller: _controller,
-                enabled: enabled,
-                onChanged: _onChanged,
-                textInputAction: TextInputAction.search,
-                style: KalinkaFonts.mono(
-                  fontSize: KalinkaTypography.baseSize + 2,
-                  color: KalinkaColors.textPrimary,
-                ),
-                cursorColor: KalinkaColors.accent,
-                decoration: InputDecoration(
-                  isCollapsed: true,
-                  border: InputBorder.none,
-                  hintText: widget.hint,
-                  hintStyle: KalinkaFonts.mono(
-                    fontSize: KalinkaTypography.baseSize + 2,
-                    color: KalinkaColors.textMuted,
-                  ),
-                ),
+      child: widget.neutral
+          ? Padding(
+              padding: const EdgeInsets.symmetric(
+                vertical: (kKalinkaPillTarget - kKalinkaPillHeight) / 2,
               ),
-            ),
-            if (enabled)
-              // Listens to the controller rather than the reported query, so
-              // the clear affordance appears with the first keystroke.
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: _controller,
-                builder: (context, value, _) {
-                  if (value.text.isEmpty) return const SizedBox.shrink();
-                  return GestureDetector(
-                    onTap: _clear,
-                    behavior: HitTestBehavior.opaque,
-                    child: const Padding(
-                      padding: EdgeInsets.only(left: 8),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 18,
-                        color: KalinkaColors.textMuted,
-                      ),
-                    ),
-                  );
-                },
-              ),
-          ],
-        ),
-      ),
+              child: field,
+            )
+          : field,
     );
   }
 }
@@ -293,7 +338,7 @@ class _FacetGroup extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Wrap(spacing: 7, runSpacing: 7, children: pills),
+        Wrap(spacing: 8, runSpacing: 8, children: pills),
         if (caption != null) ...[
           const SizedBox(height: 8),
           _FacetCaption(caption!),
@@ -579,57 +624,13 @@ class _FilterPillState extends State<FilterPill> {
   Widget build(BuildContext context) {
     final on = widget.selected && !widget.muted;
     final enabled = widget.onTap != null && !widget.muted;
-    final hovered = _hovering && enabled;
 
-    final Color fg;
-    final Color bg;
-    final Color border;
-    if (on) {
-      fg = KalinkaColors.textPrimary;
-      // Hover lightens the crimson itself — berry over the base red.
-      bg = hovered ? KalinkaColors.accentTint : KalinkaColors.accent;
-      border = bg;
-    } else if (widget.muted) {
-      fg = KalinkaColors.textMuted;
-      bg = Colors.transparent;
-      border = KalinkaColors.borderSubtle;
-    } else {
-      fg = KalinkaColors.textPrimary;
-      bg = hovered
-          ? KalinkaColors.surfaceOverlay
-          : KalinkaColors.surfaceElevated;
-      border = hovered ? KalinkaColors.textMuted : KalinkaColors.borderDefault;
-    }
-
-    // Sized by its padding, never by an alignment: a Container with one
-    // expands to the constraints it is handed, and a Wrap hands out the full
-    // line width — which turned a row of chips into a column of slabs.
-    Widget pill = AnimatedContainer(
-      duration: const Duration(milliseconds: 130),
-      curve: Curves.easeOut,
-      padding: EdgeInsets.fromLTRB(widget.leading == null ? 14 : 8, 7, 14, 7),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: border, width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (widget.leading != null) ...[
-            widget.leading!,
-            const SizedBox(width: 8),
-          ],
-          Text(
-            widget.label,
-            style: KalinkaFonts.sans(
-              fontSize: KalinkaTypography.baseSize + 1,
-              fontWeight: FontWeight.w500,
-              color: fg,
-            ),
-          ),
-        ],
-      ),
+    Widget pill = FilterPillFace(
+      label: widget.label,
+      selected: widget.selected,
+      muted: widget.muted,
+      hovered: _hovering && enabled,
+      leading: widget.leading,
     );
 
     if (enabled) {
@@ -652,6 +653,97 @@ class _FilterPillState extends State<FilterPill> {
       label: widget.label,
       excludeSemantics: true,
       child: pill,
+    );
+  }
+}
+
+/// How a [FilterPill] looks, without its input — for a chip that takes its
+/// taps elsewhere, such as the receipt of an applied filter.
+class FilterPillFace extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final bool muted;
+  final bool hovered;
+
+  /// A mark ahead of the label, such as a source's tile.
+  final Widget? leading;
+
+  /// A mark after the label, such as a chip's remove glyph.
+  final Widget? trailing;
+
+  const FilterPillFace({
+    super.key,
+    required this.label,
+    this.selected = false,
+    this.muted = false,
+    this.hovered = false,
+    this.leading,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final on = selected && !muted;
+
+    final Color fg;
+    final Color bg;
+    final Color border;
+    if (on) {
+      fg = KalinkaColors.textPrimary;
+      // Hover lightens the crimson itself — berry over the base red.
+      bg = hovered ? KalinkaColors.accentTint : KalinkaColors.accent;
+      border = bg;
+    } else if (muted) {
+      fg = KalinkaColors.textMuted;
+      bg = Colors.transparent;
+      border = KalinkaColors.borderSubtle;
+    } else {
+      fg = KalinkaColors.textPrimary;
+      bg = hovered
+          ? KalinkaColors.surfaceOverlay
+          : KalinkaColors.surfaceElevated;
+      border = hovered ? KalinkaColors.textMuted : KalinkaColors.borderDefault;
+    }
+
+    // Sized by its padding, never by an alignment: a Container with one
+    // expands to the constraints it is handed, and a Wrap hands out the full
+    // line width — which turned a row of chips into a column of slabs.
+    return AnimatedContainer(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 130),
+      curve: Curves.easeOut,
+      constraints: const BoxConstraints(minHeight: kKalinkaPillHeight),
+      padding: EdgeInsets.fromLTRB(
+        leading == null ? 16 : 10,
+        8,
+        trailing == null ? 16 : 12,
+        8,
+      ),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(kKalinkaPillRadius),
+        border: Border.all(color: border, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (leading != null) ...[leading!, const SizedBox(width: 8)],
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: KalinkaFonts.sans(
+                fontSize: KalinkaTypography.baseSize + 2,
+                fontWeight: FontWeight.w500,
+                color: fg,
+              ),
+            ),
+          ),
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+        ],
+      ),
     );
   }
 }

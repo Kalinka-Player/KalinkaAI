@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart' show RendererInfo;
+import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_player_api_provider.dart'
     show
         RendererSwitchException,
@@ -19,6 +20,7 @@ import 'renderer_upgrade_dialog.dart';
 import 'sheet_anchor.dart';
 import 'tap_highlight.dart';
 import 'transport_button.dart';
+import 'volume_control_slider.dart';
 
 /// One string for the chrome (tooltips, labels) and the sheet's empty note,
 /// so the copy cannot drift between them.
@@ -133,15 +135,14 @@ class _CastGlyph extends StatelessWidget {
   }
 }
 
-/// Renderer switch for the Now Playing header: the current output by name,
+/// Renderer switch for Now Playing: the current output by name,
 /// with a chevron saying a menu drops from it. Same picker as the playbar
 /// button, same crossed-icon empty state when the server has no renderers.
 class RendererSwitcherDropdown extends ConsumerWidget {
-  /// Longer names are ellipsised; the header has a centred label to respect.
+  /// Longer names are ellipsised to fit the available space.
   final double maxNameWidth;
 
-  /// Drawn in a grey rounded frame, standing on its own under the transport
-  /// rather than in a row of controls.
+  /// Drawn in a grey rounded frame when standing on its own.
   final bool framed;
 
   const RendererSwitcherDropdown({
@@ -198,16 +199,19 @@ class RendererSwitcherDropdown extends ConsumerWidget {
                 children: [
                   _CastGlyph(size: 18, live: outputLive),
                   const SizedBox(width: 7),
-                  ConstrainedBox(
-                    // The empty-state message must never ellipsise; names may.
-                    constraints: BoxConstraints(
-                      maxWidth: empty ? 200 : maxNameWidth,
-                    ),
-                    child: Text(
-                      name,
-                      style: KalinkaTextStyles.trayRowSublabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                  Flexible(
+                    child: ConstrainedBox(
+                      // Keep the name within narrow metadata columns too; the
+                      // tooltip still carries the full unavailable-output label.
+                      constraints: BoxConstraints(
+                        maxWidth: empty ? 200 : maxNameWidth,
+                      ),
+                      child: Text(
+                        name,
+                        style: KalinkaTextStyles.trayRowSublabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 2),
@@ -227,7 +231,7 @@ class RendererSwitcherDropdown extends ConsumerWidget {
 }
 
 /// Opens the output picker and acts on the choice. [configurable] false
-/// drops the per-output settings gear, for screens that do not host that
+/// hides the current output's settings gear, for screens that do not host that
 /// panel.
 Future<void> showRendererPicker(
   BuildContext context,
@@ -306,60 +310,143 @@ class RendererPickerContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(rendererListProvider);
     final renderers = state.renderers;
+    final active = state.active;
+    final others = renderers.where((renderer) => !renderer.active).toList();
     final ownId = ref.watch(rendererIdentityProvider).value?.rendererId;
+    final connected =
+        ref.watch(connectionStateProvider) == ConnectionStatus.connected;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const _PickerHeader(),
-        if (renderers.isEmpty)
-          _EmptyNote(loading: state.loading)
-        else
-          // Many-renderer installs are rare, but a scroll cap keeps the sheet
-          // from swallowing the screen if one turns up.
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.6,
-            ),
-            child: ListView.builder(
-              shrinkWrap: true,
-              padding: const EdgeInsets.only(bottom: 10),
-              itemCount: renderers.length,
-              itemBuilder: (ctx, i) => _RendererRow(
-                renderer: renderers[i],
-                isSelf: renderers[i].rendererId == ownId,
-                configurable: configurable,
-                onIntent: (intent) => Navigator.pop(
-                  ctx,
-                  RendererPickerChoice(
-                    rendererId: renderers[i].rendererId,
-                    rendererName: rendererDisplayName(
-                      renderers[i],
-                      isSelf: renderers[i].rendererId == ownId,
+    Widget row(RendererInfo renderer) => _RendererRow(
+      renderer: renderer,
+      isSelf: renderer.rendererId == ownId,
+      configurable: configurable,
+      onIntent: (intent) => Navigator.pop(
+        context,
+        RendererPickerChoice(
+          rendererId: renderer.rendererId,
+          rendererName: rendererDisplayName(
+            renderer,
+            isSelf: renderer.rendererId == ownId,
+          ),
+          intent: intent,
+          blocked: !renderer.compatible,
+        ),
+      ),
+    );
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: (MediaQuery.sizeOf(context).height * 0.75).clamp(0.0, 560.0),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _PickerHeader(hasActive: active != null),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (active != null)
+                    row(active)
+                  else if (renderers.isEmpty)
+                    _EmptyNote(loading: state.loading)
+                  else
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: kSheetGutter,
+                      ),
+                      child: Text(
+                        'No output selected',
+                        style: KalinkaTextStyles.trayRowLabel,
+                      ),
                     ),
-                    intent: intent,
-                    blocked: !renderers[i].compatible,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      kSheetGutter,
+                      20,
+                      kSheetGutter,
+                      24,
+                    ),
+                    child: NowPlayingVolumeControl(
+                      // Discard a previous output's optimistic drag/echo state.
+                      key: ValueKey(active?.rendererId),
+                      showUnavailable: true,
+                      showPercentage: true,
+                      activeColor: KalinkaColors.accent,
+                      enabled:
+                          connected &&
+                          active != null &&
+                          active.isConnected &&
+                          active.compatible,
+                    ),
                   ),
-                ),
+                  if (others.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: kSheetGutter),
+                      child: Divider(
+                        height: 1,
+                        color: KalinkaColors.borderSubtle,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        kSheetGutter,
+                        18,
+                        kSheetGutter,
+                        8,
+                      ),
+                      child: Text(
+                        active == null ? 'AVAILABLE OUTPUTS' : 'OTHER OUTPUTS',
+                        style: KalinkaTextStyles.sectionHeaderMuted,
+                      ),
+                    ),
+                    for (final renderer in others) row(renderer),
+                  ],
+                ],
               ),
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-/// Sheet title. The list keeps itself current over the queue socket, so the
-/// header offers nothing to press.
+/// Kept outside the scroll area so Close stays reachable on short screens.
 class _PickerHeader extends StatelessWidget {
-  const _PickerHeader();
+  final bool hasActive;
+
+  const _PickerHeader({required this.hasActive});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
-      child: Text('PLAY ON', style: KalinkaTextStyles.sectionHeaderMuted),
+      padding: const EdgeInsets.fromLTRB(kSheetGutter, 4, 8, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              hasActive ? 'PLAYING ON' : 'PLAY ON',
+              style: KalinkaTextStyles.sectionHeaderMuted,
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: 'Close output picker',
+            onPressed: () => Navigator.of(context).pop(),
+            style: kalinkaIconButtonStyle,
+            icon: const Icon(
+              Icons.close,
+              size: 20,
+              color: KalinkaColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -467,19 +554,66 @@ class _RendererRow extends StatelessWidget {
     // already on is a perfectly good thing to configure.
     final canConfigure = usable;
     final offerUpgrade = renderer.updateAvailable;
-    // Kept where it will work again — an offline renderer comes back — but
-    // never on one the server cannot talk to, whose settings are unreachable
-    // until it is upgraded, and never beside an upgrade button: two targets
-    // where only one works is a trap.
+    // Settings belong only to the current output. Keep a disabled gear while
+    // it is offline, unless upgrading is its only available action.
     final showGear =
+        active &&
         configurable &&
         (canConfigure || (renderer.compatible && !offerUpgrade));
     final name = rendererDisplayName(renderer, isSelf: isSelf);
     final detail = rendererDetail(renderer, isSelf: isSelf);
+    final actions = [
+      if (offerUpgrade)
+        _UpgradeButton(
+          rendererName: name,
+          urgent: !renderer.compatible,
+          onTap: () => onIntent(RendererPickerIntent.upgrade),
+        ),
+      if (showGear)
+        _GearButton(
+          rendererName: name,
+          onTap: canConfigure
+              ? () => onIntent(RendererPickerIntent.configure)
+              : null,
+        ),
+    ];
+
+    if (active) {
+      return Semantics(
+        container: true,
+        selected: true,
+        inMutuallyExclusiveGroup: true,
+        child: Padding(
+          padding: const EdgeInsets.only(left: kSheetGutter, right: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: KalinkaTextStyles.trayRowLabel.copyWith(
+                        fontSize: 20,
+                      ),
+                    ),
+                    if (detail.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(detail, style: KalinkaTextStyles.trayRowSublabel),
+                    ],
+                  ],
+                ),
+              ),
+              if (actions.isNotEmpty) ...[const SizedBox(width: 8), ...actions],
+            ],
+          ),
+        ),
+      );
+    }
 
     return Semantics(
-      // One output plays at a time; say so rather than leaving a screen reader
-      // to infer it from a tick.
+      // Preserve the single-choice relationship without visual radio marks.
       inMutuallyExclusiveGroup: true,
       selected: active,
       // The upgrade is a live control on a row that cannot be played; saying
@@ -487,25 +621,15 @@ class _RendererRow extends StatelessWidget {
       enabled: usable || offerUpgrade,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          // Selection lives in the container, not the label colour — it
-          // survives a glance and doesn't lean on hue to carry state.
-          color: active ? KalinkaColors.accentSubtle : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: active ? KalinkaColors.accentBorder : Colors.transparent,
-          ),
-        ),
+        constraints: const BoxConstraints(minHeight: 48),
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(11),
+          borderRadius: BorderRadius.circular(12),
           clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
               // Full-bleed, and under the content: hovering the name lights
-              // the whole item rather than the strip left of the rule. The
-              // gear is painted over it and takes its own hits first, so its
-              // highlight stays a circle.
+              // the whole item. Upgrade buttons take their own hits above it.
               Positioned.fill(
                 child: InkWell(
                   // A dead tap reads as a broken app, not as an output
@@ -537,34 +661,25 @@ class _RendererRow extends StatelessWidget {
                       // off the InkWell below. Nothing here is a target.
                       child: IgnorePointer(
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(11, 10, 8, 10),
-                          child: Row(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _SelectionMark(selected: active),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      name,
-                                      style: KalinkaTextStyles.trayRowLabel,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    if (detail.isNotEmpty) ...[
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        detail,
-                                        style:
-                                            KalinkaTextStyles.trayRowSublabel,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ],
-                                ),
+                              Text(
+                                name,
+                                style: KalinkaTextStyles.trayRowLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
+                              if (detail.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  detail,
+                                  style: KalinkaTextStyles.trayRowSublabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -572,65 +687,19 @@ class _RendererRow extends StatelessWidget {
                     ),
                   ),
                   // Separate targets in one row: the rule is what says so.
-                  if (offerUpgrade || showGear)
+                  if (offerUpgrade)
                     Container(
                       width: 1,
                       height: 26,
                       color: KalinkaColors.borderSubtle,
                     ),
-                  if (offerUpgrade)
-                    _UpgradeButton(
-                      rendererName: name,
-                      // Amber only while it is the reason the row is dead;
-                      // an upgrade that is merely available is not a fault.
-                      urgent: !renderer.compatible,
-                      onTap: () {
-                        onIntent(RendererPickerIntent.upgrade);
-                      },
-                    ),
-                  if (showGear)
-                    _GearButton(
-                      rendererName: name,
-                      onTap: canConfigure
-                          ? () {
-                              onIntent(RendererPickerIntent.configure);
-                            }
-                          : null,
-                    ),
+                  ...actions,
                 ],
               ),
             ],
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Leading single-choice mark: an empty ring, filled with a check on the
-/// output playback runs on. Shape carries the state, colour only reinforces.
-class _SelectionMark extends StatelessWidget {
-  final bool selected;
-
-  const _SelectionMark({required this.selected});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 20,
-      height: 20,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: selected ? KalinkaColors.accent : Colors.transparent,
-        border: Border.all(
-          color: selected ? KalinkaColors.accent : KalinkaColors.borderDefault,
-          width: 1.5,
-        ),
-      ),
-      child: selected
-          ? const Icon(Icons.check, size: 13, color: KalinkaColors.textPrimary)
-          : null,
     );
   }
 }

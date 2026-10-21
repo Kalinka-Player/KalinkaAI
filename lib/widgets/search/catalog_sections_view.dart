@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +9,7 @@ import '../../providers/catalog_section_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../browse_rows_shimmer.dart';
+import '../home/preview_shelf.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/browse_navigation_scope.dart';
 import '../shelf_heading.dart';
@@ -14,6 +17,31 @@ import 'browse_visit_scope.dart';
 
 /// Items a shelf shows when its source did not say.
 const _defaultPreviewLimit = 5;
+
+/// How many tracks a shelf of them lists before VIEW ALL.
+const _trackPreviewLimit = 5;
+
+/// Albums, artists and playlists, which a shelf shows as covers.
+bool _coverKind(BrowseType type) =>
+    type == BrowseType.album ||
+    type == BrowseType.artist ||
+    type == BrowseType.playlist;
+
+/// Whether a shelf of [catalog] shows covers on a sideways rail, as a pinned
+/// Cards preview does, rather than rows: by what it holds, whatever layout
+/// its source suggests. Where the catalog does not say, its [items] do; null
+/// until they have loaded.
+bool? _coverShelf(Catalog catalog, [List<BrowseItem>? items]) =>
+    switch (catalog.previewConfig?.contentType) {
+      PreviewContentType.album ||
+      PreviewContentType.artist ||
+      PreviewContentType.playlist => true,
+      PreviewContentType.track => false,
+      _ =>
+        items == null || items.isEmpty
+            ? null
+            : items.every((item) => _coverKind(item.browseType)),
+    };
 
 /// A catalog made of several shelves — one per entity kind it holds — each
 /// filled by its own browse request.
@@ -29,8 +57,9 @@ class CatalogSectionsView extends StatefulWidget {
   /// Refetches shelves after a collection changes.
   final int revision;
 
-  /// The page banner and its active-filter chips, scrolling with the shelves.
+  /// Content below the pinned header, scrolling with the shelves.
   final Widget header;
+  final Widget? sliverHeader;
 
   /// Shown when all eligible shelves are empty.
   final Widget empty;
@@ -44,6 +73,7 @@ class CatalogSectionsView extends StatefulWidget {
     required this.query,
     required this.revision,
     required this.header,
+    this.sliverHeader,
     required this.empty,
     required this.onViewAll,
   });
@@ -85,6 +115,28 @@ class _CatalogSectionsViewState extends State<CatalogSectionsView> {
   @override
   Widget build(BuildContext context) {
     final shelves = _shelves;
+    if (widget.sliverHeader != null) {
+      final empty = shelves.every((shelf) => _empty.contains(shelf.request));
+      return CustomScrollView(
+        slivers: [
+          widget.sliverHeader!,
+          SliverToBoxAdapter(child: widget.header),
+          SliverPadding(
+            padding: const EdgeInsets.only(bottom: 24),
+            sliver: empty
+                ? SliverToBoxAdapter(child: widget.empty)
+                : SliverList.builder(
+                    itemCount: shelves.length,
+                    itemBuilder: (context, index) => _SectionShelf(
+                      shelf: shelves[index],
+                      onViewAll: widget.onViewAll,
+                      onEmpty: _reportEmpty,
+                    ),
+                  ),
+          ),
+        ],
+      );
+    }
     if (shelves.every((shelf) => _empty.contains(shelf.request))) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -134,7 +186,12 @@ _ShelfPlan? _plan(BrowseItem section, BrowseFilterQuery query, int revision) {
     request: (
       id: section.id,
       filter: query.encoded(capabilities),
-      limit: catalog.previewConfig?.itemsCount ?? _defaultPreviewLimit,
+      limit: catalog.previewConfig?.contentType == PreviewContentType.track
+          ? math.min(
+              catalog.previewConfig?.itemsCount ?? _trackPreviewLimit,
+              _trackPreviewLimit,
+            )
+          : catalog.previewConfig?.itemsCount ?? _defaultPreviewLimit,
       revision: revision,
     ),
   );
@@ -190,9 +247,19 @@ class _SectionShelf extends ConsumerWidget {
       ref.read(searchSessionProvider.notifier).openPage(page, filter: filter);
     }
 
+    Preview covers(int count) => Preview(
+      type: PreviewType.imageText,
+      itemsCount: count,
+      cardSize: catalog.previewConfig?.cardSize,
+    );
+
     return preview.when(
-      loading: () =>
-          _Shelf(title: title, child: const BrowseRowsShimmer(count: 3)),
+      loading: () => _Shelf(
+        title: title,
+        child: _coverShelf(catalog) == true
+            ? PreviewShelfShimmer(preview: covers(shelf.request.limit))
+            : const BrowseRowsShimmer(count: 3),
+      ),
       // A shelf that failed says so in its own space; the rest of the page,
       // and the filters that could undo it, stay usable.
       error: (_, _) => _Shelf(
@@ -211,8 +278,15 @@ class _SectionShelf extends ConsumerWidget {
           );
           return const SizedBox.shrink();
         }
+        final cover = _coverShelf(catalog, list.items) ?? false;
+        // A shelf of tracks is a short list; VIEW ALL has the rest.
+        final shown =
+            !cover &&
+                list.items.every((item) => item.browseType == BrowseType.track)
+            ? list.items.take(_trackPreviewLimit).toList()
+            : list.items;
         final trackIds = <String>[
-          for (final item in list.items)
+          for (final item in shown)
             if (item.track != null) item.id,
         ];
         return _Shelf(
@@ -220,15 +294,20 @@ class _SectionShelf extends ConsumerWidget {
           count: list.total,
           onViewAll: navigation != null && section.canBrowse
               ? openSection
-              : type == null ||
-                    onViewAll == null ||
-                    list.total <= list.items.length
+              : type == null || onViewAll == null || list.total <= shown.length
               ? null
               : () => onViewAll!(type),
-          child: BrowseItemRows(
-            items: list.items,
-            queueContextIds: trackIds.isEmpty ? null : trackIds,
-          ),
+          child: cover
+              ? PreviewShelf(
+                  items: shown,
+                  preview: covers(shown.length),
+                  storageId: section.id,
+                  onOpenItem: (item) => openBrowsable(context, ref, item),
+                )
+              : BrowseItemRows(
+                  items: shown,
+                  queueContextIds: trackIds.isEmpty ? null : trackIds,
+                ),
         );
       },
     );
@@ -252,7 +331,7 @@ class _Shelf extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 21, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

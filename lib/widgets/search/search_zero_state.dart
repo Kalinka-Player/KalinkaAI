@@ -13,7 +13,6 @@ import '../home/home_layout.dart';
 import '../home/pinned_catalogs_section.dart';
 import '../shelf_heading.dart';
 import '../tap_highlight.dart';
-import 'catalog_cards_section.dart';
 import 'collections_section.dart';
 
 /// The Catalogs root body: the search invitation (passed in via [leading]),
@@ -35,15 +34,15 @@ class SearchZeroState extends ConsumerWidget {
   /// content rather than sitting sticky above it.
   final List<Widget> leading;
 
-  /// Source navigation lives in the shell when its persistent rail is visible.
-  final bool showMusicSources;
+  /// Off where the navigation rail lists Collections instead.
+  final bool showCollections;
 
   const SearchZeroState({
     super.key,
     required this.onOpenCatalog,
     this.controller,
     this.leading = const [],
-    this.showMusicSources = true,
+    this.showCollections = true,
   });
 
   @override
@@ -70,8 +69,7 @@ class SearchZeroState extends ConsumerWidget {
         children: [
           ...leading,
 
-          CollectionsSection(onOpenCatalog: onOpenCatalog),
-          if (showMusicSources) const CatalogCardsSection(),
+          if (showCollections) CollectionsSection(onOpenCatalog: onOpenCatalog),
           if (pins.isEmpty) const HomeCustomisationBanner(),
           if (pins.isNotEmpty) ...[
             // One action for the whole pinned group, before any previews.

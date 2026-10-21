@@ -506,7 +506,7 @@ void main() {
       },
       inspired: const {},
     );
-    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await _pump(tester, api);
@@ -520,7 +520,7 @@ void main() {
     final artist = tester.getTopLeft(find.text('Someone')).dx;
     expect(artist, greaterThan(title));
     expect(tester.getTopLeft(find.text('An Album')).dx, greaterThan(artist));
-    expect(find.byType(ColumnSeparator), findsWidgets);
+    expect(find.byType(ColumnSeparator), findsNothing);
     // A listing of tracks names its columns as such, over each one.
     for (final (title, cell) in [
       ('TITLE', 'Named Song'),

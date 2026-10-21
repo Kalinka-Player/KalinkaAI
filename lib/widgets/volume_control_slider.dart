@@ -18,7 +18,21 @@ class NowPlayingVolumeControl extends ConsumerStatefulWidget {
   /// while something plays.
   final bool showUnavailable;
 
-  const NowPlayingVolumeControl({super.key, this.showUnavailable = false});
+  /// The picker keeps the slider visible when its output cannot be reached.
+  final bool enabled;
+
+  /// Show the level beside the slider, as in the output picker.
+  final bool showPercentage;
+
+  final Color activeColor;
+
+  const NowPlayingVolumeControl({
+    super.key,
+    this.showUnavailable = false,
+    this.enabled = true,
+    this.showPercentage = false,
+    this.activeColor = KalinkaColors.textPrimary,
+  });
 
   @override
   ConsumerState<NowPlayingVolumeControl> createState() =>
@@ -201,12 +215,18 @@ class _NowPlayingVolumeControlState
     with OptimisticVolume {
   @override
   Widget build(BuildContext context) {
-    final live = volumeAvailable;
+    final live = widget.enabled && volumeAvailable;
     final fixed = volumeFixed;
     if (!live && !widget.showUnavailable && !(fixed && volumeHeld)) {
       return const SizedBox.shrink();
     }
 
+    final progress = !widget.enabled
+        ? 0.0
+        : live || !fixed
+        ? volumeProgress
+        : 1.0;
+    final percentage = '${(progress * 100).round()}%';
     final row = Row(
       children: [
         const Icon(
@@ -221,15 +241,18 @@ class _NowPlayingVolumeControlState
               trackHeight: 3,
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
               overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-              activeTrackColor: KalinkaColors.textPrimary,
+              activeTrackColor: live
+                  ? widget.activeColor
+                  : KalinkaColors.textMuted,
               inactiveTrackColor: KalinkaColors.borderDefault,
               thumbColor: KalinkaColors.textPrimary,
-              overlayColor: KalinkaColors.textPrimary.withValues(alpha: 0.1),
+              overlayColor: widget.activeColor.withValues(alpha: 0.1),
             ),
             // Never a null onChanged: greyed out, the control is shut by
             // the IgnorePointer below instead, keeping its semantics' shape.
             child: Slider(
-              value: live || !fixed ? volumeProgress : 1.0,
+              value: progress,
+              semanticFormatterCallback: (value) => '${(value * 100).round()}%',
               onChanged: (value) {
                 if (live) adjustVolume(value);
               },
@@ -239,16 +262,35 @@ class _NowPlayingVolumeControlState
             ),
           ),
         ),
-        const Icon(
-          Icons.volume_up,
-          size: 20,
-          color: KalinkaColors.textSecondary,
-        ),
+        if (widget.showPercentage)
+          SizedBox(
+            width: MediaQuery.textScalerOf(context).scale(14) * 3,
+            child: ExcludeSemantics(
+              child: Text(
+                widget.enabled && volumeHeld ? percentage : '—',
+                textAlign: TextAlign.end,
+                style: KalinkaTextStyles.timeLabel.copyWith(fontSize: 14),
+              ),
+            ),
+          )
+        else
+          const Icon(
+            Icons.volume_up,
+            size: 20,
+            color: KalinkaColors.textSecondary,
+          ),
       ],
     );
-    if (live) return RepaintBoundary(child: row);
+    if (live) {
+      return Semantics(
+        label: 'Volume',
+        child: RepaintBoundary(child: row),
+      );
+    }
     return Semantics(
-      label: fixed ? 'Volume fixed' : 'Volume unavailable',
+      label: widget.enabled && fixed && volumeHeld
+          ? 'Volume fixed'
+          : 'Volume unavailable',
       excludeSemantics: true,
       child: IgnorePointer(
         child: ExcludeFocus(

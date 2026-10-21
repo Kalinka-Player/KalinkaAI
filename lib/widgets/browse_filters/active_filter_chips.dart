@@ -5,7 +5,6 @@ import '../../data_model/browse_filters.dart';
 import '../../data_model/data_model.dart' show Genre;
 import '../../providers/browse_genres_provider.dart';
 import '../../theme/app_theme.dart';
-import '../hover_text_action.dart';
 import 'browse_filter_form.dart';
 
 /// One removable chip per active answer, shown above the rows.
@@ -19,6 +18,9 @@ class ActiveFilterChips extends ConsumerWidget {
 
   final EdgeInsets padding;
 
+  /// An inline search field already displays and clears this value.
+  final bool showText;
+
   /// Query and navigation chips shown before the filter chips.
   final List<Widget> leading;
 
@@ -29,11 +31,15 @@ class ActiveFilterChips extends ConsumerWidget {
     required this.onChanged,
     this.padding = const EdgeInsets.fromLTRB(16, 0, 16, 12),
     this.leading = const [],
+    this.showText = true,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (query.isEmpty && leading.isEmpty) return const SizedBox.shrink();
+    final facets = query.copyWith(text: '');
+    if ((showText ? query : facets).isEmpty && leading.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     // Only reached with genres applied, which needs the capability anyway.
     final vocabulary = capabilities.genreVocabulary;
@@ -54,7 +60,7 @@ class ActiveFilterChips extends ConsumerWidget {
           label: filterTypeLabel(query.type!),
           onRemove: () => onChanged(query.copyWith(clearType: true)),
         ),
-      if (query.text.isNotEmpty)
+      if (showText && query.text.isNotEmpty)
         ActiveFilterChip(
           label: '“${query.text}”',
           onRemove: () => onChanged(query.copyWith(text: '')),
@@ -87,35 +93,33 @@ class ActiveFilterChips extends ConsumerWidget {
 
     return Padding(
       padding: padding,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Wrap(
+        spacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Expanded(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [...leading, ...chips],
-            ),
-          ),
-          // Dropping four filters one X at a time is four reloads; this is
-          // one. Only worth its space once there is more than one to drop.
-          if (chips.length > 1) ...[
-            const SizedBox(width: 10),
+          ...leading,
+          ...chips,
+          if (!facets.isEmpty)
             SizedBox(
-              // Matches a chip so the label sits on the first row's centre
-              // line. Grey, not berry: dropping filters destroys nothing.
-              height: 34,
-              child: Center(
-                child: HoverTextAction(
-                  label: 'RESET ALL',
-                  semanticsLabel: 'Reset all filters',
-                  onTap: () => onChanged(const BrowseFilterQuery()),
-                  color: KalinkaColors.textSecondary,
-                  hoverColor: KalinkaColors.textPrimary,
+              height: kKalinkaPillTarget,
+              child: Tooltip(
+                message: 'Clear filters, keep search text',
+                child: TextButton(
+                  onPressed: () =>
+                      onChanged(BrowseFilterQuery(text: query.text)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: KalinkaColors.textSecondary,
+                    overlayColor: KalinkaColors.surfaceOverlay,
+                    textStyle: KalinkaFonts.sans(
+                      fontSize: KalinkaTypography.baseSize + 2,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(48, 48),
+                  ),
+                  child: const Text('Clear filters'),
                 ),
               ),
             ),
-          ],
         ],
       ),
     );
@@ -132,10 +136,10 @@ class ActiveFilterChips extends ConsumerWidget {
   }
 }
 
-/// One applied filter, drawn as a receipt: grey, because it is the trace of a
-/// choice made in the card rather than the place the choice is made, and it
-/// stays on screen for as long as the listing does (PALETTE.md, *A receipt is
-/// grey*).
+/// One applied filter, drawn as a receipt: the filter card's own pill, grey,
+/// because it is the trace of a choice made in the card rather than the place
+/// the choice is made, and it stays on screen for as long as the listing does
+/// (PALETTE.md, *A receipt is grey*).
 class ActiveFilterChip extends StatefulWidget {
   final String label;
   final VoidCallback onRemove;
@@ -168,58 +172,40 @@ class _ActiveFilterChipState extends State<ActiveFilterChip> {
       button: true,
       label: 'Remove filter ${widget.label}',
       excludeSemantics: true,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => _setHovering(true),
-        onExit: (_) => _setHovering(false),
-        child: GestureDetector(
-          onTap: widget.onRemove,
-          behavior: HitTestBehavior.opaque,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 130),
-            curve: Curves.easeOut,
-            height: 34,
-            padding: const EdgeInsets.only(left: 14, right: 10),
-            decoration: BoxDecoration(
-              color: _hovering
-                  ? KalinkaColors.surfaceOverlay
-                  : KalinkaColors.surfaceElevated,
-              borderRadius: BorderRadius.circular(17),
-              border: Border.all(
-                color: _hovering
-                    ? KalinkaColors.textMuted
-                    : KalinkaColors.borderDefault,
-                width: 1,
+      onTap: widget.onRemove,
+      child: Tooltip(
+        message: widget.label,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: widget.onRemove,
+            onHover: _setHovering,
+            onFocusChange: _setHovering,
+            mouseCursor: WidgetStateMouseCursor.clickable,
+            customBorder: const StadiumBorder(),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: kKalinkaPillTarget),
+              child: Center(
+                widthFactor: 1,
+                child: FilterPillFace(
+                  label: widget.label,
+                  hovered: _hovering,
+                  leading: widget.icon == null
+                      ? null
+                      : Icon(
+                          widget.icon,
+                          size: 16,
+                          color: KalinkaColors.textSecondary,
+                        ),
+                  trailing: Icon(
+                    Icons.close_rounded,
+                    size: 16,
+                    color: _hovering
+                        ? KalinkaColors.textPrimary
+                        : KalinkaColors.textSecondary,
+                  ),
+                ),
               ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (widget.icon != null) ...[
-                  Icon(
-                    widget.icon,
-                    size: 14,
-                    color: KalinkaColors.textSecondary,
-                  ),
-                  const SizedBox(width: 7),
-                ],
-                Text(
-                  widget.label,
-                  style: KalinkaFonts.sans(
-                    fontSize: KalinkaTypography.baseSize + 1,
-                    fontWeight: FontWeight.w500,
-                    color: KalinkaColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Icon(
-                  Icons.close_rounded,
-                  size: 15,
-                  color: _hovering
-                      ? KalinkaColors.textPrimary
-                      : KalinkaColors.textSecondary,
-                ),
-              ],
             ),
           ),
         ),

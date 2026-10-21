@@ -26,7 +26,7 @@ class CollectionsActions extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+      padding: kKalinkaActionRowPadding,
       child: Align(
         alignment: Alignment.centerLeft,
         child: ActionPillButton(

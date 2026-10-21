@@ -83,7 +83,7 @@ void main() {
         of: find.byType(RowColumnCells),
         matching: find.byType(ColumnSeparator),
       ),
-      findsNWidgets(2),
+      findsNothing,
     );
   });
 }

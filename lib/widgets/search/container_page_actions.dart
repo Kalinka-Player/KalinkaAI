@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data_model/data_model.dart';
 import '../../providers/collection_edit_provider.dart';
 import '../../providers/search_session_provider.dart';
+import '../../theme/app_theme.dart';
 import '../search_cards/action_pill_button.dart';
 import '../search_cards/collection_row.dart';
 import 'collections_edit_bar.dart';
@@ -41,13 +42,12 @@ class ContainerPageActions extends ConsumerWidget {
     final item = itemOf(page);
     final collection = isCollection(page);
     final editing =
-        collection &&
-        ref.watch(collectionEditProvider.select((s) => s.active));
+        collection && ref.watch(collectionEditProvider.select((s) => s.active));
     final empty = total == 0;
     final name = item.playlist?.name ?? item.name ?? page.title;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+      padding: kKalinkaActionRowPadding,
       child: editing
           ? const CollectionEditingBar()
           : Row(
@@ -55,7 +55,6 @@ class ContainerPageActions extends ConsumerWidget {
                 Expanded(
                   child: Wrap(
                     spacing: 8,
-                    runSpacing: 8,
                     children: [
                       if (item.canAdd && !empty) ...[
                         PlayAllChip(trackIds: [item.id], trackCount: total),

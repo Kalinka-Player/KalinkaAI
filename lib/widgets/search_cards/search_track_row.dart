@@ -13,6 +13,7 @@ import '../../utils/playback_utils.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
 import '../swipe_to_act_row.dart';
+import '../tap_highlight.dart';
 import '../track_tile_layout.dart';
 import 'long_press_ring_painter.dart';
 import 'row_columns.dart';
@@ -81,7 +82,6 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
   late final AnimationController _flashController;
   late final Animation<Color?> _flashColorAnim;
   bool _tappedToPlay = false;
-  bool _showFocus = false;
 
   @override
   void initState() {
@@ -214,13 +214,25 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
 
     final track = widget.item.track;
     final title = track?.title ?? widget.item.name ?? 'Unknown';
-    final artist = track?.performer?.name ?? '';
+    final performer = track?.performer?.name.trim() ?? '';
+    final albumPerformer = track?.album?.artist?.name.trim() ?? '';
+    final knownArtist =
+        performer.isEmpty || performer.toLowerCase() == 'unknown'
+        ? albumPerformer
+        : performer;
+    final artist = knownArtist.isEmpty || knownArtist.toLowerCase() == 'unknown'
+        ? 'Unknown artist'
+        : knownArtist;
+    final catalogTracks = RowColumnsListing.hideTrackTypeOf(context);
+    final showKind = widget.labelled && !catalogTracks;
     final album = track?.album?.title ?? '';
     final inAlbum = widget.albumTrackNumber != null;
     final number = widget.albumTrackNumber ?? widget.folderTrackNumber;
     final albumArtist = widget.albumArtist?.trim().toLowerCase() ?? '';
     final subtitle = inAlbum
         ? (artist.trim().toLowerCase() == albumArtist ? '' : artist)
+        : catalogTracks
+        ? artist
         : [artist, album].where((s) => s.isNotEmpty).join(' \u00B7 ');
     // Where the row is wide enough, the album, then the artist, then the
     // source take columns of their own, leaving the line under the title.
@@ -376,7 +388,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
                 overflow: TextOverflow.ellipsis,
               ),
               if (line.isNotEmpty ||
-                  !inAlbum && (widget.labelled || !columns.any)) ...[
+                  !inAlbum && (showKind || !columns.any)) ...[
                 const SizedBox(height: 2),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -389,7 +401,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
                       const SizedBox(width: 6),
                     ],
                     Expanded(
-                      child: widget.labelled
+                      child: showKind
                           ? Text.rich(
                               entityTypeSubtitle('Track', line),
                               maxLines: 1,
@@ -505,39 +517,32 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
         ),
       ),
     );
-    if (number == null) {
-      return MouseRegion(cursor: SystemMouseCursors.click, child: row);
-    }
+    if (number == null) return HoverHighlight(child: row);
 
-    return FocusableActionDetector(
-      mouseCursor: SystemMouseCursors.click,
-      onShowFocusHighlight: (value) => setState(() => _showFocus = value),
-      actions: {
-        ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (_) {
-            activate();
-            return null;
-          },
-        ),
-      },
-      child: Semantics(
-        button: true,
-        selected: selectionMode ? isSelected : null,
-        label: 'Track $number',
-        customSemanticsActions: selectionMode
-            ? null
-            : {
-                CustomSemanticsAction(label: 'Add to queue'): () =>
-                    addTrackToQueue(widget.item),
-                CustomSemanticsAction(label: 'Play next'): () =>
-                    playTrackNext(widget.item),
-              },
-        child: Container(
-          foregroundDecoration: BoxDecoration(
-            border: _showFocus
-                ? Border.all(color: KalinkaColors.textSecondary, width: 2)
-                : null,
+    // Wrap the focus target so keyboard focus highlights the whole row.
+    return HoverHighlight(
+      child: FocusableActionDetector(
+        mouseCursor: SystemMouseCursors.click,
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              activate();
+              return null;
+            },
           ),
+        },
+        child: Semantics(
+          button: true,
+          selected: selectionMode ? isSelected : null,
+          label: 'Track $number',
+          customSemanticsActions: selectionMode
+              ? null
+              : {
+                  CustomSemanticsAction(label: 'Add to queue'): () =>
+                      addTrackToQueue(widget.item),
+                  CustomSemanticsAction(label: 'Play next'): () =>
+                      playTrackNext(widget.item),
+                },
           child: row,
         ),
       ),

@@ -69,6 +69,19 @@ enum FindMusicView { catalogs, results }
 /// What an artist page lists: their releases, or their tracks.
 enum ArtistRelation { albums, tracks }
 
+/// The places the navigation rail lists, each keeping a history of its own:
+/// Home, the latest search's results, each source, and collections.
+abstract final class BrowseDestination {
+  static const home = 'home';
+  static const results = 'results';
+  static const collections = 'collections';
+  static String source(String name) => 'source:$name';
+
+  /// The source [destination] is, or null for any other.
+  static String? sourceOf(String destination) =>
+      destination.startsWith('source:') ? destination.substring(7) : null;
+}
+
 /// A block expanded with View all, independently of saved filters.
 typedef ExpandedBlock = ({ResultKind kind, String? source});
 
@@ -355,6 +368,13 @@ class SearchSessionState {
   /// its own whose [previousVisits] is empty.
   final List<SearchSessionState> previousVisits;
 
+  /// The [BrowseDestination] this visit, and those under it, belong to.
+  final String destination;
+
+  /// Every other destination as it was left, by destination: its visit,
+  /// holding the visits under it, and nothing parked of its own.
+  final Map<String, SearchSessionState> parked;
+
   /// Which search [results] answer; see [SearchSessionNotifier.submit].
   final int queryGen;
 
@@ -426,6 +446,8 @@ class SearchSessionState {
     this.activeView = FindMusicView.catalogs,
     this.visitId = 0,
     this.previousVisits = const [],
+    this.destination = BrowseDestination.home,
+    this.parked = const {},
     this.queryGen = 0,
     this.resultsAvailable = false,
     this.searchQuery = '',
@@ -453,6 +475,21 @@ class SearchSessionState {
 
   /// Home: nothing to go back to.
   bool get atHome => activeView == FindMusicView.catalogs && catalogPage.isRoot;
+
+  /// Every visit kept: this one, those under it, and every other
+  /// destination's.
+  Iterable<SearchSessionState> get allVisits sync* {
+    yield this;
+    yield* previousVisits;
+    for (final top in parked.values) {
+      yield top;
+      yield* top.previousVisits;
+    }
+  }
+
+  /// This visit as a history keeps it, without what only the shown one holds.
+  SearchSessionState get _snapshot =>
+      copyWith(previousVisits: const [], parked: const {});
 
   /// Prompts shown in the search overlay: the server's context-aware
   /// suggestions once fetched, static examples until then.
@@ -526,6 +563,8 @@ class SearchSessionState {
     FindMusicView? activeView,
     int? visitId,
     List<SearchSessionState>? previousVisits,
+    String? destination,
+    Map<String, SearchSessionState>? parked,
     int? queryGen,
     bool? resultsAvailable,
     String? searchQuery,
@@ -554,6 +593,8 @@ class SearchSessionState {
       activeView: activeView ?? this.activeView,
       visitId: visitId ?? this.visitId,
       previousVisits: previousVisits ?? this.previousVisits,
+      destination: destination ?? this.destination,
+      parked: parked ?? this.parked,
       queryGen: queryGen ?? this.queryGen,
       resultsAvailable: resultsAvailable ?? this.resultsAvailable,
       searchQuery: searchQuery ?? this.searchQuery,
@@ -588,6 +629,10 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   int _queryGen = 0;
 
   int _lastVisitId = 0;
+
+  /// The destination shown before the current one, where dropping a search
+  /// returns.
+  String _cameFrom = BrowseDestination.home;
 
   bool _disposed = false;
 
@@ -697,7 +742,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   void _visit(SearchSessionState next) {
     final stack = state.atHome
         ? const <SearchSessionState>[]
-        : [...state.previousVisits, state.copyWith(previousVisits: const [])];
+        : [...state.previousVisits, state._snapshot];
     state = next.copyWith(
       visitId: ++_lastVisitId,
       previousVisits: stack.length > _maxVisits
@@ -707,16 +752,23 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   }
 
   /// Return to the previous visit as it was left: its page, filters,
-  /// folder, query, results and source shortcut. With none left, Home.
+  /// folder, query, results and source shortcut. With none left in this
+  /// destination, Home.
   void goBack() {
     final stack = state.previousVisits;
     if (stack.isEmpty) {
-      backToCatalogsRoot();
+      if (state.destination == BrowseDestination.home) {
+        backToCatalogsRoot();
+      } else {
+        showHome();
+      }
       return;
     }
     final previous = stack.last;
     var next = previous.copyWith(
       previousVisits: stack.sublist(0, stack.length - 1),
+      destination: state.destination,
+      parked: state.parked,
       history: state.history,
       aiSuggestions: state.aiSuggestions,
       resultsAvailable:
@@ -787,9 +839,12 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// catalog page) discarded. History is written live on each [submit].
   void resetToRoot() {
     _queryGen++;
+    _cameFrom = BrowseDestination.home;
     state = state.copyWith(
       visitId: 0,
       previousVisits: const [],
+      destination: BrowseDestination.home,
+      parked: const {},
       queryGen: _queryGen,
       activeView: FindMusicView.catalogs,
       resultsAvailable: false,
@@ -809,16 +864,182 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     );
   }
 
-  /// Catalogs goes Home. Results reopens the last search as a visit of its
-  /// own, without asking again; it is inert until a search has run.
+  /// Catalogs goes Home. Results reopens the last search, without asking
+  /// again; it is inert until a search has run.
   void selectView(FindMusicView view) {
     if (view == FindMusicView.catalogs) {
       backToCatalogsRoot();
       return;
     }
-    if (!state.resultsAvailable || state.activeView == view) return;
-    _visit(state.copyWith(activeView: view));
+    showResults();
   }
+
+  /// [destination] in place of the one shown, which is kept as it was left
+  /// unless [keepShown] is false. With [restore], as it was itself left;
+  /// otherwise, or never shown, at the visit [start] makes. Showing the
+  /// destination already shown does nothing.
+  void _show(
+    String destination, {
+    required bool restore,
+    required SearchSessionState Function() start,
+    bool keepShown = true,
+  }) {
+    if (destination == state.destination) return;
+    final parked = {
+      ...state.parked,
+      if (keepShown) state.destination: state.copyWith(parked: const {}),
+    };
+    final left = parked.remove(destination);
+    _cameFrom = state.destination;
+    final next = restore && left != null
+        ? _carry(left)
+        : start().copyWith(previousVisits: const []);
+    state = next.copyWith(destination: destination, parked: parked);
+  }
+
+  /// [visit] brought up to what has happened since it was left: the latest
+  /// search and what it has found, the history and the suggestions.
+  SearchSessionState _carry(SearchSessionState visit) {
+    final next = visit.copyWith(
+      history: state.history,
+      aiSuggestions: state.aiSuggestions,
+      resultsAvailable: state.resultsAvailable,
+      queryGen: state.queryGen,
+      searchQuery: state.searchQuery,
+      results: state.results,
+      clearResults: state.results == null,
+      searchLoading: state.searchLoading,
+      searchError: state.searchError,
+      clearError: state.searchError == null,
+    );
+    if (visit.activeView == FindMusicView.results) {
+      if (identical(visit.results, state.results)) return next;
+      // Its own narrowing, fitted to what has arrived since.
+      return next.copyWith(
+        resultsFilter: _fitResultsFilter(
+          visit.resultsChoice,
+          state.results,
+          holding: visit.resultsFilter,
+        ),
+      );
+    }
+    return next.copyWith(
+      resultsFilter: state.resultsFilter,
+      resultsChoice: state.resultsChoice,
+      resultsGenreNames: state.resultsGenreNames,
+      matchSource: state.matchSource,
+      clearMatchSource: state.matchSource == null,
+      clearExpandedBlock: true,
+    );
+  }
+
+  /// Home at its top, with nothing under it.
+  SearchSessionState _homeTop() => state.copyWith(
+    activeView: FindMusicView.catalogs,
+    visitId: 0,
+    previousVisits: const [],
+    catalogPage: const CatalogPage.root(),
+    folderPath: const [],
+    catalogFilter: const BrowseFilterQuery(),
+    clearExpandedShelf: true,
+  );
+
+  /// Home as it was left.
+  void showHome() =>
+      _show(BrowseDestination.home, restore: true, start: _homeTop);
+
+  /// The latest search's results. With [restore], as they were left, pages
+  /// opened from them included; otherwise at the results themselves.
+  void showResults({bool restore = true}) {
+    if (!state.resultsAvailable ||
+        state.destination == BrowseDestination.results) {
+      return;
+    }
+    final left = state.parked[BrowseDestination.results];
+    // Its earliest results visit; a long trail may have dropped it.
+    final results = left == null
+        ? null
+        : [
+            ...left.previousVisits,
+            left,
+          ].where((v) => v.activeView == FindMusicView.results).firstOrNull;
+    _show(
+      BrowseDestination.results,
+      restore: restore,
+      start: () => results == null
+          // Kept nowhere: the search as the shown visit carries it.
+          ? state.copyWith(
+              activeView: FindMusicView.results,
+              visitId: ++_lastVisitId,
+              clearExpandedBlock: true,
+            )
+          : _carry(results),
+    );
+  }
+
+  /// [source]'s pages. With [restore], as they were left; otherwise at the
+  /// source's own page.
+  void openSource(CatalogSource source, {bool restore = true}) => _show(
+    BrowseDestination.source(source.module.name),
+    restore: restore,
+    start: () => _pageVisit(
+      CatalogPage.fromItem(source.root, provider: source.module.title),
+    ).copyWith(visitId: ++_lastVisitId),
+  );
+
+  /// The collections listing [plan] is and the collections opened from it.
+  /// With [restore], as they were left; otherwise at the listing.
+  void openCollections(CatalogCardPlan plan, {bool restore = true}) => _show(
+    BrowseDestination.collections,
+    restore: restore,
+    start: () => _pageVisit(
+      _planPage(plan, plan.title),
+      restoreFolder: true,
+    ).copyWith(visitId: ++_lastVisitId),
+  );
+
+  /// Open the page a catalog card stands for, under [provider]'s name.
+  void openCatalogPlan(CatalogCardPlan plan, String provider) {
+    final page = _planPage(plan, provider);
+    openPage(page, restoreFolder: true);
+  }
+
+  static CatalogPage _planPage(CatalogCardPlan plan, String provider) =>
+      CatalogPage.category(
+        id: plan.id,
+        title: plan.title,
+        provider: provider,
+        description: plan.description,
+        totalDurationSeconds: plan.totalDurationSeconds,
+        artPath: plan.artPath,
+        filters: plan.filters,
+        sections: plan.sections,
+        canEdit: plan.canEdit,
+        folderLayout: plan.folderLayout,
+        canAdd: plan.canAdd,
+        preview: plan.preview,
+      );
+
+  /// The shown visit moved to [page], with the filter and folder kept for it.
+  SearchSessionState _pageVisit(
+    CatalogPage page, {
+    BrowseFilterQuery? initialFilter,
+    bool restoreFolder = false,
+  }) => state.copyWith(
+    activeView: FindMusicView.catalogs,
+    catalogPage: page,
+    folderPath: page.folderLayout && restoreFolder
+        ? _savedFolderPath(page.id!, page.provider)
+        : const [],
+    // The source may have dropped a field since the filter was chosen.
+    catalogFilter:
+        (initialFilter ?? _savedCatalogFilters[page.id])?.fittedTo(
+          page.filterCapabilities,
+        ) ??
+        const BrowseFilterQuery(),
+    clearExpandedShelf: true,
+    artistTab: ArtistRelation.albums,
+  );
 
   /// Open a catalog category page directly by its stable browse id. Not
   /// recorded in search history — this is navigation, not a search.
@@ -872,20 +1093,10 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       item: item,
     );
     _visit(
-      state.copyWith(
-        activeView: FindMusicView.catalogs,
-        catalogPage: page,
-        folderPath: folderLayout && restoreFolder
-            ? _savedFolderPath(id, provider)
-            : const [],
-        // The source may have dropped a field since the filter was chosen.
-        catalogFilter:
-            (initialFilter ?? _savedCatalogFilters[id])?.fittedTo(
-              page.filterCapabilities,
-            ) ??
-            const BrowseFilterQuery(),
-        clearExpandedShelf: true,
-        artistTab: ArtistRelation.albums,
+      _pageVisit(
+        page,
+        initialFilter: initialFilter,
+        restoreFolder: restoreFolder,
       ),
     );
   }
@@ -909,7 +1120,11 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     openPage(page);
   }
 
-  void openPage(CatalogPage page, {BrowseFilterQuery? filter}) {
+  void openPage(
+    CatalogPage page, {
+    BrowseFilterQuery? filter,
+    bool restoreFolder = false,
+  }) {
     if (page.id == null) return;
     openCatalog(
       id: page.id!,
@@ -925,7 +1140,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       canAdd: page.canAdd,
       preview: page.preview,
       initialFilter: filter,
-      restoreFolder: false,
+      restoreFolder: restoreFolder,
       item: page.item,
     );
   }
@@ -937,10 +1152,17 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         visit.catalogPage.id == id
         ? visit.copyWith(catalogPage: visit.catalogPage.retitled(title))
         : visit;
-    state = retitled(state).copyWith(
-      previousVisits: [
-        for (final visit in state.previousVisits) retitled(visit),
-      ],
+    SearchSessionState withStack(SearchSessionState top) => retitled(top)
+        .copyWith(
+          previousVisits: [
+            for (final visit in top.previousVisits) retitled(visit),
+          ],
+        );
+    state = withStack(state).copyWith(
+      parked: {
+        for (final MapEntry(:key, :value) in state.parked.entries)
+          key: withStack(value),
+      },
     );
   }
 
@@ -974,18 +1196,17 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// Show the folder enclosing the one shown.
   void showEnclosingFolder() => showFolderAt(state.folderPath.length - 1);
 
-  /// Straight Home, past every visit.
+  /// Straight to Home's top, past every visit in it. Other destinations
+  /// are kept as they were left.
   void backToCatalogsRoot() {
-    if (state.atHome && state.previousVisits.isEmpty) return;
-    state = state.copyWith(
-      activeView: FindMusicView.catalogs,
-      visitId: 0,
-      previousVisits: const [],
-      catalogPage: const CatalogPage.root(),
-      folderPath: const [],
-      catalogFilter: const BrowseFilterQuery(),
-      clearExpandedShelf: true,
-    );
+    if (state.destination == BrowseDestination.home) {
+      if (state.atHome && state.previousVisits.isEmpty) return;
+      state = _homeTop();
+      return;
+    }
+    final parked = {...state.parked}..remove(BrowseDestination.home);
+    state = state.copyWith(parked: parked);
+    _show(BrowseDestination.home, restore: false, start: _homeTop);
   }
 
   /// Saves the catalog filter. Choosing a type replaces an expanded shelf.
@@ -1070,22 +1291,33 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     // searches. Catalog navigation never reaches here, so it stays out of it.
     _appendHistory(query);
     final gen = ++_queryGen;
-    _visit(
-      state.copyWith(
-        activeView: FindMusicView.results,
-        queryGen: gen,
-        resultsAvailable: true,
-        searchQuery: query,
-        clearResults: true,
-        searchLoading: true,
-        clearError: true,
-        resultsFilter: _savedResultsFilter,
-        resultsChoice: _savedResultsFilter,
-        resultsGenreNames: _savedResultsGenreNames,
-        clearMatchSource: true,
-        clearExpandedBlock: true,
-        history: _loadHistory(),
-      ),
+    // The search before it goes with its pages.
+    final parked = {
+      ...state.parked,
+      if (state.destination != BrowseDestination.results)
+        state.destination: state.copyWith(parked: const {}),
+    }..remove(BrowseDestination.results);
+    if (state.destination != BrowseDestination.results) {
+      _cameFrom = state.destination;
+    }
+    state = state.copyWith(
+      visitId: ++_lastVisitId,
+      previousVisits: const [],
+      destination: BrowseDestination.results,
+      parked: parked,
+      activeView: FindMusicView.results,
+      queryGen: gen,
+      resultsAvailable: true,
+      searchQuery: query,
+      clearResults: true,
+      searchLoading: true,
+      clearError: true,
+      resultsFilter: _savedResultsFilter,
+      resultsChoice: _savedResultsFilter,
+      resultsGenreNames: _savedResultsGenreNames,
+      clearMatchSource: true,
+      clearExpandedBlock: true,
+      history: _loadHistory(),
     );
     _runQuery(query, gen);
   }
@@ -1338,13 +1570,21 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// Drop the search: leave its results for the visit before them, with no
   /// query left to return to.
   void clearSearch() {
-    // Past every visit of this search, an opened block's included.
-    final gen = state.queryGen;
-    do {
-      goBack();
-    } while (state.activeView == FindMusicView.results &&
-        state.queryGen == gen);
-    if (state.activeView == FindMusicView.results) return;
+    final parked = {...state.parked}..remove(BrowseDestination.results);
+    state = state.copyWith(parked: parked);
+    if (state.destination == BrowseDestination.results) {
+      final back = parked.containsKey(_cameFrom)
+          ? _cameFrom
+          : BrowseDestination.home;
+      // Past every visit of this search, an opened block's included.
+      _show(
+        back,
+        restore: true,
+        keepShown: false,
+        // Any other is parked, so restored rather than started.
+        start: _homeTop,
+      );
+    }
     _queryGen++;
     state = state.copyWith(
       queryGen: _queryGen,

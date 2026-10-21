@@ -370,8 +370,10 @@ void main() {
           filters: [_textField, _genreField],
         ),
       );
-      expect(find.byType(ActiveFilterChips), findsOneWidget);
-      expect(find.text('RESET ALL'), findsNothing);
+      // The empty chip area has no height once Grid/List lives in the header;
+      // a sliver may discard it until there are applied filters to display.
+      expect(find.byType(ActiveFilterChip), findsNothing);
+      expect(find.text('Clear filters'), findsNothing);
 
       harness.container
           .read(searchSessionProvider.notifier)
@@ -383,15 +385,15 @@ void main() {
       // No vocabulary behind the fake, so a chip falls back to the raw id.
       expect(find.text('jazz'), findsOneWidget);
       // Two filters earn the bulk action.
-      expect(find.text('RESET ALL'), findsOneWidget);
+      expect(find.text('Clear filters'), findsOneWidget);
 
-      await tester.tap(find.text('RESET ALL'));
+      await tester.tap(find.text('Clear filters'));
       await tester.pumpAndSettle();
       expect(
         harness.container.read(searchSessionProvider).catalogFilter.isEmpty,
         isTrue,
       );
-      expect(find.text('RESET ALL'), findsNothing);
+      expect(find.text('Clear filters'), findsNothing);
     });
   });
 }

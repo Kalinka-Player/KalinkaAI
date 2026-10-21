@@ -117,7 +117,12 @@ Future<ProviderContainer> _mount(
           child: child!,
         ),
         home: Scaffold(
-          body: SearchZeroState(onOpenCatalog: (_, _, {focusItemId}) {}),
+          // Customise Home keeps the source tiles; their loading is checked
+          // here beside Home's own sections.
+          body: SearchZeroState(
+            onOpenCatalog: (_, _, {focusItemId}) {},
+            leading: const [CatalogCardsSection()],
+          ),
         ),
       ),
     ),

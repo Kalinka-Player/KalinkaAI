@@ -280,8 +280,9 @@ class _ErrorNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final inset = ConfigurationAppearance.sideInset(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      padding: EdgeInsets.fromLTRB(inset, 16, inset, 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -327,7 +328,12 @@ class _SpeakerTestSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 28, 20, 10),
+          padding: EdgeInsets.fromLTRB(
+            ConfigurationAppearance.sideInset(context),
+            28,
+            ConfigurationAppearance.sideInset(context),
+            10,
+          ),
           child: Text(
             'SPEAKER TEST',
             style: KalinkaTextStyles.sectionHeaderMuted,

@@ -231,7 +231,7 @@ class _Tile extends ConsumerStatefulWidget {
 
   /// Between the card's frame and its art and text: half the room between
   /// two cards' art.
-  static const inset = 11.0;
+  static const inset = kKalinkaFrameInset;
   static const artGap = 8.0;
   static final titleStyle = KalinkaTextStyles.trackRowTitle;
   static final subtitleStyle = KalinkaTextStyles.trackRowSubtitle;

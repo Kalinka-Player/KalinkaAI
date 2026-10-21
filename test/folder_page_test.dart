@@ -268,15 +268,13 @@ void main() {
       expect(inFolder(find.text('Folder')), findsOneWidget);
       expect(inFolder(find.text('Folder · 2 tracks')), findsNothing);
 
-      List<double> lines(Finder row) => [
-        for (final element
-            in find
-                .descendant(of: row, matching: find.byType(ColumnSeparator))
-                .evaluate())
-          (element.renderObject! as RenderBox).localToGlobal(Offset.zero).dx,
-      ];
-      expect(lines(folderRow), isNotEmpty);
-      expect(lines(_trackRow('So What')), lines(folderRow));
+      Finder cells(Finder row) =>
+          find.descendant(of: row, matching: find.byType(RowColumnCells));
+      expect(find.byType(ColumnSeparator), findsNothing);
+      expect(
+        tester.getTopLeft(cells(_trackRow('So What'))).dx,
+        closeTo(tester.getTopLeft(cells(folderRow)).dx, 0.01),
+      );
       // Named under each group's heading, in its terms, on the same lines.
       final titles = find.byType(RowColumnsHeader);
       expect(titles, findsNWidgets(2));
@@ -297,8 +295,12 @@ void main() {
           ),
         ),
       );
-      expect(lines(titles.first), lines(folderRow));
-      expect(lines(titles.last), lines(folderRow));
+      for (final heading in [titles.first, titles.last]) {
+        expect(
+          left(find.descendant(of: heading, matching: find.text('ARTIST'))),
+          closeTo(left(cells(folderRow)) + RowColumns.gap, 0.01),
+        );
+      }
       final folders = tester.getRect(_heading('FOLDERS'));
       expect(
         tester.getRect(titles.first).top,
@@ -328,12 +330,17 @@ void main() {
       tester,
       openedFolders: [_folder('Jazz', canAdd: false), _folder('Kind of Blue')],
     );
+    await tester.scrollUntilVisible(
+      find.text('Blue in Green'),
+      100,
+      scrollable: _list,
+    );
 
     expect(_numbers(tester), [1, 2]);
     final row = _trackRow('So What');
     expect(find.descendant(of: row, matching: find.text('1')), findsOneWidget);
     expect(
-      find.descendant(of: row, matching: find.text('Track')),
+      find.descendant(of: row, matching: find.textContaining('Unknown artist')),
       findsOneWidget,
     );
     expect(
@@ -502,7 +509,7 @@ void main() {
     );
     final home = tester.getTopLeft(_topCrumb);
 
-    await tester.drag(find.byType(ListView), const Offset(0, -1500));
+    await tester.drag(_list, const Offset(0, -1500));
     await tester.pumpAndSettle();
 
     expect(find.text('Take 0').hitTestable(), findsNothing);
@@ -629,7 +636,7 @@ void main() {
       tester,
       openedFolders: [_folder('Jazz', canAdd: false), _folder('Box set')],
     );
-    final list = find.byType(ListView);
+    final list = _list;
 
     await tester.drag(list, const Offset(0, -1500));
     await tester.pumpAndSettle();
@@ -639,7 +646,15 @@ void main() {
     expect(find.text('Play all').hitTestable(), findsOneWidget);
     expect(
       tester.getTopLeft(held).dy,
-      lessThan(tester.getBottomLeft(find.byType(FolderTrail)).dy + 20),
+      greaterThanOrEqualTo(tester.getBottomLeft(find.byType(FolderTrail)).dy),
+    );
+    expect(
+      tester.getBottomLeft(held).dy,
+      lessThanOrEqualTo(
+        tester
+            .getTopLeft(find.byKey(const ValueKey('catalog-header-divider')))
+            .dy,
+      ),
     );
 
     await tester.drag(list, const Offset(0, 1500));

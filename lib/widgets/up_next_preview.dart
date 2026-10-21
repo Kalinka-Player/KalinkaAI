@@ -11,11 +11,16 @@ import '../providers/kalinka_ws_api_provider.dart';
 import '../providers/shell_nav_provider.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
+import '../utils/playback_utils.dart';
 import 'away.dart';
+import 'column_separator.dart';
 import 'procedural_album_art.dart';
+import 'queue_columns.dart';
 import 'tap_highlight.dart';
 
 const _horizontalInset = 12.0;
+const _artworkSize = 40.0;
+const _artworkGap = 10.0;
 
 // These are navigation/playback shortcuts, so interaction stays neutral.
 // Keep keyboard focus visible as well as pointer hover and press.
@@ -33,7 +38,15 @@ final _previewOverlay = WidgetStateProperty.resolveWith<Color?>((states) {
 class SliverUpNextPreview extends ConsumerWidget {
   final bool canOpenQueue;
 
-  const SliverUpNextPreview({super.key, required this.canOpenQueue});
+  /// Only as many rows as the viewport has room for under what precedes it;
+  /// otherwise up to five, scrolled to below the fold.
+  final bool fitToSpace;
+
+  const SliverUpNextPreview({
+    super.key,
+    required this.canOpenQueue,
+    this.fitToSpace = true,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -47,10 +60,11 @@ class SliverUpNextPreview extends ConsumerWidget {
       ),
     );
     final start = queue.index + 1;
-    if (queue.exclusive || queue.index < 0 || start >= queue.tracks.length) {
+    if (queue.exclusive || queue.index < 0 || queue.tracks.isEmpty) {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
-    final total = queue.tracks.length - start;
+    // At the end of the queue it says so, as the queue's own Up Next does.
+    final total = math.max(0, queue.tracks.length - start);
     // The same notion of away as the rest of the player.
     final away = ref.watch(
       connectionStateProvider.select((s) => s.isInterrupted),
@@ -77,13 +91,31 @@ class SliverUpNextPreview extends ConsumerWidget {
     final headingWidth =
         headingMetrics.width + (canOpenQueue ? 48 : 20) + _horizontalInset * 2;
     headingMetrics.dispose();
+    // The queue's own columns, judged by the rows that can show.
+    final hasAlbums = queue.tracks
+        .skip(start)
+        .take(5)
+        .any((track) => track.album?.title.trim().isNotEmpty ?? false);
 
     return SliverLayoutBuilder(
       builder: (context, constraints) {
         final remaining =
             constraints.viewportMainAxisExtent -
             constraints.precedingScrollExtent;
-        final capacity = ((remaining - headerHeight - 16) / rowHeight).floor();
+        final columns = QueueColumns(
+          width: constraints.crossAxisExtent,
+          textScale: (scaler.scale(14) / 14).clamp(1.0, double.infinity),
+          hasAlbums: hasAlbums,
+        );
+        final legend = total > 0 && columns.showAlbum;
+        final capacity = fitToSpace
+            ? ((remaining -
+                          headerHeight -
+                          (legend ? columns.legendHeight : 0) -
+                          16) /
+                      rowHeight)
+                  .floor()
+            : 5;
         if (capacity < 1 || constraints.crossAxisExtent < headingWidth) {
           return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
@@ -103,6 +135,23 @@ class SliverUpNextPreview extends ConsumerWidget {
                       canOpenQueue: canOpenQueue,
                     ),
                   ),
+                  if (legend)
+                    QueueColumnLegend(
+                      columns: columns,
+                      start: _horizontalInset + _artworkSize + _artworkGap,
+                      handle: false,
+                    ),
+                  if (total == 0)
+                    SizedBox(
+                      height: rowHeight,
+                      child: Center(
+                        child: Text(
+                          'Queue is empty',
+                          style: KalinkaTextStyles.queueItemArtist,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
                   for (var i = 0; i < count; i++)
                     SizedBox(
                       height: rowHeight,
@@ -111,6 +160,7 @@ class SliverUpNextPreview extends ConsumerWidget {
                         track: queue.tracks[start + i],
                         index: start + i,
                         enabled: !away,
+                        columns: columns,
                       ),
                     ),
                 ],
@@ -188,16 +238,20 @@ class _UpNextHeading extends ConsumerWidget {
   }
 }
 
+/// A queue row in brief: no handle, but the queue's album and time columns
+/// where the queue would show them.
 class _UpcomingTrack extends ConsumerWidget {
   final Track track;
   final int index;
   final bool enabled;
+  final QueueColumns columns;
 
   const _UpcomingTrack({
     super.key,
     required this.track,
     required this.index,
     required this.enabled,
+    required this.columns,
   });
 
   @override
@@ -209,6 +263,18 @@ class _UpcomingTrack extends ConsumerWidget {
         : ref.watch(urlResolverProvider).abs(url);
     final canPlay = enabled && !track.unavailable;
     final artist = track.performer?.name ?? 'Unknown Artist';
+    final secondary = KalinkaTextStyles.queueItemArtist.copyWith(
+      fontSize: 12,
+      height: 1.25,
+    );
+    final time = Text(
+      formatClock(Duration(seconds: track.duration)),
+      maxLines: 1,
+      style: KalinkaTextStyles.queueItemDuration.copyWith(
+        fontSize: 12,
+        height: 1.25,
+      ),
+    );
     return MergeSemantics(
       child: Semantics(
         label:
@@ -240,57 +306,84 @@ class _UpcomingTrack extends ConsumerWidget {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
                     child: SizedBox(
-                      width: 40,
-                      height: 40,
+                      width: _artworkSize,
+                      height: _artworkSize,
                       child: resolved == null
-                          ? ProceduralAlbumArt(trackId: track.id, size: 40)
+                          ? ProceduralAlbumArt(
+                              trackId: track.id,
+                              size: _artworkSize,
+                            )
                           : Image.network(
                               resolved,
                               cacheWidth: 120,
                               fit: BoxFit.cover,
                               errorBuilder: (_, _, _) => ProceduralAlbumArt(
                                 trackId: track.id,
-                                size: 40,
+                                size: _artworkSize,
                               ),
                             ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: _artworkGap),
                   Expanded(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          track.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: KalinkaTextStyles.queueItemTitle.copyWith(
-                            fontSize: 14,
-                            height: 1.25,
-                          ),
+                        Row(
+                          children: [
+                            if (track.unavailable) ...[
+                              const Icon(
+                                Icons.error_outline,
+                                size: 16,
+                                color: KalinkaColors.actionDelete,
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            Expanded(
+                              child: Text(
+                                track.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: KalinkaTextStyles.queueItemTitle
+                                    .copyWith(fontSize: 14, height: 1.25),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
                           artist,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: KalinkaTextStyles.queueItemArtist.copyWith(
-                            fontSize: 12,
-                            height: 1.25,
-                          ),
+                          style: secondary,
                         ),
                       ],
                     ),
                   ),
-                  if (track.unavailable) ...[
-                    const SizedBox(width: 8),
-                    const Icon(
-                      Icons.error_outline,
-                      size: 16,
-                      color: KalinkaColors.actionDelete,
+                  if (columns.showAlbum) ...[
+                    const ColumnSeparator(),
+                    SizedBox(
+                      width: columns.albumWidth,
+                      child: Text(
+                        track.album?.title ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: secondary,
+                      ),
                     ),
                   ],
+                  const SizedBox(width: 8),
+                  if (columns.showAlbum)
+                    SizedBox(
+                      width: columns.timeWidth,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: time,
+                      ),
+                    )
+                  else
+                    time,
                 ],
               ),
             ),

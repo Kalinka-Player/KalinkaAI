@@ -268,12 +268,12 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
+              constraints: const BoxConstraints(maxWidth: kSetupColumnMaxWidth),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                     child: OnboardingProgress(
                       stepNumber: _boxStep ? 1 : 2,
                       stepCount: 2,
@@ -286,7 +286,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
                       controller: _scroll,
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
                       children: [
                         if (_boxStep)
                           ..._boxContent()
@@ -877,7 +877,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
           : 'Connecting…';
     }
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 14, 24, 18),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
       decoration: const BoxDecoration(
         color: KalinkaColors.background,
         border: Border(top: BorderSide(color: KalinkaColors.borderSubtle)),

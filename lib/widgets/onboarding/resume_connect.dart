@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../providers/onboarding_provider.dart';
 import '../../providers/server_connect.dart';
 import '../../providers/soundcard_provider.dart';
 import '../../theme/app_theme.dart';
 import '../kalinka_button.dart';
+import 'onboarding_step_scaffold.dart' show kSetupColumnMaxWidth;
 
 /// Attempts at reaching the server, about three minutes: as long as a Pi
 /// takes to restart.
@@ -75,9 +77,9 @@ class _ResumeConnectState extends ConsumerState<ResumeConnect> {
     return SafeArea(
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
+          constraints: const BoxConstraints(maxWidth: kSetupColumnMaxWidth),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

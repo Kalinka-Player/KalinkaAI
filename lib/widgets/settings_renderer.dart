@@ -73,8 +73,9 @@ class SchemaBanner extends StatelessWidget {
           return FooterNote(text: banner.text);
         }
         // Title present (possibly with body) → prominent hero-style row.
+        final inset = ConfigurationAppearance.sideInset(context);
         return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+          padding: EdgeInsets.fromLTRB(inset, 4, inset, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

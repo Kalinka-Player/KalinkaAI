@@ -59,7 +59,7 @@ class _LibraryRescanControlState extends ConsumerState<LibraryRescanControl>
       style:
           TextButton.styleFrom(
             minimumSize: const Size(48, 48),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             foregroundColor: KalinkaColors.textPrimary,
             disabledForegroundColor: KalinkaColors.textMuted,
             backgroundColor: Colors.transparent,
@@ -67,9 +67,7 @@ class _LibraryRescanControlState extends ConsumerState<LibraryRescanControl>
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: const StadiumBorder(),
           ).copyWith(
             side: WidgetStateProperty.resolveWith(
               (states) => states.contains(WidgetState.focused)

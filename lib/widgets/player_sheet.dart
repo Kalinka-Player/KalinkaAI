@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,7 +8,8 @@ import 'player_queue_view.dart';
 
 /// The phone player: a full-height sheet whose content slides while the
 /// queue's mini-player stays put over its foot, where Home's own sits, so
-/// closing the queue leaves the bar in place.
+/// closing the queue leaves the bar in place. Beside a navigation rail it
+/// leaves the rail in view and in reach.
 class PlayerSheetRoute extends PopupRoute<void> {
   PlayerSheetRoute({required this.builder, required this.themes});
 
@@ -25,6 +28,14 @@ class PlayerSheetRoute extends PopupRoute<void> {
 
   @override
   String? get barrierLabel => null;
+
+  @override
+  Widget buildModalBarrier() => Builder(
+    builder: (context) => Padding(
+      padding: EdgeInsets.only(left: _railWidth(context)),
+      child: super.buildModalBarrier(),
+    ),
+  );
 
   @override
   Duration get transitionDuration => const Duration(milliseconds: 250);
@@ -46,6 +57,12 @@ class PlayerSheetRoute extends PopupRoute<void> {
     );
   }
 }
+
+/// The window's navigation rail, which the sheet opens beside.
+double _railWidth(BuildContext context) => kalinkaNavigationRailWidth(
+  MediaQuery.sizeOf(context).width,
+  textScaler: MediaQuery.textScalerOf(context),
+);
 
 class _PlayerSheetPage extends StatefulWidget {
   final PlayerSheetRoute route;
@@ -117,6 +134,7 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
   @override
   Widget build(BuildContext context) {
     final topInset = MediaQuery.paddingOf(context).top;
+    final rail = _railWidth(context);
     return _SheetDragScope(
       onStart: _onDragStart,
       onUpdate: _onDragUpdate,
@@ -138,6 +156,7 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
                 // empty strip travels ahead of the drag handle.
                 Positioned.fill(
                   top: topInset,
+                  left: rail,
                   child: FractionalTranslation(
                     translation: Offset(0, 1 - t),
                     child: child,
@@ -146,7 +165,7 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
                 if (_controller.isCompleted && topInset > 0)
                   Positioned(
                     top: 0,
-                    left: 0,
+                    left: rail,
                     right: 0,
                     height: topInset,
                     child: const AnnotatedRegion<SystemUiOverlayStyle>(
@@ -159,11 +178,11 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
                       child: ColoredBox(color: KalinkaColors.background),
                     ),
                   ),
-                const Positioned(
-                  left: 0,
+                Positioned(
+                  left: rail,
                   right: 0,
                   bottom: 0,
-                  child: QueueMiniPlayer(),
+                  child: const QueueMiniPlayer(),
                 ),
               ],
             );
@@ -221,4 +240,116 @@ class SheetDragArea extends StatelessWidget {
       child: child,
     );
   }
+}
+
+/// Builds a scrollable that, on the phone sheet, hands a pull down from its
+/// top to the sheet, so the sheet still closes from content that scrolls.
+/// Pushing back up returns the sheet before the content scrolls. Outside the
+/// sheet the physics are plain clamping.
+class SheetScrollArea extends StatefulWidget {
+  final Widget Function(BuildContext context, ScrollPhysics physics) builder;
+
+  const SheetScrollArea({super.key, required this.builder});
+
+  @override
+  State<SheetScrollArea> createState() => _SheetScrollAreaState();
+}
+
+class _SheetScrollAreaState extends State<SheetScrollArea> {
+  _SheetDragScope? _scope;
+  late final _physics = _SheetHandoffPhysics(this);
+
+  /// How far this drag has moved the sheet down.
+  double _pulled = 0;
+  bool _dragging = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scope = context.dependOnInheritedWidgetOfExactType<_SheetDragScope>();
+  }
+
+  /// Takes what of [offset] (positive as the finger moves down) belongs to
+  /// the sheet, returning what is left for the content.
+  double _take(double offset, ScrollMetrics position) {
+    final scope = _scope;
+    if (scope == null) return offset;
+    final double toSheet;
+    if (_pulled > 0) {
+      // Back up to fully open at most; the rest scrolls the content.
+      toSheet = math.max(offset, -_pulled);
+    } else if (offset > 0) {
+      // What the content cannot take above its top.
+      toSheet = math.max(
+        0.0,
+        offset - (position.pixels - position.minScrollExtent),
+      );
+    } else {
+      return offset;
+    }
+    if (toSheet == 0) return offset;
+    if (!_dragging) {
+      _dragging = true;
+      scope.onStart(DragStartDetails());
+    }
+    _pulled += toSheet;
+    scope.onUpdate(
+      DragUpdateDetails(
+        globalPosition: Offset.zero,
+        delta: Offset(0, toSheet),
+        primaryDelta: toSheet,
+      ),
+    );
+    return offset - toSheet;
+  }
+
+  bool _onScroll(ScrollNotification notification) {
+    if (notification.depth != 0 ||
+        notification is! ScrollEndNotification ||
+        !_dragging) {
+      return false;
+    }
+    _dragging = false;
+    _pulled = 0;
+    final velocity = notification.dragDetails?.primaryVelocity ?? 0;
+    _scope?.onEnd(
+      DragEndDetails(
+        velocity: Velocity(pixelsPerSecond: Offset(0, velocity)),
+        primaryVelocity: velocity,
+      ),
+    );
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      NotificationListener<ScrollNotification>(
+        onNotification: _onScroll,
+        child: widget.builder(
+          context,
+          _scope == null ? const ClampingScrollPhysics() : _physics,
+        ),
+      );
+}
+
+class _SheetHandoffPhysics extends ClampingScrollPhysics {
+  final _SheetScrollAreaState _area;
+
+  const _SheetHandoffPhysics(this._area, {super.parent});
+
+  @override
+  _SheetHandoffPhysics applyTo(ScrollPhysics? ancestor) =>
+      _SheetHandoffPhysics(_area, parent: buildParent(ancestor));
+
+  @override
+  double applyPhysicsToUserOffset(ScrollMetrics position, double offset) =>
+      super.applyPhysicsToUserOffset(position, _area._take(offset, position));
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) => _area._dragging
+      ? null
+      : super.createBallisticSimulation(position, velocity);
 }

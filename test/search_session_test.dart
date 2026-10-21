@@ -10,6 +10,7 @@ import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/search_results.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
+import 'package:kalinka/providers/catalog_sources_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
@@ -612,7 +613,7 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 900));
     });
 
-    test('back returns through each visit as it was left', () async {
+    test('Results keeps its pages until a new search replaces them', () async {
       final api = _FakeApi();
       final container = makeContainer(api);
       final notifier = container.read(searchSessionProvider.notifier);
@@ -625,15 +626,8 @@ void main() {
         id: 'kalinka:localfiles:album:a1',
         title: 'Kind of Blue',
       );
-      // A new search from a page keeps the page to come back to.
-      notifier.submit('techno');
-      await Future.delayed(const Duration(milliseconds: 900));
-      expect(state().searchQuery, 'techno');
-      expect(state().previousVisits, hasLength(2));
-
-      notifier.goBack();
-      expect(state().activeView, FindMusicView.catalogs);
-      expect(state().catalogPage.title, 'Kind of Blue');
+      // A page opened from Results is still Results, whatever its source.
+      expect(state().destination, BrowseDestination.results);
 
       notifier.goBack();
       expect(state().activeView, FindMusicView.results);
@@ -641,8 +635,69 @@ void main() {
       expect(state().results?.settled, isTrue);
       expect(state().matchSource, 'localfiles');
 
+      notifier.openCatalog(
+        id: 'kalinka:localfiles:album:a1',
+        title: 'Kind of Blue',
+      );
+      notifier.submit('techno');
+      await Future.delayed(const Duration(milliseconds: 900));
+      expect(state().searchQuery, 'techno');
+      expect(state().previousVisits, isEmpty);
+
+      // Its first page goes Home, not to the search before it.
       notifier.goBack();
       expect(state().atHome, isTrue);
+      expect(state().destination, BrowseDestination.home);
+      expect(state().previousVisits, isEmpty);
+    });
+
+    test('each destination keeps its own history', () {
+      final container = makeContainer(_FakeApi());
+      final notifier = container.read(searchSessionProvider.notifier);
+      SearchSessionState state() => container.read(searchSessionProvider);
+      CatalogSource source(String name) => (
+        module: ModuleInfo(
+          name: name,
+          title: name,
+          enabled: true,
+          state: ModuleState.ready,
+        ),
+        root: BrowseItem(
+          id: 'kalinka:$name:catalog:root',
+          name: name,
+          canBrowse: true,
+          canAdd: false,
+        ),
+      );
+      BrowseItem album(String id) =>
+          BrowseItem(id: id, name: id, canBrowse: true, canAdd: false);
+
+      notifier.openSource(source('qobuz'));
+      notifier.openBrowseItem(album('kalinka:qobuz:album:a'));
+      notifier.openSource(source('tidal'));
+      notifier.openBrowseItem(album('kalinka:tidal:album:b'));
+      expect(state().destination, BrowseDestination.source('tidal'));
+
+      // Back as it was left, the visit under it included.
+      final qobuzAlbum = state().parked[BrowseDestination.source('qobuz')]!;
+      notifier.openSource(source('qobuz'));
+      expect(state().catalogPage.id, 'kalinka:qobuz:album:a');
+      expect(state().visitId, qobuzAlbum.visitId);
+      notifier.goBack();
+      expect(state().catalogPage.id, 'kalinka:qobuz:catalog:root');
+
+      // Showing the destination shown does nothing.
+      notifier.openSource(source('qobuz'));
+      expect(state().catalogPage.id, 'kalinka:qobuz:catalog:root');
+
+      // A source's first page goes Home; the source stays where it was.
+      notifier.goBack();
+      expect(state().atHome, isTrue);
+      expect(state().parked, contains(BrowseDestination.source('qobuz')));
+
+      // Without the rail, a source opens at its own page.
+      notifier.openSource(source('tidal'), restore: false);
+      expect(state().catalogPage.id, 'kalinka:tidal:catalog:root');
       expect(state().previousVisits, isEmpty);
     });
 
@@ -692,26 +747,22 @@ void main() {
       expect(state().previousVisits, isEmpty);
     });
 
-    test(
-      'a search replaced before it answered is asked again on return',
-      () async {
-        final api = _FakeApi();
-        final container = makeContainer(api);
-        final notifier = container.read(searchSessionProvider.notifier);
-        SearchSessionState state() => container.read(searchSessionProvider);
+    test('a search replaced before it answered is never asked', () async {
+      final api = _FakeApi();
+      final container = makeContainer(api);
+      final notifier = container.read(searchSessionProvider.notifier);
+      SearchSessionState state() => container.read(searchSessionProvider);
 
-        notifier.submit('jazz');
-        notifier.submit('techno');
-        await Future.delayed(const Duration(milliseconds: 900));
-        expect(api.queries, isNot(contains('jazz')));
+      notifier.submit('jazz');
+      notifier.submit('techno');
+      await Future.delayed(const Duration(milliseconds: 900));
+      expect(api.queries, isNot(contains('jazz')));
 
-        notifier.goBack();
-        expect(state().searchQuery, 'jazz');
-        await Future.delayed(const Duration(milliseconds: 900));
-        expect(api.queries, contains('jazz'));
-        expect(state().results?.settled, isTrue);
-      },
-    );
+      notifier.goBack();
+      expect(state().atHome, isTrue);
+      await Future.delayed(const Duration(milliseconds: 900));
+      expect(api.queries, isNot(contains('jazz')));
+    });
 
     test('resetting discards the workspace but keeps history', () async {
       final api = _FakeApi();

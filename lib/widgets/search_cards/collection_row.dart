@@ -6,6 +6,7 @@ import '../../providers/collection_edit_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../theme/app_theme.dart';
 import '../search/collection_menu_sheet.dart';
+import '../tap_highlight.dart';
 import 'action_pill_button.dart';
 import 'browse_navigation_scope.dart';
 import 'collection_identity.dart';
@@ -277,6 +278,6 @@ class CollectionFace extends ConsumerWidget {
         ),
       ),
     );
-    return MouseRegion(cursor: SystemMouseCursors.click, child: row);
+    return HoverHighlight(child: row);
   }
 }

@@ -117,8 +117,8 @@ class _SourceLine extends ConsumerWidget {
 }
 
 /// What an album is, beside its tracks on a wide pane: the square cover,
-/// title, artist, source, extent and the actions on the whole of it. Its own
-/// scroll, so a long title or enlarged text never clips.
+/// title, artist, source, extent and the actions on the whole of it. The page
+/// scrolls this content together with the tracks, including enlarged text.
 class AlbumIdentityColumn extends StatelessWidget {
   final CatalogPage page;
   final int? trackCount;
@@ -140,7 +140,7 @@ class AlbumIdentityColumn extends StatelessWidget {
       totalDurationSeconds ?? page.totalDurationSeconds,
     );
     return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
+      builder: (context, constraints) => Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,10 +190,9 @@ class AlbumIdentityColumn extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Wrap(
               spacing: 8,
-              runSpacing: 8,
               children: [
                 PlayAllChip(trackIds: [page.id!], trackCount: trackCount),
                 AddAllChip(
@@ -331,10 +330,9 @@ class AlbumPageHeader extends ConsumerWidget {
                             ),
                           ),
                         ],
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 20),
                         Wrap(
                           spacing: 8,
-                          runSpacing: 8,
                           children: [
                             PlayAllChip(
                               trackIds: [page.id!],

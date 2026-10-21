@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data_model/data_model.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
-import '../column_separator.dart';
 import '../source_badge.dart';
 
 /// The columns a listing row adds as it widens, each taking over what the
@@ -12,7 +11,7 @@ import '../source_badge.dart';
 /// year and size, what a folder or playlist holds — then the artist, then the
 /// source. Every width here comes from the row's own width and the columns
 /// end a fixed [gutter] from its right edge, so rows of one listing —
-/// whatever they list — draw their separators on the same lines.
+/// whatever they list — align their metadata with the same headings.
 class RowColumns {
   /// The row's full width, edge to edge.
   final double width;
@@ -21,21 +20,43 @@ class RowColumns {
   /// an empty column for them.
   final bool details;
 
-  const RowColumns(this.width, {this.details = true});
+  /// False where no row of the listing names an artist; the details take
+  /// that column's room instead.
+  final bool artists;
+  final bool showSource;
+  final bool tracks;
+  final double textScale;
+
+  const RowColumns(
+    this.width, {
+    this.details = true,
+    this.artists = true,
+    this.showSource = true,
+    this.tracks = false,
+    this.textScale = 1,
+  });
 
   static const none = RowColumns(0);
 
-  /// What a row keeps right of its columns for its own controls: a play
-  /// button and a chevron.
-  static const double gutter = 92;
+  /// What a row keeps right of its columns for its own controls: a gap, a
+  /// play button and a chevron.
+  static const double gutter = gap + 92;
+  static const double gap = 16;
 
-  bool get detail => details && width >= 600;
-  bool get artist => width >= 800;
-  bool get source => width >= 1000;
+  bool get detail => details && width >= (tracks ? 576 : 600) * textScale;
+  bool get _artistFits => width >= (tracks ? 1000 : 800) * textScale;
+  bool get artist => artists && _artistFits;
+  bool get source => showSource && width >= (tracks ? 1200 : 1000) * textScale;
   bool get any => detail || artist || source;
 
-  double get detailWidth => (width * 0.2).clamp(140.0, 280.0);
-  double get artistWidth => (width * 0.16).clamp(120.0, 220.0);
+  double get detailWidth =>
+      (width * (tracks ? 0.26 : 0.2)).clamp(
+        (tracks ? 200.0 : 140.0) * textScale,
+        (tracks ? 320.0 : 280.0) * textScale,
+      ) +
+      (!artists && _artistFits ? artistWidth + gap : 0);
+  double get artistWidth =>
+      (width * 0.16).clamp(120.0 * textScale, 220.0 * textScale);
   static const double sourceWidth = 160;
 
   /// The row's trailing slot, sized so its columns end at [gutter] from the
@@ -57,6 +78,10 @@ class RowColumnsScope extends StatelessWidget {
       RowColumns(
         constraints.maxWidth,
         details: RowColumnsListing.detailsOf(context),
+        artists: RowColumnsListing.artistsOf(context),
+        showSource: SourceAttributionScope.of(context) == null,
+        tracks: RowColumnsListing.tracksOf(context),
+        textScale: MediaQuery.textScalerOf(context).scale(14) / 14,
       ),
     ),
   );
@@ -67,10 +92,16 @@ class RowColumnsScope extends StatelessWidget {
 /// — draws no Details column at all.
 class RowColumnsListing extends InheritedWidget {
   final bool details;
+  final bool artists;
+  final bool tracks;
+  final bool hideTrackType;
 
   const RowColumnsListing({
     super.key,
     required this.details,
+    this.artists = true,
+    this.tracks = false,
+    this.hideTrackType = false,
     required super.child,
   });
 
@@ -79,6 +110,22 @@ class RowColumnsListing extends InheritedWidget {
           .dependOnInheritedWidgetOfExactType<RowColumnsListing>()
           ?.details ??
       true;
+
+  static bool artistsOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<RowColumnsListing>()
+          ?.artists ??
+      true;
+
+  static bool tracksOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<RowColumnsListing>()?.tracks ??
+      false;
+
+  static bool hideTrackTypeOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<RowColumnsListing>()
+          ?.hideTrackType ??
+      false;
 
   /// Whether any of [items] would fill the Details column. Only albums are
   /// known to come without; any other row is taken to have some.
@@ -90,13 +137,23 @@ class RowColumnsListing extends InheritedWidget {
         album.genres.isNotEmpty;
   });
 
+  /// Whether any of [items] would fill the Artist column: only tracks and
+  /// albums name one.
+  static bool anyArtists(Iterable<BrowseItem> items) => items.any(
+    (item) =>
+        item.browseType == BrowseType.track ||
+        item.browseType == BrowseType.album,
+  );
+
   @override
   bool updateShouldNotify(RowColumnsListing oldWidget) =>
-      details != oldWidget.details;
+      details != oldWidget.details ||
+      artists != oldWidget.artists ||
+      tracks != oldWidget.tracks ||
+      hideTrackType != oldWidget.hideTrackType;
 }
 
-/// The cells right of a row's title, each after a hairline. A row with
-/// nothing for a column leaves it empty, keeping the lines unbroken.
+/// Cells align with the header through shared widths and quiet whitespace.
 class RowColumnCells extends ConsumerWidget {
   final RowColumns columns;
 
@@ -137,15 +194,15 @@ class RowColumnCells extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (columns.artist) ...[
-          const ColumnSeparator(),
+          const SizedBox(width: RowColumns.gap),
           SizedBox(width: columns.artistWidth, child: text(artist)),
         ],
         if (columns.detail) ...[
-          const ColumnSeparator(),
+          const SizedBox(width: RowColumns.gap),
           SizedBox(width: columns.detailWidth, child: text(detail)),
         ],
         if (columns.source) ...[
-          const ColumnSeparator(),
+          const SizedBox(width: RowColumns.gap),
           SizedBox(
             width: RowColumns.sourceWidth,
             child:
@@ -229,7 +286,7 @@ class RowColumnsHeader extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         );
-        const line = ColumnSeparator(height: 14);
+        const line = SizedBox(width: RowColumns.gap);
         return Semantics(
           container: true,
           child: Padding(

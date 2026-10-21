@@ -5,7 +5,7 @@ import '../../data_model/data_model.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/click_cursor.dart';
+import '../tap_highlight.dart';
 import 'long_press_ring_painter.dart';
 import 'row_columns.dart';
 import 'track_row_support.dart';
@@ -49,8 +49,7 @@ class _SearchFolderRowState extends ConsumerState<SearchFolderRow>
       label: selectionMode
           ? '${selected ? 'Deselect' : 'Select'} folder ${item.name}'
           : 'Open folder ${item.name}',
-      child: MouseRegion(
-        cursor: clickCursor(interactive: true),
+      child: HoverHighlight(
         child: GestureDetector(
           onTap: () {
             if (selectionMode) {

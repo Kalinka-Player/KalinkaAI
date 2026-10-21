@@ -22,6 +22,7 @@ import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/home/pinned_catalogs_section.dart';
 import 'package:kalinka/widgets/home/home_customisation_banner.dart';
+import 'package:kalinka/widgets/home/home_source_list.dart';
 import 'package:kalinka/widgets/home/catalog_artwork.dart';
 import 'package:kalinka/widgets/home/catalog_tile.dart';
 import 'package:kalinka/widgets/home/preview_shelf.dart';
@@ -306,7 +307,8 @@ void main() {
     });
   }
 
-  for (final size in [const Size(375, 812), const Size(1200, 800)]) {
+  // Where the rail shows, Configuration is on it and Home has no gear.
+  for (final size in [const Size(375, 812)]) {
     testWidgets('Music sources gear opens Configuration and returns at $size', (
       tester,
     ) async {
@@ -338,16 +340,7 @@ void main() {
         ],
       );
 
-      if (size.width >= 720) {
-        expect(find.text('MUSIC SOURCES'), findsNothing);
-        final invitation = find.byKey(
-          const ValueKey('customise-home-invitation'),
-        );
-        await tester.ensureVisible(invitation);
-        await tester.tap(invitation);
-        await tester.pumpAndSettle();
-      }
-      expect(find.text('MUSIC SOURCES'), findsOneWidget);
+      // The gear ends Home's line of sources.
       expect(find.text('BROWSE SOURCES'), findsNothing);
       expect(find.text('LISTENING ON'), findsNothing);
       final gear = find.byTooltip('Configure music sources');
@@ -391,9 +384,8 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    expect(find.text('MUSIC SOURCES'), findsOneWidget);
     expect(find.byTooltip('Configure music sources'), findsNothing);
-    expect(find.byKey(const ValueKey('catalog-source-alpha')), findsOneWidget);
+    expect(find.byKey(const ValueKey('home-source-alpha')), findsOneWidget);
   });
 
   testWidgets(
@@ -401,9 +393,9 @@ void main() {
     (tester) async {
       final container = await pump(tester);
       await tester.ensureVisible(
-        find.byKey(const ValueKey('catalog-source-alpha')),
+        find.byKey(const ValueKey('home-source-alpha')),
       );
-      await tester.tap(find.byKey(const ValueKey('catalog-source-alpha')));
+      await tester.tap(find.byKey(const ValueKey('home-source-alpha')));
       await tester.pumpAndSettle();
       expect(find.text('Editorial'), findsOneWidget);
       await tester.tap(find.text('Editorial'));
@@ -486,10 +478,7 @@ void main() {
       expect(find.byTooltip('Customise Home'), findsNothing);
       expect(find.text('PINNED CATALOGS'), findsNothing);
       expect(find.text('Pin catalogs to Home'), findsNothing);
-      expect(
-        find.byKey(const ValueKey('catalog-source-alpha')),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('home-source-alpha')), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -779,7 +768,10 @@ void main() {
                 disableAnimations: true,
               ),
               child: Scaffold(
-                body: SearchZeroState(onOpenCatalog: (_, _, {focusItemId}) {}),
+                body: SearchZeroState(
+                  onOpenCatalog: (_, _, {focusItemId}) {},
+                  leading: [HomeSourceList(onOpen: (_) {})],
+                ),
               ),
             ),
           ),
@@ -788,10 +780,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('alpha music'), findsOneWidget);
       expect(find.textContaining(sourceDescription), findsNothing);
-      expect(
-        tester.widget<CatalogTile>(find.byType(CatalogTile)).subtitle,
-        isNull,
-      );
       expect(find.byTooltip('Customise Home'), findsNothing);
       expect(find.text('PINNED CATALOGS'), findsNothing);
       expect(find.text('Pin catalogs to Home'), findsNothing);

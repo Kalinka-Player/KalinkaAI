@@ -356,7 +356,7 @@ class _BatchActionButton extends StatelessWidget {
       child: Material(
         color: background,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(14),
           side: BorderSide(color: border),
         ),
         clipBehavior: Clip.antiAlias,

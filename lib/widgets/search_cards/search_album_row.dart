@@ -11,6 +11,7 @@ import '../../utils/play_next.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
 import '../swipe_to_act_row.dart';
+import '../tap_highlight.dart';
 import 'browse_navigation_scope.dart';
 import 'long_press_ring_painter.dart';
 import 'open_chevron_button.dart';
@@ -304,6 +305,6 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
         ),
       ),
     );
-    return MouseRegion(cursor: SystemMouseCursors.click, child: row);
+    return HoverHighlight(child: row);
   }
 }
