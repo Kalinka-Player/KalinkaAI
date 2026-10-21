@@ -75,6 +75,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // remounting it (which would reload config and drop staged edits).
   final _settingsKey = GlobalKey();
   final _pluginsKey = GlobalKey<PluginCatalogScreenState>();
+  final _customiseKey = GlobalKey();
   bool _navigating = false;
 
   // Drives the mini-player sliding down out of view while the search entry
@@ -587,8 +588,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       musicSourcesSettingsRequestProvider,
       (_, _) => _openPlugins(slide: !ref.read(homeCustomisationProvider)),
     );
-    final customiseOpen = ref.watch(homeCustomisationProvider);
-    final rendererSettings = ref.watch(rendererSettingsRouteProvider);
+    final customise = _buildCustomiseHome();
     // Arm the failure recorder from app start. Left to the queue rows that
     // read it, it would miss an error that lands while the queue isn't built
     // — during a search session, say.
@@ -680,36 +680,22 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                             context,
                             windowWidth,
                             railWidth > 0,
+                            customise,
                           )
                         : _buildPhoneLayout(context, railWidth > 0),
-                    if (customiseOpen &&
-                        !_settingsOpen &&
-                        !_pluginsOpen &&
-                        !_serverSheetOpen &&
-                        rendererSettings == null)
+                    // On tablet it lives in the browsing pane instead.
+                    if (!isTablet && customise != null)
                       Positioned(
                         left: 0,
-                        right: isTablet
-                            ? kalinkaPlayerPaneWidth(constraints.maxWidth) + 1
-                            : 0,
+                        right: 0,
                         top: 0,
                         bottom:
-                            !isTablet &&
-                                ref.watch(connectionStateProvider) !=
-                                    ConnectionStatus.none
+                            ref.watch(connectionStateProvider) !=
+                                ConnectionStatus.none
                             ? kalinkaMiniPlayerHeight(context) +
                                   MediaQuery.paddingOf(context).bottom
                             : 0,
-                        child: SheetAnchor(
-                          child: ClipRect(
-                            child: CustomiseHomeScreen(
-                              handlesBack: !_discoveryOpen,
-                              onClose: () => ref
-                                  .read(homeCustomisationProvider.notifier)
-                                  .close(),
-                            ),
-                          ),
-                        ),
+                        child: customise,
                       ),
                     // Hosted above the phone/tablet switch so an in-progress scan
                     // (and its state) survives resizing across the breakpoint.
@@ -942,6 +928,27 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
   }
 
+  /// Customise Home, while nothing else is open over Home. One key in both
+  /// layouts, so a resize moves it rather than remounting it.
+  Widget? _buildCustomiseHome() {
+    if (!ref.watch(homeCustomisationProvider) ||
+        _settingsOpen ||
+        _pluginsOpen ||
+        _serverSheetOpen ||
+        ref.watch(rendererSettingsRouteProvider) != null) {
+      return null;
+    }
+    return SheetAnchor(
+      key: _customiseKey,
+      child: ClipRect(
+        child: CustomiseHomeScreen(
+          handlesBack: !_discoveryOpen,
+          onClose: () => ref.read(homeCustomisationProvider.notifier).close(),
+        ),
+      ),
+    );
+  }
+
   /// Home, or what stands in for it without a server.
   Widget _buildHome({required bool isTablet, required bool navigationVisible}) {
     final disconnected =
@@ -1027,6 +1034,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     BuildContext context,
     double windowWidth,
     bool navigationVisible,
+    Widget? customise,
   ) {
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
     final disconnected =
@@ -1095,6 +1103,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           ),
                         ),
                         _buildEscalation(isTablet: true),
+                        // Within browsing, so it ends above the queue's bar.
+                        if (customise != null)
+                          Positioned.fill(child: customise),
                         if (_serverSheetOpen)
                           Positioned.fill(
                             child: ServerSheet(
