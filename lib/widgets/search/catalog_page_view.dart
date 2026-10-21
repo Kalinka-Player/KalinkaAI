@@ -44,7 +44,6 @@ import 'catalog_sliver_header.dart';
 import 'collections_edit_bar.dart';
 import 'collections_section.dart';
 import 'container_page_actions.dart';
-import 'folder_trail.dart';
 import 'library_rescan_control.dart';
 import 'track_group_actions.dart';
 
@@ -65,7 +64,6 @@ class CatalogPageView extends ConsumerStatefulWidget {
 
   /// How far a catalog's header scrolls before it is fully collapsed.
   final ValueChanged<double>? onHeaderCollapseExtent;
-  final VoidCallback? onOpenFilters;
 
   /// Returns to the Catalogs root — used by the error state's action.
   final VoidCallback onBackToCatalogs;
@@ -77,8 +75,25 @@ class CatalogPageView extends ConsumerStatefulWidget {
     this.onAlbumHeaderHeight,
     this.onHeaderCollapsed,
     this.onHeaderCollapseExtent,
-    this.onOpenFilters,
   });
+
+  /// The Grid/List choice a visit's listing offers, if any. Folders, albums
+  /// and playlists list tracks, and a catalog of shelves lays them out
+  /// itself until one is opened.
+  static ListingLayout? presentationLayoutOf(SearchSessionState visit) {
+    final page = visit.catalogPage;
+    final shelf = visit.expandedShelf;
+    final shelves =
+        !page.folderLayout &&
+        !page.isAlbum &&
+        !page.isPlaylist &&
+        page.sections.isNotEmpty &&
+        visit.catalogFilter.copyWith(type: shelf).type == null;
+    if (page.folderLayout || page.isAlbum || page.isPlaylist || shelves) {
+      return null;
+    }
+    return _CatalogPageViewState._layoutOf(page, shelf);
+  }
 
   @override
   ConsumerState<CatalogPageView> createState() => _CatalogPageViewState();
@@ -88,11 +103,13 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   /// The listing's size as the server last said, -1 before it has. The head
   /// shows it, and its actions have nothing to act on when it is 0.
   int _total = -1;
-  bool _catalogCardsOnly = false;
-  String? _catalogCardsRequest;
 
-  /// Whether the listing holds tracks, whose rows need wider grid columns.
-  bool _gridTracks = false;
+  /// What each listing shown here led with. Where its catalog does not say
+  /// what it holds, the first item decides how it lays out a grid and how
+  /// it shimmers when it loads again, never the rest of the listing.
+  final _firstKinds = <String, BrowseType>{};
+  String? _listingKey;
+  BrowseType? get _firstKind => _firstKinds[_listingKey];
 
   final _albumTrackDurations = <int, int>{};
   int? _reportedAlbumDuration;
@@ -100,8 +117,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
 
   /// What this page's own build last read of what the fetches found.
   Object? _builtFrom;
-  Object get _fetched =>
-      (_total, _albumDuration, _catalogCardsOnly, _gridTracks);
+  Object get _fetched => (_total, _albumDuration, _firstKind);
 
   void _countRows(int rows, bool appended) {
     // The head reads the total and duration a fetch just read; a refresh may
@@ -221,13 +237,12 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     final filter = visit.catalogFilter;
     final expandedShelf = visit.expandedShelf;
     final query = filter.copyWith(type: expandedShelf);
-    final requestKey =
-        '${visit.shownListing.id}|${query.serverKey(capabilities)}';
-    if (_catalogCardsRequest != requestKey) {
-      _catalogCardsRequest = requestKey;
-      _catalogCardsOnly = false;
-      _gridTracks = false;
-    }
+    // Per filter too: a shelf or a filter can lead with another kind, and a
+    // response to an earlier one must not decide this one's layout.
+    final listingKey =
+        '${(page.folderLayout ? visit.shownListing : page).id}|'
+        '${query.serverKey(capabilities)}';
+    _listingKey = listingKey;
     _builtFrom = _fetched;
     // A listing the server takes writes for can change under the page, so a
     // write restarts it the way a filter does.
@@ -260,13 +275,20 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         page.sections.isNotEmpty &&
         query.type == null;
     // A listing laid out as its catalog's preview says, or as chosen for it
-    // on this device. Folders, albums and playlists list tracks.
-    final layout = page.folderLayout || isAlbum || page.isPlaylist || shelves
-        ? null
-        : _layoutOf(page, expandedShelf);
+    // on this device.
+    final layout = CatalogPageView.presentationLayoutOf(visit);
     final grid =
         layout != null &&
         watchPresentation(ref, layout) == ListingPresentation.grid;
+    // What a grid holds: what its catalog says, else what it led with.
+    final gridKind = switch (layout?.contentType) {
+      PreviewContentType.album => BrowseType.album,
+      PreviewContentType.artist => BrowseType.artist,
+      PreviewContentType.playlist => BrowseType.playlist,
+      PreviewContentType.catalog => BrowseType.catalog,
+      PreviewContentType.track => BrowseType.track,
+      _ => _firstKind,
+    };
     // Any folder shown, the same one again included, opens at its top.
     if (listing.id != _shownListingId) {
       _shownListingId = listing.id;
@@ -277,18 +299,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     final sliverHeader = catalogChrome
         ? CatalogSliverHeader(
             page: listing,
-            capabilities: capabilities,
             query: query,
-            // The shown shelf is the visit's, not a facet to save.
-            onChanged: (next) => setQuery(
-              next.copyWith(type: filter.type, clearType: filter.type == null),
-            ),
-            onOpenFilters: widget.onOpenFilters,
             onCollapsed: widget.onHeaderCollapsed,
             onCollapseExtent: widget.onHeaderCollapseExtent,
-            presentation: layout == null
-                ? null
-                : PresentationToggle(layout: layout),
             actions: page.folderLayout && _FolderActions.anyFor(page, listing)
                 ? _FolderActions(page: page, listing: listing)
                 : null,
@@ -415,15 +428,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           filter: query.encoded(capabilities),
         );
         _pollWhileComposing(list.items);
-        // A response from an earlier filter must not change the active grid.
-        if (_catalogCardsRequest == requestKey) {
-          if (offset == 0) _catalogCardsOnly = list.items.isNotEmpty;
-          _catalogCardsOnly =
-              _catalogCardsOnly &&
-              list.items.every((item) => item.browseType == BrowseType.catalog);
-          _gridTracks =
-              (offset > 0 && _gridTracks) ||
-              list.items.any((item) => item.browseType == BrowseType.track);
+        if (offset == 0 && list.items.isNotEmpty) {
+          _firstKinds[listingKey] = list.items.first.browseType;
         }
         _total = list.total;
         if (isAlbum) _readAlbumDuration(list, offset);
@@ -437,7 +443,10 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               padding: EdgeInsets.only(
                 left:
                     16 +
-                    BrowseItemRows.textInsetOf(above) +
+                    BrowseItemRows.textInsetOf(
+                      above,
+                      inFolder: page.folderLayout,
+                    ) +
                     (numberedInFolder(above)
                         ? SearchTrackRow.folderNumberWidth
                         : 0),
@@ -519,14 +528,15 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             : BrowseItemRows.buildRow(
                 item,
                 queueContextIds: trackIds.isEmpty ? null : trackIds,
+                // A folder draws the folders it holds as folders; anywhere
+                // else they are the catalogs they are.
+                inFolder: page.folderLayout,
               );
         final heading = isAlbum
             ? _discHeading(index, loaded, trackIdsMemo.multiDisc(loaded))
             : page.folderLayout
             ? _groupHeading(index, loaded)
             : null;
-        // Rows across columns are already inset by the listing.
-        if (columns > 1) return attributed(row);
         // An album's numbered rows keep no columns to name; a folder names
         // them under each group's heading, in that group's terms.
         final titles = isAlbum
@@ -537,7 +547,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                   : RowColumnsHeader(
                       tracks: item.browseType == BrowseType.track,
                       titleInset:
-                          BrowseItemRows.textInsetOf(item) +
+                          BrowseItemRows.textInsetOf(item, inFolder: true) +
                           (numberedInFolder(item)
                               ? SearchTrackRow.folderNumberWidth
                               : 0),
@@ -563,18 +573,22 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           ),
         );
       },
-      initialPlaceholder: grid
-          ? _GridShimmer(columns: columns, rows: 3)
-          : const Padding(
+      // A grid shimmers as what it will hold: covers, or rows for tracks;
+      // until that is known, a spinner. Rows are rows whatever they hold.
+      initialPlaceholder: !grid || gridKind == BrowseType.track
+          ? const Padding(
               padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
               child: BrowseRowsShimmer(count: 8),
-            ),
-      loadMorePlaceholder: grid
-          ? _GridShimmer(columns: columns, rows: 1)
-          : const Padding(
+            )
+          : gridKind == null
+          ? const LoadingSpinner()
+          : _GridShimmer(columns: columns, rows: 3),
+      loadMorePlaceholder: !grid || gridKind == BrowseType.track
+          ? const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: BrowseRowsShimmer(count: 3, leadingDivider: true),
-            ),
+            )
+          : _GridShimmer(columns: columns, rows: 1),
       emptyBuilder: (context) => _emptyState(page, filter, onReset: setQuery),
       // The error state replaces only the rows, never the header — a filter
       // that failed has to stay reachable to be undone.
@@ -609,81 +623,54 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         },
       );
     }
-    // Compact rows of one kind of item, and the collections index, go two
-    // or three across a wide pane; anything else keeps one row per line.
-    if (grid ||
-        (layout?.rowsAcross ?? false) ||
-        (page.canEdit && !page.isPlaylist)) {
-      final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          return listOf(
-            header,
-            grid: grid,
-            columns: grid
-                ? _gridColumns(
-                    width - 2 * (16 - ArtworkGridCard.inset),
-                    scale,
-                    catalogs:
-                        layout.contentType == PreviewContentType.catalog ||
-                        (_catalogCardsRequest == requestKey &&
-                            _catalogCardsOnly),
-                    tracks: _catalogCardsRequest == requestKey && _gridTracks,
-                  )
-                : compactColumnsFor(width - 32, scale),
-          );
-        },
-      );
-    }
-    final listView = listOf(header);
-    if (!page.folderLayout) return listView;
-    if (catalogChrome) {
-      return Column(
-        children: [
-          const FolderTrail(),
-          Expanded(child: listView),
-        ],
-      );
-    }
-
-    // Outside the list, so the way back stays in reach however far it scrolls.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const FolderTrail(),
-        Expanded(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              NotificationListener<ScrollNotification>(
-                onNotification: _holdActions,
-                child: listView,
+    // List is always a table, one row per line; only Grid goes across. Both
+    // share one tree, so switching keeps what has loaded and where it is.
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    final listView = LayoutBuilder(
+      builder: (context, constraints) => grid
+          ? listOf(
+              header,
+              grid: true,
+              columns: _gridColumns(
+                constraints.maxWidth - 2 * (16 - ArtworkGridCard.inset),
+                scale,
+                catalogs: gridKind == BrowseType.catalog,
+                tracks: gridKind == BrowseType.track,
               ),
-              if (_actionsHeld && _FolderActions.anyFor(page, listing))
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      color: KalinkaColors.background,
-                      border: Border(
-                        bottom: BorderSide(color: KalinkaColors.borderSubtle),
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: _heldInset,
-                      ),
-                      child: _FolderActions(page: page, listing: listing),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+            )
+          : listOf(header),
+    );
+    // A folder's trail is the bar's, in place of its title.
+    if (!page.folderLayout || catalogChrome) return listView;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        NotificationListener<ScrollNotification>(
+          onNotification: _holdActions,
+          child: listView,
         ),
+        if (_actionsHeld && _FolderActions.anyFor(page, listing))
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                color: KalinkaColors.background,
+                border: Border(
+                  bottom: BorderSide(color: KalinkaColors.borderSubtle),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: _heldInset,
+                ),
+                child: _FolderActions(page: page, listing: listing),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -745,37 +732,32 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     final header = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ArtistPageHeader(page: page),
-        if (available.isNotEmpty)
+        // Offered once it is known the page lists releases.
+        ArtistPageHeader(
+          page: page,
+          presentation: releases && relations.hasValue ? layout : null,
+        ),
+        if (available.length > 1)
           ArtistRelationTabs(
-            relations: available.length > 1 ? available : const [],
+            relations: available,
             shown: shown,
             onShow: notifier.setArtistTab,
-            trailing: releases ? PresentationToggle(layout: layout) : null,
           ),
       ],
     );
+    // Whether it lists releases or tracks is not known yet, so not how they
+    // will look either.
     if (relations.isLoading) {
-      return ListView(
-        children: [
-          header,
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: BrowseRowsShimmer(count: 6),
-          ),
-        ],
-      );
+      return ListView(children: [header, const LoadingSpinner()]);
     }
     final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
     final trackIdsMemo = _TrackIdsMemo();
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final columns = !releases
-            ? 1
-            : grid
+        final columns = grid
             ? _gridColumns(width - 2 * (16 - ArtworkGridCard.inset), scale)
-            : compactColumnsFor(width - 32, scale);
+            : 1;
         return InfiniteListView<BrowseItem>(
           key: ValueKey('${page.id}|$shown'),
           padding: const EdgeInsets.only(bottom: 24),
@@ -816,7 +798,6 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               item,
               queueContextIds: trackIds.isEmpty ? null : trackIds,
             );
-            if (columns > 1) return row;
             return RowColumnsListing(
               details: trackIdsMemo.details(loaded),
               artists: trackIdsMemo.artists(loaded),
@@ -939,7 +920,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   /// of its tracks; a folder lists all its subfolders first, so once a track
   /// has loaded both counts are known.
   Widget? _groupHeading(int index, List<BrowseItem> loaded) {
-    bool isFolder(BrowseItem item) => item.browseType == BrowseType.folder;
+    bool isFolder(BrowseItem item) =>
+        item.browseTypeIn(folder: true) == BrowseType.folder;
     final folder = isFolder(loaded[index]);
     if (index > 0 && isFolder(loaded[index - 1]) == folder) return null;
 
@@ -1056,23 +1038,36 @@ class _CatalogHeader extends StatelessWidget {
               child: PresentationToggle(layout: layout),
             ),
           ),
-        if (page.isPlaylist)
-          ContainerPageActions(page: page, total: total)
+        if (ContainerPageActions.appliesTo(page))
+          ContainerPageActions(
+            page: page,
+            total: total,
+            narrowed: query.activeCount > 0 || expandedShelf != null,
+          )
         else if (page.canEdit)
           const CollectionsActions(),
-        ActiveFilterChips(
-          capabilities: capabilities,
-          query: query,
-          showText: capabilities.text == FacetSupport.hidden,
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-          onChanged: onQueryChanged,
-          leading: [
-            if (expandedShelf case final type?)
-              ActiveFilterChip(
-                label: filterTypeLabel(type),
-                onRemove: onCollapse,
-              ),
-          ],
+        // The search is a chip of its own where no field in the bar shows it.
+        LayoutBuilder(
+          builder: (context, constraints) => ActiveFilterChips(
+            capabilities: capabilities,
+            query: query,
+            showText:
+                capabilities.text == FacetSupport.hidden ||
+                (!showBanner &&
+                    !CatalogSliverHeader.searchInBar(
+                      constraints.maxWidth,
+                      MediaQuery.textScalerOf(context).scale(16) / 16,
+                    )),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            onChanged: onQueryChanged,
+            leading: [
+              if (expandedShelf case final type?)
+                ActiveFilterChip(
+                  label: filterTypeLabel(type),
+                  onRemove: onCollapse,
+                ),
+            ],
+          ),
         ),
       ],
     );

@@ -1,6 +1,6 @@
 # Kalinka settings design guide
 
-Settings use one fixed page title, a restrained dark header and directly accessible controls. This specification covers Configuration, plugin settings and About, Advanced settings, change review, Download server logs, Output settings and the older Server settings screen. All dimensions are Flutter logical pixels (dp); text sizes are before the system text scaler.
+Settings use one fixed page title, a restrained dark header and directly accessible controls. This specification covers Configuration, plugin settings and About, the expert settings list, change review, Download server logs, Output settings and the older Server settings screen. All dimensions are Flutter logical pixels (dp); text sizes are before the system text scaler.
 
 ## Direction and rationale
 
@@ -15,17 +15,18 @@ This is the settings specification. The branded player/search bars and editorial
 ## Page structure and navigation
 
 1. `SettingsTopBar`, including the top safe area: Back, current page name, optionally one icon action, connection dot. The page's outer `SafeArea` uses `top: false`; the header applies the top inset inside its opaque background so the Android status-bar area matches the header. Controls remain below the system icons. Keep the page's side and bottom safe insets.
-2. Optional secondary toolbar for page-specific controls, then connection/pending-change notices.
+2. Optional secondary toolbar for page-specific controls, then the connection notice.
 3. Optional pinned tabs on an overview. Other pages start with an introduction or their first controls.
 4. Independently scrolling content, ending with 32dp breathing room. The host reserves space for the mini-player; content must not render underneath it.
+5. While changes are staged, `PendingChangesBanner` at the foot: the amber bar (count, consequence, Discard, APPLY) that a renderer, Server settings and Configuration share. It is laid out under the content, never over it, so the page shrinks to make room and its last controls scroll up into view above the bar. Configuration's sits under every page it opens; when an issue blocks applying, the bar names it and APPLY becomes REVIEW. Its actions are 48dp targets.
 
-Use sentence case: **Download server logs**, **Output settings**, **Advanced settings**, **Check your changes**. Plugin titles include their subject: **Qobuz settings**, **About Qobuz**. Do not add breadcrumbs, a second large title, a logo in place of the title, or a decorative heading icon.
+Use sentence case: **Download server logs**, **Check your changes**. A renderer's page is titled with the renderer's name alone. Plugin titles include their subject: **Qobuz settings**, **About Qobuz**. Do not add breadcrumbs, a second large title, a logo in place of the title, or a decorative heading icon.
 
 Back closes the current panel through `SlideInPanel.closeOf(context)`. System Back does the same. Returning preserves the parent tab, scroll position and staged edits. Only the uppermost panel owns Back. The header remains outside the content scroll.
 
-The shell's labelled navigation rail remains available beside settings on wider windows. Settings occupy the browsing pane, leaving the player available, and use the shared adaptive split calculation. On phones, Configuration remains in the existing server menu; settings retain their Back button with no additional navigation menu. Choosing another destination runs the existing pending-change guard and cannot dismiss an active operation. Resizing preserves the current settings page and staged changes. The mini-player grows with system text size, and settings reserve that height.
+The shell's labelled navigation rail remains available beside settings on wider windows. Settings occupy the browsing pane, leaving the player available, and use the shared adaptive split calculation. On phones, Configuration remains in the existing server menu; settings retain their Back button with no additional navigation menu. Beside the rail, which names Configuration and is how it is left, Configuration has no top bar: its tabs start at the top of the pane, taking the top safe inset themselves. Choosing another destination runs the existing pending-change guard and cannot dismiss an active operation. Resizing preserves the current settings page and staged changes. The mini-player grows with system text size, and settings reserve that height.
 
-About is a labelled icon button in a plugin's title bar. Install/Uninstall belongs beside its status in the scrolling introduction. Expert mode and the renderer's name belong in a secondary toolbar below **Output settings**. The older **Server settings** screen uses that toolbar for Restart and Expert mode. Do not squeeze multiple controls into the title row.
+About is a labelled icon button in a plugin's title bar. Install/Uninstall belongs beside its status in the scrolling introduction. A renderer's page is titled with the renderer's name, in the top bar's title face, and ends its top bar with the Expert settings switch: a round 40dp `{}` icon button in a 48dp target, grey (`surfaceElevated`, `borderDefault`, `textSecondary` icon) while off and outlined in berry (`accentSubtle`, `accentBorder`, `accentTint` icon) while on, since expert is a mode the page stays in. Do not add further controls to the title row.
 
 ## Colours and surfaces
 
@@ -43,8 +44,9 @@ Read these values from `KalinkaColors`, never duplicate hex literals in a screen
 | Descriptions, captions, section labels | `textSecondary` | `#A3A3A3` |
 | Low-emphasis supporting text | `textMuted` | `#858585` |
 | Header/card/row divider | `borderSubtle` | `#11FFFFFF` (white, 6.67% opacity) |
-| Input borders and tab baseline | `borderDefault` | `#323235` |
-| Selected tab and enabled switch | `accent` | `#C2394B` |
+| Input borders | `borderDefault` | `#323235` |
+| Selected tab and switch track when on (thumb `textPrimary`) | `accent` | `#C2394B` |
+| Switch when off: thumb `textSecondary` on a `surfaceElevated` track edged in `borderDefault`; disabled, either state at reduced opacity, the thumb still visible | `textSecondary` | `#A3A3A3` |
 | Online dot | `statusOnline` | `#3D8A58` |
 | Connecting/reconnecting dot | `statusPending` | `#C8943A` |
 | Offline dot | `statusOffline` | `#858585` |
@@ -52,7 +54,7 @@ Read these values from `KalinkaColors`, never duplicate hex literals in a screen
 | Online badge text on tinted fill | `statusOnlineLight` | `#5FB07E` |
 | Pending badge text on tinted fill | `statusPendingLight` | `#E8B86A` |
 
-The header always has the same opaque fill, a 1dp bottom rule and no shadow or elevation. There is no transparent variant. Card borders and internal row dividers are also 1dp. These rules group content; they are not the only cue identifying a control. The inset tab baseline is a separate boundary below the tabs, using `borderDefault` at 1dp and a 2dp berry selected indicator.
+The header always has the same opaque fill, a 1dp bottom rule and no shadow or elevation. There is no transparent variant. Card borders and internal row dividers are also 1dp. These rules group content; they are not the only cue identifying a control. Configuration's tabs have no rule under them: only the selected tab's 2dp berry indicator, then the content.
 
 Measured sRGB contrast: primary/secondary text on the header is **17.82:1 / 7.65:1**; on cards it is **16.88:1 / 7.25:1**. Muted text on a card is **4.95:1**. Keep normal text at least 4.5:1 and meaningful icons at least 3:1. Do not use the base green as small text on cards (4.33:1); use the brighter status text token on its intended tinted surface. Recheck the composed colour when introducing any tint or opacity.
 
@@ -117,14 +119,18 @@ Keep a backend message with its status. An Error/Warning with an explanation get
 
 ## Streamer content
 
-Keep this order directly on the tab:
+The Streamer tab ends the tab row with the Expert settings switch, the same round `{}` button a renderer's page has in its top bar, and the same setting: one switch for the whole app, kept on the device so it survives switching tabs, leaving and restarting. On, the tab's body is the expert list in place of the groups below; there is no separate Advanced settings page.
+
+The expert list is drawn as the simple page draws settings: a search field alone at the top (no introduction above it), pinned under the tabs on the page's own background, then every field as a standard setting row in one card (`surfaceRaised`, 14dp radius, 1dp `borderSubtle` border and dividers; rows 16dp × 12dp, `trayRowLabel` name, the dotted path in `textMuted` mono under it, `trayRowSublabel` help, the control 10dp below; staged rows tinted and ruled in amber as elsewhere). A renderer's expert list is the same.
+
+Off, keep this order directly on the tab:
 
 | Group | Contents |
 | --- | --- |
 | SERVER | Identity card: name and pencil, selectable address, server version, raw backend supervisor status |
 | SOFTWARE UPDATES | Bundle/component update state and automatic updates in one card |
 | MANAGEMENT | Restart Kalinka, Network, dashboard, restart streamer, power off streamer, when supported |
-| SUPPORT | Download server logs and Advanced settings |
+| SUPPORT | Download server logs |
 
 The name is a prominent value, not a duplicate page heading. Its 48dp pencil opens a bottom sheet; Done stages the name, Cancel/Back discards the sheet edit. Apply/restart follows the existing settings flow. Settings reads refresh the connected server's saved label without changing its address or reconnecting.
 
@@ -132,18 +138,18 @@ The address has 16dp side padding, a 4dp label/value gap and 20dp bottom padding
 
 **Network** appears only for a box with a supervisor. It opens a **Network** page that hosts the same network panel as setup: the current wired or Wi-Fi connection, and the Wi-Fi networks the box can join.
 
-Display the supervisor status exactly as the backend returns it; do not parse a version or infer health from “Installed”. Package updates show the components the backend identifies as changed. Sound-card controls belong in Output settings. Device automation belongs in Advanced settings.
+Display the supervisor status exactly as the backend returns it; do not parse a version or infer health from “Installed”. Package updates show the components the backend identifies as changed. Sound-card controls belong in Output settings. Device automation belongs in the expert list.
 
 ## Responsive layout and interaction
 
 - Page titles wrap naturally with no ellipsis, fixed line limit, auto-shrink or capped text scaler. When the 18dp title scales above 27dp (1.5×), place it on a full-width second row **inside the same fixed header**, inset to the page gutter, with 10dp bottom padding plus the header’s 2dp outer padding. Back, the optional action and status stay on the first row. This avoids a narrow column of oversized text between icons.
 - `SettingsPageIntro` stacks status and action below 320dp of **content width**, or when 14dp text scales above 18.2dp (1.3×). Otherwise status expands beside the action. Descriptions always use the full intro width.
-- Secondary toolbars wrap. Device names and status text can occupy their own line. Do not force a long name, Expert toggle and page title into one row.
+- A device name in the top bar stays on one line beside the title: each keeps its own width while both fit, else the shorter keeps its width or each takes half, and the name ends in an ellipsis with its full text in a tooltip. When the title takes its own row at large text, the name keeps the first row's room before the switch.
 - Use native `IconButton`/`TextButton` for header/toolbar actions, with a visible keyboard focus outline. Keep visual bounds stable on focus, hover and press. Button tooltips name the action; decorative icons are excluded from semantics.
 - Mark the page title as a semantic header. Give the connection dot a readable status tooltip and an accessible label containing the current server name and status. Colour alone is insufficient. The dot is not a button.
 - Keep destructive confirmation and pending-change behaviour intact. Layout changes must not initiate a restart, update, download or power-off.
 - Respect safe areas and the host's mini-player allocation. Lists scroll within the remaining height. Avoid placing fixed elements over the list.
-- Panel motion uses `kSlideInPanelDuration` (320ms, cubic 0.4/0/0.2/1); skip the slide when the system disables animations. Header interactions add no movement or layout shifts.
+- Panel motion uses `kSlideInPanelDuration` (320ms, cubic 0.4/0/0.2/1); skip the slide when the system disables animations, and where Configuration is switched to as a destination (from the rail or Customise Home). Header interactions add no movement or layout shifts.
 
 ## Implementation and verification
 

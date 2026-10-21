@@ -36,6 +36,9 @@ class ShelfHeading extends StatelessWidget {
     this.viewAllLabel = 'VIEW ALL',
   });
 
+  static const _iconSize = 15.0;
+  static const _iconGap = 8.0;
+
   @override
   Widget build(BuildContext context) {
     // Large type leaves no room for the rule; the title takes it, wrapping.
@@ -50,8 +53,8 @@ class ShelfHeading extends StatelessWidget {
         Row(
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 15, color: iconColor),
-              const SizedBox(width: 8),
+              Icon(icon, size: _iconSize, color: iconColor),
+              const SizedBox(width: _iconGap),
             ],
             if (roomy && showDivider) heading else Expanded(child: heading),
             if (count != null) ...[
@@ -76,10 +79,16 @@ class ShelfHeading extends StatelessWidget {
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 4),
-          Text(
-            subtitle!,
-            style: KalinkaTextStyles.trackRowSubtitle.copyWith(
-              color: KalinkaColors.textMuted,
+          // Under the title, past the glyph before it.
+          Padding(
+            padding: EdgeInsetsDirectional.only(
+              start: icon == null ? 0 : _iconSize + _iconGap,
+            ),
+            child: Text(
+              subtitle!,
+              style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+                color: KalinkaColors.textMuted,
+              ),
             ),
           ),
         ],

@@ -137,12 +137,20 @@ class ServerSettingsBinding implements SettingsBinding {
   Future<void> refreshOptions() => notifier.refreshOptions();
 }
 
-/// Global toggle for "expert" importance fields.
+/// Global toggle for "expert" importance fields, kept on the device so the
+/// view a power user left in is the one they come back to.
 class ExpertModeNotifier extends Notifier<bool> {
+  static const _key = 'Kalinka.expertMode';
+
   @override
-  bool build() => false;
-  void toggle() => state = !state;
-  void set(bool value) => state = value;
+  bool build() => ref.read(sharedPrefsProvider).getBool(_key) ?? false;
+
+  void toggle() => set(!state);
+
+  void set(bool value) {
+    state = value;
+    ref.read(sharedPrefsProvider).setBool(_key, value);
+  }
 }
 
 final expertModeProvider = NotifierProvider<ExpertModeNotifier, bool>(

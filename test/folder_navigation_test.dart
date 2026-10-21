@@ -55,7 +55,11 @@ void main() {
   });
 
   test('a folder is told from a catalog by the layout it asks for', () {
-    expect(_folder('music').browseType, BrowseType.folder);
+    // It opens as a folder, and only a folder's listing draws it as one: in
+    // any other it is the catalog it is.
+    expect(_folder('music').opensAsFolder, isTrue);
+    expect(_folder('music').browseTypeIn(folder: true), BrowseType.folder);
+    expect(_folder('music').browseType, BrowseType.catalog);
     expect(PreviewTypeExtension.fromValue('folder'), PreviewType.folder);
     final plain = BrowseItem(
       id: 'kalinka:localfiles:catalog:albums',
@@ -64,6 +68,8 @@ void main() {
       catalog: Catalog(id: 'albums', title: 'Albums'),
     );
     expect(plain.browseType, BrowseType.catalog);
+    expect(plain.opensAsFolder, isFalse);
+    expect(plain.browseTypeIn(folder: true), BrowseType.catalog);
   });
 
   test('a folder shown carries what its row said about it', () {

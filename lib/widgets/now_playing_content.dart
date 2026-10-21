@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -222,12 +224,13 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                     0.0,
                     constraints.maxHeight * 0.52,
                   );
-            final metadata = _buildTrackMetadataSection(
+            Widget metadataOf({double grow = 1}) => _buildTrackMetadataSection(
               currentTrack: currentTrack,
               sourceInfo: sourceInfo,
               mimeLabel: mimeLabel,
               qualityLabel: qualityLabel,
               leftAligned: sideBySide,
+              grow: grow,
             );
             final short = constraints.maxHeight < 400;
             Widget output() => AwayLock(
@@ -243,7 +246,9 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(height: 32),
+                  // Beside the details, the cover is held by the height, so
+                  // what is spared above it goes to the cover.
+                  SizedBox(height: sideBySide ? 8 : 32),
                   Flexible(
                     child: LayoutBuilder(
                       builder: (context, available) {
@@ -258,6 +263,25 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                                   ) -
                                   20;
                         final fittedArtSize = coverHeight.clamp(0.0, artSize);
+                        final metadataWidth =
+                            available.maxWidth - fittedArtSize - metadataGap;
+                        // Beside the cover the details grow into the room
+                        // there, as far as the cover's height holds them.
+                        final metadata = sideBySide
+                            ? metadataOf(
+                                grow: _metadataGrowth(
+                                  currentTrack,
+                                  width: metadataWidth,
+                                  height: math.max(
+                                    fittedArtSize - 16 - _outputHeight(),
+                                    _metadataHeight(
+                                      currentTrack,
+                                      metadataWidth,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : metadataOf();
                         final artwork = _AlbumArtSection(
                           size: fittedArtSize,
                           trackId: currentTrack?.id,
@@ -364,10 +388,15 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
   /// Space reserved for stacked metadata before sizing the cover. Measuring
   /// these few labels keeps long names and system text from pushing controls
   /// below the viewport; it runs only when the presentation is laid out.
-  double _metadataHeight(Track? track, double width) {
-    double line(String text, TextStyle style, int maxLines) {
+  double _metadataHeight(Track? track, double width, {double grow = 1}) {
+    double line(
+      String text,
+      TextStyle style,
+      int maxLines, {
+      bool grows = true,
+    }) {
       final painter = TextPainter(
-        text: TextSpan(text: text, style: style),
+        text: TextSpan(text: text, style: grows ? _grown(style, grow) : style),
         textDirection: Directionality.of(context),
         textScaler: MediaQuery.textScalerOf(context),
         maxLines: maxLines,
@@ -379,22 +408,65 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
 
     var height =
         line(track?.title ?? 'No track', KalinkaTextStyles.expandedTitle, 2) +
-        6 +
+        6 * grow +
         line(
           track?.performer?.name ?? '\u2014',
           KalinkaTextStyles.expandedArtist,
           2,
         );
-    if (track?.album != null) {
+    if (track?.album case final album?) {
       height +=
-          4 + line(track!.album!.title, KalinkaTextStyles.expandedAlbum, 1);
+          4 * grow +
+          line(_albumLine(album), KalinkaTextStyles.expandedAlbum, 1);
     }
     if (track != null) {
+      // The stream's line keeps its size.
       height +=
-          12 + line('Stream info', KalinkaTextStyles.expandedAttribution, 1);
+          12 +
+          line(
+            'Stream info',
+            KalinkaTextStyles.expandedAttribution,
+            1,
+            grows: false,
+          );
     }
     return height;
   }
+
+  /// How much larger than the stacked layout's the details beside the cover
+  /// may be: in step with the [width] they have, up to 1.6×, and no taller
+  /// than [height].
+  double _metadataGrowth(
+    Track? track, {
+    required double width,
+    required double height,
+  }) {
+    final room = width / MediaQuery.textScalerOf(context).scale(260);
+    for (var grow = room.clamp(1.0, 1.6); grow > 1; grow -= 0.05) {
+      if (_metadataHeight(track, width, grow: grow) <= height) return grow;
+    }
+    return 1;
+  }
+
+  /// The output switcher under the details beside the cover.
+  double _outputHeight() {
+    final painter = TextPainter(
+      text: TextSpan(text: 'Output', style: KalinkaTextStyles.trayRowSublabel),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    // Its padding, and the glyphs beside the name.
+    return 20 + math.max(18.0, height);
+  }
+
+  static TextStyle _grown(TextStyle style, double grow) =>
+      grow == 1 ? style : style.copyWith(fontSize: style.fontSize! * grow);
+
+  static String _albumLine(Album album) =>
+      album.year != null ? '${album.title} · ${album.year}' : album.title;
 
   Widget _buildTrackMetadataSection({
     required Track? currentTrack,
@@ -402,6 +474,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     required String mimeLabel,
     required String qualityLabel,
     bool leftAligned = false,
+    double grow = 1,
   }) {
     final textAlign = leftAligned ? TextAlign.left : TextAlign.center;
     return Column(
@@ -413,28 +486,24 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
       children: [
         Text(
           currentTrack?.title ?? 'No track',
-          style: KalinkaTextStyles.expandedTitle,
+          style: _grown(KalinkaTextStyles.expandedTitle, grow),
           textAlign: textAlign,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6 * grow),
         Text(
           currentTrack?.performer?.name ?? '\u2014',
-          style: KalinkaTextStyles.expandedArtist,
+          style: _grown(KalinkaTextStyles.expandedArtist, grow),
           textAlign: textAlign,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
-        if (currentTrack?.album != null) ...[
-          const SizedBox(height: 4),
+        if (currentTrack?.album case final album?) ...[
+          SizedBox(height: 4 * grow),
           Text(
-            () {
-              final album = currentTrack!.album!;
-              final year = album.year;
-              return year != null ? '${album.title} · $year' : album.title;
-            }(),
-            style: KalinkaTextStyles.expandedAlbum,
+            _albumLine(album),
+            style: _grown(KalinkaTextStyles.expandedAlbum, grow),
             textAlign: textAlign,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

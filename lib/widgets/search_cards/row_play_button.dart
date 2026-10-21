@@ -5,6 +5,7 @@ import '../../data_model/data_model.dart';
 import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../theme/app_theme.dart';
+import '../modifier_click.dart';
 
 /// Plays a whole album, playlist or collection from its first track,
 /// replacing the queue. It sits beside the row's way in, so playing never
@@ -58,43 +59,47 @@ class _RowPlayButtonState extends ConsumerState<RowPlayButton> {
   Widget build(BuildContext context) {
     final hot = _hovering && !_starting;
 
-    return MergeSemantics(
-      child: Semantics(
-        button: true,
-        label: 'Play ${RowPlayButton.nameOf(widget.item)}',
-        child: SizedBox(
-          width: 44,
-          height: 48,
-          child: Center(
-            child: Material(
-              type: MaterialType.transparency,
-              child: InkWell(
-                mouseCursor: WidgetStateMouseCursor.clickable,
-                customBorder: const CircleBorder(),
-                onTap: _starting ? null : _play,
-                onHover: _setHover,
-                focusColor: KalinkaColors.surfaceOverlay,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: hot
-                        ? KalinkaColors.surfaceOverlay
-                        : KalinkaColors.surfaceElevated,
-                    border: Border.all(
+    return ClickAtOnce(
+      child: MergeSemantics(
+        child: Semantics(
+          button: true,
+          label: 'Play ${RowPlayButton.nameOf(widget.item)}',
+          child: SizedBox(
+            width: 44,
+            height: 48,
+            child: Center(
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  mouseCursor: WidgetStateMouseCursor.clickable,
+                  customBorder: const CircleBorder(),
+                  // Kept while starting, so the click never falls through
+                  // to the row.
+                  onTap: _play,
+                  onHover: _setHover,
+                  focusColor: KalinkaColors.surfaceOverlay,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
                       color: hot
-                          ? KalinkaColors.textMuted
-                          : KalinkaColors.borderDefault,
+                          ? KalinkaColors.surfaceOverlay
+                          : KalinkaColors.surfaceElevated,
+                      border: Border.all(
+                        color: hot
+                            ? KalinkaColors.textMuted
+                            : KalinkaColors.borderDefault,
+                      ),
                     ),
-                  ),
-                  child: Icon(
-                    _starting
-                        ? Icons.hourglass_empty_rounded
-                        : Icons.play_arrow_rounded,
-                    size: 18,
-                    color: KalinkaColors.textPrimary,
+                    child: Icon(
+                      _starting
+                          ? Icons.hourglass_empty_rounded
+                          : Icons.play_arrow_rounded,
+                      size: 18,
+                      color: KalinkaColors.textPrimary,
+                    ),
                   ),
                 ),
               ),

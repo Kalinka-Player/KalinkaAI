@@ -146,6 +146,14 @@ class FilterSearchField extends StatefulWidget {
   /// Zero reports every keystroke immediately (staged hosts want that).
   final Duration debounce;
   final bool neutral;
+  final bool autofocus;
+  final FocusNode? focusNode;
+
+  /// Reports the text on Enter and on clearing only, not as it is typed.
+  final bool submitOnly;
+
+  /// On Enter, after any pending edit is reported.
+  final ValueChanged<String>? onSubmitted;
 
   const FilterSearchField({
     super.key,
@@ -155,6 +163,10 @@ class FilterSearchField extends StatefulWidget {
     required this.onChanged,
     this.debounce = kFilterTextDebounce,
     this.neutral = false,
+    this.autofocus = false,
+    this.focusNode,
+    this.submitOnly = false,
+    this.onSubmitted,
   });
 
   @override
@@ -180,12 +192,21 @@ class _FilterSearchFieldState extends State<FilterSearchField> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    // A field put away mid-edit still reports what was typed, once the
+    // tree has settled.
+    if (_debounce?.isActive ?? false) {
+      _debounce!.cancel();
+      final text = _controller.text;
+      // Never pending when it waits for Enter.
+      final report = widget.onChanged;
+      scheduleMicrotask(() => report(text));
+    }
     _controller.dispose();
     super.dispose();
   }
 
   void _onChanged(String text) {
+    if (widget.submitOnly) return;
     _debounce?.cancel();
     if (widget.debounce == Duration.zero) {
       widget.onChanged(text);
@@ -245,7 +266,20 @@ class _FilterSearchFieldState extends State<FilterSearchField> {
             child: TextField(
               controller: _controller,
               enabled: enabled,
+              autofocus: widget.autofocus,
+              focusNode: widget.focusNode,
               onChanged: _onChanged,
+              onSubmitted: widget.onSubmitted == null && !widget.submitOnly
+                  ? null
+                  : (text) {
+                      if (widget.submitOnly) {
+                        widget.onChanged(text);
+                      } else if (_debounce?.isActive ?? false) {
+                        _debounce!.cancel();
+                        widget.onChanged(text);
+                      }
+                      widget.onSubmitted?.call(text);
+                    },
               textInputAction: TextInputAction.search,
               style: textStyle,
               cursorColor: KalinkaColors.accent,

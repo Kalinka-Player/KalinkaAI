@@ -9,6 +9,7 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/listing_presentation_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
+import 'package:kalinka/widgets/browse_filters/presentation_toggle.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search_cards/artwork_grid_card.dart';
 import 'package:kalinka/widgets/search_cards/search_album_row.dart';
@@ -107,7 +108,24 @@ Future<ProviderContainer> _pump(
       container: container,
       child: MaterialApp(
         home: Scaffold(
-          body: CatalogPageView(page: shown, onBackToCatalogs: () {}),
+          // Grid/List sits in the bar above the page, as Find Music sets it.
+          body: Column(
+            children: [
+              Consumer(
+                builder: (context, ref, _) {
+                  final layout = CatalogPageView.presentationLayoutOf(
+                    ref.watch(searchSessionProvider),
+                  );
+                  return layout == null
+                      ? const SizedBox.shrink()
+                      : PresentationToggle(layout: layout);
+                },
+              ),
+              Expanded(
+                child: CatalogPageView(page: shown, onBackToCatalogs: () {}),
+              ),
+            ],
+          ),
         ),
       ),
     ),
@@ -135,7 +153,7 @@ void main() {
     expect(card.width, inInclusiveRange(150, 240));
   });
 
-  testWidgets('List keeps rows, compact items across a wide pane', (
+  testWidgets('List is a table, one row per line on a wide pane', (
     tester,
   ) async {
     final container = await _pump(tester, const Size(1000, 900));
@@ -147,8 +165,8 @@ void main() {
     expect(find.byType(SearchAlbumRow), findsWidgets);
     final first = tester.getRect(find.byType(SearchAlbumRow).at(0));
     final second = tester.getRect(find.byType(SearchAlbumRow).at(1));
-    expect(second.top, first.top);
-    expect(second.left, greaterThan(first.right));
+    expect(second.top, greaterThan(first.bottom));
+    expect(second.left, first.left);
     // Remembered for this listing, on this device.
     expect(
       container.read(listingPresentationProvider)[_page.id],

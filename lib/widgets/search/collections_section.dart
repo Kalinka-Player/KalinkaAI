@@ -8,8 +8,6 @@ import '../../providers/collections_provider.dart';
 import '../../providers/connection_state_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/click_cursor.dart';
-import '../browse_rows_shimmer.dart';
 import '../collection_art_tile.dart';
 import '../home/home_layout.dart';
 import '../kalinka_button.dart';
@@ -19,16 +17,22 @@ import '../search_cards/collection_row.dart';
 import '../shelf_heading.dart';
 
 /// Your collections on the Discover root: a heading with the count, the
-/// first few as rows, and VIEW ALL into the rest. With none yet it shows
-/// what a collection is and where making one will live. Absent entirely when
-/// the server has no collections source.
+/// first few as rows, and VIEW ALL into the rest. Absent until there is one,
+/// and where the server has no collections source.
 ///
 /// Each row opens its collection's own page; VIEW ALL opens the listing.
 class CollectionsSection extends ConsumerWidget {
   /// Opens the Collections screen, where VIEW ALL leads.
   final OpenCatalog onOpenCatalog;
 
-  const CollectionsSection({super.key, required this.onOpenCatalog});
+  /// The room left under it, before the next section.
+  final double gapAfter;
+
+  const CollectionsSection({
+    super.key,
+    required this.onOpenCatalog,
+    this.gapAfter = kHomeSectionGap,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -45,34 +49,16 @@ class CollectionsSection extends ConsumerWidget {
         (sources) => sources.isLoading && !sources.hasValue,
       ),
     );
-    if (loadingSources) return _loading();
+    // Nothing until there are collections to show; not promoted for now.
+    if (loadingSources) return const SizedBox.shrink();
 
     return shelfAsync.when(
-      loading: _loading,
+      loading: SizedBox.shrink,
       // A shelf that failed to load is not worth a message on the root; the
       // catalogs below still work, and the next reload tries again.
       error: (_, _) => const SizedBox.shrink(),
       data: (shelf) {
-        if (shelf == null) return const SizedBox.shrink();
-        if (shelf.isEmpty) {
-          return _section(
-            heading: ShelfHeading(title: shelf.plan.title.toUpperCase()),
-            body: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth:
-                      440 *
-                      (MediaQuery.textScalerOf(context).scale(16) / 16).clamp(
-                        1.0,
-                        double.infinity,
-                      ),
-                ),
-                child: const CollectionsEmptyRow(),
-              ),
-            ),
-          );
-        }
+        if (shelf == null || shelf.isEmpty) return const SizedBox.shrink();
         return _section(
           heading: ShelfHeading(
             title: shelf.plan.title.toUpperCase(),
@@ -88,11 +74,6 @@ class CollectionsSection extends ConsumerWidget {
     );
   }
 
-  Widget _loading() => _section(
-    heading: const ShelfHeading(title: 'YOUR COLLECTIONS'),
-    body: const BrowseRowsShimmer(count: 3, shape: ShimmerRowShape.collection),
-  );
-
   Widget _section({required Widget heading, required Widget body}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -100,86 +81,8 @@ class CollectionsSection extends ConsumerWidget {
         heading,
         const SizedBox(height: kHomeHeadingGap),
         body,
-        const SizedBox(height: kHomeSectionGap),
+        SizedBox(height: gapAfter),
       ],
-    );
-  }
-}
-
-/// Home's empty shelf uses the same visual weight as a music row. The whole
-/// invitation opens the name sheet; the dedicated Collections page keeps its
-/// fuller empty-state card below.
-class CollectionsEmptyRow extends ConsumerWidget {
-  const CollectionsEmptyRow({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    void create() => showNewCollectionSheet(context, ref);
-
-    return Semantics(
-      container: true,
-      button: true,
-      label: 'Create your first collection',
-      hint: 'Keep tracks from any source together.',
-      onTap: create,
-      excludeSemantics: true,
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          onTap: create,
-          mouseCursor: clickCursor(interactive: true),
-          borderRadius: BorderRadius.circular(8),
-          focusColor: KalinkaColors.surfaceOverlay,
-          hoverColor: KalinkaColors.surfaceRaised,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 72),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: KalinkaColors.surfaceElevated,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.add,
-                      size: 22,
-                      color: KalinkaColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Create your first collection',
-                          style: KalinkaTextStyles.trayRowLabel,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Keep tracks from any source together.',
-                          style: KalinkaTextStyles.trayRowSublabel,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    size: 20,
-                    color: KalinkaColors.textSecondary,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

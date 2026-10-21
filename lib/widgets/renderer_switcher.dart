@@ -60,7 +60,7 @@ class RendererSwitcherButton extends ConsumerWidget {
   const RendererSwitcherButton({
     super.key,
     this.hitDiameter = 46,
-    this.iconSize = 22,
+    this.iconSize = 24,
   });
 
   @override
@@ -93,20 +93,21 @@ class RendererSwitcherButton extends ConsumerWidget {
         child: TransportButton(
           hitDiameter: hitDiameter,
           onTap: () => showRendererPicker(context, ref),
-          child: _CastGlyph(size: iconSize, live: outputLive),
+          child: _OutputGlyph(size: iconSize, live: outputLive),
         ),
       ),
     );
   }
 }
 
-/// Cast icon, badged with a grey cross only when sound has nowhere to go —
-/// the normal state is unremarkable and gets no ornament.
-class _CastGlyph extends StatelessWidget {
+/// A pair of speakers, the mark for choosing where sound plays, badged with a
+/// cross only when sound has nowhere to go — the normal state is unremarkable
+/// and gets no ornament.
+class _OutputGlyph extends StatelessWidget {
   final double size;
   final bool live;
 
-  const _CastGlyph({required this.size, required this.live});
+  const _OutputGlyph({required this.size, required this.live});
 
   @override
   Widget build(BuildContext context) {
@@ -118,7 +119,11 @@ class _CastGlyph extends StatelessWidget {
         clipBehavior: Clip.none,
         alignment: Alignment.center,
         children: [
-          Icon(Icons.cast, size: size, color: KalinkaColors.textSecondary),
+          Icon(
+            Icons.speaker_group_outlined,
+            size: size,
+            color: KalinkaColors.textSecondary,
+          ),
           if (!live)
             const Positioned(
               right: 0,
@@ -197,7 +202,7 @@ class RendererSwitcherDropdown extends ConsumerWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _CastGlyph(size: 18, live: outputLive),
+                  _OutputGlyph(size: 18, live: outputLive),
                   const SizedBox(width: 7),
                   Flexible(
                     child: ConstrainedBox(

@@ -18,6 +18,8 @@ import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/renderer_settings_provider.dart';
 import 'package:kalinka/screens/renderer_settings_screen.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/expert_field_list.dart';
+import 'package:kalinka/widgets/settings_top_bar.dart';
 import 'package:kalinka/widgets/demo_read_only_dialog.dart';
 import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/settings_controls/settings_readonly_card.dart';
@@ -602,8 +604,15 @@ void main() {
       await tester.pumpWidget(wrap(_FakeApi()));
       await tester.pumpAndSettle();
 
-      expect(find.text('Living Room'), findsOneWidget);
-      expect(find.text('Output settings'), findsOneWidget);
+      // The renderer's name is the page's title.
+      expect(
+        find.descendant(
+          of: find.byType(SettingsTopBar),
+          matching: find.text('Living Room'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Output settings'), findsNothing);
       // Section label, then the fields the renderer declared.
       expect(find.text('OUTPUT'), findsOneWidget);
       expect(find.text('Device'), findsOneWidget);
@@ -631,7 +640,7 @@ void main() {
       await tester.pumpWidget(wrap(_FakeApi()));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('EXPERT'));
+      await tester.tap(find.byKey(const ValueKey('expert-mode-toggle')));
       await tester.pumpAndSettle();
 
       // Paths, not section cards — sorted, so the expert-only section leads.
@@ -647,7 +656,7 @@ void main() {
         200,
         scrollable: find
             .descendant(
-              of: find.byType(ListView),
+              of: find.byType(ExpertFieldList),
               matching: find.byType(Scrollable),
             )
             .first,
@@ -676,7 +685,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('EXPERT'));
+      await tester.tap(find.byKey(const ValueKey('expert-mode-toggle')));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'buffer');
       await tester.pump(const Duration(milliseconds: 200)); // debounce
@@ -699,7 +708,7 @@ void main() {
       await tester.pumpWidget(wrap(api));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('EXPERT'));
+      await tester.tap(find.byKey(const ValueKey('expert-mode-toggle')));
       await tester.pumpAndSettle();
 
       // Narrow to the one row, so the only other text field on screen is the
@@ -730,7 +739,7 @@ void main() {
       await tester.pumpWidget(wrap(api));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('EXPERT'));
+      await tester.tap(find.byKey(const ValueKey('expert-mode-toggle')));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'buffer');
       await tester.pump(const Duration(milliseconds: 200));
@@ -754,7 +763,7 @@ void main() {
       await tester.pumpWidget(wrap(_FakeApi()));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('EXPERT'));
+      await tester.tap(find.byKey(const ValueKey('expert-mode-toggle')));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'latency');
       await tester.pump(const Duration(milliseconds: 200));

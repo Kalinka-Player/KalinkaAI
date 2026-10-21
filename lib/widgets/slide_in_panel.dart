@@ -33,6 +33,10 @@ class SlideInPanel extends StatefulWidget {
   /// PopScope on a route hears it, so both would close.
   final bool handlesBack;
 
+  /// False shows it, and later hides it, in place: a destination switched
+  /// to rather than a page opened over another. Read once, as it opens.
+  final bool slides;
+
   const SlideInPanel({
     super.key,
     required this.child,
@@ -41,6 +45,7 @@ class SlideInPanel extends StatefulWidget {
     this.beforeClose,
     this.onCoverageChanged,
     this.handlesBack = true,
+    this.slides = true,
   });
 
   /// Dismiss the nearest enclosing panel, playing the slide-out first.
@@ -59,6 +64,7 @@ class _SlideInPanelState extends State<SlideInPanel>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<Offset> _slide;
+  late final bool _slides = widget.slides;
   bool _closing = false;
   bool _allowPop = false;
   bool _started = false;
@@ -78,7 +84,7 @@ class _SlideInPanelState extends State<SlideInPanel>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _controller.duration = MediaQuery.disableAnimationsOf(context)
+    _controller.duration = MediaQuery.disableAnimationsOf(context) || !_slides
         ? Duration.zero
         : kSlideInPanelDuration;
     if (!_started) {

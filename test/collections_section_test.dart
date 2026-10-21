@@ -13,7 +13,6 @@ import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/collection_art_tile.dart';
-import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/search/collections_section.dart';
 import 'package:kalinka/widgets/search_cards/collection_row.dart';
 import 'package:kalinka/widgets/source_badge.dart';
@@ -332,86 +331,15 @@ void main() {
     );
   });
 
-  testWidgets('the whole empty row creates a collection and refreshes Home', (
+  testWidgets('with no collections yet, no section and no invitation', (
     tester,
   ) async {
-    final api = _serverWith(const []);
-    await pump(tester, api: api, modules: _withCollections);
+    await pump(tester, api: _serverWith(const []), modules: _withCollections);
 
-    expect(find.text('YOUR COLLECTIONS'), findsOneWidget);
-    expect(find.text('Create your first collection'), findsOneWidget);
-    expect(find.text('VIEW ALL'), findsNothing);
+    expect(find.text('YOUR COLLECTIONS'), findsNothing);
+    expect(find.text('Create your first collection'), findsNothing);
     expect(find.byType(CollectionsEmptyCard), findsNothing);
-    expect(find.byType(KalinkaButton), findsNothing);
-
-    // Open from padding, away from either the icon or text.
-    final row = tester.getRect(find.byType(CollectionsEmptyRow));
-    await tester.tapAt(row.bottomRight + const Offset(-2, -2));
-    await tester.pumpAndSettle();
-    expect(find.text('NEW COLLECTION'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), 'Evening listening');
-    await tester.pump();
-    await tester.tap(find.text('CREATE'));
-    await tester.pumpAndSettle();
-
-    expect(api.createdNames, ['Evening listening']);
-    expect(find.byType(CollectionsEmptyRow), findsNothing);
-    expect(
-      find.widgetWithText(CollectionShelfRow, 'Evening listening'),
-      findsOneWidget,
-    );
-    // Let the creation confirmation retire its display timer.
-    await tester.pump(const Duration(seconds: 30));
   });
-
-  testWidgets('the empty row stays compact on phone and desktop', (
-    tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    for (final width in [375.0, 1200.0]) {
-      tester.view.physicalSize = Size(width, 800);
-      await pump(tester, api: _serverWith(const []), modules: _withCollections);
-      final row = tester.getRect(find.byType(CollectionsEmptyRow));
-      expect(row.height, inInclusiveRange(68, 76));
-      expect(find.byType(CollectionArtTile), findsNothing);
-      expect(tester.takeException(), isNull);
-    }
-  });
-
-  testWidgets(
-    'large text wraps and the creation row supports keyboard activation',
-    (tester) async {
-      tester.view.physicalSize = const Size(320, 800);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final semantics = tester.ensureSemantics();
-      await pump(
-        tester,
-        api: _serverWith(const []),
-        modules: _withCollections,
-        textScale: 2,
-      );
-      expect(tester.takeException(), isNull);
-      expect(
-        tester.getSize(find.byType(CollectionsEmptyRow)).height,
-        greaterThan(76),
-      );
-      expect(
-        tester.getSemantics(
-          find.bySemanticsLabel('Create your first collection'),
-        ),
-        isSemantics(isButton: true, hasTapAction: true),
-      );
-      Focus.of(tester.element(find.text('Create your first collection')))
-          .requestFocus();
-      await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pumpAndSettle();
-      expect(find.text('NEW COLLECTION'), findsOneWidget);
-      semantics.dispose();
-    },
-  );
 
   testWidgets('a collection shows its collage; an empty one the tile', (
     tester,

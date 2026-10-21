@@ -152,17 +152,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   // ref.listen above), swapping this back for the apply bar.
                   _buildDisconnectedPlaceholder()
                 else ...[
-                  // Pending changes banner — only actionable while
-                  // connected, since applying restarts the server.
-                  PendingChangesBanner(
-                    pendingCount: settingsState.pendingCount,
-                    consequence: 'restart required',
-                    blocked: settingsState.hasBlockingIssues,
-                    busy: _applying,
-                    onDiscard: () =>
-                        ref.read(settingsProvider.notifier).discardAll(),
-                    onApply: _onApply,
-                  ),
                   // Tab bar — only meaningful in simple mode; expert is
                   // a single flat about:config-style screen.
                   if (!expertMode) _buildTabBar(settingsState.schema?.pages),
@@ -257,6 +246,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     )
                   else
                     const Expanded(child: SizedBox.shrink()),
+                  // Pending changes, at the foot under the page — only
+                  // actionable while connected, since applying restarts
+                  // the server.
+                  PendingChangesBanner(
+                    pendingCount: settingsState.pendingCount,
+                    consequence: 'restart required',
+                    blocked: settingsState.hasBlockingIssues,
+                    busy: _applying,
+                    onDiscard: () =>
+                        ref.read(settingsProvider.notifier).discardAll(),
+                    onApply: _onApply,
+                  ),
                 ],
               ],
             ),

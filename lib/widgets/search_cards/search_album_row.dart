@@ -8,6 +8,7 @@ import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/play_next.dart';
+import '../modifier_click.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
 import '../swipe_to_act_row.dart';
@@ -110,196 +111,209 @@ class _SearchAlbumRowState extends ConsumerState<SearchAlbumRow>
       enabled: !selectionMode,
       onAddToQueue: _addToQueue,
       onPlayNext: _playNext,
-      child: GestureDetector(
-        onTap: () {
-          if (selectionMode) {
-            ref
-                .read(selectionStateProvider.notifier)
-                .toggleContainer(widget.item.id);
-          } else {
-            openBrowsable(context, ref, widget.item);
-          }
-        },
-        onLongPressStart: selectionMode
+      child: ModifierClick(
+        onModifiedClick: selectionMode
             ? null
-            : (_) => startLongPressRing(
-                () => ref
-                    .read(selectionStateProvider.notifier)
-                    .toggleContainer(widget.item.id),
+            : () => ref
+                  .read(selectionStateProvider.notifier)
+                  .toggleContainer(widget.item.id),
+        child: GestureDetector(
+          onTap: () {
+            if (selectionMode) {
+              ref
+                  .read(selectionStateProvider.notifier)
+                  .toggleContainer(widget.item.id);
+            } else {
+              openBrowsable(context, ref, widget.item);
+            }
+          },
+          onLongPressStart: selectionMode
+              ? null
+              : (_) => startLongPressRing(
+                  () => ref
+                      .read(selectionStateProvider.notifier)
+                      .toggleContainer(widget.item.id),
+                ),
+          onLongPressEnd: selectionMode ? null : (_) => cancelLongPressRing(),
+          onLongPressCancel: selectionMode ? null : cancelLongPressRing,
+          behavior: HitTestBehavior.opaque,
+          child: RowColumnsScope(
+            builder: (context, columns) => AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: EdgeInsets.only(
+                top: 8,
+                bottom: 8,
+                left: selectionMode && isSelected ? 0 : 3,
+                right: 0,
               ),
-        onLongPressEnd: selectionMode ? null : (_) => cancelLongPressRing(),
-        onLongPressCancel: selectionMode ? null : cancelLongPressRing,
-        behavior: HitTestBehavior.opaque,
-        child: RowColumnsScope(
-          builder: (context, columns) => AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            padding: EdgeInsets.only(
-              top: 8,
-              bottom: 8,
-              left: selectionMode && isSelected ? 0 : 3,
-              right: 0,
-            ),
-            decoration: BoxDecoration(
-              color: selectionMode && isSelected
-                  ? KalinkaColors.accent.withValues(alpha: 0.07)
-                  : Colors.transparent,
-              border: selectionMode && isSelected
-                  ? const Border(
-                      left: BorderSide(color: KalinkaColors.accent, width: 3),
-                    )
-                  : null,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Thumbnail 56x56 with selection overlay
-                SizedBox(
-                  width: 60,
-                  height: 60,
-                  child: Stack(
-                    children: [
-                      // Note: previously wrapped in a Container with
-                      // BoxShadow(blurRadius: 6). Each blurred shadow
-                      // forced a saveLayer + Gaussian blur shader pass on
-                      // the GPU, and several album/playlist rows can be
-                      // on screen at once. Tracing showed this was the
-                      // dominant scroll-time cost on the zero-state
-                      // surface (BASED ON NOW PLAYING packs many
-                      // shadow-bearing rows into the first viewport).
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: resolvedImageUrl != null
-                            ? Image.network(
-                                resolvedImageUrl,
-                                width: 60,
-                                height: 60,
-                                cacheWidth: 180,
-                                cacheHeight: 180,
-                                fit: BoxFit.cover,
-                                gaplessPlayback: true,
-                                filterQuality: FilterQuality.low,
-                                errorBuilder: (_, _, _) => ProceduralAlbumArt(
+              decoration: BoxDecoration(
+                color: selectionMode && isSelected
+                    ? KalinkaColors.accent.withValues(alpha: 0.07)
+                    : Colors.transparent,
+                border: selectionMode && isSelected
+                    ? const Border(
+                        left: BorderSide(color: KalinkaColors.accent, width: 3),
+                      )
+                    : null,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Thumbnail 56x56 with selection overlay
+                  SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: Stack(
+                      children: [
+                        // Note: previously wrapped in a Container with
+                        // BoxShadow(blurRadius: 6). Each blurred shadow
+                        // forced a saveLayer + Gaussian blur shader pass on
+                        // the GPU, and several album/playlist rows can be
+                        // on screen at once. Tracing showed this was the
+                        // dominant scroll-time cost on the zero-state
+                        // surface (BASED ON NOW PLAYING packs many
+                        // shadow-bearing rows into the first viewport).
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: resolvedImageUrl != null
+                              ? Image.network(
+                                  resolvedImageUrl,
+                                  width: 60,
+                                  height: 60,
+                                  cacheWidth: 180,
+                                  cacheHeight: 180,
+                                  fit: BoxFit.cover,
+                                  gaplessPlayback: true,
+                                  filterQuality: FilterQuality.low,
+                                  errorBuilder: (_, _, _) => ProceduralAlbumArt(
+                                    trackId: widget.item.id,
+                                    size: 60,
+                                  ),
+                                )
+                              : ProceduralAlbumArt(
                                   trackId: widget.item.id,
                                   size: 60,
                                 ),
-                              )
-                            : ProceduralAlbumArt(
-                                trackId: widget.item.id,
-                                size: 60,
+                        ),
+                        // Long-press ring
+                        if (longPressing && longPressProgress > 0)
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: LongPressRingPainter(
+                                progress: longPressProgress,
+                                color: KalinkaColors.accent,
                               ),
-                      ),
-                      // Long-press ring
-                      if (longPressing && longPressProgress > 0)
-                        Positioned.fill(
-                          child: CustomPaint(
-                            painter: LongPressRingPainter(
-                              progress: longPressProgress,
-                              color: KalinkaColors.accent,
                             ),
                           ),
-                        ),
-                      // Selection overlay
-                      if (selectionMode && isSelected)
-                        Positioned.fill(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: KalinkaColors.accent.withValues(
-                                alpha: 0.4,
+                        // Selection overlay
+                        if (selectionMode && isSelected)
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: KalinkaColors.accent.withValues(
+                                  alpha: 0.4,
+                                ),
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              isPartial ? Icons.remove : Icons.check,
-                              color: Colors.white,
-                              size: 24,
+                              child: Icon(
+                                isPartial ? Icons.remove : Icons.check,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                // Info column
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ...matchBadge(widget.item),
-                      Text(
-                        title,
-                        style: KalinkaTextStyles.trackRowTitle.copyWith(
-                          color: selectionMode && isSelected
-                              ? KalinkaColors.accentTint
-                              : null,
+                  const SizedBox(width: 12),
+                  // Info column
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ...matchBadge(widget.item),
+                        Text(
+                          title,
+                          style: KalinkaTextStyles.trackRowTitle.copyWith(
+                            color: selectionMode && isSelected
+                                ? KalinkaColors.accentTint
+                                : null,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          if (!columns.source &&
-                              sourceBadgeVisible(ref, widget.item.id)) ...[
-                            SourceBadge(entityId: widget.item.id),
-                            const SizedBox(width: 6),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            if (!columns.source &&
+                                sourceBadgeVisible(ref, widget.item.id)) ...[
+                              SourceBadge(entityId: widget.item.id),
+                              const SizedBox(width: 6),
+                            ],
+                            Expanded(
+                              child: Text.rich(
+                                entityTypeSubtitle(
+                                  'Album',
+                                  subtitleFor(columns),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                           ],
-                          Expanded(
-                            child: Text.rich(
-                              entityTypeSubtitle('Album', subtitleFor(columns)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                        ),
+                        if (genre != null && !columns.detail) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: KalinkaColors.surfaceElevated,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              genre,
+                              style: KalinkaTextStyles.tagPill,
                             ),
                           ),
                         ],
-                      ),
-                      if (genre != null && !columns.detail) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: KalinkaColors.surfaceElevated,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(genre, style: KalinkaTextStyles.tagPill),
-                        ),
                       ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (columns.any)
-                  SizedBox(
-                    height: 60,
-                    child: Center(
-                      child: RowColumnCells(
-                        columns: columns,
-                        artist: artist,
-                        detail: [
-                          if (details.isNotEmpty) details,
-                          ?genre,
-                        ].join(' \u00B7 '),
-                        sourceOf: widget.item.id,
-                      ),
                     ),
                   ),
-                RowTrailing(
-                  columns: columns,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (widget.item.canAdd && !selectionMode)
-                        RowPlayButton(item: widget.item),
-                      OpenChevronButton(
-                        name: title,
-                        onTap: () => openBrowsable(context, ref, widget.item),
+                  const SizedBox(width: 8),
+                  if (columns.any)
+                    SizedBox(
+                      height: 60,
+                      child: Center(
+                        child: RowColumnCells(
+                          columns: columns,
+                          artist: artist,
+                          detail: [
+                            if (details.isNotEmpty) details,
+                            ?genre,
+                          ].join(' \u00B7 '),
+                          sourceOf: widget.item.id,
+                        ),
                       ),
-                    ],
+                    ),
+                  RowTrailing(
+                    columns: columns,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.item.canAdd && !selectionMode)
+                          RowPlayButton(item: widget.item),
+                        OpenChevronButton(
+                          name: title,
+                          onTap: () => openBrowsable(context, ref, widget.item),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

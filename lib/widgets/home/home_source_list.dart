@@ -6,10 +6,14 @@ import '../../providers/connection_state_provider.dart';
 import '../../providers/server_info_provider.dart';
 import '../../providers/shell_nav_provider.dart';
 import '../../theme/app_theme.dart';
+import '../edge_fading_rail.dart';
+import '../search/search_zero_state.dart' show kHomeSideInset;
 import '../tap_highlight.dart' show kalinkaIconButtonStyle;
 
-/// Home's music sources as a centred line of names, ending with the gear that
-/// configures them. A name opens its source.
+/// Home's music sources as a line of names, ending with the gear that
+/// configures them: centred while it fits, else scrolled and faded at its
+/// edges as the search prompts are. A name opens its source — for a new
+/// listener, the way into the music.
 class HomeSourceList extends ConsumerWidget {
   final ValueChanged<CatalogSource> onOpen;
 
@@ -40,11 +44,10 @@ class HomeSourceList extends ConsumerWidget {
             if (sources.isEmpty && !configurable) {
               return const SizedBox.shrink();
             }
-            return Wrap(
-              alignment: WrapAlignment.center,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            return EdgeFadingRail(
+              storageId: 'home-sources',
+              gutter: kHomeSideInset,
               spacing: 4,
-              runSpacing: 4,
               children: [
                 for (final source in sources)
                   _SourceName(
@@ -92,7 +95,7 @@ class _SourceName extends StatelessWidget {
         ),
         shape: const WidgetStatePropertyAll(StadiumBorder()),
         textStyle: WidgetStatePropertyAll(
-          KalinkaFonts.sans(fontSize: 14, fontWeight: FontWeight.w500),
+          KalinkaFonts.sans(fontSize: 16, fontWeight: FontWeight.w500),
         ),
         foregroundColor: WidgetStateProperty.resolveWith(
           (states) => lit(states)
@@ -105,7 +108,7 @@ class _SourceName extends StatelessWidget {
         ),
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
       ),
-      child: Text(title),
+      child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
     );
   }
 }

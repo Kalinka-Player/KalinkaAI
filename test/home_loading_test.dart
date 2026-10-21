@@ -156,12 +156,13 @@ void main() {
       expect(find.byType(LinearProgressIndicator), findsNothing);
       expect(find.textContaining('Unavailable'), findsNothing);
       expect(sourceTiles, findsNWidgets(3));
+      // Collections hold no place until there are some.
       expect(
         find.descendant(
           of: find.byType(CollectionsSection),
           matching: find.byType(BrowseRowsShimmer),
         ),
-        findsOneWidget,
+        findsNothing,
       );
       expect(find.byType(PreviewShelfShimmer), findsNWidgets(2));
       expect(

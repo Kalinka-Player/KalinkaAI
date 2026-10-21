@@ -14,7 +14,6 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
-import 'package:kalinka/widgets/browse_filters/active_filter_chips.dart';
 import 'package:kalinka/widgets/browse_rows_shimmer.dart';
 import 'package:kalinka/widgets/search_cards/action_pill_button.dart';
 import 'package:kalinka/widgets/search/results_view.dart';
@@ -131,18 +130,23 @@ final _modules = <ModuleInfo>[
     title: 'Qobuz',
     enabled: true,
     state: ModuleState.ready,
-    capabilities: const [ModuleCapability.aiSearch],
+    capabilities: const [ModuleCapability.catalogs, ModuleCapability.aiSearch],
   ),
   ModuleInfo(
     name: 'localfiles',
     title: 'Local Library',
     enabled: true,
     state: ModuleState.ready,
-    capabilities: const [ModuleCapability.aiSearch],
+    capabilities: const [ModuleCapability.catalogs, ModuleCapability.aiSearch],
   ),
 ];
 
 late SharedPreferences _prefs;
+
+/// The block's heading, as wide as the block: the block itself is a sliver.
+final _inspiredHeading = find.byWidgetPredicate(
+  (w) => w.runtimeType.toString() == '_InspiredHeading',
+);
 
 /// The legs hold their answer on screen for a moment even when it is
 /// instant, so a settled screen is one pump past that hold.
@@ -192,27 +196,6 @@ void main() {
     _prefs = await SharedPreferences.getInstance();
   });
 
-  testWidgets('saved genres keep their labels while results are loading', (
-    tester,
-  ) async {
-    await _prefs.setString(
-      'Kalinka.resultsFilter',
-      '{"type":"album","genreIds":["jazz"],"genreNames":{"jazz":"Jazz"}}',
-    );
-    final gate = Completer<void>();
-    await _pump(tester, _ScriptedApi(gates: {'qobuz': gate}));
-    await tester.pump(_settle);
-
-    expect(find.text('Jazz'), findsOneWidget);
-    expect(find.text('Albums'), findsOneWidget);
-    expect(find.text('jazz'), findsNothing);
-
-    gate.complete();
-    await tester.pumpAndSettle();
-    expect(find.text('Jazz'), findsNothing);
-    expect(find.text('Albums'), findsNothing);
-  });
-
   testWidgets('the name block shimmers until every source has answered', (
     tester,
   ) async {
@@ -242,7 +225,7 @@ void main() {
     expect(find.text('Slow Act'), findsOneWidget);
   });
 
-  testWidgets('four lead, and VIEW ALL opens the rest until its chip goes', (
+  testWidgets('four lead, and VIEW ALL opens the rest until Back', (
     tester,
   ) async {
     final api = _ScriptedApi(
@@ -263,12 +246,15 @@ void main() {
     await tester.tap(find.text('VIEW ALL'));
     await tester.pump();
 
-    expect(find.text('Name matches'), findsOneWidget);
+    // A page, not a filter: no chip names it.
+    expect(find.text('Name matches'), findsNothing);
+    // Rows are built as they come into view.
+    await tester.scrollUntilVisible(find.text('Act 6'), 200);
     expect(find.text('Act 6'), findsOneWidget);
     expect(find.text('VIEW ALL'), findsNothing);
     expect(container.read(searchSessionProvider).resultsFilter.isEmpty, isTrue);
 
-    await tester.tap(find.text('Name matches'));
+    container.read(searchSessionProvider.notifier).goBack();
     await tester.pump();
 
     expect(find.text('Act 5'), findsNothing);
@@ -351,7 +337,7 @@ void main() {
     expect(find.text('VIEW ALL'), findsOneWidget);
     expect(
       tester.getTopRight(find.byType(ViewAllAction)).dx,
-      closeTo(tester.getTopRight(find.byType(InspiredBlock)).dx, 0.5),
+      closeTo(tester.getTopRight(_inspiredHeading).dx, 0.5),
     );
     // The Discover mark on the heading; the query chip wears the same glyph
     // outside the block.
@@ -366,32 +352,11 @@ void main() {
     await tester.tap(find.text('VIEW ALL'));
     await tester.pump();
 
-    expect(find.text('Recommendations · Qobuz'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Away Song 5'), 200);
     expect(find.text('Away Song 5'), findsOneWidget);
     expect(find.text('· 5'), findsOneWidget);
     expect(find.text('LOCAL LIBRARY'), findsNothing);
     expect(find.text('MATCHES BY NAME'), findsNothing);
-  });
-
-  testWidgets('with one source, VIEW ALL narrows by kind alone', (
-    tester,
-  ) async {
-    final api = _ScriptedApi(
-      inspired: {
-        'qobuz': [
-          for (var i = 1; i <= 5; i++) _track('qobuz', '$i', 'Away Song $i'),
-        ],
-      },
-    );
-    await _pump(tester, api, modules: [_modules.first]);
-    await tester.pump(_settle);
-
-    await tester.tap(find.text('VIEW ALL'));
-    await tester.pump();
-
-    expect(find.text('Recommendations'), findsOneWidget);
-    expect(find.text('Qobuz'), findsNothing);
-    expect(find.text('Away Song 5'), findsOneWidget);
   });
 
   testWidgets('the inspired heading is a name and a line, nothing drawn', (
@@ -484,7 +449,7 @@ void main() {
     }
     // Edge to edge, and gone before the first group's name.
     final wash = tester.getRect(washes);
-    final block = tester.getRect(find.byType(InspiredBlock));
+    final block = tester.getRect(_inspiredHeading);
     expect(wash.left, lessThan(block.left));
     expect(wash.right, greaterThan(block.right));
     expect(wash.top, closeTo(block.top, 0.5));
@@ -786,71 +751,9 @@ void main() {
       expect(find.text('Q Act'), findsOneWidget);
     });
 
-    testWidgets('offer nothing the screen filter has already excluded', (
+    testWidgets('the next search starts on the one picked last', (
       tester,
     ) async {
-      final api = _ScriptedApi(
-        matches: {
-          'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
-          'localfiles': [_artist('localfiles', '1', 'L Act', MatchTier.exact)],
-          'jamendo': [_artist('jamendo', '1', 'J Act', MatchTier.exact)],
-        },
-      );
-      final container = await _pump(
-        tester,
-        api,
-        modules: [
-          ..._modules,
-          ModuleInfo(
-            name: 'jamendo',
-            title: 'Jamendo',
-            enabled: true,
-            state: ModuleState.ready,
-            capabilities: const [ModuleCapability.aiSearch],
-          ),
-        ],
-      );
-      await tester.pump(_settle);
-      expect(pill('Jamendo'), findsOneWidget);
-
-      container
-          .read(searchSessionProvider.notifier)
-          .setResultsFilter(
-            const BrowseFilterQuery(sources: ['qobuz', 'localfiles']),
-          );
-      await tester.pump();
-
-      expect(pill('Qobuz'), findsOneWidget);
-      expect(pill('Local Library'), findsOneWidget);
-      expect(pill('Jamendo'), findsNothing);
-    });
-
-    testWidgets('a pick the screen filter rules out is dropped', (
-      tester,
-    ) async {
-      final api = _ScriptedApi(
-        matches: {
-          'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
-          'localfiles': [_artist('localfiles', '1', 'L Act', MatchTier.exact)],
-        },
-      );
-      final container = await _pump(tester, api);
-      await tester.pump(_settle);
-
-      await tester.tap(pill('Qobuz'));
-      await tester.pump();
-      expect(container.read(searchSessionProvider).matchSource, 'qobuz');
-
-      container
-          .read(searchSessionProvider.notifier)
-          .setResultsFilter(const BrowseFilterQuery(sources: ['localfiles']));
-      await tester.pump();
-
-      expect(container.read(searchSessionProvider).matchSource, isNull);
-      expect(find.text('L Act'), findsOneWidget);
-    });
-
-    testWidgets('a new search starts on ALL again', (tester) async {
       final api = _ScriptedApi(
         matches: {
           'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
@@ -867,68 +770,17 @@ void main() {
       container.read(searchSessionProvider.notifier).submit('blues');
       await tester.pump(_settle);
 
+      expect(container.read(searchSessionProvider).matchSource, 'qobuz');
+      expect(find.text('L Act'), findsNothing);
+
+      await tester.tap(pill('All'));
+      await tester.pump();
+      container.read(searchSessionProvider.notifier).submit('jazz');
+      await tester.pump(_settle);
+
       expect(container.read(searchSessionProvider).matchSource, isNull);
     });
   });
-
-  testWidgets('a source the remembered filter left unasked hangs nothing', (
-    tester,
-  ) async {
-    await _prefs.setString('Kalinka.resultsFilter', '{"sources":["qobuz"]}');
-    final api = _ScriptedApi(
-      matches: {
-        'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
-        'localfiles': [_artist('localfiles', '1', 'L Act', MatchTier.exact)],
-      },
-      inspired: {
-        'localfiles': [_track('localfiles', 'l1', 'Home Song')],
-      },
-    );
-    final container = await _pump(tester, api);
-    await tester.pump(_settle);
-
-    expect(api.matchCalls, {'qobuz': 1});
-    expect(find.text('Q Act'), findsOneWidget);
-    expect(find.text('L Act'), findsNothing);
-    expect(find.byType(BrowseRowsShimmer), findsNothing);
-    expect(find.textContaining('Source unavailable'), findsNothing);
-    expect(find.text('LOCAL LIBRARY'), findsNothing);
-
-    container
-        .read(searchSessionProvider.notifier)
-        .setResultsFilter(const BrowseFilterQuery());
-    await tester.pump();
-    expect(find.byType(BrowseRowsShimmer), findsWidgets);
-    await tester.pump(_settle);
-
-    expect(api.matchCalls, {'qobuz': 1, 'localfiles': 1});
-    expect(find.text('L Act'), findsOneWidget);
-    expect(find.text('Home Song'), findsOneWidget);
-  });
-
-  testWidgets(
-    'a remembered filter shows no chips until the sources are known',
-    (tester) async {
-      await _prefs.setString('Kalinka.resultsFilter', '{"sources":["qobuz"]}');
-      final api = _ScriptedApi(
-        matches: {
-          'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
-        },
-      );
-      final container = await _pump(
-        tester,
-        api,
-        modulesAfter: const Duration(milliseconds: 100),
-      );
-
-      expect(container.read(searchSessionProvider).searchLoading, isTrue);
-      expect(find.byType(ActiveFilterChip), findsOneWidget);
-
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump(_settle);
-      expect(find.widgetWithText(ActiveFilterChip, 'Qobuz'), findsOneWidget);
-    },
-  );
 
   testWidgets('nothing found says so', (tester) async {
     await _pump(tester, _ScriptedApi());
@@ -987,6 +839,5 @@ void main() {
     expect(find.text('Q Act'), findsOneWidget);
     expect(find.text('L Act'), findsOneWidget);
     expect(find.text('Reset filters'), findsNothing);
-    expect(_prefs.getString('Kalinka.resultsFilter'), isNull);
   });
 }

@@ -89,6 +89,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   bool _serverSheetOpen = false;
   bool _settingsOpen = false;
   bool _pluginsOpen = false;
+
+  /// Configuration slides in over what it was opened from, but is switched
+  /// to in place from the rail or Customise Home, as destinations are.
+  bool _pluginsSlide = true;
   // True once the settings panel fully covers the content behind it (after its
   // slide-in). Used to Offstage the occluded content so it isn't painted while
   // hidden — but only after the animation, so the slide-in still shows it.
@@ -282,12 +286,13 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     _settingsOpen = true;
   });
 
-  void _openPlugins() {
+  void _openPlugins({bool slide = true}) {
     if (!ref.read(pluginCatalogEnabledProvider)) return;
     ref.read(rendererSettingsRouteProvider.notifier).close();
     setState(() {
       _settingsOpen = false;
       _settingsCovering = false;
+      if (!_pluginsOpen) _pluginsSlide = slide;
       _pluginsOpen = true;
     });
   }
@@ -301,6 +306,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     key: _pluginsKey,
     handlesBack: handlesBack,
     showBack: !navigationVisible,
+    slides: _pluginsSlide,
     onClose: () => setState(() {
       _pluginsOpen = false;
       _settingsCovering = false;
@@ -319,9 +325,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         _pluginsOpen ||
         _settingsOpen ||
         ref.watch(rendererSettingsRouteProvider) != null,
+    changeServerOpen: _discoveryOpen,
+    // The picker can be left for another destination only where it could
+    // be cancelled: with no server to go back to, it is the way on.
     enabled:
         !_navigating &&
-        !_discoveryOpen &&
+        !(_discoveryOpen && !ref.watch(connectionSettingsProvider).isSet) &&
         !ref.watch(upgradeProvider).isUpgrading &&
         !ref.watch(
           restartProvider.select(
@@ -356,6 +365,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     if (_navigating) return;
     // The phone's player sits beside the rail; where the rail goes shows.
     _closeExpandedPlayer();
+    // Any other destination leaves the server picker as its Cancel does,
+    // back to what it covered, then goes on there.
+    if (_discoveryOpen) setState(() => _discoveryOpen = false);
     if (destination == ShellDestination.configuration && _pluginsOpen) return;
     setState(() => _navigating = true);
     try {
@@ -390,7 +402,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           final plan = ref.read(collectionsShelfProvider).value?.plan;
           if (plan != null) browsing.openCollections(plan);
         case ShellDestination.configuration:
-          _openPlugins();
+          _openPlugins(slide: false);
       }
     } finally {
       if (mounted) setState(() => _navigating = false);
@@ -571,7 +583,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(musicSourcesSettingsRequestProvider, (_, _) => _openPlugins());
+    ref.listen(
+      musicSourcesSettingsRequestProvider,
+      (_, _) => _openPlugins(slide: !ref.read(homeCustomisationProvider)),
+    );
     final customiseOpen = ref.watch(homeCustomisationProvider);
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
     // Arm the failure recorder from app start. Left to the queue rows that

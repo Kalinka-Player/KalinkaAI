@@ -22,6 +22,10 @@ const _minHistoryQueryLength = 2;
 
 const _resultsFilterKey = 'Kalinka.resultsFilter';
 
+/// The source last picked out of the name matches, picked again for the next
+/// search.
+const _matchSourceKey = 'Kalinka.resultsSource';
+
 const _catalogFiltersKey = 'Kalinka.catalogFilters';
 
 /// The folder each page of folders was left on, by server and page.
@@ -242,7 +246,7 @@ class CatalogPage {
         filters: item.catalog?.filters ?? const [],
         sections: item.sections ?? const [],
         canEdit: item.canEdit,
-        folderLayout: item.browseType == BrowseType.folder,
+        folderLayout: item.opensAsFolder,
         canAdd: item.canAdd,
         preview: item.catalog?.previewConfig,
         item: item,
@@ -496,13 +500,24 @@ class SearchSessionState {
   List<SearchSuggestion> get suggestions =>
       aiSuggestions.isEmpty ? _fallbackSuggestions : aiSuggestions;
 
-  /// What the results can be narrowed by: whatever they hold. A facet with
-  /// nothing to choose between is hidden — one source, one kind.
-  BrowseFilterCapabilities get resultsFilterCapabilities => _capabilitiesFor(
-    results,
-    holding: results?.settled == false ? resultsFilter : null,
-    genreNames: resultsGenreNames,
-  );
+  /// What the Filters card narrows the results by: what kind of music
+  /// (artist, album, playlist, track) and genre, each while the results hold
+  /// more than one. A source is picked on the name matches' own line, and a
+  /// block opened in full is a page of its own.
+  BrowseFilterCapabilities get resultsFilterCapabilities {
+    final held = _capabilitiesFor(
+      results,
+      holding: results?.settled == false ? resultsFilter : null,
+      genreNames: resultsGenreNames,
+    );
+    return BrowseFilterCapabilities(
+      type: held.type,
+      types: held.types,
+      presentTypes: held.presentTypes,
+      genre: held.genre,
+      genreOptions: held.genreOptions,
+    );
+  }
 
   BrowseFilterQuery get resultsShown => switch (expandedBlock) {
     null => resultsFilter,
@@ -642,6 +657,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// When the shown suggestions were asked for; null until one succeeds.
   DateTime? _suggestionsAt;
 
+  /// The shown search's filter as chosen, facets it hides included. Each
+  /// search starts without one: a filter belongs to the search it narrowed.
   BrowseFilterQuery _savedResultsFilter = const BrowseFilterQuery();
   Map<String, String> _savedResultsGenreNames = {};
   Map<String, BrowseFilterQuery> _savedCatalogFilters = {};
@@ -651,7 +668,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   SearchSessionState build() {
     _prefs = ref.read(sharedPrefsProvider);
     ref.onDispose(() => _disposed = true);
-    _savedResultsFilter = _loadResultsFilter();
+    // Kept by earlier versions for every next search.
+    _prefs.remove(_resultsFilterKey);
     _savedCatalogFilters = _loadCatalogFilters();
     _savedFolderPaths = _loadFolderPaths();
     // Another server's results and pages mean nothing on this one.
@@ -840,6 +858,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   void resetToRoot() {
     _queryGen++;
     _cameFrom = BrowseDestination.home;
+    _savedResultsFilter = const BrowseFilterQuery();
+    _savedResultsGenreNames = {};
     state = state.copyWith(
       visitId: 0,
       previousVisits: const [],
@@ -1264,28 +1284,15 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// replaces the current query. This is the only path that fires a search —
   /// there is no search-as-you-type, and catalog taps bypass it.
   ///
-  /// Requests name matches and recommendations separately for sources
-  /// included by the saved filter.
-  ///
-  /// [filter] and [shown] carry the card's edited and original selections.
-  void submit(
-    String rawQuery, {
-    BrowseFilterQuery? filter,
-    BrowseFilterQuery? shown,
-    bool reset = false,
-  }) {
+  /// Requests name matches and recommendations separately from each source,
+  /// with no filter yet.
+  void submit(String rawQuery) {
     final query = rawQuery.trim();
     if (query.isEmpty) return;
-    if (filter != null) {
-      _rememberResultsFilter(
-        _withChange(
-          _savedResultsFilter,
-          shown: (shown ?? state.resultsFilter).copyWith(text: ''),
-          next: filter.copyWith(text: ''),
-          reset: reset,
-        ),
-      );
-    }
+    // A filter belongs to the search it narrowed: each starts without one.
+    _savedResultsFilter = const BrowseFilterQuery();
+    _savedResultsGenreNames = {};
+    final matchSource = _prefs.getString(_matchSourceKey);
 
     // Dedup + move-to-front, so a repeated query jumps to the top of Recent
     // searches. Catalog navigation never reaches here, so it stays out of it.
@@ -1315,7 +1322,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       resultsFilter: _savedResultsFilter,
       resultsChoice: _savedResultsFilter,
       resultsGenreNames: _savedResultsGenreNames,
-      clearMatchSource: true,
+      matchSource: matchSource,
+      clearMatchSource: matchSource == null,
       clearExpandedBlock: true,
       history: _loadHistory(),
     );
@@ -1332,7 +1340,14 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     List<SourceOption> sources;
     Set<String> suggesting;
     try {
-      final modules = await ref.read(sourceModulesProvider.future);
+      // Only a source with catalogs has anything to find, and the server's
+      // own (collections), which answers by name without declaring any; the
+      // rest would be asked for nothing and offered as a filter that finds
+      // nothing.
+      final modules = [
+        for (final module in await ref.read(sourceModulesProvider.future))
+          if (module.builtin || module.can(ModuleCapability.catalogs)) module,
+      ];
       sources = _inDisplayOrder(modules);
       suggesting = {
         for (final module in modules)
@@ -1349,22 +1364,15 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       sources,
       suggesting: suggesting,
     );
-    var choice = state.resultsChoice;
-    var results = pending.askingOnly(_fitResultsFilter(choice, pending));
-    if (results.settled && choice.kind != null) {
-      // Fall back to name matches if none of the selected sources can suggest.
-      choice = choice.copyWith(clearKind: true);
-      results = pending.askingOnly(_fitResultsFilter(choice, pending));
-    }
+    // Every source is asked: a search starts with no filter to leave one out.
     state = state.copyWith(
       searchLoading: false,
-      results: results,
-      resultsChoice: choice,
-      resultsFilter: _fitResultsFilter(choice, results),
+      results: pending,
+      resultsFilter: _fitResultsFilter(state.resultsChoice, pending),
     );
     for (final source in sources) {
       for (final leg in ResultsLeg.values) {
-        if (results.legsOf(leg)[source.name] is LegLoading) {
+        if (pending.legsOf(leg)[source.name] is LegLoading) {
           _runLeg(gen, query, source.name, leg);
         }
       }
@@ -1462,12 +1470,15 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   );
 
   /// Clears saved filters, the selected source and any expanded block.
-  void resetResults() => _narrowResults(
-    const BrowseFilterQuery(),
-    shown: state.resultsFilter,
-    reset: true,
-    clearNavigation: true,
-  );
+  void resetResults() {
+    _prefs.remove(_matchSourceKey);
+    _narrowResults(
+      const BrowseFilterQuery(),
+      shown: state.resultsFilter,
+      reset: true,
+      clearNavigation: true,
+    );
+  }
 
   void _narrowResults(
     BrowseFilterQuery filter, {
@@ -1485,16 +1496,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       next: next,
       reset: reset,
     );
-    var results = state.results;
-    final unasked =
-        results?.unaskedUnder(
-          _fitResultsFilter(choice, results, judgeHeld: false),
-        ) ??
-        const <({ResultsLeg leg, String source})>[];
-    for (final (:leg, :source) in unasked) {
-      results = results!.withLeg(leg, source, const LegLoading());
-    }
-    final fitted = _fitResultsFilter(choice, results, holding: next);
+    final fitted = _fitResultsFilter(choice, state.results, holding: next);
     final picked = state.matchSource;
     final gone =
         picked != null &&
@@ -1502,7 +1504,6 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         !fitted.sources.contains(picked);
     final block = state.expandedBlock;
     state = state.copyWith(
-      results: results,
       resultsChoice: choice,
       resultsGenreNames: _savedResultsGenreNames,
       resultsFilter: fitted,
@@ -1511,9 +1512,6 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
           clearNavigation ||
           (block != null && !fitted.shows(block.kind, block.source)),
     );
-    for (final (:leg, :source) in unasked) {
-      _runLeg(_queryGen, state.searchQuery, source, leg);
-    }
   }
 
   /// Opens one block of the results in full as a visit of its own; null
@@ -1535,20 +1533,15 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   }
 
   /// Validates types and genres after all requests finish. [holding] keeps
-  /// the current selection during retries. Set [judgeHeld] to false to skip
-  /// validation when deciding which deferred requests to start.
+  /// the current selection during retries.
   static BrowseFilterQuery _fitResultsFilter(
     BrowseFilterQuery choice,
     SearchResults? results, {
-    bool judgeHeld = true,
     BrowseFilterQuery? holding,
   }) {
     if (results == null) return choice;
     var fitted = choice.fittedTo(
-      SearchSessionState._capabilitiesFor(
-        results,
-        gatherHeld: judgeHeld && results.settled,
-      ),
+      SearchSessionState._capabilitiesFor(results, gatherHeld: results.settled),
     );
     if (holding != null && !results.settled) {
       fitted = fitted.withFacetsFrom(holding, const {
@@ -1559,8 +1552,14 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     return fitted;
   }
 
-  /// Read one source's name matches, or all of them again with null.
+  /// Read one source's name matches, or all of them again with null; the
+  /// next search starts on the same.
   void setMatchSource(String? source) {
+    if (source == null) {
+      _prefs.remove(_matchSourceKey);
+    } else {
+      _prefs.setString(_matchSourceKey, source);
+    }
     state = state.copyWith(
       matchSource: source,
       clearMatchSource: source == null,
@@ -1586,6 +1585,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       );
     }
     _queryGen++;
+    _savedResultsFilter = const BrowseFilterQuery();
+    _savedResultsGenreNames = {};
     state = state.copyWith(
       queryGen: _queryGen,
       resultsAvailable: false,
@@ -1663,23 +1664,6 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     state = state.copyWith(history: const []);
   }
 
-  BrowseFilterQuery _loadResultsFilter() {
-    final json = _prefs.getString(_resultsFilterKey);
-    if (json == null) return const BrowseFilterQuery();
-    try {
-      final decoded = jsonDecode(json) as Map<String, dynamic>;
-      final names = decoded['genreNames'];
-      _savedResultsGenreNames = {
-        if (names is Map<String, dynamic>)
-          for (final entry in names.entries)
-            if (entry.value is String) entry.key: entry.value as String,
-      };
-      return BrowseFilterQuery.fromJson(decoded).copyWith(text: '');
-    } catch (_) {
-      return const BrowseFilterQuery();
-    }
-  }
-
   void _rememberResultsFilter(BrowseFilterQuery filter) {
     _savedResultsFilter = filter.copyWith(text: '');
     final names = {
@@ -1690,18 +1674,6 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     _savedResultsGenreNames = {
       for (final id in filter.genreIds) id: ?names[id],
     };
-    if (_savedResultsFilter.isEmpty) {
-      _prefs.remove(_resultsFilterKey);
-    } else {
-      _prefs.setString(
-        _resultsFilterKey,
-        jsonEncode({
-          ..._savedResultsFilter.toJson(),
-          if (_savedResultsGenreNames.isNotEmpty)
-            'genreNames': _savedResultsGenreNames,
-        }),
-      );
-    }
   }
 
   Map<String, BrowseFilterQuery> _loadCatalogFilters() {

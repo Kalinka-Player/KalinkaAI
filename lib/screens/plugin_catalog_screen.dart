@@ -21,8 +21,9 @@ import '../widgets/demo_read_only_dialog.dart';
 import '../widgets/kalinka_button.dart';
 import '../widgets/kalinka_dialog.dart';
 import '../widgets/configuration_appearance.dart';
-import '../widgets/configuration_changes_bar.dart';
+import '../widgets/pending_changes_banner.dart';
 import '../widgets/configuration_page.dart';
+import '../widgets/expert_mode_toggle.dart';
 import '../widgets/expert_settings_screen.dart';
 import '../widgets/onboarding/step_network.dart';
 import 'log_export_screen.dart';
@@ -49,17 +50,22 @@ final _label = KalinkaTextStyles.sectionHeaderMuted.copyWith(
 class PluginCatalogScreen extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
 
-  /// Whether its top bar offers Back; off beside the navigation rail, which
-  /// is how it is left there.
+  /// Whether it has a top bar, with Back; off beside the navigation rail,
+  /// which names it and is how it is left there, so the tabs start at the
+  /// top.
   final bool showBack;
   final ValueChanged<bool>? onCoverageChanged;
   final bool handlesBack;
+
+  /// False switches to it in place, as to another destination.
+  final bool slides;
   const PluginCatalogScreen({
     super.key,
     this.onClose,
     this.showBack = true,
     this.onCoverageChanged,
     this.handlesBack = true,
+    this.slides = true,
   });
   @override
   PluginCatalogScreenState createState() => PluginCatalogScreenState();
@@ -70,7 +76,6 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   PluginTab _tab = PluginTab.sources;
   CatalogPlugin? _settingsFor;
   CatalogPlugin? _aboutFor;
-  bool _advancedOpen = false;
   bool _logsOpen = false;
   bool _networkOpen = false;
   bool _restartOverlayOpen = false;
@@ -260,7 +265,6 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         _tab = PluginTab.sources;
         _settingsFor = null;
         _aboutFor = null;
-        _advancedOpen = false;
         _logsOpen = false;
         _networkOpen = false;
       });
@@ -281,7 +285,6 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         _settingsFor = null;
         _aboutFor = null;
         _tab = PluginTab.sources;
-        _advancedOpen = false;
         _logsOpen = false;
         _networkOpen = false;
         _reviewPaths = null;
@@ -294,6 +297,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     final catalog = enabled ? ref.watch(pluginCatalogProvider) : null;
     final settings = ref.watch(settingsProvider);
     final upgrading = ref.watch(upgradeProvider).isUpgrading;
+    final expert = ref.watch(expertModeProvider);
 
     final issuePaths = settings.issues.entries
         .where((entry) => entry.value.any((issue) => issue.isBlocking))
@@ -312,6 +316,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
             children: [
               Expanded(
                 child: SlideInPanel(
+                  slides: widget.slides,
                   onClose: widget.onClose,
                   beforeClose: _beforeClose,
                   onCoverageChanged: widget.onCoverageChanged,
@@ -319,7 +324,6 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                       widget.handlesBack &&
                       _settingsFor == null &&
                       _aboutFor == null &&
-                      !_advancedOpen &&
                       !_logsOpen &&
                       !_networkOpen &&
                       _reviewPaths == null &&
@@ -351,20 +355,6 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                             !_restartOverlayOpen &&
                             !upgrading,
                         onClose: () => setState(() => _aboutFor = null),
-                      ),
-                    if (_advancedOpen)
-                      ConfigurationPage(
-                        key: const ValueKey('server-expert'),
-                        title: 'Advanced settings',
-                        description: 'All player settings. Search for the setting you need.',
-                        onClose: () => setState(() => _advancedOpen = false),
-                        handlesBack:
-                            widget.handlesBack &&
-                            _reviewPaths == null &&
-                            !_restartOverlayOpen &&
-                            !upgrading,
-                        bodyBuilder: (heading) =>
-                            ExpertSettingsScreen(heading: heading),
                       ),
                     if (_networkOpen)
                       ConfigurationPage(
@@ -438,14 +428,15 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                   child: Material(
                     color: KalinkaColors.background,
                     child: SafeArea(
-                      top: false,
+                      // Without its bar the tabs take the top inset.
+                      top: !widget.showBack,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SettingsTopBar(
-                            title: 'Configuration',
-                            showBack: widget.showBack,
-                          ),
+                          // Beside the rail, which names it and is how it is
+                          // left, the tabs start at the top.
+                          if (widget.showBack)
+                            const SettingsTopBar(title: 'Configuration'),
                           ColoredBox(
                             color: KalinkaColors.background,
                             child: Column(
@@ -467,7 +458,11 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                                   if (_sectionDescription(_tab, gutter)
                                       case final description?)
                                     SliverToBoxAdapter(child: description),
-                                  if (_tab == PluginTab.server)
+                                  // Expert, the tab is the flat list of
+                                  // every setting, found by name.
+                                  if (_tab == PluginTab.server && expert)
+                                    const ExpertSettingsScreen(sliver: true)
+                                  else if (_tab == PluginTab.server)
                                     ..._serverSlivers()
                                   else if (info.isLoading)
                                     const SliverFillRemaining(
@@ -480,7 +475,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                                     const SliverFillRemaining(
                                       hasScrollBody: false,
                                       child: _Notice(
-                                        'Plugin catalog preview is off or unavailable on this server. Enable it in Streamer → Advanced settings.',
+                                        'Plugin catalog preview is off or unavailable on this server. Enable it on the Streamer tab, with Expert settings on.',
                                       ),
                                     )
                                   else
@@ -518,11 +513,15 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                   ),
                 ),
               ),
-              ConfigurationChangesBar(
+              // Under every page Configuration opens, the page shrinking
+              // to make room for it.
+              PendingChangesBanner(
                 key: const ValueKey('configuration-changes'),
-                count: settings.pendingCount,
+                pendingCount: settings.pendingCount,
+                consequence: 'restart required',
                 busy: _applying || _restartOverlayOpen || upgrading,
-                issueLabel: issueLabel,
+                blocked: issueLabel != null,
+                blockedReason: issueLabel == null ? null : 'check $issueLabel',
                 onReview: () => setState(() => _reviewPaths = issuePaths),
                 onDiscard: ref.read(settingsProvider.notifier).discardAll,
                 onApply: _onApply,
@@ -701,53 +700,50 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
 
   Widget _tabs(PluginTab tab, double gutter) => PinnedHeaderSliver(
     child: ColoredBox(
+      key: const ValueKey('catalog-tabs'),
       color: KalinkaColors.background,
-      child: Stack(
-        key: const ValueKey('catalog-tabs'),
-        children: [
-          // The grey rule the selected tab's berry line sits on.
-          const Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: SizedBox(
-              height: 1,
-              child: ColoredBox(color: KalinkaColors.borderDefault),
-            ),
-          ),
-          // Each tab as wide as its label, an even gap apart, from the
-          // content's inset. Short of room, all three truncate alike: the
-          // labels are monospace, so their shares follow their lengths.
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: gutter),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 24,
-                children: [
-                  for (final (option, label) in [
-                    (PluginTab.sources, 'Music sources'),
-                    (PluginTab.devices, 'HiFi control'),
-                    (PluginTab.server, 'Streamer'),
-                  ])
-                    Flexible(
-                      flex: label.length,
-                      child: _PluginTabButton(
-                        key: ValueKey('catalog-tab-${option.name}'),
-                        label: label,
-                        selected: tab == option,
-                        onTap: () {
-                          setState(() => _tab = option);
-                          _scroll.jumpTo(0);
-                        },
+      // Each tab as wide as its label, an even gap apart, from the content's
+      // inset, with no rule under them. Short of room, all three truncate
+      // alike: the labels are monospace, so their shares follow their
+      // lengths. The Streamer tab ends the row with the Expert switch.
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: gutter),
+        child: Row(
+          children: [
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 24,
+                  children: [
+                    for (final (option, label) in [
+                      (PluginTab.sources, 'Music sources'),
+                      (PluginTab.devices, 'HiFi control'),
+                      (PluginTab.server, 'Streamer'),
+                    ])
+                      Flexible(
+                        flex: label.length,
+                        child: _PluginTabButton(
+                          key: ValueKey('catalog-tab-${option.name}'),
+                          label: label,
+                          selected: tab == option,
+                          onTap: () {
+                            setState(() => _tab = option);
+                            _scroll.jumpTo(0);
+                          },
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+            if (tab == PluginTab.server) ...[
+              const SizedBox(width: 8),
+              const ExpertModeToggle(),
+            ],
+          ],
+        ),
       ),
     ),
   );
@@ -777,7 +773,6 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         onRestart: _onRestart,
         onDownloadLogs: () => setState(() => _logsOpen = true),
         onNetwork: () => setState(() => _networkOpen = true),
-        onAdvanced: () => setState(() => _advancedOpen = true),
       ),
     ),
     const SliverToBoxAdapter(child: SizedBox(height: 32)),

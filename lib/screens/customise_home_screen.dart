@@ -91,7 +91,7 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'No pinned catalogs yet',
+                                      'Nothing pinned yet',
                                       style: KalinkaTextStyles.trayRowLabel,
                                     ),
                                     const SizedBox(height: 8),

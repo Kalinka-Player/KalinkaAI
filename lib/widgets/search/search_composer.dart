@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -60,12 +62,30 @@ class _SearchComposerState extends State<SearchComposer> {
     return KeyEventResult.ignored;
   }
 
+  /// The height of the field's first line with its padding: the icons
+  /// either side sit centred in it, so they stay level with the text at any
+  /// text size.
+  double _lineHeight(BuildContext context) {
+    final painter = TextPainter(
+      text: TextSpan(text: 'Ag', style: KalinkaTextStyles.searchBarInput),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return math.max(32.0, height + 2 * _fieldInset);
+  }
+
+  static const _fieldInset = 7.0;
+
   @override
   Widget build(BuildContext context) {
     // One row, everything anchored to the top: at one line it reads as a
     // centred bar; as the field wraps taller, the leading icon and the
     // clear + send stay pinned to the first line and only the text grows
     // downward.
+    final line = _lineHeight(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
       child: Row(
@@ -81,10 +101,10 @@ class _SearchComposerState extends State<SearchComposer> {
                 child: GestureDetector(
                   onTap: widget.onBack,
                   behavior: HitTestBehavior.opaque,
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: 38,
-                    height: 32,
-                    child: Icon(
+                    height: line,
+                    child: const Icon(
                       Icons.arrow_back,
                       size: 20,
                       color: KalinkaColors.textSecondary,
@@ -94,10 +114,10 @@ class _SearchComposerState extends State<SearchComposer> {
               ),
             )
           else
-            const SizedBox(
+            SizedBox(
               width: 38,
-              height: 32,
-              child: Icon(
+              height: line,
+              child: const Icon(
                 Icons.search_rounded,
                 size: 19,
                 color: KalinkaColors.accentTint,
@@ -105,7 +125,7 @@ class _SearchComposerState extends State<SearchComposer> {
             ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 7),
+              padding: const EdgeInsets.symmetric(vertical: _fieldInset),
               child: Focus(
                 onKeyEvent: _onKeyEvent,
                 child: TextField(
@@ -135,7 +155,7 @@ class _SearchComposerState extends State<SearchComposer> {
           ),
           // Clear (✕) + send — appear only when there's text; pinned to
           // the first line as the field grows.
-          _buildTrailingButtons(),
+          _buildTrailingButtons(line),
         ],
       ),
     );
@@ -147,10 +167,10 @@ class _SearchComposerState extends State<SearchComposer> {
     widget.focusNode.requestFocus();
   }
 
-  Widget _buildTrailingButtons() {
+  Widget _buildTrailingButtons(double line) {
     // Rebuilds on every keystroke (without firing any search) so the buttons
-    // show up only once there's non-whitespace text. Results appear below the
-    // bar, so a downward accent arrow reads as "send it down".
+    // show up only once there's non-whitespace text. The accent arrow points
+    // on, as a send button does.
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, _) {
@@ -169,10 +189,10 @@ class _SearchComposerState extends State<SearchComposer> {
                   child: GestureDetector(
                     onTap: _clear,
                     behavior: HitTestBehavior.opaque,
-                    child: const SizedBox(
+                    child: SizedBox(
                       width: 32,
-                      height: 32,
-                      child: Icon(
+                      height: line,
+                      child: const Icon(
                         Icons.close_rounded,
                         size: 20,
                         color: KalinkaColors.textSecondary,
@@ -190,11 +210,11 @@ class _SearchComposerState extends State<SearchComposer> {
                   child: GestureDetector(
                     onTap: _submit,
                     behavior: HitTestBehavior.opaque,
-                    child: const SizedBox(
+                    child: SizedBox(
                       width: 32,
-                      height: 32,
-                      child: Icon(
-                        Icons.arrow_downward_rounded,
+                      height: line,
+                      child: const Icon(
+                        Icons.arrow_forward_rounded,
                         size: 22,
                         color: KalinkaColors.accent,
                       ),

@@ -6,15 +6,15 @@ import '../../data_model/search_results.dart';
 import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../browse_filters/active_filter_chips.dart';
-import '../browse_filters/browse_filter_form.dart' show resultKindLabel;
 import '../browse_filters/filters_match_nothing.dart';
 import 'browse_visit_scope.dart';
 import 'inspired_block.dart';
 import 'name_matches_block.dart';
 import 'search_loading_indicator.dart';
 
-/// The Results layer: the query as a chip beside whatever narrows it, then
-/// what was found by name and what was found for it. Holds a single query —
+/// The Results layer: the chips of the genres narrowing the query, which the
+/// bar names, then what was found by name and what was found for it. A block
+/// opened with VIEW ALL is a visit of its own, left with Back. Holds a single query —
 /// a new search replaces it. Going back to Catalogs is the title bar's `‹`
 /// (or system back), never a button here.
 class ResultsView extends ConsumerWidget {
@@ -28,57 +28,51 @@ class ResultsView extends ConsumerWidget {
     final notifier = ref.read(searchSessionProvider.notifier);
     final results = session.results;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(_gutter, 4, _gutter, 24),
-      children: [
-        ActiveFilterChips(
-          capabilities: session.resultsFilterCapabilities,
-          // Wait for the source list before showing saved filters.
-          query: results == null
-              ? const BrowseFilterQuery()
-              : session.resultsFilter,
-          onChanged: notifier.setResultsFilter,
-          padding: const EdgeInsets.only(bottom: 16),
-          // The query is not a facet, but it sits where the facets do: the
-          // one thing every row below answers to. Removing it removes them.
-          leading: [
-            ActiveFilterChip(
-              label: '“${session.searchQuery}”',
-              icon: Icons.auto_awesome,
-              onRemove: notifier.clearSearch,
-            ),
-            if (session.expandedBlock case (:final kind, :final source))
-              ActiveFilterChip(
-                label: [
-                  resultKindLabel(kind),
-                  if (source != null &&
-                      results != null &&
-                      results.sources.length > 1)
-                    results.sources.titleOf(source),
-                ].join(' · '),
-                onRemove: () => notifier.expandBlock(null),
+    // Slivers, so a block opened in full builds only the rows in view.
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(_gutter, 21, _gutter, 24),
+          sliver: SliverMainAxisGroup(
+            slivers: [
+              SliverToBoxAdapter(
+                child: ActiveFilterChips(
+                  capabilities: session.resultsFilterCapabilities,
+                  // Wait for the source list before showing filters.
+                  query: results == null
+                      ? const BrowseFilterQuery()
+                      : session.resultsFilter,
+                  onChanged: notifier.setResultsFilter,
+                  padding: const EdgeInsets.only(bottom: 16),
+                ),
               ),
-          ],
-        ),
-        if (session.searchLoading)
-          const SearchLoadingIndicator()
-        else if (session.searchError != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
-            child: Text(
-              session.searchError!,
-              style: KalinkaTextStyles.trackRowSubtitle.copyWith(
-                color: KalinkaColors.actionDelete,
-              ),
-            ),
-          )
-        else if (results != null)
-          ..._blocks(
-            results,
-            session.resultsShown,
-            session.matchSource,
-            notifier,
+              if (session.searchLoading)
+                const SliverToBoxAdapter(child: SearchLoadingIndicator())
+              else if (session.searchError != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 16,
+                      horizontal: 4,
+                    ),
+                    child: Text(
+                      session.searchError!,
+                      style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+                        color: KalinkaColors.actionDelete,
+                      ),
+                    ),
+                  ),
+                )
+              else if (results != null)
+                ..._blocks(
+                  results,
+                  session.resultsShown,
+                  session.matchSource,
+                  notifier,
+                ),
+            ],
           ),
+        ),
       ],
     );
   }
@@ -93,15 +87,17 @@ class ResultsView extends ConsumerWidget {
     final matches = NameMatchesBlock.visible(results, narrowed, filter);
     final inspired = InspiredBlock.visible(results, narrowed, filter);
     if (!matches && !inspired) {
-      // Sorting alone cannot cause an empty result.
+      // Sorting alone cannot cause an empty result, nor a source picked: it
+      // is only ever one that found something.
       final filtered =
-          filter.copyWith(order: NameMatchOrder.relevance).activeCount > 0 ||
-          matchSource != null;
-      if (!filtered) return const [_NoMatches()];
+          filter.copyWith(order: NameMatchOrder.relevance).activeCount > 0;
+      if (!filtered) return const [SliverToBoxAdapter(child: _NoMatches())];
       return [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 28),
-          child: FiltersMatchNothing(onReset: notifier.resetResults),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 28),
+            child: FiltersMatchNothing(onReset: notifier.resetResults),
+          ),
         ),
       ];
     }
@@ -118,8 +114,10 @@ class ResultsView extends ConsumerWidget {
             source: null,
           )),
           onRetry: (source) => notifier.retry(ResultsLeg.matches, source),
+          gutter: _gutter,
         ),
-      if (matches && inspired) const SizedBox(height: 28),
+      if (matches && inspired)
+        const SliverToBoxAdapter(child: SizedBox(height: 28)),
       if (inspired)
         InspiredBlock(
           results: results,

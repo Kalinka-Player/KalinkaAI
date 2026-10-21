@@ -8,13 +8,14 @@ import '../providers/collections_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/search_session_provider.dart';
 import '../providers/server_info_provider.dart';
+import '../providers/source_modules_provider.dart' show colorForSourceName;
 import '../providers/supervisor_api.dart';
 import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
 
 enum ShellDestination { home, results, source, collections, configuration }
 
-/// Between the rail's edges and its destinations.
+/// Above and below the destinations, which span the rail edge to edge.
 const _railInset = 6.0;
 
 /// The server's own controls, pinned under Configuration.
@@ -23,6 +24,10 @@ enum ShellAction { restart, changeServer, powerOff }
 /// Persistent shortcuts beside browsing on larger screens.
 class ShellNavigation extends ConsumerWidget {
   final bool configurationOpen;
+
+  /// The server picker shows: Change server is then the destination shown,
+  /// over whatever it covers.
+  final bool changeServerOpen;
   final bool enabled;
 
   /// Icons beside full names, rather than over short labels.
@@ -34,6 +39,7 @@ class ShellNavigation extends ConsumerWidget {
   const ShellNavigation({
     super.key,
     this.configurationOpen = false,
+    this.changeServerOpen = false,
     this.enabled = true,
     this.extended = false,
     required this.onNavigate,
@@ -47,7 +53,9 @@ class ShellNavigation extends ConsumerWidget {
     final session = ref.watch(searchSessionProvider);
     // The destination shown, whatever page in it is: an album opened from
     // Results is still Results.
-    final shown = configurationOpen ? null : session.destination;
+    final shown = configurationOpen || changeServerOpen
+        ? null
+        : session.destination;
     final sources = ref.watch(catalogSourcesProvider);
     // Only where the server keeps collections.
     final collections = ref.watch(collectionsShelfProvider).value?.plan;
@@ -69,6 +77,8 @@ class ShellNavigation extends ConsumerWidget {
       compactLabel: compactLabel,
       tooltip: tooltip,
       icon: icon,
+      // A source's icon in its own colour, as its badges are.
+      iconColor: source == null ? null : colorForSourceName(source.module.name),
       selected: selected,
       extended: extended,
       onPressed: enabled && available
@@ -80,13 +90,14 @@ class ShellNavigation extends ConsumerWidget {
       ShellAction action,
       String label,
       IconData icon,
-      String tooltip,
-    ) => _NavigationButton(
+      String tooltip, {
+      bool selected = false,
+    }) => _NavigationButton(
       key: ValueKey('navigation-${action.name}'),
       label: label,
       tooltip: tooltip,
       icon: icon,
-      selected: false,
+      selected: selected,
       extended: extended,
       onPressed: enabled ? () => onAction(action) : null,
     );
@@ -111,6 +122,7 @@ class ShellNavigation extends ConsumerWidget {
           'Change server',
           Icons.language,
           'Connect to a different server',
+          selected: changeServerOpen,
         ),
       if (box?.offers(BoxAction.powerOff) ?? false)
         action(
@@ -130,7 +142,7 @@ class ShellNavigation extends ConsumerWidget {
           child: CustomScrollView(
             slivers: [
               SliverPadding(
-                padding: const EdgeInsets.all(_railInset),
+                padding: const EdgeInsets.symmetric(vertical: _railInset),
                 sliver: SliverList.list(
                   children: [
                     destination(
@@ -195,7 +207,7 @@ class ShellNavigation extends ConsumerWidget {
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: Padding(
-                  padding: const EdgeInsets.all(_railInset),
+                  padding: const EdgeInsets.symmetric(vertical: _railInset),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.end,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -207,7 +219,7 @@ class ShellNavigation extends ConsumerWidget {
                           Icons.settings_outlined,
                           ShellDestination.configuration,
                           compactLabel: 'Config',
-                          selected: configurationOpen,
+                          selected: configurationOpen && !changeServerOpen,
                         ),
                       if (configuration && actions.isNotEmpty) divider,
                       ...actions,
@@ -228,6 +240,9 @@ class _NavigationButton extends StatelessWidget {
   final String? compactLabel;
   final String? tooltip;
   final IconData icon;
+
+  /// The icon's own colour while it can be followed; null takes the label's.
+  final Color? iconColor;
   final bool selected;
   final bool extended;
   final VoidCallback? onPressed;
@@ -238,6 +253,7 @@ class _NavigationButton extends StatelessWidget {
     this.compactLabel,
     this.tooltip,
     required this.icon,
+    this.iconColor,
     required this.selected,
     required this.extended,
     required this.onPressed,
@@ -245,13 +261,15 @@ class _NavigationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final glyph = ExcludeSemantics(child: Icon(icon, size: 24));
+    final glyph = ExcludeSemantics(
+      child: Icon(icon, size: 24, color: onPressed == null ? null : iconColor),
+    );
     final text = ExcludeSemantics(
       child: Text(
         extended ? label : compactLabel ?? label,
         textAlign: extended ? TextAlign.start : TextAlign.center,
         style: KalinkaFonts.sans(
-          fontSize: extended ? 14 : 12,
+          fontSize: extended ? 16 : 12,
           fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
         ),
       ),
@@ -271,13 +289,12 @@ class _NavigationButton extends StatelessWidget {
             ),
             padding: WidgetStatePropertyAll(
               extended
-                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
-                  : const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  ? const EdgeInsets.symmetric(horizontal: 16, vertical: 10)
+                  : const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             ),
             alignment: extended ? AlignmentDirectional.centerStart : null,
-            shape: WidgetStatePropertyAll(
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
+            // A plain block from edge to edge, as the rule beside it.
+            shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
             foregroundColor: WidgetStateProperty.resolveWith(
               (states) => states.contains(WidgetState.disabled)
                   ? KalinkaColors.textMuted
@@ -329,11 +346,10 @@ class _NavigationButton extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4),
       // Marked as the player's PLAYING / QUEUE tabs are: a berry rule as
       // long as what it marks, here upright on the rail's edge beside the
-      // pane it shows, and no fill.
+      // pane it shows, the item's full height, and no fill.
       child: Stack(
         // The button keeps the rail's full width.
         fit: StackFit.passthrough,
-        clipBehavior: Clip.none,
         children: [
           message == null
               ? button
@@ -342,18 +358,15 @@ class _NavigationButton extends StatelessWidget {
                   excludeFromSemantics: true,
                   child: button,
                 ),
-          Positioned(
-            top: extended ? 10 : 8,
-            bottom: extended ? 10 : 8,
-            right: -_railInset,
+          PositionedDirectional(
+            top: 0,
+            bottom: 0,
+            end: 0,
             width: 2,
             child: AnimatedContainer(
               duration: duration,
               curve: Curves.easeOutCubic,
-              decoration: BoxDecoration(
-                color: selected ? KalinkaColors.accent : Colors.transparent,
-                borderRadius: BorderRadius.circular(1),
-              ),
+              color: selected ? KalinkaColors.accent : Colors.transparent,
             ),
           ),
         ],

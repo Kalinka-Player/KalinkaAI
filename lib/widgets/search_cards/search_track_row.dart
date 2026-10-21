@@ -10,6 +10,7 @@ import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/playback_utils.dart';
+import '../modifier_click.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
 import '../swipe_to_act_row.dart';
@@ -17,14 +18,15 @@ import '../tap_highlight.dart';
 import '../track_tile_layout.dart';
 import 'long_press_ring_painter.dart';
 import 'row_columns.dart';
+import 'row_enqueue_button.dart';
 import 'track_row_support.dart';
 
 /// Track row for search results.
 /// ~60px height, 44x44 thumbnail, title/artist/duration.
 /// Tap row = play now (replaces queue). With [queueContextIds] the list the
 /// row belongs to becomes the queue, playhead on the tapped track.
-/// Swipe right = add to queue / play next.
-/// Long-press row = enter multi-select.
+/// Swipe right = add to queue / play next; a wide row also has a + for the
+/// former. Long-press row, or Ctrl/⌘-click it, = enter multi-select.
 class SearchTrackRow extends ConsumerStatefulWidget {
   final BrowseItem item;
 
@@ -306,150 +308,185 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
       ),
     );
 
-    Widget tileFor(RowColumns columns) => TrackTileLayout(
-      // Match the album/artist rows' 3px artwork inset — the default
-      // TrackTileLayout left padding (12) pushed track artwork out of line.
-      // Right 8 lands the duration on the chevrons'/chips' right edge.
-      padding: const EdgeInsets.fromLTRB(
-        3,
-        kTrackTileVerticalPadding,
-        8,
-        kTrackTileVerticalPadding,
-      ),
-      leadingStartSpacing: 0,
-      leading: Stack(
+    Widget tileFor(RowColumns columns, {required bool wide}) {
+      final ends = TrackRowTrailing(duration: duration, current: showBars);
+      final enqueue = !selectionMode && widget.item.canAdd;
+      // The + ends a wide row, after the time. Where it is hidden its room
+      // stays, so times keep in line under TIME. In a column slot the time
+      // and bars give way to it rather than overflow.
+      Widget withEnqueue(Widget ends, {required bool bounded}) => Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (inAlbum)
-            numeral()
+          if (bounded)
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: ends,
+              ),
+            )
           else
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: resolvedImageUrl != null
-                  ? Image.network(
-                      resolvedImageUrl,
-                      width: 44,
-                      height: 44,
-                      cacheWidth: 132,
-                      cacheHeight: 132,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                      filterQuality: FilterQuality.low,
-                      errorBuilder: (_, _, _) =>
-                          ProceduralAlbumArt(trackId: widget.item.id, size: 44),
-                    )
-                  : ProceduralAlbumArt(trackId: widget.item.id, size: 44),
-            ),
-          if (longPressing && longPressProgress > 0)
-            Positioned.fill(
-              child: CustomPaint(
-                painter: LongPressRingPainter(
-                  progress: longPressProgress,
-                  color: KalinkaColors.accent,
-                ),
-              ),
-            ),
-          if (selectionMode && isSelected)
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: KalinkaColors.accent.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Icon(Icons.check, color: Colors.white, size: 20),
-              ),
-            ),
+            ends,
+          const SizedBox(width: RowEnqueueButton.gap),
+          if (enqueue)
+            RowEnqueueButton(item: widget.item)
+          else
+            const SizedBox(width: RowEnqueueButton.size),
         ],
-      ),
-      content: Builder(
-        builder: (context) {
-          final line = !columns.any
-              ? subtitle
-              : columns.artist
-              ? ''
-              : artist;
-          final badge =
-              widget.labelled &&
-              !columns.source &&
-              sourceBadgeVisible(ref, widget.item.id);
-          final details = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ...matchBadge(widget.item),
-              Text(
-                title,
-                style: KalinkaTextStyles.trackRowTitle.copyWith(
-                  fontSize: inAlbum ? 16 : null,
-                  color: selectionMode && isSelected
-                      ? KalinkaColors.accentTint
-                      : null,
-                ),
-                maxLines: inAlbum ? 2 : 1,
-                overflow: TextOverflow.ellipsis,
+      );
+      return TrackTileLayout(
+        // Match the album/artist rows' 3px artwork inset — the default
+        // TrackTileLayout left padding (12) pushed track artwork out of line.
+        // Right 8 lands the duration on the chevrons'/chips' right edge.
+        padding: const EdgeInsets.fromLTRB(
+          3,
+          kTrackTileVerticalPadding,
+          8,
+          kTrackTileVerticalPadding,
+        ),
+        leadingStartSpacing: 0,
+        leading: Stack(
+          children: [
+            if (inAlbum)
+              numeral()
+            else
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: resolvedImageUrl != null
+                    ? Image.network(
+                        resolvedImageUrl,
+                        width: 44,
+                        height: 44,
+                        cacheWidth: 132,
+                        cacheHeight: 132,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        filterQuality: FilterQuality.low,
+                        errorBuilder: (_, _, _) => ProceduralAlbumArt(
+                          trackId: widget.item.id,
+                          size: 44,
+                        ),
+                      )
+                    : ProceduralAlbumArt(trackId: widget.item.id, size: 44),
               ),
-              if (line.isNotEmpty ||
-                  !inAlbum && (showKind || !columns.any)) ...[
-                const SizedBox(height: 2),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    if (badge) ...[
-                      SourceBadge(
-                        entityId: widget.item.id,
-                        size: SourceBadgeSize.standard,
+            if (longPressing && longPressProgress > 0)
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: LongPressRingPainter(
+                    progress: longPressProgress,
+                    color: KalinkaColors.accent,
+                  ),
+                ),
+              ),
+            if (selectionMode && isSelected)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: KalinkaColors.accent.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(Icons.check, color: Colors.white, size: 20),
+                ),
+              ),
+          ],
+        ),
+        content: Builder(
+          builder: (context) {
+            final line = !columns.any
+                ? subtitle
+                : columns.artist
+                ? ''
+                : artist;
+            final badge =
+                widget.labelled &&
+                !columns.source &&
+                sourceBadgeVisible(ref, widget.item.id);
+            final details = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ...matchBadge(widget.item),
+                Text(
+                  title,
+                  style: KalinkaTextStyles.trackRowTitle.copyWith(
+                    fontSize: inAlbum ? 16 : null,
+                    color: selectionMode && isSelected
+                        ? KalinkaColors.accentTint
+                        : null,
+                  ),
+                  maxLines: inAlbum ? 2 : 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (line.isNotEmpty ||
+                    !inAlbum && (showKind || !columns.any)) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      if (badge) ...[
+                        SourceBadge(
+                          entityId: widget.item.id,
+                          size: SourceBadgeSize.standard,
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Expanded(
+                        child: showKind
+                            ? Text.rich(
+                                entityTypeSubtitle('Track', line),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : Text(
+                                line,
+                                style: KalinkaTextStyles.trackRowSubtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                       ),
-                      const SizedBox(width: 6),
                     ],
-                    Expanded(
-                      child: showKind
-                          ? Text.rich(
-                              entityTypeSubtitle('Track', line),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            )
-                          : Text(
-                              line,
-                              style: KalinkaTextStyles.trackRowSubtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                    ),
-                  ],
+                  ),
+                ],
+              ],
+            );
+            if (!columns.any) return details;
+            return Row(
+              children: [
+                Expanded(child: details),
+                RowColumnCells(
+                  columns: columns,
+                  detail: album,
+                  artist: artist,
+                  sourceOf: widget.item.id,
+                  format: mimeTypeLabel(track?.mimeType),
                 ),
               ],
-            ],
-          );
-          if (!columns.any) return details;
-          return Row(
-            children: [
-              Expanded(child: details),
-              RowColumnCells(
+            );
+          },
+        ),
+        // Right of the columns the duration keeps the slot the other rows'
+        // controls take, past the layout's spacing and padding.
+        trailing: columns.any
+            ? RowTrailing(
                 columns: columns,
-                detail: album,
-                artist: artist,
-                sourceOf: widget.item.id,
-                format: mimeTypeLabel(track?.mimeType),
-              ),
-            ],
-          );
-        },
-      ),
-      // Right of the columns the duration keeps the slot the other rows'
-      // controls take, past the layout's spacing and padding.
-      trailing: columns.any
-          ? RowTrailing(
-              columns: columns,
-              inset: 16,
-              child: TrackRowTrailing(duration: duration, current: showBars),
-            )
-          : duration != null || showBars
-          ? TrackRowTrailing(duration: duration, current: showBars)
-          : null,
-    );
+                inset: 16,
+                child: wide ? withEnqueue(ends, bounded: true) : ends,
+              )
+            : wide
+            ? withEnqueue(ends, bounded: false)
+            : duration != null || showBars
+            ? ends
+            : null,
+      );
+    }
+
     // Folder rows keep their cover, so the number gets a column before it.
     final tileChild = RowColumnsScope(
       builder: (context, measured) {
-        final tile = tileFor(columnsAllowed ? measured : RowColumns.none);
+        final tile = tileFor(
+          columnsAllowed ? measured : RowColumns.none,
+          wide: measured.wide,
+        );
         if (widget.folderTrackNumber == null) return tile;
         return Row(
           children: [
@@ -471,49 +508,56 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
       enabled: !selectionMode,
       onAddToQueue: () => addTrackToQueue(widget.item),
       onPlayNext: () => playTrackNext(widget.item),
-      child: GestureDetector(
-        onTap: activate,
-        onLongPressStart: selectionMode
+      child: ModifierClick(
+        onModifiedClick: selectionMode
             ? null
-            : (_) => startLongPressRing(
-                () => ref
-                    .read(selectionStateProvider.notifier)
-                    .enterSelectionMode(widget.item.id),
-              ),
-        onLongPressEnd: selectionMode ? null : (_) => cancelLongPressRing(),
-        onLongPressCancel: selectionMode ? null : cancelLongPressRing,
-        child: Stack(
-          children: [
-            // The flash animation only repaints the background — `tileChild`
-            // is captured outside the AnimatedBuilder so its image, badges,
-            // and text don't rebuild on every animation tick.
-            AnimatedBuilder(
-              animation: _flashController,
-              builder: (context, child) {
-                final Color rowBg =
-                    (showNowPlaying && _flashController.isAnimating)
-                    ? (_flashColorAnim.value ?? baseRowBg)
-                    : baseRowBg;
-                return AnimatedContainer(
-                  duration: MediaQuery.disableAnimationsOf(context)
-                      ? Duration.zero
-                      : const Duration(milliseconds: 180),
-                  decoration: BoxDecoration(color: rowBg),
-                  child: child,
-                );
-              },
-              child: tileChild,
-            ),
-            if (barColor != null)
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                child: IgnorePointer(
-                  child: Container(width: 2, color: barColor),
+            : () => ref
+                  .read(selectionStateProvider.notifier)
+                  .enterSelectionMode(widget.item.id),
+        child: GestureDetector(
+          onTap: activate,
+          onLongPressStart: selectionMode
+              ? null
+              : (_) => startLongPressRing(
+                  () => ref
+                      .read(selectionStateProvider.notifier)
+                      .enterSelectionMode(widget.item.id),
                 ),
+          onLongPressEnd: selectionMode ? null : (_) => cancelLongPressRing(),
+          onLongPressCancel: selectionMode ? null : cancelLongPressRing,
+          child: Stack(
+            children: [
+              // The flash animation only repaints the background — `tileChild`
+              // is captured outside the AnimatedBuilder so its image, badges,
+              // and text don't rebuild on every animation tick.
+              AnimatedBuilder(
+                animation: _flashController,
+                builder: (context, child) {
+                  final Color rowBg =
+                      (showNowPlaying && _flashController.isAnimating)
+                      ? (_flashColorAnim.value ?? baseRowBg)
+                      : baseRowBg;
+                  return AnimatedContainer(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 180),
+                    decoration: BoxDecoration(color: rowBg),
+                    child: child,
+                  );
+                },
+                child: tileChild,
               ),
-          ],
+              if (barColor != null)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: Container(width: 2, color: barColor),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

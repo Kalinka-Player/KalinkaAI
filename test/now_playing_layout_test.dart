@@ -442,7 +442,11 @@ void main() {
       );
       expect(
         tester.getTopLeft(_presentation).dy,
-        closeTo(tester.getRect(find.byType(PlayerHeader)).bottom + 32, 0.1),
+        closeTo(
+          tester.getRect(find.byType(PlayerHeader)).bottom +
+              (sideBySide ? 8 : 32),
+          0.1,
+        ),
       );
       final title = find.text(queue.trackList.first.title);
       final titleBounds = tester.getRect(title);

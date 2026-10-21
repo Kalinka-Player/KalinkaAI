@@ -544,7 +544,7 @@ void main() {
     }
   });
 
-  testWidgets('Home leaves sources and collections to the rail', (
+  testWidgets('an empty Home keeps its sources beside the rail', (
     tester,
   ) async {
     await _pump(tester);
@@ -557,17 +557,13 @@ void main() {
         find.byType(ShellNavigation),
         rail ? findsOneWidget : findsNothing,
       );
-      expect(find.byType(HomeSourceList), rail ? findsNothing : findsOneWidget);
-      expect(
-        find.byType(CollectionsSection),
-        rail ? findsNothing : findsOneWidget,
-      );
+      // Nothing pinned and no collections: the sources are the way in,
+      // rail or not, and there is no collections shelf to show.
+      expect(find.byType(HomeSourceList), findsOneWidget);
+      expect(find.byType(CollectionsSection), findsNothing);
       expect(_nav('collections'), rail ? findsOneWidget : findsNothing);
       expect(find.byType(CatalogCardsSection), findsNothing);
-      expect(
-        find.byTooltip('Configure music sources'),
-        rail ? findsNothing : findsOneWidget,
-      );
+      expect(find.byTooltip('Configure music sources'), findsOneWidget);
       expect(tester.state(find.byType(SearchSessionView)), same(homeState));
       expect(find.byType(Drawer), findsNothing);
       expect(tester.takeException(), isNull);
@@ -651,7 +647,7 @@ void main() {
       }
       await capture('$name-results');
       final invitation = find.byKey(
-        const ValueKey('customise-home-invitation'),
+        const ValueKey('home-pin-hint-customise'),
       );
       await tester.scrollUntilVisible(
         invitation,

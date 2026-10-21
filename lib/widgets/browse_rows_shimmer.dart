@@ -138,3 +138,28 @@ class BrowseRowsShimmer extends StatelessWidget {
     ),
   );
 }
+
+/// Stands in while it is not yet known what will load, so no placeholder
+/// claims a shape the content then breaks.
+class LoadingSpinner extends StatelessWidget {
+  const LoadingSpinner({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Loading',
+      child: const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(
+          child: SizedBox.square(
+            dimension: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: KalinkaColors.textMuted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

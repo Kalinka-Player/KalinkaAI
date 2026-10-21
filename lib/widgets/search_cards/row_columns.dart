@@ -5,6 +5,7 @@ import '../../data_model/data_model.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
 import '../source_badge.dart';
+import 'row_enqueue_button.dart';
 
 /// The columns a listing row adds as it widens, each taking over what the
 /// row's second line said: the details first — a track's album, an album's
@@ -49,6 +50,10 @@ class RowColumns {
   bool get source => showSource && width >= (tracks ? 1200 : 1000) * textScale;
   bool get any => detail || artist || source;
 
+  /// Wide enough for a track's Album column; a track row then has room for
+  /// its own enqueue button, where it otherwise relies on a swipe.
+  bool get wide => width >= 576 * textScale;
+
   double get detailWidth =>
       (width * (tracks ? 0.26 : 0.2)).clamp(
         (tracks ? 200.0 : 140.0) * textScale,
@@ -77,9 +82,15 @@ class RowColumnsScope extends StatelessWidget {
       context,
       RowColumns(
         constraints.maxWidth,
-        details: RowColumnsListing.detailsOf(context),
-        artists: RowColumnsListing.artistsOf(context),
-        showSource: SourceAttributionScope.of(context) == null,
+        details:
+            RowColumnsListing.tableOf(context) &&
+            RowColumnsListing.detailsOf(context),
+        artists:
+            RowColumnsListing.tableOf(context) &&
+            RowColumnsListing.artistsOf(context),
+        showSource:
+            RowColumnsListing.tableOf(context) &&
+            SourceAttributionScope.of(context) == null,
         tracks: RowColumnsListing.tracksOf(context),
         textScale: MediaQuery.textScalerOf(context).scale(14) / 14,
       ),
@@ -96,14 +107,28 @@ class RowColumnsListing extends InheritedWidget {
   final bool tracks;
   final bool hideTrackType;
 
+  /// False where the rows are of more than one kind: a column would hold an
+  /// album under one row and an artist's count under the next, so each row
+  /// says what it is on its own second line and no header names columns.
+  final bool table;
+
   const RowColumnsListing({
     super.key,
     required this.details,
     this.artists = true,
     this.tracks = false,
     this.hideTrackType = false,
+    this.table = true,
     required super.child,
   });
+
+  static bool tableOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<RowColumnsListing>()?.table ??
+      true;
+
+  /// Whether [items] are all of one kind, and so read as a table.
+  static bool oneKind(Iterable<BrowseItem> items) =>
+      items.map((item) => item.browseType).toSet().length <= 1;
 
   static bool detailsOf(BuildContext context) =>
       context
@@ -150,7 +175,8 @@ class RowColumnsListing extends InheritedWidget {
       details != oldWidget.details ||
       artists != oldWidget.artists ||
       tracks != oldWidget.tracks ||
-      hideTrackType != oldWidget.hideTrackType;
+      hideTrackType != oldWidget.hideTrackType ||
+      table != oldWidget.table;
 }
 
 /// Cells align with the header through shared widths and quiet whitespace.
@@ -313,14 +339,21 @@ class RowColumnsHeader extends StatelessWidget {
                   ),
                 ],
                 // Over the duration, which a track row sets 8 in from its
-                // edge.
+                // edge and, as wide as this, before its +.
                 SizedBox(
                   width: RowColumns.gutter,
                   child: tracks
                       ? Align(
                           alignment: Alignment.centerRight,
                           child: Padding(
-                            padding: const EdgeInsets.only(right: 8),
+                            padding: EdgeInsets.only(
+                              right:
+                                  8 +
+                                  (columns.wide
+                                      ? RowEnqueueButton.gap +
+                                            RowEnqueueButton.size
+                                      : 0),
+                            ),
                             child: label('TIME'),
                           ),
                         )

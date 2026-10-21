@@ -7,6 +7,7 @@ import '../../providers/artist_relations_provider.dart' show imagePathOf;
 import '../../providers/selection_state_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../modifier_click.dart';
 import '../procedural_album_art.dart';
 import '../loading_shimmer.dart';
 import '../source_badge.dart';
@@ -111,84 +112,88 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
     final url = path == null ? null : ref.read(urlResolverProvider).abs(path);
     final showSource = sourceBadgeVisible(ref, item.id);
 
-    final card = Semantics(
-      button: true,
-      selected: selecting ? selected : null,
-      label: [title, if (detail.isNotEmpty) detail].join(', '),
-      explicitChildNodes: true,
-      onTap: activate,
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          excludeFromSemantics: true,
-          mouseCursor: WidgetStateMouseCursor.clickable,
-          onTap: activate,
-          onLongPress: playable && !selecting ? select : null,
-          onHighlightChanged: (value) => setState(() => _pressed = value),
-          overlayColor: kalinkaOverlay,
-          borderRadius: _frame,
-          child: DecoratedBox(
-            position: DecorationPosition.foreground,
-            decoration: BoxDecoration(
-              borderRadius: _frame,
-              border: Border.all(
-                color: _hovered || _focused || _pressed
-                    ? KalinkaColors.borderDefault
-                    : Colors.transparent,
+    final card = ModifierClick(
+      onModifiedClick: playable && !selecting ? select : null,
+      child: Semantics(
+        button: true,
+        selected: selecting ? selected : null,
+        label: [title, if (detail.isNotEmpty) detail].join(', '),
+        explicitChildNodes: true,
+        onTap: activate,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            excludeFromSemantics: true,
+            mouseCursor: WidgetStateMouseCursor.clickable,
+            onTap: activate,
+            onLongPress: playable && !selecting ? select : null,
+            onHighlightChanged: (value) => setState(() => _pressed = value),
+            overlayColor: kalinkaOverlay,
+            borderRadius: _frame,
+            child: DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration: BoxDecoration(
+                borderRadius: _frame,
+                border: Border.all(
+                  color: _hovered || _focused || _pressed
+                      ? KalinkaColors.borderDefault
+                      : Colors.transparent,
+                ),
               ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(_inset),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _artwork(
-                    url: url,
-                    round: round,
-                    selected: selected,
-                    playable: playable && !selecting,
-                  ),
-                  const SizedBox(height: 8),
-                  ExcludeSemantics(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: KalinkaTextStyles.trackRowTitle.copyWith(
-                            color: selected ? KalinkaColors.accentTint : null,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (showSource || detail.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              if (showSource) ...[
-                                SourceBadge(
-                                  entityId: item.id,
-                                  size: SourceBadgeSize.small,
-                                ),
-                                if (detail.isNotEmpty) const SizedBox(width: 6),
-                              ],
-                              if (detail.isNotEmpty)
-                                Expanded(
-                                  child: Text(
-                                    detail,
-                                    style: KalinkaTextStyles.trackRowSubtitle,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ],
+              child: Padding(
+                padding: const EdgeInsets.all(_inset),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _artwork(
+                      url: url,
+                      round: round,
+                      selected: selected,
+                      playable: playable && !selecting,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    ExcludeSemantics(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: KalinkaTextStyles.trackRowTitle.copyWith(
+                              color: selected ? KalinkaColors.accentTint : null,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (showSource || detail.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                if (showSource) ...[
+                                  SourceBadge(
+                                    entityId: item.id,
+                                    size: SourceBadgeSize.small,
+                                  ),
+                                  if (detail.isNotEmpty)
+                                    const SizedBox(width: 6),
+                                ],
+                                if (detail.isNotEmpty)
+                                  Expanded(
+                                    child: Text(
+                                      detail,
+                                      style: KalinkaTextStyles.trackRowSubtitle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

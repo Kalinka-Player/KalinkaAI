@@ -5,6 +5,7 @@ import '../../data_model/data_model.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/selection_state_provider.dart';
 import '../../theme/app_theme.dart';
+import '../modifier_click.dart';
 import '../tap_highlight.dart';
 import 'long_press_ring_painter.dart';
 import 'row_columns.dart';
@@ -43,116 +44,119 @@ class _SearchFolderRowState extends ConsumerState<SearchFolderRow>
     void toggle() =>
         ref.read(selectionStateProvider.notifier).toggleContainer(item.id);
 
-    return Semantics(
-      button: true,
-      selected: selectionMode ? selected : null,
-      label: selectionMode
-          ? '${selected ? 'Deselect' : 'Select'} folder ${item.name}'
-          : 'Open folder ${item.name}',
-      child: HoverHighlight(
-        child: GestureDetector(
-          onTap: () {
-            if (selectionMode) {
-              toggle();
-              return;
-            }
-            ref.read(searchSessionProvider.notifier).openFolder(item);
-          },
-          onLongPressStart: selectionMode
-              ? null
-              : (_) => startLongPressRing(toggle),
-          onLongPressEnd: selectionMode ? null : (_) => cancelLongPressRing(),
-          onLongPressCancel: selectionMode ? null : cancelLongPressRing,
-          behavior: HitTestBehavior.opaque,
-          child: RowColumnsScope(
-            builder: (context, columns) => AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              color: selected
-                  ? KalinkaColors.accent.withValues(alpha: 0.07)
-                  : Colors.transparent,
-              padding: const EdgeInsets.symmetric(vertical: 5),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 68,
-                    height: 68,
-                    child: Stack(
-                      children: [
-                        TrackThumb(item: item, size: 68, radius: 8),
-                        const Positioned(
-                          right: 4,
-                          bottom: 4,
-                          child: CornerGlyph(Icons.folder_outlined),
-                        ),
-                        if (longPressing && longPressProgress > 0)
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: LongPressRingPainter(
-                                progress: longPressProgress,
-                                color: KalinkaColors.accent,
-                              ),
-                            ),
+    return ModifierClick(
+      onModifiedClick: selectionMode ? null : toggle,
+      child: Semantics(
+        button: true,
+        selected: selectionMode ? selected : null,
+        label: selectionMode
+            ? '${selected ? 'Deselect' : 'Select'} folder ${item.name}'
+            : 'Open folder ${item.name}',
+        child: HoverHighlight(
+          child: GestureDetector(
+            onTap: () {
+              if (selectionMode) {
+                toggle();
+                return;
+              }
+              ref.read(searchSessionProvider.notifier).openFolder(item);
+            },
+            onLongPressStart: selectionMode
+                ? null
+                : (_) => startLongPressRing(toggle),
+            onLongPressEnd: selectionMode ? null : (_) => cancelLongPressRing(),
+            onLongPressCancel: selectionMode ? null : cancelLongPressRing,
+            behavior: HitTestBehavior.opaque,
+            child: RowColumnsScope(
+              builder: (context, columns) => AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                color: selected
+                    ? KalinkaColors.accent.withValues(alpha: 0.07)
+                    : Colors.transparent,
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 68,
+                      height: 68,
+                      child: Stack(
+                        children: [
+                          TrackThumb(item: item, size: 68, radius: 8),
+                          const Positioned(
+                            right: 4,
+                            bottom: 4,
+                            child: CornerGlyph(Icons.folder_outlined),
                           ),
-                        if (selected)
-                          Positioned.fill(
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: KalinkaColors.accent.withValues(
-                                  alpha: 0.4,
+                          if (longPressing && longPressProgress > 0)
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: LongPressRingPainter(
+                                  progress: longPressProgress,
+                                  color: KalinkaColors.accent,
                                 ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 24,
                               ),
                             ),
+                          if (selected)
+                            Positioned.fill(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: KalinkaColors.accent.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            item.name ?? '',
+                            style: KalinkaTextStyles.trackRowTitle.copyWith(
+                              color: selected ? KalinkaColors.accentTint : null,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          item.name ?? '',
-                          style: KalinkaTextStyles.trackRowTitle.copyWith(
-                            color: selected ? KalinkaColors.accentTint : null,
+                          const SizedBox(height: 3),
+                          Text(
+                            subname.isEmpty || columns.detail
+                                ? 'Folder'
+                                : 'Folder · $subname',
+                            style: KalinkaTextStyles.trackRowSubtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          subname.isEmpty || columns.detail
-                              ? 'Folder'
-                              : 'Folder · $subname',
-                          style: KalinkaTextStyles.trackRowSubtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  RowColumnCells(
-                    columns: columns,
-                    detail: details,
-                    sourceOf: item.id,
-                  ),
-                  RowTrailing(
-                    columns: columns,
-                    child: const Icon(
-                      Icons.chevron_right,
-                      size: 22,
-                      color: KalinkaColors.textMuted,
+                    const SizedBox(width: 12),
+                    RowColumnCells(
+                      columns: columns,
+                      detail: details,
+                      sourceOf: item.id,
                     ),
-                  ),
-                ],
+                    RowTrailing(
+                      columns: columns,
+                      child: const Icon(
+                        Icons.chevron_right,
+                        size: 22,
+                        color: KalinkaColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

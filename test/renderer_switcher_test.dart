@@ -363,7 +363,7 @@ void main() {
       of: find.byType(RendererSwitcherButton),
       matching: find.byIcon(Icons.close),
     );
-    expect(find.byIcon(Icons.cast), findsOneWidget);
+    expect(find.byIcon(Icons.speaker_group_outlined), findsOneWidget);
     expect(inButton, findsOneWidget);
     expect(find.byTooltip('No renderer available'), findsOneWidget);
 
@@ -449,7 +449,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.cast), findsNothing);
+    expect(find.byIcon(Icons.speaker_group_outlined), findsNothing);
     expect(find.byTooltip('No renderer available'), findsNothing);
   });
 
@@ -464,14 +464,14 @@ void main() {
       of: find.byType(RendererSwitcherButton),
       matching: find.byIcon(Icons.close),
     );
-    expect(find.byIcon(Icons.cast), findsOneWidget);
+    expect(find.byIcon(Icons.speaker_group_outlined), findsOneWidget);
     expect(inButton, findsNothing);
 
     // Nothing active: the grey cross appears.
     api.renderers = [
       for (final r in api.renderers) r.copyWith(active: false, selected: false),
     ];
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle(); // sheet's refresh re-reads the list
     await tester.tapAt(const Offset(5, 5)); // dismiss the sheet
     await tester.pumpAndSettle();
@@ -485,7 +485,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
 
     expect(find.text('PLAYING ON'), findsOneWidget);
@@ -529,7 +529,7 @@ void main() {
       final semantics = tester.ensureSemantics();
       await tester.pumpWidget(wrap(api, container: container));
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.cast));
+      await tester.tap(find.byIcon(Icons.speaker_group_outlined));
       await tester.pumpAndSettle();
       expect(find.text('18%'), findsOneWidget);
       expect(tester.widget<Slider>(find.byType(Slider)).value, 0.18);
@@ -607,7 +607,7 @@ void main() {
       );
       await tester.pumpWidget(wrap(api, container: container));
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.cast));
+      await tester.tap(find.byIcon(Icons.speaker_group_outlined));
       await tester.pumpAndSettle();
       expect(find.byType(Slider), findsOneWidget);
       final dim = tester.widget<Opacity>(
@@ -661,7 +661,7 @@ void main() {
         ];
         await tester.pumpWidget(wrap(api, textScale: scale));
         await tester.pumpAndSettle();
-        await tester.tap(find.byIcon(Icons.cast));
+        await tester.tap(find.byIcon(Icons.speaker_group_outlined));
         await tester.pumpAndSettle();
         final close = find.byTooltip('Close output picker');
         final closeBounds = tester.getRect(close);
@@ -693,7 +693,7 @@ void main() {
     await tester.pumpWidget(wrap(_FakeApi()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
 
     expect(find.text('kitchen-pi · ALSA'), findsOneWidget);
@@ -724,7 +724,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.system_update_alt));
@@ -756,7 +756,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Attic'));
     await tester.pumpAndSettle();
@@ -774,7 +774,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.system_update_alt), findsNothing);
@@ -799,7 +799,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.system_update_alt), findsOneWidget);
@@ -825,7 +825,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
 
     expect(find.text('Workshop'), findsOneWidget);
@@ -850,7 +850,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.system_update_alt), findsOneWidget);
@@ -877,7 +877,7 @@ void main() {
     await tester.pumpWidget(wrap(api, container: container));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.system_update_alt));
     await tester.pumpAndSettle();
@@ -913,7 +913,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
 
     expect(find.text('Attic'), findsOneWidget);
@@ -967,7 +967,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
 
     expect(find.text('This browser'), findsOneWidget);
@@ -1087,7 +1087,7 @@ void main() {
     await tester.pumpWidget(wrap(api, events: events.stream));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
     expect(find.text('Attic'), findsNothing);
 
@@ -1116,7 +1116,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
     // tapAt, not tap: the label ignores pointers so the whole row is one
     // target, which means the finder's widget isn't the one that's hit.
@@ -1141,7 +1141,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
     final row = tester.getRect(_rowOf('Kitchen'));
     // Blank space to the right of the text remains part of the target.
@@ -1156,7 +1156,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
     // Settings are available only for the current output.
     expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
@@ -1165,7 +1165,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.selected, isEmpty, reason: 'configuring is not switching');
-    expect(find.text('Output settings'), findsOneWidget);
+    expect(find.byType(RendererSettingsScreen), findsOneWidget);
     expect(find.text('Living Room'), findsOneWidget);
     expect(api.configuredRenderer, 'r-living');
   });
@@ -1178,7 +1178,7 @@ void main() {
     await tester.pumpWidget(wrap(_FakeApi()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
     await tester.tap(_gearOf('Living Room'));
     await tester.pumpAndSettle();
@@ -1195,21 +1195,21 @@ void main() {
     await tester.pumpWidget(wrap(_FakeApi()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
     await tester.tap(_gearOf('Living Room'));
     await tester.pumpAndSettle();
-    expect(find.text('Output settings'), findsOneWidget);
+    expect(find.byType(RendererSettingsScreen), findsOneWidget);
 
     await tester.tap(find.byTooltip('Back'));
     // Mid-slide the panel is still there; only the host removes it, and only
     // once the animation has run.
     await tester.pump();
     await tester.pump(kSlideInPanelDuration ~/ 2);
-    expect(find.text('Output settings'), findsOneWidget);
+    expect(find.byType(RendererSettingsScreen), findsOneWidget);
 
     await tester.pumpAndSettle();
-    expect(find.text('Output settings'), findsNothing);
+    expect(find.byType(RendererSettingsScreen), findsNothing);
     expect(find.byType(RendererSwitcherButton), findsOneWidget);
   });
 
@@ -1218,11 +1218,11 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
     expect(_gearOf('Study'), findsNothing);
 
-    expect(find.text('Output settings'), findsNothing);
+    expect(find.byType(RendererSettingsScreen), findsNothing);
     expect(api.configuredRenderer, isNull);
   });
 
@@ -1231,7 +1231,7 @@ void main() {
     await tester.pumpWidget(wrap(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.cast));
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
     await tester.pumpAndSettle();
     await tester.tapAt(tester.getCenter(find.text('Study')));
     await tester.pumpAndSettle();
