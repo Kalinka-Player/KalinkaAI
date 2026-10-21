@@ -647,13 +647,22 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           windowWidth,
           textScaler: MediaQuery.textScalerOf(context),
         );
-        return Scaffold(
-          backgroundColor: KalinkaColors.background,
-          body: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (railWidth > 0)
-                SizedBox(
+        final connected =
+            ref.watch(connectionStateProvider) != ConnectionStatus.none;
+        // On tablet the queue's mini-player spans the window, the rail
+        // included; the rail and whatever covers the panes end above it.
+        final barShowing =
+            isTablet &&
+            connected &&
+            ref.watch(playerViewProvider) == PlayerView.queue;
+        final barHeight =
+            kalinkaMiniPlayerHeight(context) +
+            MediaQuery.paddingOf(context).bottom;
+        final rail = railWidth > 0
+            ? MediaQuery.removePadding(
+                context: context,
+                removeBottom: barShowing,
+                child: SizedBox(
                   key: const ValueKey('navigation-rail'),
                   width: railWidth,
                   child: DecoratedBox(
@@ -670,40 +679,102 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                     ),
                   ),
                 ),
-              Expanded(
-                child: Stack(
-                  // Tight constraints keep the layout root a relayout boundary.
-                  fit: StackFit.expand,
+              )
+            : null;
+        final panes = Expanded(
+          child: Stack(
+            // Tight constraints keep the layout root a relayout boundary.
+            fit: StackFit.expand,
+            children: [
+              isTablet
+                  ? _buildTabletLayout(
+                      context,
+                      windowWidth,
+                      railWidth > 0,
+                      customise,
+                    )
+                  : _buildPhoneLayout(context, railWidth > 0),
+              // On tablet it lives in the browsing pane instead.
+              if (!isTablet && customise != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  bottom: connected ? barHeight : 0,
+                  child: customise,
+                ),
+            ],
+          ),
+        );
+        // Hosted above the phone/tablet switch so an in-progress scan (and
+        // its state) survives resizing across the breakpoint.
+        final discovery = _discoveryOpen
+            ? MediaQuery.removePadding(
+                context: context,
+                removeBottom: barShowing,
+                child: _buildDiscoveryOverlay(),
+              )
+            : null;
+        return Scaffold(
+          backgroundColor: KalinkaColors.background,
+          // Only the foot animates, as the browsing pane's does.
+          body: TweenAnimationBuilder<double>(
+            tween: Tween(end: barShowing ? barHeight : 0),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : kMiniPlayerHideDuration,
+            curve: Curves.easeOutCubic,
+            builder: (context, inset, _) => Stack(
+              fit: StackFit.expand,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    isTablet
-                        ? _buildTabletLayout(
-                            context,
-                            windowWidth,
-                            railWidth > 0,
-                            customise,
-                          )
-                        : _buildPhoneLayout(context, railWidth > 0),
-                    // On tablet it lives in the browsing pane instead.
-                    if (!isTablet && customise != null)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: 0,
-                        bottom:
-                            ref.watch(connectionStateProvider) !=
-                                ConnectionStatus.none
-                            ? kalinkaMiniPlayerHeight(context) +
-                                  MediaQuery.paddingOf(context).bottom
-                            : 0,
-                        child: customise,
+                    if (rail != null)
+                      Padding(
+                        padding: EdgeInsets.only(bottom: inset),
+                        child: rail,
                       ),
-                    // Hosted above the phone/tablet switch so an in-progress scan
-                    // (and its state) survives resizing across the breakpoint.
-                    if (_discoveryOpen) _buildDiscoveryOverlay(),
+                    panes,
                   ],
                 ),
-              ),
-            ],
+                if (discovery != null)
+                  Positioned(
+                    key: const ValueKey('discovery-overlay'),
+                    left: railWidth,
+                    top: 0,
+                    right: 0,
+                    bottom: inset,
+                    child: discovery,
+                  ),
+                if (isTablet && connected)
+                  Positioned(
+                    key: const ValueKey('queue-bar'),
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    // The bar is the player's, so its sheets open over its
+                    // pane.
+                    child: SheetAnchor(
+                      target: _playerPaneKey,
+                      child: QueueMiniPlayer(
+                        outputSwitcherKey: _outputSwitcherKey,
+                      ),
+                    ),
+                  ),
+                // The same one-time tour as the phone, over the panes and the
+                // bar alike.
+                if (isTablet && _showCoachMarks)
+                  Positioned(
+                    key: const ValueKey('coach-marks'),
+                    left: railWidth,
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _buildCoachMarks(),
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -859,7 +930,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           if (rendererSettings != null && !_pluginsOpen)
             Positioned.fill(child: _buildRendererSettings(rendererSettings)),
           // One-time first-run tour
-          if (showCoachMarks) _buildCoachMarks(),
+          if (showCoachMarks) Positioned.fill(child: _buildCoachMarks()),
         ],
       ),
     );
@@ -893,38 +964,36 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     final hasOutputSwitcher = ref.watch(
       rendererListProvider.select((s) => s.switcherVisible),
     );
-    return Positioned.fill(
-      child: CoachMarksOverlay(
-        stops: [
+    return CoachMarksOverlay(
+      stops: [
+        CoachMarkStop(
+          targetKey: _searchEntryKey,
+          title: 'Find music',
+          body:
+              'Search from here — by name, or by describing what you '
+              'want, like “mellow late-night jazz”, when smart search is '
+              'on. Nothing plays until you add it.',
+        ),
+        if (hasOutputSwitcher)
           CoachMarkStop(
-            targetKey: _searchEntryKey,
-            title: 'Find music',
+            targetKey: _outputSwitcherKey,
+            title: 'Choose where it plays',
             body:
-                'Search from here — by name, or by describing what you '
-                'want, like “mellow late-night jazz”, when smart search is '
-                'on. Nothing plays until you add it.',
+                'The speaker icon switches between the outputs on your '
+                'network — a speaker, another machine, this device. Its '
+                'gear opens that output’s own settings.',
           ),
-          if (hasOutputSwitcher)
-            CoachMarkStop(
-              targetKey: _outputSwitcherKey,
-              title: 'Choose where it plays',
-              body:
-                  'The cast icon switches between the outputs on your '
-                  'network — a speaker, another machine, this device. Its '
-                  'gear opens that output’s own settings.',
-            ),
-          CoachMarkStop(
-            targetKey: _connectionDotKey,
-            title: 'Your server lives here',
-            body:
-                'The green dot shows you’re connected. Tap it '
-                'for server status, settings, and switching '
-                'servers.',
-          ),
-        ],
-        onDismiss: () =>
-            ref.read(onboardingStatusProvider.notifier).markCoachMarksShown(),
-      ),
+        CoachMarkStop(
+          targetKey: _connectionDotKey,
+          title: 'Your server lives here',
+          body:
+              'The green dot shows you’re connected. Tap it '
+              'for server status, settings, and switching '
+              'servers.',
+        ),
+      ],
+      onDismiss: () =>
+          ref.read(onboardingStatusProvider.notifier).markCoachMarksShown(),
     );
   }
 
@@ -1014,19 +1083,17 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }
 
   Widget _buildDiscoveryOverlay() {
-    return Positioned.fill(
-      // Consumer keeps settings churn from the overlay's own connect flow
-      // from rebuilding the occluded layout below.
-      child: Consumer(
-        builder: (context, ref, _) {
-          final settings = ref.watch(connectionSettingsProvider);
-          return DiscoveryScreen(
-            allowCancel: settings.isSet,
-            currentServerHost: settings.isSet ? settings.host : null,
-            onClose: () => setState(() => _discoveryOpen = false),
-          );
-        },
-      ),
+    // Consumer keeps settings churn from the overlay's own connect flow from
+    // rebuilding the occluded layout below.
+    return Consumer(
+      builder: (context, ref, _) {
+        final settings = ref.watch(connectionSettingsProvider);
+        return DiscoveryScreen(
+          allowCancel: settings.isSet,
+          currentServerHost: settings.isSet ? settings.host : null,
+          onClose: () => setState(() => _discoveryOpen = false),
+        );
+      },
     );
   }
 
@@ -1262,22 +1329,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   ),
                 ),
               ),
-              if (!disconnected)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  // The bar is the player's, so its sheets open over its pane.
-                  child: SheetAnchor(
-                    target: _playerPaneKey,
-                    child: QueueMiniPlayer(
-                      outputSwitcherKey: _outputSwitcherKey,
-                    ),
-                  ),
-                ),
-              // The same one-time tour as the phone. It used to be phone-only, so
-              // anyone who first ran the app on a wide window never saw it.
-              if (_showCoachMarks) _buildCoachMarks(),
             ],
           );
         },

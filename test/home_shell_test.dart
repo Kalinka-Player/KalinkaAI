@@ -402,11 +402,16 @@ void main() {
     await tester.tap(_side('QUEUE'));
     await tester.pumpAndSettle();
     final bar = tester.getRect(_queueMiniPlayer);
-    expect(bar.left, browsing.left);
+    // Under the rail too, edge to edge.
+    expect(bar.left, 0);
     expect(bar.right, 1600);
-    // Browsing ends above the bar rather than running under it.
+    // Browsing and the rail end above the bar rather than running under it.
     expect(
       tester.getRect(find.byType(SearchSessionView)).bottom,
+      lessThanOrEqualTo(bar.top + 1),
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('navigation-rail'))).bottom,
       lessThanOrEqualTo(bar.top + 1),
     );
   });
