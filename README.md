@@ -62,15 +62,11 @@ Everything is also on the [releases page](https://github.com/Kalinka-Player/Kali
 
 1. **[Install the server](https://github.com/Kalinka-Player/KalinkaPlayer#installation)** — required. The quickest route is a ready-made image for a Raspberry Pi or any x86-64 box; it starts straight into a working player.
 2. **Install the app** as described [above](#-install), or use a browser.
-3. **Follow the setup wizard** the first time you connect.
+3. **Follow the setup** the app shows the first time you connect.
 
-**Box not on your network yet?** Use **Set up a box** in the app for Bluetooth or hotspot setup. From a laptop without the app, join **`Kalinka-Setup-XXXX`** with password **`kalinka-setup`**, stay connected without internet, and open **`http://192.168.4.1`**. [Read and save the connection instructions first](docs/first-run-setup.md#connect-an-offline-box).
+**Box not on your network yet?** The app can set it up over Bluetooth or the box's temporary Wi-Fi. From a laptop without the app, join **`Kalinka-Setup-XXXX`** with password **`kalinka-setup`**, stay connected without internet, and open **`http://192.168.4.1`**. [The full steps](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md#connect-your-box-to-the-network) are in the installation guide.
 
-| | |
-|---|---|
-| [Installing the server](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md) | Images for a Raspberry Pi or PC, virtual machines, the one-command install, adding music and outputs in other rooms |
-| [First-run setup](docs/first-run-setup.md) | What the setup wizard asks for, step by step, in the app and in the browser, and how updates work |
-| [App manual](docs/app-manual.md) | Illustrated tour — the wizard, the server chip and settings, music folders, AI search and queueing |
+The [installation guide](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md) covers images for a Raspberry Pi or PC, virtual machines, the one-command install, adding music and outputs in other rooms, and troubleshooting.
 
 ## License
 
