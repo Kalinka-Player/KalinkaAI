@@ -21,7 +21,6 @@ import 'package:kalinka/providers/shell_nav_provider.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/home/pinned_catalogs_section.dart';
-import 'package:kalinka/widgets/home/home_customisation_banner.dart';
 import 'package:kalinka/widgets/home/home_source_list.dart';
 import 'package:kalinka/widgets/home/catalog_artwork.dart';
 import 'package:kalinka/widgets/home/catalog_tile.dart';
@@ -177,9 +176,7 @@ void main() {
           settingsProvider.overrideWith(_QuietSettings.new),
         ],
       );
-      final invitation = find.byKey(
-        const ValueKey('home-pin-hint-customise'),
-      );
+      final invitation = find.byKey(const ValueKey('home-pin-hint-customise'));
       await tester.ensureVisible(invitation);
       await tester.tap(invitation);
       await tester.pumpAndSettle();
@@ -207,9 +204,8 @@ void main() {
         );
         await tester.ensureVisible(invitation);
         await tester.pumpAndSettle();
-        // An empty Home hints at pinning rather than carrying the banner.
+        // An empty Home hints at pinning.
         expect(find.byKey(const ValueKey('home-pin-hint')), findsOneWidget);
-        expect(find.byType(HomeCustomisationBanner), findsNothing);
         expect(find.text('YOUR PINS'), findsNothing);
         expect(tester.getSize(invitation).height, greaterThanOrEqualTo(48));
         await tester.tap(invitation);

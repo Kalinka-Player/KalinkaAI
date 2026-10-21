@@ -12,7 +12,6 @@ import '../../providers/search_session_provider.dart';
 import '../../providers/shell_nav_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
-import '../home/home_customisation_banner.dart';
 import '../home/home_layout.dart';
 import '../home/pinned_catalogs_section.dart';
 import '../measure_size.dart';
@@ -129,7 +128,6 @@ class SearchZeroState extends ConsumerWidget {
                     ? kHomeSectionGap
                     : kHomeSectionGap - overhang,
               ),
-            if (!empty && pins.isEmpty) const HomeCustomisationBanner(),
             if (pins.isNotEmpty) ...[
               // One action for the whole pinned group, before any previews.
               Row(
