@@ -308,7 +308,12 @@ void main() {
         expect(coverRect.bottom, headerRect.bottom);
         expect(navRect.height, kKalinkaTopBarHeight + 24);
         expect(headerRect.top, navRect.bottom);
-        expect(find.byType(AlbumArtwork), findsOneWidget);
+        // Behind the bar, and behind the list, where it stretches with it.
+        expect(find.byType(AlbumArtwork), findsNWidgets(2));
+        expect(
+          tester.getRect(find.byKey(const ValueKey('album-backdrop-top'))),
+          coverRect,
+        );
         expect(find.text('50 tracks · 2 hr 30 min'), findsOneWidget);
 
         final systemStyle = tester
@@ -465,6 +470,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.state<ScrollableState>(list).position.pixels, 0);
     expect(tester.getRect(cover), opened);
+  });
+
+  testWidgets('an album cover stretches with its list', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(427, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final container = await pumpSurface(tester, topInset: 24);
+    container
+        .read(searchSessionProvider.notifier)
+        .openCatalog(id: 'kalinka:localfiles:album:example', title: 'Abbey');
+    await tester.pumpAndSettle();
+    final cover = find.byKey(const ValueKey('album-backdrop'));
+    final header = find.byType(AlbumPageHeader);
+    expect(tester.getRect(cover).bottom, tester.getRect(header).bottom);
+
+    // Pulled down past the top: the header moves, and the cover with it.
+    final pull = await tester.startGesture(const Offset(200, 300));
+    await pull.moveBy(const Offset(0, 120));
+    await pull.moveBy(const Offset(0, 120));
+    await tester.pump();
+    final stretched = tester.getRect(header).bottom;
+    expect(stretched, greaterThan(tester.getRect(cover).top + 1));
+    expect(tester.getRect(cover).bottom, closeTo(stretched, 0.5));
+    await pull.up();
+    await tester.pumpAndSettle();
+    expect(tester.getRect(cover).bottom, tester.getRect(header).bottom);
   });
 
   testWidgets('returning from a catalog restores the backdrop with the list', (
