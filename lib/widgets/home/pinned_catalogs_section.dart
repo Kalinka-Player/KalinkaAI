@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -36,7 +35,7 @@ class PinnedCatalogsSection extends StatelessWidget {
             pins[index].preview == HomePreviewType.compact);
         children.add(
           Padding(
-            padding: const EdgeInsets.only(bottom: kHomeSectionGap),
+            padding: const EdgeInsets.only(bottom: kHomePinGap),
             child: CatalogTileGrid(children: tiles),
           ),
         );
@@ -118,7 +117,7 @@ class PinnedCatalogPreview extends ConsumerWidget {
     final subtitle = !available && !loadingSources ? 'Unavailable' : about;
     if (pin.preview == HomePreviewType.artwork) {
       return Padding(
-        padding: const EdgeInsets.only(bottom: kHomeSectionGap),
+        padding: const EdgeInsets.only(bottom: kHomePinGap),
         child: CatalogArtwork(
           page: pin.page,
           description: subtitle,
@@ -128,23 +127,22 @@ class PinnedCatalogPreview extends ConsumerWidget {
         ),
       );
     }
-    // The pin marks it as one of yours; the subtitle says where it's from.
+    // The source's tile before the title says where it's from; the subtitle
+    // says what of it, where there is more to say.
+    final detail = [
+      if (pin.filterDescription.isNotEmpty) pin.filterDescription,
+      if (!available && !loadingSources) 'Unavailable',
+      ?about,
+    ].join(' · ');
     final heading = ShelfHeading(
-      showDivider: false,
       title: title.toUpperCase(),
-      icon: CupertinoIcons.pin,
-      iconColor: info?.color ?? colorForSourceName(source),
-      subtitle: [
-        sourceTitle,
-        if (pin.filterDescription.isNotEmpty) pin.filterDescription,
-        if (!available && !loadingSources) 'Unavailable',
-        ?about,
-      ].join(' · '),
+      source: source,
+      subtitle: detail.isEmpty ? null : detail,
       onViewAll: available ? open : null,
     );
     if (!available && !loadingSources) {
       return Padding(
-        padding: const EdgeInsets.only(bottom: kHomeSectionGap),
+        padding: const EdgeInsets.only(bottom: kHomePinGap),
         child: heading,
       );
     }
@@ -156,7 +154,7 @@ class PinnedCatalogPreview extends ConsumerWidget {
       itemsCount: request.limit,
     );
     return Padding(
-      padding: const EdgeInsets.only(bottom: kHomeSectionGap),
+      padding: const EdgeInsets.only(bottom: kHomePinGap),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

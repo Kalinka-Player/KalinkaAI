@@ -66,6 +66,17 @@ double kalinkaNavigationRailWidth(
 double kalinkaShellWidth(BuildContext context) =>
     MediaQuery.sizeOf(context).width - MediaQuery.paddingOf(context).horizontal;
 
+/// [kalinkaShellWidth] from inside the shell, whose SafeArea has taken the
+/// side insets out of MediaQuery: they are read above it, at the root
+/// navigator.
+double kalinkaShellWidthWithin(BuildContext context) {
+  final root = Navigator.maybeOf(context, rootNavigator: true)?.context;
+  final insets =
+      root?.getInheritedWidgetOfExactType<MediaQuery>()?.data.padding ??
+      EdgeInsets.zero;
+  return MediaQuery.sizeOf(context).width - insets.horizontal;
+}
+
 /// Where the rail ends in window coordinates, past the left inset; zero
 /// without one. Only above the shell, as [kalinkaShellWidth].
 double kalinkaRailEdge(BuildContext context) {

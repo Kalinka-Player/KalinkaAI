@@ -30,7 +30,7 @@ class InspiredBlock extends StatelessWidget {
   /// out to it.
   final double gutter;
 
-  /// How many of a group's tracks lead before VIEW ALL.
+  /// How many of a group's tracks lead before View All.
   static const previewCount = 3;
 
   const InspiredBlock({
@@ -271,7 +271,7 @@ class _SourceGroup extends StatelessWidget {
             ),
             if (more) ...[
               const SizedBox(width: 12),
-              ViewAllAction(label: 'VIEW ALL', onTap: onViewAll),
+              ViewAllAction(label: 'View All', onTap: onViewAll),
             ],
           ],
         ),

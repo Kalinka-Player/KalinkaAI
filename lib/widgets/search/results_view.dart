@@ -14,7 +14,7 @@ import 'search_loading_indicator.dart';
 
 /// The Results layer: the chips of the genres narrowing the query, which the
 /// bar names, then what was found by name and what was found for it. A block
-/// opened with VIEW ALL is a visit of its own, left with Back. Holds a single query —
+/// opened with View All is a visit of its own, left with Back. Holds a single query —
 /// a new search replaces it. Going back to Catalogs is the title bar's `‹`
 /// (or system back), never a button here.
 class ResultsView extends ConsumerWidget {

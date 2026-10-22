@@ -357,7 +357,7 @@ void main() {
       );
       harness.api.calls.clear();
 
-      await tester.tap(find.text('VIEW ALL').first);
+      await tester.tap(find.text('View All').first);
       await tester.pumpAndSettle();
 
       expect(find.text('ALBUMS'), findsNothing);
@@ -402,7 +402,7 @@ void main() {
       SearchSessionState state() =>
           harness.container.read(searchSessionProvider);
 
-      await tester.tap(find.text('VIEW ALL').first);
+      await tester.tap(find.text('View All').first);
       await tester.pumpAndSettle();
       expect(state().catalogPage.id, 'kalinka:localfiles:catalog:albums');
       expect(state().catalogFilter.type, isNull);
@@ -425,7 +425,7 @@ void main() {
       SearchSessionState state() =>
           harness.container.read(searchSessionProvider);
 
-      await tester.tap(find.text('VIEW ALL').first);
+      await tester.tap(find.text('View All').first);
       await tester.pumpAndSettle();
       harness.api.calls.clear();
       session.setCatalogFilter(

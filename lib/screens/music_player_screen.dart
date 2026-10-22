@@ -76,6 +76,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   final _settingsKey = GlobalKey();
   final _pluginsKey = GlobalKey<PluginCatalogScreenState>();
   final _customiseKey = GlobalKey();
+  // The rail moves between the layouts: beside the panes on tablet, over the
+  // phone layout's side there, so the mini-player can run under it.
+  final _railKey = GlobalKey();
+  // The phone mini-player's full height, border and inset included, which
+  // the rail ends above; null until it is first laid out.
+  final _miniPlayerExtent = ValueNotifier<double?>(null);
   bool _navigating = false;
 
   // Drives the mini-player sliding down out of view while the search entry
@@ -187,6 +193,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   @override
   void dispose() {
     _miniPlayerHide.dispose();
+    _miniPlayerExtent.dispose();
     super.dispose();
   }
 
@@ -666,10 +673,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
             final barHeight =
                 kalinkaMiniPlayerHeight(context) +
                 MediaQuery.paddingOf(context).bottom;
-            final rail = railWidth > 0
-                ? MediaQuery.removePadding(
-                    context: context,
-                    removeBottom: barShowing,
+            final railBody = railWidth > 0
+                ? KeyedSubtree(
+                    key: _railKey,
                     child: SizedBox(
                       key: const ValueKey('navigation-rail'),
                       width: railWidth,
@@ -691,6 +697,13 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                     ),
                   )
                 : null;
+            final rail = isTablet && railBody != null
+                ? MediaQuery.removePadding(
+                    context: context,
+                    removeBottom: barShowing,
+                    child: railBody,
+                  )
+                : null;
             final panes = Expanded(
               child: Stack(
                 // Tight constraints keep the layout root a relayout boundary.
@@ -703,11 +716,16 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           railWidth > 0,
                           customise,
                         )
-                      : _buildPhoneLayout(context, railWidth > 0),
+                      : _buildPhoneLayout(
+                          context,
+                          railWidth > 0,
+                          rail: railBody,
+                          railWidth: railWidth,
+                        ),
                   // On tablet it lives in the browsing pane instead.
                   if (!isTablet && customise != null)
                     Positioned(
-                      left: 0,
+                      left: railWidth,
                       right: 0,
                       top: 0,
                       bottom: connected ? barHeight : 0,
@@ -838,7 +856,14 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
   }
 
-  Widget _buildPhoneLayout(BuildContext context, bool navigationVisible) {
+  /// [rail] stands over the layout's side, so the mini-player runs under it
+  /// from edge to edge; the rail ends above it while it shows.
+  Widget _buildPhoneLayout(
+    BuildContext context,
+    bool navigationVisible, {
+    Widget? rail,
+    double railWidth = 0,
+  }) {
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
     final showCoachMarks = _showCoachMarks;
     // Without a server there is no track for the mini-player to show.
@@ -858,43 +883,46 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           Column(
             children: [
               Expanded(
-                child: SheetAnchor(
-                  key: _browsingPaneKey,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Visibility(
-                        visible: !_settingsCovering,
-                        maintainState: true,
-                        maintainAnimation: true,
-                        maintainSize: true,
-                        child: _buildHome(
-                          isTablet: false,
-                          navigationVisible: navigationVisible,
-                        ),
-                      ),
-                      _buildEscalation(isTablet: false),
-                      // Configuration and every nested page share the space
-                      // above the mini-player, including its safe-area inset.
-                      if (_pluginsOpen)
-                        MediaQuery.removePadding(
-                          context: context,
-                          removeBottom: true,
-                          child: ClipRect(
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                _buildPlugins(
-                                  handlesBack: rendererSettings == null,
-                                  navigationVisible: navigationVisible,
-                                ),
-                                if (rendererSettings != null)
-                                  _buildRendererSettings(rendererSettings),
-                              ],
-                            ),
+                child: Padding(
+                  padding: EdgeInsets.only(left: railWidth),
+                  child: SheetAnchor(
+                    key: _browsingPaneKey,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Visibility(
+                          visible: !_settingsCovering,
+                          maintainState: true,
+                          maintainAnimation: true,
+                          maintainSize: true,
+                          child: _buildHome(
+                            isTablet: false,
+                            navigationVisible: navigationVisible,
                           ),
                         ),
-                    ],
+                        _buildEscalation(isTablet: false),
+                        // Configuration and every nested page share the space
+                        // above the mini-player, including its safe-area inset.
+                        if (_pluginsOpen)
+                          MediaQuery.removePadding(
+                            context: context,
+                            removeBottom: true,
+                            child: ClipRect(
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  _buildPlugins(
+                                    handlesBack: rendererSettings == null,
+                                    navigationVisible: navigationVisible,
+                                  ),
+                                  if (rendererSettings != null)
+                                    _buildRendererSettings(rendererSettings),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -913,20 +941,38 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                       position: _pluginsOpen
                           ? const AlwaysStoppedAnimation(Offset.zero)
                           : _miniPlayerSlide,
-                      child: MiniPlayer(
-                        onTap: _showExpandedPlayer,
-                        outputSwitcherKey: _outputSwitcherKey,
+                      child: MeasureSize(
+                        onChange: (size) =>
+                            _miniPlayerExtent.value = size.height,
+                        child: MiniPlayer(
+                          onTap: _showExpandedPlayer,
+                          outputSwitcherKey: _outputSwitcherKey,
+                        ),
                       ),
                     ),
                   ),
                 ),
             ],
           ),
+          if (rail != null)
+            _phoneRail(
+              rail,
+              width: railWidth,
+              miniPlayer: miniPlayer,
+              // Whatever covers the mini-player has the rail come down over
+              // the rest of it.
+              miniCovered:
+                  _discoveryOpen || (!_pluginsOpen && _settingsCovering),
+            ),
           // Settings — full-screen overlay on phone (slides in from the right).
           // The same flag renders it in the browsing pane on tablet, so
           // resizing across the breakpoint just re-homes it.
           if (_settingsOpen)
-            Positioned.fill(
+            Positioned(
+              left: railWidth,
+              top: 0,
+              right: 0,
+              bottom: 0,
               child: SettingsScreen(
                 key: _settingsKey,
                 handlesBack: rendererSettings == null,
@@ -940,11 +986,57 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
             ),
           // A renderer's own settings, hosted exactly like the server's.
           if (rendererSettings != null && !_pluginsOpen)
-            Positioned.fill(child: _buildRendererSettings(rendererSettings)),
+            Positioned(
+              left: railWidth,
+              top: 0,
+              right: 0,
+              bottom: 0,
+              child: _buildRendererSettings(rendererSettings),
+            ),
           // One-time first-run tour
           if (showCoachMarks) Positioned.fill(child: _buildCoachMarks()),
         ],
       ),
+    );
+  }
+
+  /// The phone mini-player's slot as it is made to be, until it is measured:
+  /// its height, the rule along its top and the inset under it.
+  double _miniPlayerSlot() =>
+      kalinkaMiniPlayerHeight(context) +
+      1 +
+      MediaQuery.paddingOf(context).bottom;
+
+  /// The rail over the phone layout's side, ending above the mini-player
+  /// while it shows and following it as it slides away under a search.
+  Widget _phoneRail(
+    Widget rail, {
+    required double width,
+    required bool miniPlayer,
+    required bool miniCovered,
+  }) {
+    final estimate = _miniPlayerSlot();
+    return AnimatedBuilder(
+      animation: Listenable.merge([_miniPlayerReveal, _miniPlayerExtent]),
+      builder: (context, child) {
+        final slot = _miniPlayerExtent.value ?? estimate;
+        final above = !miniPlayer || miniCovered
+            ? 0.0
+            : slot * (_pluginsOpen ? 1 : _miniPlayerReveal.value);
+        return Positioned(
+          left: 0,
+          top: 0,
+          width: width,
+          bottom: above,
+          // The mini-player takes the inset under it while it is there.
+          child: MediaQuery.removePadding(
+            context: context,
+            removeBottom: above > 0,
+            child: child!,
+          ),
+        );
+      },
+      child: rail,
     );
   }
 
@@ -1074,9 +1166,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               roomLent: isTablet
                   ? null
                   : Tween<double>(
-                      begin:
-                          kalinkaMiniPlayerHeight(context) +
-                          MediaQuery.paddingOf(context).bottom,
+                      begin: _miniPlayerSlot(),
                       end: 0,
                     ).animate(_miniPlayerReveal),
             ),

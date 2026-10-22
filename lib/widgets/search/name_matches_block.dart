@@ -13,7 +13,7 @@ import '../source_badge.dart';
 import 'source_unavailable_row.dart';
 
 /// What every source found by name, as one list — the best few, with the
-/// rest a VIEW ALL away.
+/// rest a View All away.
 ///
 /// Waits for every source before showing anything: the list is a merge, and
 /// a merge that fills in as sources answer would reshuffle under the eye. A
@@ -35,7 +35,7 @@ class NameMatchesBlock extends StatelessWidget {
   /// out to it.
   final double gutter;
 
-  /// How many lead the block before VIEW ALL.
+  /// How many lead the block before View All.
   static const previewCount = 4;
 
   const NameMatchesBlock({

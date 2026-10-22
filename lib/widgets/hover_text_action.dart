@@ -5,8 +5,9 @@ import '../theme/app_theme.dart';
 /// A textual action: mono caps, no fill, its colour lifting under the pointer.
 ///
 /// The shape the app uses where an action belongs to a heading or a row rather
-/// than standing on its own — RESET, RESET ALL, VIEW ALL. Its palette is the
-/// caller's, because what it must not compete with differs by surface.
+/// than standing on its own — RESET, RESET ALL, or (in sans) View All. Its
+/// palette is the caller's, because what it must not compete with differs by
+/// surface.
 class HoverTextAction extends StatefulWidget {
   final String label;
   final VoidCallback onTap;
@@ -20,8 +21,11 @@ class HoverTextAction extends StatefulWidget {
   final double fontSize;
   final EdgeInsetsGeometry padding;
 
-  /// A glyph after the label (the arrow on VIEW ALL), coloured with it.
+  /// A glyph after the label (the chevron on View All), coloured with it.
   final IconData? trailingIcon;
+
+  /// Mono caps; off for a quieter link in sentence-style words.
+  final bool mono;
 
   const HoverTextAction({
     super.key,
@@ -33,6 +37,7 @@ class HoverTextAction extends StatefulWidget {
     this.fontSize = KalinkaTypography.baseSize,
     this.padding = EdgeInsets.zero,
     this.trailingIcon,
+    this.mono = true,
   });
 
   @override
@@ -72,12 +77,18 @@ class _HoverTextActionState extends State<HoverTextAction> {
                 children: [
                   Text(
                     widget.label,
-                    style: KalinkaFonts.mono(
-                      fontSize: widget.fontSize,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.4,
-                      color: colour,
-                    ),
+                    style: widget.mono
+                        ? KalinkaFonts.mono(
+                            fontSize: widget.fontSize,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.4,
+                            color: colour,
+                          )
+                        : KalinkaFonts.sans(
+                            fontSize: widget.fontSize,
+                            fontWeight: FontWeight.w500,
+                            color: colour,
+                          ),
                   ),
                   if (widget.trailingIcon != null) ...[
                     const SizedBox(width: 2),

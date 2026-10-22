@@ -241,9 +241,9 @@ void main() {
 
     expect(find.text('Act 4'), findsOneWidget);
     expect(find.text('Act 5'), findsNothing);
-    expect(find.text('VIEW ALL'), findsOneWidget);
+    expect(find.text('View All'), findsOneWidget);
 
-    await tester.tap(find.text('VIEW ALL'));
+    await tester.tap(find.text('View All'));
     await tester.pump();
 
     // A page, not a filter: no chip names it.
@@ -251,14 +251,14 @@ void main() {
     // Rows are built as they come into view.
     await tester.scrollUntilVisible(find.text('Act 6'), 200);
     expect(find.text('Act 6'), findsOneWidget);
-    expect(find.text('VIEW ALL'), findsNothing);
+    expect(find.text('View All'), findsNothing);
     expect(container.read(searchSessionProvider).resultsFilter.isEmpty, isTrue);
 
     container.read(searchSessionProvider.notifier).goBack();
     await tester.pump();
 
     expect(find.text('Act 5'), findsNothing);
-    expect(find.text('VIEW ALL'), findsOneWidget);
+    expect(find.text('View All'), findsOneWidget);
   });
 
   testWidgets('an exact hit wears its badge, a partial one does not', (
@@ -334,7 +334,7 @@ void main() {
     expect(find.text('Away Song 4'), findsNothing);
     // Only the group holding more than its preview offers to open in full,
     // and it sits on the block's right edge, like the block's own link.
-    expect(find.text('VIEW ALL'), findsOneWidget);
+    expect(find.text('View All'), findsOneWidget);
     expect(
       tester.getTopRight(find.byType(ViewAllAction)).dx,
       closeTo(tester.getTopRight(_inspiredHeading).dx, 0.5),
@@ -349,7 +349,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.text('VIEW ALL'));
+    await tester.tap(find.text('View All'));
     await tester.pump();
 
     await tester.scrollUntilVisible(find.text('Away Song 5'), 200);

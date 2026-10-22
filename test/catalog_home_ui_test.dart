@@ -33,6 +33,7 @@ import 'package:kalinka/widgets/search/search_zero_state.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 import 'package:kalinka/widgets/search_cards/search_album_row.dart';
 import 'package:kalinka/widgets/shelf_heading.dart';
+import 'package:kalinka/widgets/source_badge.dart';
 
 import 'support/home_shell.dart';
 
@@ -206,7 +207,7 @@ void main() {
         await tester.pumpAndSettle();
         // An empty Home hints at pinning.
         expect(find.byKey(const ValueKey('home-pin-hint')), findsOneWidget);
-        expect(find.text('YOUR PINS'), findsNothing);
+        expect(find.text('Want Home to look different?'), findsNothing);
         expect(tester.getSize(invitation).height, greaterThanOrEqualTo(48));
         await tester.tap(invitation);
         await tester.pumpAndSettle();
@@ -235,13 +236,13 @@ void main() {
         container.read(searchSessionProvider.notifier).backToCatalogsRoot();
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('home-pin-hint')), findsNothing);
-        expect(find.text('YOUR PINS'), findsOneWidget);
+        expect(find.text('Want Home to look different?'), findsOneWidget);
         final pin = container.read(pinnedCatalogsProvider).single;
         await container.read(pinnedCatalogsProvider.notifier).unpin(pin.key);
         await tester.pumpAndSettle();
         await tester.ensureVisible(invitation);
         expect(find.byKey(const ValueKey('home-pin-hint')), findsOneWidget);
-        expect(find.text('YOUR PINS'), findsNothing);
+        expect(find.text('Want Home to look different?'), findsNothing);
         expect(tester.takeException(), isNull);
       },
     );
@@ -439,31 +440,34 @@ void main() {
         of: find.byType(PinnedCatalogPreview),
         matching: find.byType(ShelfHeading),
       );
+      // The source is the tile before the title, not part of the subtitle.
       expect(
-        find.text(
-          'alpha music · Jazz · Hand-picked releases from our editors.',
-        ),
+        find.text('Jazz · Hand-picked releases from our editors.'),
         findsOneWidget,
       );
       expect(find.text('From alpha music · Jazz'), findsNothing);
+      expect(tester.widget<ShelfHeading>(heading).source, 'alpha');
+      // A rule from the title to View All, as on any shelf.
+      final rule = find.descendant(of: heading, matching: find.byType(Divider));
+      expect(rule, findsOneWidget);
       expect(
-        tester.widget<ShelfHeading>(heading).iconColor,
-        container.read(sourceDisplayInfoProvider)['alpha']!.color,
+        tester.getRect(rule).left,
+        greaterThan(tester.getRect(find.text('EDITORIAL')).right),
       );
       expect(
-        find.descendant(of: heading, matching: find.byType(Divider)),
-        findsNothing,
+        tester.getRect(rule).right,
+        lessThan(tester.getRect(find.text('View All')).left),
       );
       final sourceIcon = find.descendant(
         of: heading,
-        matching: find.byIcon(CupertinoIcons.pin),
+        matching: find.byType(SourceTile),
       );
       expect(
         tester.getTopLeft(sourceIcon).dx,
         lessThan(tester.getTopLeft(find.text('EDITORIAL')).dx),
       );
-      await tester.ensureVisible(find.text('VIEW ALL'));
-      await tester.tap(find.text('VIEW ALL'));
+      await tester.ensureVisible(find.text('View All'));
+      await tester.tap(find.text('View All'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Unpin catalog'));
       await tester.pumpAndSettle();
@@ -473,8 +477,8 @@ void main() {
       container.read(searchSessionProvider.notifier).backFromCatalog();
       await tester.pumpAndSettle();
       expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
-      expect(find.byTooltip('Customise Home'), findsNothing);
-      expect(find.text('YOUR PINS'), findsNothing);
+      expect(find.byKey(const ValueKey('customise-home-button')), findsNothing);
+      expect(find.text('Want Home to look different?'), findsNothing);
       expect(find.text('Pin catalogs to Home'), findsNothing);
       expect(find.byKey(const ValueKey('home-source-alpha')), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -501,7 +505,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Customise'), findsNothing);
       await tester.scrollUntilVisible(
-        find.byTooltip('Customise Home'),
+        find.byKey(const ValueKey('customise-home-button')),
         200,
         scrollable: find
             .descendant(
@@ -510,8 +514,13 @@ void main() {
             )
             .first,
       );
-      expect(find.byTooltip('Customise Home'), findsOneWidget);
-      await tester.ensureVisible(find.byTooltip('Customise Home'));
+      expect(
+        find.byKey(const ValueKey('customise-home-button')),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('customise-home-button')),
+      );
       final button = find.byKey(const ValueKey('customise-home-button'));
       final buttonRect = tester.getRect(button);
       expect(buttonRect.height, greaterThanOrEqualTo(48));
@@ -519,10 +528,13 @@ void main() {
         buttonRect.right,
         tester.getRect(find.byType(SearchZeroState)).right - kHomeSideInset,
       );
-      expect(find.text('YOUR PINS'), findsOneWidget);
+      expect(find.text('Want Home to look different?'), findsOneWidget);
+      // After the pins, not over them.
       expect(
-        buttonRect.bottom,
-        lessThan(tester.getTopLeft(find.byType(PinnedCatalogPreview).first).dy),
+        buttonRect.top,
+        greaterThan(
+          tester.getBottomLeft(find.byType(PinnedCatalogPreview).last).dy,
+        ),
       );
       final icon = find.descendant(
         of: button,
@@ -778,8 +790,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('alpha music'), findsOneWidget);
       expect(find.textContaining(sourceDescription), findsNothing);
-      expect(find.byTooltip('Customise Home'), findsNothing);
-      expect(find.text('YOUR PINS'), findsNothing);
+      expect(find.byKey(const ValueKey('customise-home-button')), findsNothing);
+      expect(find.text('Want Home to look different?'), findsNothing);
       expect(find.text('Pin catalogs to Home'), findsNothing);
       expect(tester.takeException(), isNull);
       await container
@@ -818,7 +830,7 @@ void main() {
       // A fully wrapped compact title can put its heading outside the short
       // landscape viewport; it must remain reachable by scrolling back.
       await tester.scrollUntilVisible(
-        find.byTooltip('Customise Home'),
+        find.byKey(const ValueKey('customise-home-button')),
         -100,
         scrollable: find
             .descendant(
@@ -827,7 +839,10 @@ void main() {
             )
             .first,
       );
-      expect(find.byTooltip('Customise Home'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('customise-home-button')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
       final pin = container.read(pinnedCatalogsProvider).single;
       await container
@@ -942,8 +957,10 @@ void main() {
             ),
           );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byTooltip('Customise Home'));
-      await tester.tap(find.byTooltip('Customise Home'));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('customise-home-button')),
+      );
+      await tester.tap(find.byKey(const ValueKey('customise-home-button')));
       await tester.pumpAndSettle();
       final panel = find.byType(CustomiseHomeScreen);
       final browsing = tester.getRect(find.byType(SearchSessionView));
@@ -1231,8 +1248,8 @@ void main() {
       await tester.drag(rail, const Offset(-300, 0));
       await tester.pumpAndSettle();
       expect(scrollable.position.pixels, greaterThan(0));
-      await tester.ensureVisible(find.text('VIEW ALL'));
-      await tester.tap(find.text('VIEW ALL'));
+      await tester.ensureVisible(find.text('View All'));
+      await tester.tap(find.text('View All'));
       await tester.pumpAndSettle();
       expect(container.read(searchSessionProvider).catalogFilter.genreIds, [
         'jazz',
@@ -1277,7 +1294,7 @@ void main() {
         expect(
           find.descendant(
             of: find.byType(PinnedCatalogPreview),
-            matching: find.text('VIEW ALL'),
+            matching: find.text('View All'),
           ),
           findsNothing,
         );
