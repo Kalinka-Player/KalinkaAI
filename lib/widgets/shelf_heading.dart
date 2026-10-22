@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import 'hover_text_action.dart';
+import 'source_badge.dart';
 
 /// A shelf's heading: its name, how many it holds, a rule, and the action
 /// that opens it in full. One shape for a library shelf and a results block,
@@ -15,9 +16,8 @@ class ShelfHeading extends StatelessWidget {
   /// One line under the title, saying what the shelf is made of.
   final String? subtitle;
 
-  /// A glyph before the title, where the shelf has a mark of its own.
-  final IconData? icon;
-  final Color? iconColor;
+  /// The source the shelf comes from, whose tile stands before the title.
+  final String? source;
   final bool showDivider;
 
   final VoidCallback? onViewAll;
@@ -29,15 +29,14 @@ class ShelfHeading extends StatelessWidget {
     this.titleColor = KalinkaColors.textPrimary,
     this.count,
     this.subtitle,
-    this.icon,
-    this.iconColor,
+    this.source,
     this.showDivider = true,
     this.onViewAll,
-    this.viewAllLabel = 'VIEW ALL',
+    this.viewAllLabel = 'View All',
   });
 
-  static const _iconSize = 15.0;
-  static const _iconGap = 8.0;
+  static const _tileSize = 20.0;
+  static const _tileGap = 10.0;
 
   @override
   Widget build(BuildContext context) {
@@ -52,9 +51,9 @@ class ShelfHeading extends StatelessWidget {
       children: [
         Row(
           children: [
-            if (icon != null) ...[
-              Icon(icon, size: _iconSize, color: iconColor),
-              const SizedBox(width: _iconGap),
+            if (source != null) ...[
+              SourceTile(source: source!, size: _tileSize),
+              const SizedBox(width: _tileGap),
             ],
             if (roomy && showDivider) heading else Expanded(child: heading),
             if (count != null) ...[
@@ -79,10 +78,10 @@ class ShelfHeading extends StatelessWidget {
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 4),
-          // Under the title, past the glyph before it.
+          // Under the title, past the tile before it.
           Padding(
             padding: EdgeInsetsDirectional.only(
-              start: icon == null ? 0 : _iconSize + _iconGap,
+              start: source == null ? 0 : _tileSize + _tileGap,
             ),
             child: Text(
               subtitle!,
@@ -120,9 +119,9 @@ class ShelfTally extends StatelessWidget {
   }
 }
 
-/// The action that opens a shelf or a group in full. Mono and unfilled like
-/// RESET ALL, so it reads as the heading's action rather than a control of
-/// its own. The arrow marks it as a link.
+/// The action that opens a shelf or a group in full: a small, neutral link
+/// that lights up under the pointer, so it never competes with the heading.
+/// The chevron marks it as a link.
 class ViewAllAction extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
@@ -135,9 +134,13 @@ class ViewAllAction extends StatelessWidget {
       label: label,
       semanticsLabel: 'View all',
       onTap: onTap,
-      color: KalinkaColors.accentTint,
+      color: KalinkaColors.textSecondary,
       hoverColor: KalinkaColors.textPrimary,
-      trailingIcon: Icons.arrow_forward_rounded,
+      trailingIcon: Icons.chevron_right_rounded,
+      mono: false,
+      // Room beside the small words, not above them: the title's row stays
+      // its own height, so the subtitle sits close under it.
+      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
     );
   }
 }

@@ -6,7 +6,7 @@ import 'catalog_cards_provider.dart';
 import 'kalinka_player_api_provider.dart';
 import 'source_modules_provider.dart';
 
-/// How many collections the shelf shows before VIEW ALL, where the server
+/// How many collections the shelf shows before View All, where the server
 /// did not say.
 const _kDefaultPreviewCount = 3;
 
@@ -25,7 +25,7 @@ final collectionsRevisionProvider = NotifierProvider<CollectionsRevision, int>(
 );
 
 /// The collections shelf as the Discover root shows it: the first few, how
-/// many there are in all, and the catalog VIEW ALL opens.
+/// many there are in all, and the catalog View All opens.
 class CollectionsShelf {
   final CatalogCardPlan plan;
   final List<BrowseItem> items;

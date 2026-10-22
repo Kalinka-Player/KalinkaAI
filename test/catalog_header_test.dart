@@ -826,7 +826,7 @@ void main() {
         ],
       );
       await _pump(tester, api, page: page, size: const Size(432, 800));
-      expect(find.text('VIEW ALL'), findsNothing);
+      expect(find.text('View All'), findsNothing);
       expect(find.byType(SearchTrackRow).evaluate().length, lessThan(30));
       expect(api.calls.map((call) => call.id).toSet(), {page.id});
       await tester.scrollUntilVisible(

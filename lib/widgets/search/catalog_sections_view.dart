@@ -18,7 +18,7 @@ import 'browse_visit_scope.dart';
 /// Items a shelf shows when its source did not say.
 const _defaultPreviewLimit = 5;
 
-/// How many tracks a shelf of them lists before VIEW ALL.
+/// How many tracks a shelf of them lists before View All.
 const _trackPreviewLimit = 5;
 
 /// The fewest covers a rail of them asks for: it scrolls, and builds only
@@ -300,7 +300,7 @@ class _SectionShelf extends ConsumerWidget {
           return const SizedBox.shrink();
         }
         final cover = _coverShelf(catalog, list.items) ?? false;
-        // Rows are a short list; VIEW ALL has the rest.
+        // Rows are a short list; View All has the rest.
         final shown = cover
             ? list.items
             : list.items.take(_rowLimit(catalog, list.items)).toList();

@@ -77,6 +77,13 @@ class _SettingsNumericInputState extends State<SettingsNumericInput> {
     return value;
   }
 
+  /// A finite number, or null: `num.tryParse` also takes "NaN" and
+  /// "Infinity".
+  static num? _parse(String text) {
+    final parsed = num.tryParse(text);
+    return parsed != null && parsed.isFinite ? parsed : null;
+  }
+
   void _showValue(String text) {
     if (_controller.text == text) return;
     _controller.text = text;
@@ -104,7 +111,7 @@ class _SettingsNumericInputState extends State<SettingsNumericInput> {
   /// recorded with the keyboard still up; anything else waits for the field
   /// to be left, which pulls it inside them.
   void _stageTyped() {
-    final parsed = num.tryParse(_controller.text);
+    final parsed = _parse(_controller.text);
     if (parsed == null || _pulledInsideBounds(parsed) != parsed) return;
     if (parsed != _committedValue) {
       _committedValue = parsed;
@@ -117,7 +124,7 @@ class _SettingsNumericInputState extends State<SettingsNumericInput> {
   /// [_valueAtFocus]. A number outside the declared bounds is pulled
   /// back to the nearest one it may hold, and the field shows what it sent.
   void _commitIfChanged() {
-    final typed = num.tryParse(_controller.text);
+    final typed = _parse(_controller.text);
     final parsed = typed == null ? _valueAtFocus : _pulledInsideBounds(typed);
     _showValue(parsed.toString());
     if (parsed != _committedValue) {

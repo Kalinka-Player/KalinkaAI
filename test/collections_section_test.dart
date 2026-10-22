@@ -238,7 +238,7 @@ void main() {
     expect(find.text('YOUR COLLECTIONS'), findsOneWidget);
     expect(find.text('· 6'), findsOneWidget);
     expect(find.text('Your lists, mixed from any source'), findsOneWidget);
-    expect(find.text('VIEW ALL'), findsOneWidget);
+    expect(find.text('View All'), findsOneWidget);
     expect(find.byType(CollectionShelfRow), findsNWidgets(3));
     expect(find.text('Late Night Focus'), findsOneWidget);
     expect(find.text('28 tracks'), findsOneWidget);
@@ -278,7 +278,7 @@ void main() {
       );
 
       expect(find.byType(CollectionShelfRow), findsNWidgets(count));
-      expect(find.text('VIEW ALL'), findsNothing);
+      expect(find.text('View All'), findsNothing);
     });
   }
 
@@ -289,7 +289,7 @@ void main() {
       modules: _withCollections,
     );
 
-    await tester.tap(find.text('VIEW ALL'));
+    await tester.tap(find.text('View All'));
     await tester.pump();
 
     expect(opened.map((plan) => plan.id), [_shelfId]);

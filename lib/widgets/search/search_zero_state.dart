@@ -16,8 +16,6 @@ import '../../theme/app_theme.dart';
 import '../home/home_layout.dart';
 import '../home/pinned_catalogs_section.dart';
 import '../measure_size.dart';
-import '../tap_highlight.dart';
-import '../shelf_heading.dart';
 import '../modifier_click.dart';
 import 'collections_section.dart';
 
@@ -77,17 +75,6 @@ class SearchZeroState extends ConsumerWidget {
     // loading counts as none, so a new listener's Home never jumps.
     final collections = ref.watch(collectionsShelfProvider).value;
     final empty = pins.isEmpty && (collections == null || collections.isEmpty);
-    // Customise's 48dp target stands this far above and below the heading's
-    // line; the gaps around the heading give it back, so the heading sits
-    // where any other does.
-    final line = TextPainter(
-      text: TextSpan(text: 'Y', style: KalinkaTextStyles.sectionLabel),
-      textDirection: TextDirection.ltr,
-      textScaler: MediaQuery.textScalerOf(context),
-    )..layout();
-    final overhang = math.max(0.0, (48 - line.height) / 2);
-    line.dispose();
-
     const top = 8.0;
     return RefreshIndicator(
       onRefresh: ref.read(searchSessionProvider.notifier).refreshAll,
@@ -120,10 +107,13 @@ class SearchZeroState extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   ...leading,
+                  // Close under the prompts and over what follows, as one
+                  // line of ways in; without it, the search's full gap.
                   if (sources != null && (showSources || empty)) ...[
                     sources!,
-                    const SizedBox(height: kHomeSectionGap),
-                  ],
+                    const SizedBox(height: 16),
+                  ] else
+                    const SizedBox(height: 12),
                   if (empty)
                     _PinHint(
                       onCustomise: () =>
@@ -133,37 +123,14 @@ class SearchZeroState extends ConsumerWidget {
               ),
             ),
             if (!empty && showCollections)
-              CollectionsSection(
-                onOpenCatalog: onOpenCatalog,
-                gapAfter: pins.isEmpty
-                    ? kHomeSectionGap
-                    : kHomeSectionGap - overhang,
-              ),
+              CollectionsSection(onOpenCatalog: onOpenCatalog),
             if (pins.isNotEmpty) ...[
-              // One action for the whole pinned group, before any previews.
-              Row(
-                children: [
-                  const Expanded(
-                    child: ShelfHeading(
-                      title: 'YOUR PINS',
-                      titleColor: KalinkaColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    key: const ValueKey('customise-home-button'),
-                    tooltip: 'Customise Home',
-                    style: kalinkaIconButtonStyle,
-                    color: KalinkaColors.textSecondary,
-                    icon: const Icon(Icons.tune, size: 20),
-                    onPressed: () =>
-                        ref.read(homeCustomisationProvider.notifier).open(),
-                  ),
-                ],
-              ),
-              // A little air still, so the target never abuts the first preview.
-              SizedBox(height: math.max(4.0, kHomeHeadingGap - overhang)),
               PinnedCatalogsSection(pins: pins),
+              // After the pins, quietly: where to change them.
+              _CustomiseLine(
+                onCustomise: () =>
+                    ref.read(homeCustomisationProvider.notifier).open(),
+              ),
             ],
           ],
         ),
@@ -261,6 +228,49 @@ class _CentringState extends State<_Centring>
       child: widget.child,
     ),
   );
+}
+
+/// The end of the pins: a muted question and a neutral Customise Home,
+/// against the trailing edge, so it never reads as part of a preview.
+class _CustomiseLine extends StatelessWidget {
+  final VoidCallback onCustomise;
+
+  const _CustomiseLine({required this.onCustomise});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: AlignmentDirectional.centerEnd,
+      child: Wrap(
+        alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 4,
+        children: [
+          Text(
+            'Want Home to look different?',
+            style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+              color: KalinkaColors.textMuted,
+            ),
+          ),
+          TextButton.icon(
+            key: const ValueKey('customise-home-button'),
+            onPressed: onCustomise,
+            style: TextButton.styleFrom(
+              foregroundColor: KalinkaColors.textSecondary,
+              minimumSize: const Size(48, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              textStyle: KalinkaFonts.sans(
+                fontSize: KalinkaTypography.baseSize + 1,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            icon: const Icon(Icons.tune, size: 18),
+            label: const Text('Customise Home'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Under the sources while nothing is pinned: what pinning does, and the

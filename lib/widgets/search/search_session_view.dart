@@ -691,7 +691,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
               ) is StretchingOverscrollIndicator;
           // Beside the player's pane, backdrops fade out before meeting it.
           final besidePlayer = kalinkaSplitLayout(
-            MediaQuery.sizeOf(context).width,
+            kalinkaShellWidthWithin(context),
             textScaler: MediaQuery.textScalerOf(context),
           );
           return ColoredBox(
@@ -1562,7 +1562,8 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                   onSuggestion: _submitFromTile,
                   onOpenSearch: _openSearch,
                 ),
-                const SizedBox(height: 24),
+                // The rest of the gap is Home's: less where the sources follow.
+                const SizedBox(height: 12),
               ],
             ),
           ),
@@ -1894,7 +1895,7 @@ class _DiscoverHero extends StatelessWidget {
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: kHomeSearchMaxWidth),
               child: Text(
-                'Smart search works with $smartSources.',
+                'Smart search · $smartSources',
                 textAlign: TextAlign.center,
                 style: KalinkaTextStyles.trackRowSubtitle.copyWith(
                   fontSize: KalinkaTypography.baseSize,

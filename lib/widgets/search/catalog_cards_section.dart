@@ -82,7 +82,7 @@ class CatalogCardsSection extends ConsumerWidget {
                         // rail to return through, at its own page.
                         final rail =
                             kalinkaNavigationRailWidth(
-                              MediaQuery.sizeOf(context).width,
+                              kalinkaShellWidthWithin(context),
                               windowHeight: MediaQuery.sizeOf(context).height,
                               textScaler: MediaQuery.textScalerOf(context),
                             ) >

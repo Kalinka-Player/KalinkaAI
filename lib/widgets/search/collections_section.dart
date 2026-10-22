@@ -17,12 +17,12 @@ import '../search_cards/collection_row.dart';
 import '../shelf_heading.dart';
 
 /// Your collections on the Discover root: a heading with the count, the
-/// first few as rows, and VIEW ALL into the rest. Absent until there is one,
+/// first few as rows, and View All into the rest. Absent until there is one,
 /// and where the server has no collections source.
 ///
-/// Each row opens its collection's own page; VIEW ALL opens the listing.
+/// Each row opens its collection's own page; View All opens the listing.
 class CollectionsSection extends ConsumerWidget {
-  /// Opens the Collections screen, where VIEW ALL leads.
+  /// Opens the Collections screen, where View All leads.
   final OpenCatalog onOpenCatalog;
 
   /// The room left under it, before the next section.

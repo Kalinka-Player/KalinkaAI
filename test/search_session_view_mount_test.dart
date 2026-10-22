@@ -706,7 +706,7 @@ void main() {
       expect(
         tester.getTopLeft(find.text('upbeat indie')).dy,
         greaterThan(
-          tester.getBottomLeft(find.textContaining('Smart search works')).dy,
+          tester.getBottomLeft(find.textContaining('Smart search · ')).dy,
         ),
       );
 

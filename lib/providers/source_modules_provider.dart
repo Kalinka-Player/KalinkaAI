@@ -102,8 +102,8 @@ final smartSearchAvailableProvider = Provider<bool?>((ref) {
   );
 });
 
-/// The enabled sources that answer smart search, by title, as one phrase
-/// ("Jamendo and My Library"); empty when none do or while loading.
+/// The enabled sources that answer smart search, by title, as one line
+/// ("Jamendo · My Library"); empty when none do or while loading.
 final smartSearchSourcesProvider = Provider<String>((ref) {
   return ref.watch(
     sourceModulesProvider.select((m) {
@@ -111,9 +111,7 @@ final smartSearchSourcesProvider = Provider<String>((ref) {
         for (final s in m.value ?? const <ModuleInfo>[])
           if (s.enabled && s.can(ModuleCapability.aiSearch)) s.title,
       ];
-      if (titles.length < 2) return titles.join();
-      return '${titles.sublist(0, titles.length - 1).join(', ')} '
-          'and ${titles.last}';
+      return titles.join(' · ');
     }),
   );
 });
