@@ -8,6 +8,27 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.21.0
+
+Works with server 5.11.0. Setting the streamer's time zone and the new Configuration Network page need supervisor 0.5.0; against an older one, those stay hidden as before.
+
+### Added
+- Home is rebuilt around source tiles instead of catalog cards, with pinned catalogs you choose from Customise Home, which now illustrates the layout it is changing. Home returns to the page you left it on.
+- A Network page in Configuration, alongside the setup wizard's Network step, for joining or checking a streamer's Wi-Fi or Ethernet connection after setup. The wizard's Network step is skipped where it is not needed.
+- The streamer's time zone shows and can be changed from Settings, and setup's Network step proposes this device's time zone for a new streamer.
+- Folder pages number tracks and keep the cover beside the number.
+- Rail cards mark folders, albums and playlists, and compact pinned catalogs show their item count.
+
+### Changed
+- While the server is unreachable, Now Playing, the mini-player and the kiosk display show a reconnecting state instead of stale or broken controls: the player and mini-player close, controls lose keyboard focus and the output switcher is disabled, and the playback position holds in place until the server reports back, released only if it reports before the connection drops again.
+- Rail artwork stays in place while the window resizes, and artwork captions stay readable over bright art.
+- The album page's Play all and Enqueue pills match the size used everywhere else.
+
+### Fixed
+- A box whose supervisor action fails offers a retry.
+- A box that did not answer is told apart from a server that has none.
+- The zone a box set for an old time zone name is remembered across launches, and the time zone shown is re-read each time instead of only once.
+
 ## 0.20.1
 
 Fixes for search and Home. Works with server 5.10.0; with server 5.11.0, search follows each source's AI search setting.
