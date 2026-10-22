@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/scheduler.dart';
@@ -52,14 +53,18 @@ const double _kPaneEdgeFade = 165;
 /// How far the Discover backdrop reaches below the status inset. The bloom
 /// is drawn over all of it and [_kDiscoverFadeOut] dissolves it before the
 /// bottom, so this is the bloom's reach and not an edge anything can see.
-const double _kDiscoverBackdropHeight = 340;
+const double _kDiscoverBackdropHeight = 400;
 
-/// Where the bloom centres below the status inset: between the search entry
-/// and the prompts under it. It reaches [_kBloomReach] up and down, so it
-/// is all but gone at the bar, and across to just short of the pane's
-/// sides, never more than the entry's widest.
-const double _kBloomDepth = 185;
-const double _kBloomReach = 155;
+/// How far the backdrop starts above the status inset's top, so the bloom
+/// never meets its top edge, even where an empty Home centres it mid-pane.
+const double _kDiscoverBackdropOverhang = 48;
+
+/// Where the bloom centres below the status inset: the search entry, with
+/// the question above it and the prompts under it all inside it. It reaches
+/// [_kBloomReach] up and down and across to past the pane's sides, never
+/// more than 1.3 times the entry's widest.
+const double _kBloomDepth = 170;
+const double _kBloomReach = 200;
 
 /// The crimson bloom over the Discover root, around the search entry and
 /// its prompts.
@@ -82,11 +87,14 @@ class _AroundSearch extends GradientTransform {
   Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
     final circle = bounds.shortestSide / 2;
     if (circle <= 0) return null;
-    final across = math.min(0.475 * bounds.width, kHomeSearchMaxWidth);
+    final across = math.min(0.62 * bounds.width, 1.3 * kHomeSearchMaxWidth);
     final sx = across / circle;
     final sy = _kBloomReach / circle;
     final from = bounds.center;
-    final to = Offset(from.dx, bounds.top + topInset + _kBloomDepth);
+    final to = Offset(
+      from.dx,
+      bounds.top + _kDiscoverBackdropOverhang + topInset + _kBloomDepth,
+    );
     return Matrix4.diagonal3Values(sx, sy, 1)
       ..setTranslationRaw(to.dx - sx * from.dx, to.dy - sy * from.dy, 0);
   }
@@ -137,6 +145,9 @@ class SearchSessionView extends ConsumerStatefulWidget {
   /// The shell supplies this from its actual layout, not the browsing width.
   final bool navigationVisible;
 
+  /// Height lent to Home by the mini-player while it has slid away.
+  final ValueListenable<double>? roomLent;
+
   const SearchSessionView({
     super.key,
     this.onServerTap,
@@ -144,6 +155,7 @@ class SearchSessionView extends ConsumerStatefulWidget {
     this.connectionKey,
     this.handlesBack = true,
     this.navigationVisible = false,
+    this.roomLent,
   });
 
   @override
@@ -716,10 +728,11 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                 // including overscroll, without rebuilding the content below.
                 if (session.atHome)
                   Positioned(
-                    top: 0,
+                    top: -_kDiscoverBackdropOverhang,
                     left: 0,
                     right: 0,
                     height:
+                        _kDiscoverBackdropOverhang +
                         MediaQuery.paddingOf(context).top +
                         _kDiscoverBackdropHeight,
                     child: IgnorePointer(
@@ -956,22 +969,28 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
             child: StretchingOverscrollIndicator(
               axisDirection: AxisDirection.down,
               clipBehavior: Clip.none,
-              child: Stack(
-                key: _albumStretchKey,
-                clipBehavior: Clip.none,
-                children: [
-                  Positioned(
-                    top: -chrome,
-                    left: 0,
-                    right: 0,
-                    child: AlbumPageBackdrop(
-                      page: session.catalogPage,
-                      headerHeight: _albumHeaderHeight,
-                      scrollOffset: _albumOffset,
-                      shaded: false,
+              // Clipped to the list's own box before it is stretched: the
+              // stretch works on what its child paints, so the cover running
+              // up under the bar would stretch from a taller box than the
+              // list's, and the two would part.
+              child: ClipRect(
+                child: Stack(
+                  key: _albumStretchKey,
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      top: -chrome,
+                      left: 0,
+                      right: 0,
+                      child: AlbumPageBackdrop(
+                        page: session.catalogPage,
+                        headerHeight: _albumHeaderHeight,
+                        scrollOffset: _albumOffset,
+                        shaded: false,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -1481,6 +1500,18 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// then pinned previews. Tapping the entry lifts the overlay.
   Widget _buildCatalogsRoot(SearchSessionState session) {
     final smart = ref.watch(smartSearchAvailableProvider) ?? true;
+    // A resize, such as turning the phone, can move the list without telling
+    // its controller; its new metrics bring the backdrop along.
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: (notification) {
+        if (notification.depth == 0) _afterLayout(_syncDiscoverOffset);
+        return false;
+      },
+      child: _buildZeroState(session, smart),
+    );
+  }
+
+  Widget _buildZeroState(SearchSessionState session, bool smart) {
     return SearchZeroState(
       controller: _discoverScroll,
       onOpenCatalog: _openCatalog,
@@ -1490,6 +1521,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       showSources: !widget.navigationVisible,
       sources: HomeSourceList(onOpen: _openSourceFromHome),
       onCentringShift: (shift) => _discoverCentring.value = shift,
+      roomLent: widget.roomLent,
       leading: [
         // Folds up under the bar as a source opens, the sources rising with it.
         // Clipped above and below only: the prompts run out to the pane's

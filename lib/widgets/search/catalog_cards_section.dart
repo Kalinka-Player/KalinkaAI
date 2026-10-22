@@ -83,6 +83,7 @@ class CatalogCardsSection extends ConsumerWidget {
                         final rail =
                             kalinkaNavigationRailWidth(
                               MediaQuery.sizeOf(context).width,
+                              windowHeight: MediaQuery.sizeOf(context).height,
                               textScaler: MediaQuery.textScalerOf(context),
                             ) >
                             0;

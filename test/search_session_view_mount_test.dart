@@ -401,7 +401,8 @@ void main() {
       final titleRect = tester.getRect(find.text('What shall we play?'));
       expect(backdropRect.left, 0);
       expect(backdropRect.width, size.width);
-      expect(backdropRect.top, 0);
+      // From a little above the top, so the bloom never meets an edge.
+      expect(backdropRect.top, lessThan(0));
       expect(headerRect.height, kKalinkaTopBarHeight + 24);
       expect(headerColors(tester).first.a, 0);
       await _captureHome(tester, captureKey, 'home-${size.width}-$scale');
@@ -422,9 +423,9 @@ void main() {
 
       expect(
         rootPosition(tester).maxScrollExtent,
-        greaterThanOrEqualTo(backdropRect.height),
+        greaterThanOrEqualTo(backdropRect.bottom),
       );
-      rootPosition(tester).jumpTo(backdropRect.height);
+      rootPosition(tester).jumpTo(backdropRect.bottom);
       await tester.pump();
       expect(tester.getRect(backdrop).bottom, lessThanOrEqualTo(0));
       expect(tester.takeException(), isNull);
@@ -472,9 +473,7 @@ void main() {
     expect(tester.getRect(cover), opened);
   });
 
-  testWidgets('an album cover stretches with its list', (
-    tester,
-  ) async {
+  testWidgets('an album cover stretches with its list', (tester) async {
     tester.view.physicalSize = const Size(427, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);

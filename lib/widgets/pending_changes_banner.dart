@@ -121,7 +121,7 @@ class PendingChangesBanner extends StatelessWidget {
                         children: [
                           _Action(
                             key: const ValueKey('pending-changes-discard'),
-                            onTap: busy ? null : onDiscard,
+                            onTap: busy ? null : _leavingField(onDiscard),
                             child: Text(
                               'Discard',
                               style: KalinkaTextStyles.cancelButton,
@@ -132,10 +132,10 @@ class PendingChangesBanner extends StatelessWidget {
                             onTap: busy
                                 ? null
                                 : review
-                                ? onReview
+                                ? _leavingField(onReview)
                                 : blocked
                                 ? null
-                                : onApply,
+                                : _leavingField(onApply),
                             child: _ApplyPill(
                               label: busy
                                   ? 'APPLYING…'
@@ -174,6 +174,16 @@ class PendingChangesBanner extends StatelessWidget {
     );
   }
 }
+
+/// Leaves the field being typed in first, so its text is staged before
+/// the action takes the changes and the keyboard goes with it.
+VoidCallback? _leavingField(VoidCallback? action) => action == null
+    ? null
+    : () {
+        FocusManager.instance.primaryFocus?.unfocus();
+        FocusManager.instance.applyFocusChangesIfNeeded();
+        action();
+      };
 
 /// One of the bar's actions: drawn small, aimed at in a 48dp target.
 class _Action extends StatelessWidget {

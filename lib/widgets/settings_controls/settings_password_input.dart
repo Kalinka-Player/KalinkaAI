@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
 
 /// Password/masked input with eye toggle button.
@@ -133,9 +134,8 @@ class _SettingsPasswordInputState extends State<SettingsPasswordInput> {
                   ),
                   isDense: true,
                 ),
+                // Done closes the keyboard, and leaving the field commits it.
                 onChanged: _onEdited,
-                onSubmitted: (_) => _commitIfChanged(),
-                onEditingComplete: _commitIfChanged,
               ),
             ),
             GestureDetector(

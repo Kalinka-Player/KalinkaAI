@@ -59,10 +59,7 @@ class PlayerSheetRoute extends PopupRoute<void> {
 }
 
 /// The window's navigation rail, which the sheet opens beside.
-double _railWidth(BuildContext context) => kalinkaNavigationRailWidth(
-  MediaQuery.sizeOf(context).width,
-  textScaler: MediaQuery.textScalerOf(context),
-);
+double _railWidth(BuildContext context) => kalinkaRailEdge(context);
 
 class _PlayerSheetPage extends StatefulWidget {
   final PlayerSheetRoute route;
@@ -192,7 +189,13 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
             removeTop: true,
             child: Material(
               color: KalinkaColors.background,
-              child: SafeArea(top: false, bottom: false, child: widget.child),
+              // Beside the rail it is already past the left inset.
+              child: SafeArea(
+                top: false,
+                bottom: false,
+                left: rail == 0,
+                child: widget.child,
+              ),
             ),
           ),
         ),

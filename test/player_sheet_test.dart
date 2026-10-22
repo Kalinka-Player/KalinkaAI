@@ -109,7 +109,10 @@ void main() {
       expect(tester.state(find.byType(NowPlayingContent)), same(contentState));
       if (scenario.topInset > 0) {
         // Beside the rail, where a window is wide enough for one.
-        final rail = kalinkaNavigationRailWidth(scenario.size.width);
+        final rail = kalinkaNavigationRailWidth(
+          scenario.size.width,
+          windowHeight: scenario.size.height,
+        );
         expect(
           tester.getRect(_statusBar),
           Rect.fromLTWH(rail, 0, scenario.size.width - rail, scenario.topInset),

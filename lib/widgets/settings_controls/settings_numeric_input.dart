@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
 
 /// Numeric input with optional constraints. 80px wide, right-aligned.
 /// Shows accent-colored border on focus.
 ///
-/// The parsed value is held locally while the field has focus and only
-/// propagated on blur, submit, or dispose, allowing incomplete numeric input.
+/// A number inside the bounds is propagated as it is typed; anything else
+/// waits for blur or dispose, which pulls it inside them or, unparseable,
+/// reverts to the value the edit began from.
 class SettingsNumericInput extends StatefulWidget {
   final num value;
   final ValueChanged<num> onChanged;
@@ -41,10 +43,15 @@ class _SettingsNumericInputState extends State<SettingsNumericInput> {
   // erased back to where they started.
   late num _committedValue;
 
+  // What the field held when the edit began, for unparseable text to revert
+  // to: typing stages the numbers on the way, which are not the user's choice.
+  late num _valueAtFocus;
+
   @override
   void initState() {
     super.initState();
     _committedValue = widget.value;
+    _valueAtFocus = widget.value;
     _controller = TextEditingController(text: widget.value.toString());
     _focusNode = FocusNode();
     _focusNode.addListener(_onFocusChange);
@@ -86,24 +93,32 @@ class _SettingsNumericInputState extends State<SettingsNumericInput> {
   }
 
   void _onFocusChange() {
-    if (!_focusNode.hasFocus) _commitIfChanged();
+    if (_focusNode.hasFocus) {
+      _valueAtFocus = _committedValue;
+    } else {
+      _commitIfChanged();
+    }
+  }
+
+  /// A number inside the bounds is staged as it is typed, so the change is
+  /// recorded with the keyboard still up; anything else waits for the field
+  /// to be left, which pulls it inside them.
+  void _stageTyped() {
+    final parsed = num.tryParse(_controller.text);
+    if (parsed == null || _pulledInsideBounds(parsed) != parsed) return;
+    if (parsed != _committedValue) {
+      _committedValue = parsed;
+      widget.onChanged(parsed);
+    }
   }
 
   /// Parse + emit only if the text is a valid number and differs from
-  /// what the parent currently holds. Invalid text (mid-typing "1.")
-  /// is left alone — the user might continue typing — and silently
-  /// reverts on blur because we restore the text from
-  /// [_committedValue]. A number outside the declared bounds is pulled
+  /// what the parent currently holds. Unparseable text reverts to
+  /// [_valueAtFocus]. A number outside the declared bounds is pulled
   /// back to the nearest one it may hold, and the field shows what it sent.
   void _commitIfChanged() {
-    var parsed = num.tryParse(_controller.text);
-    if (parsed == null) {
-      // Restore display so the user isn't left looking at an unparseable
-      // string after blurring.
-      _showValue(_committedValue.toString());
-      return;
-    }
-    parsed = _pulledInsideBounds(parsed);
+    final typed = num.tryParse(_controller.text);
+    final parsed = typed == null ? _valueAtFocus : _pulledInsideBounds(typed);
     _showValue(parsed.toString());
     if (parsed != _committedValue) {
       _committedValue = parsed;
@@ -140,8 +155,8 @@ class _SettingsNumericInputState extends State<SettingsNumericInput> {
           ),
           isDense: true,
         ),
-        onSubmitted: (_) => _commitIfChanged(),
-        onEditingComplete: _commitIfChanged,
+        // Done closes the keyboard, and leaving the field commits it.
+        onChanged: (_) => _stageTyped(),
       ),
     );
 
