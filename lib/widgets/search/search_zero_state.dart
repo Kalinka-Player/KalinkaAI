@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -52,6 +53,11 @@ class SearchZeroState extends ConsumerWidget {
   /// follows.
   final ValueChanged<double>? onCentringShift;
 
+  /// Height Home has only for now, lent by a bar that has slid away (the
+  /// mini-player while the search is up). Centring leaves it out, so the bar
+  /// coming back moves nothing.
+  final ValueListenable<double>? roomLent;
+
   const SearchZeroState({
     super.key,
     required this.onOpenCatalog,
@@ -61,6 +67,7 @@ class SearchZeroState extends ConsumerWidget {
     this.sources,
     this.showSources = true,
     this.onCentringShift,
+    this.roomLent,
   });
 
   @override
@@ -101,10 +108,14 @@ class SearchZeroState extends ConsumerWidget {
             kHomeSectionGap,
           ),
           children: [
-            _Centring(
-              centred: empty,
-              room: constraints.maxHeight - top - kHomeSectionGap,
-              onShift: onCentringShift,
+            ValueListenableBuilder<double>(
+              valueListenable: roomLent ?? const AlwaysStoppedAnimation(0.0),
+              builder: (context, lent, child) => _Centring(
+                centred: empty,
+                room: constraints.maxHeight - top - kHomeSectionGap - lent,
+                onShift: onCentringShift,
+                child: child!,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

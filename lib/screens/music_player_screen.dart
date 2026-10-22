@@ -636,148 +636,160 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       }
     });
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final windowWidth = constraints.maxWidth;
-        final railWidth = kalinkaNavigationRailWidth(
-          windowWidth,
-          textScaler: MediaQuery.textScalerOf(context),
-        );
-        final isTablet = kalinkaSplitLayout(
-          windowWidth,
-          textScaler: MediaQuery.textScalerOf(context),
-        );
-        final connected =
-            ref.watch(connectionStateProvider) != ConnectionStatus.none;
-        // On tablet the queue's mini-player spans the window, the rail
-        // included; the rail and whatever covers the panes end above it.
-        final barShowing =
-            isTablet &&
-            connected &&
-            ref.watch(playerViewProvider) == PlayerView.queue;
-        final barHeight =
-            kalinkaMiniPlayerHeight(context) +
-            MediaQuery.paddingOf(context).bottom;
-        final rail = railWidth > 0
-            ? MediaQuery.removePadding(
-                context: context,
-                removeBottom: barShowing,
-                child: SizedBox(
-                  key: const ValueKey('navigation-rail'),
-                  width: railWidth,
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        right: BorderSide(color: KalinkaColors.borderSubtle),
+    // Clear of a phone's camera cutout on its side when it is turned; the
+    // canvas fills the inset.
+    return ColoredBox(
+      color: KalinkaColors.background,
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final windowWidth = constraints.maxWidth;
+            final railWidth = kalinkaNavigationRailWidth(
+              windowWidth,
+              windowHeight: MediaQuery.sizeOf(context).height,
+              textScaler: MediaQuery.textScalerOf(context),
+            );
+            final isTablet = kalinkaSplitLayout(
+              windowWidth,
+              textScaler: MediaQuery.textScalerOf(context),
+            );
+            final connected =
+                ref.watch(connectionStateProvider) != ConnectionStatus.none;
+            // On tablet the queue's mini-player spans the window, the rail
+            // included; the rail and whatever covers the panes end above it.
+            final barShowing =
+                isTablet &&
+                connected &&
+                ref.watch(playerViewProvider) == PlayerView.queue;
+            final barHeight =
+                kalinkaMiniPlayerHeight(context) +
+                MediaQuery.paddingOf(context).bottom;
+            final rail = railWidth > 0
+                ? MediaQuery.removePadding(
+                    context: context,
+                    removeBottom: barShowing,
+                    child: SizedBox(
+                      key: const ValueKey('navigation-rail'),
+                      width: railWidth,
+                      child: DecoratedBox(
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            right: BorderSide(
+                              color: KalinkaColors.borderSubtle,
+                            ),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 1),
+                          child: _navigation(
+                            extended: railWidth > kKalinkaRailWidth,
+                          ),
+                        ),
                       ),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 1),
-                      child: _navigation(
-                        extended: railWidth > kKalinkaRailWidth,
-                      ),
+                  )
+                : null;
+            final panes = Expanded(
+              child: Stack(
+                // Tight constraints keep the layout root a relayout boundary.
+                fit: StackFit.expand,
+                children: [
+                  isTablet
+                      ? _buildTabletLayout(
+                          context,
+                          windowWidth,
+                          railWidth > 0,
+                          customise,
+                        )
+                      : _buildPhoneLayout(context, railWidth > 0),
+                  // On tablet it lives in the browsing pane instead.
+                  if (!isTablet && customise != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      bottom: connected ? barHeight : 0,
+                      child: customise,
                     ),
-                  ),
-                ),
-              )
-            : null;
-        final panes = Expanded(
-          child: Stack(
-            // Tight constraints keep the layout root a relayout boundary.
-            fit: StackFit.expand,
-            children: [
-              isTablet
-                  ? _buildTabletLayout(
-                      context,
-                      windowWidth,
-                      railWidth > 0,
-                      customise,
-                    )
-                  : _buildPhoneLayout(context, railWidth > 0),
-              // On tablet it lives in the browsing pane instead.
-              if (!isTablet && customise != null)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  bottom: connected ? barHeight : 0,
-                  child: customise,
-                ),
-            ],
-          ),
-        );
-        // Hosted above the phone/tablet switch so an in-progress scan (and
-        // its state) survives resizing across the breakpoint.
-        final discovery = _discoveryOpen
-            ? MediaQuery.removePadding(
-                context: context,
-                removeBottom: barShowing,
-                child: _buildDiscoveryOverlay(),
-              )
-            : null;
-        return Scaffold(
-          backgroundColor: KalinkaColors.background,
-          // Only the foot animates, as the browsing pane's does.
-          body: TweenAnimationBuilder<double>(
-            tween: Tween(end: barShowing ? barHeight : 0),
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : kMiniPlayerHideDuration,
-            curve: Curves.easeOutCubic,
-            builder: (context, inset, _) => Stack(
-              fit: StackFit.expand,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                ],
+              ),
+            );
+            // Hosted above the phone/tablet switch so an in-progress scan (and
+            // its state) survives resizing across the breakpoint.
+            final discovery = _discoveryOpen
+                ? MediaQuery.removePadding(
+                    context: context,
+                    removeBottom: barShowing,
+                    child: _buildDiscoveryOverlay(),
+                  )
+                : null;
+            return Scaffold(
+              backgroundColor: KalinkaColors.background,
+              // Only the foot animates, as the browsing pane's does.
+              body: TweenAnimationBuilder<double>(
+                tween: Tween(end: barShowing ? barHeight : 0),
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : kMiniPlayerHideDuration,
+                curve: Curves.easeOutCubic,
+                builder: (context, inset, _) => Stack(
+                  fit: StackFit.expand,
                   children: [
-                    if (rail != null)
-                      Padding(
-                        padding: EdgeInsets.only(bottom: inset),
-                        child: rail,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (rail != null)
+                          Padding(
+                            padding: EdgeInsets.only(bottom: inset),
+                            child: rail,
+                          ),
+                        panes,
+                      ],
+                    ),
+                    if (discovery != null)
+                      Positioned(
+                        key: const ValueKey('discovery-overlay'),
+                        left: railWidth,
+                        top: 0,
+                        right: 0,
+                        bottom: inset,
+                        child: discovery,
                       ),
-                    panes,
+                    if (isTablet && connected)
+                      Positioned(
+                        key: const ValueKey('queue-bar'),
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        // The bar is the player's, so its sheets open over its
+                        // pane.
+                        child: SheetAnchor(
+                          target: _playerPaneKey,
+                          child: QueueMiniPlayer(
+                            outputSwitcherKey: _outputSwitcherKey,
+                          ),
+                        ),
+                      ),
+                    // The same one-time tour as the phone, over the panes and the
+                    // bar alike.
+                    if (isTablet && _showCoachMarks)
+                      Positioned(
+                        key: const ValueKey('coach-marks'),
+                        left: railWidth,
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: _buildCoachMarks(),
+                      ),
                   ],
                 ),
-                if (discovery != null)
-                  Positioned(
-                    key: const ValueKey('discovery-overlay'),
-                    left: railWidth,
-                    top: 0,
-                    right: 0,
-                    bottom: inset,
-                    child: discovery,
-                  ),
-                if (isTablet && connected)
-                  Positioned(
-                    key: const ValueKey('queue-bar'),
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    // The bar is the player's, so its sheets open over its
-                    // pane.
-                    child: SheetAnchor(
-                      target: _playerPaneKey,
-                      child: QueueMiniPlayer(
-                        outputSwitcherKey: _outputSwitcherKey,
-                      ),
-                    ),
-                  ),
-                // The same one-time tour as the phone, over the panes and the
-                // bar alike.
-                if (isTablet && _showCoachMarks)
-                  Positioned(
-                    key: const ValueKey('coach-marks'),
-                    left: railWidth,
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: _buildCoachMarks(),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -1058,6 +1070,15 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               connectionKey: _connectionDotKey,
               handlesBack: !covered,
               navigationVisible: navigationVisible,
+              // The mini-player's slot, while it slides away under a search.
+              roomLent: isTablet
+                  ? null
+                  : Tween<double>(
+                      begin:
+                          kalinkaMiniPlayerHeight(context) +
+                          MediaQuery.paddingOf(context).bottom,
+                      end: 0,
+                    ).animate(_miniPlayerReveal),
             ),
     );
   }
@@ -1360,7 +1381,8 @@ class _ExpandedPlayerSheetState extends State<_ExpandedPlayerSheet> {
     // "No element" (Navigator.pop on empty history) mid-resize.
     if (!_dismissing &&
         kalinkaSplitLayout(
-          MediaQuery.sizeOf(context).width,
+          // The navigator's, from above the sheet's own safe area.
+          kalinkaShellWidth(Navigator.of(context).context),
           textScaler: MediaQuery.textScalerOf(context),
         )) {
       _dismissing = true;

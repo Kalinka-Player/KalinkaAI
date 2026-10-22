@@ -364,7 +364,10 @@ void main() {
         (w) =>
             w is Positioned &&
             w.width == 1 &&
-            w.left == player.left - kalinkaNavigationRailWidth(1400) - 1 &&
+            w.left ==
+                player.left -
+                    kalinkaNavigationRailWidth(1400, windowHeight: 900) -
+                    1 &&
             (w.top ?? 0) > 0,
       );
       expect(divider, findsOneWidget);

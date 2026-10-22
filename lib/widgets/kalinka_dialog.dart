@@ -101,8 +101,11 @@ class KalinkaDialog extends StatelessWidget {
             _buildCard(context),
           ],
         );
+        // The shell keeps clear of side insets; so do its panes.
+        final padding = MediaQuery.paddingOf(context);
+        final shellWidth = constraints.maxWidth - padding.horizontal;
         final split = kalinkaSplitLayout(
-          constraints.maxWidth,
+          shellWidth,
           textScaler: MediaQuery.textScalerOf(context),
         );
         if (side == KalinkaDialogSide.full ||
@@ -111,22 +114,28 @@ class KalinkaDialog extends StatelessWidget {
         }
         // The player's pane has a bounded width at the right; browsing
         // takes the rest.
-        final player = split
-            ? kalinkaPlayerPaneWidth(constraints.maxWidth)
-            : 0.0;
+        final player = split ? kalinkaPlayerPaneWidth(shellWidth) : 0.0;
         final rail = kalinkaNavigationRailWidth(
-          constraints.maxWidth,
+          shellWidth,
+          windowHeight: MediaQuery.sizeOf(context).height,
           textScaler: MediaQuery.textScalerOf(context),
         );
+        final railEdge = rail > 0 ? padding.left + rail : 0.0;
         final away = _buildTapToDismiss(context, dimmed: false);
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: side == KalinkaDialogSide.player
-              ? [Expanded(child: away), SizedBox(width: player, child: panel)]
+              ? [
+                  Expanded(child: away),
+                  SizedBox(width: player, child: panel),
+                  if (padding.right > 0)
+                    SizedBox(width: padding.right, child: away),
+                ]
               : [
-                  if (rail > 0) SizedBox(width: rail, child: away),
+                  if (rail > 0) SizedBox(width: railEdge, child: away),
                   Expanded(child: panel),
-                  if (split) SizedBox(width: player + 1, child: away),
+                  if (split)
+                    SizedBox(width: player + 1 + padding.right, child: away),
                 ],
         );
       },

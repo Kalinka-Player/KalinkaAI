@@ -132,8 +132,16 @@ class KalinkaToastHost extends ConsumerWidget {
     final inset = ref.watch(toastBottomInsetProvider);
     return LayoutBuilder(
       builder: (context, constraints) {
+        // The shell keeps clear of side insets; so do its panes.
+        final padding = MediaQuery.paddingOf(context);
+        final shellWidth = constraints.maxWidth - padding.horizontal;
         final isTablet = kalinkaSplitLayout(
-          constraints.maxWidth,
+          shellWidth,
+          textScaler: MediaQuery.textScalerOf(context),
+        );
+        final rail = kalinkaNavigationRailWidth(
+          shellWidth,
+          windowHeight: MediaQuery.sizeOf(context).height,
           textScaler: MediaQuery.textScalerOf(context),
         );
         return Stack(
@@ -143,7 +151,8 @@ class KalinkaToastHost extends ConsumerWidget {
               // Bottom-right of browsing, which ends where the player's pane
               // begins.
               Positioned(
-                right: kalinkaPlayerPaneWidth(constraints.maxWidth) + 1 + 20,
+                right:
+                    padding.right + kalinkaPlayerPaneWidth(shellWidth) + 1 + 20,
                 bottom: inset,
                 child: _layer(
                   const SizedBox(
@@ -157,10 +166,7 @@ class KalinkaToastHost extends ConsumerWidget {
               )
             else
               Positioned(
-                left: kalinkaNavigationRailWidth(
-                  constraints.maxWidth,
-                  textScaler: MediaQuery.textScalerOf(context),
-                ),
+                left: rail > 0 ? padding.left + rail : 0.0,
                 right: 0,
                 bottom: 0,
                 child: _layer(KalinkaToastOverlay(bottomOffset: inset)),

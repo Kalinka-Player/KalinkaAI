@@ -37,18 +37,44 @@ const double kKalinkaWideRailWidth = 200;
 /// The rail names each destination beside its icon from here.
 const double kKalinkaWideRailBreakpoint = 1280;
 
+/// Below this height (a phone turned on its side) there is no rail: the
+/// window is wide enough, but too short to spare a column for it.
+const double kKalinkaRailMinHeight = 480;
+
 /// Persistent navigation fits beside a useful single browsing pane from here.
 double kalinkaNavigationRailWidth(
   double windowWidth, {
+  required double windowHeight,
   TextScaler textScaler = TextScaler.noScaling,
 }) {
-  if (windowWidth < 720 || textScaler.scale(12) > 18) return 0;
+  if (windowWidth < 720 ||
+      windowHeight < kKalinkaRailMinHeight ||
+      textScaler.scale(12) > 18) {
+    return 0;
+  }
   final text = textScaler.scale(14) / 14;
   if (windowWidth < kKalinkaWideRailBreakpoint || text > 1.3) {
     return kKalinkaRailWidth;
   }
   // Grows with the text so the names keep their room.
   return kKalinkaWideRailWidth * text.clamp(1.0, 1.3);
+}
+
+/// The shell's width, for what is laid over the whole window: the shell
+/// keeps clear of side insets, and its rail and split are judged on what is
+/// left. Only above the shell, where those insets are still in MediaQuery.
+double kalinkaShellWidth(BuildContext context) =>
+    MediaQuery.sizeOf(context).width - MediaQuery.paddingOf(context).horizontal;
+
+/// Where the rail ends in window coordinates, past the left inset; zero
+/// without one. Only above the shell, as [kalinkaShellWidth].
+double kalinkaRailEdge(BuildContext context) {
+  final rail = kalinkaNavigationRailWidth(
+    kalinkaShellWidth(context),
+    windowHeight: MediaQuery.sizeOf(context).height,
+    textScaler: MediaQuery.textScalerOf(context),
+  );
+  return rail > 0 ? MediaQuery.paddingOf(context).left + rail : 0;
 }
 
 /// Leave room for navigation and music browsing while keeping useful artwork.
@@ -62,7 +88,12 @@ bool kalinkaSplitLayout(
 }) =>
     windowWidth >= kKalinkaTabletBreakpoint &&
     windowWidth -
-            kalinkaNavigationRailWidth(windowWidth, textScaler: textScaler) -
+            // Whatever the height: a short window keeps a single pane.
+            kalinkaNavigationRailWidth(
+              windowWidth,
+              windowHeight: double.infinity,
+              textScaler: textScaler,
+            ) -
             kalinkaPlayerPaneWidth(windowWidth) -
             1 >=
         520 * (textScaler.scale(16) / 16).clamp(1.0, double.infinity);
