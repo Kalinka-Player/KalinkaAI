@@ -3,6 +3,7 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -886,6 +887,24 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   bool _isShown(int visitId) =>
       ref.read(searchSessionProvider).visitId == visitId;
 
+  /// Scroll notifications can arrive mid-layout, as a list restarts its
+  /// fling when its extent changes; whatever listens is rebuilt only once
+  /// that layout is done, and with what was stored last by then.
+  void _afterLayout(VoidCallback write) {
+    if (SchedulerBinding.instance.schedulerPhase !=
+        SchedulerPhase.persistentCallbacks) {
+      write();
+      return;
+    }
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (mounted) write();
+    });
+  }
+
+  void _showCatalogSurface(int id) => _afterLayout(() {
+    if (_isShown(id)) _catalogSurface.value = _catalogSurfaceOf(id);
+  });
+
   Widget _buildVisit(SearchSessionState visit) {
     if (visit.activeView == FindMusicView.results) {
       return visit.resultsAvailable
@@ -914,15 +933,16 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
             metrics != null &&
             metrics.axis == Axis.vertical) {
           // Overscroll at the top keeps the cover in place.
-          final offset = math.max(0.0, metrics.pixels);
-          _albumOffsets[id] = offset;
-          if (_isShown(id)) _albumOffset.value = offset;
+          _albumOffsets[id] = math.max(0.0, metrics.pixels);
+          _afterLayout(() {
+            if (_isShown(id)) _albumOffset.value = _albumOffsets[id] ?? 0;
+          });
         } else if (CatalogSliverHeader.appliesTo(page) &&
             depth == 0 &&
             metrics != null &&
             metrics.axis == Axis.vertical) {
           _catalogOffsets[id] = math.max(0.0, metrics.pixels);
-          if (_isShown(id)) _catalogSurface.value = _catalogSurfaceOf(id);
+          _showCatalogSurface(id);
         }
         if (notification is UserScrollNotification) {
           _closeSearchOnScroll(id, notification);
@@ -938,7 +958,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         },
         onHeaderCollapseExtent: (extent) {
           _catalogExtents[id] = extent;
-          if (_isShown(id)) _catalogSurface.value = _catalogSurfaceOf(id);
+          _showCatalogSurface(id);
         },
         onAlbumHeaderHeight: page.isAlbum
             ? (height) {

@@ -25,6 +25,7 @@ import 'package:kalinka/widgets/kalinka_top_bar.dart';
 import 'package:kalinka/widgets/overlay_card.dart';
 import 'package:kalinka/widgets/search/folder_trail.dart';
 import 'package:kalinka/widgets/search/album_page_header.dart';
+import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 import 'package:kalinka/widgets/search/catalog_sliver_header.dart';
 import 'package:kalinka/widgets/search/search_composer.dart';
@@ -429,6 +430,42 @@ void main() {
       expect(headerColors(tester).first.a, 0);
     });
   }
+
+  testWidgets('an album flung down, left and opened again keeps its cover', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(427, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final container = await pumpSurface(tester, topInset: 24);
+    void open() => container
+        .read(searchSessionProvider.notifier)
+        .openCatalog(id: 'kalinka:localfiles:album:example', title: 'Abbey');
+    final list = find
+        .descendant(
+          of: find.byType(CatalogPageView),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    final cover = find.byKey(const ValueKey('album-backdrop'));
+
+    open();
+    await tester.pumpAndSettle();
+    final opened = tester.getRect(cover);
+    // Flings land mid-layout as later rows arrive; nothing may throw.
+    for (var i = 0; i < 10; i++) {
+      await tester.fling(list, const Offset(0, -400), 2000);
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    container.read(searchSessionProvider.notifier).goBack();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    open();
+    await tester.pumpAndSettle();
+    expect(tester.state<ScrollableState>(list).position.pixels, 0);
+    expect(tester.getRect(cover), opened);
+  });
 
   testWidgets('returning from a catalog restores the backdrop with the list', (
     tester,
