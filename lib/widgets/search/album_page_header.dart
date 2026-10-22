@@ -445,11 +445,18 @@ class AlbumPageBackdrop extends StatelessWidget {
   final ValueListenable<double> headerHeight;
   final ValueListenable<double> scrollOffset;
 
+  /// Darkens the top for the status bar and breadcrumb.
+  final bool shaded;
+
+  final Key artworkKey;
+
   const AlbumPageBackdrop({
     super.key,
     required this.page,
     required this.headerHeight,
     required this.scrollOffset,
+    this.shaded = true,
+    this.artworkKey = const ValueKey('album-backdrop'),
   });
 
   @override
@@ -471,36 +478,49 @@ class AlbumPageBackdrop extends StatelessWidget {
                 child: child,
               ),
               child: RepaintBoundary(
-                child: AlbumArtwork(
-                  key: const ValueKey('album-backdrop'),
-                  page: page,
-                ),
+                child: AlbumArtwork(key: artworkKey, page: page),
               ),
             ),
           ),
           // Protect the white system icons and breadcrumb over pale art;
           // the separate, content-sized shade in the header covers its text.
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: chromeHeight + 48,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0, chromeHeight / (chromeHeight + 48), 1],
-                  colors: [
-                    KalinkaColors.background.withValues(alpha: 0.84),
-                    KalinkaColors.background.withValues(alpha: 0.84),
-                    KalinkaColors.background.withValues(alpha: 0),
-                  ],
-                ),
-              ),
+          if (shaded)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: chromeHeight + AlbumStatusShade.fade,
+              child: const AlbumStatusShade(),
             ),
-          ),
         ],
+      ),
+    );
+  }
+}
+
+/// The shade over the top of an album's cover: solid behind the status bar
+/// and breadcrumb, then fading out over [fade].
+class AlbumStatusShade extends StatelessWidget {
+  const AlbumStatusShade({super.key});
+
+  static const fade = 48.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final chromeHeight =
+        MediaQuery.paddingOf(context).top + kKalinkaTopBarHeight;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [0, chromeHeight / (chromeHeight + fade), 1],
+          colors: [
+            KalinkaColors.background.withValues(alpha: 0.84),
+            KalinkaColors.background.withValues(alpha: 0.84),
+            KalinkaColors.background.withValues(alpha: 0),
+          ],
+        ),
       ),
     );
   }

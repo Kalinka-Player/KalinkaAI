@@ -174,6 +174,14 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   final _albumHeaderHeight = ValueNotifier<double>(0);
   final _albumOffsets = <int, double>{};
   final _albumHeaderHeights = <int, double>{};
+
+  /// Inside the stretch of the album's cover behind its list, where the
+  /// list's own scroll notifications are sent on.
+  final _albumStretchKey = GlobalKey();
+
+  /// Whether lists here stretch when pulled past an end, as on Android.
+  bool _albumStretches = false;
+
   final _visitPages = <int, (SearchSessionState, Widget)>{};
   final _catalogHeadersCollapsed = <int, bool>{};
 
@@ -661,6 +669,14 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           // A wide album sets its cover beside the tracks, not behind them.
           final onAlbum =
               albumPage && constraints.maxWidth < kAlbumSideLayoutWidth;
+          final chromeHeight =
+              MediaQuery.paddingOf(context).top + kKalinkaTopBarHeight;
+          _albumStretches =
+              ScrollConfiguration.of(context).buildOverscrollIndicator(
+                context,
+                const SizedBox.shrink(),
+                const ScrollableDetails.vertical(),
+              ) is StretchingOverscrollIndicator;
           // Beside the player's pane, backdrops fade out before meeting it.
           final besidePlayer = kalinkaSplitLayout(
             MediaQuery.sizeOf(context).width,
@@ -670,15 +686,28 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
             color: KalinkaColors.background,
             child: Stack(
               children: [
+                // Behind the bar only; the rest of the cover is drawn behind
+                // the list, so it stretches with it.
                 if (onAlbum)
                   Positioned(
                     top: 0,
                     left: 0,
                     right: 0,
-                    child: AlbumPageBackdrop(
-                      page: session.catalogPage,
-                      headerHeight: _albumHeaderHeight,
-                      scrollOffset: _albumOffset,
+                    height: chromeHeight,
+                    // Each copy repaints alone as the page scrolls.
+                    child: RepaintBoundary(
+                      child: ClipRect(
+                        child: OverflowBox(
+                          alignment: Alignment.topCenter,
+                          maxHeight: double.infinity,
+                          child: AlbumPageBackdrop(
+                            page: session.catalogPage,
+                            headerHeight: _albumHeaderHeight,
+                            scrollOffset: _albumOffset,
+                            artworkKey: const ValueKey('album-backdrop-top'),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 // The backdrop behind the Discover root, full surface width and
@@ -785,7 +814,19 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                       )
                     else
                       _buildHeader(session),
-                    Expanded(child: _buildVisits(session)),
+                    Expanded(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (onAlbum)
+                            ..._albumBehindList(session, chromeHeight),
+                          KeyedSubtree(
+                            key: const ValueKey('visits'),
+                            child: _buildVisits(session),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
                 if (_barSearchOpen && _barSearchOf(session) != null)
@@ -901,6 +942,60 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     });
   }
 
+  /// The album's cover from the bar's foot down, behind the list and the
+  /// same size as it, stretched by the list's own notifications so that the
+  /// two stretch as one; the top shade's fade over it.
+  List<Widget> _albumBehindList(SearchSessionState session, double chrome) => [
+    Positioned.fill(
+      key: const ValueKey('album-behind-list'),
+      child: RepaintBoundary(
+        child: ClipRect(
+          child: NotificationListener<ScrollNotification>(
+            // Sent on from the list, which has already told everyone else.
+            onNotification: (_) => true,
+            child: StretchingOverscrollIndicator(
+              axisDirection: AxisDirection.down,
+              clipBehavior: Clip.none,
+              child: Stack(
+                key: _albumStretchKey,
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    top: -chrome,
+                    left: 0,
+                    right: 0,
+                    child: AlbumPageBackdrop(
+                      page: session.catalogPage,
+                      headerHeight: _albumHeaderHeight,
+                      scrollOffset: _albumOffset,
+                      shaded: false,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+    Positioned(
+      key: const ValueKey('album-shade-fade'),
+      top: -chrome,
+      left: 0,
+      right: 0,
+      height: chrome + AlbumStatusShade.fade,
+      child: const IgnorePointer(child: AlbumStatusShade()),
+    ),
+  ];
+
+  void _forwardAlbumStretch(int id, ScrollNotification notification) {
+    if (!_albumStretches) return;
+    _afterLayout(() {
+      final target = _albumStretchKey.currentContext;
+      if (target != null && _isShown(id)) notification.dispatch(target);
+    });
+  }
+
   void _showCatalogSurface(int id) => _afterLayout(() {
     if (_isShown(id)) _catalogSurface.value = _catalogSurfaceOf(id);
   });
@@ -937,6 +1032,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           _afterLayout(() {
             if (_isShown(id)) _albumOffset.value = _albumOffsets[id] ?? 0;
           });
+          if (notification is ScrollNotification) {
+            _forwardAlbumStretch(id, notification);
+          }
         } else if (CatalogSliverHeader.appliesTo(page) &&
             depth == 0 &&
             metrics != null &&
