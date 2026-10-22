@@ -388,9 +388,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       Widget? sideHeader,
       double sideHeaderWidth = 0,
     }) => InfiniteListView(
+      // Scroll kept for this visit only: the same page opened again starts
+      // at its top.
       key: page.folderLayout
           ? ValueKey(listing.id)
-          : PageStorageKey(listing.id),
+          : PageStorageKey((visit.visitId, listing.id)),
       // Only the facets the server honours restart the list, so touching an
       // inert placeholder never costs a refetch.
       reloadKey: '${listing.id}|${query.serverKey(capabilities)}|$revision',
