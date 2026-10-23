@@ -18,9 +18,10 @@ enum ShellDestination { home, results, source, collections, configuration }
 /// Above and below the destinations.
 const _railInset = 4.0;
 
-/// How far each item's highlight keeps in from the rail's sides, and its
-/// corners.
+/// How far each item's highlight keeps in from the sides of the wide rail and
+/// of the narrow one, and its corners.
 const _itemInset = 6.0;
+const _compactItemInset = 4.0;
 const _itemRadius = 12.0;
 
 /// The server's own controls, pinned under Configuration.
@@ -295,7 +296,7 @@ class _NavigationButton extends StatelessWidget {
             padding: WidgetStatePropertyAll(
               extended
                   ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
-                  : const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  : const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
             ),
             alignment: extended ? AlignmentDirectional.centerStart : null,
             shape: const WidgetStatePropertyAll(
@@ -352,7 +353,10 @@ class _NavigationButton extends StatelessWidget {
         ? Duration.zero
         : const Duration(milliseconds: 180);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: _itemInset, vertical: 2),
+      padding: EdgeInsets.symmetric(
+        horizontal: extended ? _itemInset : _compactItemInset,
+        vertical: 2,
+      ),
       // The current destination on grey: the rail is chrome, on screen all
       // session, which berry would leave meaning nothing in particular.
       child: Stack(
