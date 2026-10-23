@@ -184,14 +184,14 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   // retained visit keeps its own, so Back lands with them as they were.
   final _albumOffset = ValueNotifier<double>(0);
   final _albumHeaderHeight = ValueNotifier<double>(0);
-  final _albumTitleInset = ValueNotifier<double>(0);
+  final _albumInsets = ValueNotifier<AlbumHeaderInsets?>(null);
   final _albumOffsets = <int, double>{};
   final _albumHeaderHeights = <int, double>{};
-  final _albumTitleInsets = <int, double>{};
+  final _albumInsetsOf = <int, AlbumHeaderInsets>{};
   late final _albumBar = Listenable.merge([
     _albumOffset,
     _albumHeaderHeight,
-    _albumTitleInset,
+    _albumInsets,
   ]);
 
   /// Inside the stretch of the album's cover behind its list, where the
@@ -341,7 +341,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     _albumOffset.dispose();
     _catalogSurface.dispose();
     _albumHeaderHeight.dispose();
-    _albumTitleInset.dispose();
+    _albumInsets.dispose();
     _composerController.removeListener(_onTextChange);
     _overlayCtrl.dispose();
     _filtersCtrl.dispose();
@@ -632,7 +632,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       _barSearchOpen = false;
       _albumOffset.value = _albumOffsets[visit] ?? 0;
       _albumHeaderHeight.value = _albumHeaderHeights[visit] ?? 0;
-      _albumTitleInset.value = _albumTitleInsets[visit] ?? 0;
+      _albumInsets.value = _albumInsetsOf[visit];
       _catalogSurface.value = _catalogSurfaceOf(visit);
       final kept = {
         for (final each in ref.read(searchSessionProvider).allVisits)
@@ -640,7 +640,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       };
       _albumOffsets.removeWhere((id, _) => !kept.contains(id));
       _albumHeaderHeights.removeWhere((id, _) => !kept.contains(id));
-      _albumTitleInsets.removeWhere((id, _) => !kept.contains(id));
+      _albumInsetsOf.removeWhere((id, _) => !kept.contains(id));
       _catalogOffsets.removeWhere((id, _) => !kept.contains(id));
       _catalogExtents.removeWhere((id, _) => !kept.contains(id));
     });
@@ -1079,10 +1079,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                 if (_isShown(id)) _albumHeaderHeight.value = height;
               }
             : null,
-        onAlbumTitleInset: page.isAlbum
-            ? (inset) {
-                _albumTitleInsets[id] = inset;
-                if (_isShown(id)) _albumTitleInset.value = inset;
+        onAlbumInsets: page.isAlbum
+            ? (insets) {
+                _albumInsetsOf[id] = insets;
+                if (_isShown(id)) _albumInsets.value = insets;
               }
             : null,
         onBackToCatalogs: () =>
@@ -1106,16 +1106,29 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         )
       : kKalinkaTopBarHeight;
 
-  /// How far the bar over an album's cover has filled in: over the last
-  /// stretch before the album's title scrolls away under it, so the bar is
-  /// solid by the time it takes the title over.
-  double get _albumBarFill {
+  /// How far the album's title has gone under the bar, over the last
+  /// stretch before it is out of sight.
+  double get _albumTitleGone {
     final height = _albumHeaderHeight.value;
-    if (height <= 0) return 0;
-    final titleGone = height - _albumTitleInset.value;
+    final insets = _albumInsets.value;
+    if (height <= 0 || insets == null) return 0;
+    final titleGone = height - insets.title;
     return ((_albumOffset.value - titleGone) / kKalinkaTopBarHeight + 1).clamp(
       0.0,
       1.0,
+    );
+  }
+
+  /// How far the bar over an album's cover has filled in: as dark as the
+  /// header's shade where the two meet, so there is no step between them,
+  /// and solid by the time the title has gone under it.
+  double get _albumBarFill {
+    final height = _albumHeaderHeight.value;
+    final insets = _albumInsets.value;
+    if (height <= 0 || insets == null) return 0;
+    return math.max(
+      _albumTitleGone,
+      AlbumPageHeader.shadeAt(height - _albumOffset.value, insets),
     );
   }
 
@@ -1543,7 +1556,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       listenable: _albumBar,
       builder: (context, child) => Opacity(
         key: const ValueKey('album-bar-title'),
-        opacity: const Interval(0.5, 1).transform(_albumBarFill),
+        opacity: const Interval(0.5, 1).transform(_albumTitleGone),
         child: child,
       ),
       child: heading,

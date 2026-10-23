@@ -61,8 +61,8 @@ class CatalogPageView extends ConsumerStatefulWidget {
   /// navigation. The header reports its height so that cover ends at the list.
   final ValueChanged<double>? onAlbumHeaderHeight;
 
-  /// How far above that header's foot the album's title ends.
-  final ValueChanged<double>? onAlbumTitleInset;
+  /// Where in that header the album's title ends and its shade starts.
+  final ValueChanged<AlbumHeaderInsets>? onAlbumInsets;
   final ValueChanged<bool>? onHeaderCollapsed;
 
   /// How far a catalog's header scrolls before it is fully collapsed.
@@ -76,7 +76,7 @@ class CatalogPageView extends ConsumerStatefulWidget {
     required this.page,
     required this.onBackToCatalogs,
     this.onAlbumHeaderHeight,
-    this.onAlbumTitleInset,
+    this.onAlbumInsets,
     this.onHeaderCollapsed,
     this.onHeaderCollapseExtent,
   });
@@ -319,7 +319,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               trackCount: _total < 0 ? null : _total,
               totalDurationSeconds: _albumDuration,
               showArtwork: widget.onAlbumHeaderHeight == null,
-              onTitleInset: widget.onAlbumTitleInset,
+              onInsets: widget.onAlbumInsets,
             ),
           )
         : page.folderLayout
