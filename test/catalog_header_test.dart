@@ -46,8 +46,22 @@ final _catalog = CatalogPage.category(
 final _expanded = find.byKey(const ValueKey('catalog-expanded-title'));
 final _collapsed = find.byKey(const ValueKey('catalog-collapsed-title'));
 final _barFilters = find.byKey(const ValueKey('bar-filters'));
-final _divider = find.byKey(const ValueKey('catalog-header-divider'));
 final _surface = find.byKey(const ValueKey('catalog-header-surface'));
+
+/// Where the header ends and the content starts, across the gutters. Fully
+/// collapsed, the header has no height and counts as offstage.
+Rect _foot(WidgetTester tester) {
+  final surface = tester.getRect(
+    find.byKey(const ValueKey('catalog-header-surface'), skipOffstage: false),
+  );
+  return Rect.fromLTRB(
+    surface.left + 16,
+    surface.bottom,
+    surface.right - 16,
+    surface.bottom,
+  );
+}
+
 final _barSearch = find.byKey(const ValueKey('catalog-bar-search'));
 final _unrolled = find.byKey(const ValueKey('catalog-unrolled-search'));
 final _barField = find.byKey(const ValueKey('catalog-bar-field'));
@@ -266,18 +280,18 @@ void main() {
       final title = tester.getRect(_expanded);
       final toggle = tester.getRect(_barPresentation);
       final pin = tester.getRect(find.byType(CatalogPinButton));
-      final divider = tester.getRect(_divider);
+      final foot = _foot(tester);
       expect(pin.center.dy, closeTo(title.center.dy, 0.01));
       expect(pin.left, closeTo(title.right + 8, 0.01));
-      expect(pin.bottom, lessThan(divider.top));
+      expect(pin.bottom, lessThan(foot.top));
       // Grid/List is the bar's, never the header's.
       expect(toggle.bottom, lessThanOrEqualTo(title.top));
-      if (inline) expect(divider.top, lessThan(210));
+      if (inline) expect(foot.top, lessThan(210));
       expect(toggle.width, greaterThanOrEqualTo(48));
       expect(toggle.height, greaterThanOrEqualTo(48));
       expect(find.byType(PresentationToggle), findsOneWidget);
       final card = tester.getRect(find.byType(ArtworkGridCard).first);
-      expect(card.left + ArtworkGridCard.inset, closeTo(divider.left, 0.01));
+      expect(card.left + ArtworkGridCard.inset, closeTo(foot.left, 0.01));
       await _capture(tester, key, 'compact-catalog-$width-$scale');
       expect(tester.takeException(), isNull);
     });
@@ -479,7 +493,7 @@ void main() {
         captureKey: key,
       );
       final viewportTop = tester.getRect(find.byTooltip('Back')).bottom + 2;
-      final initialDividerTop = tester.getRect(_divider).top;
+      final initialFootTop = _foot(tester).top;
       final identity = find.byKey(const ValueKey('catalog-identity'));
       // The title hands over once it has passed under the bar.
       final headingClearance = tester.getRect(identity).bottom - viewportTop;
@@ -498,8 +512,8 @@ void main() {
         scroll.position.jumpTo(offset);
         await tester.pumpAndSettle();
         expect(
-          tester.getRect(_divider).top,
-          closeTo(initialDividerTop - offset.clamp(0.0, extent), 0.1),
+          _foot(tester).top,
+          closeTo(initialFootTop - offset.clamp(0.0, extent), 0.1),
           reason: 'The list should follow the scroll without a layout jump.',
         );
         expect(find.byType(CatalogPinButton), findsOneWidget);
@@ -509,7 +523,7 @@ void main() {
         );
         if (inlinePin.evaluate().isNotEmpty) {
           final rect = tester.getRect(inlinePin);
-          expect(rect.bottom, lessThanOrEqualTo(tester.getRect(_divider).top));
+          expect(rect.bottom, lessThanOrEqualTo(_foot(tester).top));
         }
         // In the header until it is out of sight under the bar, then only
         // in the bar.
@@ -530,7 +544,7 @@ void main() {
           if (control.evaluate().isNotEmpty) {
             expect(
               tester.getRect(control).bottom,
-              lessThanOrEqualTo(tester.getRect(_divider).top),
+              lessThanOrEqualTo(_foot(tester).top),
             );
           }
         }
@@ -619,7 +633,7 @@ void main() {
           tester.getRect(find.byType(CatalogPinButton)).center.dy,
           tester.getRect(find.byTooltip('Back')).center.dy,
         );
-        // Nothing stays under the bar but the divider.
+        // Nothing stays under the bar.
         expect(find.byTooltip('Filters').hitTestable(), findsOneWidget);
         final back = tester.getRect(find.byTooltip('Back')).center.dy;
         expect(tester.getRect(search).center.dy, closeTo(back, 0.5));
@@ -629,12 +643,12 @@ void main() {
               kKalinkaTopBarHeight,
               double.infinity,
             );
-        expect(tester.getRect(_divider).top, closeTo(barHeight, 0.1));
-        final pinned = tester.getRect(_divider);
+        expect(_foot(tester).top, closeTo(barHeight, 0.1));
+        final pinned = _foot(tester);
         await _capture(tester, key, '${size.width}-$scale-collapsed');
         scroll.position.jumpTo(700);
         await tester.pumpAndSettle();
-        expect(tester.getRect(_divider), pinned);
+        expect(_foot(tester), pinned);
         scroll.position.jumpTo(0);
         await tester.pumpAndSettle();
         expect(_collapsed, findsNothing);
@@ -734,7 +748,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(_collapsed, findsOneWidget);
     expect(find.byType(CatalogPinButton), findsOneWidget);
-    expect(tester.getRect(_divider).top, kKalinkaTopBarHeight);
+    expect(_foot(tester).top, kKalinkaTopBarHeight);
     expect(tester.takeException(), isNull);
   });
 
