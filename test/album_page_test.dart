@@ -17,6 +17,7 @@ import 'package:kalinka/widgets/search/album_page_header.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search/track_group_actions.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
+import 'package:kalinka/widgets/shelf_heading.dart';
 
 import 'support/queue_api.dart';
 
@@ -186,10 +187,27 @@ void main() {
     expect(rows.map((row) => row.albumTrackNumber), [2, 3, 1, 2]);
     expect(find.text('DISC 1'), findsOneWidget);
     expect(find.text('DISC 2'), findsOneWidget);
-    // A disc's name starts where its tracks' titles do.
+    // A disc's name starts at its tracks' own edge, with no rule after it.
     expect(
       tester.getRect(find.text('DISC 2')).left,
-      closeTo(tester.getRect(find.text('Song 3')).left, 0.01),
+      closeTo(
+        tester
+            .getRect(
+              find.ancestor(
+                of: find.text('Song 3'),
+                matching: find.byType(SearchTrackRow),
+              ),
+            )
+            .left,
+        0.01,
+      ),
+    );
+    expect(
+      find.descendant(
+        of: find.byType(ShelfHeading),
+        matching: find.byType(Divider),
+      ),
+      findsNothing,
     );
     expect(find.text('The Beatles'), findsOneWidget);
     expect(find.text('Guest artist'), findsOneWidget);

@@ -903,8 +903,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     return wanted.clamp(1, fits < 1 ? 1 : fits).clamp(1, 10);
   }
 
-  /// Over each disc's first track, a section heading in line with the
-  /// titles under it.
+  /// Over each disc's first track, a section heading from the rows' own
+  /// edge, a shade under the titles so it reads apart from them.
   Widget? _discHeading(int index, List<BrowseItem> loaded, bool multiDisc) {
     final disc = loaded[index].track?.discNumber;
     // A single-disc album needs no "Disc 1" heading.
@@ -914,12 +914,15 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       return null;
     }
     return Padding(
-      padding: EdgeInsets.only(
-        left: BrowseItemRows.trackTextInset,
-        top: index == 0 ? 8 : 24,
-        bottom: 10,
+      padding: EdgeInsets.only(top: index == 0 ? 8 : 24, bottom: 10),
+      child: Semantics(
+        header: true,
+        child: ShelfHeading(
+          title: 'DISC $disc',
+          titleColor: KalinkaColors.textSectionLabel,
+          showDivider: false,
+        ),
       ),
-      child: Semantics(header: true, child: ShelfHeading(title: 'DISC $disc')),
     );
   }
 
