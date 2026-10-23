@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,165 +10,380 @@ import '../providers/kalinka_player_api_provider.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/play_next.dart';
+import 'scroll_edge_fade.dart';
 import 'search/add_to_collection_sheet.dart';
-import 'search_cards/action_icon_chip.dart';
+import 'search_cards/action_pill_button.dart';
 
-/// Bottom batch bar shown during multi-select mode. One row, in two stages:
-/// what to do with the selection — play it now, queue it, keep it — and,
-/// behind `Queue…`, where in the queue it goes. Splitting the queueing in two
-/// is what leaves room for a third action; both stages stand the same height,
-/// so stepping between them moves nothing above the bar.
+/// What the batch bar offers, in its order.
+enum _Action {
+  playAll('Play all', Icons.play_arrow_rounded),
+  enqueue('Enqueue', Icons.playlist_add_rounded),
+  playNext('Play next', Icons.playlist_play_rounded),
+  collect('Add to collection', Icons.library_add_rounded);
+
+  const _Action(this.label, this.icon);
+  final String label;
+  final IconData icon;
+}
+
+/// Short of room on a floating bar, these give way behind the chevron, first
+/// to last.
+const _setAside = [_Action.playNext, _Action.collect];
+
+/// Bottom batch bar shown during multi-select mode: what the selection comes
+/// to, with the cross that drops it, beside or over what can be done with it.
+/// Across a narrow pane it is docked under the page, so the page's end stays
+/// in reach, and its actions scroll sideways where they do not all fit; on a
+/// wide one it is a card over the page's bottom right, as wide as it needs.
 class MultiSelectBottomBar extends ConsumerStatefulWidget {
   const MultiSelectBottomBar({super.key});
+
+  /// From this pane width the bar floats as a card over the page.
+  static const floatFrom = 600.0;
+
+  /// Whether the bar floats over a pane [width] wide, rather than docks.
+  static bool floatsIn(double width) => width >= floatFrom;
 
   @override
   ConsumerState<MultiSelectBottomBar> createState() =>
       _MultiSelectBottomBarState();
 }
 
-class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar> {
-  /// Whether the bar is asking where in the queue the selection lands. The bar
-  /// leaves the tree with the selection, so every selection starts over.
-  bool _placing = false;
+class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar>
+    with SingleTickerProviderStateMixin {
+  static const _margin = 16.0;
+  static const _gap = 8.0;
+  static const _padding = EdgeInsets.fromLTRB(14, 4, 4, 4);
+
+  /// Kept after the actions where they have a line of their own.
+  static const _actionsEnd = 10.0;
+
+  /// A compact [IconButton]'s, and an icon-only pill's, width.
+  static const _iconWidth = 40.0;
+  static const _swap = Duration(milliseconds: 200);
+
+  late final AnimationController _reveal = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 240),
+  )..forward();
+  late final _revealCurve = CurvedAnimation(
+    parent: _reveal,
+    curve: Curves.easeOutCubic,
+  );
+
+  /// Whether the row shows the actions set aside rather than the rest.
+  bool _more = false;
+
+  @override
+  void dispose() {
+    _revealCurve.dispose();
+    _reveal.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final selection = ref.watch(selectionStateProvider);
-    final tally = _trackTally(selection);
+    final ready = selection.count > 0;
+    final summary = TextSpan(
+      style: KalinkaFonts.sans(
+        fontSize: KalinkaTypography.baseSize + 1,
+        fontWeight: FontWeight.w700,
+        color: KalinkaColors.textPrimary,
+      ),
+      children: [
+        TextSpan(text: '${selection.count} selected'),
+        TextSpan(
+          text: '   ${_trackTally(selection)}',
+          style: KalinkaFonts.sans(
+            fontSize: KalinkaTypography.baseSize - 1,
+            fontWeight: FontWeight.w500,
+            color: KalinkaColors.textMuted,
+          ),
+        ),
+      ],
+    );
 
-    return AnimatedSlide(
-      offset: selection.isActive ? Offset.zero : const Offset(0, 1),
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOutQuart,
-      child: AnimatedOpacity(
-        opacity: selection.isActive ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 300),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-          decoration: BoxDecoration(
-            color: KalinkaColors.surfaceInput,
-            border: const Border(
-              top: BorderSide(color: KalinkaColors.borderDefault, width: 1),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 8,
-                offset: const Offset(0, -2),
+    Widget button(_Action action) => ActionPillButton(
+      key: ValueKey(action),
+      label: action.label,
+      icon: action.icon,
+      accent: action == _Action.playAll,
+      enabled: ready,
+      onTap: switch (action) {
+        _Action.playAll => () => _playNow(selection),
+        _Action.enqueue => () => _appendToQueue(selection),
+        _Action.playNext => () => _playNext(selection),
+        _Action.collect => _saveToCollection,
+      },
+    );
+
+    final close = IconButton(
+      tooltip: 'Cancel selection',
+      onPressed: () =>
+          ref.read(selectionStateProvider.notifier).exitSelectionMode(),
+      icon: const Icon(Icons.close_rounded, size: 22),
+      color: KalinkaColors.textSecondary,
+      visualDensity: VisualDensity.compact,
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final floating = MultiSelectBottomBar.floatsIn(constraints.maxWidth);
+        final full =
+            constraints.maxWidth -
+            (floating ? 2 * _margin : 0) -
+            _padding.horizontal;
+        final room = full - _actionsEnd;
+
+        final pillWidths = {
+          for (final action in _Action.values)
+            action: ActionPillButton.widthOf(context, action.label),
+        };
+        double rowWidth(List<_Action> actions, {required bool chevron}) {
+          var width = (actions.length - 1) * _gap;
+          for (final action in actions) {
+            width += pillWidths[action]!;
+          }
+          return chevron ? width + _gap + _iconWidth : width;
+        }
+
+        final title = Text.rich(
+          summary,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
+        if (!floating) {
+          return _revealed(
+            _docked(
+              title: title,
+              close: close,
+              actions: Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: _gap,
+                children: [for (final action in _Action.values) button(action)],
               ),
+              inline:
+                  _widthOf(context, summary) +
+                      2 * _gap +
+                      rowWidth(_Action.values, chevron: false) +
+                      _iconWidth <=
+                  full,
+            ),
+          );
+        }
+
+        final shown = [..._Action.values];
+        for (final action in _setAside) {
+          final chevron = shown.length < _Action.values.length;
+          if (rowWidth(shown, chevron: chevron) <= room) break;
+          shown.remove(action);
+        }
+        final aside = [
+          for (final action in _Action.values)
+            if (!shown.contains(action)) action,
+        ];
+        final more = _more && aside.isNotEmpty;
+        // Either row may be up, so the line takes the wider.
+        final widest = aside.isEmpty
+            ? rowWidth(shown, chevron: false)
+            : math.max(
+                rowWidth(shown, chevron: true),
+                rowWidth(aside, chevron: true),
+              );
+        final inline =
+            _widthOf(context, summary) + 2 * _gap + widest + _iconWidth <= full;
+
+        final actions = AnimatedSwitcher(
+          duration: _swap,
+          layoutBuilder: (current, previous) => Stack(
+            alignment: Alignment.centerLeft,
+            children: [...previous, ?current],
+          ),
+          child: Row(
+            key: ValueKey(more),
+            mainAxisSize: MainAxisSize.min,
+            spacing: _gap,
+            children: [
+              for (final action in more ? aside : shown) button(action),
+              if (aside.isNotEmpty)
+                Tooltip(
+                  message: more ? 'Back' : 'More actions',
+                  excludeFromSemantics: true,
+                  child: ActionPillButton(
+                    icon: more
+                        ? Icons.chevron_left_rounded
+                        : Icons.chevron_right_rounded,
+                    semanticsLabel: more ? 'Back' : 'More actions',
+                    onTap: () => setState(() => _more = !more),
+                  ),
+                ),
             ],
           ),
-          child: SafeArea(
+        );
+        final Widget content = inline
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(child: title),
+                  const SizedBox(width: 2 * _gap),
+                  actions,
+                  const SizedBox(width: _gap / 2),
+                  close,
+                ],
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: title),
+                      close,
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: _actionsEnd),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      // The set-aside actions may still be too wide for a
+                      // phone; they shrink a little rather than overflow.
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: actions,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+
+        return _revealed(
+          SafeArea(
             top: false,
-            child: _placing
-                ? _placementRow(selection, tally)
-                : _actionsRow(selection, tally),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(_margin, 0, _margin, _margin),
+              child: Align(
+                alignment: Alignment.bottomRight,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: KalinkaColors.surfaceInput,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: KalinkaColors.borderDefault),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: AnimatedSize(
+                    duration: _swap,
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.bottomRight,
+                    child: Padding(
+                      padding: _padding,
+                      child: IntrinsicWidth(child: content),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
+        );
+      },
+    );
+  }
+
+  /// Grows into place, and fades in, when the bar first shows.
+  Widget _revealed(Widget bar) => SizeTransition(
+    sizeFactor: _revealCurve,
+    alignment: Alignment.topCenter,
+    child: FadeTransition(opacity: _revealCurve, child: bar),
+  );
+
+  /// Across the pane's foot: on one line with the summary when [inline],
+  /// otherwise under it, scrolling sideways out to the bar's edges.
+  Widget _docked({
+    required Widget title,
+    required Widget close,
+    required Widget actions,
+    required bool inline,
+  }) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: KalinkaColors.surfaceInput,
+      border: const Border(
+        top: BorderSide(color: KalinkaColors.borderDefault, width: 1),
       ),
-    );
-  }
-
-  /// What can be done with the selection, and what it comes to.
-  Widget _actionsRow(SelectionState selection, String tally) {
-    final ready = selection.count > 0;
-    return Row(
-      children: [
-        ActionIconChip(
-          icon: Icons.close,
-          semanticsLabel: 'Cancel selection',
-          onTap: () {
-            ref.read(selectionStateProvider.notifier).exitSelectionMode();
-          },
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: _BarLabel(
-            title: '${selection.count} selected',
-            subtitle: tally,
-          ),
-        ),
-        const SizedBox(width: 8),
-        const _BarRule(),
-        const SizedBox(width: 8),
-        _BatchActionButton(
-          icon: Icons.play_arrow_rounded,
-          label: 'Play now',
-          look: _BatchLook.filled,
-          onTap: ready
-              ? () {
-                  _playNow(selection);
-                }
-              : null,
-        ),
-        const SizedBox(width: 8),
-        _BatchActionButton(
-          icon: Icons.playlist_add_rounded,
-          label: 'Queue…',
-          onTap: ready
-              ? () {
-                  setState(() => _placing = true);
-                }
-              : null,
-        ),
-        const SizedBox(width: 8),
-        _BatchActionButton(
-          icon: Icons.library_add_rounded,
-          label: 'Collection',
-          onTap: ready ? _saveToCollection : null,
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.3),
+          blurRadius: 8,
+          offset: const Offset(0, -2),
         ),
       ],
-    );
-  }
+    ),
+    child: SafeArea(
+      top: false,
+      child: inline
+          ? Padding(
+              padding: _padding,
+              child: Row(
+                children: [
+                  Expanded(child: title),
+                  const SizedBox(width: 2 * _gap),
+                  actions,
+                  const SizedBox(width: _gap / 2),
+                  close,
+                ],
+              ),
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: _padding.copyWith(bottom: 0),
+                  child: Row(
+                    children: [
+                      Expanded(child: title),
+                      close,
+                    ],
+                  ),
+                ),
+                ScrollEdgeFade(
+                  axis: Axis.horizontal,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: EdgeInsets.fromLTRB(
+                      _padding.left,
+                      0,
+                      _actionsEnd,
+                      _padding.bottom,
+                    ),
+                    child: actions,
+                  ),
+                ),
+              ],
+            ),
+    ),
+  );
 
-  /// Where in the queue the selection lands. Wider buttons than the stage
-  /// before it: there are two of them, and nothing else to fit.
-  Widget _placementRow(SelectionState selection, String tally) {
-    return Row(
-      children: [
-        ActionIconChip(
-          icon: Icons.chevron_left_rounded,
-          semanticsLabel: 'Back to actions',
-          onTap: () {
-            setState(() => _placing = false);
-          },
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          flex: 3,
-          child: _BarLabel(
-            title: 'QUEUE ${tally.toUpperCase()}',
-            titleStyle: KalinkaTextStyles.sectionLabel,
-            subtitle: 'Choose placement',
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 2,
-          child: _BatchActionButton(
-            icon: Icons.arrow_upward_rounded,
-            label: 'Play next',
-            look: _BatchLook.outlined,
-            width: null,
-            onTap: () {
-              _playNext(selection);
-            },
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 2,
-          child: _BatchActionButton(
-            icon: Icons.playlist_add_rounded,
-            label: 'Enqueue',
-            width: null,
-            onTap: () {
-              _appendToQueue(selection);
-            },
-          ),
-        ),
-      ],
-    );
+  /// How wide [span] sets on one line here.
+  static double _widthOf(BuildContext context, InlineSpan span) {
+    final painter = TextPainter(
+      text: TextSpan(
+        style: DefaultTextStyle.of(context).style,
+        children: [span],
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width.ceilToDouble();
   }
 
   /// How many tracks the selection comes to, in words. A container counts
@@ -279,179 +496,5 @@ class _MultiSelectBottomBarState extends ConsumerState<MultiSelectBottomBar> {
     );
     // A sheet closed without saving leaves the selection to try again.
     if (landed) selectionNotifier.exitSelectionMode();
-  }
-}
-
-/// InkWell overlay for the batch bar: subtle wash on hover, accent on press
-/// (matches KalinkaButton).
-WidgetStateProperty<Color?> _batchOverlay() =>
-    WidgetStateProperty.resolveWith((states) {
-      if (states.contains(WidgetState.pressed)) {
-        return KalinkaColors.accent.withValues(alpha: 0.20);
-      }
-      if (states.contains(WidgetState.hovered)) {
-        return Colors.white.withValues(alpha: 0.07);
-      }
-      return null;
-    });
-
-/// Overlay for the accent-filled button, where an accent wash would vanish.
-WidgetStateProperty<Color?> _accentOverlay() =>
-    WidgetStateProperty.resolveWith((states) {
-      if (states.contains(WidgetState.pressed)) {
-        return Colors.white.withValues(alpha: 0.15);
-      }
-      if (states.contains(WidgetState.hovered)) {
-        return Colors.white.withValues(alpha: 0.07);
-      }
-      return null;
-    });
-
-/// How a batch action is drawn: [filled] for the one that takes the queue
-/// over, [outlined] for the one a stage of two leads with, [plain] for the
-/// rest.
-enum _BatchLook { filled, outlined, plain }
-
-/// One batch action: an icon over its label. [width] fixes the footprint so a
-/// row of them reads as a set, leaving the spare width to the label beside
-/// them; a null one fills whatever it is given instead. A null [onTap]
-/// renders it disabled.
-class _BatchActionButton extends StatelessWidget {
-  // Wide enough for the longest label of the set ("Collection").
-  static const double _defaultWidth = 72;
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-  final _BatchLook look;
-  final double? width;
-
-  const _BatchActionButton({
-    required this.icon,
-    required this.label,
-    this.onTap,
-    this.look = _BatchLook.plain,
-    this.width = _defaultWidth,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onTap != null;
-    final Color fg = switch (look) {
-      _BatchLook.outlined => KalinkaColors.accentTint,
-      _BatchLook.filled => KalinkaColors.textPrimary,
-      _BatchLook.plain =>
-        enabled ? KalinkaColors.textPrimary : KalinkaColors.textMuted,
-    };
-    final Color background = switch (look) {
-      _BatchLook.filled => KalinkaColors.accent,
-      _BatchLook.outlined => KalinkaColors.accentSubtle,
-      _BatchLook.plain => KalinkaColors.surfaceElevated,
-    };
-    final Color border = look == _BatchLook.plain
-        ? KalinkaColors.borderDefault
-        : KalinkaColors.accent;
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.5,
-      child: Material(
-        color: background,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: border),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          mouseCursor: WidgetStateMouseCursor.clickable,
-          onTap: onTap,
-          // On the crimson fill an accent wash would vanish — use white.
-          overlayColor: look == _BatchLook.filled
-              ? _accentOverlay()
-              : _batchOverlay(),
-          child: SizedBox(
-            width: width,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 24, color: fg),
-                  const SizedBox(height: 1),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: KalinkaFonts.sans(
-                      fontSize: KalinkaTypography.baseSize - 1,
-                      fontWeight: FontWeight.w600,
-                      color: fg,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The upright rule that keeps the batch actions off the label beside them.
-class _BarRule extends StatelessWidget {
-  const _BarRule();
-
-  @override
-  Widget build(BuildContext context) =>
-      Container(width: 1, height: 30, color: KalinkaColors.borderDefault);
-}
-
-/// What the bar is about, over a line saying what it amounts to: the count of
-/// items taken over the tracks they come to, or the stage's own name over what
-/// it wants decided.
-class _BarLabel extends StatelessWidget {
-  final String title;
-  final String subtitle;
-
-  /// Overrides the plain title where a stage names itself the way a section
-  /// header does.
-  final TextStyle? titleStyle;
-
-  const _BarLabel({
-    required this.title,
-    required this.subtitle,
-    this.titleStyle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style:
-              titleStyle ??
-              KalinkaFonts.sans(
-                fontSize: KalinkaTypography.baseSize + 1,
-                fontWeight: FontWeight.w700,
-                color: KalinkaColors.textPrimary,
-              ),
-        ),
-        const SizedBox(height: 1),
-        Text(
-          subtitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: KalinkaFonts.sans(
-            fontSize: KalinkaTypography.baseSize - 1,
-            fontWeight: FontWeight.w500,
-            color: KalinkaColors.textMuted,
-          ),
-        ),
-      ],
-    );
   }
 }

@@ -49,9 +49,10 @@ void main() {
   /// The bar over a selection of two tracks, as a listing would raise it.
   Future<ProviderContainer> openBar(
     WidgetTester tester,
-    KalinkaPlayerProxy api,
-  ) async {
-    tester.view.physicalSize = const Size(1000, 800);
+    KalinkaPlayerProxy api, {
+    double width = 1000,
+  }) async {
+    tester.view.physicalSize = Size(width, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
@@ -90,47 +91,62 @@ void main() {
   Future<void> letToastsGo(WidgetTester tester) =>
       tester.pump(const Duration(seconds: 30));
 
-  Future<void> tap(WidgetTester tester, String label) async {
-    await tester.tap(find.text(label));
+  Future<void> tap(WidgetTester tester, String action) async {
+    await tester.tap(find.text(action));
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the bar offers three things to do with a selection', (
+  const actions = ['Play all', 'Enqueue', 'Play next', 'Add to collection'];
+
+  testWidgets('the bar offers four things to do with a selection', (
     tester,
   ) async {
     await openBar(tester, QueueApi());
 
-    expect(find.text('2 selected'), findsOneWidget);
-    expect(find.text('Play now'), findsOneWidget);
-    expect(find.text('Queue…'), findsOneWidget);
-    expect(find.text('Collection'), findsOneWidget);
-    // Where in the queue is a question the bar has not asked yet.
+    expect(find.textContaining('2 selected'), findsOneWidget);
+    for (final action in actions) {
+      expect(find.text(action), findsOneWidget, reason: action);
+    }
+    expect(find.byTooltip('More actions'), findsNothing);
+  });
+
+  testWidgets('short of room, a floating bar sets Play next and then Add to '
+      'collection behind the chevron', (tester) async {
+    await openBar(tester, QueueApi(), width: 760);
     expect(find.text('Play next'), findsNothing);
-    expect(find.text('Enqueue'), findsNothing);
-  });
+    expect(find.text('Add to collection'), findsOneWidget);
 
-  testWidgets('queueing asks where before it queues anything', (tester) async {
-    final api = QueueApi();
-    await openBar(tester, api);
-
-    await tap(tester, 'Queue…');
-
-    expect(find.text('QUEUE 2 TRACKS'), findsOneWidget);
+    await tester.tap(find.byTooltip('More actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Play all'), findsNothing);
     expect(find.text('Play next'), findsOneWidget);
-    expect(find.text('Enqueue'), findsOneWidget);
-    expect(api.added, isEmpty);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.text('Play all'), findsOneWidget);
+    expect(find.text('Play next'), findsNothing);
   });
 
-  testWidgets('the way back leaves the selection as it was', (tester) async {
+  testWidgets('a docked bar scrolls its actions sideways', (tester) async {
+    await openBar(tester, QueueApi(), width: 400);
+    expect(find.byTooltip('More actions'), findsNothing);
+    for (final action in actions) {
+      expect(find.text(action), findsOneWidget, reason: action);
+    }
+    expect(find.text('Add to collection').hitTestable(), findsNothing);
+
+    await tester.drag(find.text('Enqueue'), const Offset(-400, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Add to collection').hitTestable(), findsOneWidget);
+  });
+
+  testWidgets('the cross drops the selection', (tester) async {
     final container = await openBar(tester, QueueApi());
 
-    await tap(tester, 'Queue…');
-    await tester.tap(find.bySemanticsLabel('Back to actions'));
+    await tester.tap(find.byTooltip('Cancel selection'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Play now'), findsOneWidget);
-    expect(find.text('Play next'), findsNothing);
-    expect(container.read(selectionStateProvider).count, 2);
+    expect(container.read(selectionStateProvider).isActive, isFalse);
   });
 
   testWidgets('enqueueing sends the selection to the end of the queue', (
@@ -139,7 +155,6 @@ void main() {
     final api = QueueApi();
     final container = await openBar(tester, api);
 
-    await tap(tester, 'Queue…');
     await tap(tester, 'Enqueue');
 
     expect(api.added.single.$1, unorderedEquals([_t1, _t2]));
@@ -154,7 +169,6 @@ void main() {
     final api = QueueApi();
     await openBar(tester, api);
 
-    await tap(tester, 'Queue…');
     await tap(tester, 'Play next');
 
     expect(api.added.single.$2, 2);
@@ -166,7 +180,7 @@ void main() {
     final api = QueueApi();
     final container = await openBar(tester, api);
 
-    await tap(tester, 'Play now');
+    await tap(tester, 'Play all');
 
     expect(api.replaced.single, unorderedEquals([_t1, _t2]));
     expect(api.cleared, 0);
@@ -182,7 +196,7 @@ void main() {
     final api = QueueApi(refusal: Exception('The queue is full.'));
     final container = await openBar(tester, api);
 
-    await tap(tester, 'Play now');
+    await tap(tester, 'Play all');
 
     expect(api.cleared, 0);
     expect(api.added, isEmpty);
@@ -200,7 +214,7 @@ void main() {
       final server = QueueServer(status, body);
       await openBar(tester, server.api());
 
-      await tap(tester, 'Play now');
+      await tap(tester, 'Play all');
 
       expect(server.requests, [
         'POST /queue/replace',
@@ -212,12 +226,12 @@ void main() {
     });
   }
 
-  testWidgets('the collection button opens the destination sheet', (
+  testWidgets('Add to collection opens the collection destination sheet', (
     tester,
   ) async {
     final container = await openBar(tester, QueueApi());
 
-    await tap(tester, 'Collection');
+    await tap(tester, 'Add to collection');
 
     expect(find.text('ADD SELECTION TO COLLECTION'), findsOneWidget);
     expect(find.text('2 items selected'), findsOneWidget);
@@ -234,10 +248,9 @@ void main() {
     container.read(selectionStateProvider.notifier).toggleContainer(folder);
     await tester.pumpAndSettle();
 
-    expect(find.text('3 selected'), findsOneWidget);
-    expect(find.text('2 tracks · 1 folder'), findsOneWidget);
+    expect(find.textContaining('3 selected'), findsOneWidget);
+    expect(find.textContaining('2 tracks · 1 folder'), findsOneWidget);
 
-    await tap(tester, 'Queue…');
     await tap(tester, 'Enqueue');
 
     expect(api.added.single.$1, unorderedEquals([_t1, _t2, folder]));

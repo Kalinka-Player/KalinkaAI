@@ -688,6 +688,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
+          final barFloats = MultiSelectBottomBar.floatsIn(constraints.maxWidth);
           // A wide album sets its cover beside the tracks, not behind them.
           final onAlbum =
               albumPage && constraints.maxWidth < kAlbumSideLayoutWidth;
@@ -846,8 +847,20 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                         ],
                       ),
                     ),
+                    // On a narrow pane under the pages, not over them: their
+                    // ends stay reachable above it.
+                    if (selectionActive && !barFloats)
+                      const MultiSelectBottomBar(),
                   ],
                 ),
+                // On a wide one a card over the pages' bottom right.
+                if (selectionActive && barFloats)
+                  const Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: MultiSelectBottomBar(),
+                  ),
                 if (_barSearchOpen && _barSearchOf(session) != null)
                   _buildUnrolledSearch(session),
                 // Only while there is something to narrow: a reconnect can reset
@@ -858,13 +871,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                 // dim scrim covers the top bar — the in-field arrow is the
                 // only back affordance while it is up.
                 if (_focused) _buildSearchOverlay(session),
-                if (selectionActive)
-                  const Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: MultiSelectBottomBar(),
-                  ),
               ],
             ),
           );
