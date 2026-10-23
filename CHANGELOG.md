@@ -8,6 +8,35 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.21.0
+
+Browsing is rebuilt for tablets and desktop, with a navigation rail, the player on the right and a page of its own for every album, artist, catalog and collection. Home leads to your music sources and the catalogs you pin, and the streamer's time zone can be set from the app. Home's music sources need server 5.12.0, and an older server lists none. Catalog art in its own shape and folder track numbers from tags need server 5.13.0. The time zone needs supervisor 0.6.0.
+
+### Added
+- Pinned catalogs on Home. Pin any catalog from its page, with its filters and the preview you choose: Cards, Artwork, List or Compact. Pins are kept per server, and Customise Home reorders and removes them. Home lists the sources that offer catalogs under MUSIC SOURCES, with a gear that opens Configuration's Music sources.
+- Smart prompts under Home's search entry: tiles that each run their words as a search.
+- Artists have a page of their own, with a tab for each kind of relation they have.
+- Time zone in the streamer's settings. The row shows the box's zone and opens a searchable picker with this device's zone first. Setup's Network step offers this phone's or computer's zone when the box is on another, so a new box no longer runs on UTC until someone notices.
+- A Network page in Configuration's Streamer tab, to move a box set up over Ethernet onto Wi-Fi, or to change networks without running setup again.
+- Folder pages number their tracks: by their tags when every track has one, otherwise by position.
+
+### Changed
+- On tablets and desktop a navigation rail leads to Home, search results, each source and Collections, and each keeps its own history: going back to one returns to where you left it, and Back on its first page goes Home. The player sits in a pane on the right with Up Next under its controls. While the queue shows, its bar runs the width of the window with a seekable slider and, as room allows, the output, source, format and volume. A phone turned wide enough gets the rail too.
+- Every row opens its item's page instead of unrolling in place. Wider than a phone, an album's cover sits beside its tracks, which Play all and Enqueue head. On a phone the cover stays put while the page scrolls over it.
+- Wide listings name their columns over the first row, and album, artist, source and format move out of each row's second line into those columns. Album and artist catalogs show as artwork grids, with a Grid/List choice remembered for each.
+- A catalog card is a fixed 3:1 card with its name on the art, so it no longer jumps when the art loads, and rows lead with a square thumbnail. Art that does not match its card is shown whole over a soft fill of itself instead of cropped. A catalog with no art yet gets one drawn from its name, in a colour that stays the same across sources.
+- Search results: VIEW ALL opens a block as its own page, sources are pills above the matches and stay chosen between searches, and Filters keeps kind and genre.
+- Settings and renderer settings apply from a Discard / Apply bar at the bottom. The Advanced page is gone: the Expert switch sits in the Streamer tab's top bar and stays on across launches.
+- The output switch is a speaker icon under the player's controls.
+- Recently added and Recently favourited leave Home. Pin the recently added catalog to keep it there.
+
+### Fixed
+- While the server is away, Now Playing and the on-device display dim and take no input, as the mini-player already did. The position holds instead of running past the end of the track, and an open output panel or volume popup closes. With no server connected, the player closes.
+- An album page no longer crashes partway through a scroll, and an album opened again starts at its top.
+- An output playing at fixed full volume shows its volume greyed at full instead of a slider that does nothing.
+- A setting still being typed is kept when you press Apply, and the keyboard's Done keeps it too.
+- Resizing the window no longer flashes cards back to their placeholders, and Home comes back where you left it.
+
 ## 0.20.1
 
 Fixes for search and Home. Works with server 5.10.0; with server 5.11.0, search follows each source's AI search setting.

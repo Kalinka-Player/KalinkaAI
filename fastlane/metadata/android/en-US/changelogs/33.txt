@@ -1,0 +1,6 @@
+- New layout for tablets: navigation rail, player on the right
+- Every artist, catalog and collection opens its own page
+- Pin catalogs to Home
+- Set the streamer's time zone (with supervisor 0.6.0)
+- Network page in Configuration
+- Player holds still while the server is away
