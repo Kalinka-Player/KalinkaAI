@@ -484,6 +484,10 @@ void main() {
   testWidgets('the page\'s own crumb returns to the library\'s top', (
     tester,
   ) async {
+    // Room for the folder rows under the shelf's cards.
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final container = await _pumpLibrary(
       tester,
       openedFolders: [_folder('Jazz', canAdd: false), _folder('Kind of Blue')],
