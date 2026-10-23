@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/ext_device_events.dart' show ExtDeviceEvent;
 import '../data_model/playqueue_events.dart' show PlayQueueEvent;
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_player_api_provider.dart';
 import '../providers/websocket_provider.dart'
-    show deviceWebSocketProvider, queueWebSocketProvider;
+    show closedByApp, deviceWebSocketProvider, queueWebSocketProvider;
+
 import 'package:logger/logger.dart';
 
 final logger = Logger();
@@ -88,10 +91,13 @@ Stream<String> openPlayQueueWsStream(Ref ref, CancelToken cancel) async* {
     });
   } finally {
     channel.sink.close();
-    // Stream ended — if not intentionally cancelled AND the user hasn't
-    // deliberately disconnected (settings cleared), the server dropped the
-    // connection. Trigger reconnection so the UI reflects the lost connection.
-    if (!cancel.isCancelled && ref.read(connectionSettingsProvider).isSet) {
+    // Stream ended — if not intentionally cancelled or replaced AND the user
+    // hasn't deliberately disconnected (settings cleared), the server dropped
+    // the connection. Trigger reconnection so the UI reflects the lost
+    // connection.
+    if (!cancel.isCancelled &&
+        !closedByApp(channel) &&
+        ref.read(connectionSettingsProvider).isSet) {
       conn.startReconnecting();
     }
   }
@@ -113,10 +119,13 @@ Stream<String> openExtDeviceWsStream(Ref ref, CancelToken cancel) async* {
     });
   } finally {
     channel.sink.close();
-    // Stream ended — if not intentionally cancelled AND the user hasn't
-    // deliberately disconnected (settings cleared), the server dropped the
-    // connection. Trigger reconnection so the UI reflects the lost connection.
-    if (!cancel.isCancelled && ref.read(connectionSettingsProvider).isSet) {
+    // Stream ended — if not intentionally cancelled or replaced AND the user
+    // hasn't deliberately disconnected (settings cleared), the server dropped
+    // the connection. Trigger reconnection so the UI reflects the lost
+    // connection.
+    if (!cancel.isCancelled &&
+        !closedByApp(channel) &&
+        ref.read(connectionSettingsProvider).isSet) {
       conn.startReconnecting();
     }
   }
