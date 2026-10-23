@@ -16,6 +16,7 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_rows_shimmer.dart';
 import 'package:kalinka/widgets/search_cards/action_pill_button.dart';
+import 'package:kalinka/widgets/search_cards/row_columns.dart';
 import 'package:kalinka/widgets/search/results_view.dart';
 import 'package:kalinka/widgets/search/inspired_block.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
@@ -257,8 +258,10 @@ void main() {
     container.read(searchSessionProvider.notifier).goBack();
     await tester.pump();
 
-    expect(find.text('Act 5'), findsNothing);
-    expect(find.text('View All'), findsOneWidget);
+    // Alone here, the two visits share one scroll, still where the rest was
+    // read; the app keeps each visit's own.
+    expect(find.text('Act 5', skipOffstage: false), findsNothing);
+    expect(find.text('View All', skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('an exact hit wears its badge, a partial one does not', (
@@ -380,15 +383,20 @@ void main() {
       headings.map((h) => h.title),
       isNot(contains(startsWith('Inspired'))),
     );
-    // Nothing is ruled through the heading; the only hairlines are between
-    // its rows (three shown of five, so two). The tally is the source's, not
-    // the block's.
+    // Nothing is ruled through the heading; the only hairlines are the
+    // table's, under its column names, and between its rows (three shown of
+    // five, so two). The tally is the source's, not the block's.
+    final rules = find.descendant(
+      of: find.byType(InspiredBlock),
+      matching: find.byType(Divider),
+    );
+    expect(rules, findsNWidgets(3));
     expect(
       find.descendant(
-        of: find.byType(InspiredBlock),
+        of: find.byType(RowColumnsHeader),
         matching: find.byType(Divider),
       ),
-      findsNWidgets(2),
+      findsOneWidget,
     );
     expect(find.text('· 5'), findsOneWidget);
     expect(

@@ -281,9 +281,10 @@ class _SourceCell extends ConsumerWidget {
   }
 }
 
-/// Names a listing's columns above its first row, while its rows have any.
-/// A listing of tracks alone calls the details its album and the trailing
-/// figure its time; any other listing calls them details.
+/// Names a listing's columns above its first row, while its rows have any,
+/// over a rule that sets the table off from its rows. A listing of tracks
+/// alone calls the details its album and the trailing figure its time; any
+/// other listing calls them details.
 class RowColumnsHeader extends StatelessWidget {
   /// Whether every row is a track.
   final bool tracks;
@@ -313,54 +314,64 @@ class RowColumnsHeader extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         );
         const line = SizedBox(width: RowColumns.gap);
-        return Semantics(
-          container: true,
-          child: Padding(
-            padding: EdgeInsets.only(left: titleInset, top: 4, bottom: 8),
-            child: Row(
-              children: [
-                Expanded(child: label(tracks ? 'TITLE' : 'NAME')),
-                if (columns.artist) ...[
-                  line,
-                  SizedBox(width: columns.artistWidth, child: label('ARTIST')),
-                ],
-                if (columns.detail) ...[
-                  line,
-                  SizedBox(
-                    width: columns.detailWidth,
-                    child: label(tracks ? 'ALBUM' : 'DETAILS'),
-                  ),
-                ],
-                if (columns.source) ...[
-                  line,
-                  SizedBox(
-                    width: RowColumns.sourceWidth,
-                    child: label('SOURCE'),
-                  ),
-                ],
-                // Over the duration, which a track row sets 8 in from its
-                // edge and, as wide as this, before its +.
+        final names = Padding(
+          // Room from whatever heads the listing.
+          padding: EdgeInsets.only(left: titleInset, top: 10),
+          child: Row(
+            children: [
+              Expanded(child: label(tracks ? 'TITLE' : 'NAME')),
+              if (columns.artist) ...[
+                line,
+                SizedBox(width: columns.artistWidth, child: label('ARTIST')),
+              ],
+              if (columns.detail) ...[
+                line,
                 SizedBox(
-                  width: RowColumns.gutter,
-                  child: tracks
-                      ? Align(
-                          alignment: Alignment.centerRight,
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                              right:
-                                  8 +
-                                  (columns.wide
-                                      ? RowEnqueueButton.gap +
-                                            RowEnqueueButton.size
-                                      : 0),
-                            ),
-                            child: label('TIME'),
-                          ),
-                        )
-                      : null,
+                  width: columns.detailWidth,
+                  child: label(tracks ? 'ALBUM' : 'DETAILS'),
                 ),
               ],
-            ),
+              if (columns.source) ...[
+                line,
+                SizedBox(width: RowColumns.sourceWidth, child: label('SOURCE')),
+              ],
+              // Over the duration, which a track row sets 8 in from its
+              // edge and, as wide as this, before its +.
+              SizedBox(
+                width: RowColumns.gutter,
+                child: tracks
+                    ? Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            right:
+                                8 +
+                                (columns.wide
+                                    ? RowEnqueueButton.gap +
+                                          RowEnqueueButton.size
+                                    : 0),
+                          ),
+                          child: label('TIME'),
+                        ),
+                      )
+                    : null,
+              ),
+            ],
+          ),
+        );
+        return Semantics(
+          container: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              names,
+              // As far from the first row as a separator is from its rows.
+              const Divider(
+                height: 14,
+                thickness: 1,
+                color: KalinkaColors.borderDefault,
+              ),
+            ],
           ),
         );
       },
