@@ -184,8 +184,15 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   // retained visit keeps its own, so Back lands with them as they were.
   final _albumOffset = ValueNotifier<double>(0);
   final _albumHeaderHeight = ValueNotifier<double>(0);
+  final _albumTitleInset = ValueNotifier<double>(0);
   final _albumOffsets = <int, double>{};
   final _albumHeaderHeights = <int, double>{};
+  final _albumTitleInsets = <int, double>{};
+  late final _albumBar = Listenable.merge([
+    _albumOffset,
+    _albumHeaderHeight,
+    _albumTitleInset,
+  ]);
 
   /// Inside the stretch of the album's cover behind its list, where the
   /// list's own scroll notifications are sent on.
@@ -334,6 +341,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     _albumOffset.dispose();
     _catalogSurface.dispose();
     _albumHeaderHeight.dispose();
+    _albumTitleInset.dispose();
     _composerController.removeListener(_onTextChange);
     _overlayCtrl.dispose();
     _filtersCtrl.dispose();
@@ -624,6 +632,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       _barSearchOpen = false;
       _albumOffset.value = _albumOffsets[visit] ?? 0;
       _albumHeaderHeight.value = _albumHeaderHeights[visit] ?? 0;
+      _albumTitleInset.value = _albumTitleInsets[visit] ?? 0;
       _catalogSurface.value = _catalogSurfaceOf(visit);
       final kept = {
         for (final each in ref.read(searchSessionProvider).allVisits)
@@ -631,6 +640,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       };
       _albumOffsets.removeWhere((id, _) => !kept.contains(id));
       _albumHeaderHeights.removeWhere((id, _) => !kept.contains(id));
+      _albumTitleInsets.removeWhere((id, _) => !kept.contains(id));
       _catalogOffsets.removeWhere((id, _) => !kept.contains(id));
       _catalogExtents.removeWhere((id, _) => !kept.contains(id));
     });
@@ -810,19 +820,16 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                           statusBarBrightness: Brightness.dark,
                           systemStatusBarContrastEnforced: false,
                         ),
-                        child: ValueListenableBuilder<double>(
-                          valueListenable: _albumOffset,
-                          builder: (context, offset, child) => ColoredBox(
+                        child: ListenableBuilder(
+                          listenable: _albumBar,
+                          builder: (context, child) => ColoredBox(
                             key: const ValueKey('album-header-surface'),
                             color: KalinkaColors.background.withValues(
-                              alpha: (offset / kKalinkaTopBarHeight).clamp(
-                                0.0,
-                                1.0,
-                              ),
+                              alpha: _albumBarFill,
                             ),
                             child: child,
                           ),
-                          child: _buildHeader(session),
+                          child: _buildHeader(session, overAlbum: true),
                         ),
                       )
                     else
@@ -1083,6 +1090,12 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                 if (_isShown(id)) _albumHeaderHeight.value = height;
               }
             : null,
+        onAlbumTitleInset: page.isAlbum
+            ? (inset) {
+                _albumTitleInsets[id] = inset;
+                if (_isShown(id)) _albumTitleInset.value = inset;
+              }
+            : null,
         onBackToCatalogs: () =>
             ref.read(searchSessionProvider.notifier).backToCatalogsRoot(),
       ),
@@ -1104,7 +1117,20 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         )
       : kKalinkaTopBarHeight;
 
-  Widget _buildHeader(SearchSessionState session) {
+  /// How far the bar over an album's cover has filled in: over the last
+  /// stretch before the album's title scrolls away under it, so the bar is
+  /// solid by the time it takes the title over.
+  double get _albumBarFill {
+    final height = _albumHeaderHeight.value;
+    if (height <= 0) return 0;
+    final titleGone = height - _albumTitleInset.value;
+    return ((_albumOffset.value - titleGone) / kKalinkaTopBarHeight + 1).clamp(
+      0.0,
+      1.0,
+    );
+  }
+
+  Widget _buildHeader(SearchSessionState session, {bool overAlbum = false}) {
     final onResults = session.activeView == FindMusicView.results;
     final catalogChrome =
         !onResults && CatalogSliverHeader.appliesTo(session.catalogPage);
@@ -1179,7 +1205,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                   ),
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: _buildTitle(session)),
+                Expanded(child: _buildTitle(session, overAlbum: overAlbum)),
                 // What joins the bar on scroll comes in before what is always
                 // there, so Search and Grid/List never move under a finger.
                 if (catalogChrome &&
@@ -1428,8 +1454,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   }
 
   /// What the shown visit is, and nothing about how it was reached: Back
-  /// returns along the way it came, which a fixed path would misstate.
-  Widget _buildTitle(SearchSessionState session) {
+  /// returns along the way it came, which a fixed path would misstate. Over
+  /// an album's cover it comes in as the album's own title scrolls away.
+  Widget _buildTitle(SearchSessionState session, {bool overAlbum = false}) {
     final catalogChrome =
         session.activeView == FindMusicView.catalogs &&
         CatalogSliverHeader.appliesTo(session.catalogPage);
@@ -1481,7 +1508,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     } else {
       title = session.catalogPage.title ?? '';
     }
-    return Semantics(
+    final heading = Semantics(
       header: true,
       child: Text(
         title.toUpperCase(),
@@ -1492,6 +1519,16 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
+    );
+    if (!overAlbum) return heading;
+    return ListenableBuilder(
+      listenable: _albumBar,
+      builder: (context, child) => Opacity(
+        key: const ValueKey('album-bar-title'),
+        opacity: const Interval(0.5, 1).transform(_albumBarFill),
+        child: child,
+      ),
+      child: heading,
     );
   }
 
