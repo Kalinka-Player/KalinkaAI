@@ -71,9 +71,12 @@ class SearchZeroState extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pins = ref.watch(pinnedCatalogsProvider);
-    // Nothing of the listener's own yet: no pins and no collections. Still
-    // loading counts as none, so a new listener's Home never jumps.
-    final collections = ref.watch(collectionsShelfProvider).value;
+    // Nothing of the listener's own on Home yet: no pins and no collections
+    // shown here (the rail carries them where it shows). Still loading counts
+    // as none, so a new listener's Home never jumps.
+    final collections = showCollections
+        ? ref.watch(collectionsShelfProvider).value
+        : null;
     final empty = pins.isEmpty && (collections == null || collections.isEmpty);
     const top = 8.0;
     return RefreshIndicator(
@@ -230,8 +233,8 @@ class _CentringState extends State<_Centring>
   );
 }
 
-/// The end of the pins: a muted question and a neutral Customise Home,
-/// against the trailing edge, so it never reads as part of a preview.
+/// The end of the pins: a muted question and a bright, neutral Customise
+/// Home, against the trailing edge, so it never reads as part of a preview.
 class _CustomiseLine extends StatelessWidget {
   final VoidCallback onCustomise;
 
@@ -256,7 +259,7 @@ class _CustomiseLine extends StatelessWidget {
             key: const ValueKey('customise-home-button'),
             onPressed: onCustomise,
             style: TextButton.styleFrom(
-              foregroundColor: KalinkaColors.textSecondary,
+              foregroundColor: KalinkaColors.textPrimary,
               minimumSize: const Size(48, 48),
               padding: const EdgeInsets.symmetric(horizontal: 8),
               textStyle: KalinkaFonts.sans(

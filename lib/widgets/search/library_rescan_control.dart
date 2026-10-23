@@ -91,7 +91,9 @@ class _LibraryRescanControlState extends ConsumerState<LibraryRescanControl>
       label: Text(label),
     );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      // What follows keeps the room under it, as much as the title above
+      // leaves over it.
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

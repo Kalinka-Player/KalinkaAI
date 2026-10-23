@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,7 +54,8 @@ class PreviewShelf extends StatelessWidget {
     return _TileRail(
       count: items.length,
       rows: _rowsOf(preview),
-      tileSize: _tileSizeOf(preview),
+      sizeFactor: _sizeFactorOf(preview),
+      shape: _shapeOf(preview),
       storageId: storageId,
       tile: (i, size) => _Tile(
         item: items[i],
@@ -70,8 +73,9 @@ class PreviewShelf extends StatelessWidget {
   static double _shapeOf(Preview? preview) =>
       validAspectRatio(preview?.aspectRatio) ?? 1;
 
-  static double _tileSizeOf(Preview? preview) =>
-      preview?.cardSize == CardSize.large ? 168 : 128;
+  /// Large cards are this much the size of normal ones.
+  static double _sizeFactorOf(Preview? preview) =>
+      preview?.cardSize == CardSize.large ? 1.3125 : 1;
 }
 
 /// Stands in for a [PreviewShelf] while its items load, in the shape they
@@ -92,7 +96,8 @@ class PreviewShelfShimmer extends StatelessWidget {
         child: _TileRail(
           count: count,
           rows: PreviewShelf._rowsOf(preview),
-          tileSize: PreviewShelf._tileSizeOf(preview),
+          sizeFactor: PreviewShelf._sizeFactorOf(preview),
+          shape: PreviewShelf._shapeOf(preview),
           scrollable: false,
           storageId: 'placeholder',
           tile: (_, size) => _TilePlaceholder(
@@ -109,9 +114,11 @@ class _TileRail extends StatelessWidget {
   final int count;
   final int rows;
 
-  /// The tile's size on a phone; wider screens scale it up to 1.768 times
-  /// that.
-  final double tileSize;
+  /// Times a normal card's size.
+  final double sizeFactor;
+
+  /// The art's width over its height.
+  final double shape;
   final Widget Function(int index, double size) tile;
   final bool scrollable;
   final String storageId;
@@ -119,16 +126,20 @@ class _TileRail extends StatelessWidget {
   const _TileRail({
     required this.count,
     required this.rows,
-    required this.tileSize,
+    required this.sizeFactor,
+    required this.shape,
     required this.tile,
     required this.storageId,
     this.scrollable = true,
   });
 
-  /// Content width at which tiles show at [tileSize]. Above it, cards grow
-  /// at half the proportional rate of the available width.
-  static const _phoneWidth = 400.0;
+  /// Up to this window width, normal cards are sized for [_across] of them
+  /// to show across it. Above it, they grow at half the proportional rate of
+  /// the window, to [_maxGrowth] times their size there.
+  static const _phoneWidth = 480.0;
+  static const _across = 2.5;
   static const _widthGrowth = 0.5;
+  static const _maxGrowth = 1.768;
 
   /// The art, then a line each of title and subtitle at the user's text size.
   double _tileHeight(BuildContext context, double tileSize) {
@@ -160,11 +171,16 @@ class _TileRail extends StatelessWidget {
     final columns = (count / rows).ceil();
     return LayoutBuilder(
       builder: (context, constraints) {
-        final scale =
-            1 + (constraints.maxWidth / _phoneWidth - 1) * _widthGrowth;
-        final size = (tileSize * scale).clamp(tileSize, tileSize * 1.768);
-        final tileHeight = _tileHeight(context, size);
         final width = constraints.maxWidth + 2 * kHomeSideInset;
+        // The first card's frame starts this far in; each takes its art and
+        // an inset either side.
+        const lead = kHomeSideInset - _Tile.inset;
+        final phone = math.min(width, _phoneWidth);
+        final fit = ((phone - lead) / _across - 2 * _Tile.inset) / shape;
+        final growth =
+            1 + (math.max(width, _phoneWidth) / _phoneWidth - 1) * _widthGrowth;
+        final size = fit * sizeFactor * math.min(growth, _maxGrowth);
+        final tileHeight = _tileHeight(context, size);
         // The height first: an OverflowBox fills what it is offered, and a
         // list offers unbounded height.
         return SizedBox(
