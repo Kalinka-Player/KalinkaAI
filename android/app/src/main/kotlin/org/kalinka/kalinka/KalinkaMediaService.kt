@@ -8,12 +8,12 @@ import android.app.Service
 import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -35,8 +35,8 @@ import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.io.FileDescriptor
 import java.io.PrintWriter
-import java.net.URL
 import java.util.concurrent.TimeUnit
+import kotlin.math.roundToInt
 
 class KalinkaMediaService : Service() {
 
@@ -50,7 +50,10 @@ class KalinkaMediaService : Service() {
         const val ACTION_PAUSE = "org.kalinka.kalinka.ACTION_PAUSE"
         const val ACTION_NEXT = "org.kalinka.kalinka.ACTION_NEXT"
         const val ACTION_PREV = "org.kalinka.kalinka.ACTION_PREV"
-
+        private const val RECONNECT_MIN_MS = 1_000L
+        // How long it keeps reconnecting before giving up until the app
+        // enables it again; also how long a connection must hold to count.
+        private const val RETRY_WINDOW_MS = 30_000L
     }
 
     inner class LocalBinder : Binder() {
@@ -69,6 +72,14 @@ class KalinkaMediaService : Service() {
     private var server = ServerAddress("http", "", 0)
     private var enableOwner: Any? = null
     private var isEnabled = false
+
+    // This service's own connection: true while its queue socket is open.
+    private var connected = false
+    private var connectedAtMs = 0L
+    // When the current run of failed or short-lived connections began.
+    private var outageStartMs: Long? = null
+    private var reconnectDelayMs = RECONNECT_MIN_MS
+    private val reconnect = Runnable { if (isEnabled) connect() }
 
     private var notificationVisible = false
 
@@ -108,21 +119,14 @@ class KalinkaMediaService : Service() {
         createNotificationChannel()
         routing = KalinkaRouting(this) { ready ->
             outputReady = ready
-            if (isEnabled && ready && hasCurrentTrack && !exclusivePlayback) {
-                ensureMediaSession()
-                updateMediaSessionMetadata()
-                updatePlaybackState()
-                postNotification()
-            } else if (!ready) {
-                hideNotification()
-            }
+            syncNotification()
         }
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun dump(fd: FileDescriptor, writer: PrintWriter, args: Array<out String>?) {
-        writer.println("enabled=$isEnabled queueSocket=${queueWs != null} deviceSocket=${deviceWs != null}")
+        writer.println("enabled=$isEnabled connected=$connected queueSocket=${queueWs != null} deviceSocket=${deviceWs != null}")
         writer.println("playback=$currentPlayerState hasTrack=$hasCurrentTrack exclusive=$exclusivePlayback outputReady=$outputReady")
         writer.println("session=${mediaSession != null} notification=$notificationVisible")
         routing.dump(writer)
@@ -165,38 +169,60 @@ class KalinkaMediaService : Service() {
     // Public API (called from KalinkaMediaPlugin)
     // -------------------------------------------------------------------------
 
+    /**
+     * Follow [address]: stay connected to it, reconnecting after a loss for up
+     * to [RETRY_WINDOW_MS], then give up until enabled again. The app enables
+     * it each time it reaches the server, which also cuts a backoff short.
+     */
     internal fun enable(address: ServerAddress, owner: Any? = null) {
         Log.d(TAG, "enable: $address")
-        if (isEnabled && address == server && queueWs != null && deviceWs != null) {
+        if (isEnabled && address == server) {
             enableOwner = owner
+            // The app has just reached the server: a fresh retry window, even
+            // for an attempt still in flight.
+            outageStartMs = null
+            reconnectDelayMs = RECONNECT_MIN_MS
+            if (queueWs == null) {
+                mainHandler.removeCallbacks(reconnect)
+                connect()
+            }
             return
         }
         // If switching servers, fully tear down first so we don't mix state.
-        if (isEnabled && address != server) {
-            disable()
-        }
+        if (isEnabled) disable()
         server = address
         enableOwner = owner
         isEnabled = true
-        // Reset playback state — fresh session, fresh state.
-        resetPlaybackState()
-        routing.start(server)
-        connectQueueWs()
-        connectDeviceWs()
+        outageStartMs = null
+        reconnectDelayMs = RECONNECT_MIN_MS
+        connect()
     }
 
     fun disable(owner: Any? = null) {
         // During Activity/engine replacement the new plugin can bind before
         // the old one detaches. Only the current owner may disable via Flutter.
-        // Native connection loss and service teardown always disable.
+        // Service teardown always disables.
         if (owner != null && enableOwner !== owner) return
         enableOwner = null
         Log.d(TAG, "disable")
         isEnabled = false
-        hideNotification()
+        mainHandler.removeCallbacks(reconnect)
+        dropConnection()
+    }
+
+    private fun connect() {
+        routing.start(server)
+        connectQueueWs()
+        connectDeviceWs()
+    }
+
+    private fun dropConnection() {
+        connected = false
+        resetPlaybackState()
+        // Hides the notification, deactivating the session before routing detaches.
+        syncNotification()
         routing.stop()
         closeConnections()
-        resetPlaybackState()
     }
 
     private fun resetPlaybackState() {
@@ -230,6 +256,8 @@ class KalinkaMediaService : Service() {
                 Log.d(TAG, "queueWs onOpen")
                 mainHandler.post {
                     if (webSocket !== queueWs) return@post
+                    connected = true
+                    connectedAtMs = SystemClock.elapsedRealtime()
                     pendingQueueCommand?.let { cmd ->
                         Log.d(TAG, "queueWs flushing pendingCommand: $cmd")
                         pendingQueueCommand = null
@@ -309,10 +337,29 @@ class KalinkaMediaService : Service() {
 
     private fun connectionLost(webSocket: WebSocket) {
         mainHandler.post {
-            // A callback from a socket we replaced must not disable the new
-            // connection. A real loss ends this notification's lifetime; only
-            // a new enable from the app may start it again.
-            if (isEnabled && (webSocket === queueWs || webSocket === deviceWs)) disable()
+            // A callback from a socket we replaced must not end the new connection.
+            if (!isEnabled || (webSocket !== queueWs && webSocket !== deviceWs)) return@post
+            val now = SystemClock.elapsedRealtime()
+            // Only a connection that held ends an outage: a server that accepts
+            // the queue socket but drops the device one must not loop forever.
+            val held = connected && now - connectedAtMs >= RETRY_WINDOW_MS
+            var start = outageStartMs
+            if (start == null || held) {
+                start = now
+                outageStartMs = now
+                reconnectDelayMs = RECONNECT_MIN_MS
+            }
+            val left = RETRY_WINDOW_MS - (now - start)
+            if (left <= 0) {
+                Log.d(TAG, "connection lost, giving up until the app reconnects")
+                disable()
+                return@post
+            }
+            val delay = minOf(reconnectDelayMs, left)
+            Log.d(TAG, "connection lost, reconnecting in ${delay}ms")
+            dropConnection()
+            mainHandler.postDelayed(reconnect, delay)
+            reconnectDelayMs *= 2
         }
     }
 
@@ -342,7 +389,8 @@ class KalinkaMediaService : Service() {
                     Log.d(TAG, "playback_control_changed: exclusive=$exclusivePlayback")
                     // Stepping back in waits for the queue's own state, which
                     // the server sends right after.
-                    if (exclusivePlayback) hideNotification()
+                    if (exclusivePlayback) hasCurrentTrack = false
+                    syncNotification()
                 }
                 "state_changed" -> {
                     if (exclusivePlayback) return
@@ -363,7 +411,8 @@ class KalinkaMediaService : Service() {
                         exclusivePlayback =
                             isExclusive(outerState.optJSONObject("playback_control"))
                         if (exclusivePlayback) {
-                            hideNotification()
+                            hasCurrentTrack = false
+                            syncNotification()
                             return
                         }
                         val playbackState = outerState.optJSONObject("playback_state") ?: run {
@@ -392,11 +441,10 @@ class KalinkaMediaService : Service() {
         val trackJson = stateJson.optJSONObject("current_track")
         Log.d(TAG, "updateFromPlaybackState: state=$stateStr isPlaying=$newIsPlaying hasTrack=${trackJson != null} title=${trackJson?.optString("title")}")
 
-        // No current track → notification (and session) must not be present.
-        // This covers playqueue cleared, fresh server with no playback, etc.
+        // No current track: the queue was cleared or never played.
         hasCurrentTrack = trackJson != null
         if (trackJson == null) {
-            hideNotification()
+            syncNotification()
             return
         }
 
@@ -441,16 +489,12 @@ class KalinkaMediaService : Service() {
                     Log.d(TAG, "albumArt: loading $newArtUrl")
                     currentAlbumArt = loadBitmapFromUrl(newArtUrl)
                     Log.d(TAG, "albumArt: loaded=${currentAlbumArt != null}")
-                    updateMediaSessionMetadata()
-                    postNotification()
+                    syncNotification()
                 }
             }
         }
 
-        ensureMediaSession()
-        updateMediaSessionMetadata()
-        updatePlaybackState()
-        postNotification()
+        syncNotification()
     }
 
     private fun handleDeviceEvent(text: String) {
@@ -488,12 +532,28 @@ class KalinkaMediaService : Service() {
     }
 
     /**
+     * The notification's one rule: shown while this service's own connection
+     * is up and has a current track outside direct (exclusive) playback, once
+     * Android has attached the renderer as the session's output.
+     */
+    private fun syncNotification() {
+        if (connected && hasCurrentTrack && !exclusivePlayback && outputReady) {
+            ensureMediaSession()
+            updateMediaSessionMetadata()
+            updatePlaybackState()
+            postNotification()
+        } else {
+            hideNotification()
+        }
+    }
+
+    /**
      * Lazily create the MediaSession. Tied to notification visibility — torn
      * down in [hideNotification] so that volume keys, lock-screen controls etc.
      * stop routing to us when there's no active playback to control.
      */
     private fun ensureMediaSession() {
-        if (!isEnabled || mediaSession != null || !outputReady || exclusivePlayback) return
+        if (mediaSession != null) return
         Log.d(TAG, "ensureMediaSession: creating")
         val mediaButtonReceiver = ComponentName(this, MediaButtonReceiver::class.java)
         mediaSession = MediaSessionCompat(this, "KaiMediaSession", mediaButtonReceiver, null).apply {
@@ -599,12 +659,18 @@ class KalinkaMediaService : Service() {
             .build()
     }
 
-    fun postNotification() {
-        // Don't resurrect after disable — async album-art callbacks can land
-        // here after the WS dropped and we've already torn down.
-        if (!isEnabled || mediaSession == null) return
+    private fun postNotification() {
         Log.d(TAG, "postNotification: title=$currentTitle artist=$currentArtist isPlaying=$currentIsPlaying positionMs=$currentPositionMs durationMs=$currentDurationMs hasArt=${currentAlbumArt != null}")
-        startForeground(NOTIFICATION_ID, buildNotification())
+        val notification = buildNotification()
+        try {
+            startForeground(NOTIFICATION_ID, notification)
+        } catch (e: IllegalStateException) {
+            // Android demotes the service once playback has been paused for a
+            // while (10 min on Android 16+), and from the background it may not
+            // return to the foreground. Keep the controls current meanwhile.
+            Log.w(TAG, "postNotification: foreground not allowed: $e")
+            getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification)
+        }
         notificationVisible = true
     }
 
@@ -612,6 +678,8 @@ class KalinkaMediaService : Service() {
         if (!notificationVisible && mediaSession == null) return
         Log.d(TAG, "hideNotification")
         stopForeground(STOP_FOREGROUND_REMOVE)
+        // A demoted service's notification is no longer the foreground one.
+        getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
         notificationVisible = false
         releaseMediaSession()
     }
@@ -619,11 +687,15 @@ class KalinkaMediaService : Service() {
     private suspend fun loadBitmapFromUrl(url: String): Bitmap? =
         withContext(Dispatchers.IO) {
             try {
-                val connection = URL(url).openConnection()
-                connection.connectTimeout = 5000
-                connection.readTimeout = 5000
-                connection.connect()
-                BitmapFactory.decodeStream(connection.getInputStream())
+                val bytes = okHttpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        Log.e(TAG, "albumArt: HTTP ${response.code} for $url")
+                        return@withContext null
+                    }
+                    response.body?.bytes()
+                } ?: return@withContext null
+                // MediaSession scales metadata art down to 320dp, so nothing larger is ever shown.
+                decodeAlbumArt(bytes, (320 * resources.displayMetrics.density).roundToInt())
             } catch (e: Exception) {
                 Log.e(TAG, "albumArt: failed to load $url: $e")
                 null

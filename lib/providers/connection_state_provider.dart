@@ -4,6 +4,7 @@ import 'package:dio/dio.dart' show DioException;
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart' show Logger;
+
 import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
 import 'kiosk_provider.dart' show kioskActiveProvider;
@@ -44,12 +45,6 @@ void refetchOnReconnect(Ref ref) {
 /// this so that only timer-driven ticks (or a manual retry) trigger new socket
 /// connection attempts — preventing Riverpod's autoDispose rebuild loop.
 final retryEpochProvider = NotifierProvider<_RetryEpochNotifier, int>(
-  _RetryEpochNotifier.new,
-);
-
-/// Explicit retries are also user intent to restore Android media controls.
-/// Automatic reachability probes must not carry that intent.
-final manualReconnectEpochProvider = NotifierProvider<_RetryEpochNotifier, int>(
   _RetryEpochNotifier.new,
 );
 
@@ -103,7 +98,6 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     });
 
     // A display opened after the app gave up has no Retry button to press.
-    // Not retryNow(): that would also bring back the Android media controls.
     ref.listen<bool>(kioskActiveProvider, (_, active) {
       if (!active || state != ConnectionStatus.offline) return;
       _leaveOffline();
@@ -196,7 +190,6 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
 
   /// Manually trigger a single reconnect attempt (e.g. from Retry button).
   void retryNow() {
-    ref.read(manualReconnectEpochProvider.notifier).increment();
     if (state == ConnectionStatus.offline) {
       _leaveOffline();
       escalationDismissed = false;

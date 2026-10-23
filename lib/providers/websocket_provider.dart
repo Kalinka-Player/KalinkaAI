@@ -49,6 +49,12 @@ const _connectTimeout = Duration(seconds: 5);
 /// flip the UI to a green "connected" indicator over an empty queue (issue #21).
 const _connectionStatePath = '/queue/ws';
 
+final _closedByApp = Expando<bool>();
+
+/// Whether the app closed [channel] itself — replaced it (e.g. the stale-socket
+/// rebuild on resume) or released it — so its stream ending is not a drop.
+bool closedByApp(WebSocketChannel channel) => _closedByApp[channel] ?? false;
+
 /// Provides a configured [WebSocketChannel] for the given path.
 ///
 /// Centralises connection semantics (host/port, heartbeat, connect timeout)
@@ -120,6 +126,7 @@ final webSocketProvider = FutureProvider.family<WebSocketChannel, String>((
     }
 
     ref.onDispose(() {
+      _closedByApp[channel] = true;
       channel.sink.close();
     });
 

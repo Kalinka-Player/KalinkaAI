@@ -16,6 +16,8 @@ import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/monotonic_clock_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
+import 'package:kalinka/providers/wire_event_provider.dart'
+    show playQueueEventBusProvider;
 
 /// Regression coverage for issue #21: after a background→resume where the event
 /// socket silently died, a successful HTTP reachability probe must NOT by
@@ -86,20 +88,14 @@ void main() {
 
       final notifier = container.read(connectionStateProvider.notifier);
       final epochBefore = container.read(retryEpochProvider);
-      final manualEpochBefore = container.read(manualReconnectEpochProvider);
 
       notifier.startReconnecting();
       expect(
         container.read(connectionStateProvider),
         ConnectionStatus.reconnecting,
       );
-      expect(container.read(manualReconnectEpochProvider), manualEpochBefore);
 
       notifier.retryNow();
-      expect(
-        container.read(manualReconnectEpochProvider),
-        manualEpochBefore + 1,
-      );
       await pumpEventQueue();
 
       // The probe reached the server (so the socket rebuild is triggered)...
@@ -224,7 +220,6 @@ void main() {
           ConnectionStatus.offline,
         );
         final calls = api.listModulesCalls;
-        final manualEpochBefore = container.read(manualReconnectEpochProvider);
 
         container.read(kioskProvider.notifier).enter();
         async.flushMicrotasks();
@@ -234,7 +229,6 @@ void main() {
           ConnectionStatus.reconnecting,
         );
         expect(api.listModulesCalls, calls + 1);
-        expect(container.read(manualReconnectEpochProvider), manualEpochBefore);
 
         async.elapse(const Duration(seconds: 60));
         expect(
@@ -472,6 +466,28 @@ void main() {
       await container.read(queueWebSocketProvider.future);
       await pumpEventQueue();
 
+      expect(
+        container.read(connectionStateProvider),
+        ConnectionStatus.connected,
+      );
+    });
+
+    // A resume after a long background replaces a live socket. Its stream
+    // ending is not a drop, which would flash `reconnecting` on every return.
+    test('replacing a healthy queue socket stays connected', () async {
+      final container = await connectedContainer();
+      container.listen(playQueueEventBusProvider, (_, _) {});
+      await container.read(queueWebSocketProvider.future);
+      await pumpEventQueue();
+      final seen = <ConnectionStatus>[];
+      container.listen(connectionStateProvider, (_, next) => seen.add(next));
+
+      container.read(retryEpochProvider.notifier).increment();
+      // Rebuilt by the scheduler, as on resume, then the old socket's close
+      // handshake finishes.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      expect(seen, isNot(contains(ConnectionStatus.reconnecting)));
       expect(
         container.read(connectionStateProvider),
         ConnectionStatus.connected,

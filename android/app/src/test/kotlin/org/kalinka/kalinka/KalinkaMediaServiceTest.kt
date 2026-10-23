@@ -42,6 +42,9 @@ class KalinkaMediaServiceTest {
     @Volatile private var queueSocket: WebSocket? = null
     @Volatile private var deviceSocket: WebSocket? = null
     private val rendererListRequests = AtomicInteger()
+    private val queueAttempts = AtomicInteger()
+    // A server that answers HTTP but turns its sockets away.
+    @Volatile private var refuseSockets = false
 
     @Before fun setup() {
         RecordingMediaSession.activeOutputs.clear()
@@ -55,21 +58,24 @@ class KalinkaMediaServiceTest {
                     ]}""")
                 }
                 "/device/get_volume" -> MockResponse().setBody("""{"current_volume":25,"max_volume":70,"supported":true}""")
-                "/queue/ws", "/device/ws" -> MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
-                    override fun onOpen(webSocket: WebSocket, response: Response) {
-                        if (request.requestUrl!!.encodedPath == "/queue/ws") {
-                            queueSocket = webSocket
-                            webSocket.send("""{"event_type":"state_changed","state":{
-                                "state":"PLAYING","current_track":{"title":"Test track","duration":60}
-                            }}""")
-                        } else {
-                            deviceSocket = webSocket
+                "/queue/ws", "/device/ws" -> {
+                    val queue = request.requestUrl!!.encodedPath == "/queue/ws"
+                    if (queue) queueAttempts.incrementAndGet()
+                    if (refuseSockets) MockResponse().setResponseCode(503)
+                    else MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+                        override fun onOpen(webSocket: WebSocket, response: Response) {
+                            if (queue) {
+                                queueSocket = webSocket
+                                webSocket.send(PLAYING_TRACK)
+                            } else {
+                                deviceSocket = webSocket
+                            }
                         }
-                    }
-                    override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                        webSocket.close(code, reason)
-                    }
-                })
+                        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                            webSocket.close(code, reason)
+                        }
+                    })
+                }
                 else -> MockResponse().setResponseCode(404)
             }
         }
@@ -155,37 +161,93 @@ class KalinkaMediaServiceTest {
             RecordingMediaSession.activeOutputs.all { it == "remote" })
     }
 
-    private fun assertDisconnectedWithoutRetry() {
+    private val notifications get() =
+        service.getSystemService(NotificationManager::class.java).activeNotifications
+
+    private fun assertShownAgain() {
+        await { router.mediaSessionToken != null && notifications.size == 1 }
+        assertEquals("Kitchen", router.selectedRoute.name)
+    }
+
+    private fun assertDisconnected() {
         await { KalinkaRoutes.commands == null }
         assertNull(router.mediaSessionToken)
-        assertTrue(service.getSystemService(NotificationManager::class.java).activeNotifications.isEmpty())
+        assertTrue(notifications.isEmpty())
         assertFalse(router.selectedRoute.supportsControlCategory(KalinkaRouteProvider.category(service)))
-        while (server.takeRequest(0, TimeUnit.MILLISECONDS) != null) { }
-        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
-        assertNull("The notification must not reconnect itself", server.takeRequest(1, TimeUnit.SECONDS))
-        assertNull(router.mediaSessionToken)
     }
 
-    @Test fun serverClosingQueueRemovesNotificationAndDoesNotReconnect() {
-        queueSocket!!.close(1001, "Server shutting down")
-        assertDisconnectedWithoutRetry()
+    @Test fun serverClosingQueueHidesNotificationUntilReconnected() {
+        queueSocket!!.close(1001, "Server restarting")
+        assertDisconnected()
+        assertShownAgain()
     }
 
-    @Test fun serverClosingDeviceRemovesNotificationAndDoesNotReconnect() {
+    @Test fun serverClosingDeviceHidesNotificationUntilReconnected() {
         await { deviceSocket != null }
-        deviceSocket!!.close(1001, "Server shutting down")
-        assertDisconnectedWithoutRetry()
+        deviceSocket!!.close(1001, "Server restarting")
+        assertDisconnected()
+        assertShownAgain()
     }
 
-    @Test fun socketFailureRemovesNotificationUntilExplicitlyEnabledAgain() {
-        server.shutdown()
-        assertDisconnectedWithoutRetry()
-        val dispatcher = server.dispatcher
-        server = MockWebServer().also { it.dispatcher = dispatcher; it.start() }
+    /** Lets [duration] pass on the main looper, giving sockets time to answer. */
+    private fun pass(duration: Duration) {
+        repeat((duration.toMillis() / 500).toInt()) {
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(500))
+            Thread.sleep(20)
+        }
+    }
+
+    @Test fun reconnectingGivesUpAfterItsWindowUntilEnabledAgain() {
+        refuseSockets = true
+        queueSocket!!.close(1001, "Server restarting")
+        assertDisconnected()
+        pass(Duration.ofSeconds(40))
+        val attempts = queueAttempts.get()
+        assertTrue("It should retry before giving up: $attempts", attempts > 3)
+        refuseSockets = false
+        pass(Duration.ofSeconds(60))
+        assertEquals("It gave up and stays down", attempts, queueAttempts.get())
+        assertTrue(notifications.isEmpty())
+        // The app reaching the server turns it on again.
         service.enable(ServerAddress("http", server.hostName, server.port))
-        await { router.mediaSessionToken != null }
-        assertEquals("Kitchen", router.selectedRoute.name)
-        assertEquals(1, service.getSystemService(NotificationManager::class.java).activeNotifications.size)
+        assertShownAgain()
+    }
+
+    @Test fun enablingWhileItWaitsToReconnectTriesAtOnce() {
+        refuseSockets = true
+        queueSocket!!.close(1001, "Server restarting")
+        assertDisconnected()
+        pass(Duration.ofSeconds(4)) // into the 4 s wait after two failures
+        refuseSockets = false
+        val attempts = queueAttempts.get()
+        service.enable(ServerAddress("http", server.hostName, server.port))
+        // No time passes on the looper: the scheduled retry cannot be it.
+        val deadline = System.nanoTime() + 2_000_000_000
+        while (queueAttempts.get() == attempts && System.nanoTime() < deadline) Thread.sleep(10)
+        assertTrue("Enabling should reconnect at once", queueAttempts.get() > attempts)
+        assertShownAgain()
+    }
+
+    @Test fun socketFailureHidesNotification() {
+        server.shutdown()
+        assertDisconnected()
+    }
+
+    @Test fun clearedQueueHidesNotificationAndANewTrackShowsIt() {
+        queueSocket!!.send("""{"event_type":"state_changed","state":{"state":"STOPPED","current_track":null}}""")
+        await { notifications.isEmpty() }
+        assertNull(router.mediaSessionToken)
+        queueSocket!!.send(PLAYING_TRACK)
+        assertShownAgain()
+    }
+
+    @Test fun directPlaybackHidesNotificationUntilTheQueuePlaysAgain() {
+        queueSocket!!.send("""{"event_type":"playback_control_changed","control":{"mode":"exclusive"}}""")
+        await { notifications.isEmpty() }
+        assertNull(router.mediaSessionToken)
+        queueSocket!!.send("""{"event_type":"playback_control_changed","control":{"mode":"queue"}}""")
+        queueSocket!!.send(PLAYING_TRACK)
+        assertShownAgain()
     }
 
     @Test fun oldEngineDetachingCannotDisableTheNewEnginesNotification() {
@@ -239,5 +301,10 @@ class KalinkaMediaServiceTest {
         companion object {
             val activeOutputs = mutableListOf<String>()
         }
+    }
+
+    companion object {
+        private const val PLAYING_TRACK =
+            """{"event_type":"state_changed","state":{"state":"PLAYING","current_track":{"title":"Test track","duration":60}}}"""
     }
 }
