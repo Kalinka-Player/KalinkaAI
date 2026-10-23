@@ -282,7 +282,7 @@ class _SourceCell extends ConsumerWidget {
 }
 
 /// Names a listing's columns above its first row, while its rows have any,
-/// over a rule that sets the table off from its rows. A listing of tracks
+/// over the same hairline that runs between its rows. A listing of tracks
 /// alone calls the details its album and the trailing figure its time; any
 /// other listing calls them details.
 class RowColumnsHeader extends StatelessWidget {
@@ -365,11 +365,15 @@ class RowColumnsHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               names,
-              // As far from the first row as a separator is from its rows.
-              const Divider(
-                height: 14,
-                thickness: 1,
-                color: KalinkaColors.borderDefault,
+              // Drawn as the separators between rows are, from the first
+              // row's words to the edge.
+              Padding(
+                padding: EdgeInsets.only(left: titleInset),
+                child: const Divider(
+                  height: 14,
+                  thickness: 1,
+                  color: KalinkaColors.borderSubtle,
+                ),
               ),
             ],
           ),
