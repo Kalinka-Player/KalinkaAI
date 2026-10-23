@@ -7,35 +7,28 @@ import '../../providers/artist_relations_provider.dart' show imagePathOf;
 import '../../providers/selection_state_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../catalog_art.dart';
 import '../modifier_click.dart';
 import '../procedural_album_art.dart';
-import '../loading_shimmer.dart';
 import '../source_badge.dart';
 import '../tap_highlight.dart' show kalinkaOverlay;
 import 'browse_navigation_scope.dart';
 import 'row_play_button.dart';
 
-/// An artwork grid item: square covers, round artist portraits, or catalog
-/// banners in their native proportions, followed by a name and detail. The
-/// cover and name open its page; Play rests on the cover while the card is lit,
+/// An artwork grid item: square covers and round artist portraits followed by
+/// a name and detail, or a catalog's card with its name on it. The cover and
+/// name open its page; Play rests on the cover while the card is lit,
 /// and always on a touch screen. Long-press takes a playable item into the
 /// selection, as its row would. Under the pointer, held or focused, the whole
 /// card is outlined, as the cards of a Home rail are.
 class ArtworkGridCard extends ConsumerStatefulWidget {
   final BrowseItem item;
 
-  /// A parent catalog's preview hint for its child artwork, used while loading.
-  final double? catalogAspectRatio;
-
   /// Between the card's frame and its cover and caption: half the room
   /// between two covers, so frames abut and two outlines side by side meet.
   static const inset = kKalinkaFrameInset;
 
-  const ArtworkGridCard({
-    super.key,
-    required this.item,
-    this.catalogAspectRatio,
-  });
+  const ArtworkGridCard({super.key, required this.item});
 
   /// What [item] is called on its card, and the detail under it.
   static (String, String) captionOf(BrowseItem item) {
@@ -87,7 +80,13 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
 
   @override
   Widget build(BuildContext context) {
-    final (title, detail) = ArtworkGridCard.captionOf(item);
+    final catalog = item.browseType == BrowseType.catalog;
+    final (title, detail) = catalog
+        ? (
+            item.catalog?.title ?? item.name ?? 'Catalog',
+            item.description ?? '',
+          )
+        : ArtworkGridCard.captionOf(item);
     final round = item.browseType == BrowseType.artist;
     final playable = item.canAdd && !round;
     final selecting = ref.watch(
@@ -109,7 +108,6 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
     }
 
     final path = imagePathOf(item.image);
-    final url = path == null ? null : ref.read(urlResolverProvider).abs(path);
     final showSource = sourceBadgeVisible(ref, item.id);
 
     final card = ModifierClick(
@@ -147,51 +145,58 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _artwork(
-                      url: url,
+                      path: path,
                       round: round,
                       selected: selected,
                       playable: playable && !selecting,
+                      catalogTitle: catalog ? title : null,
+                      showSource: showSource,
                     ),
-                    const SizedBox(height: 8),
-                    ExcludeSemantics(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: KalinkaTextStyles.trackRowTitle.copyWith(
-                              color: selected ? KalinkaColors.accentTint : null,
+                    if (!catalog) ...[
+                      const SizedBox(height: 8),
+                      ExcludeSemantics(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: KalinkaTextStyles.trackRowTitle.copyWith(
+                                color: selected
+                                    ? KalinkaColors.accentTint
+                                    : null,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (showSource || detail.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                if (showSource) ...[
-                                  SourceBadge(
-                                    entityId: item.id,
-                                    size: SourceBadgeSize.small,
-                                  ),
-                                  if (detail.isNotEmpty)
-                                    const SizedBox(width: 6),
-                                ],
-                                if (detail.isNotEmpty)
-                                  Expanded(
-                                    child: Text(
-                                      detail,
-                                      style: KalinkaTextStyles.trackRowSubtitle,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                            if (showSource || detail.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  if (showSource) ...[
+                                    SourceBadge(
+                                      entityId: item.id,
+                                      size: SourceBadgeSize.small,
                                     ),
-                                  ),
-                              ],
-                            ),
+                                    if (detail.isNotEmpty)
+                                      const SizedBox(width: 6),
+                                  ],
+                                  if (detail.isNotEmpty)
+                                    Expanded(
+                                      child: Text(
+                                        detail,
+                                        style:
+                                            KalinkaTextStyles.trackRowSubtitle,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -214,58 +219,55 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
     return highlighted(card);
   }
 
+  /// A catalog's card when [catalogTitle] is given, else a cover.
   Widget _artwork({
-    required String? url,
+    required String? path,
     required bool round,
     required bool selected,
     required bool playable,
+    required String? catalogTitle,
+    required bool showSource,
   }) => LayoutBuilder(
     builder: (context, constraints) {
       final size = constraints.maxWidth;
-      final catalog = item.browseType == BrowseType.catalog;
-      final hint = widget.catalogAspectRatio;
-      final ratio = catalog
-          ? (hint != null && hint.isFinite && hint > 0 ? hint : 3.0)
-          : 1.0;
-      final fallback = AspectRatio(
-        aspectRatio: ratio,
-        child: ClipRect(
+      final Widget cover;
+      if (catalogTitle != null) {
+        cover = CatalogCard(
+          artPath: path,
+          aspectRatio: item.image?.aspectRatio,
+          title: catalogTitle,
+          description: item.description,
+          subtitle: item.description,
+          leading: showSource
+              ? (_) =>
+                    SourceBadge(entityId: item.id, size: SourceBadgeSize.small)
+              : null,
+          minScale: 0.8,
+          maxLines: 2,
+        );
+      } else {
+        final fallback = ClipRect(
           child: FittedBox(
             fit: BoxFit.cover,
             child: ProceduralAlbumArt(trackId: item.id, size: size),
           ),
-        ),
-      );
-      final art = url == null
-          ? fallback
-          : Image.network(
-              url,
-              width: size,
-              // Category banners keep the decoded image's own proportions.
-              // Album/playlist covers and artist portraits remain square.
-              height: catalog ? null : size,
-              cacheWidth: (size * 2.5).round(),
-              fit: catalog ? BoxFit.contain : BoxFit.cover,
-              gaplessPlayback: true,
-              filterQuality: FilterQuality.medium,
-              frameBuilder: (context, child, frame, synchronous) =>
-                  catalog && frame == null
-                  ? AspectRatio(
-                      aspectRatio: ratio,
-                      child: const ShimmerPulse(child: ShimmerBlock()),
-                    )
-                  : child,
-              errorBuilder: (_, _, _) => fallback,
-            );
-      final cover = catalog
-          ? ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: playable ? 48 : 0,
-                maxHeight: 320,
-              ),
-              child: art,
-            )
-          : AspectRatio(aspectRatio: 1, child: art);
+        );
+        cover = AspectRatio(
+          aspectRatio: 1,
+          child: path == null
+              ? fallback
+              : Image.network(
+                  ref.read(urlResolverProvider).abs(path),
+                  width: size,
+                  height: size,
+                  cacheWidth: (size * 2.5).round(),
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  filterQuality: FilterQuality.medium,
+                  errorBuilder: (_, _, _) => fallback,
+                ),
+        );
+      }
       final mouse = RendererBinding.instance.mouseTracker;
       return Stack(
         children: [

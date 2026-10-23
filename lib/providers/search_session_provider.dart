@@ -112,6 +112,9 @@ class CatalogPage {
   /// Server-rendered card art path — reused as the page's header backdrop.
   final String? artPath;
 
+  /// [artPath]'s width over its height, where its source said.
+  final double? artAspectRatio;
+
   /// The fields this category's source declared for it, carried from the
   /// catalog the page was opened from.
   final List<FilterSpec> filters;
@@ -146,6 +149,7 @@ class CatalogPage {
       description = null,
       totalDurationSeconds = null,
       artPath = null,
+      artAspectRatio = null,
       filters = const [],
       sections = const [],
       canEdit = false,
@@ -161,6 +165,7 @@ class CatalogPage {
     this.description,
     this.totalDurationSeconds,
     this.artPath,
+    this.artAspectRatio,
     this.filters = const [],
     this.sections = const [],
     this.canEdit = false,
@@ -184,6 +189,7 @@ class CatalogPage {
     'provider': provider,
     'description': description,
     'artPath': artPath,
+    'artAspectRatio': artAspectRatio,
     'filters': filters.map((f) => f.toJson()).toList(),
     'sections': sections.map((s) => s.toJson()).toList(),
     'folderLayout': folderLayout,
@@ -198,6 +204,7 @@ class CatalogPage {
         provider: json['provider'] as String?,
         description: json['description'] as String?,
         artPath: json['artPath'] as String?,
+        artAspectRatio: validAspectRatio(json['artAspectRatio']),
         filters: FilterSpec.parseList(json['filters']),
         sections: [
           for (final item in json['sections'] as List? ?? [])
@@ -243,6 +250,7 @@ class CatalogPage {
             item.subname,
         totalDurationSeconds: item.album?.duration,
         artPath: item.image?.large ?? item.image?.small ?? artPathOf(item),
+        artAspectRatio: item.image?.aspectRatio,
         filters: item.catalog?.filters ?? const [],
         sections: item.sections ?? const [],
         canEdit: item.canEdit,
@@ -290,6 +298,7 @@ class CatalogPage {
       description: description,
       totalDurationSeconds: totalDurationSeconds,
       artPath: artPath,
+      artAspectRatio: artAspectRatio,
       filters: filters,
       sections: sections,
       canEdit: canEdit,
@@ -1032,6 +1041,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         description: plan.description,
         totalDurationSeconds: plan.totalDurationSeconds,
         artPath: plan.artPath,
+        artAspectRatio: plan.artAspectRatio,
         filters: plan.filters,
         sections: plan.sections,
         canEdit: plan.canEdit,
@@ -1070,6 +1080,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     String? description,
     int? totalDurationSeconds,
     String? artPath,
+    double? artAspectRatio,
     List<FilterSpec> filters = const [],
     List<BrowseItem> sections = const [],
     bool canEdit = false,
@@ -1104,6 +1115,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       description: description,
       totalDurationSeconds: totalDurationSeconds,
       artPath: artPath,
+      artAspectRatio: artAspectRatio,
       filters: filters,
       sections: sections,
       canEdit: canEdit,
@@ -1153,6 +1165,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       description: page.description,
       totalDurationSeconds: page.totalDurationSeconds,
       artPath: page.artPath,
+      artAspectRatio: page.artAspectRatio,
       filters: page.filters,
       sections: page.sections,
       canEdit: page.canEdit,
