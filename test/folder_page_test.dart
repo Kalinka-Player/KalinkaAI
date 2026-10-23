@@ -660,7 +660,7 @@ void main() {
       tester.getBottomLeft(held).dy,
       lessThanOrEqualTo(
         tester
-            .getTopLeft(find.byKey(const ValueKey('catalog-header-divider')))
+            .getBottomLeft(find.byKey(const ValueKey('catalog-header-surface')))
             .dy,
       ),
     );

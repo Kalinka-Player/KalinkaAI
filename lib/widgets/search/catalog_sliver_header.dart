@@ -168,9 +168,9 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
                     folderActions;
         final controlsWidth = wide ? folderActions : available;
         final actionsHeight = widget.actions == null ? 0.0 : rowHeight + 8;
-        // Only the divider stays under the bar, and a folder's own actions,
-        // held there as its trail is.
-        final pinnedHeight = widget.actions == null ? 1.0 : rowHeight + 17;
+        // Only a folder's own actions stay under the bar, held there as its
+        // trail is.
+        final pinnedHeight = widget.actions == null ? 0.0 : rowHeight + 16;
         final headingWidth = wide
             ? available - controlsWidth - identityGap
             : available;
@@ -228,14 +228,13 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
             ? math.max(0.0, headingHeight + pillInset - blockHeight)
             : headingHeight;
         final controlsBottom = expandedTop + blockHeight;
-        // The divider sits 12dp under whatever ends lowest, text or pill.
+        // The content starts 12dp under whatever ends lowest, text or pill.
         final expandedHeight = math.max(
           pinnedHeight,
           math.max(
-                wide || !hasBlock ? headingHeight + 12 : 0.0,
-                hasBlock ? controlsBottom + 8 : 0.0,
-              ) +
-              1,
+            wide || !hasBlock ? headingHeight + 12 : 0.0,
+            hasBlock ? controlsBottom + 8 : 0.0,
+          ),
         );
         final collapseExtent = expandedHeight - pinnedHeight;
         _reportExtent(collapseExtent);
@@ -267,7 +266,7 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
               // Up to 8dp under the bar, across the pane, and held there.
               final actionsTop = math.min(
                 math.max(top + 8, 8.0),
-                expandedHeight - shrink - rowHeight - 9,
+                expandedHeight - shrink - rowHeight - 8,
               );
               final actionsLeft = left + (16 - left) * settle;
               return ColoredBox(
@@ -350,16 +349,6 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
                           height: rowHeight,
                           child: widget.actions!,
                         ),
-                      const Positioned(
-                        bottom: 0,
-                        left: 16,
-                        right: 16,
-                        child: SizedBox(
-                          key: ValueKey('catalog-header-divider'),
-                          height: 1,
-                          child: ColoredBox(color: KalinkaColors.borderDefault),
-                        ),
-                      ),
                     ],
                   ),
                 ),
