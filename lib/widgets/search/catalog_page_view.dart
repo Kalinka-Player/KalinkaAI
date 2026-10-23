@@ -295,12 +295,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     };
     // A category's card, or covers its source declares wider than square,
     // such as editorial banners.
-    final declaredRatio = layout?.itemAspectRatio ?? 1;
     final coverRatio = gridKind == BrowseType.catalog
         ? 3.0
-        : declaredRatio > 1
-        ? declaredRatio
-        : 1.0;
+        : (layout?.itemAspectRatio ?? 1).clamp(1.0, double.infinity);
     // Any folder shown, the same one again included, opens at its top.
     if (listing.id != _shownListingId) {
       _shownListingId = listing.id;

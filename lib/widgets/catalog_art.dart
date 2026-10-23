@@ -42,8 +42,10 @@ class CatalogArtSeed {
     Color(0xFF7A2F20), // rust
   ];
 
+  static final _space = RegExp(r'\s+');
+
   static String _normalised(String text) =>
-      text.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+      text.trim().toLowerCase().replaceAll(_space, ' ');
 
   @override
   bool operator ==(Object other) =>
@@ -220,8 +222,7 @@ class CatalogArt extends ConsumerWidget {
   final String? artPath;
 
   /// Width over height of the catalog's card art, its large image. Unstated,
-  /// it is taken for the server's 3:1 card, which servers before SDK 3.16
-  /// send without one.
+  /// it is taken for a square.
   final double? aspectRatio;
 
   /// What the drawn art is seeded from.
@@ -248,7 +249,7 @@ class CatalogArt extends ConsumerWidget {
           ? image?.thumbnail ?? image?.small ?? image?.large
           : image?.large ?? image?.small ?? image?.thumbnail,
       aspectRatio: image?.aspectRatio,
-      title: item.catalog?.title ?? item.name ?? '',
+      title: item.catalog?.title ?? item.name ?? 'Catalog',
       description: item.description,
       square: square,
     );
@@ -260,8 +261,8 @@ class CatalogArt extends ConsumerWidget {
   /// An inset image's share of the card, leaving the caption its side.
   static const _insetRoom = 0.4;
 
-  /// Where a square crop of a card-shaped thumbnail starts across it, past
-  /// the caption's side: older servers send the card itself as one.
+  /// Where a square crops a card-shaped image, stated 2:1 or wider, across
+  /// it: past the caption's side, over the art.
   static const _cropStart = 0.55;
 
   @override
@@ -277,7 +278,7 @@ class CatalogArt extends ConsumerWidget {
     if (path == null || path.isEmpty) return drawn;
     final url = ref.watch(urlResolverProvider).abs(path);
     final dpr = MediaQuery.devicePixelRatioOf(context);
-    final ratio = aspectRatio ?? 3;
+    final ratio = aspectRatio ?? 1;
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest;

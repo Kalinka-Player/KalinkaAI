@@ -316,11 +316,12 @@ class _TileState extends ConsumerState<_Tile> {
   @override
   Widget build(BuildContext context) {
     final size = widget.size;
-    final path =
-        item.image?.large ?? item.image?.small ?? item.image?.thumbnail;
-    final url = path == null ? null : ref.watch(urlResolverProvider).abs(path);
     final catalog =
         item.browseTypeIn(folder: widget.inFolder) == BrowseType.catalog;
+    final path = catalog
+        ? null
+        : item.image?.large ?? item.image?.small ?? item.image?.thumbnail;
+    final url = path == null ? null : ref.watch(urlResolverProvider).abs(path);
     // As tall as the rail's other art, a banner as wide as its shape.
     final width = catalog ? size : size * ArtworkGridCard.coverShapeOf(item);
     final fallback = SizedBox(

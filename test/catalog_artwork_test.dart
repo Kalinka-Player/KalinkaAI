@@ -195,7 +195,7 @@ void main() {
     expect(card(tester).height, closeTo(320, 0.5));
   });
 
-  for (final ratio in [null, 3.0]) {
+  for (final ratio in [3.0]) {
     testWidgets('card art (ratio $ratio) covers the card it is laid out for', (
       tester,
     ) async {
@@ -211,7 +211,7 @@ void main() {
     });
   }
 
-  for (final ratio in [1.0, 1100 / 800]) {
+  for (final ratio in [null, 1.0, 1100 / 800]) {
     testWidgets('$ratio:1 art sits on the right of a drawn card', (
       tester,
     ) async {
@@ -219,7 +219,7 @@ void main() {
       final cardRect = card(tester);
       final art = tester.getRect(find.byType(Image));
       expect(cardRect.width / cardRect.height, closeTo(3, 0.001));
-      expect(art.width / art.height, closeTo(ratio, 0.001));
+      expect(art.width / art.height, closeTo(ratio ?? 1, 0.001));
       expect(art.right, lessThan(cardRect.right));
       expect(art.left, greaterThan(tester.getRect(find.text('Art')).right));
       expect(cardRect.contains(art.topLeft), isTrue);
