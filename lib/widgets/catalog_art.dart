@@ -428,6 +428,10 @@ class CatalogCard extends StatelessWidget {
   /// dark.
   static const captionShare = 0.6;
 
+  // The caption's sizes on a 400dp card, in the styles album cards use.
+  static const _titleSize = KalinkaTypography.baseSize + 10;
+  static const _subtitleSize = KalinkaTypography.baseSize + 2;
+
   // Lifts the caption off bright spots of a source's own art: a tight edge
   // round each glyph, and a softer one under it.
   static const _captionShadows = [
@@ -498,10 +502,11 @@ class CatalogCard extends StatelessWidget {
                                   overflow: maxLines == null
                                       ? null
                                       : TextOverflow.ellipsis,
-                                  style: KalinkaTextStyles.blockTitle.apply(
-                                    fontSizeFactor: 0.85 * scale,
-                                    shadows: _captionShadows,
-                                  ),
+                                  style: KalinkaTextStyles.trackRowTitle
+                                      .copyWith(
+                                        fontSize: _titleSize * scale,
+                                        shadows: _captionShadows,
+                                      ),
                                 ),
                               ),
                             ],
@@ -514,10 +519,11 @@ class CatalogCard extends StatelessWidget {
                               overflow: maxLines == null
                                   ? null
                                   : TextOverflow.ellipsis,
-                              style: KalinkaTextStyles.trackRowSubtitle.apply(
-                                fontSizeFactor: 0.85 * subtitleScale,
-                                shadows: _captionShadows,
-                              ),
+                              style: KalinkaTextStyles.trackRowSubtitle
+                                  .copyWith(
+                                    fontSize: _subtitleSize * subtitleScale,
+                                    shadows: _captionShadows,
+                                  ),
                             ),
                           ],
                         ],
