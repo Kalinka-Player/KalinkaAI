@@ -30,6 +30,13 @@ class ArtworkGridCard extends ConsumerStatefulWidget {
 
   const ArtworkGridCard({super.key, required this.item});
 
+  /// The shape of [item]'s cover on a card: its large image's own where that
+  /// is wider than a square, such as an editorial banner, else a square.
+  static double coverShapeOf(BrowseItem item) {
+    final ratio = item.image?.aspectRatio;
+    return item.artist == null && ratio != null && ratio > 1 ? ratio : 1;
+  }
+
   /// What [item] is called on its card, and the detail under it.
   static (String, String) captionOf(BrowseItem item) {
     final album = item.album;
@@ -252,14 +259,15 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
             child: ProceduralAlbumArt(trackId: item.id, size: size),
           ),
         );
+        final shape = round ? 1.0 : ArtworkGridCard.coverShapeOf(item);
         cover = AspectRatio(
-          aspectRatio: 1,
+          aspectRatio: shape,
           child: path == null
               ? fallback
               : Image.network(
                   ref.read(urlResolverProvider).abs(path),
                   width: size,
-                  height: size,
+                  height: size / shape,
                   cacheWidth: (size * 2.5).round(),
                   fit: BoxFit.cover,
                   gaplessPlayback: true,

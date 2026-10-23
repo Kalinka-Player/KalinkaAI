@@ -14,6 +14,7 @@ import '../loading_shimmer.dart';
 import '../procedural_album_art.dart';
 import '../scroll_edge_fade.dart';
 import '../search/search_zero_state.dart' show kHomeSideInset;
+import '../search_cards/artwork_grid_card.dart' show ArtworkGridCard;
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/track_row_support.dart' show CornerGlyph;
 import '../tap_highlight.dart' show kalinkaOverlay;
@@ -191,6 +192,7 @@ class _TileRail extends StatelessWidget {
                   ),
                   itemCount: columns,
                   itemBuilder: (context, column) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       for (var row = 0; row < rows; row++)
                         if (column * rows + row < count)
@@ -317,15 +319,28 @@ class _TileState extends ConsumerState<_Tile> {
     final path =
         item.image?.large ?? item.image?.small ?? item.image?.thumbnail;
     final url = path == null ? null : ref.watch(urlResolverProvider).abs(path);
-    final fallback = ProceduralAlbumArt(trackId: item.id, size: size);
-    final art = item.browseTypeIn(folder: widget.inFolder) == BrowseType.catalog
+    final catalog =
+        item.browseTypeIn(folder: widget.inFolder) == BrowseType.catalog;
+    // As tall as the rail's other art, a banner as wide as its shape.
+    final width = catalog ? size : size * ArtworkGridCard.coverShapeOf(item);
+    final fallback = SizedBox(
+      width: width,
+      height: size,
+      child: ClipRect(
+        child: FittedBox(
+          fit: BoxFit.cover,
+          child: ProceduralAlbumArt(trackId: item.id, size: width),
+        ),
+      ),
+    );
+    final art = catalog
         ? SizedBox.square(
             dimension: size,
             child: CatalogArt.of(item, square: true),
           )
         : url == null
         ? fallback
-        : _TileArt(url: url, size: size, fallback: fallback);
+        : _TileArt(url: url, width: width, size: size, fallback: fallback);
     final isArtist = item.artist != null && item.album == null;
     final subtitle = _subtitle;
     final playable = item.track != null && !item.canBrowse;
@@ -361,7 +376,7 @@ class _TileState extends ConsumerState<_Tile> {
             child: Padding(
               padding: const EdgeInsets.all(_Tile.inset),
               child: SizedBox(
-                width: size,
+                width: width,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -419,11 +434,15 @@ class _TileState extends ConsumerState<_Tile> {
 /// loads instead of flashing back to a placeholder.
 class _TileArt extends StatefulWidget {
   final String url;
+  final double width;
+
+  /// The art's height, the rail's tile size.
   final double size;
   final Widget fallback;
 
   const _TileArt({
     required this.url,
+    required this.width,
     required this.size,
     required this.fallback,
   });
@@ -446,10 +465,11 @@ class _TileArtState extends State<_TileArt> {
   @override
   Widget build(BuildContext context) {
     final size = widget.size;
-    final decodeSize = (size / _decodeStep).ceil() * _decodeStep;
+    final width = widget.width;
+    final decodeSize = (width / _decodeStep).ceil() * _decodeStep;
     return Image.network(
       widget.url,
-      width: size,
+      width: width,
       height: size,
       fit: BoxFit.cover,
       cacheWidth: (decodeSize * MediaQuery.devicePixelRatioOf(context)).round(),
@@ -459,7 +479,7 @@ class _TileArtState extends State<_TileArt> {
         return _shown
             ? child
             : ShimmerPulse(
-                child: ShimmerBlock(width: size, height: size),
+                child: ShimmerBlock(width: width, height: size),
               );
       },
       errorBuilder: (_, _, _) => widget.fallback,

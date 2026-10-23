@@ -104,6 +104,31 @@ void main() {
     }
   });
 
+  testWidgets('a banner keeps its shape, its name under it', (tester) async {
+    await _mount(
+      tester,
+      BrowseItem(
+        id: 'kalinka:demo:playlist:p',
+        name: 'Jazz Classics',
+        canBrowse: true,
+        canAdd: false,
+        playlist: Playlist(
+          id: 'p',
+          name: 'Jazz Classics',
+          image: AlbumImage(large: '/banner.jpg', aspectRatio: 2.1),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final art = tester.getRect(find.byType(AspectRatio));
+    expect(art.width / art.height, closeTo(2.1, 0.001));
+    expect(
+      tester.getTopLeft(find.text('Jazz Classics')).dy,
+      greaterThan(art.bottom),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('album art stays square and Play is separate from opening', (
     tester,
   ) async {
