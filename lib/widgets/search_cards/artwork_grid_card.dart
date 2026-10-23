@@ -8,6 +8,7 @@ import '../../providers/selection_state_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../catalog_art.dart';
+import '../fitted_art.dart';
 import '../modifier_click.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
@@ -24,20 +25,15 @@ import 'row_play_button.dart';
 class ArtworkGridCard extends ConsumerStatefulWidget {
   final BrowseItem item;
 
+  /// The shape its shelf lays covers out in, width over height. An artist's
+  /// portrait stays round, and a catalog's card 3:1.
+  final double shape;
+
   /// Between the card's frame and its cover and caption: half the room
   /// between two covers, so frames abut and two outlines side by side meet.
   static const inset = kKalinkaFrameInset;
 
-  const ArtworkGridCard({super.key, required this.item});
-
-  /// The shape of [item]'s cover on a card: its large image's own where that
-  /// is wider than a square, such as an editorial banner, else a square.
-  static double coverShapeOf(BrowseItem item) {
-    final ratio = item.image?.aspectRatio;
-    return item.browseType != BrowseType.artist && ratio != null && ratio > 1
-        ? ratio
-        : 1;
-  }
+  const ArtworkGridCard({super.key, required this.item, this.shape = 1});
 
   /// What [item] is called on its card, and the detail under it.
   static (String, String) captionOf(BrowseItem item) {
@@ -261,20 +257,37 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
             child: ProceduralAlbumArt(trackId: item.id, size: size),
           ),
         );
-        final shape = round ? 1.0 : ArtworkGridCard.coverShapeOf(item);
+        final shape = round ? 1.0 : widget.shape;
+        final height = size / shape;
+        final ratio = item.image?.aspectRatio;
+        final fills = fillsShape(ratio, shape);
+        final byHeight = !fills && fitsByHeight(ratio, shape);
+        final url = path == null
+            ? null
+            : ref.read(urlResolverProvider).abs(path);
+        final art = url == null
+            ? fallback
+            : Image.network(
+                url,
+                width: size,
+                height: height,
+                cacheWidth: byHeight ? null : (size * 2.5).round(),
+                cacheHeight: byHeight ? (height * 2.5).round() : null,
+                fit: fills ? BoxFit.cover : BoxFit.contain,
+                gaplessPlayback: true,
+                filterQuality: FilterQuality.medium,
+                errorBuilder: (_, _, _) => fallback,
+              );
         cover = AspectRatio(
           aspectRatio: shape,
-          child: path == null
-              ? fallback
-              : Image.network(
-                  ref.read(urlResolverProvider).abs(path),
-                  width: size,
-                  height: size / shape,
-                  cacheWidth: (size * 2.5).round(),
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                  filterQuality: FilterQuality.medium,
-                  errorBuilder: (_, _, _) => fallback,
+          child: url == null || fills
+              ? art
+              : Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    SoftImageFill(url: url),
+                    art,
+                  ],
                 ),
         );
       }

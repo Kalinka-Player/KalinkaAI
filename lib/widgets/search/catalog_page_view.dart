@@ -293,11 +293,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       PreviewContentType.track => BrowseType.track,
       _ => _firstKind,
     };
-    // A category's card, or covers its source declares wider than square,
-    // such as editorial banners.
-    final coverRatio = gridKind == BrowseType.catalog
-        ? 3.0
-        : (layout?.itemAspectRatio ?? 1).clamp(1.0, double.infinity);
+    // Covers take the shape their shelf declares; a category's card is 3:1.
+    final coverShape = layout?.itemAspectRatio ?? 1.0;
+    final cardShape = gridKind == BrowseType.catalog ? 3.0 : coverShape;
     // Any folder shown, the same one again included, opens at its top.
     if (listing.id != _shownListingId) {
       _shownListingId = listing.id;
@@ -482,7 +480,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           child: child,
         );
         if (grid && _inGrid(item)) {
-          final card = ArtworkGridCard(item: item);
+          final card = ArtworkGridCard(item: item, shape: coverShape);
           return attributed(
             columns == 1
                 ? Padding(
@@ -595,7 +593,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               columns: columns,
               rows: 3,
               catalogs: gridKind == BrowseType.catalog,
-              coverRatio: coverRatio,
+              coverRatio: cardShape,
             ),
       loadMorePlaceholder: !grid || gridKind == BrowseType.track
           ? const Padding(
@@ -606,7 +604,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               columns: columns,
               rows: 1,
               catalogs: gridKind == BrowseType.catalog,
-              coverRatio: coverRatio,
+              coverRatio: cardShape,
             ),
       emptyBuilder: (context) => _emptyState(page, filter, onReset: setQuery),
       // The error state replaces only the rows, never the header — a filter
@@ -656,7 +654,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               columns: _gridColumns(
                 constraints.maxWidth - 2 * (16 - ArtworkGridCard.inset),
                 scale,
-                wide: coverRatio > 1,
+                wide: cardShape > 1,
                 tracks: gridKind == BrowseType.track,
               ),
             )
