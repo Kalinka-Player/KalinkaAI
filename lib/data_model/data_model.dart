@@ -481,7 +481,8 @@ class AlbumImage {
   final String? thumbnail;
   final String? large;
 
-  /// Width over height of every size, when whoever made the image said.
+  /// Width over height of [large], when its source said. [thumbnail] is drawn
+  /// into a square, whatever its shape.
   final double? aspectRatio;
 
   AlbumImage({this.small, this.thumbnail, this.large, this.aspectRatio});

@@ -66,6 +66,47 @@ void main() {
     expect(fnv1a('foobar'), 0xbf9cf968);
   });
 
+  testWidgets('a row leads with the catalog\'s thumbnail, square', (
+    tester,
+  ) async {
+    BrowseItem catalog(AlbumImage? image) => BrowseItem(
+      id: 'kalinka:demo:catalog:c',
+      name: 'Jazz',
+      canBrowse: true,
+      canAdd: false,
+      catalog: Catalog(id: 'c', title: 'Jazz', image: image),
+    );
+    Future<void> thumb(BrowseItem item) => tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          urlResolverProvider.overrideWithValue(
+            UrlResolver('https://art.example'),
+          ),
+        ],
+        child: MaterialApp(
+          home: Center(child: CatalogThumb(item: item, size: 60)),
+        ),
+      ),
+    );
+
+    await thumb(
+      catalog(
+        AlbumImage(large: '/card.jpg', thumbnail: '/thumb.jpg', aspectRatio: 3),
+      ),
+    );
+    final image = tester.widget<Image>(find.byType(Image));
+    final provider = (image.image as ResizeImage).imageProvider as NetworkImage;
+    expect(provider.url, 'https://art.example/thumb.jpg');
+    expect(image.fit, BoxFit.cover);
+    expect(tester.getSize(find.byType(Image)), const Size(60, 60));
+
+    await thumb(catalog(null));
+    final drawn = tester.widget<CustomPaint>(_drawn);
+    expect((drawn.painter! as CatalogArtPainter).captioned, isFalse);
+    expect(tester.getSize(_drawn), const Size(60, 60));
+    expect(tester.takeException(), isNull);
+  });
+
   Future<void> mount(
     WidgetTester tester, {
     String? path,
