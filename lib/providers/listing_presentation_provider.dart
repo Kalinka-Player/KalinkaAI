@@ -28,7 +28,16 @@ class ListingLayout {
   /// How it is laid out until a choice is made for it on this device.
   final ListingPresentation byDefault;
 
-  const ListingLayout(this.id, {this.contentType, required this.byDefault});
+  /// The shape of its items' art, as its catalog declares; null when it does
+  /// not. Each item's own image decides its card; this sizes the columns.
+  final double? itemAspectRatio;
+
+  const ListingLayout(
+    this.id, {
+    this.contentType,
+    required this.byDefault,
+    this.itemAspectRatio,
+  });
 
   /// From the preview its catalog declares: image cards and carousels open as
   /// a grid, anything else as rows. Null for a listing of tracks, which only
@@ -44,6 +53,7 @@ class ListingLayout {
         PreviewType.carousel => ListingPresentation.grid,
         _ => ListingPresentation.list,
       },
+      itemAspectRatio: validAspectRatio(preview?.aspectRatio),
     );
   }
 }

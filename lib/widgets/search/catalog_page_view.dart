@@ -293,6 +293,14 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       PreviewContentType.track => BrowseType.track,
       _ => _firstKind,
     };
+    // A category's card, or covers its source declares wider than square,
+    // such as editorial banners.
+    final declaredRatio = layout?.itemAspectRatio ?? 1;
+    final coverRatio = gridKind == BrowseType.catalog
+        ? 3.0
+        : declaredRatio > 1
+        ? declaredRatio
+        : 1.0;
     // Any folder shown, the same one again included, opens at its top.
     if (listing.id != _shownListingId) {
       _shownListingId = listing.id;
@@ -590,6 +598,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               columns: columns,
               rows: 3,
               catalogs: gridKind == BrowseType.catalog,
+              coverRatio: coverRatio,
             ),
       loadMorePlaceholder: !grid || gridKind == BrowseType.track
           ? const Padding(
@@ -600,6 +609,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               columns: columns,
               rows: 1,
               catalogs: gridKind == BrowseType.catalog,
+              coverRatio: coverRatio,
             ),
       emptyBuilder: (context) => _emptyState(page, filter, onReset: setQuery),
       // The error state replaces only the rows, never the header — a filter
@@ -649,7 +659,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               columns: _gridColumns(
                 constraints.maxWidth - 2 * (16 - ArtworkGridCard.inset),
                 scale,
-                catalogs: gridKind == BrowseType.catalog,
+                wide: coverRatio > 1,
                 tracks: gridKind == BrowseType.track,
               ),
             )
@@ -890,21 +900,20 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   );
 
   /// Covers of about 180–220 across, more columns as the pane grows, never
-  /// narrower than a readable caption. A track keeps its row, which needs
-  /// 68% more room than a cover to read.
+  /// narrower than a readable caption; [wide] art, a category's card or a
+  /// banner, about 220–340. A track keeps its row, which needs 68% more room
+  /// than a cover to read.
   static int _gridColumns(
     double width,
     double scale, {
-    bool catalogs = false,
+    bool wide = false,
     bool tracks = false,
   }) {
     // Each card is its cover with a frame inset either side.
     const frame = 2 * ArtworkGridCard.inset;
     final grow = tracks ? 1.68 : 1.0;
-    final wanted = (width / ((catalogs ? 340 : 220) * grow * scale + frame))
-        .ceil();
-    final fits = (width / ((catalogs ? 220 : 140) * grow * scale + frame))
-        .floor();
+    final wanted = (width / ((wide ? 340 : 220) * grow * scale + frame)).ceil();
+    final fits = (width / ((wide ? 220 : 140) * grow * scale + frame)).floor();
     return wanted.clamp(1, fits < 1 ? 1 : fits).clamp(1, 10);
   }
 
@@ -1675,10 +1684,14 @@ class _GridShimmer extends StatelessWidget {
   /// Catalog cards: 3:1, their name on them.
   final bool catalogs;
 
+  /// Other covers' shape, captioned under it.
+  final double coverRatio;
+
   const _GridShimmer({
     required this.columns,
     required this.rows,
     this.catalogs = false,
+    this.coverRatio = 1,
   });
 
   @override
@@ -1702,20 +1715,20 @@ class _GridShimmer extends StatelessWidget {
                                 aspectRatio: 3,
                                 child: ShimmerBlock(radius: 10),
                               )
-                            : const Column(
+                            : Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   AspectRatio(
-                                    aspectRatio: 1,
-                                    child: ShimmerBlock(radius: 10),
+                                    aspectRatio: coverRatio,
+                                    child: const ShimmerBlock(radius: 10),
                                   ),
-                                  SizedBox(height: 10),
-                                  FractionallySizedBox(
+                                  const SizedBox(height: 10),
+                                  const FractionallySizedBox(
                                     widthFactor: 0.7,
                                     child: ShimmerBlock(height: 14, radius: 4),
                                   ),
-                                  SizedBox(height: 6),
-                                  FractionallySizedBox(
+                                  const SizedBox(height: 6),
+                                  const FractionallySizedBox(
                                     widthFactor: 0.45,
                                     child: ShimmerBlock(height: 12, radius: 4),
                                   ),
