@@ -34,6 +34,7 @@ import '../search_cards/editable_track_list.dart';
 import '../search_cards/row_columns.dart';
 import '../search_cards/search_track_row.dart';
 import '../shelf_heading.dart';
+import '../track_tile_layout.dart';
 import '../source_badge.dart';
 import 'add_queue_chip.dart';
 import 'album_page_header.dart';
@@ -903,6 +904,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     return wanted.clamp(1, fits < 1 ? 1 : fits).clamp(1, 10);
   }
 
+  /// Over each disc's first track: a disc over the column of numbers and
+  /// its name in line with the titles, as the rows under it set theirs.
   Widget? _discHeading(int index, List<BrowseItem> loaded, bool multiDisc) {
     final disc = loaded[index].track?.discNumber;
     // A single-disc album needs no "Disc 1" heading.
@@ -911,17 +914,42 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         (index > 0 && loaded[index - 1].track?.discNumber == disc)) {
       return null;
     }
+    const numbersStart = 3.0;
     return Padding(
-      padding: EdgeInsets.fromLTRB(8, index == 0 ? 8 : 16, 8, 8),
-      child: Semantics(
-        header: true,
-        child: Text(
-          'Disc $disc',
-          style: KalinkaFonts.mono(
-            fontSize: 12,
-            color: KalinkaColors.textSecondary,
+      padding: EdgeInsets.only(top: index == 0 ? 8 : 24, bottom: 8),
+      child: Row(
+        children: [
+          const SizedBox(width: numbersStart),
+          const SizedBox(
+            width: kTrackTileArtworkSize,
+            child: Center(
+              child: Icon(
+                Icons.album_outlined,
+                size: 20,
+                color: KalinkaColors.textSecondary,
+              ),
+            ),
           ),
-        ),
+          const SizedBox(
+            width:
+                BrowseItemRows.trackTextInset -
+                numbersStart -
+                kTrackTileArtworkSize,
+          ),
+          Expanded(
+            child: Semantics(
+              header: true,
+              child: Text(
+                'Disc $disc',
+                style: KalinkaFonts.sans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: KalinkaColors.textPrimary,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

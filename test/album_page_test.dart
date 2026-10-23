@@ -186,6 +186,11 @@ void main() {
     expect(rows.map((row) => row.albumTrackNumber), [2, 3, 1, 2]);
     expect(find.text('Disc 1'), findsOneWidget);
     expect(find.text('Disc 2'), findsOneWidget);
+    // A disc's name starts where its tracks' titles do.
+    expect(
+      tester.getRect(find.text('Disc 2')).left,
+      closeTo(tester.getRect(find.text('Song 3')).left, 0.01),
+    );
     expect(find.text('The Beatles'), findsOneWidget);
     expect(find.text('Guest artist'), findsOneWidget);
     expect(find.text('Abbey Road'), findsOneWidget);
