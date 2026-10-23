@@ -55,7 +55,8 @@ class InfiniteListView<T> extends StatefulWidget {
   final int chunkSize;
   final EdgeInsets padding;
 
-  /// Scrolls above the items (title, attribution, …).
+  /// Scrolls above the items (title, attribution, …); beside a [sideHeader],
+  /// above the items' own column.
   final Widget? header;
 
   /// A pinned/collapsible header, preceding [header] in the same viewport.
@@ -123,8 +124,7 @@ class InfiniteListView<T> extends StatefulWidget {
     this.refreshKey,
     this.onLoadedCount,
     this.rowsDependOn,
-  }) : assert(header == null || sideHeader == null),
-       assert(sideHeader == null || sideHeaderWidth > 0),
+  }) : assert(sideHeader == null || sideHeaderWidth > 0),
        assert(sideHeader == null || sliverHeader == null);
 
   @override

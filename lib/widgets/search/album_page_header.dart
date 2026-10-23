@@ -9,6 +9,7 @@ import '../../theme/app_theme.dart';
 import '../fitted_title.dart';
 import '../measure_size.dart';
 import '../procedural_album_art.dart';
+import '../search_cards/action_pill_button.dart';
 import '../search_cards/track_row_support.dart';
 import '../source_badge.dart';
 import 'track_group_actions.dart';
@@ -16,6 +17,9 @@ import 'track_group_actions.dart';
 /// A pane narrower than this stacks an album's cover over its tracks; from
 /// here the cover and what it says stand in a column beside them.
 const double kAlbumSideLayoutWidth = 528;
+
+/// Where the cover starts in that column, and the actions over the tracks.
+const double _sideTop = 8;
 
 /// The artist an album page can open: only one its listing named by a full
 /// id, so the link keeps the album's source and never looks a name up.
@@ -118,8 +122,8 @@ class _SourceLine extends ConsumerWidget {
 }
 
 /// What an album is, beside its tracks on a wide pane: the square cover,
-/// title, artist, source, extent and the actions on the whole of it. The page
-/// scrolls this content together with the tracks, including enlarged text.
+/// title, artist, source and extent. The page scrolls this content together
+/// with the tracks, including enlarged text.
 class AlbumIdentityColumn extends StatelessWidget {
   final CatalogPage page;
   final int? trackCount;
@@ -142,7 +146,7 @@ class AlbumIdentityColumn extends StatelessWidget {
     );
     return LayoutBuilder(
       builder: (context, constraints) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, _sideTop, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -191,23 +195,41 @@ class AlbumIdentityColumn extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: 20),
-            Wrap(
-              spacing: 8,
-              children: [
-                PlayAllChip(trackIds: [page.id!], trackCount: trackCount),
-                AddAllChip(
-                  trackIds: [page.id!],
-                  trackCount: trackCount,
-                  name: title,
-                ),
-              ],
-            ),
           ],
         ),
       ),
     );
   }
+}
+
+/// Play all and Enqueue over an album's tracks on a wide pane, the pills'
+/// tops level with the cover's beside them.
+class AlbumTrackActions extends StatelessWidget {
+  final CatalogPage page;
+  final int? trackCount;
+
+  const AlbumTrackActions({super.key, required this.page, this.trackCount});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.fromLTRB(
+      16,
+      _sideTop - ActionPillButton.edgeInset(context),
+      16,
+      16,
+    ),
+    child: Wrap(
+      spacing: 8,
+      children: [
+        PlayAllChip(trackIds: [page.id!], trackCount: trackCount),
+        AddAllChip(
+          trackIds: [page.id!],
+          trackCount: trackCount,
+          name: page.title ?? '',
+        ),
+      ],
+    ),
+  );
 }
 
 String _summary(int? trackCount, int? duration) => [

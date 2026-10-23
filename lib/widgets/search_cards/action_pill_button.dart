@@ -65,11 +65,7 @@ class ActionPillButton extends StatelessWidget {
     final border =
         borderOverride ??
         (accent ? KalinkaColors.accentBorder : KalinkaColors.borderDefault);
-    final labelStyle = KalinkaFonts.sans(
-      fontSize: KalinkaTypography.baseSize + 2,
-      fontWeight: FontWeight.w600,
-      color: fg,
-    );
+    final labelStyle = _labelStyle(fg);
     final mark = icon != null || leading != null;
     // A glyph alone sits in a circle; one ahead of a label takes some of
     // that side's room.
@@ -121,6 +117,20 @@ class ActionPillButton extends StatelessWidget {
       selected: selected,
       child: button,
     );
+  }
+
+  static TextStyle _labelStyle(Color color) => KalinkaFonts.sans(
+    fontSize: KalinkaTypography.baseSize + 2,
+    fontWeight: FontWeight.w600,
+    color: color,
+  );
+
+  /// How far below its target's top the pill itself starts, so what stands
+  /// beside one can line up with the pill rather than its target.
+  static double edgeInset(BuildContext context) {
+    final line = _lineHeightOf(context, _labelStyle(KalinkaColors.textPrimary));
+    final height = math.max(kKalinkaPillHeight, line + 2 * _vertical);
+    return math.max(0, (kKalinkaPillTarget - height) / 2);
   }
 
   /// How tall a line of label sets, so a pill without one is as tall as
