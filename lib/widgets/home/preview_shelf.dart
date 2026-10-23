@@ -321,7 +321,7 @@ class _TileState extends ConsumerState<_Tile> {
     final art = item.browseTypeIn(folder: widget.inFolder) == BrowseType.catalog
         ? SizedBox.square(
             dimension: size,
-            child: CatalogArt.of(item, thumbnail: true),
+            child: CatalogArt.of(item, square: true),
           )
         : url == null
         ? fallback

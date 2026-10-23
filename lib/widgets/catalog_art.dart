@@ -86,10 +86,10 @@ double _smooth(double u) {
   return t * t * (3 - 2 * t);
 }
 
-/// The server's coverless card, drawn with gradient fills alone: a wash
-/// rising to the key colour, concentric bands, a few satellites and, under a
+/// The server's coverless art, drawn with gradient fills alone: a wash rising
+/// to the key colour, concentric bands, a few satellites and, under a
 /// caption, the left side held dark. Each soft edge is a gradient ramp where
-/// the server blurs, so a card costs no layer and no image.
+/// the server blurs, so it costs no layer and no image.
 class CatalogArtPainter extends CustomPainter {
   final CatalogArtSeed seed;
   final bool captioned;
@@ -98,73 +98,51 @@ class CatalogArtPainter extends CustomPainter {
 
   static const _base = Color(0xFF101014);
 
-  /// Where a squarer box's window onto the 3:1 card starts, across it: past
-  /// the caption's side, over the rings.
-  static const windowStart = 0.55;
-
-  /// An uncaptioned box narrower than this for its height is a window onto a
-  /// card, not a card. Art at least this wide is card-shaped.
-  static const cardShape = 2.0;
-
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
-    final visible = Offset.zero & size;
-    final window = !captioned && size.width < size.height * cardShape;
-    final card = window
-        ? Rect.fromLTWH(
-            -size.height * 3 * windowStart,
-            0,
-            size.height * 3,
-            size.height,
-          )
-        : visible;
+    final box = Offset.zero & size;
     canvas.save();
-    canvas.clipRect(visible);
-    _paintWash(canvas, visible, card);
-    _paintRings(canvas, visible, card);
-    if (captioned) _paintHold(canvas, visible);
+    canvas.clipRect(box);
+    _paintWash(canvas, box);
+    _paintRings(canvas, box);
+    if (captioned) _paintHold(canvas, box);
     canvas.restore();
   }
 
   /// The server's diagonal t = (x/W + y/H) / 2: dark to 0.42, easing to the
   /// key at the far corner. Opaque, so it is the ground as well.
-  void _paintWash(Canvas canvas, Rect visible, Rect card) {
-    final w = card.width;
-    final h = card.height;
+  void _paintWash(Canvas canvas, Rect box) {
+    final w = box.width;
+    final h = box.height;
     final k = 2 * w * h / (w * w + h * h);
     const stops = [0.0, 0.42, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
     final key = seed.key;
     canvas.drawRect(
-      visible,
+      box,
       Paint()
-        ..shader = ui.Gradient.linear(
-          card.topLeft,
-          card.topLeft + Offset(h * k, w * k),
-          [
-            for (final s in stops)
-              Color.lerp(
-                _base,
-                Color.from(
-                  alpha: 1,
-                  red: key.r * s,
-                  green: key.g * s,
-                  blue: key.b * s,
-                ),
-                _smooth((s - 0.42) / 0.58),
-              )!,
-          ],
-          stops,
-        ),
+        ..shader = ui.Gradient.linear(box.topLeft, Offset(h * k, w * k), [
+          for (final s in stops)
+            Color.lerp(
+              _base,
+              Color.from(
+                alpha: 1,
+                red: key.r * s,
+                green: key.g * s,
+                blue: key.b * s,
+              ),
+              _smooth((s - 0.42) / 0.58),
+            )!,
+        ], stops),
     );
   }
 
-  void _paintRings(Canvas canvas, Rect visible, Rect card) {
+  void _paintRings(Canvas canvas, Rect box) {
     final random = _Mulberry32(seed.geometry);
-    final h = card.height;
+    final h = box.height;
     final centre = Offset(
-      card.left + card.width * (0.48 + random.next() * 0.42),
-      card.top + h * (0.1 + random.next() * 0.8),
+      box.width * (0.48 + random.next() * 0.42),
+      h * (0.1 + random.next() * 0.8),
     );
     final maxRadius = h * (1.1 + random.next() * 0.9);
     final rings = 6 + (random.next() * 5).floor();
@@ -188,7 +166,7 @@ class CatalogArtPainter extends CustomPainter {
     colors.addAll([tone(rings), tone(rings, 0)]);
     stops.addAll([maxRadius / reach - soft, 1]);
     canvas.drawRect(
-      visible,
+      box,
       Paint()..shader = ui.Gradient.radial(centre, reach, colors, stops),
     );
 
@@ -215,12 +193,12 @@ class CatalogArtPainter extends CustomPainter {
   }
 
   /// 92% dark to 0.38 of the width, eased out by 0.6, as the server holds it.
-  void _paintHold(Canvas canvas, Rect visible) {
+  void _paintHold(Canvas canvas, Rect box) {
     const stops = [0.0, 0.38, 0.435, 0.49, 0.545, 0.6, 1.0];
     canvas.drawRect(
-      visible,
+      box,
       Paint()
-        ..shader = ui.Gradient.linear(visible.topLeft, visible.topRight, [
+        ..shader = ui.Gradient.linear(box.topLeft, box.topRight, [
           for (final x in stops)
             Color.fromRGBO(0, 0, 0, 0.92 * _smooth((0.6 - x) / 0.22)),
         ], stops),
@@ -232,24 +210,25 @@ class CatalogArtPainter extends CustomPainter {
       oldDelegate.seed != seed || oldDelegate.captioned != captioned;
 }
 
-/// A catalog's art, filling its box. Art shaped like the server's 3:1 card
-/// covers the box; any other shape sits on the right of a drawn card, as
-/// album covers sit on the server's. A squarer box shows the side of the card
-/// the art is on. The drawn card stands in until an image arrives, and for
-/// good where there is none.
+/// A catalog's art, filling its box: a card, with its left side held dark for
+/// a caption, or a [square] for a row or a tile. On a card, art shaped like
+/// the server's 3:1 card covers it, and any other shape sits on the right of
+/// a drawn card, as album covers sit on the server's. A square covers itself
+/// with the catalog's thumbnail. The drawn art stands in until an image
+/// arrives, and for good where there is none.
 class CatalogArt extends ConsumerWidget {
   final String? artPath;
 
-  /// The art's width over its height. Unstated, it is taken for the server's
-  /// card, which servers before SDK 3.16 send without one.
+  /// Width over height of the catalog's card art, its large image. Unstated,
+  /// it is taken for the server's 3:1 card, which servers before SDK 3.16
+  /// send without one.
   final double? aspectRatio;
 
-  /// What the drawn card is seeded from.
+  /// What the drawn art is seeded from.
   final String title;
   final String? description;
 
-  /// Holds a card's left side dark for a caption over it.
-  final bool captioned;
+  final bool square;
 
   const CatalogArt({
     super.key,
@@ -257,38 +236,40 @@ class CatalogArt extends ConsumerWidget {
     required this.aspectRatio,
     required this.title,
     required this.description,
-    this.captioned = false,
+    this.square = false,
   });
 
-  /// [item]'s art, in the size a [thumbnail] or a card wants.
-  factory CatalogArt.of(
-    BrowseItem item, {
-    Key? key,
-    bool thumbnail = false,
-    bool captioned = false,
-  }) {
+  /// [item]'s art: its thumbnail for a [square], else its large image.
+  factory CatalogArt.of(BrowseItem item, {Key? key, bool square = false}) {
     final image = item.image;
     return CatalogArt(
       key: key,
-      artPath: thumbnail
-          ? image?.small ?? image?.thumbnail ?? image?.large
+      artPath: square
+          ? image?.thumbnail ?? image?.small ?? image?.large
           : image?.large ?? image?.small ?? image?.thumbnail,
       aspectRatio: image?.aspectRatio,
       title: item.catalog?.title ?? item.name ?? '',
       description: item.description,
-      captioned: captioned,
+      square: square,
     );
   }
 
+  /// Art at least this wide for its height is card-shaped.
+  static const cardShape = 2.0;
+
   /// An inset image's share of the card, leaving the caption its side.
   static const _insetRoom = 0.4;
+
+  /// Where a square crop of a card-shaped thumbnail starts across it, past
+  /// the caption's side: older servers send the card itself as one.
+  static const _cropStart = 0.55;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final drawn = CustomPaint(
       painter: CatalogArtPainter(
         CatalogArtSeed.of(title, description),
-        captioned: captioned,
+        captioned: !square,
       ),
       child: const SizedBox.expand(),
     );
@@ -301,18 +282,16 @@ class CatalogArt extends ConsumerWidget {
       builder: (context, constraints) {
         final size = constraints.biggest;
         if (size.isEmpty) return drawn;
-        final window =
-            !captioned &&
-            size.width < size.height * CatalogArtPainter.cardShape;
-        if (window || ratio >= CatalogArtPainter.cardShape) {
+        if (square || ratio >= cardShape) {
           return _image(
             url,
             size: size,
             ratio: ratio,
             dpr: dpr,
             placeholder: drawn,
-            alignment: window && ratio >= CatalogArtPainter.cardShape
-                ? _windowAlignment(size.aspectRatio / ratio)
+            // Moves nothing unless the image is wider than its box.
+            alignment: square && ratio >= cardShape
+                ? _cropAlignment(size.aspectRatio / ratio)
                 : Alignment.center,
           );
         }
@@ -349,17 +328,10 @@ class CatalogArt extends ConsumerWidget {
     );
   }
 
-  /// Crops a card to the window the drawn card shows, [visible] of its width
-  /// across.
-  static Alignment _windowAlignment(double visible) => visible >= 1
+  /// Crops a card from [_cropStart] across, [visible] of its width wide.
+  static Alignment _cropAlignment(double visible) => visible >= 1
       ? Alignment.center
-      : Alignment(
-          (2 * CatalogArtPainter.windowStart / (1 - visible) - 1).clamp(
-            -1.0,
-            1.0,
-          ),
-          0,
-        );
+      : Alignment((2 * _cropStart / (1 - visible) - 1).clamp(-1.0, 1.0), 0);
 
   static Widget _image(
     String url, {
@@ -407,7 +379,7 @@ class CatalogThumb extends StatelessWidget {
     borderRadius: BorderRadius.circular(radius),
     child: SizedBox.square(
       dimension: size,
-      child: CatalogArt.of(item, thumbnail: true),
+      child: CatalogArt.of(item, square: true),
     ),
   );
 }
@@ -470,7 +442,6 @@ class CatalogCard extends StatelessWidget {
               aspectRatio: aspectRatio,
               title: title,
               description: description,
-              captioned: true,
             ),
           ),
           SizedBox(
