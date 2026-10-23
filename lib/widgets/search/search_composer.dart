@@ -14,9 +14,9 @@ import '../../theme/app_theme.dart';
 /// field holds non-whitespace text.
 ///
 /// There is deliberately no onChanged search hook: typing never triggers a
-/// query. The query fires on the soft keyboard's search action, hardware
-/// Enter (Shift+Enter inserts a newline), or the send button — kept for
-/// mouse-only paste on desktop, where no Enter press is available.
+/// query. The query fires on the soft keyboard's Go action, hardware Enter,
+/// or the send button — kept for mouse-only paste on desktop, where no Enter
+/// press is available.
 class SearchComposer extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -54,13 +54,18 @@ class _SearchComposerState extends State<SearchComposer> {
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.enter &&
-        !HardwareKeyboard.instance.isShiftPressed) {
+    if (event.logicalKey == LogicalKeyboardKey.enter) {
       _submit();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
+
+  /// A query is one line, however it wraps.
+  static final _noNewlines = FilteringTextInputFormatter.deny(
+    RegExp(r'[\r\n]+'),
+    replacementString: ' ',
+  );
 
   /// The height of the field's first line with its padding: the icons
   /// either side sit centred in it, so they stay level with the text at any
@@ -135,16 +140,20 @@ class _SearchComposerState extends State<SearchComposer> {
                   cursorColor: KalinkaColors.accent,
                   minLines: 1,
                   maxLines: 5,
-                  keyboardType: TextInputType.multiline,
-                  // Enter on the soft keyboard finishes the entry: submits
-                  // and closes the keyboard (newlines only via Shift+Enter
-                  // on hardware keyboards; pasted ones still wrap).
-                  textInputAction: TextInputAction.search,
+                  // Wraps as it grows, but to the keyboard it is a one-line
+                  // entry: its key is Go (→), not a newline, and submits.
+                  keyboardType: TextInputType.text,
+                  textInputAction: TextInputAction.go,
+                  inputFormatters: [_noNewlines],
                   onSubmitted: (_) => _submit(),
                   textCapitalization: TextCapitalization.sentences,
                   decoration: InputDecoration(
                     hintText: widget.hint,
                     hintStyle: KalinkaTextStyles.searchPlaceholder,
+                    // One line, like the entry: a wrapping hint stands the
+                    // field a line taller, and once typing starts, the hidden
+                    // hint wrapping beside the clear and send buttons too.
+                    hintMaxLines: 1,
                     border: InputBorder.none,
                     isCollapsed: true,
                     contentPadding: EdgeInsets.zero,
