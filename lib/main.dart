@@ -25,6 +25,18 @@ bool get networkActivation =>
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Android 15+ always draws behind the system bars; do the same on 10–14
+  // so every version gets one layout.
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+      ),
+    );
+  }
+
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks([
       'IBM Plex Sans',
