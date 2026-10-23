@@ -14,7 +14,7 @@ Cross-platform app for the self-hosted Kalinka music system — Android, Windows
 [![License](https://img.shields.io/badge/code-Apache--2.0-2ea043)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-2ea043)](#-install)
 
-**[📱 Download](https://github.com/Kalinka-Player/KalinkaAI/releases/latest) · [🖥️ Music server](https://github.com/Kalinka-Player/KalinkaPlayer) · [💿 Flash an image](https://github.com/Kalinka-Player/KalinkaPlayer/releases?q=kalinka-image-v&expanded=true) · [🌐 kalinkaplayer.com](https://kalinkaplayer.com)**
+**[▶️ Google Play](https://play.google.com/store/apps/details?id=org.kalinka.kalinka) · [📱 Download](https://github.com/Kalinka-Player/KalinkaAI/releases/latest) · [🖥️ Music server](https://github.com/Kalinka-Player/KalinkaPlayer) · [💿 Flash an image](https://github.com/Kalinka-Player/KalinkaPlayer/releases?q=kalinka-image-v&expanded=true) · [🌐 kalinkaplayer.com](https://kalinkaplayer.com)**
 
 <img src="docs/images/demo.gif" alt="Semantic search demo: searching for 'something melancholic for tonight'" width="280">
 
@@ -36,13 +36,17 @@ Semantic search turns a phrase like *"something melancholic for tonight"* into m
 
 ### Android
 
-**With Obtainium (recommended).** [Obtainium](https://github.com/ImranR98/Obtainium) installs the app straight from GitHub Releases and keeps it up to date. Install Obtainium, then tap this badge on your phone; it fills in this repository for you:
+**From Google Play (recommended).** Install Kalinka from the [Play Store](https://play.google.com/store/apps/details?id=org.kalinka.kalinka); Play keeps it up to date.
+
+<a href="https://play.google.com/store/apps/details?id=org.kalinka.kalinka"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="54"></a>
+
+**With Obtainium.** [Obtainium](https://github.com/ImranR98/Obtainium) installs the app straight from GitHub Releases and keeps it up to date. Install Obtainium, then tap this badge on your phone; it fills in this repository for you:
 
 <a href="https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/Kalinka-Player/KalinkaAI"><img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="54"></a>
 
 **Or download the APK yourself.** On the phone, download [`kalinka-android-universal.apk`](https://github.com/Kalinka-Player/KalinkaAI/releases/latest/download/kalinka-android-universal.apk) from the latest release and open it. Android asks once to allow installs from your browser. To update later, download and open the new APK the same way.
 
-All release APKs are signed with the Kalinka release key. Certificate SHA-256, which Obtainium can pin:
+The APKs on GitHub Releases are signed with the Kalinka release key. Certificate SHA-256, which Obtainium can pin:
 
 ```
 79e0051195d444fd531637202870223455fb436b80b75d55ce2c133aa33e11fb
