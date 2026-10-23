@@ -838,8 +838,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          if (onAlbum)
-                            ..._albumBehindList(session, chromeHeight),
+                          if (onAlbum) _albumBehindList(session, chromeHeight),
                           KeyedSubtree(
                             key: const ValueKey('visits'),
                             child: _buildVisits(session),
@@ -964,55 +963,45 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
 
   /// The album's cover from the bar's foot down, behind the list and the
   /// same size as it, stretched by the list's own notifications so that the
-  /// two stretch as one; the top shade's fade over it.
-  List<Widget> _albumBehindList(SearchSessionState session, double chrome) => [
-    Positioned.fill(
-      key: const ValueKey('album-behind-list'),
-      child: RepaintBoundary(
-        child: ClipRect(
-          child: NotificationListener<ScrollNotification>(
-            // Sent on from the list, which has already told everyone else.
-            onNotification: (_) => true,
-            child: StretchingOverscrollIndicator(
-              axisDirection: AxisDirection.down,
-              clipBehavior: Clip.none,
-              // Clipped to the list's own box before it is stretched: the
-              // stretch works on what its child paints, so the cover running
-              // up under the bar would stretch from a taller box than the
-              // list's, and the two would part.
-              child: ClipRect(
-                child: Stack(
-                  key: _albumStretchKey,
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned(
-                      top: -chrome,
-                      left: 0,
-                      right: 0,
-                      child: AlbumPageBackdrop(
-                        page: session.catalogPage,
-                        headerHeight: _albumHeaderHeight,
-                        scrollOffset: _albumOffset,
-                        shaded: false,
+  /// two stretch as one.
+  Widget _albumBehindList(SearchSessionState session, double chrome) =>
+      Positioned.fill(
+        key: const ValueKey('album-behind-list'),
+        child: RepaintBoundary(
+          child: ClipRect(
+            child: NotificationListener<ScrollNotification>(
+              // Sent on from the list, which has already told everyone else.
+              onNotification: (_) => true,
+              child: StretchingOverscrollIndicator(
+                axisDirection: AxisDirection.down,
+                clipBehavior: Clip.none,
+                // Clipped to the list's own box before it is stretched: the
+                // stretch works on what its child paints, so the cover running
+                // up under the bar would stretch from a taller box than the
+                // list's, and the two would part.
+                child: ClipRect(
+                  child: Stack(
+                    key: _albumStretchKey,
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        top: -chrome,
+                        left: 0,
+                        right: 0,
+                        child: AlbumPageBackdrop(
+                          page: session.catalogPage,
+                          headerHeight: _albumHeaderHeight,
+                          scrollOffset: _albumOffset,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    ),
-    Positioned(
-      key: const ValueKey('album-shade-fade'),
-      top: -chrome,
-      left: 0,
-      right: 0,
-      height: chrome + AlbumStatusShade.fade,
-      child: const IgnorePointer(child: AlbumStatusShade()),
-    ),
-  ];
+      );
 
   void _forwardAlbumStretch(int id, ScrollNotification notification) {
     if (!_albumStretches) return;
@@ -1130,6 +1119,32 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     );
   }
 
+  /// [button] on a grey disc of its own while it stands over an album's
+  /// cover, so it shows on the palest art, and gone as the bar fills in.
+  Widget _onDisc(bool overAlbum, Widget button) {
+    if (!overAlbum) return button;
+    return ListenableBuilder(
+      listenable: _albumBar,
+      builder: (context, child) => Stack(
+        alignment: Alignment.center,
+        children: [
+          DecoratedBox(
+            key: const ValueKey('album-back-disc'),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: KalinkaColors.surfaceOverlay.withValues(
+                alpha: 0.85 * (1 - _albumBarFill),
+              ),
+            ),
+            child: const SizedBox.square(dimension: kKalinkaPillHeight),
+          ),
+          child!,
+        ],
+      ),
+      child: button,
+    );
+  }
+
   Widget _buildHeader(SearchSessionState session, {bool overAlbum = false}) {
     final onResults = session.activeView == FindMusicView.results;
     final catalogChrome =
@@ -1191,17 +1206,20 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           child: LayoutBuilder(
             builder: (context, constraints) => Row(
               children: [
-                IconButton(
-                  tooltip: 'Back',
-                  constraints: const BoxConstraints(
-                    minWidth: 48,
-                    minHeight: 48,
-                  ),
-                  onPressed: _handleBack,
-                  icon: const Icon(
-                    Icons.arrow_back,
-                    size: 22,
-                    color: KalinkaColors.textPrimary,
+                _onDisc(
+                  overAlbum,
+                  IconButton(
+                    tooltip: 'Back',
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                    onPressed: _handleBack,
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      size: 22,
+                      color: KalinkaColors.textPrimary,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
