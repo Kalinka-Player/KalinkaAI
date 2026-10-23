@@ -619,7 +619,10 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           final width = constraints.maxWidth;
           if (width < kAlbumSideLayoutWidth) return listOf(header);
           return listOf(
-            null,
+            AlbumTrackActions(
+              page: page,
+              trackCount: _total < 0 ? null : _total,
+            ),
             sideHeaderWidth: (width * 0.4).clamp(220.0, 520.0),
             sideHeader: AlbumIdentityColumn(
               page: page,

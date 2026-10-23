@@ -447,6 +447,42 @@ void main() {
     }
   }
 
+  for (final scale in [1.0, 2.0]) {
+    testWidgets('a wide album leads its tracks with its actions at ${scale}x', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        _AlbumApi([_track(1)]),
+        size: const Size(1024, 768),
+        textScale: scale,
+      );
+      final cover = tester.getRect(
+        find.descendant(
+          of: find.byType(AlbumIdentityColumn),
+          matching: find.byType(AlbumArtwork),
+        ),
+      );
+      for (final chip in [find.byType(PlayAllChip), find.byType(AddAllChip)]) {
+        // The pill as drawn, not the taller target around it.
+        final pill = tester.getRect(
+          find.descendant(of: chip, matching: find.byType(Material)).first,
+        );
+        expect(pill.top, closeTo(cover.top, 0.01));
+        expect(pill.left, greaterThan(cover.right));
+        expect(pill.bottom, lessThan(tester.getRect(find.text('Song 1')).top));
+      }
+      expect(
+        find.descendant(
+          of: find.byType(AlbumIdentityColumn),
+          matching: find.byType(PlayAllChip),
+        ),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final size in [const Size(375, 400), const Size(812, 375)]) {
     for (final fail in [false, true]) {
       testWidgets(
