@@ -203,9 +203,10 @@ void main() {
         ),
       );
 
-      // 400 wide, less the banner's 16px insets, times the column factor.
+      // 400 wide, less the banner's 16px insets, times the column factor:
+      // the room the title is given, whatever its words take of it.
       expect(
-        tester.getSize(find.text('Recently Added')).width,
+        tester.getSize(find.byKey(const ValueKey('catalog-identity'))).width,
         greaterThan(0.7 * (400 - 32)),
       );
     });
