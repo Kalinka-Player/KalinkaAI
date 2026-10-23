@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -239,9 +241,13 @@ String _summary(int? trackCount, int? duration) => [
   if (duration != null && duration > 0) formatTotalDuration(duration),
 ].join(' · ');
 
+/// How far up from an album header's foot its title ends, and its text's
+/// shade starts.
+typedef AlbumHeaderInsets = ({double title, double shade});
+
 /// The cover is the album's backdrop. Its shade follows the text block, so
 /// even long titles and enlarged system text stay on a dark enough surface.
-class AlbumPageHeader extends ConsumerWidget {
+class AlbumPageHeader extends StatefulWidget {
   final CatalogPage page;
   final int? trackCount;
   final int? totalDurationSeconds;
@@ -250,9 +256,9 @@ class AlbumPageHeader extends ConsumerWidget {
   /// Standalone uses can keep the same cover inside this header.
   final bool showArtwork;
 
-  /// How far above the header's foot the title ends, so Home's bar can take
-  /// the title over once it has scrolled away.
-  final ValueChanged<double>? onTitleInset;
+  /// Where the title and the shade are, so Home's bar can match the shade
+  /// where they meet and take the title over once it has scrolled away.
+  final ValueChanged<AlbumHeaderInsets>? onInsets;
 
   const AlbumPageHeader({
     super.key,
@@ -260,18 +266,57 @@ class AlbumPageHeader extends ConsumerWidget {
     this.trackCount,
     this.totalDurationSeconds,
     this.showArtwork = true,
-    this.onTitleInset,
+    this.onInsets,
   });
 
-  static const _bottomPadding = 20.0;
+  /// The clear-to-shaded lead-in above the text, and how dark the shade is
+  /// where the text starts; it deepens to the canvas at the header's foot.
+  static const leadIn = 64.0;
+  static const shadeAlpha = 0.76;
+
+  /// How dark the header's shade is [fromFoot] up from its foot.
+  static double shadeAt(double fromFoot, AlbumHeaderInsets insets) {
+    final text = insets.shade;
+    final alpha = fromFoot <= text
+        ? 1 - (1 - shadeAlpha) * fromFoot / math.max(text, 1)
+        : shadeAlpha * (1 - (fromFoot - text) / leadIn);
+    return alpha.clamp(0.0, 1.0);
+  }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  State<AlbumPageHeader> createState() => _AlbumPageHeaderState();
+}
+
+class _AlbumPageHeaderState extends State<AlbumPageHeader> {
+  static const _bottomPadding = 20.0;
+
+  double? _titleInset;
+  double? _shadeInset;
+
+  void _report({double? title, double? shade}) {
+    _titleInset = title ?? _titleInset;
+    _shadeInset = shade ?? _shadeInset;
+    if ((_titleInset, _shadeInset) case (final title?, final shade?)) {
+      widget.onInsets?.call((title: title, shade: shade));
+    }
+  }
+
+  /// [child], its height told to [onHeight] where the header reports.
+  Widget _measure(ValueChanged<double> onHeight, Widget child) =>
+      widget.onInsets == null
+      ? child
+      : MeasureSize(onChange: (size) => onHeight(size.height), child: child);
+
+  @override
+  Widget build(BuildContext context) {
+    final page = widget.page;
+    final trackCount = widget.trackCount;
+    final showArtwork = widget.showArtwork;
     final title = page.title ?? '';
     final artist = page.description?.trim() ?? '';
     final summary = _summary(
       trackCount,
-      totalDurationSeconds ?? page.totalDurationSeconds,
+      widget.totalDurationSeconds ?? page.totalDurationSeconds,
     );
 
     return LayoutBuilder(
@@ -281,7 +326,9 @@ class AlbumPageHeader extends ConsumerWidget {
         // enlarged system text can still grow the header without clipping.
         final heroHeight = width.clamp(320.0, 440.0);
         final titleSize = (width * 0.10).clamp(36.0, 52.0);
-        final shade = KalinkaColors.background.withValues(alpha: 0.76);
+        final shade = KalinkaColors.background.withValues(
+          alpha: AlbumPageHeader.shadeAlpha,
+        );
         final details = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -328,7 +375,7 @@ class AlbumPageHeader extends ConsumerWidget {
                   // title; the title's own shade starts at 76% even when
                   // its height changes with wrapping or text scaling.
                   SizedBox(
-                    height: 64,
+                    height: AlbumPageHeader.leadIn,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
@@ -342,58 +389,57 @@ class AlbumPageHeader extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(
-                      16,
-                      0,
-                      16,
-                      _bottomPadding,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [shade, KalinkaColors.background],
+                  _measure(
+                    (height) => _report(shade: height),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(
+                        16,
+                        0,
+                        16,
+                        _bottomPadding,
                       ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'ALBUM',
-                          style: KalinkaFonts.mono(
-                            fontSize: 12,
-                            letterSpacing: 2,
-                            color: KalinkaColors.textPrimary,
-                          ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [shade, KalinkaColors.background],
                         ),
-                        const SizedBox(height: 8),
-                        Semantics(
-                          header: true,
-                          child: FittedTitle(
-                            title,
-                            // Keep long names within two display lines' height,
-                            // leaving the cover visible above the metadata.
-                            minFontSize: 24,
-                            lines: 2,
-                            style: KalinkaFonts.display(
-                              fontSize: titleSize,
-                              height: 1.12,
-                              letterSpacing: -0.7,
-                              fontWeight: FontWeight.w500,
-                              color: KalinkaColors.frost,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ALBUM',
+                            style: KalinkaFonts.mono(
+                              fontSize: 12,
+                              letterSpacing: 2,
+                              color: KalinkaColors.textPrimary,
                             ),
                           ),
-                        ),
-                        if (onTitleInset case final report?)
-                          MeasureSize(
-                            onChange: (size) =>
-                                report(size.height + _bottomPadding),
-                            child: details,
-                          )
-                        else
-                          details,
-                      ],
+                          const SizedBox(height: 8),
+                          Semantics(
+                            header: true,
+                            child: FittedTitle(
+                              title,
+                              // Keep long names within two display lines' height,
+                              // leaving the cover visible above the metadata.
+                              minFontSize: 24,
+                              lines: 2,
+                              style: KalinkaFonts.display(
+                                fontSize: titleSize,
+                                height: 1.12,
+                                letterSpacing: -0.7,
+                                fontWeight: FontWeight.w500,
+                                color: KalinkaColors.frost,
+                              ),
+                            ),
+                          ),
+                          _measure(
+                            (height) => _report(title: height + _bottomPadding),
+                            details,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

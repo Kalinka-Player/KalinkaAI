@@ -361,10 +361,47 @@ void main() {
         expect(coverOpacity(), lessThan(1));
         expect(tester.getRect(surface), navRect);
 
-        scrollable.position.jumpTo(titleGone - kKalinkaTopBarHeight);
-        await tester.pump();
-        expect(barFill(), 0);
-        expect(tester.widget<Opacity>(barTitle).opacity, 0);
+        // How dark the header's own shade is where it meets the bar, read
+        // from the gradients it draws.
+        double shadeAtSeam() {
+          final seam = navRect.bottom;
+          for (final element
+              in find
+                  .descendant(
+                    of: find.byType(AlbumPageHeader),
+                    matching: find.byType(DecoratedBox),
+                  )
+                  .evaluate()) {
+            final decoration = (element.widget as DecoratedBox).decoration;
+            if (decoration is! BoxDecoration ||
+                decoration.gradient is! LinearGradient) {
+              continue;
+            }
+            final box = element.renderObject! as RenderBox;
+            final rect = box.localToGlobal(Offset.zero) & box.size;
+            if (seam < rect.top || seam > rect.bottom) continue;
+            final colors = (decoration.gradient! as LinearGradient).colors;
+            return ui.lerpDouble(
+              colors.first.a,
+              colors.last.a,
+              (seam - rect.top) / rect.height,
+            )!;
+          }
+          return 0;
+        }
+
+        // The bar darkens with the shade rising to it, never a step apart,
+        // while the title is still the page's own.
+        for (var offset = 0.0; offset < titleGone; offset += 8) {
+          scrollable.position.jumpTo(offset);
+          await tester.pump();
+          if (offset < titleGone - kKalinkaTopBarHeight) {
+            expect(barFill(), closeTo(shadeAtSeam(), 0.01), reason: '$offset');
+            expect(tester.widget<Opacity>(barTitle).opacity, 0);
+          } else {
+            expect(barFill(), greaterThanOrEqualTo(shadeAtSeam() - 0.01));
+          }
+        }
 
         scrollable.position.jumpTo(titleGone);
         await tester.pump();
