@@ -291,6 +291,8 @@ class _NavigationButton extends StatelessWidget {
           onPressed: onPressed,
           style: ButtonStyle(
             minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
+            // Desktop's compact density would take 8dp off top and bottom.
+            visualDensity: extended ? null : VisualDensity.standard,
             // Only as tall as the icon and its label, so a short window
             // keeps the whole rail in view.
             padding: WidgetStatePropertyAll(
