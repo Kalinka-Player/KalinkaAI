@@ -469,9 +469,22 @@ void main() {
           find.descendant(of: chip, matching: find.byType(Material)).first,
         );
         expect(pill.top, closeTo(cover.top, 0.01));
-        expect(pill.left, greaterThan(cover.right));
         expect(pill.bottom, lessThan(tester.getRect(find.text('Song 1')).top));
       }
+      // Play all starts where the titles under it do.
+      expect(
+        tester
+            .getRect(
+              find
+                  .descendant(
+                    of: find.byType(PlayAllChip),
+                    matching: find.byType(Material),
+                  )
+                  .first,
+            )
+            .left,
+        closeTo(tester.getRect(find.text('Song 1')).left, 0.01),
+      );
       expect(
         find.descendant(
           of: find.byType(AlbumIdentityColumn),

@@ -142,12 +142,15 @@ class BrowseItemRows extends StatelessWidget {
   /// has to say so here.
   static double textInsetOf(BrowseItem item, {bool inFolder = false}) =>
       switch (item.browseTypeIn(folder: inFolder)) {
-        BrowseType.track => 57,
+        BrowseType.track => trackTextInset,
         BrowseType.album || BrowseType.artist || BrowseType.catalog => 75,
         BrowseType.folder => 84,
         BrowseType.playlist => item.canEdit ? 81 : 71,
-        BrowseType.unknown => 57,
+        BrowseType.unknown => trackTextInset,
       };
+
+  /// [textInsetOf] a track's row.
+  static const trackTextInset = 57.0;
 
   /// Maps a single [BrowseItem] to its Search*Row widget. Public so lazy
   /// lists (e.g. paged/infinite-scroll surfaces) can build one row at a time
