@@ -296,7 +296,7 @@ class _NavigationButton extends StatelessWidget {
             padding: WidgetStatePropertyAll(
               extended
                   ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
-                  : const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                  : const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
             ),
             alignment: extended ? AlignmentDirectional.centerStart : null,
             shape: const WidgetStatePropertyAll(
@@ -353,9 +353,10 @@ class _NavigationButton extends StatelessWidget {
         ? Duration.zero
         : const Duration(milliseconds: 180);
     return Padding(
+      // Half the room between two items' highlights either side.
       padding: EdgeInsets.symmetric(
         horizontal: extended ? _itemInset : _compactItemInset,
-        vertical: 2,
+        vertical: extended ? 2 : 3,
       ),
       // The current destination on grey: the rail is chrome, on screen all
       // session, which berry would leave meaning nothing in particular.
