@@ -390,7 +390,8 @@ class CatalogThumb extends StatelessWidget {
 }
 
 /// A catalog as a card: its art, never shorter than 3:1, with its name on the
-/// left, vertically centred. The card grows with its caption.
+/// left, vertically centred over a dark gradient. The card grows with its
+/// caption.
 class CatalogCard extends StatelessWidget {
   final String? artPath;
   final double? aspectRatio;
@@ -434,6 +435,19 @@ class CatalogCard extends StatelessWidget {
     Shadow(color: Color(0x99000000), blurRadius: 10),
   ];
 
+  /// Holds the caption's side dark where covers in the art run beneath it.
+  static const _scrim = BoxDecoration(
+    gradient: LinearGradient(
+      colors: [
+        Color(0xCC000000),
+        Color(0xB3000000),
+        Color(0x59000000),
+        Color(0x00000000),
+      ],
+      stops: [0, 0.35, 0.55, 0.75],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -451,6 +465,7 @@ class CatalogCard extends StatelessWidget {
               description: description,
             ),
           ),
+          const Positioned.fill(child: DecoratedBox(decoration: _scrim)),
           SizedBox(
             width: width,
             child: ConstrainedBox(
