@@ -99,7 +99,7 @@ void main() {
       final card = tester.getRect(find.byType(CatalogCard));
       expect(card.size, const Size(300, 100));
       final art = tester.getRect(find.byType(Image));
-      expect(art.width / art.height, closeTo(ratio == 1 ? 1 : 3, 0.001));
+      expect(art.width / art.height, closeTo(ratio ?? 1, 0.001));
       expect(tester.takeException(), isNull);
     }
   });

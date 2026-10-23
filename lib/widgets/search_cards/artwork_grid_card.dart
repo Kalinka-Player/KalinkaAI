@@ -34,7 +34,9 @@ class ArtworkGridCard extends ConsumerStatefulWidget {
   /// is wider than a square, such as an editorial banner, else a square.
   static double coverShapeOf(BrowseItem item) {
     final ratio = item.image?.aspectRatio;
-    return item.artist == null && ratio != null && ratio > 1 ? ratio : 1;
+    return item.browseType != BrowseType.artist && ratio != null && ratio > 1
+        ? ratio
+        : 1;
   }
 
   /// What [item] is called on its card, and the detail under it.

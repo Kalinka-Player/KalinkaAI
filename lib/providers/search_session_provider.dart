@@ -250,7 +250,9 @@ class CatalogPage {
             item.subname,
         totalDurationSeconds: item.album?.duration,
         artPath: item.image?.large ?? item.image?.small ?? artPathOf(item),
-        artAspectRatio: item.image?.aspectRatio,
+        artAspectRatio: (item.image?.large ?? item.image?.small) != null
+            ? item.image?.aspectRatio
+            : item.catalog?.image?.aspectRatio,
         filters: item.catalog?.filters ?? const [],
         sections: item.sections ?? const [],
         canEdit: item.canEdit,
