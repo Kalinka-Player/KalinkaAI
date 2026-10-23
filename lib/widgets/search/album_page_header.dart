@@ -10,6 +10,7 @@ import '../fitted_title.dart';
 import '../measure_size.dart';
 import '../procedural_album_art.dart';
 import '../search_cards/action_pill_button.dart';
+import '../search_cards/browse_item_rows.dart';
 import '../search_cards/track_row_support.dart';
 import '../source_badge.dart';
 import 'track_group_actions.dart';
@@ -203,7 +204,8 @@ class AlbumIdentityColumn extends StatelessWidget {
 }
 
 /// Play all and Enqueue over an album's tracks on a wide pane, the pills'
-/// tops level with the cover's beside them.
+/// tops level with the cover's beside them and their start with the titles
+/// under them.
 class AlbumTrackActions extends StatelessWidget {
   final CatalogPage page;
   final int? trackCount;
@@ -212,8 +214,8 @@ class AlbumTrackActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(
-      16,
+    padding: EdgeInsetsDirectional.fromSTEB(
+      16 + BrowseItemRows.trackTextInset,
       _sideTop - ActionPillButton.edgeInset(context),
       16,
       16,

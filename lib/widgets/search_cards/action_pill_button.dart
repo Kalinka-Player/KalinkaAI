@@ -28,6 +28,13 @@ class ActionPillButton extends StatelessWidget {
 
   static const _vertical = 8.0;
 
+  /// The accent pill's tint laid on the canvas, so the pill reads as it
+  /// does there over a page's art too.
+  static final accentFill = Color.alphaBlend(
+    KalinkaColors.accentSubtle,
+    KalinkaColors.background,
+  );
+
   /// Reported to a screen reader for a pill that stands for a choice rather
   /// than an action. Null leaves it unsaid.
   final bool? selected;
@@ -59,9 +66,7 @@ class ActionPillButton extends StatelessWidget {
     final fg =
         foregroundOverride ??
         (accent ? KalinkaColors.accentTint : KalinkaColors.textPrimary);
-    final bg = accent
-        ? KalinkaColors.accentSubtle
-        : KalinkaColors.surfaceElevated;
+    final bg = accent ? accentFill : KalinkaColors.surfaceElevated;
     final border =
         borderOverride ??
         (accent ? KalinkaColors.accentBorder : KalinkaColors.borderDefault);

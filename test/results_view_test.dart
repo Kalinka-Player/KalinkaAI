@@ -712,14 +712,14 @@ void main() {
           .color!;
 
       // All is on to start with.
-      expect(lit('All'), KalinkaColors.accentSubtle);
+      expect(lit('All'), ActionPillButton.accentFill);
       expect(lit('Qobuz'), KalinkaColors.surfaceElevated);
 
       await tester.tap(pill('Qobuz'));
       await tester.pump();
 
       expect(lit('All'), KalinkaColors.surfaceElevated);
-      expect(lit('Qobuz'), KalinkaColors.accentSubtle);
+      expect(lit('Qobuz'), ActionPillButton.accentFill);
     });
 
     testWidgets('picking one reads that source alone, ALL brings them back', (
