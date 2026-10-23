@@ -15,8 +15,13 @@ import '../utils/schema_icons.dart';
 
 enum ShellDestination { home, results, source, collections, configuration }
 
-/// Above and below the destinations, which span the rail edge to edge.
-const _railInset = 6.0;
+/// Above and below the destinations.
+const _railInset = 4.0;
+
+/// How far each item's highlight keeps in from the rail's sides, and its
+/// corners.
+const _itemInset = 6.0;
+const _itemRadius = 12.0;
 
 /// The server's own controls, pinned under Configuration.
 enum ShellAction { restart, changeServer, powerOff }
@@ -103,7 +108,7 @@ class ShellNavigation extends ConsumerWidget {
     );
 
     const divider = Padding(
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Divider(height: 1, color: KalinkaColors.borderSubtle),
     );
     final configuration = ref.watch(pluginCatalogEnabledProvider);
@@ -191,7 +196,7 @@ class ShellNavigation extends ConsumerWidget {
                     // Apart from the sources: it holds tracks from any of
                     // them.
                     if (collections != null) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 8),
                       destination(
                         'collections',
                         'Collections',
@@ -284,17 +289,20 @@ class _NavigationButton extends StatelessWidget {
         child: TextButton(
           onPressed: onPressed,
           style: ButtonStyle(
-            minimumSize: WidgetStatePropertyAll(
-              extended ? const Size(48, 48) : const Size(48, 64),
-            ),
+            minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
+            // Only as tall as the icon and its label, so a short window
+            // keeps the whole rail in view.
             padding: WidgetStatePropertyAll(
               extended
-                  ? const EdgeInsets.symmetric(horizontal: 16, vertical: 10)
-                  : const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
+                  : const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             ),
             alignment: extended ? AlignmentDirectional.centerStart : null,
-            // A plain block from edge to edge, as the rule beside it.
-            shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
+            shape: const WidgetStatePropertyAll(
+              RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(_itemRadius)),
+              ),
+            ),
             foregroundColor: WidgetStateProperty.resolveWith(
               (states) => states.contains(WidgetState.disabled)
                   ? KalinkaColors.textMuted
@@ -307,13 +315,14 @@ class _NavigationButton extends StatelessWidget {
                   ? const BorderSide(color: KalinkaColors.textPrimary, width: 2)
                   : BorderSide.none,
             ),
-            // As the player's PLAYING / QUEUE tabs respond.
+            // As the player's PLAYING / QUEUE tabs respond. The current
+            // destination is no action, so it takes no hover.
             overlayColor: WidgetStateProperty.resolveWith(
               (states) =>
                   states.contains(WidgetState.focused) ||
                       states.contains(WidgetState.pressed)
                   ? KalinkaColors.surfaceOverlay
-                  : states.contains(WidgetState.hovered)
+                  : states.contains(WidgetState.hovered) && !selected
                   ? KalinkaColors.surfaceInput
                   : null,
             ),
@@ -343,14 +352,24 @@ class _NavigationButton extends StatelessWidget {
         ? Duration.zero
         : const Duration(milliseconds: 180);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      // Marked as the player's PLAYING / QUEUE tabs are: a berry rule as
-      // long as what it marks, here upright on the rail's edge beside the
-      // pane it shows, the item's full height, and no fill.
+      padding: const EdgeInsets.symmetric(horizontal: _itemInset, vertical: 2),
+      // The current destination on grey: the rail is chrome, on screen all
+      // session, which berry would leave meaning nothing in particular.
       child: Stack(
-        // The button keeps the rail's full width.
         fit: StackFit.passthrough,
         children: [
+          Positioned.fill(
+            child: AnimatedContainer(
+              duration: duration,
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                color: KalinkaColors.surfaceOverlay.withValues(
+                  alpha: selected ? 1 : 0,
+                ),
+                borderRadius: BorderRadius.circular(_itemRadius),
+              ),
+            ),
+          ),
           message == null
               ? button
               : Tooltip(
@@ -358,17 +377,6 @@ class _NavigationButton extends StatelessWidget {
                   excludeFromSemantics: true,
                   child: button,
                 ),
-          PositionedDirectional(
-            top: 0,
-            bottom: 0,
-            end: 0,
-            width: 2,
-            child: AnimatedContainer(
-              duration: duration,
-              curve: Curves.easeOutCubic,
-              color: selected ? KalinkaColors.accent : Colors.transparent,
-            ),
-          ),
         ],
       ),
     );
