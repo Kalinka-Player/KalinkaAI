@@ -8,6 +8,24 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.21.1
+
+A redone multi-select bar, a media notification that stays up while music plays, and fixes for the rail, Home and search. It needs no newer server or supervisor than 0.21.0.
+
+### Changed
+- The multi-select bar has labelled pill buttons: Play all, Enqueue, Play next and Add to collection. On a phone it docks under the page and its actions scroll sideways. On tablets and desktop it is a card over the page's bottom right, and Play next and Add to collection fold behind a chevron when it runs short of room.
+- On a window too short for all of the rail's server controls, those that don't fit among Restart, Change server and Power off go behind a More item that unfolds to the rail's right. Power off's icon is berry.
+- Home's card rails size their cards to the window: about two and a half show across a phone, and they grow on wider windows, so cards are larger everywhere. Customise Home at the foot of the pins is brighter.
+- Catalog card titles are set in sans, and the line under a table's column titles is the same hairline as the rows' separators.
+- On Android the app draws edge to edge, behind transparent system bars.
+- In the phone player's sheet, the queue's mini-player spans the window as Home's does.
+
+### Fixed
+- The media notification shows whenever the app is connected and a track is loaded. It often did not appear, or vanished mid-playback, on Android 16 and later. It hides when the connection drops or the queue is cleared.
+- A sound card change that restarts the box shows the Restarting the Pi screen until the box is back, and on the server's own box the app reconnects by itself. While the server or box restarts or a plugin updates, the phone hides its mini-player and the rail takes no input.
+- The search field stays on one line: a single typed character no longer grows it, Enter always searches, a pasted line break becomes a space, and the keyboard shows Go.
+- With the rail showing, Home no longer scrolls as if something were pinned when nothing is.
+
 ## 0.21.0
 
 Browsing is rebuilt for tablets and desktop, with a navigation rail, the player on the right and a page of its own for every album, artist, catalog and collection. Home leads to your music sources and the catalogs you pin, and the streamer's time zone can be set from the app. Home's music sources need server 5.12.0, and an older server lists none. Catalog art in its own shape and folder track numbers from tags need server 5.13.0. The time zone needs supervisor 0.6.0.

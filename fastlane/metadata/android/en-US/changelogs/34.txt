@@ -1,0 +1,6 @@
+- Redone multi-select bar with labelled actions
+- Media notification stays up while music plays
+- Rail's server controls fold behind More on short windows
+- Larger cards on Home
+- Edge-to-edge on Android
+- Search field stays on one line
