@@ -344,6 +344,12 @@ void main() {
         expect(tester.widget<Opacity>(barTitle).opacity, 0);
         expect(barFill(), 0);
         expect(coverOpacity(), 1);
+        // Back stands on a disc of its own over the cover.
+        final disc = find.byKey(const ValueKey('album-back-disc'));
+        Color discColor() =>
+            (tester.widget<DecoratedBox>(disc).decoration as BoxDecoration)
+                .color!;
+        expect(discColor().a, greaterThan(0.5));
 
         final scrollable = tester.state<ScrollableState>(
           find.byType(Scrollable).first,
@@ -368,6 +374,7 @@ void main() {
           KalinkaColors.background,
         );
         expect(tester.widget<Opacity>(barTitle).opacity, 1);
+        expect(discColor().a, 0);
         expect(tester.takeException(), isNull);
 
         // Rows remain below pinned navigation; leaving the album removes its

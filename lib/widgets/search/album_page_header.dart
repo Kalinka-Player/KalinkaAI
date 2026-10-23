@@ -487,15 +487,13 @@ class _AlbumCoverImageState extends State<_AlbumCoverImage> {
 }
 
 /// Home's album cover spans the Android system inset, the pinned breadcrumb,
-/// and the measured introduction. It stays put while the page scrolls up
-/// over it, hidden from the header's foot down and fading as it goes.
+/// and the measured introduction, with the bar's controls straight over it.
+/// It stays put while the page scrolls up over it, hidden from the header's
+/// foot down and fading as it goes.
 class AlbumPageBackdrop extends StatelessWidget {
   final CatalogPage page;
   final ValueListenable<double> headerHeight;
   final ValueListenable<double> scrollOffset;
-
-  /// Darkens the top for the status bar and breadcrumb.
-  final bool shaded;
 
   final Key artworkKey;
 
@@ -504,7 +502,6 @@ class AlbumPageBackdrop extends StatelessWidget {
     required this.page,
     required this.headerHeight,
     required this.scrollOffset,
-    this.shaded = true,
     this.artworkKey = const ValueKey('album-backdrop'),
   });
 
@@ -513,42 +510,28 @@ class AlbumPageBackdrop extends StatelessWidget {
     final chromeHeight =
         MediaQuery.paddingOf(context).top + kKalinkaTopBarHeight;
     return IgnorePointer(
-      child: Stack(
-        children: [
-          ListenableBuilder(
-            listenable: Listenable.merge([headerHeight, scrollOffset]),
-            builder: (context, child) {
-              final height = headerHeight.value;
-              final offset = scrollOffset.value;
-              return SizedBox(
-                width: double.infinity,
-                height: chromeHeight + height,
-                child: ClipRect(
-                  clipper: _UncoveredClip(chromeHeight + height - offset),
-                  child: Opacity(
-                    opacity: height <= 0
-                        ? 1
-                        : 1 - (offset / height).clamp(0.0, 1.0),
-                    child: child,
-                  ),
-                ),
-              );
-            },
-            child: RepaintBoundary(
-              child: AlbumArtwork(key: artworkKey, page: page),
+      child: ListenableBuilder(
+        listenable: Listenable.merge([headerHeight, scrollOffset]),
+        builder: (context, child) {
+          final height = headerHeight.value;
+          final offset = scrollOffset.value;
+          return SizedBox(
+            width: double.infinity,
+            height: chromeHeight + height,
+            child: ClipRect(
+              clipper: _UncoveredClip(chromeHeight + height - offset),
+              child: Opacity(
+                opacity: height <= 0
+                    ? 1
+                    : 1 - (offset / height).clamp(0.0, 1.0),
+                child: child,
+              ),
             ),
-          ),
-          // Protect the white system icons and breadcrumb over pale art;
-          // the separate, content-sized shade in the header covers its text.
-          if (shaded)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: chromeHeight + AlbumStatusShade.fade,
-              child: const AlbumStatusShade(),
-            ),
-        ],
+          );
+        },
+        child: RepaintBoundary(
+          child: AlbumArtwork(key: artworkKey, page: page),
+        ),
       ),
     );
   }
@@ -567,32 +550,4 @@ class _UncoveredClip extends CustomClipper<Rect> {
 
   @override
   bool shouldReclip(_UncoveredClip oldClipper) => oldClipper.bottom != bottom;
-}
-
-/// The shade over the top of an album's cover: solid behind the status bar
-/// and breadcrumb, then fading out over [fade].
-class AlbumStatusShade extends StatelessWidget {
-  const AlbumStatusShade({super.key});
-
-  static const fade = 48.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final chromeHeight =
-        MediaQuery.paddingOf(context).top + kKalinkaTopBarHeight;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          stops: [0, chromeHeight / (chromeHeight + fade), 1],
-          colors: [
-            KalinkaColors.background.withValues(alpha: 0.84),
-            KalinkaColors.background.withValues(alpha: 0.84),
-            KalinkaColors.background.withValues(alpha: 0),
-          ],
-        ),
-      ),
-    );
-  }
 }
