@@ -7,6 +7,7 @@ import '../../providers/search_session_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../fitted_title.dart';
+import '../measure_size.dart';
 import '../procedural_album_art.dart';
 import '../search_cards/track_row_support.dart';
 import '../source_badge.dart';
@@ -225,13 +226,20 @@ class AlbumPageHeader extends ConsumerWidget {
   /// Standalone uses can keep the same cover inside this header.
   final bool showArtwork;
 
+  /// How far above the header's foot the title ends, so Home's bar can take
+  /// the title over once it has scrolled away.
+  final ValueChanged<double>? onTitleInset;
+
   const AlbumPageHeader({
     super.key,
     required this.page,
     this.trackCount,
     this.totalDurationSeconds,
     this.showArtwork = true,
+    this.onTitleInset,
   });
+
+  static const _bottomPadding = 20.0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -250,6 +258,39 @@ class AlbumPageHeader extends ConsumerWidget {
         final heroHeight = width.clamp(320.0, 440.0);
         final titleSize = (width * 0.10).clamp(36.0, 52.0);
         final shade = KalinkaColors.background.withValues(alpha: 0.76);
+        final details = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (artist.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _ArtistLine(page: page, name: artist),
+            ],
+            const SizedBox(height: 4),
+            _SourceLine(page: page),
+            if (summary.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                summary,
+                style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+                  fontSize: 14,
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 8,
+              children: [
+                PlayAllChip(trackIds: [page.id!], trackCount: trackCount),
+                AddAllChip(
+                  trackIds: [page.id!],
+                  trackCount: trackCount,
+                  name: title,
+                ),
+              ],
+            ),
+          ],
+        );
         return Stack(
           children: [
             if (showArtwork) Positioned.fill(child: AlbumArtwork(page: page)),
@@ -278,7 +319,12 @@ class AlbumPageHeader extends ConsumerWidget {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                    padding: const EdgeInsets.fromLTRB(
+                      16,
+                      0,
+                      16,
+                      _bottomPadding,
+                    ),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
@@ -315,36 +361,14 @@ class AlbumPageHeader extends ConsumerWidget {
                             ),
                           ),
                         ),
-                        if (artist.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          _ArtistLine(page: page, name: artist),
-                        ],
-                        const SizedBox(height: 4),
-                        _SourceLine(page: page),
-                        if (summary.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            summary,
-                            style: KalinkaTextStyles.trackRowSubtitle.copyWith(
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 20),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            PlayAllChip(
-                              trackIds: [page.id!],
-                              trackCount: trackCount,
-                            ),
-                            AddAllChip(
-                              trackIds: [page.id!],
-                              trackCount: trackCount,
-                              name: title,
-                            ),
-                          ],
-                        ),
+                        if (onTitleInset case final report?)
+                          MeasureSize(
+                            onChange: (size) =>
+                                report(size.height + _bottomPadding),
+                            child: details,
+                          )
+                        else
+                          details,
                       ],
                     ),
                   ),
@@ -439,7 +463,8 @@ class _AlbumCoverImageState extends State<_AlbumCoverImage> {
 }
 
 /// Home's album cover spans the Android system inset, the pinned breadcrumb,
-/// and the measured introduction. Only its transform updates while scrolling.
+/// and the measured introduction. It stays put while the page scrolls up
+/// over it, hidden from the header's foot down and fading as it goes.
 class AlbumPageBackdrop extends StatelessWidget {
   final CatalogPage page;
   final ValueListenable<double> headerHeight;
@@ -466,20 +491,27 @@ class AlbumPageBackdrop extends StatelessWidget {
     return IgnorePointer(
       child: Stack(
         children: [
-          ValueListenableBuilder<double>(
-            valueListenable: scrollOffset,
-            builder: (context, offset, child) =>
-                Transform.translate(offset: Offset(0, -offset), child: child),
-            child: ValueListenableBuilder<double>(
-              valueListenable: headerHeight,
-              builder: (context, height, child) => SizedBox(
+          ListenableBuilder(
+            listenable: Listenable.merge([headerHeight, scrollOffset]),
+            builder: (context, child) {
+              final height = headerHeight.value;
+              final offset = scrollOffset.value;
+              return SizedBox(
                 width: double.infinity,
                 height: chromeHeight + height,
-                child: child,
-              ),
-              child: RepaintBoundary(
-                child: AlbumArtwork(key: artworkKey, page: page),
-              ),
+                child: ClipRect(
+                  clipper: _UncoveredClip(chromeHeight + height - offset),
+                  child: Opacity(
+                    opacity: height <= 0
+                        ? 1
+                        : 1 - (offset / height).clamp(0.0, 1.0),
+                    child: child,
+                  ),
+                ),
+              );
+            },
+            child: RepaintBoundary(
+              child: AlbumArtwork(key: artworkKey, page: page),
             ),
           ),
           // Protect the white system icons and breadcrumb over pale art;
@@ -496,6 +528,21 @@ class AlbumPageBackdrop extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What of the cover the page has not yet risen over: everything above
+/// [bottom].
+class _UncoveredClip extends CustomClipper<Rect> {
+  final double bottom;
+
+  const _UncoveredClip(this.bottom);
+
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTRB(0, 0, size.width, bottom.clamp(0.0, size.height));
+
+  @override
+  bool shouldReclip(_UncoveredClip oldClipper) => oldClipper.bottom != bottom;
 }
 
 /// The shade over the top of an album's cover: solid behind the status bar

@@ -327,17 +327,47 @@ void main() {
         expect(systemStyle.statusBarColor, Colors.transparent);
         expect(systemStyle.statusBarIconBrightness, Brightness.light);
 
+        // The title stays the page's own, over a clear bar, until it has
+        // scrolled away under that bar.
+        final barTitle = find.byKey(const ValueKey('album-bar-title'));
+        final title = find.descendant(
+          of: find.byType(AlbumPageHeader),
+          matching: find.text('Abbey Road'),
+        );
+        final titleGone = tester.getRect(title).bottom - navRect.bottom;
+        double barFill() => tester.widget<ColoredBox>(surface).color.a;
+        double coverOpacity() => tester
+            .widget<Opacity>(
+              find.ancestor(of: cover, matching: find.byType(Opacity)).first,
+            )
+            .opacity;
+        expect(tester.widget<Opacity>(barTitle).opacity, 0);
+        expect(barFill(), 0);
+        expect(coverOpacity(), 1);
+
         final scrollable = tester.state<ScrollableState>(
           find.byType(Scrollable).first,
         );
+        // The page rises over the cover, which stays put and fades.
         scrollable.position.jumpTo(80);
         await tester.pump();
-        expect(tester.getRect(cover), coverRect.shift(const Offset(0, -80)));
+        expect(tester.getRect(cover), coverRect);
+        expect(coverOpacity(), lessThan(1));
         expect(tester.getRect(surface), navRect);
+
+        scrollable.position.jumpTo(titleGone - kKalinkaTopBarHeight);
+        await tester.pump();
+        expect(barFill(), 0);
+        expect(tester.widget<Opacity>(barTitle).opacity, 0);
+
+        scrollable.position.jumpTo(titleGone);
+        await tester.pump();
+        expect(tester.getRect(cover), coverRect);
         expect(
           tester.widget<ColoredBox>(surface).color,
           KalinkaColors.background,
         );
+        expect(tester.widget<Opacity>(barTitle).opacity, 1);
         expect(tester.takeException(), isNull);
 
         // Rows remain below pinned navigation; leaving the album removes its
