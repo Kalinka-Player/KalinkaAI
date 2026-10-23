@@ -398,7 +398,6 @@ class _OverflowShelf extends StatefulWidget {
 
 class _OverflowShelfState extends State<_OverflowShelf>
     with SingleTickerProviderStateMixin {
-  final _link = LayerLink();
   final _portal = OverlayPortalController();
   late final _unfold = AnimationController(vsync: this);
   late final _curve = CurvedAnimation(
@@ -445,19 +444,19 @@ class _OverflowShelfState extends State<_OverflowShelf>
   @override
   Widget build(BuildContext context) {
     return TapRegion(
-      groupId: _link,
+      groupId: this,
       onTapOutside: (_) => _close(),
-      child: CompositedTransformTarget(
-        link: _link,
-        child: OverlayPortal(
-          controller: _portal,
-          overlayChildBuilder: _shelf,
-          child: Semantics(
-            expanded: _open,
-            child: widget.button(
-              open: widget.selected || _open,
-              onPressed: widget.enabled ? (_open ? _close : _show) : null,
-            ),
+      // Placed from where More is, not by following it: a follower above
+      // the controls' tooltips, which are overlay children themselves,
+      // leaves them no position to lay out from.
+      child: OverlayPortal.overlayChildLayoutBuilder(
+        controller: _portal,
+        overlayChildBuilder: _shelf,
+        child: Semantics(
+          expanded: _open,
+          child: widget.button(
+            open: widget.selected || _open,
+            onPressed: widget.enabled ? (_open ? _close : _show) : null,
           ),
         ),
       ),
@@ -465,46 +464,53 @@ class _OverflowShelfState extends State<_OverflowShelf>
   }
 
   /// Level with More, from just past the rail's edge.
-  Widget _shelf(BuildContext context) => Positioned(
-    left: 0,
-    top: 0,
-    child: CompositedTransformFollower(
-      link: _link,
-      targetAnchor: Alignment.centerRight,
-      followerAnchor: Alignment.centerLeft,
-      offset: const Offset(8, 0),
-      child: TapRegion(
-        groupId: _link,
-        child: FadeTransition(
-          opacity: _curve,
-          child: SizeTransition(
-            sizeFactor: _curve,
-            axis: Axis.horizontal,
-            alignment: Alignment.centerLeft,
-            child: Material(
-              color: KalinkaColors.surfaceBase,
-              elevation: 8,
-              shadowColor: Colors.black,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: KalinkaColors.borderSubtle),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(_railInset),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final control in widget.controls(_close))
-                      SizedBox(width: kKalinkaRailWidth - 1, child: control),
-                  ],
+  Widget _shelf(BuildContext context, OverlayChildLayoutInfo info) {
+    // More is out of view.
+    if (info.childPaintTransform.determinant() == 0) {
+      return const SizedBox.shrink();
+    }
+    final more = MatrixUtils.transformRect(
+      info.childPaintTransform,
+      Offset.zero & info.childSize,
+    );
+    return Positioned(
+      left: more.right + 8,
+      top: more.center.dy,
+      child: FractionalTranslation(
+        translation: const Offset(0, -0.5),
+        child: TapRegion(
+          groupId: this,
+          child: FadeTransition(
+            opacity: _curve,
+            child: SizeTransition(
+              sizeFactor: _curve,
+              axis: Axis.horizontal,
+              alignment: Alignment.centerLeft,
+              child: Material(
+                color: KalinkaColors.surfaceBase,
+                elevation: 8,
+                shadowColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: KalinkaColors.borderSubtle),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(_railInset),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final control in widget.controls(_close))
+                        SizedBox(width: kKalinkaRailWidth - 1, child: control),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _NavigationButton extends StatelessWidget {
