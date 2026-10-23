@@ -152,6 +152,9 @@ class PinnedCatalogPreview extends ConsumerWidget {
           ? PreviewType.imageText
           : PreviewType.tile,
       itemsCount: request.limit,
+      // The shape and size of card its catalog asks for.
+      aspectRatio: pin.page.preview?.aspectRatio,
+      cardSize: pin.page.preview?.cardSize,
     );
     return Padding(
       padding: const EdgeInsets.only(bottom: kHomePinGap),

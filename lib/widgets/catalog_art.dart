@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
+import 'fitted_art.dart';
 
 /// What a catalog's drawn card is made of, where the server has no art for
 /// it: the title picks the colour, so a genre wears the same one in every
@@ -255,6 +256,9 @@ class CatalogArt extends ConsumerWidget {
     );
   }
 
+  /// A catalog card's shape.
+  static const cardRatio = 3.0;
+
   /// Art at least this wide for its height is card-shaped.
   static const cardShape = 2.0;
 
@@ -283,7 +287,7 @@ class CatalogArt extends ConsumerWidget {
       builder: (context, constraints) {
         final size = constraints.biggest;
         if (size.isEmpty) return drawn;
-        if (square || ratio >= cardShape) {
+        if (square || fillsShape(aspectRatio, cardRatio)) {
           return _image(
             url,
             size: size,
@@ -448,7 +452,9 @@ class CatalogCard extends StatelessWidget {
           SizedBox(
             width: width,
             child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: width / 3),
+              constraints: BoxConstraints(
+                minHeight: width / CatalogArt.cardRatio,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,

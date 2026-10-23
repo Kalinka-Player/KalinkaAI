@@ -9,12 +9,12 @@ import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../browse_rows_shimmer.dart';
 import '../catalog_art.dart';
+import '../fitted_art.dart';
 import '../edge_fading_rail.dart';
 import '../loading_shimmer.dart';
 import '../procedural_album_art.dart';
 import '../scroll_edge_fade.dart';
 import '../search/search_zero_state.dart' show kHomeSideInset;
-import '../search_cards/artwork_grid_card.dart' show ArtworkGridCard;
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/track_row_support.dart' show CornerGlyph;
 import '../tap_highlight.dart' show kalinkaOverlay;
@@ -57,6 +57,7 @@ class PreviewShelf extends StatelessWidget {
       tile: (i, size) => _Tile(
         item: items[i],
         size: size,
+        shape: _shapeOf(preview),
         onOpen: onOpenItem,
         inFolder: inFolder,
       ),
@@ -64,6 +65,10 @@ class PreviewShelf extends StatelessWidget {
   }
 
   static int _rowsOf(Preview? preview) => (preview?.rowsCount ?? 1).clamp(1, 3);
+
+  /// The shape the shelf lays its covers out in, a square unless it says.
+  static double _shapeOf(Preview? preview) =>
+      validAspectRatio(preview?.aspectRatio) ?? 1;
 
   static double _tileSizeOf(Preview? preview) =>
       preview?.cardSize == CardSize.large ? 168 : 128;
@@ -90,7 +95,10 @@ class PreviewShelfShimmer extends StatelessWidget {
           tileSize: PreviewShelf._tileSizeOf(preview),
           scrollable: false,
           storageId: 'placeholder',
-          tile: (_, size) => _TilePlaceholder(size: size),
+          tile: (_, size) => _TilePlaceholder(
+            size: size,
+            shape: PreviewShelf._shapeOf(preview),
+          ),
         ),
       ),
     );
@@ -212,8 +220,9 @@ class _TileRail extends StatelessWidget {
 /// A tile's art and its two lines, as grey blocks.
 class _TilePlaceholder extends StatelessWidget {
   final double size;
+  final double shape;
 
-  const _TilePlaceholder({required this.size});
+  const _TilePlaceholder({required this.size, required this.shape});
 
   @override
   Widget build(BuildContext context) {
@@ -223,11 +232,11 @@ class _TilePlaceholder extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.all(_Tile.inset),
       child: SizedBox(
-        width: size,
+        width: size * shape,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ShimmerBlock(width: size, height: size, radius: 8),
+            ShimmerBlock(width: size * shape, height: size, radius: 8),
             const SizedBox(height: _Tile.artGap + 3),
             bar(size * 0.75, 11),
             const SizedBox(height: 6),
@@ -245,12 +254,17 @@ class _TilePlaceholder extends StatelessWidget {
 class _Tile extends ConsumerStatefulWidget {
   final BrowseItem item;
   final double size;
+
+  /// The shelf's shape for covers; a catalog's art and an artist's portrait
+  /// stay square.
+  final double shape;
   final ValueChanged<BrowseItem> onOpen;
   final bool inFolder;
 
   const _Tile({
     required this.item,
     required this.size,
+    required this.shape,
     required this.onOpen,
     required this.inFolder,
   });
@@ -322,8 +336,11 @@ class _TileState extends ConsumerState<_Tile> {
         ? null
         : item.image?.large ?? item.image?.small ?? item.image?.thumbnail;
     final url = path == null ? null : ref.watch(urlResolverProvider).abs(path);
-    // As tall as the rail's other art, a banner as wide as its shape.
-    final width = catalog ? size : size * ArtworkGridCard.coverShapeOf(item);
+    final isArtist = item.artist != null && item.album == null;
+    // As tall as the rail's other art, as wide as the shelf's shape.
+    final width = catalog || isArtist ? size : size * widget.shape;
+    final ratio = item.image?.aspectRatio;
+    final fills = fillsShape(ratio, width / size);
     final fallback = SizedBox(
       width: width,
       height: size,
@@ -341,8 +358,14 @@ class _TileState extends ConsumerState<_Tile> {
           )
         : url == null
         ? fallback
-        : _TileArt(url: url, width: width, size: size, fallback: fallback);
-    final isArtist = item.artist != null && item.album == null;
+        : _TileArt(
+            url: url,
+            width: width,
+            size: size,
+            fills: fills,
+            byHeight: !fills && fitsByHeight(ratio, width / size),
+            fallback: fallback,
+          );
     final subtitle = _subtitle;
     final playable = item.track != null && !item.canBrowse;
 
@@ -439,12 +462,19 @@ class _TileArt extends StatefulWidget {
 
   /// The art's height, the rail's tile size.
   final double size;
+
+  /// The image is the box's shape and covers it; else it is set inside whole
+  /// over a soft fill of itself, decoded by the side it meets.
+  final bool fills;
+  final bool byHeight;
   final Widget fallback;
 
   const _TileArt({
     required this.url,
     required this.width,
     required this.size,
+    required this.fills,
+    required this.byHeight,
     required this.fallback,
   });
 
@@ -467,13 +497,18 @@ class _TileArtState extends State<_TileArt> {
   Widget build(BuildContext context) {
     final size = widget.size;
     final width = widget.width;
-    final decodeSize = (width / _decodeStep).ceil() * _decodeStep;
-    return Image.network(
+    final byHeight = widget.byHeight;
+    final decodeSize =
+        ((byHeight ? size : width) / _decodeStep).ceil() * _decodeStep;
+    final decode = (decodeSize * MediaQuery.devicePixelRatioOf(context))
+        .round();
+    final image = Image.network(
       widget.url,
       width: width,
       height: size,
-      fit: BoxFit.cover,
-      cacheWidth: (decodeSize * MediaQuery.devicePixelRatioOf(context)).round(),
+      fit: widget.fills ? BoxFit.cover : BoxFit.contain,
+      cacheWidth: byHeight ? null : decode,
+      cacheHeight: byHeight ? decode : null,
       gaplessPlayback: true,
       frameBuilder: (_, child, frame, _) {
         if (frame != null) _shown = true;
@@ -484,6 +519,18 @@ class _TileArtState extends State<_TileArt> {
               );
       },
       errorBuilder: (_, _, _) => widget.fallback,
+    );
+    if (widget.fills) return image;
+    return SizedBox(
+      width: width,
+      height: size,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          SoftImageFill(url: widget.url),
+          image,
+        ],
+      ),
     );
   }
 }

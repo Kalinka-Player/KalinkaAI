@@ -268,6 +268,7 @@ class _SectionShelf extends ConsumerWidget {
       type: PreviewType.imageText,
       itemsCount: count,
       cardSize: catalog.previewConfig?.cardSize,
+      aspectRatio: catalog.previewConfig?.aspectRatio,
     );
 
     return preview.when(

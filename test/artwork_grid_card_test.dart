@@ -6,6 +6,7 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/widgets/catalog_art.dart';
+import 'package:kalinka/widgets/fitted_art.dart';
 import 'package:kalinka/widgets/search_cards/artwork_grid_card.dart';
 import 'package:kalinka/widgets/search_cards/browse_navigation_scope.dart';
 import 'package:kalinka/widgets/search_cards/row_play_button.dart';
@@ -54,6 +55,7 @@ Future<void> _mount(
   BrowseItem item, {
   _Api? api,
   ValueChanged<BrowseItem>? onOpen,
+  double shape = 1,
 }) => tester.pumpWidget(
   ProviderScope(
     overrides: [
@@ -69,7 +71,7 @@ Future<void> _mount(
             alignment: Alignment.topLeft,
             child: SizedBox(
               width: 300 + 2 * ArtworkGridCard.inset,
-              child: ArtworkGridCard(item: item),
+              child: ArtworkGridCard(item: item, shape: shape),
             ),
           ),
         ),
@@ -104,29 +106,41 @@ void main() {
     }
   });
 
-  testWidgets('a banner keeps its shape, its name under it', (tester) async {
-    await _mount(
-      tester,
-      BrowseItem(
-        id: 'kalinka:demo:playlist:p',
+  testWidgets('a cover takes its shelf\'s shape and fits inside it', (
+    tester,
+  ) async {
+    BrowseItem playlist(double? ratio) => BrowseItem(
+      id: 'kalinka:demo:playlist:p',
+      name: 'Jazz Classics',
+      canBrowse: true,
+      canAdd: false,
+      playlist: Playlist(
+        id: 'p',
         name: 'Jazz Classics',
-        canBrowse: true,
-        canAdd: false,
-        playlist: Playlist(
-          id: 'p',
-          name: 'Jazz Classics',
-          image: AlbumImage(large: '/banner.jpg', aspectRatio: 2.1),
-        ),
+        image: AlbumImage(large: '/cover.jpg', aspectRatio: ratio),
       ),
     );
-    await tester.pumpAndSettle();
-    final art = tester.getRect(find.byType(AspectRatio));
-    expect(art.width / art.height, closeTo(2.1, 0.001));
-    expect(
-      tester.getTopLeft(find.text('Jazz Classics')).dy,
-      greaterThan(art.bottom),
+    final cover = find.byWidgetPredicate(
+      (widget) => widget is Image && widget.fit != BoxFit.cover,
     );
-    expect(tester.takeException(), isNull);
+    for (final (ratio, shape, fills) in [
+      (2.1, 2.1, true),
+      (null, 2.1, false),
+      (2.1, 1.0, false),
+      (1.0, 1.0, true),
+    ]) {
+      await _mount(tester, playlist(ratio), shape: shape);
+      await tester.pumpAndSettle();
+      final art = tester.getRect(find.byType(AspectRatio));
+      expect(art.width / art.height, closeTo(shape, 0.001));
+      expect(find.byType(SoftImageFill), fills ? findsNothing : findsOneWidget);
+      expect(cover, fills ? findsNothing : findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Jazz Classics')).dy,
+        greaterThan(art.bottom),
+      );
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('album art stays square and Play is separate from opening', (
