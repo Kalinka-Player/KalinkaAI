@@ -477,10 +477,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           child: child,
         );
         if (grid && _inGrid(item)) {
-          final card = ArtworkGridCard(
-            item: item,
-            catalogAspectRatio: page.preview?.aspectRatio,
-          );
+          final card = ArtworkGridCard(item: item);
           return attributed(
             columns == 1
                 ? Padding(
@@ -589,13 +586,21 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             )
           : gridKind == null
           ? const LoadingSpinner()
-          : _GridShimmer(columns: columns, rows: 3),
+          : _GridShimmer(
+              columns: columns,
+              rows: 3,
+              catalogs: gridKind == BrowseType.catalog,
+            ),
       loadMorePlaceholder: !grid || gridKind == BrowseType.track
           ? const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: BrowseRowsShimmer(count: 3, leadingDivider: true),
             )
-          : _GridShimmer(columns: columns, rows: 1),
+          : _GridShimmer(
+              columns: columns,
+              rows: 1,
+              catalogs: gridKind == BrowseType.catalog,
+            ),
       emptyBuilder: (context) => _emptyState(page, filter, onReset: setQuery),
       // The error state replaces only the rows, never the header — a filter
       // that failed has to stay reachable to be undone.
@@ -1667,7 +1672,14 @@ class _GridShimmer extends StatelessWidget {
   final int columns;
   final int rows;
 
-  const _GridShimmer({required this.columns, required this.rows});
+  /// Catalog cards: 3:1, their name on them.
+  final bool catalogs;
+
+  const _GridShimmer({
+    required this.columns,
+    required this.rows,
+    this.catalogs = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1684,26 +1696,31 @@ class _GridShimmer extends StatelessWidget {
                   children: [
                     for (var c = 0; c < columns; c++) ...[
                       if (c > 0) const SizedBox(width: 22),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            AspectRatio(
-                              aspectRatio: 1,
-                              child: ShimmerBlock(radius: 10),
-                            ),
-                            SizedBox(height: 10),
-                            FractionallySizedBox(
-                              widthFactor: 0.7,
-                              child: ShimmerBlock(height: 14, radius: 4),
-                            ),
-                            SizedBox(height: 6),
-                            FractionallySizedBox(
-                              widthFactor: 0.45,
-                              child: ShimmerBlock(height: 12, radius: 4),
-                            ),
-                          ],
-                        ),
+                      Expanded(
+                        child: catalogs
+                            ? const AspectRatio(
+                                aspectRatio: 3,
+                                child: ShimmerBlock(radius: 10),
+                              )
+                            : const Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  AspectRatio(
+                                    aspectRatio: 1,
+                                    child: ShimmerBlock(radius: 10),
+                                  ),
+                                  SizedBox(height: 10),
+                                  FractionallySizedBox(
+                                    widthFactor: 0.7,
+                                    child: ShimmerBlock(height: 14, radius: 4),
+                                  ),
+                                  SizedBox(height: 6),
+                                  FractionallySizedBox(
+                                    widthFactor: 0.45,
+                                    child: ShimmerBlock(height: 12, radius: 4),
+                                  ),
+                                ],
+                              ),
                       ),
                     ],
                   ],

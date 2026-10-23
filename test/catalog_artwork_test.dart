@@ -1,13 +1,15 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
+import 'package:kalinka/widgets/catalog_art.dart';
 import 'package:kalinka/widgets/home/catalog_artwork.dart';
-import 'package:kalinka/widgets/loading_shimmer.dart';
+
+final _drawn = find.byWidgetPredicate(
+  (widget) => widget is CustomPaint && widget.painter is CatalogArtPainter,
+);
 
 void main() {
   test('preview aspect ratio survives wire decoding, copying and encoding', () {
@@ -18,6 +20,50 @@ void main() {
       3.0,
     );
     expect(preview.copyWith(aspectRatio: 2), isNot(preview));
+  });
+
+  test('an image says its shape, and a bad one says none', () {
+    expect(
+      AlbumImage.fromJson({'large': '/a', 'aspect_ratio': 3}).aspectRatio,
+      3,
+    );
+    for (final bad in [0, -1, double.infinity, double.nan, '3', null]) {
+      expect(AlbumImage.fromJson({'aspect_ratio': bad}).aspectRatio, isNull);
+    }
+    final image = AlbumImage.fromJson(
+      AlbumImage(large: '/a', aspectRatio: 1.375).toJson(),
+    );
+    expect(image.aspectRatio, 1.375);
+  });
+
+  test('a pinned page keeps its art shape', () {
+    final page = CatalogPage.fromJson(
+      const CatalogPage.category(
+        id: 'kalinka:source:catalog:a',
+        title: 'Art',
+        artPath: '/a.jpg',
+        artAspectRatio: 1.375,
+      ).toJson(),
+    );
+    expect(page.artAspectRatio, 1.375);
+  });
+
+  test(
+    'a title keeps its colour whatever describes it; both set the rings',
+    () {
+      final jazz = CatalogArtSeed.of('Jazz', null);
+      final described = CatalogArtSeed.of('  JAZZ ', 'From bebop on');
+      expect(described.key, jazz.key);
+      expect(described.geometry, isNot(jazz.geometry));
+      expect(CatalogArtSeed.of('jazz', ''), jazz);
+      expect(CatalogArtSeed.keys, contains(jazz.key));
+    },
+  );
+
+  test('the seed hash is FNV-1a, the same on every platform', () {
+    expect(fnv1a(''), 0x811c9dc5);
+    expect(fnv1a('a'), 0xe40c292c);
+    expect(fnv1a('foobar'), 0xbf9cf968);
   });
 
   Future<void> mount(
@@ -44,10 +90,9 @@ void main() {
                   id: 'kalinka:source:catalog:a',
                   title: 'Art',
                   artPath: path,
-                  preview: Preview(
-                    type: PreviewType.imageText,
-                    aspectRatio: ratio,
-                  ),
+                  artAspectRatio: ratio,
+                  // Describes the catalog's children, never its own card.
+                  preview: Preview(type: PreviewType.imageText, aspectRatio: 1),
                 ),
                 description: description,
                 onOpen: () {},
@@ -59,22 +104,20 @@ void main() {
     ),
   );
 
-  testWidgets('artwork uses a valid hint or a 3:1 placeholder', (tester) async {
-    for (final (hint, expected) in [
-      (null, 3.0),
-      (2.0, 2.0),
-      (0.0, 3.0),
-      (-1.0, 3.0),
-      (double.infinity, 3.0),
-    ]) {
-      await mount(tester, ratio: hint);
-      final size = tester.getSize(find.byType(AspectRatio));
-      expect(size.width / size.height, closeTo(expected, 0.001));
-      expect(
-        tester.getCenter(find.text('Art')).dy,
-        closeTo(tester.getCenter(find.bySemanticsLabel('Open Art')).dy, 0.01),
-      );
-    }
+  Rect card(WidgetTester tester) =>
+      tester.getRect(find.bySemanticsLabel('Open Art'));
+
+  testWidgets('a catalog without art is a drawn 3:1 card under its caption', (
+    tester,
+  ) async {
+    await mount(tester);
+    expect(card(tester).width / card(tester).height, closeTo(3, 0.001));
+    expect(_drawn, findsOneWidget);
+    expect(find.byType(Image), findsNothing);
+    expect(
+      tester.getCenter(find.text('Art')).dy,
+      closeTo(card(tester).center.dy, 0.01),
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -82,11 +125,11 @@ void main() {
     tester,
   ) async {
     const description = 'Picked for you';
-    Future<(Size, Size)> captionAt(double width, {double ratio = 3}) async {
-      await mount(tester, width: width, ratio: ratio, description: description);
+    Future<(Size, Size)> captionAt(double width) async {
+      await mount(tester, width: width, description: description);
       final titleRect = tester.getRect(find.text('Art'));
       final descriptionRect = tester.getRect(find.text(description));
-      final cardRect = tester.getRect(find.bySemanticsLabel('Open Art'));
+      final cardRect = card(tester);
       final captionRect = titleRect.expandToInclude(descriptionRect);
       expect(captionRect.center.dy, closeTo(cardRect.center.dy, 0.01));
       expect(cardRect.contains(captionRect.topLeft), isTrue);
@@ -99,54 +142,48 @@ void main() {
     final (largeTitle, largeDescription) = await captionAt(800);
     expect(largeTitle.height, closeTo(smallTitle.height * 2, 1));
     expect(largeDescription.height, closeTo(smallDescription.height * 2, 1));
-
-    // A square image's height cap makes its card narrow even in a wide panel.
-    final (squareTitle, squareDescription) = await captionAt(800, ratio: 1);
-    expect(squareTitle.height, smallTitle.height);
-    expect(squareDescription.height, smallDescription.height);
   });
 
-  for (final (width, height) in [(120, 40), (100, 50), (40, 80)]) {
-    testWidgets('loaded $width × $height art keeps its native proportions', (
+  testWidgets('a wide panel stops the card at about 320dp tall', (
+    tester,
+  ) async {
+    tester.view.physicalSize =
+        const Size(1600, 1200) * tester.view.devicePixelRatio;
+    addTearDown(tester.view.reset);
+    await mount(tester, width: 1400);
+    expect(card(tester).height, closeTo(320, 0.5));
+  });
+
+  for (final ratio in [null, 3.0]) {
+    testWidgets('card art (ratio $ratio) covers the card it is laid out for', (
       tester,
     ) async {
-      final frame = (await tester.runAsync(
-        () => createTestImage(width: width, height: height),
-      ))!;
-      addTearDown(frame.dispose);
-      addTearDown(() {
-        imageCache.clear();
-        imageCache.clearLiveImages();
-      });
-      const url = 'https://art.example/catalog.jpg';
-      final decode = Completer<ImageInfo>();
-      final provider = ResizeImage(const NetworkImage(url), width: 1024);
-      final key = await provider.obtainKey(ImageConfiguration.empty);
-      imageCache.putIfAbsent(
-        key,
-        () => OneFrameImageStreamCompleter(decode.future),
-      );
-      await mount(tester, path: '/catalog.jpg', ratio: 1);
-      expect(find.byType(ShimmerPulse), findsOneWidget);
-      expect(
-        tester.widget<AspectRatio>(find.byType(AspectRatio)).aspectRatio,
-        1,
-      );
-      decode.complete(ImageInfo(image: frame.clone()));
+      await mount(tester, path: '/card.jpg', ratio: ratio);
+      final image = tester.widget<Image>(find.byType(Image));
+      expect(image.fit, BoxFit.cover);
+      expect(tester.getRect(find.byType(Image)), card(tester));
+      // Until it arrives, and when it fails, the drawn card stands in.
       await tester.pumpAndSettle();
-      expect(find.byType(ShimmerPulse), findsNothing);
-      final size = tester.getSize(find.byType(AspectRatio));
-      expect(size.width / size.height, closeTo(width / height, 0.001));
-      expect(size.height, lessThanOrEqualTo(320));
-      expect(tester.widget<Image>(find.byType(Image)).fit, BoxFit.contain);
-      await mount(tester);
-      await tester.pumpAndSettle();
-      expect(
-        tester.widget<AspectRatio>(find.byType(AspectRatio)).aspectRatio,
-        3,
-      );
+      expect(_drawn, findsOneWidget);
+      expect(card(tester).width / card(tester).height, closeTo(3, 0.001));
       expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  for (final ratio in [1.0, 1100 / 800]) {
+    testWidgets('$ratio:1 art sits on the right of a drawn card', (
+      tester,
+    ) async {
+      await mount(tester, path: '/square.jpg', ratio: ratio);
+      final cardRect = card(tester);
+      final art = tester.getRect(find.byType(Image));
+      expect(cardRect.width / cardRect.height, closeTo(3, 0.001));
+      expect(art.width / art.height, closeTo(ratio, 0.001));
+      expect(art.right, lessThan(cardRect.right));
+      expect(art.left, greaterThan(tester.getRect(find.text('Art')).right));
+      expect(cardRect.contains(art.topLeft), isTrue);
+      expect(_drawn, findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   }
 }

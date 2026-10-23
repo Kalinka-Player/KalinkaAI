@@ -18,6 +18,7 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/screens/customise_home_screen.dart';
 import 'package:kalinka/screens/plugin_catalog_screen.dart';
 import 'package:kalinka/providers/shell_nav_provider.dart';
+import 'package:kalinka/widgets/catalog_art.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/home/pinned_catalogs_section.dart';
@@ -1321,7 +1322,17 @@ void main() {
           lessThan(tester.getTopLeft(find.text('Editorial')).dx),
         );
         if (art == null) {
-          expect(find.byTooltip('No artwork available'), findsOneWidget);
+          expect(
+            find.descendant(
+              of: artwork,
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is CustomPaint &&
+                    widget.painter is CatalogArtPainter,
+              ),
+            ),
+            findsOneWidget,
+          );
         } else {
           final image = tester.widget<Image>(
             find.descendant(of: artwork, matching: find.byType(Image)),

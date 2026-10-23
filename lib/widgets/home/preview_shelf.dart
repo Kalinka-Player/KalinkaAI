@@ -8,6 +8,7 @@ import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../browse_rows_shimmer.dart';
+import '../catalog_art.dart';
 import '../edge_fading_rail.dart';
 import '../loading_shimmer.dart';
 import '../procedural_album_art.dart';
@@ -317,7 +318,12 @@ class _TileState extends ConsumerState<_Tile> {
         item.image?.large ?? item.image?.small ?? item.image?.thumbnail;
     final url = path == null ? null : ref.watch(urlResolverProvider).abs(path);
     final fallback = ProceduralAlbumArt(trackId: item.id, size: size);
-    final art = url == null
+    final art = item.browseTypeIn(folder: widget.inFolder) == BrowseType.catalog
+        ? SizedBox.square(
+            dimension: size,
+            child: CatalogArt.of(item, thumbnail: true),
+          )
+        : url == null
         ? fallback
         : _TileArt(url: url, size: size, fallback: fallback);
     final isArtist = item.artist != null && item.album == null;

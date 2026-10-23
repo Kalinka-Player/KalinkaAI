@@ -80,6 +80,7 @@ final collectionsShelfProvider = FutureProvider<CollectionsShelf?>((ref) async {
           contentType: catalog.previewConfig?.contentType,
           icon: catalog.previewConfig?.icon,
           artPath: artPathOf(shelf),
+          artAspectRatio: shelf.catalog?.image?.aspectRatio,
           filters: catalog.filters,
           sections: shelf.sections ?? const [],
           canEdit: shelf.canEdit,

@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data_model/data_model.dart';
 import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
+import '../catalog_art.dart';
 import '../tap_highlight.dart';
 import 'browse_navigation_scope.dart';
-import 'track_row_support.dart';
 
 /// Catalogs open as pages so their subcatalogs, filters and pin action remain
 /// reachable. Only media containers use inline expansion.
@@ -25,7 +25,7 @@ class SearchCatalogRow extends ConsumerWidget {
         contentPadding: const EdgeInsets.only(left: 3),
         minVerticalPadding: 8,
         horizontalTitleGap: 12,
-        leading: TrackThumb(item: item, size: 60, radius: 10),
+        leading: CatalogThumb(item: item, size: 60, radius: 10),
         title: Text(
           item.catalog?.title ?? item.name ?? 'Catalog',
           style: KalinkaTextStyles.trackRowTitle,

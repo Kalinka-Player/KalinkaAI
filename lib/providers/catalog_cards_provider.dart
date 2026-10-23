@@ -26,8 +26,12 @@ class CatalogCardPlan {
   final Preview? preview;
 
   /// Unresolved background path (resolved against the base URL at render time).
-  /// Null until the server has generated the art; the card is black until then.
+  /// Null until the server has generated the art; the card draws its own until
+  /// then.
   final String? artPath;
+
+  /// [artPath]'s width over its height, where its source said.
+  final double? artAspectRatio;
 
   /// What the shelf behind this card can be filtered by, as its source
   /// declared it. Carried from here into the page so the page never has to
@@ -62,6 +66,7 @@ class CatalogCardPlan {
     this.role,
     this.preview,
     this.artPath,
+    this.artAspectRatio,
     this.filters = const [],
     this.sections = const [],
     this.canEdit = false,

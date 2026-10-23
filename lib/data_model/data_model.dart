@@ -481,13 +481,17 @@ class AlbumImage {
   final String? thumbnail;
   final String? large;
 
-  AlbumImage({this.small, this.thumbnail, this.large});
+  /// Width over height of every size, when whoever made the image said.
+  final double? aspectRatio;
+
+  AlbumImage({this.small, this.thumbnail, this.large, this.aspectRatio});
 
   // Plugins built on the SDK send "" for a size they do not have.
   factory AlbumImage.fromJson(Map<String, dynamic> json) => AlbumImage(
     small: _presentUrl(json["small"]),
     thumbnail: _presentUrl(json["thumbnail"]),
     large: _presentUrl(json["large"]),
+    aspectRatio: validAspectRatio(json["aspect_ratio"]),
   );
 
   static String? _presentUrl(Object? value) =>
@@ -497,8 +501,13 @@ class AlbumImage {
     "small": small,
     "thumbnail": thumbnail,
     "large": large,
+    if (aspectRatio != null) "aspect_ratio": aspectRatio,
   };
 }
+
+/// [value] as an aspect ratio, or null when it is not a usable one.
+double? validAspectRatio(Object? value) =>
+    value is num && value.isFinite && value > 0 ? value.toDouble() : null;
 
 class Artist {
   final String id;
