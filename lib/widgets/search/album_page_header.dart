@@ -175,7 +175,7 @@ class AlbumIdentityColumn extends StatelessWidget {
               child: Text(
                 title,
                 style: KalinkaFonts.display(
-                  fontSize: constraints.maxWidth < 300 ? 24 : 30,
+                  fontSize: constraints.maxWidth < 300 ? 20 : 26,
                   height: 1.15,
                   letterSpacing: -0.5,
                   fontWeight: FontWeight.w500,
@@ -325,7 +325,7 @@ class _AlbumPageHeaderState extends State<AlbumPageHeader> {
         // A compact cover leaves more tracks visible. This is a minimum so
         // enlarged system text can still grow the header without clipping.
         final heroHeight = width.clamp(320.0, 440.0);
-        final titleSize = (width * 0.10).clamp(36.0, 52.0);
+        final titleSize = (width * 0.085).clamp(30.0, 44.0);
         final shade = KalinkaColors.background.withValues(
           alpha: AlbumPageHeader.shadeAlpha,
         );
@@ -423,7 +423,7 @@ class _AlbumPageHeaderState extends State<AlbumPageHeader> {
                               title,
                               // Keep long names within two display lines' height,
                               // leaving the cover visible above the metadata.
-                              minFontSize: 24,
+                              minFontSize: 20,
                               lines: 2,
                               style: KalinkaFonts.display(
                                 fontSize: titleSize,

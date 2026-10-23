@@ -119,7 +119,7 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
     return SliverLayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.crossAxisExtent;
-        final titleFontSize = (width * 0.045).clamp(34.0, 48.0);
+        final titleFontSize = (width * 0.038).clamp(29.0, 41.0);
         final titleStyle = KalinkaFonts.display(
           fontSize: titleFontSize,
           fontWeight: FontWeight.w600,
