@@ -28,6 +28,12 @@ class ActionPillButton extends StatelessWidget {
 
   static const _vertical = 8.0;
 
+  // A labelled pill's sides, the side ahead of a mark, and the mark's gap.
+  static const _side = 18.0;
+  static const _markSide = 13.0;
+  static const _iconSize = 18.0;
+  static const _markGap = 6.0;
+
   /// The accent pill's tint laid on the canvas, so the pill reads as it
   /// does there over a page's art too.
   static final accentFill = Color.alphaBlend(
@@ -76,7 +82,12 @@ class ActionPillButton extends StatelessWidget {
     // that side's room.
     final padding = label == null
         ? const EdgeInsets.symmetric(horizontal: 11, vertical: _vertical)
-        : EdgeInsets.fromLTRB(mark ? 13 : 18, _vertical, 18, _vertical);
+        : EdgeInsets.fromLTRB(
+            mark ? _markSide : _side,
+            _vertical,
+            _side,
+            _vertical,
+          );
     final interactive = enabled && onTap != null;
 
     Widget button = PillTarget(
@@ -101,8 +112,8 @@ class ActionPillButton extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   ?leading,
-                  if (icon != null) Icon(icon, size: 18, color: fg),
-                  if (mark && label != null) const SizedBox(width: 6),
+                  if (icon != null) Icon(icon, size: _iconSize, color: fg),
+                  if (mark && label != null) const SizedBox(width: _markGap),
                   if (label != null) Text(label!, style: labelStyle),
                 ],
               ),
@@ -136,6 +147,24 @@ class ActionPillButton extends StatelessWidget {
     final line = _lineHeightOf(context, _labelStyle(KalinkaColors.textPrimary));
     final height = math.max(kKalinkaPillHeight, line + 2 * _vertical);
     return math.max(0, (kKalinkaPillTarget - height) / 2);
+  }
+
+  /// How wide a pill with an icon ahead of [label] sets, as [build] lays it
+  /// out.
+  static double widthOf(BuildContext context, String label) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: DefaultTextStyle.of(context).style
+            .merge(_labelStyle(KalinkaColors.textPrimary)),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return _markSide + _iconSize + _markGap + width.ceilToDouble() + _side;
   }
 
   /// How tall a line of label sets, so a pill without one is as tall as
