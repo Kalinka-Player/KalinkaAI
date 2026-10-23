@@ -390,8 +390,7 @@ class CatalogThumb extends StatelessWidget {
 }
 
 /// A catalog as a card: its art, never shorter than 3:1, with its name on the
-/// left, vertically centred, over a soft shade. The card grows with its
-/// caption.
+/// left, vertically centred. The card grows with its caption.
 class CatalogCard extends StatelessWidget {
   final String? artPath;
   final double? aspectRatio;
@@ -428,17 +427,12 @@ class CatalogCard extends StatelessWidget {
   /// dark.
   static const captionShare = 0.6;
 
-  // Lifts the caption off bright spots of a source's own art.
+  // Lifts the caption off bright spots of a source's own art: a tight edge
+  // round each glyph, and a softer one under it.
   static const _captionShadows = [
-    Shadow(color: Color(0x99000000), blurRadius: 8),
+    Shadow(color: Color(0xCC000000), blurRadius: 3, offset: Offset(0, 1)),
+    Shadow(color: Color(0x99000000), blurRadius: 10),
   ];
-
-  /// Under the caption, hugging it, where a cover in the art runs beneath.
-  static BoxShadow _shade(double scale) => BoxShadow(
-    color: const Color(0xA6000000),
-    blurRadius: 20 * scale,
-    spreadRadius: 8 * scale,
-  );
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -472,53 +466,46 @@ class CatalogCard extends StatelessWidget {
                     constraints: BoxConstraints(maxWidth: width * captionShare),
                     child: Padding(
                       padding: EdgeInsets.all(16 * scale),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12 * scale),
-                          boxShadow: [_shade(scale)],
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (leading case final leading?) ...[
-                                  leading(scale),
-                                  SizedBox(width: 8 * scale),
-                                ],
-                                Flexible(
-                                  child: Text(
-                                    title,
-                                    maxLines: maxLines,
-                                    overflow: maxLines == null
-                                        ? null
-                                        : TextOverflow.ellipsis,
-                                    style: KalinkaTextStyles.blockTitle.apply(
-                                      fontSizeFactor: 0.85 * scale,
-                                      shadows: _captionShadows,
-                                    ),
-                                  ),
-                                ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              if (leading case final leading?) ...[
+                                leading(scale),
+                                SizedBox(width: 8 * scale),
                               ],
-                            ),
-                            if (subtitle != null && subtitle.isNotEmpty) ...[
-                              SizedBox(height: 4 * scale),
-                              Text(
-                                subtitle,
-                                maxLines: maxLines,
-                                overflow: maxLines == null
-                                    ? null
-                                    : TextOverflow.ellipsis,
-                                style: KalinkaTextStyles.trackRowSubtitle.apply(
-                                  fontSizeFactor: 0.85 * subtitleScale,
-                                  shadows: _captionShadows,
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  maxLines: maxLines,
+                                  overflow: maxLines == null
+                                      ? null
+                                      : TextOverflow.ellipsis,
+                                  style: KalinkaTextStyles.blockTitle.apply(
+                                    fontSizeFactor: 0.85 * scale,
+                                    shadows: _captionShadows,
+                                  ),
                                 ),
                               ),
                             ],
+                          ),
+                          if (subtitle != null && subtitle.isNotEmpty) ...[
+                            SizedBox(height: 4 * scale),
+                            Text(
+                              subtitle,
+                              maxLines: maxLines,
+                              overflow: maxLines == null
+                                  ? null
+                                  : TextOverflow.ellipsis,
+                              style: KalinkaTextStyles.trackRowSubtitle.apply(
+                                fontSizeFactor: 0.85 * subtitleScale,
+                                shadows: _captionShadows,
+                              ),
+                            ),
                           ],
-                        ),
+                        ],
                       ),
                     ),
                   ),
