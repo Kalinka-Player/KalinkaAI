@@ -16,6 +16,7 @@ import '../providers/renderer_host_provider.dart' show rendererIdentityProvider;
 import '../providers/renderer_provider.dart';
 import '../providers/renderer_settings_route_provider.dart';
 import '../providers/restart_provider.dart';
+import '../providers/soundcard_provider.dart' show restartingBoxesProvider;
 import '../providers/search_session_provider.dart';
 import '../providers/server_connect.dart';
 import '../providers/settings_provider.dart';
@@ -79,9 +80,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // The rail moves between the layouts: beside the panes on tablet, over the
   // phone layout's side there, so the mini-player can run under it.
   final _railKey = GlobalKey();
+  final _miniPlayerExtent = ValueNotifier<double?>(null);
   // The phone mini-player's full height, border and inset included, which
   // the rail ends above; null until it is first laid out.
-  final _miniPlayerExtent = ValueNotifier<double?>(null);
   bool _navigating = false;
 
   // Drives the mini-player sliding down out of view while the search entry
@@ -124,6 +125,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
   // The phone's player sheet while it is open.
   PlayerSheetRoute? _expandedPlayer;
+
+  /// The player's sheet is up, over the mini-player.
+  bool get _sheetOpen => _expandedPlayer != null;
 
   double? _publishedToastInset;
 
@@ -327,6 +331,15 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     ref.read(homeSearchRequestProvider.notifier).request();
   }
 
+  /// While the server restarts, a box restarts for its sound card, or a
+  /// plugin updates, there is nothing to go to or control.
+  bool get _serverBusy =>
+      ref.watch(upgradeProvider).isUpgrading ||
+      ref.watch(
+        restartProvider.select((state) => state.isRestarting && !state.isDone),
+      ) ||
+      ref.watch(restartingBoxesProvider).isNotEmpty;
+
   Widget _navigation({required bool extended}) => ShellNavigation(
     extended: extended,
     configurationOpen:
@@ -339,12 +352,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     enabled:
         !_navigating &&
         !(_discoveryOpen && !ref.watch(connectionSettingsProvider).isSet) &&
-        !ref.watch(upgradeProvider).isUpgrading &&
-        !ref.watch(
-          restartProvider.select(
-            (state) => state.isRestarting && !state.isDone,
-          ),
-        ),
+        !_serverBusy,
     onNavigate: _navigate,
     onAction: _onShellAction,
   );
@@ -430,9 +438,11 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         },
       ),
     );
-    _expandedPlayer = sheet;
+    setState(() => _expandedPlayer = sheet);
     navigator.push(sheet).whenComplete(() {
-      if (identical(_expandedPlayer, sheet)) _expandedPlayer = null;
+      if (mounted && identical(_expandedPlayer, sheet)) {
+        setState(() => _expandedPlayer = null);
+      }
     });
   }
 
@@ -728,7 +738,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                       left: railWidth,
                       right: 0,
                       top: 0,
-                      bottom: connected ? barHeight : 0,
+                      // Clear of the phone's mini-player, while it shows.
+                      bottom: connected && !_serverBusy ? barHeight : 0,
                       child: customise,
                     ),
                 ],
@@ -866,9 +877,11 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }) {
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
     final showCoachMarks = _showCoachMarks;
-    // Without a server there is no track for the mini-player to show.
+    // Without a server there is no track for the mini-player to show, and
+    // nothing to control while it restarts or updates.
     final miniPlayer =
-        ref.watch(connectionStateProvider) != ConnectionStatus.none;
+        ref.watch(connectionStateProvider) != ConnectionStatus.none &&
+        !_serverBusy;
     // Clear the mini-player, and the escalation card when it is up.
     _publishToastInset(
       (miniPlayer ? kalinkaMiniPlayerHeight(context) : 0) + _escalationHeight,
@@ -895,9 +908,21 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           maintainState: true,
                           maintainAnimation: true,
                           maintainSize: true,
-                          child: _buildHome(
-                            isTablet: false,
-                            navigationVisible: navigationVisible,
+                          // The mini-player takes the inset under it while
+                          // it is there, as it does for the rail.
+                          child: AnimatedBuilder(
+                            animation: _miniPlayerReveal,
+                            builder: (context, child) =>
+                                MediaQuery.removePadding(
+                                  context: context,
+                                  removeBottom:
+                                      miniPlayer && _miniPlayerReveal.value > 0,
+                                  child: child!,
+                                ),
+                            child: _buildHome(
+                              isTablet: false,
+                              navigationVisible: navigationVisible,
+                            ),
                           ),
                         ),
                         _buildEscalation(isTablet: false),
@@ -906,7 +931,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                         if (_pluginsOpen)
                           MediaQuery.removePadding(
                             context: context,
-                            removeBottom: true,
+                            removeBottom: miniPlayer,
                             child: ClipRect(
                               child: Stack(
                                 fit: StackFit.expand,
@@ -959,10 +984,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               rail,
               width: railWidth,
               miniPlayer: miniPlayer,
-              // Whatever covers the mini-player has the rail come down over
-              // the rest of it.
+              // Whatever covers the mini-player, the player's sheet included,
+              // has the rail come down over the rest of it.
               miniCovered:
-                  _discoveryOpen || (!_pluginsOpen && _settingsCovering),
+                  _sheetOpen ||
+                  _discoveryOpen ||
+                  (!_pluginsOpen && _settingsCovering),
             ),
           // Settings — full-screen overlay on phone (slides in from the right).
           // The same flag renders it in the browsing pane on tablet, so

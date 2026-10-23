@@ -9,7 +9,7 @@ import 'player_queue_view.dart';
 /// The phone player: a full-height sheet whose content slides while the
 /// queue's mini-player stays put over its foot, where Home's own sits, so
 /// closing the queue leaves the bar in place. Beside a navigation rail it
-/// leaves the rail in view and in reach.
+/// leaves the rail in view and in reach, all but the foot the bar spans.
 class PlayerSheetRoute extends PopupRoute<void> {
   PlayerSheetRoute({required this.builder, required this.themes});
 
@@ -175,11 +175,12 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
                       child: ColoredBox(color: KalinkaColors.background),
                     ),
                   ),
-                Positioned(
-                  left: rail,
+                // Exactly where Home's sits, under the rail too.
+                const Positioned(
+                  left: 0,
                   right: 0,
                   bottom: 0,
-                  child: const QueueMiniPlayer(),
+                  child: QueueMiniPlayer(),
                 ),
               ],
             );

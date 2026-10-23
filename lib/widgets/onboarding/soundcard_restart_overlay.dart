@@ -1,29 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../providers/soundcard_provider.dart';
 import '../../providers/supervisor_api.dart';
 import '../../theme/app_theme.dart';
 import '../kalinka_button.dart';
 import '../progress_timeline.dart';
 
-/// Covers the wizard while the Pi an output plays on restarts to switch a
-/// sound card on, and offers the way on when it does not come back in time.
+/// Covers the wizard, or an output's settings, while the Pi the output plays
+/// on restarts to switch a sound card on. The wizard also offers the way on
+/// when it does not come back in time.
 class SoundcardRestartOverlay extends ConsumerWidget {
   final SoundcardBox box;
   final SoundcardOption card;
 
-  /// Set once the Pi did not come back in time.
+  /// What happens once the Pi is back, after how long it takes.
+  final String afterwards;
+
+  /// Set once the Pi did not come back in time; then [onKeepWaiting] and
+  /// [onContinue] are the ways on.
   final bool notBack;
-  final VoidCallback onKeepWaiting;
-  final VoidCallback onContinue;
+  final VoidCallback? onKeepWaiting;
+  final VoidCallback? onContinue;
 
   const SoundcardRestartOverlay({
     super.key,
     required this.box,
     required this.card,
-    required this.notBack,
-    required this.onKeepWaiting,
-    required this.onContinue,
+    this.afterwards = 'Setup carries on afterwards.',
+    this.notBack = false,
+    this.onKeepWaiting,
+    this.onContinue,
   });
 
   @override
@@ -45,7 +52,7 @@ class SoundcardRestartOverlay extends ConsumerWidget {
             notBack
                 ? 'Check that it has power and a network connection. A start '
                       'after a change can take a while.'
-                : 'This takes a minute or two. Setup carries on afterwards.',
+                : 'This takes a minute or two. $afterwards',
             textAlign: TextAlign.center,
             style: KalinkaTextStyles.trayRowSublabel.copyWith(
               fontSize: KalinkaTypography.baseSize + 1,
