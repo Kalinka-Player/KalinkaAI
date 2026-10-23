@@ -12,6 +12,7 @@ import '../providers/source_modules_provider.dart' show colorForSourceName;
 import '../providers/supervisor_api.dart';
 import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
+import 'measure_size.dart';
 
 enum ShellDestination { home, results, source, collections, configuration }
 
@@ -27,8 +28,16 @@ const _itemRadius = 12.0;
 /// The server's own controls, pinned under Configuration.
 enum ShellAction { restart, changeServer, powerOff }
 
+typedef _Control = ({
+  ShellAction action,
+  String label,
+  IconData icon,
+  String tooltip,
+  bool selected,
+});
+
 /// Persistent shortcuts beside browsing on larger screens.
-class ShellNavigation extends ConsumerWidget {
+class ShellNavigation extends ConsumerStatefulWidget {
   final bool configurationOpen;
 
   /// The server picker shows: Change server is then the destination shown,
@@ -53,13 +62,36 @@ class ShellNavigation extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ShellNavigation> createState() => _ShellNavigationState();
+}
+
+class _ShellNavigationState extends ConsumerState<ShellNavigation> {
+  // What the rail's parts take, to tell how many of the server's controls
+  // fit under the rest.
+  double _listHeight = 0;
+  double _footHeight = 0;
+  final _controlHeights = <ShellAction, double>{};
+  double _moreHeight = 0;
+
+  void _measuredControl(ShellAction action, double height) =>
+      setState(() => _controlHeights[action] = height);
+
+  void _measured({double? list, double? foot, double? more}) => setState(() {
+    _listHeight = list ?? _listHeight;
+    _footHeight = foot ?? _footHeight;
+    _moreHeight = more ?? _moreHeight;
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final extended = widget.extended;
+    final enabled = widget.enabled;
     final connected =
         ref.watch(connectionStateProvider) == ConnectionStatus.connected;
     final session = ref.watch(searchSessionProvider);
     // The destination shown, whatever page in it is: an album opened from
     // Results is still Results.
-    final shown = configurationOpen || changeServerOpen
+    final shown = widget.configurationOpen || widget.changeServerOpen
         ? null
         : session.destination;
     final sources = ref.watch(catalogSourcesProvider);
@@ -88,24 +120,31 @@ class ShellNavigation extends ConsumerWidget {
       selected: selected,
       extended: extended,
       onPressed: enabled && available
-          ? () => onNavigate(destination, source)
+          ? () => widget.onNavigate(destination, source)
           : null,
     );
 
-    Widget action(
-      ShellAction action,
-      String label,
-      IconData icon,
-      String tooltip, {
-      bool selected = false,
+    Widget control(
+      _Control control, {
+      bool extended = false,
+      VoidCallback? then,
     }) => _NavigationButton(
-      key: ValueKey('navigation-${action.name}'),
-      label: label,
-      tooltip: tooltip,
-      icon: icon,
-      selected: selected,
+      key: ValueKey('navigation-${control.action.name}'),
+      label: control.label,
+      tooltip: control.tooltip,
+      icon: control.icon,
+      // In berry: the one of them that leaves the box off.
+      iconColor: control.action == ShellAction.powerOff
+          ? KalinkaColors.accent
+          : null,
+      selected: control.selected,
       extended: extended,
-      onPressed: enabled ? () => onAction(action) : null,
+      onPressed: enabled
+          ? () {
+              then?.call();
+              widget.onAction(control.action);
+            }
+          : null,
     );
 
     const divider = Padding(
@@ -113,132 +152,359 @@ class ShellNavigation extends ConsumerWidget {
       child: Divider(height: 1, color: KalinkaColors.borderSubtle),
     );
     final configuration = ref.watch(pluginCatalogEnabledProvider);
-    final actions = [
+    final List<_Control> controls = [
       if (box?.offers(BoxAction.reboot) ?? false)
-        action(
-          ShellAction.restart,
-          'Restart',
-          Icons.autorenew,
-          'Restart the streamer',
+        (
+          action: ShellAction.restart,
+          label: 'Restart',
+          icon: Icons.autorenew,
+          tooltip: 'Restart the streamer',
+          selected: false,
         ),
       // Web is bound to the server that serves it.
       if (!kIsWeb)
-        action(
-          ShellAction.changeServer,
-          'Change server',
-          Icons.language,
-          'Connect to a different server',
-          selected: changeServerOpen,
+        (
+          action: ShellAction.changeServer,
+          label: 'Change server',
+          icon: Icons.language,
+          tooltip: 'Connect to a different server',
+          selected: widget.changeServerOpen,
         ),
       if (box?.offers(BoxAction.powerOff) ?? false)
-        action(
-          ShellAction.powerOff,
-          'Power off',
-          Icons.power_settings_new,
-          'Power off the streamer',
+        (
+          action: ShellAction.powerOff,
+          label: 'Power off',
+          icon: Icons.power_settings_new,
+          tooltip: 'Power off the streamer',
+          selected: false,
         ),
     ];
+    Widget more({bool open = false, VoidCallback? onPressed}) =>
+        _NavigationButton(
+          key: const ValueKey('navigation-more'),
+          label: 'More',
+          tooltip: open ? null : 'More controls',
+          icon: Icons.more_horiz,
+          selected: open,
+          extended: extended,
+          onPressed: onPressed,
+        );
+    // Each measured on its own, out of sight, whether it stands or not.
+    final measures = Offstage(
+      child: ExcludeFocus(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final c in controls)
+              MeasureSize(
+                onChange: (size) => _measuredControl(c.action, size.height),
+                child: control(c, extended: extended),
+              ),
+            MeasureSize(
+              onChange: (size) => _measured(more: size.height),
+              child: more(),
+            ),
+          ],
+        ),
+      ),
+    );
 
     return FocusTraversalGroup(
       child: Material(
         color: KalinkaColors.surfaceBase,
         child: SafeArea(
-          // One scroll on a short window; otherwise the server's controls
-          // keep to the foot.
-          child: CustomScrollView(
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(vertical: _railInset),
-                sliver: SliverList.list(
-                  children: [
-                    destination(
-                      'home',
-                      'Home',
-                      Icons.home_outlined,
-                      ShellDestination.home,
-                      selected: shown == BrowseDestination.home,
-                    ),
-                    destination(
-                      'results',
-                      'Search results',
-                      Icons.manage_search,
-                      ShellDestination.results,
-                      compactLabel: 'Results',
-                      tooltip: session.resultsAvailable
-                          ? 'Search results: ${session.searchQuery}'
-                          : 'Search results appear after your first search',
-                      selected: shown == BrowseDestination.results,
-                      available: session.resultsAvailable,
-                    ),
-                    divider,
-                    for (final source in sources.value ?? <CatalogSource>[])
-                      destination(
-                        'source-${source.module.name}',
-                        source.module.title,
-                        iconNamed(source.module.icon) ??
-                            Icons.library_music_outlined,
-                        ShellDestination.source,
-                        selected:
-                            shown ==
-                            BrowseDestination.source(source.module.name),
-                        available: connected && source.root.canBrowse,
-                        source: source,
-                      ),
-                    if (sources.hasError && connected)
-                      _NavigationButton(
-                        label: 'Retry sources',
-                        icon: Icons.refresh,
-                        selected: false,
-                        extended: extended,
-                        onPressed: enabled
-                            ? () => ref.invalidate(catalogSourcesProvider)
-                            : null,
-                      ),
-                    // Apart from the sources: it holds tracks from any of
-                    // them.
-                    if (collections != null) ...[
-                      const SizedBox(height: 8),
-                      destination(
-                        'collections',
-                        'Collections',
-                        Icons.queue_music_rounded,
-                        ShellDestination.collections,
-                        selected: shown == BrowseDestination.collections,
-                        available: connected,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: _railInset),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (configuration)
-                        destination(
-                          'configuration',
-                          'Configuration',
-                          Icons.settings_outlined,
-                          ShellDestination.configuration,
-                          compactLabel: 'Config',
-                          selected: configurationOpen && !changeServerOpen,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // As many as fit stand; the rest go behind More.
+              final room =
+                  constraints.maxHeight -
+                  _listHeight -
+                  _footHeight -
+                  4 * _railInset;
+              double heightOf(Iterable<_Control> some) => some.fold(
+                0.0,
+                (sum, c) => sum + (_controlHeights[c.action] ?? 0),
+              );
+              var standing = controls.length;
+              if (heightOf(controls) > room) {
+                standing = controls.length - 1;
+                while (standing > 0 &&
+                    heightOf(controls.take(standing)) + _moreHeight > room) {
+                  standing--;
+                }
+              }
+              final folded = controls.skip(standing).toList();
+              // One scroll on a short window; otherwise the server's controls
+              // keep to the foot.
+              return CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(vertical: _railInset),
+                    sliver: SliverToBoxAdapter(
+                      child: MeasureSize(
+                        onChange: (size) => _measured(list: size.height),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            destination(
+                              'home',
+                              'Home',
+                              Icons.home_outlined,
+                              ShellDestination.home,
+                              selected: shown == BrowseDestination.home,
+                            ),
+                            destination(
+                              'results',
+                              'Search results',
+                              Icons.manage_search,
+                              ShellDestination.results,
+                              compactLabel: 'Results',
+                              tooltip: session.resultsAvailable
+                                  ? 'Search results: ${session.searchQuery}'
+                                  : 'Search results appear after your first '
+                                        'search',
+                              selected: shown == BrowseDestination.results,
+                              available: session.resultsAvailable,
+                            ),
+                            divider,
+                            for (final source
+                                in sources.value ?? <CatalogSource>[])
+                              destination(
+                                'source-${source.module.name}',
+                                source.module.title,
+                                iconNamed(source.module.icon) ??
+                                    Icons.library_music_outlined,
+                                ShellDestination.source,
+                                selected:
+                                    shown ==
+                                    BrowseDestination.source(
+                                      source.module.name,
+                                    ),
+                                available: connected && source.root.canBrowse,
+                                source: source,
+                              ),
+                            if (sources.hasError && connected)
+                              _NavigationButton(
+                                label: 'Retry sources',
+                                icon: Icons.refresh,
+                                selected: false,
+                                extended: extended,
+                                onPressed: enabled
+                                    ? () =>
+                                          ref.invalidate(catalogSourcesProvider)
+                                    : null,
+                              ),
+                            // Apart from the sources: it holds tracks from any
+                            // of them.
+                            if (collections != null) ...[
+                              const SizedBox(height: 8),
+                              destination(
+                                'collections',
+                                'Collections',
+                                Icons.queue_music_rounded,
+                                ShellDestination.collections,
+                                selected:
+                                    shown == BrowseDestination.collections,
+                                available: connected,
+                              ),
+                            ],
+                          ],
                         ),
-                      if (configuration && actions.isNotEmpty) divider,
-                      ...actions,
-                    ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ],
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: _railInset),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          MeasureSize(
+                            onChange: (size) => _measured(foot: size.height),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (configuration)
+                                  destination(
+                                    'configuration',
+                                    'Configuration',
+                                    Icons.settings_outlined,
+                                    ShellDestination.configuration,
+                                    compactLabel: 'Config',
+                                    selected:
+                                        widget.configurationOpen &&
+                                        !widget.changeServerOpen,
+                                  ),
+                                if (configuration && controls.isNotEmpty)
+                                  divider,
+                              ],
+                            ),
+                          ),
+                          for (final c in controls.take(standing))
+                            control(c, extended: extended),
+                          if (folded.isNotEmpty)
+                            _OverflowShelf(
+                              enabled: enabled,
+                              selected: folded.any((c) => c.selected),
+                              button: more,
+                              controls: (close) => [
+                                for (final c in folded) control(c, then: close),
+                              ],
+                            ),
+                          measures,
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
     );
   }
+}
+
+/// The server's controls that do not fit the rail, behind More; they unfold
+/// side by side on a shelf to the rail's right.
+class _OverflowShelf extends StatefulWidget {
+  final bool enabled;
+
+  /// One of the controls is the destination shown.
+  final bool selected;
+
+  /// The More item, highlighted while [open].
+  final Widget Function({bool open, VoidCallback? onPressed}) button;
+
+  /// The controls, each closing the shelf through the callback first.
+  final List<Widget> Function(VoidCallback close) controls;
+
+  const _OverflowShelf({
+    required this.enabled,
+    required this.selected,
+    required this.button,
+    required this.controls,
+  });
+
+  @override
+  State<_OverflowShelf> createState() => _OverflowShelfState();
+}
+
+class _OverflowShelfState extends State<_OverflowShelf>
+    with SingleTickerProviderStateMixin {
+  final _link = LayerLink();
+  final _portal = OverlayPortalController();
+  late final _unfold = AnimationController(vsync: this);
+  late final _curve = CurvedAnimation(
+    parent: _unfold,
+    curve: Curves.easeOutCubic,
+  );
+  bool _open = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _unfold.duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 180);
+  }
+
+  @override
+  void didUpdateWidget(_OverflowShelf oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled) _close();
+  }
+
+  @override
+  void dispose() {
+    _curve.dispose();
+    _unfold.dispose();
+    super.dispose();
+  }
+
+  void _show() {
+    setState(() => _open = true);
+    _portal.show();
+    _unfold.forward();
+  }
+
+  void _close() {
+    if (!_open) return;
+    setState(() => _open = false);
+    _unfold.reverse().whenComplete(() {
+      if (mounted && !_open) _portal.hide();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TapRegion(
+      groupId: _link,
+      onTapOutside: (_) => _close(),
+      child: CompositedTransformTarget(
+        link: _link,
+        child: OverlayPortal(
+          controller: _portal,
+          overlayChildBuilder: _shelf,
+          child: Semantics(
+            expanded: _open,
+            child: widget.button(
+              open: widget.selected || _open,
+              onPressed: widget.enabled ? (_open ? _close : _show) : null,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Level with More, from just past the rail's edge.
+  Widget _shelf(BuildContext context) => Positioned(
+    left: 0,
+    top: 0,
+    child: CompositedTransformFollower(
+      link: _link,
+      targetAnchor: Alignment.centerRight,
+      followerAnchor: Alignment.centerLeft,
+      offset: const Offset(8, 0),
+      child: TapRegion(
+        groupId: _link,
+        child: FadeTransition(
+          opacity: _curve,
+          child: SizeTransition(
+            sizeFactor: _curve,
+            axis: Axis.horizontal,
+            alignment: Alignment.centerLeft,
+            child: Material(
+              color: KalinkaColors.surfaceBase,
+              elevation: 8,
+              shadowColor: Colors.black,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: KalinkaColors.borderSubtle),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(_railInset),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final control in widget.controls(_close))
+                      SizedBox(width: kKalinkaRailWidth - 1, child: control),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _NavigationButton extends StatelessWidget {
