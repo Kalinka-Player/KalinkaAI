@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'box_control_provider.dart';
 import 'connection_settings_provider.dart';
+import 'connection_state_provider.dart';
 import 'demo_mode.dart';
 import 'kalinka_player_api_provider.dart';
 import 'renderer_provider.dart';
@@ -20,10 +21,14 @@ class SoundcardBox {
   /// Pointed at the new card once the box is back; null on a box with none.
   final String? rendererId;
 
+  /// The connected server runs on it, so goes down with it.
+  final bool hostsServer;
+
   const SoundcardBox({
     required this.api,
     required this.identity,
     this.rendererId,
+    this.hostsServer = false,
   });
 
   @override
@@ -31,10 +36,12 @@ class SoundcardBox {
       other is SoundcardBox &&
       identical(other.api, api) &&
       other.identity == identity &&
-      other.rendererId == rendererId;
+      other.rendererId == rendererId &&
+      other.hostsServer == hostsServer;
 
   @override
-  int get hashCode => Object.hash(identityHashCode(api), identity, rendererId);
+  int get hashCode =>
+      Object.hash(identityHashCode(api), identity, rendererId, hostsServer);
 }
 
 /// The connected server's own box, when its supervisor can set up its sound
@@ -49,6 +56,7 @@ final serverSoundcardBoxProvider = FutureProvider<SoundcardBox?>((ref) async {
     api: api,
     identity: BoxIdentity(serverId: control.serverId),
     rendererId: control.info.rendererId,
+    hostsServer: true,
   );
 });
 
@@ -157,16 +165,28 @@ class SoundcardChange extends Notifier<SoundcardStep> {
   final SoundcardBox box;
 
   @override
-  SoundcardStep build() => SoundcardStep.idle;
+  SoundcardStep build() {
+    listenSelf(
+      (_, step) => ref
+          .read(restartingBoxesProvider.notifier)
+          .mark(box, restarting: _restarted && step != SoundcardStep.idle),
+    );
+    return SoundcardStep.idle;
+  }
 
   /// Whether the change under way, or the last one, restarted the box.
   bool get restarted => _restarted;
   bool _restarted = false;
 
+  /// The card the change under way, or the last one, sets up.
+  SoundcardOption? get card => _card;
+  SoundcardOption? _card;
+
   /// Throws [BoxActionException] when the box refuses; what happens after it
   /// accepted is reported in toasts, and returned.
   Future<SoundcardOutcome> apply(SoundcardOption card) async {
     _restarted = false;
+    _card = card;
     state = SoundcardStep.applying;
     final bool restarts;
     try {
@@ -183,8 +203,10 @@ class SoundcardChange extends Notifier<SoundcardStep> {
   }
 
   /// Goes on waiting for a box that did not come back in time.
-  Future<SoundcardOutcome> keepWaiting(SoundcardOption card) =>
-      _follow(card, wentDown: true);
+  Future<SoundcardOutcome> keepWaiting(SoundcardOption card) {
+    _card = card;
+    return _follow(card, wentDown: true);
+  }
 
   Future<SoundcardOutcome> _follow(
     SoundcardOption card, {
@@ -192,6 +214,19 @@ class SoundcardChange extends Notifier<SoundcardStep> {
   }) async {
     _restarted = true;
     state = SoundcardStep.restarting;
+    try {
+      return await _followBack(card, wentDown: wentDown);
+    } catch (_) {
+      // Back to idle, or the box stays marked restarting and holds the app.
+      if (ref.mounted) state = SoundcardStep.idle;
+      rethrow;
+    }
+  }
+
+  Future<SoundcardOutcome> _followBack(
+    SoundcardOption card, {
+    required bool wentDown,
+  }) async {
     final report = await _backAfterRestart(
       waitForCard: card.kind != 'none',
       wentDown: wentDown,
@@ -205,7 +240,23 @@ class SoundcardChange extends Notifier<SoundcardStep> {
       );
       return SoundcardOutcome.notBack;
     }
+    if (box.hostsServer) await _reconnect();
+    if (!ref.mounted) return SoundcardOutcome.notBack;
     return _settle(card, report, restarted: true);
+  }
+
+  /// Waits for the app to be back on the server, which went down with the
+  /// box, retrying where it gave up on it meanwhile.
+  Future<void> _reconnect() async {
+    for (var i = 0; i < _rendererPolls; i++) {
+      if (!ref.mounted) return;
+      final status = ref.read(connectionStateProvider);
+      if (status == ConnectionStatus.connected) return;
+      if (status == ConnectionStatus.offline) {
+        ref.read(connectionStateProvider.notifier).retryNow();
+      }
+      await Future<void>.delayed(ref.read(soundcardPollProvider));
+    }
   }
 
   /// Points the renderer at the card [report] shows up, and says how it went.
@@ -353,3 +404,20 @@ final soundcardChangeProvider =
     NotifierProvider.family<SoundcardChange, SoundcardStep, SoundcardBox>(
       SoundcardChange.new,
     );
+
+/// The boxes restarting to switch a sound card on. While one is, its output
+/// — and on the server's own box the server — is away, so the app holds back
+/// as it does while the server restarts. Kept whole, as a box cannot be
+/// looked up while it is down.
+final restartingBoxesProvider =
+    NotifierProvider<RestartingBoxes, Set<SoundcardBox>>(RestartingBoxes.new);
+
+class RestartingBoxes extends Notifier<Set<SoundcardBox>> {
+  @override
+  Set<SoundcardBox> build() => const {};
+
+  void mark(SoundcardBox box, {required bool restarting}) {
+    if (state.contains(box) == restarting) return;
+    state = restarting ? {...state, box} : ({...state}..remove(box));
+  }
+}

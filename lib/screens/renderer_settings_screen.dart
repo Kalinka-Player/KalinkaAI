@@ -5,6 +5,7 @@ import '../providers/kalinka_player_api_provider.dart';
 import '../providers/renderer_provider.dart';
 import '../providers/renderer_settings_provider.dart';
 import '../providers/settings_provider.dart' show expertModeProvider;
+import '../providers/soundcard_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/connection_banner.dart';
 import '../widgets/configuration_appearance.dart';
@@ -14,6 +15,7 @@ import '../widgets/demo_read_only_dialog.dart';
 import '../widgets/expert_mode_toggle.dart';
 import '../widgets/kalinka_button.dart';
 import '../widgets/kalinka_dialog.dart' show showKalinkaDialog;
+import '../widgets/onboarding/soundcard_restart_overlay.dart';
 import '../widgets/onboarding/speaker_test_dialog.dart';
 import '../widgets/pending_changes_banner.dart';
 import '../widgets/settings_controls/settings_binding.dart';
@@ -96,9 +98,29 @@ class _RendererSettingsScreenState
         ),
       ],
     );
+    // A sound card change that restarts the box takes the output away: the
+    // page waits under the restart, as it does under the server's.
+    final box = ref.watch(
+      restartingBoxesProvider.select(
+        (boxes) =>
+            boxes.where((b) => b.rendererId == widget.rendererId).firstOrNull,
+      ),
+    );
+    final card = box == null
+        ? null
+        : ref.read(soundcardChangeProvider(box).notifier).card;
+
     return SlideInPanel(
       onClose: widget.onClose,
       onCoverageChanged: widget.onCoverageChanged,
+      overlays: [
+        if (box != null && card != null)
+          SoundcardRestartOverlay(
+            box: box,
+            card: card,
+            afterwards: 'The output comes back by itself.',
+          ),
+      ],
       // Material, not a plain Container: the page's text fields and ink need
       // one, and a host that isn't a Scaffold — a bare route — supplies none.
       child: Material(
