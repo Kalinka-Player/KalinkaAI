@@ -8,10 +8,17 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
-## Unreleased
+## 0.21.2
+
+Fixes for changing the sound card and for the Wi-Fi list in setup. It needs no newer server or supervisor than 0.21.0; supervisor 0.6.1, out alongside it, makes the Pi's HDMI and headphone outputs play after they are chosen.
 
 ### Fixed
 - A sound card change calls the device the streamer, as the Streamer settings do, or the output on a Pi that only plays: the screen shown while it restarts reads Restarting the streamer or Restarting the output, and its messages no longer say the Pi or the box. Names of the Pi's own outputs, such as Raspberry Pi HDMI, stay.
+- While a sound card change restarts the streamer or output, the app holds only until it answers again: the phone's mini-player and the rail are back then, and the change finishes in the background. One that comes back without its new card is given about half a minute for it rather than five minutes.
+- When the streamer or output is not back in time, the output's settings offer Keep waiting and Continue, as setup does, and still offer them when the page is opened again. Continue keeps what the app knew of the sound card, and the output's settings stay open while a card is being set up.
+- When HDMI or the headphone socket does not come up, the app says to choose another card rather than to check that a HAT sits on its pins.
+- An error while setting a card up or waiting for the restart shows in a toast, and no longer leaves setup's Sound step stuck.
+- In setup's Wi-Fi list, each network's signal icon matches its Strong, Good or Weak label.
 
 ## 0.21.1
 

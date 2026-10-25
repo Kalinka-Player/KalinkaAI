@@ -1,0 +1,5 @@
+- Says the streamer, not the Pi, while a sound card change restarts it
+- The app is free again as soon as the restarting streamer answers
+- Keep waiting and Continue in an output's settings
+- No HAT advice when HDMI or the headphone socket does not come up
+- Wi-Fi signal icons match their Strong, Good or Weak label
