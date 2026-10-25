@@ -137,6 +137,23 @@ class _Connected extends ConnectionStateNotifier {
   ConnectionStatus build() => ConnectionStatus.connected;
 }
 
+/// Connected until [drop], as when the server goes down with its box; a retry
+/// connects again.
+class _Dropping extends ConnectionStateNotifier {
+  int retries = 0;
+
+  @override
+  ConnectionStatus build() => ConnectionStatus.connected;
+
+  void drop() => state = ConnectionStatus.offline;
+
+  @override
+  void retryNow() {
+    retries++;
+    state = ConnectionStatus.connected;
+  }
+}
+
 void main() {
   group('wire types', () {
     test('info names the renderer on the box', () {
@@ -749,6 +766,42 @@ void main() {
         output,
         'The output did not answer. Check that it is on and connected.',
       );
+    });
+
+    test('the server’s own box found at its renderer’s address is the '
+        'streamer, and waits for the server', () async {
+      final own = FakeBox(
+        restarts: true,
+        answers: [supervisorInfo(rendererId: 'r-local')],
+        reports: [
+          soundcardReport(name: 'JustBoom DAC', pcm: 'hw:CARD=Boom,DEV=0'),
+        ],
+      )..answersAfterApply = [null, supervisorInfo(rendererId: 'r-local')];
+      final container = await _container(
+        box: FakeBox(answers: [null]),
+        proxy: FakeProxy([rendererRow('r-local', address: '192.168.1.30')]),
+        others: {'192.168.1.30': own},
+        overrides: [connectionStateProvider.overrideWith(_Dropping.new)],
+      );
+      expect(await container.read(serverSoundcardBoxProvider.future), isNull);
+      final target = (await container.read(
+        rendererSoundcardBoxProvider('r-local').future,
+      ))!;
+      expect(identical(target.api, own), isTrue);
+      final connection =
+          container.read(connectionStateProvider.notifier) as _Dropping;
+      connection.drop();
+
+      final outcome = await container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+
+      expect(outcome, SoundcardOutcome.playing);
+      expect(connection.retries, 1);
+      expect(toasts(container), [
+        'The streamer restarts to switch JustBoom DAC HAT on.',
+        'The streamer is back, playing through JustBoom DAC.',
+      ]);
     });
   });
 

@@ -98,10 +98,15 @@ final rendererSoundcardBoxProvider = FutureProvider.autoDispose
           info.rendererId != rendererId) {
         return null;
       }
+      // The server's own box, reached here before its own probe found it.
+      final hostsServer =
+          info.serverId != null &&
+          info.serverId == await ref.watch(serverIdentityProvider.future);
       return SoundcardBox(
         api: api,
         identity: BoxIdentity(serverId: info.serverId, rendererId: rendererId),
         rendererId: rendererId,
+        hostsServer: hostsServer,
       );
     });
 
