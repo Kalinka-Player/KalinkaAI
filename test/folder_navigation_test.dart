@@ -3,8 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
+
+import 'support/server_answer.dart';
 
 BrowseItem _folder(String name, {bool canAdd = true, String? art}) =>
     BrowseItem(
@@ -48,9 +51,13 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
     container = ProviderContainer(
-      overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+      overrides: [
+        sharedPrefsProvider.overrideWithValue(prefs),
+        serverAnswering('box-1'),
+      ],
     );
     addTearDown(container.dispose);
+    await container.read(serverAnswerProvider.future);
     openLibrary(container);
   });
 
@@ -130,14 +137,18 @@ void main() {
     expect(shownPath(), ['Jazz', 'Miles Davis']);
   });
 
-  test('the folder left on outlives the app', () {
+  test('the folder left on outlives the app', () async {
     session().openFolder(_folder('Jazz', art: '/resource/folder/k_large.jpg'));
     session().openFolder(_folder('Miles Davis', canAdd: false));
 
     final restarted = ProviderContainer(
-      overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+      overrides: [
+        sharedPrefsProvider.overrideWithValue(prefs),
+        serverAnswering('box-1'),
+      ],
     );
     addTearDown(restarted.dispose);
+    await restarted.read(serverAnswerProvider.future);
     openLibrary(restarted);
 
     final path = restarted.read(searchSessionProvider).folderPath;

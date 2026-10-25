@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data_model/browse_filters.dart';
 import '../data_model/data_model.dart';
 import '../data_model/search_results.dart';
+import 'box_control_provider.dart';
 import 'catalog_cards_provider.dart';
 import 'catalog_sources_provider.dart';
 import 'catalog_section_provider.dart';
@@ -26,6 +27,7 @@ const _resultsFilterKey = 'Kalinka.resultsFilter';
 /// search.
 const _matchSourceKey = 'Kalinka.resultsSource';
 
+/// Every server's catalog filters, as kept before they were kept per server.
 const _catalogFiltersKey = 'Kalinka.catalogFilters';
 
 /// The folder each page of folders was left on, by server and page.
@@ -672,8 +674,20 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// search starts without one: a filter belongs to the search it narrowed.
   BrowseFilterQuery _savedResultsFilter = const BrowseFilterQuery();
   Map<String, String> _savedResultsGenreNames = {};
-  Map<String, BrowseFilterQuery> _savedCatalogFilters = {};
+  Map<String, BrowseFilterQuery> _loadedCatalogFilters = {};
+  ServerStorageKey? _catalogFiltersOf;
   Map<String, List<Map<String, dynamic>>> _savedFolderPaths = {};
+
+  /// The connected server's catalog filters, loaded again once another server
+  /// answers. Nothing is kept before the server is known.
+  Map<String, BrowseFilterQuery> get _savedCatalogFilters {
+    final server = ref.read(serverStorageKeyProvider);
+    if (server != _catalogFiltersOf) {
+      _catalogFiltersOf = server;
+      _loadedCatalogFilters = _loadCatalogFilters(server);
+    }
+    return _loadedCatalogFilters;
+  }
 
   @override
   SearchSessionState build() {
@@ -681,7 +695,6 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     ref.onDispose(() => _disposed = true);
     // Kept by earlier versions for every next search.
     _prefs.remove(_resultsFilterKey);
-    _savedCatalogFilters = _loadCatalogFilters();
     _savedFolderPaths = _loadFolderPaths();
     // Another server's results and pages mean nothing on this one.
     ref.listen(connectionSettingsProvider.select((s) => s.baseUrl), (
@@ -1691,8 +1704,10 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     };
   }
 
-  Map<String, BrowseFilterQuery> _loadCatalogFilters() {
-    final json = _prefs.getString(_catalogFiltersKey);
+  Map<String, BrowseFilterQuery> _loadCatalogFilters(ServerStorageKey? server) {
+    if (server == null) return {};
+    final json =
+        _prefs.getString(server.catalogFilters) ?? _adoptCatalogFilters(server);
     if (json == null) return {};
     try {
       return {
@@ -1717,12 +1732,25 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     _saveCatalogFilters();
   }
 
+  /// The filters kept for every server before they were kept per server,
+  /// taken by the first server known.
+  String? _adoptCatalogFilters(ServerStorageKey server) {
+    final json = _prefs.getString(_catalogFiltersKey);
+    if (json == null) return null;
+    _prefs.setString(server.catalogFilters, json).then((saved) {
+      if (saved) _prefs.remove(_catalogFiltersKey);
+    });
+    return json;
+  }
+
   void _saveCatalogFilters() {
+    final key = _catalogFiltersOf?.catalogFilters;
+    if (key == null) return;
     if (_savedCatalogFilters.isEmpty) {
-      _prefs.remove(_catalogFiltersKey);
+      _prefs.remove(key);
     } else {
       _prefs.setString(
-        _catalogFiltersKey,
+        key,
         jsonEncode({
           for (final MapEntry(key: id, value: filter)
               in _savedCatalogFilters.entries)
@@ -1734,8 +1762,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   /// Folder paths differ from one server's library to the next, so each is
   /// kept per server as well as per page.
-  String _folderPathKey(String pageId) =>
-      '${ref.read(connectionSettingsProvider).baseUrl} $pageId';
+  String? _folderPathKey(String pageId) =>
+      ref.read(serverStorageKeyProvider)?.folderPath(pageId);
 
   List<CatalogPage> _savedFolderPath(String pageId, String? provider) => [
     for (final folder in _savedFolderPaths[_folderPathKey(pageId)] ?? const [])
@@ -1765,6 +1793,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     final pageId = state.catalogPage.id;
     if (pageId == null) return;
     final key = _folderPathKey(pageId);
+    if (key == null) return;
     if (state.folderPath.isEmpty) {
       _savedFolderPaths.remove(key);
     } else {
