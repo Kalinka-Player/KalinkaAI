@@ -198,7 +198,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     if (!restarts) {
       return _settle(card, await box.api.soundcard(), restarted: false);
     }
-    _toast('The box restarts to switch ${card.label} on.');
+    _toast('The streamer restarts to switch ${card.label} on.');
     return _follow(card, wentDown: false);
   }
 
@@ -234,8 +234,8 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     if (!ref.mounted) return SoundcardOutcome.notBack;
     if (report == null) {
       _finish(
-        'The box has not come back after five minutes. Check that it has '
-        'power and a network connection.',
+        'The streamer has not come back after five minutes. Check that it '
+        'has power and a network connection.',
         isError: true,
       );
       return SoundcardOutcome.notBack;
@@ -270,8 +270,8 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     if (card.kind == 'none') {
       _finish(
         restarted
-            ? 'The box is back, set up without a HAT.'
-            : 'The box is set up without a HAT.',
+            ? 'The streamer is back, set up without a HAT.'
+            : 'The streamer is set up without a HAT.',
         reloadSettings: restarted,
       );
       return SoundcardOutcome.noHat;
@@ -279,8 +279,8 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     if (pcm == null) {
       _finish(
         restarted
-            ? 'The box is back, but the sound card did not come up. Check '
-                  'that the HAT sits firmly on the pins.'
+            ? 'The streamer is back, but the sound card did not come up. '
+                  'Check that the HAT sits firmly on the pins.'
             : '${card.label} is set up, but did not come up. Check that the '
                   'HAT sits firmly on the pins.',
         isError: true,
@@ -299,7 +299,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     }
     _finish(
       restarted
-          ? 'The box is back, playing through $name.'
+          ? 'The streamer is back, playing through $name.'
           : 'Playing through $name.',
       reloadSettings: true,
     );

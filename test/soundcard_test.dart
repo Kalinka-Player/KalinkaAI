@@ -233,7 +233,7 @@ void main() {
           isA<BoxActionException>().having(
             (e) => e.message,
             'message',
-            'This box cannot be set up for that sound card.',
+            'This streamer cannot be set up for that sound card.',
           ),
         ),
       );
@@ -433,10 +433,10 @@ void main() {
       final (renderer, changes) = proxy.updates.single;
       expect(renderer, 'r-local');
       expect(changes, {'output.device': 'hw:CARD=sndrpijustboomd,DEV=0'});
-      expect(
-        toasts(container).last,
-        'The box is back, playing through JustBoom DAC.',
-      );
+      expect(toasts(container), [
+        'The streamer restarts to switch JustBoom DAC HAT on.',
+        'The streamer is back, playing through JustBoom DAC.',
+      ]);
       expect(
         container.read(soundcardChangeProvider(target)),
         SoundcardStep.idle,
@@ -458,7 +458,11 @@ void main() {
       expect(outcome, SoundcardOutcome.silent);
       expect(proxy.updates, isEmpty);
       final toast = container.read(toastProvider).last;
-      expect(toast.message, contains('did not come up'));
+      expect(
+        toast.message,
+        'The streamer is back, but the sound card did not come up. Check '
+        'that the HAT sits firmly on the pins.',
+      );
       expect(toast.isError, isTrue);
     });
 
@@ -471,7 +475,11 @@ void main() {
           .apply(card);
 
       expect(outcome, SoundcardOutcome.notBack);
-      expect(toasts(container).last, contains('has not come back'));
+      expect(
+        toasts(container).last,
+        'The streamer has not come back after five minutes. Check that it '
+        'has power and a network connection.',
+      );
     });
 
     test('waiting on for a late box plays through its card', () async {
@@ -506,7 +514,10 @@ void main() {
 
       expect(outcome, SoundcardOutcome.noHat);
       expect(proxy.updates, isEmpty);
-      expect(toasts(container).last, 'The box is back, set up without a HAT.');
+      expect(
+        toasts(container).last,
+        'The streamer is back, set up without a HAT.',
+      );
     });
 
     /// The output's settings as an open settings page holds them.
@@ -831,7 +842,7 @@ void main() {
 
       await tester.tap(find.text('Sound card'));
       await tester.pumpAndSettle();
-      final found = tester.getTopLeft(find.text('FOUND ON THIS BOX'));
+      final found = tester.getTopLeft(find.text('FOUND ON THIS STREAMER'));
       expect(found.dy, lessThan(tester.getTopLeft(find.text('JUSTBOOM')).dy));
       expect(find.text('THE PI’S OWN OUTPUTS'), findsOneWidget);
       expect(find.text('NO HAT'), findsOneWidget);

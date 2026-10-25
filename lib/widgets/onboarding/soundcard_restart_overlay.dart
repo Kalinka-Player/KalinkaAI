@@ -43,7 +43,9 @@ class SoundcardRestartOverlay extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            notBack ? 'The Pi is not back yet' : 'Restarting the Pi',
+            notBack
+                ? 'The streamer is not back yet'
+                : 'Restarting the streamer',
             style: KalinkaTextStyles.dialogTitle,
             textAlign: TextAlign.center,
           ),
@@ -62,12 +64,12 @@ class SoundcardRestartOverlay extends ConsumerWidget {
           const SizedBox(height: 28),
           TimelineStep(
             label: 'Setting up ${card.label}',
-            sublabel: 'The Pi’s boot settings',
+            sublabel: 'The streamer’s boot settings',
             done: true,
             active: false,
           ),
           TimelineStep(
-            label: 'Restarting the Pi',
+            label: 'Restarting the streamer',
             sublabel: 'Waiting for it to come back',
             done: switching,
             active: !switching && !notBack,

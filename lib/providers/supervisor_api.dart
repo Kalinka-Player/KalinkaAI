@@ -416,9 +416,9 @@ class DioSupervisorApi implements SupervisorApi {
     'wrong_server':
         'A different Kalinka streamer now answers at this address. Reconnect to '
         'your server first.',
-    'unknown_soundcard': 'This box cannot be set up for that sound card.',
+    'unknown_soundcard': 'This streamer cannot be set up for that sound card.',
     'soundcard_failed':
-        'The box could not set that sound card up. Try again in a moment.',
+        'The streamer could not set that sound card up. Try again in a moment.',
     'unknown_timezone':
         'This box does not have that time zone. Choose one from its list.',
   };

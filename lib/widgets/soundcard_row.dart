@@ -185,7 +185,7 @@ class SoundcardPicker extends StatelessWidget {
   Map<String, List<SoundcardOption>> get _groups {
     final groups = <String, List<SoundcardOption>>{};
     final found = [for (final name in report.suggested) ?report.option(name)];
-    if (found.isNotEmpty) groups['FOUND ON THIS BOX'] = found;
+    if (found.isNotEmpty) groups['FOUND ON THIS STREAMER'] = found;
     for (final option in report.options) {
       final group = switch (option.kind) {
         'onboard' => 'THE PI’S OWN OUTPUTS',
@@ -245,8 +245,8 @@ class _ConfirmSoundcard extends StatelessWidget {
       iconGlyphColor: KalinkaColors.accentTint,
       title: 'Change the sound card?',
       message:
-          'Sets this box up for ${card.label}. If its boot settings change, '
-          'it restarts once, which takes a minute or two.'
+          'Sets the streamer up for ${card.label}. If its boot settings '
+          'change, it restarts once, which takes a minute or two.'
           '${afterRestart == null ? '' : ' $afterRestart'}',
       actions: [
         KalinkaButton(

@@ -316,7 +316,7 @@ void main() {
       // Saved and remembered before the Pi went down, which it stays.
       expect(proxy.saved.single, {'base_config.server.service_name': 'Den'});
       expect(container.read(oobeResumeProvider)?.step, 6);
-      expect(find.text('The Pi is not back yet'), findsOne);
+      expect(find.text('The streamer is not back yet'), findsOne);
       expect(proxy.configReads, hasLength(reads));
 
       box.answers
@@ -328,7 +328,7 @@ void main() {
       await tester.tap(find.text('Keep waiting'));
       await tester.pumpAndSettle();
 
-      expect(find.text('The Pi is not back yet'), findsNothing);
+      expect(find.text('The streamer is not back yet'), findsNothing);
       expect(find.text('Sound'), findsOne);
       expect(proxy.updates.single.$2, {
         'output.device': 'hw:CARD=sndrpihifiberry,DEV=0',
@@ -337,7 +337,7 @@ void main() {
       expect(container.read(oobeResumeProvider), isNull);
       expect(
         container.read(toastProvider).last.message,
-        'The box is back, playing through HiFiBerry Digi2 Pro.',
+        'The streamer is back, playing through HiFiBerry Digi2 Pro.',
       );
       await _drain(tester);
     });
@@ -357,7 +357,8 @@ void main() {
       await tester.tap(find.text('Apply'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Restarting the Pi'), findsWidgets);
+      expect(find.text('Restarting the streamer'), findsWidgets);
+      expect(find.text('The streamer’s boot settings'), findsOne);
       expect(
         find.text('Playing through HiFiBerry Digi+ Pro or Digi2 Pro'),
         findsOne,
@@ -370,7 +371,7 @@ void main() {
       restart.complete();
       await tester.pumpAndSettle();
 
-      expect(find.text('Restarting the Pi'), findsNothing);
+      expect(find.text('Restarting the streamer'), findsNothing);
       expect(find.text('Sound'), findsOne);
       await _drain(tester);
     });
@@ -391,7 +392,7 @@ void main() {
       await tester.tap(find.text('Continue setup'));
       await tester.pumpAndSettle();
 
-      expect(find.text('The Pi is not back yet'), findsNothing);
+      expect(find.text('The streamer is not back yet'), findsNothing);
       expect(find.text('Sound'), findsOne);
       expect(proxy.configReads, hasLength(reads + 1));
       expect(container.read(oobeResumeProvider), isNull);
