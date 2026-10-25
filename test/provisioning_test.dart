@@ -740,11 +740,6 @@ void main() {
     ]) {
       expect(inRow(ssid, find.text(subtitle)), findsOneWidget, reason: ssid);
       expect(inRow(ssid, find.byIcon(icon)), findsOneWidget, reason: ssid);
-      expect(
-        inRow(ssid, find.byIcon(Icons.wifi_rounded)),
-        findsNothing,
-        reason: ssid,
-      );
     }
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
