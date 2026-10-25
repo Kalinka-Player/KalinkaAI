@@ -75,35 +75,26 @@ class _RendererSettingsScreenState
 
   late final _soundcardHost = SoundcardHost(setUp: _setUpSoundcard);
 
-  /// Set while the sound card change this page started waits on a box that
-  /// did not come back in time.
-  bool _notBack = false;
-
   Future<void> _setUpSoundcard(SoundcardBox box, SoundcardOption card) async {
     final change = ref.read(soundcardChangeProvider(box).notifier);
     final toasts = ref.read(toastProvider.notifier);
-    setState(() => _notBack = false);
     try {
-      _settleSoundcard(await change.apply(card));
+      await change.apply(card);
     } on BoxActionException catch (e) {
       toasts.show(e.message, isError: true);
     }
+    // The step stays restarting when the box is not back, so nothing else
+    // rebuilds the page to offer the ways on.
+    if (mounted) setState(() {});
   }
 
   Future<void> _keepWaiting(SoundcardBox box, SoundcardOption card) async {
-    final change = ref.read(soundcardChangeProvider(box).notifier);
-    setState(() => _notBack = false);
-    _settleSoundcard(await change.keepWaiting(card));
-  }
-
-  void _settleSoundcard(SoundcardOutcome outcome) {
-    if (!mounted) return;
-    setState(() => _notBack = outcome == SoundcardOutcome.notBack);
-  }
-
-  void _stopWaiting(SoundcardBox box) {
-    setState(() => _notBack = false);
-    ref.read(soundcardChangeProvider(box).notifier).stopWaiting();
+    final waiting = ref
+        .read(soundcardChangeProvider(box).notifier)
+        .keepWaiting(card);
+    setState(() {});
+    await waiting;
+    if (mounted) setState(() {});
   }
 
   @override
@@ -141,9 +132,10 @@ class _RendererSettingsScreenState
             boxes.where((b) => b.rendererId == widget.rendererId).firstOrNull,
       ),
     );
-    final card = box == null
+    final change = box == null
         ? null
-        : ref.read(soundcardChangeProvider(box).notifier).card;
+        : ref.read(soundcardChangeProvider(box).notifier);
+    final card = change?.card;
 
     return SlideInPanel(
       onClose: widget.onClose,
@@ -151,14 +143,14 @@ class _RendererSettingsScreenState
       beforeClose: () async => box == null,
       onCoverageChanged: widget.onCoverageChanged,
       overlays: [
-        if (box != null && card != null)
+        if (box != null && change != null && card != null)
           SoundcardRestartOverlay(
             box: box,
             card: card,
             afterwards: 'The output comes back by itself.',
-            notBack: _notBack,
+            notBack: change.notBack,
             onKeepWaiting: () => _keepWaiting(box, card),
-            onContinue: () => _stopWaiting(box),
+            onContinue: change.stopWaiting,
             continueLabel: 'Continue',
           ),
       ],
