@@ -458,7 +458,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 child: SoundcardRestartOverlay(
                   box: run.box,
                   card: run.card,
-                  notBack: run.notBack,
                   onKeepWaiting: _keepWaiting,
                   onContinue: _endSoundcardRun,
                 ),
