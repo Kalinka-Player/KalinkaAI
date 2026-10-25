@@ -1734,14 +1734,11 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   /// The filters kept for every server before they were kept per server,
   /// taken by the first server known.
-  String? _adoptCatalogFilters(ServerStorageKey server) {
-    final json = _prefs.getString(_catalogFiltersKey);
-    if (json == null) return null;
-    _prefs.setString(server.catalogFilters, json).then((saved) {
-      if (saved) _prefs.remove(_catalogFiltersKey);
-    });
-    return json;
-  }
+  String? _adoptCatalogFilters(ServerStorageKey server) => moveStoredString(
+    _prefs,
+    from: _catalogFiltersKey,
+    to: server.catalogFilters,
+  );
 
   void _saveCatalogFilters() {
     final key = _catalogFiltersOf?.catalogFilters;
@@ -1766,9 +1763,27 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       ref.read(serverStorageKeyProvider)?.folderPath(pageId);
 
   List<CatalogPage> _savedFolderPath(String pageId, String? provider) => [
-    for (final folder in _savedFolderPaths[_folderPathKey(pageId)] ?? const [])
+    for (final folder in _folderPathOf(pageId) ?? const [])
       CatalogPage.savedFolder(folder, provider: provider),
   ];
+
+  /// [pageId]'s saved path, taking one kept under this address before
+  /// servers were told apart by id.
+  List<Map<String, dynamic>>? _folderPathOf(String pageId) {
+    final server = ref.read(serverStorageKeyProvider);
+    if (server == null) return null;
+    final key = server.folderPath(pageId);
+    final saved = _savedFolderPaths[key];
+    if (saved != null || !server.isServerId) return saved;
+    final adopted = _savedFolderPaths.remove(
+      ServerStorageKey.ofAddress(ref.read(connectionSettingsProvider).baseUrl)
+          .folderPath(pageId),
+    );
+    if (adopted == null) return null;
+    _savedFolderPaths[key] = adopted;
+    _saveFolderPaths();
+    return adopted;
+  }
 
   Map<String, List<Map<String, dynamic>>> _loadFolderPaths() {
     final json = _prefs.getString(_folderPathsKey);
@@ -1801,6 +1816,10 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         for (final folder in state.folderPath) folder.toFolderJson(),
       ];
     }
+    _saveFolderPaths();
+  }
+
+  void _saveFolderPaths() {
     if (_savedFolderPaths.isEmpty) {
       _prefs.remove(_folderPathsKey);
     } else {

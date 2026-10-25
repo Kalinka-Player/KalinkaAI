@@ -128,15 +128,13 @@ class PinnedCatalogsNotifier extends Notifier<List<PinnedCatalog>?> {
   /// moved to [key] the first time the server here is known.
   String? _adoptAddressPins(SharedPreferences prefs, ServerStorageKey key) {
     if (!key.isServerId) return null;
-    final address = ServerStorageKey.ofAddress(
-      ref.read(connectionSettingsProvider).baseUrl,
-    ).pinnedCatalogs;
-    final raw = prefs.getString(address);
-    if (raw == null) return null;
-    prefs.setString(key.pinnedCatalogs, raw).then((saved) {
-      if (saved) prefs.remove(address);
-    });
-    return raw;
+    return moveStoredString(
+      prefs,
+      from: ServerStorageKey.ofAddress(
+        ref.read(connectionSettingsProvider).baseUrl,
+      ).pinnedCatalogs,
+      to: key.pinnedCatalogs,
+    );
   }
 
   /// No change is kept before the server is known: it could be another's.
