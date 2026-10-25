@@ -75,11 +75,26 @@ class _RendererSettingsScreenState
 
   late final _soundcardHost = SoundcardHost(setUp: _setUpSoundcard);
 
-  Future<void> _setUpSoundcard(SoundcardBox box, SoundcardOption card) =>
-      _runSoundcardChange(
-        card,
-        ref.read(soundcardChangeProvider(box).notifier).apply,
-      );
+  /// The box a change from this page last set up.
+  SoundcardBox? _changing;
+
+  Future<void> _setUpSoundcard(SoundcardBox box, SoundcardOption card) {
+    _changing = box;
+    return _runSoundcardChange(
+      card,
+      ref.read(soundcardChangeProvider(box).notifier).apply,
+    );
+  }
+
+  /// Closed during the apply, the page would be gone by the time the box
+  /// restarts, leaving nothing to end the wait if it does not come back.
+  bool _mayClose(SoundcardBox? restarting) {
+    final changing = _changing;
+    return restarting == null &&
+        (changing == null ||
+            ref.read(soundcardChangeProvider(changing)) !=
+                SoundcardStep.applying);
+  }
 
   Future<void> _keepWaiting(SoundcardBox box, SoundcardOption card) =>
       _runSoundcardChange(
@@ -146,7 +161,7 @@ class _RendererSettingsScreenState
     return SlideInPanel(
       onClose: widget.onClose,
       // While the box is down, the overlay is all that says why the app waits.
-      beforeClose: () async => box == null,
+      beforeClose: () async => _mayClose(box),
       onCoverageChanged: widget.onCoverageChanged,
       overlays: [
         if (box != null && change != null && card != null)

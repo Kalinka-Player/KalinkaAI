@@ -21,6 +21,7 @@ import 'package:kalinka/providers/soundcard_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/screens/onboarding_screen.dart';
+import 'package:kalinka/widgets/onboarding/onboarding_step_scaffold.dart';
 import 'package:kalinka/widgets/onboarding/step_sound.dart';
 import 'package:kalinka/widgets/soundcard_row.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -397,6 +398,35 @@ void main() {
       expect(container.read(restartingBoxesProvider), isEmpty);
       expect(find.text('Sound'), findsOne);
       expect(proxy.configReads, hasLength(reads + 1));
+      expect(container.read(oobeResumeProvider), isNull);
+      await _drain(tester);
+    });
+
+    testWidgets('frees the step when waiting on the Pi fails outright', (
+      tester,
+    ) async {
+      final box = FakeBox(reports: [_found], restarts: true)
+        ..answersAfterApply = [null];
+      final container = await atSoundStep(tester, box);
+
+      await tester.tap(find.text('Set it up'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      box.fault = StateError('lost');
+      await tester.tap(find.text('Keep waiting'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('The Pi is not back yet'), findsNothing);
+      expect(
+        container.read(toastProvider).last.message,
+        'Could not set up HiFiBerry Digi+ Pro or Digi2 Pro: Bad state: lost',
+      );
+      final step = tester.widget<OnboardingStepScaffold>(
+        find.byType(OnboardingStepScaffold),
+      );
+      expect(step.onBack, isNotNull);
+      expect(step.nextEnabled, isTrue);
       expect(container.read(oobeResumeProvider), isNull);
       await _drain(tester);
     });

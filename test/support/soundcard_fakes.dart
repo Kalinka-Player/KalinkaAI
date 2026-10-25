@@ -92,6 +92,9 @@ class FakeBox implements SupervisorApi {
   /// While set, `/v1/soundcard` answers only once it completes.
   Completer<void>? holdReport;
 
+  /// While set, setting a card up answers only once it completes.
+  Completer<void>? holdApply;
+
   /// While set, `/info` throws it rather than answering.
   Object? fault;
 
@@ -149,6 +152,7 @@ class FakeBox implements SupervisorApi {
   @override
   Future<bool> setSoundcard(String card, BoxIdentity identity) async {
     applied.add((card, identity));
+    await holdApply?.future;
     if (refusal != null) throw refusal!;
     if (answersAfterApply case final after?) {
       answers
