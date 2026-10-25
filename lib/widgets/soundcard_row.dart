@@ -94,8 +94,11 @@ String soundcardSummary(SoundcardReport report) {
 String? soundcardTrouble(SoundcardReport report) {
   if (report.activePcm != null) return null;
   if (report.option(report.configured) case final configured?) {
-    return '${configured.label} is set up but did not come up. Check that '
-        'the HAT sits firmly on the pins, or choose another card.';
+    return configured.kind == 'onboard'
+        ? '${configured.label} is set up but did not come up. Choose another '
+              'card.'
+        : '${configured.label} is set up but did not come up. Check that '
+              'the HAT sits firmly on the pins, or choose another card.';
   }
   final suggested = report.suggested;
   if (suggested.isEmpty) return null;
