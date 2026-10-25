@@ -53,6 +53,15 @@ final rememberServerIdentityProvider = Provider<void>((ref) {
   });
 });
 
+/// The connected server's identity, or while it is down the one last seen at
+/// its address.
+final knownServerIdentityProvider = FutureProvider<String?>((ref) async {
+  final prefs = ref.watch(sharedPrefsProvider);
+  ref.watch(connectionSettingsProvider.select((s) => s.address));
+  final key = _knownServerKey(ref.read(connectionSettingsProvider));
+  return await ref.watch(serverIdentityProvider.future) ?? prefs.getString(key);
+});
+
 /// Why the connected server has no box controls.
 enum NoBoxControl {
   /// No supervisor answers on the server's host: none is installed, its
@@ -91,11 +100,7 @@ final boxProbeProvider = FutureProvider<BoxProbe>((ref) async {
   if (api == null || ref.watch(demoModeProvider)) {
     return const BoxProbe.missing(NoBoxControl.noSupervisor);
   }
-  final prefs = ref.watch(sharedPrefsProvider);
-  ref.watch(connectionSettingsProvider.select((s) => s.address));
-  final key = _knownServerKey(ref.read(connectionSettingsProvider));
-  final current = await ref.watch(serverIdentityProvider.future);
-  final known = current ?? prefs.getString(key);
+  final known = await ref.watch(knownServerIdentityProvider.future);
   if (known == null) return const BoxProbe.missing(NoBoxControl.notAnswering);
   final (:reach, :info) = await api.probe();
   if (info == null) {

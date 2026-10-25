@@ -26,6 +26,7 @@ import 'package:kalinka/widgets/onboarding/step_sound.dart';
 import 'package:kalinka/widgets/soundcard_row.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/device_wording.dart';
 import 'support/soundcard_fakes.dart';
 
 class _Outputs extends RendererListNotifier {
@@ -298,9 +299,8 @@ void main() {
       expect(find.text('Almost there'), findsOne);
     });
 
-    testWidgets('follows the Pi through its restart and stays on the step', (
-      tester,
-    ) async {
+    testWidgets('follows the streamer through its restart and stays on the '
+        'step', (tester) async {
       final box = FakeBox(reports: [_found], restarts: true)
         ..answersAfterApply = [null];
       final proxy = FakeProxy([rendererRow('r-local')]);
@@ -309,16 +309,26 @@ void main() {
           .read(settingsProvider.notifier)
           .stageChange('base_config.server.service_name', 'Den');
       final reads = proxy.configReads.length;
+      final copy = <String>{};
+      container.listen(
+        toastProvider,
+        (_, toasts) => copy.addAll([for (final t in toasts) t.message]),
+      );
 
-      await tester.tap(find.text('Set it up'));
+      await tester.tap(find.text('Choose another'));
       await tester.pumpAndSettle();
+      copy.addAll(shownText(tester));
+      await tester.tap(find.text('HiFiBerry Digi+ Pro or Digi2 Pro').first);
+      await tester.pumpAndSettle();
+      copy.addAll(shownText(tester));
       await tester.tap(find.text('Apply'));
       await tester.pumpAndSettle();
+      copy.addAll(shownText(tester));
 
       // Saved and remembered before the Pi went down, which it stays.
       expect(proxy.saved.single, {'base_config.server.service_name': 'Den'});
       expect(container.read(oobeResumeProvider)?.step, 6);
-      expect(find.text('The Pi is not back yet'), findsOne);
+      expect(find.text('The streamer is not back yet'), findsOne);
       expect(proxy.configReads, hasLength(reads));
 
       box.answers
@@ -330,7 +340,7 @@ void main() {
       await tester.tap(find.text('Keep waiting'));
       await tester.pumpAndSettle();
 
-      expect(find.text('The Pi is not back yet'), findsNothing);
+      expect(find.text('The streamer is not back yet'), findsNothing);
       expect(find.text('Sound'), findsOne);
       expect(proxy.updates.single.$2, {
         'output.device': 'hw:CARD=sndrpihifiberry,DEV=0',
@@ -339,12 +349,31 @@ void main() {
       expect(container.read(oobeResumeProvider), isNull);
       expect(
         container.read(toastProvider).last.message,
-        'The box is back, playing through HiFiBerry Digi2 Pro.',
+        'The streamer is back, playing through HiFiBerry Digi2 Pro.',
       );
+      expect(
+        copy,
+        containsAll([
+          'FOUND ON THIS STREAMER',
+          'THE PI’S OWN OUTPUTS',
+          'Sets the streamer up for HiFiBerry Digi+ Pro or Digi2 Pro. If its '
+              'boot settings change, it restarts once, which takes a minute '
+              'or two. Setup carries on here.',
+          'Restarting the streamer',
+          'The streamer’s boot settings',
+          'The streamer restarts to switch HiFiBerry Digi+ Pro or Digi2 Pro '
+              'on.',
+          'The streamer has not come back after five minutes. Check that it '
+              'has power and a network connection.',
+        ]),
+      );
+      expect(callingItBoxOrPi(copy), isEmpty);
       await _drain(tester);
     });
 
-    testWidgets('covers the wizard while the Pi restarts', (tester) async {
+    testWidgets('covers the wizard while the streamer restarts', (
+      tester,
+    ) async {
       final box = FakeBox(reports: [_found], restarts: true)
         ..answersAfterApply = [null, supervisorInfo(rendererId: 'r-local')];
       await atSoundStep(
@@ -359,7 +388,8 @@ void main() {
       await tester.tap(find.text('Apply'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Restarting the Pi'), findsWidgets);
+      expect(find.text('Restarting the streamer'), findsWidgets);
+      expect(find.text('The streamer’s boot settings'), findsOne);
       expect(
         find.text('Playing through HiFiBerry Digi+ Pro or Digi2 Pro'),
         findsOne,
@@ -372,12 +402,12 @@ void main() {
       restart.complete();
       await tester.pumpAndSettle();
 
-      expect(find.text('Restarting the Pi'), findsNothing);
+      expect(find.text('Restarting the streamer'), findsNothing);
       expect(find.text('Sound'), findsOne);
       await _drain(tester);
     });
 
-    testWidgets('lets setup go on without a Pi that is not back', (
+    testWidgets('lets setup go on without a streamer that is not back', (
       tester,
     ) async {
       final box = FakeBox(reports: [_found], restarts: true)
@@ -394,7 +424,7 @@ void main() {
       await tester.tap(find.text('Continue setup'));
       await tester.pumpAndSettle();
 
-      expect(find.text('The Pi is not back yet'), findsNothing);
+      expect(find.text('The streamer is not back yet'), findsNothing);
       expect(container.read(restartingBoxesProvider), isEmpty);
       expect(find.text('Sound'), findsOne);
       expect(proxy.configReads, hasLength(reads + 1));
@@ -402,7 +432,7 @@ void main() {
       await _drain(tester);
     });
 
-    testWidgets('frees the step when waiting on the Pi fails outright', (
+    testWidgets('frees the step when waiting on the streamer fails outright', (
       tester,
     ) async {
       final box = FakeBox(reports: [_found], restarts: true)
@@ -417,7 +447,7 @@ void main() {
       await tester.tap(find.text('Keep waiting'));
       await tester.pumpAndSettle();
 
-      expect(find.text('The Pi is not back yet'), findsNothing);
+      expect(find.text('The streamer is not back yet'), findsNothing);
       expect(
         container.read(toastProvider).last.message,
         'Could not set up HiFiBerry Digi+ Pro or Digi2 Pro: Bad state: lost',

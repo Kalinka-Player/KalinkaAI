@@ -5,10 +5,12 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart' show RendererInfo;
 import 'package:kalinka/data_model/renderer_config.dart';
 import 'package:kalinka/providers/box_control_provider.dart';
+import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/renderer_settings_provider.dart';
@@ -22,6 +24,7 @@ import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/settings_controls/option_picker.dart';
 import 'package:kalinka/widgets/soundcard_row.dart';
 
+import 'support/device_wording.dart';
 import 'support/home_shell.dart';
 import 'support/soundcard_fakes.dart';
 
@@ -29,14 +32,20 @@ Future<ProviderContainer> _container({
   required FakeBox box,
   FakeProxy? proxy,
   Map<String, SupervisorApi> others = const {},
+  String? serverId = 'box-1',
+  List<Override> overrides = const [],
 }) async {
   final container = ProviderContainer(
-    overrides: soundcardOverrides(
-      await boxPrefs(),
-      box: box,
-      proxy: proxy,
-      others: others,
-    ),
+    overrides: [
+      ...soundcardOverrides(
+        await boxPrefs(),
+        box: box,
+        proxy: proxy,
+        others: others,
+        serverId: serverId,
+      ),
+      ...overrides,
+    ],
   );
   addTearDown(container.dispose);
   return container;
@@ -135,6 +144,23 @@ RendererConfigSnapshot _outputConfig(
 class _Connected extends ConnectionStateNotifier {
   @override
   ConnectionStatus build() => ConnectionStatus.connected;
+}
+
+/// Connected until [drop], as when the server goes down with its box; a retry
+/// connects again.
+class _Dropping extends ConnectionStateNotifier {
+  int retries = 0;
+
+  @override
+  ConnectionStatus build() => ConnectionStatus.connected;
+
+  void drop() => state = ConnectionStatus.offline;
+
+  @override
+  void retryNow() {
+    retries++;
+    state = ConnectionStatus.connected;
+  }
 }
 
 /// A server whose local output has settings, behind the main screen.
@@ -249,7 +275,7 @@ void main() {
           isA<BoxActionException>().having(
             (e) => e.message,
             'message',
-            'This box cannot be set up for that sound card.',
+            'That sound card cannot be set up here.',
           ),
         ),
       );
@@ -319,6 +345,30 @@ void main() {
       expect(box.identity, const BoxIdentity(rendererId: 'r-far'));
     });
 
+    test('the server’s own box found at its renderer’s address stays the '
+        'streamer while the server is down', () async {
+      Future<String> noun({String? remembered}) async {
+        final container = await _container(
+          box: FakeBox(answers: [null]),
+          proxy: FakeProxy([rendererRow('r-local', address: '192.168.1.30')]),
+          others: {'192.168.1.30': FakeBox()},
+          serverId: null,
+        );
+        if (remembered != null) {
+          await container
+              .read(sharedPrefsProvider)
+              .setString('Kalinka.serverIdAt.kalinka.local:8000', remembered);
+        }
+        final box = await container.read(
+          rendererSoundcardBoxProvider('r-local').future,
+        );
+        return box!.noun;
+      }
+
+      expect(await noun(remembered: 'box-1'), 'streamer');
+      expect(await noun(), 'output');
+    });
+
     test(
       'a box at that address that names another renderer is not it',
       () async {
@@ -361,11 +411,16 @@ void main() {
       FakeBox box,
     ) async {
       final proxy = FakeProxy([rendererRow('r-local')]);
-      final container = await _container(box: box, proxy: proxy);
+      final container = await _container(
+        box: box,
+        proxy: proxy,
+        overrides: [connectionStateProvider.overrideWith(_Connected.new)],
+      );
       final soundcardBox = SoundcardBox(
         api: box,
         identity: const BoxIdentity(serverId: 'box-1'),
         rendererId: 'r-local',
+        hostsServer: true,
       );
       return (container, soundcardBox, proxy);
     }
@@ -449,10 +504,10 @@ void main() {
       final (renderer, changes) = proxy.updates.single;
       expect(renderer, 'r-local');
       expect(changes, {'output.device': 'hw:CARD=sndrpijustboomd,DEV=0'});
-      expect(
-        toasts(container).last,
-        'The box is back, playing through JustBoom DAC.',
-      );
+      expect(toasts(container), [
+        'The streamer restarts to switch JustBoom DAC HAT on.',
+        'The streamer is back, playing through JustBoom DAC.',
+      ]);
       expect(
         container.read(soundcardChangeProvider(target)),
         SoundcardStep.idle,
@@ -505,7 +560,11 @@ void main() {
       expect(outcome, SoundcardOutcome.silent);
       expect(proxy.updates, isEmpty);
       final toast = container.read(toastProvider).last;
-      expect(toast.message, contains('did not come up'));
+      expect(
+        toast.message,
+        'The streamer is back, but the sound card did not come up. Check '
+        'that the HAT sits firmly on the pins, or choose another card.',
+      );
       expect(toast.isError, isTrue);
     });
 
@@ -556,8 +615,8 @@ void main() {
 
         expect(
           toasts(container).last,
-          'The box is back, but the sound card did not come up. Choose another '
-          'card.',
+          'The streamer is back, but the sound card did not come up. Choose '
+          'another card.',
         );
         expect(
           toasts(inPlace).last,
@@ -577,7 +636,11 @@ void main() {
 
       expect(outcome, SoundcardOutcome.notBack);
       expect(box.infoReads, 100);
-      expect(toasts(container).last, contains('has not come back'));
+      expect(
+        toasts(container).last,
+        'The streamer has not come back after five minutes. Check that it '
+        'has power and a network connection.',
+      );
     });
 
     test('a box that is not back holds the app until the change stops '
@@ -680,7 +743,10 @@ void main() {
 
       expect(outcome, SoundcardOutcome.noHat);
       expect(proxy.updates, isEmpty);
-      expect(toasts(container).last, 'The box is back, set up without a HAT.');
+      expect(
+        toasts(container).last,
+        'The streamer is back, set up without a HAT.',
+      );
     });
 
     /// The output's settings as an open settings page holds them.
@@ -869,6 +935,75 @@ void main() {
         SoundcardStep.idle,
       );
     });
+
+    test('a refusal names the box as the app calls it', () async {
+      final unreachable = BoxActionException(
+        'unreachable',
+        boxRefusal('unreachable'),
+      );
+      final box = FakeBox()..refusal = unreachable;
+      final remote = FakeBox()..refusal = unreachable;
+      final (container, streamer, _) = await start(box);
+      final output = SoundcardBox(
+        api: remote,
+        identity: const BoxIdentity(rendererId: 'r-far'),
+        rendererId: 'r-far',
+      );
+
+      Future<void> refused(SoundcardBox target, String message) => expectLater(
+        container.read(soundcardChangeProvider(target).notifier).apply(card),
+        throwsA(
+          isA<BoxActionException>()
+              .having((e) => e.code, 'code', 'unreachable')
+              .having((e) => e.message, 'message', message),
+        ),
+      );
+
+      await refused(
+        streamer,
+        'The streamer did not answer. Check that it is on and connected.',
+      );
+      await refused(
+        output,
+        'The output did not answer. Check that it is on and connected.',
+      );
+    });
+
+    test('the server’s own box found at its renderer’s address is the '
+        'streamer, and waits for the server', () async {
+      final own = FakeBox(
+        restarts: true,
+        answers: [supervisorInfo(rendererId: 'r-local')],
+        reports: [
+          soundcardReport(name: 'JustBoom DAC', pcm: 'hw:CARD=Boom,DEV=0'),
+        ],
+      )..answersAfterApply = [null, supervisorInfo(rendererId: 'r-local')];
+      final container = await _container(
+        box: FakeBox(answers: [null]),
+        proxy: FakeProxy([rendererRow('r-local', address: '192.168.1.30')]),
+        others: {'192.168.1.30': own},
+        overrides: [connectionStateProvider.overrideWith(_Dropping.new)],
+      );
+      expect(await container.read(serverSoundcardBoxProvider.future), isNull);
+      final target = (await container.read(
+        rendererSoundcardBoxProvider('r-local').future,
+      ))!;
+      expect(identical(target.api, own), isTrue);
+      final connection =
+          container.read(connectionStateProvider.notifier) as _Dropping;
+      connection.drop();
+
+      final outcome = await container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+
+      expect(outcome, SoundcardOutcome.playing);
+      expect(connection.retries, 1);
+      expect(toasts(container), [
+        'The streamer restarts to switch JustBoom DAC HAT on.',
+        'The streamer is back, playing through JustBoom DAC.',
+      ]);
+    });
   });
 
   group('soundcardSummary', () {
@@ -1023,7 +1158,7 @@ void main() {
 
       await tester.tap(find.text('Sound card'));
       await tester.pumpAndSettle();
-      final found = tester.getTopLeft(find.text('FOUND ON THIS BOX'));
+      final found = tester.getTopLeft(find.text('FOUND ON THIS STREAMER'));
       expect(found.dy, lessThan(tester.getTopLeft(find.text('JUSTBOOM')).dy));
       expect(find.text('THE PI’S OWN OUTPUTS'), findsOneWidget);
       expect(find.text('NO HAT'), findsOneWidget);
@@ -1154,6 +1289,137 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
     });
 
+    testWidgets('a Pi that only plays is the output, not the streamer, '
+        'while its card changes', (tester) async {
+      final far = supervisorInfo(serverId: null, rendererId: 'r-far');
+      final remote = FakeBox(
+        restarts: true,
+        answers: [far],
+        reports: [
+          soundcardReport(
+            name: 'HiFiBerry Digi2 Pro',
+            suggested: ['hifiberry-digi-pro'],
+          ),
+        ],
+      )..answersAfterApply = [null, far];
+      final proxy = FakeProxy([rendererRow('r-far', address: '192.168.1.40')])
+        ..rendererConfig = _deviceConfig('HiFiBerry Digi+ Pro');
+      final container = await _container(
+        box: FakeBox(),
+        proxy: proxy,
+        others: {'192.168.1.40': remote},
+        overrides: [connectionStateProvider.overrideWith(_Connected.new)],
+      );
+      final copy = <String>{};
+      container.listen(
+        toastProvider,
+        (_, toasts) => copy.addAll([for (final t in toasts) t.message]),
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: RendererSettingsScreen(
+                rendererId: 'r-far',
+                rendererName: 'Den',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sound card'));
+      await tester.pumpAndSettle();
+      copy.addAll(shownText(tester));
+      await tester.tap(find.text('HiFiBerry Digi+ Pro or Digi2 Pro').first);
+      await tester.pumpAndSettle();
+      copy.addAll(shownText(tester));
+      final restart = remote.holdInfo = Completer<void>();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      copy.addAll(shownText(tester));
+      remote.reports
+        ..clear()
+        ..add(
+          soundcardReport(
+            name: 'HiFiBerry Digi2 Pro',
+            configured: 'hifiberry-digi-pro',
+            pcm: _hifiberryPcm,
+          ),
+        );
+      restart.complete();
+      await tester.pumpAndSettle();
+
+      expect(proxy.updates.single.$1, 'r-far');
+      expect(
+        copy,
+        containsAll([
+          'FOUND ON THIS OUTPUT',
+          'Sets the output up for HiFiBerry Digi+ Pro or Digi2 Pro. If its '
+              'boot settings change, it restarts once, which takes a minute '
+              'or two.',
+          'Restarting the output',
+          'The output’s boot settings',
+          'The output restarts to switch HiFiBerry Digi+ Pro or Digi2 Pro on.',
+          'The output is back, playing through HiFiBerry Digi2 Pro.',
+        ]),
+      );
+      expect(copy.where((t) => t.toLowerCase().contains('streamer')), isEmpty);
+      expect(callingItBoxOrPi(copy), isEmpty);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a busy Pi that only plays is the output', (tester) async {
+      final remote = FakeBox(
+        answers: [supervisorInfo(serverId: null, rendererId: 'r-far')],
+        reports: [
+          soundcardReport(
+            name: 'HiFiBerry Digi2 Pro',
+            suggested: ['hifiberry-digi-pro'],
+          ),
+        ],
+      )..refusal = BoxActionException('busy', boxRefusal('busy'));
+      final container = await _container(
+        box: FakeBox(),
+        proxy: FakeProxy([rendererRow('r-far', address: '192.168.1.40')])
+          ..rendererConfig = _deviceConfig('HiFiBerry Digi+ Pro'),
+        others: {'192.168.1.40': remote},
+        overrides: [connectionStateProvider.overrideWith(_Connected.new)],
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: RendererSettingsScreen(
+                rendererId: 'r-far',
+                rendererName: 'Den',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sound card'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('HiFiBerry Digi+ Pro or Digi2 Pro').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+
+      expect(remote.applied.single.$1, 'hifiberry-digi-pro');
+      final toast = container.read(toastProvider).single;
+      expect(
+        toast.message,
+        'The output is busy with another action. Try again in a moment.',
+      );
+      expect(toast.isError, isTrue);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
     Future<void> chooseJustBoom(WidgetTester tester) async {
       await tester.tap(find.text('Sound card'));
       await tester.pumpAndSettle();
@@ -1236,7 +1502,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(RendererSettingsScreen), findsOneWidget);
-      expect(find.text('Restarting the Pi'), findsWidgets);
+      expect(find.text('Restarting the streamer'), findsWidgets);
 
       final write = proxy.holdUpdate = Completer<void>();
       box.reports
@@ -1244,7 +1510,7 @@ void main() {
         ..add(soundcardReport(name: 'JustBoom DAC', pcm: 'hw:CARD=Boom,DEV=0'));
       down.complete();
       await tester.pumpAndSettle();
-      expect(find.text('Restarting the Pi'), findsNothing);
+      expect(find.text('Restarting the streamer'), findsNothing);
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -1283,7 +1549,7 @@ void main() {
 
       await chooseJustBoom(tester);
 
-      expect(find.text('The Pi is not back yet'), findsOneWidget);
+      expect(find.text('The streamer is not back yet'), findsOneWidget);
       expect(find.text('Keep waiting'), findsOneWidget);
       expect(find.byType(MiniPlayer), findsNothing);
 
@@ -1293,7 +1559,7 @@ void main() {
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
-      expect(find.text('The Pi is not back yet'), findsNothing);
+      expect(find.text('The streamer is not back yet'), findsNothing);
       expect(find.byType(RendererSettingsScreen), findsOneWidget);
       expect(find.text('Sound card'), findsOneWidget);
       expect(find.byType(MiniPlayer), findsOneWidget);
@@ -1339,7 +1605,7 @@ void main() {
       box.fault = StateError('lost');
       await tester.tap(find.text('Keep waiting'));
       await tester.pumpAndSettle();
-      expect(find.text('The Pi is not back yet'), findsNothing);
+      expect(find.text('The streamer is not back yet'), findsNothing);
       expect(lastToast(), 'Could not set up JustBoom DAC HAT: Bad state: lost');
 
       await chooseJustBoom(tester);

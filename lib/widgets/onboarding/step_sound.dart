@@ -41,7 +41,12 @@ Future<void> fixSoundcard(
 ) async {
   final found = _foundCard(report);
   if (found == null) return chooseSoundcardFor(context, box, report, host);
-  if (await confirmSoundcard(context, found, afterRestart: host.confirmNote)) {
+  if (await confirmSoundcard(
+    context,
+    box,
+    found,
+    afterRestart: host.confirmNote,
+  )) {
     host.setUp(box, found);
   }
 }

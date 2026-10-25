@@ -38,12 +38,13 @@ class SoundcardRestartOverlay extends ConsumerWidget {
     final switching = step == SoundcardStep.switching;
     final notBack = step == SoundcardStep.notBack;
     final hat = card.kind != 'none';
+    final noun = box.noun;
     return ProgressScrim(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            notBack ? 'The Pi is not back yet' : 'Restarting the Pi',
+            notBack ? 'The $noun is not back yet' : 'Restarting the $noun',
             style: KalinkaTextStyles.dialogTitle,
             textAlign: TextAlign.center,
           ),
@@ -62,12 +63,12 @@ class SoundcardRestartOverlay extends ConsumerWidget {
           const SizedBox(height: 28),
           TimelineStep(
             label: 'Setting up ${card.label}',
-            sublabel: 'The Pi’s boot settings',
+            sublabel: 'The $noun’s boot settings',
             done: true,
             active: false,
           ),
           TimelineStep(
-            label: 'Restarting the Pi',
+            label: 'Restarting the $noun',
             sublabel: 'Waiting for it to come back',
             done: switching,
             active: !switching && !notBack,

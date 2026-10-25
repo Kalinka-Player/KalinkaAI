@@ -285,17 +285,19 @@ Future<SharedPreferences> boxPrefs([Map<String, Object> extra = const {}]) {
 }
 
 /// The server's own box is [box], with its supervisor; [others] answer at the
-/// addresses other renderers connected from.
+/// addresses other renderers connected from. The server reports [serverId],
+/// or nothing as while it is down.
 List<Override> soundcardOverrides(
   SharedPreferences prefs, {
   required FakeBox box,
   FakeProxy? proxy,
   Map<String, SupervisorApi> others = const {},
+  String? serverId = 'box-1',
 }) => [
   sharedPrefsProvider.overrideWithValue(prefs),
   supervisorApiProvider.overrideWithValue(box),
   supervisorAtProvider.overrideWith((ref, host) => others[host]!),
-  serverIdentityProvider.overrideWith((ref) async => 'box-1'),
+  serverIdentityProvider.overrideWith((ref) async => serverId),
   demoModeProvider.overrideWithValue(false),
   kalinkaProxyProvider.overrideWithValue(proxy ?? FakeProxy([])),
   soundcardPollProvider.overrideWithValue(Duration.zero),

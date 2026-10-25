@@ -24,6 +24,11 @@ class SoundcardBox {
   /// The connected server runs on it, so goes down with it.
   final bool hostsServer;
 
+  /// What the app calls it. The streamer is the server's host, so a Pi that
+  /// only plays is called the output, or a restart would seem to stop the
+  /// server.
+  String get noun => hostsServer ? 'streamer' : 'output';
+
   const SoundcardBox({
     required this.api,
     required this.identity,
@@ -93,10 +98,17 @@ final rendererSoundcardBoxProvider = FutureProvider.autoDispose
           info.rendererId != rendererId) {
         return null;
       }
+      // The server's own box, reached here before its own probe found it.
+      // Matched against the remembered server too, so a dropped connection
+      // does not turn it into an output.
+      final hostsServer =
+          info.serverId != null &&
+          info.serverId == await ref.watch(knownServerIdentityProvider.future);
       return SoundcardBox(
         api: api,
         identity: BoxIdentity(serverId: info.serverId, rendererId: rendererId),
         rendererId: rendererId,
+        hostsServer: hostsServer,
       );
     });
 
@@ -218,6 +230,13 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     final bool restarts;
     try {
       restarts = await box.api.setSoundcard(card.name, box.identity);
+    } on BoxActionException catch (e, stack) {
+      state = SoundcardStep.idle;
+      // The supervisor words its refusals for the streamer.
+      Error.throwWithStackTrace(
+        BoxActionException(e.code, boxRefusal(e.code, noun: box.noun)),
+        stack,
+      );
     } catch (_) {
       state = SoundcardStep.idle;
       rethrow;
@@ -225,7 +244,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     if (!restarts) {
       return _settle(card, await box.api.soundcard(), restarted: false);
     }
-    _toast('The box restarts to switch ${card.label} on.');
+    _toast('The ${box.noun} restarts to switch ${card.label} on.');
     return _follow(card, wentDown: false);
   }
 
@@ -265,8 +284,8 @@ class SoundcardChange extends Notifier<SoundcardStep> {
       if (ref.mounted) {
         state = SoundcardStep.notBack;
         _toast(
-          'The box has not come back after five minutes. Check that it has '
-          'power and a network connection.',
+          'The ${box.noun} has not come back after five minutes. Check that '
+          'it has power and a network connection.',
           isError: true,
         );
       }
@@ -307,8 +326,8 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     if (card.kind == 'none') {
       _finish(
         restarted
-            ? 'The box is back, set up without a HAT.'
-            : 'The box is set up without a HAT.',
+            ? 'The ${box.noun} is back, set up without a HAT.'
+            : 'The ${box.noun} is set up without a HAT.',
         reloadSettings: restarted,
       );
       return SoundcardOutcome.noHat;
@@ -317,7 +336,8 @@ class SoundcardChange extends Notifier<SoundcardStep> {
       final advice = soundcardAdvice(card);
       _finish(
         restarted
-            ? 'The box is back, but the sound card did not come up. $advice'
+            ? 'The ${box.noun} is back, but the sound card did not come up. '
+                  '$advice'
             : '${card.label} is set up, but did not come up. $advice',
         isError: true,
         reloadSettings: restarted,
@@ -335,7 +355,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     }
     _finish(
       restarted
-          ? 'The box is back, playing through $name.'
+          ? 'The ${box.noun} is back, playing through $name.'
           : 'Playing through $name.',
       reloadSettings: true,
     );

@@ -106,57 +106,67 @@ Future<void> chooseSoundcardFor(
 ) async {
   final card = await pickSoundcard(
     context,
+    box,
     report,
     afterRestart: host.confirmNote,
   );
   if (card != null) host.setUp(box, card);
 }
 
-/// The card the person picked from [report]'s and confirmed; null when they
-/// backed out or picked the card already set up. [afterRestart] ends the
-/// confirmation.
+/// The card the person picked from [report]'s and confirmed for [box]; null
+/// when they backed out or picked the card already set up. [afterRestart]
+/// ends the confirmation.
 Future<SoundcardOption?> pickSoundcard(
   BuildContext context,
+  SoundcardBox box,
   SoundcardReport report, {
   String? afterRestart,
 }) async {
   final picked = await showKalinkaBottomSheet<String>(
     context: context,
     mayFillScreen: true,
-    contentBuilder: (_) => SoundcardPicker(report: report),
+    contentBuilder: (_) => SoundcardPicker(noun: box.noun, report: report),
   );
   final card = report.option(picked);
   if (card == null || card.name == report.configured || !context.mounted) {
     return null;
   }
-  return await confirmSoundcard(context, card, afterRestart: afterRestart)
+  return await confirmSoundcard(context, box, card, afterRestart: afterRestart)
       ? card
       : null;
 }
 
-/// Asks before [card] is set up, since the box may restart.
+/// Asks before [box] is set up for [card], since it may restart.
 Future<bool> confirmSoundcard(
   BuildContext context,
+  SoundcardBox box,
   SoundcardOption card, {
   String? afterRestart,
 }) async =>
     await showKalinkaDialog<bool>(
       context: context,
-      builder: (_) => _ConfirmSoundcard(card: card, afterRestart: afterRestart),
+      builder: (_) => _ConfirmSoundcard(
+        noun: box.noun,
+        card: card,
+        afterRestart: afterRestart,
+      ),
     ) ==
     true;
 
-/// Every card a box can be set up for, the detected ones first, then by
+/// Every card the [noun] can be set up for, the detected ones first, then by
 /// maker, the Pi's own outputs and no HAT; pops the name of the one tapped.
 class SoundcardPicker extends StatelessWidget {
+  final String noun;
   final SoundcardReport report;
 
-  const SoundcardPicker({super.key, required this.report});
+  const SoundcardPicker({super.key, required this.noun, required this.report});
 
   Map<String, List<SoundcardOption>> get _groups {
     final groups = <String, List<SoundcardOption>>{};
     final found = [for (final name in report.suggested) ?report.option(name)];
-    if (found.isNotEmpty) groups['FOUND ON THIS BOX'] = found;
+    if (found.isNotEmpty) {
+      groups['FOUND ON THIS ${noun.toUpperCase()}'] = found;
+    }
     for (final option in report.options) {
       final group = switch (option.kind) {
         'onboard' => 'THE PI’S OWN OUTPUTS',
@@ -202,10 +212,15 @@ class SoundcardPicker extends StatelessWidget {
 }
 
 class _ConfirmSoundcard extends StatelessWidget {
+  final String noun;
   final SoundcardOption card;
   final String? afterRestart;
 
-  const _ConfirmSoundcard({required this.card, this.afterRestart});
+  const _ConfirmSoundcard({
+    required this.noun,
+    required this.card,
+    this.afterRestart,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -216,8 +231,8 @@ class _ConfirmSoundcard extends StatelessWidget {
       iconGlyphColor: KalinkaColors.accentTint,
       title: 'Change the sound card?',
       message:
-          'Sets this box up for ${card.label}. If its boot settings change, '
-          'it restarts once, which takes a minute or two.'
+          'Sets the $noun up for ${card.label}. If its boot settings '
+          'change, it restarts once, which takes a minute or two.'
           '${afterRestart == null ? '' : ' $afterRestart'}',
       actions: [
         KalinkaButton(
