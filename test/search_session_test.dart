@@ -19,6 +19,8 @@ import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/widgets/search/search_zero_state.dart';
 
+import 'support/server_answer.dart';
+
 /// Minimal fake proxy: only the methods the search session calls are
 /// implemented; everything else throws if unexpectedly invoked.
 class _FakeApi implements KalinkaPlayerProxy {
@@ -350,6 +352,7 @@ void main() {
             (ref) => Future.delayed(modulesAfter!, () => modules ?? _modules),
           ),
         connectionStateProvider.overrideWith(_FixedConnection.new),
+        serverAnswering('box-1'),
         // The real provider opens the wire-event WebSocket (retry timer).
         playerStateProvider.overrideWithValue(PlaybackState.empty),
       ],

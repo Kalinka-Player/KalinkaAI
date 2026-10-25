@@ -27,6 +27,8 @@ import 'package:kalinka/widgets/server_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'support/server_answer.dart';
+
 class _Box implements SupervisorApi {
   _Box({this.actions = const {'poweroff'}, this.available = true});
 
@@ -99,6 +101,7 @@ Future<SharedPreferences> _pumpPlayer(
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
         connectionStateProvider.overrideWith(_Connected.new),
+        serverAnswering('box-1'),
         playQueueStateStoreProvider.overrideWith(_Queue.new),
         demoModeProvider.overrideWithValue(demo),
         serverIdentityProvider.overrideWith((ref) async => 'server-1'),

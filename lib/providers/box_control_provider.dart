@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart' show DioException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,6 +21,39 @@ class BoxControl {
   bool offers(BoxAction action) => info.offers(action);
 }
 
+/// What the server at [server] said it is: its [id], or null from a server too
+/// old to report one.
+typedef ServerAnswer = ({Uri server, String? id});
+
+const _askAgainAfter = Duration(seconds: 10);
+
+/// The connected server's answer to who it is. Loading while not connected,
+/// and an error while the server does not answer, asked again every
+/// [_askAgainAfter]. Either way it keeps the last answer.
+///
+/// Not retried by Riverpod, whose retries would hold [serverIdentityProvider]
+/// loading instead of null.
+final serverAnswerProvider = FutureProvider<ServerAnswer>((ref) async {
+  final server = ref.watch(connectionSettingsProvider.select((s) => s.baseUrl));
+  if (ref.watch(connectionStateProvider) != ConnectionStatus.connected) {
+    return Completer<ServerAnswer>().future;
+  }
+  try {
+    final data = (await ref.watch(httpClientProvider).get('/renderer/sessions'))
+        .data;
+    final id = data is Map ? data['server_id'] : null;
+    return (server: server, id: id is String && id.isNotEmpty ? id : null);
+  } on DioException catch (e) {
+    // A server from before the route answers it as missing.
+    if (e.response?.statusCode case 404 || 405) {
+      return (server: server, id: null);
+    }
+    final again = Timer(_askAgainAfter, ref.invalidateSelf);
+    ref.onDispose(again.cancel);
+    rethrow;
+  }
+}, retry: (_, _) => null);
+
 /// The connected server's identity, as the server itself reports it; null
 /// whenever it is not connected.
 final serverIdentityProvider = FutureProvider<String?>((ref) async {
@@ -26,13 +61,55 @@ final serverIdentityProvider = FutureProvider<String?>((ref) async {
     return null;
   }
   try {
-    final data =
-        (await ref.watch(httpClientProvider).get('/renderer/sessions')).data;
-    final id = data is Map ? data['server_id'] : null;
-    return id is String && id.isNotEmpty ? id : null;
+    return (await ref.watch(serverAnswerProvider.future)).id;
   } on DioException {
     return null;
   }
+});
+
+/// Where the app keeps what belongs to one server: under its id, or its
+/// address for a server too old to report one. Every per-server key is here.
+class ServerStorageKey {
+  final String scope;
+
+  const ServerStorageKey._(this.scope);
+
+  ServerStorageKey.ofServer(String id) : this._('id:$id');
+
+  /// The scope pins were kept under before servers were told apart by id.
+  ServerStorageKey.ofAddress(Uri baseUrl) : this._('$baseUrl');
+
+  bool get isServerId => scope.startsWith('id:');
+
+  String get pinnedCatalogs => 'Kalinka.pinnedCatalogs.v1:$scope';
+
+  String get catalogFilters => 'Kalinka.catalogFilters:$scope';
+
+  /// [pageId]'s entry in the map of folders pages were left on.
+  String folderPath(String pageId) => '$scope $pageId';
+
+  @override
+  bool operator ==(Object other) =>
+      other is ServerStorageKey && other.scope == scope;
+
+  @override
+  int get hashCode => scope.hashCode;
+
+  @override
+  String toString() => 'ServerStorageKey($scope)';
+}
+
+/// The connected server's [ServerStorageKey]; null until the server at this
+/// address has answered. Kept through a reconnect to the same address, so
+/// Home does not blank each time the server is away.
+final serverStorageKeyProvider = Provider<ServerStorageKey?>((ref) {
+  final server = ref.watch(connectionSettingsProvider.select((s) => s.baseUrl));
+  final answer = ref.watch(serverAnswerProvider).value;
+  if (answer == null || answer.server != server) return null;
+  final id = answer.id;
+  return id == null
+      ? ServerStorageKey.ofAddress(server)
+      : ServerStorageKey.ofServer(id);
 });
 
 /// The server last seen at [settings]' address, so its box is still known

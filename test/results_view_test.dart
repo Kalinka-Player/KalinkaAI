@@ -24,6 +24,8 @@ import 'package:kalinka/widgets/column_separator.dart';
 import 'package:kalinka/widgets/shelf_heading.dart';
 import 'package:kalinka/widgets/source_badge.dart';
 
+import 'support/server_answer.dart';
+
 BrowseItem _artist(String source, String id, String name, MatchTier tier) =>
     BrowseItem(
       id: 'kalinka:$source:artist:$id',
@@ -170,6 +172,7 @@ Future<ProviderContainer> _pump(
           (ref) => Future.delayed(modulesAfter, () => modules ?? _modules),
         ),
       connectionStateProvider.overrideWith(_FixedConnection.new),
+      serverAnswering('box-1'),
       playerStateProvider.overrideWithValue(PlaybackState.empty),
     ],
   );

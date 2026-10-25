@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/collections_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
@@ -22,6 +24,9 @@ import 'package:kalinka/widgets/loading_shimmer.dart';
 import 'package:kalinka/widgets/search/catalog_cards_section.dart';
 import 'package:kalinka/widgets/search/collections_section.dart';
 import 'package:kalinka/widgets/search/search_zero_state.dart';
+
+import 'support/home_shell.dart' show SettableConnection;
+import 'support/server_answer.dart';
 
 class _Connected extends ConnectionStateNotifier {
   @override
@@ -71,6 +76,8 @@ Future<ProviderContainer> _mount(
   Size size = const Size(560, 1400),
   double textScale = 1,
   bool reducedMotion = false,
+  ServersByHost? servers,
+  Map<String, Object> saved = const {},
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -78,18 +85,26 @@ Future<ProviderContainer> _mount(
   SharedPreferences.setMockInitialValues({
     'Kalinka.host': 'localhost',
     'Kalinka.port': 8080,
+    ...saved,
   });
   final prefs = await SharedPreferences.getInstance();
   final container = ProviderContainer(
     overrides: [
       sharedPrefsProvider.overrideWithValue(prefs),
       kalinkaProxyProvider.overrideWithValue(api),
-      connectionStateProvider.overrideWith(_Connected.new),
+      if (servers == null) ...[
+        connectionStateProvider.overrideWith(_Connected.new),
+        serverAnswering('box-1'),
+      ] else ...[
+        connectionStateProvider.overrideWith(SettableConnection.new),
+        servers.client,
+      ],
       sourceModulesProvider.overrideWith((ref) => modules),
       collectionsShelfProvider.overrideWith((ref) async => null),
     ],
   );
   addTearDown(container.dispose);
+  if (servers == null) await container.read(serverAnswerProvider.future);
   for (final type in pins) {
     await container
         .read(pinnedCatalogsProvider.notifier)
@@ -214,6 +229,84 @@ void main() {
       expect(find.byType(LinearProgressIndicator), findsNothing);
       expect(find.textContaining('Unavailable'), findsNothing);
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'Home shows no pins until the server says who it is, and keeps them '
+    'through a reconnect',
+    (tester) async {
+      String saved(String title) => jsonEncode([
+        PinnedCatalog(
+          page: CatalogPage.category(
+            id: 'kalinka:Alpha:catalog:${title.length}',
+            title: title,
+          ),
+          filter: const BrowseFilterQuery(),
+          preview: HomePreviewType.compact,
+        ).toJson(),
+      ]);
+      final servers = ServersByHost()
+        ..ids['localhost'] = 'box-a'
+        ..silent.add('localhost');
+      final container = await _mount(
+        tester,
+        api: _DelayedApi(),
+        modules: Future.value([_module('Alpha')]),
+        servers: servers,
+        saved: {
+          'Kalinka.pinnedCatalogs.v1:id:box-a': saved('Box pick'),
+          'Kalinka.pinnedCatalogs.v1:http://localhost:8080': saved(
+            'Address pick',
+          ),
+        },
+      );
+      void expectLoading() {
+        expect(find.byType(LoadingSpinner), findsOneWidget);
+        expect(find.byKey(const ValueKey('home-pin-hint')), findsNothing);
+        expect(find.text('Box pick'), findsNothing);
+        expect(find.text('Address pick'), findsNothing);
+      }
+
+      void expectPins() {
+        expect(find.byType(LoadingSpinner), findsNothing);
+        expect(find.text('Box pick'), findsOneWidget);
+        expect(find.text('Address pick'), findsNothing);
+      }
+
+      // Dio's request needs the clock to move, not only a frame.
+      Future<void> settle([Duration by = const Duration(milliseconds: 1)]) =>
+          tester.pump(by);
+
+      await settle();
+      expect(servers.asked, 1);
+      expectLoading();
+
+      // A failed call is asked again after ten seconds.
+      servers.silent.clear();
+      await settle(const Duration(seconds: 10));
+      expect(servers.asked, 2);
+      expectPins();
+
+      final connection = container.read(
+        connectionStateProvider.notifier,
+      ) as SettableConnection;
+      connection.set(ConnectionStatus.reconnecting);
+      await settle();
+      expectPins();
+      servers.silent.add('localhost');
+      connection.set(ConnectionStatus.connected);
+      await settle();
+      expect(servers.asked, 3);
+      expectPins();
+
+      servers.silent.clear();
+      connection.set(ConnectionStatus.reconnecting);
+      await settle();
+      connection.set(ConnectionStatus.connected);
+      await settle();
+      expect(servers.asked, 4);
+      expectPins();
     },
   );
 

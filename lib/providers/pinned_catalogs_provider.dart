@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data_model/browse_filters.dart';
+import 'box_control_provider.dart';
 import 'connection_settings_provider.dart';
 import 'search_session_provider.dart';
 
@@ -87,17 +89,19 @@ class PinnedCatalog {
   );
 }
 
-class PinnedCatalogsNotifier extends Notifier<List<PinnedCatalog>> {
+/// Home's pins for the connected server; null until the server has said who
+/// it is, so one server's pins never show on another.
+class PinnedCatalogsNotifier extends Notifier<List<PinnedCatalog>?> {
   Future<void> _writes = Future.value();
-  late String _key;
+  ServerStorageKey? _key;
 
   @override
-  List<PinnedCatalog> build() {
-    final server = ref.watch(
-      connectionSettingsProvider.select((s) => s.baseUrl),
-    );
-    _key = 'Kalinka.pinnedCatalogs.v1:$server';
-    final raw = ref.read(sharedPrefsProvider).getString(_key);
+  List<PinnedCatalog>? build() {
+    final key = _key = ref.watch(serverStorageKeyProvider);
+    if (key == null) return null;
+    final prefs = ref.read(sharedPrefsProvider);
+    final raw =
+        prefs.getString(key.pinnedCatalogs) ?? _adoptAddressPins(prefs, key);
     if (raw == null) return const [];
     try {
       final decoded = jsonDecode(raw);
@@ -120,32 +124,63 @@ class PinnedCatalogsNotifier extends Notifier<List<PinnedCatalog>> {
     }
   }
 
+  /// The pins kept under this address before servers were told apart by id,
+  /// moved to [key] the first time the server here is known.
+  String? _adoptAddressPins(SharedPreferences prefs, ServerStorageKey key) {
+    if (!key.isServerId) return null;
+    final address = ServerStorageKey.ofAddress(
+      ref.read(connectionSettingsProvider).baseUrl,
+    ).pinnedCatalogs;
+    final raw = prefs.getString(address);
+    if (raw == null) return null;
+    prefs.setString(key.pinnedCatalogs, raw).then((saved) {
+      if (saved) prefs.remove(address);
+    });
+    return raw;
+  }
+
+  /// No change is kept before the server is known: it could be another's.
+  Future<void> _serverNotKnown() =>
+      Future.error(StateError('The server is not known yet'));
+
   Future<void> pin(PinnedCatalog pin) {
     if (!pin.page.isCatalog) {
       throw ArgumentError('Only catalogs can be pinned');
     }
-    if (state.any((p) => p.key == pin.key)) return Future.value();
-    return _save([...state, pin]);
+    final pins = state;
+    if (pins == null) return _serverNotKnown();
+    if (pins.any((p) => p.key == pin.key)) return Future.value();
+    return _save([...pins, pin]);
   }
 
-  Future<void> unpin(String key) => _save([
-    for (final pin in state)
-      if (pin.key != key) pin,
-  ]);
+  Future<void> unpin(String key) {
+    final pins = state;
+    if (pins == null) return _serverNotKnown();
+    return _save([
+      for (final pin in pins)
+        if (pin.key != key) pin,
+    ]);
+  }
 
-  Future<void> setPreview(String key, HomePreviewType type) => _save([
-    for (final pin in state) pin.key == key ? pin.withPreview(type) : pin,
-  ]);
+  Future<void> setPreview(String key, HomePreviewType type) {
+    final pins = state;
+    if (pins == null) return _serverNotKnown();
+    return _save([
+      for (final pin in pins) pin.key == key ? pin.withPreview(type) : pin,
+    ]);
+  }
 
   /// Uses ReorderableListView's insertion index convention.
   Future<void> reorder(int oldIndex, int newIndex) {
+    final pins = state;
+    if (pins == null) return _serverNotKnown();
     if (oldIndex < 0 ||
-        oldIndex >= state.length ||
+        oldIndex >= pins.length ||
         newIndex < 0 ||
-        newIndex > state.length) {
+        newIndex > pins.length) {
       return Future.value();
     }
-    final next = [...state];
+    final next = [...pins];
     if (newIndex > oldIndex) newIndex--;
     next.insert(newIndex, next.removeAt(oldIndex));
     return _save(next);
@@ -153,13 +188,13 @@ class PinnedCatalogsNotifier extends Notifier<List<PinnedCatalog>> {
 
   Future<void> _save(List<PinnedCatalog> next) {
     final previous = state;
-    final key = _key;
+    final key = _key!;
     final prefs = ref.read(sharedPrefsProvider);
     state = List.unmodifiable(next);
     final optimistic = state;
     final payload = jsonEncode(next.map((p) => p.toJson()).toList());
     final write = _writes.then((_) async {
-      if (!await prefs.setString(key, payload)) {
+      if (!await prefs.setString(key.pinnedCatalogs, payload)) {
         throw StateError('Could not save Home');
       }
     });
@@ -174,6 +209,6 @@ class PinnedCatalogsNotifier extends Notifier<List<PinnedCatalog>> {
 }
 
 final pinnedCatalogsProvider =
-    NotifierProvider<PinnedCatalogsNotifier, List<PinnedCatalog>>(
+    NotifierProvider<PinnedCatalogsNotifier, List<PinnedCatalog>?>(
       PinnedCatalogsNotifier.new,
     );

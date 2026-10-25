@@ -31,6 +31,8 @@ import 'package:kalinka/widgets/search/catalog_sliver_header.dart';
 import 'package:kalinka/widgets/search/search_composer.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 
+import 'support/server_answer.dart';
+
 /// Mounting the whole Find Music surface is the only thing that exercises its
 /// `initState` — where a second AnimationController on a
 /// SingleTickerProviderStateMixin threw on the first build.
@@ -209,6 +211,7 @@ void main() {
         ),
         sourceModulesProvider.overrideWith((ref) => modules),
         connectionStateProvider.overrideWith(_FixedConnection.new),
+        serverAnswering('box-1'),
         playerStateProvider.overrideWithValue(PlaybackState.empty),
         indexerStatusProvider.overrideWith(_IdleIndexer.new),
       ],

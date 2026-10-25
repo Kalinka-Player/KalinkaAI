@@ -17,6 +17,8 @@ import 'package:kalinka/widgets/search/collections_section.dart';
 import 'package:kalinka/widgets/search_cards/collection_row.dart';
 import 'package:kalinka/widgets/source_badge.dart';
 
+import 'support/server_answer.dart';
+
 const _shelfId = 'kalinka:collections:catalog:collections';
 
 BrowseItem _root(String source, String title) => BrowseItem(
@@ -192,6 +194,7 @@ void main() {
         kalinkaProxyProvider.overrideWithValue(api),
         sourceModulesProvider.overrideWith((ref) => modules),
         connectionStateProvider.overrideWith(_FixedConnection.new),
+        serverAnswering('box-1'),
       ],
     );
     addTearDown(container.dispose);

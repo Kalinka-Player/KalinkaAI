@@ -66,7 +66,7 @@ class _TimezoneRowState extends ConsumerState<TimezoneRow> {
         trailing: retry ? Icons.refresh : null,
         onTap: retry && !looking
             ? () {
-                ref.invalidate(serverIdentityProvider);
+                ref.invalidate(serverAnswerProvider);
                 ref.invalidate(boxProbeProvider);
               }
             : null,

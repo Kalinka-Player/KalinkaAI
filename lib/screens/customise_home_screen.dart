@@ -2,12 +2,13 @@ import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/box_control_provider.dart';
 import '../providers/catalog_sources_provider.dart';
-import '../providers/connection_settings_provider.dart';
 import '../providers/pinned_catalogs_provider.dart';
 import '../providers/server_info_provider.dart';
 import '../providers/shell_nav_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/browse_rows_shimmer.dart' show LoadingSpinner;
 import '../widgets/configuration_appearance.dart';
 import '../widgets/home/catalog_pin_button.dart';
 import '../widgets/home/home_preview_switch.dart';
@@ -55,6 +56,7 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
   Widget build(BuildContext context) {
     final pins = ref.watch(pinnedCatalogsProvider);
     final noSources =
+        pins != null &&
         pins.isEmpty &&
         ref.watch(catalogSourcesProvider).asData?.value.isEmpty == true;
     final notifier = ref.read(pinnedCatalogsProvider.notifier);
@@ -80,8 +82,12 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                     Expanded(
                       child: ReorderableListView.builder(
                         padding: const EdgeInsets.only(bottom: 32),
-                        header: pins.isEmpty ? null : const _HomeLayoutIntro(),
-                        footer: pins.isEmpty
+                        header: switch (pins) {
+                          null => const LoadingSpinner(),
+                          [] => null,
+                          _ => const _HomeLayoutIntro(),
+                        },
+                        footer: pins != null && pins.isEmpty
                             ? Padding(
                                 padding: EdgeInsets.symmetric(
                                   horizontal: gutter,
@@ -131,7 +137,7 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                               )
                             : null,
                         buildDefaultDragHandles: false,
-                        itemCount: pins.length,
+                        itemCount: pins?.length ?? 0,
                         onReorderItem: (oldIndex, newIndex) => saveHomeChange(
                           context,
                           notifier.reorder(
@@ -140,7 +146,7 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                           ),
                         ),
                         itemBuilder: (_, index) {
-                          final pin = pins[index];
+                          final pin = pins![index];
                           final title = pin.page.title ?? 'Catalog';
                           return Material(
                             key: ValueKey(pin.key),
@@ -279,7 +285,7 @@ Future<void> _confirmUnpin(
   WidgetRef ref,
   PinnedCatalog pin,
 ) async {
-  final server = ref.read(connectionSettingsProvider).baseUrl;
+  final server = ref.read(serverStorageKeyProvider);
   final confirmed = await showKalinkaDialog<bool>(
     context: context,
     builder: (dialogContext) => KalinkaDialog(
@@ -305,10 +311,9 @@ Future<void> _confirmUnpin(
     ),
   );
   if (confirmed != true || !context.mounted) return;
-  if (ref.read(connectionSettingsProvider).baseUrl != server) return;
-  if (!ref.read(pinnedCatalogsProvider).any((item) => item.key == pin.key)) {
-    return;
-  }
+  if (ref.read(serverStorageKeyProvider) != server) return;
+  final pins = ref.read(pinnedCatalogsProvider);
+  if (pins == null || !pins.any((item) => item.key == pin.key)) return;
   await saveHomeChange(
     context,
     ref.read(pinnedCatalogsProvider.notifier).unpin(pin.key),

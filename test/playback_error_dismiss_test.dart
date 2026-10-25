@@ -19,6 +19,8 @@ import 'package:kalinka/providers/websocket_provider.dart';
 import 'package:kalinka/screens/music_player_screen.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'support/server_answer.dart';
+
 // How a failed track surfaces, driven end to end from server state.
 //
 // The dialog is raised from server state, so it has to be retired from server
@@ -95,6 +97,7 @@ Future<_SettableQueueNotifier> _pumpScreen(WidgetTester tester) async {
         kalinkaProxyProvider.overrideWithValue(_FakeApi()),
         playQueueStateStoreProvider.overrideWith(() => queueNotifier),
         connectionStateProvider.overrideWith(() => _FakeConnectionNotifier()),
+        serverAnswering('box-1'),
         playbackTimeMsProvider.overrideWith(() => _FakePlaybackTimeNotifier()),
         sourceModulesProvider.overrideWith((ref) => <ModuleInfo>[]),
         // The real family dials a socket and arms a 5s connect timeout that

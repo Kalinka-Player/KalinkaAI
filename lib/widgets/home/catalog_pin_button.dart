@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/browse_filters.dart';
 import '../../providers/pinned_catalogs_provider.dart';
+import '../../providers/box_control_provider.dart';
 import '../../providers/browse_genres_provider.dart';
-import '../../providers/connection_settings_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
@@ -47,9 +47,118 @@ class CatalogPinButton extends ConsumerWidget {
       preview: HomePreviewType.list,
       genreNames: {for (final genre in genres ?? []) genre.id: genre.name},
     );
-    final pinned = ref
-        .watch(pinnedCatalogsProvider)
-        .any((pin) => pin.key == candidate.key);
+    final pins = ref.watch(pinnedCatalogsProvider);
+    final pinned = pins?.any((pin) => pin.key == candidate.key) ?? false;
+    Future<void> toggle() async {
+      final server = ref.read(serverStorageKeyProvider);
+      final notifier = ref.read(pinnedCatalogsProvider.notifier);
+      if (pinned) {
+        await saveHomeChange(context, notifier.unpin(candidate.key));
+        return;
+      }
+      final type = await showKalinkaBottomSheet<HomePreviewType>(
+        context: context,
+        mayFillScreen: true,
+        contentBuilder: (context) => ConstrainedBox(
+          // A short decision sheet, even on a tall tablet. Enlarged text
+          // and short windows scroll within the available space.
+          constraints: const BoxConstraints(maxHeight: 560),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(kSheetGutter, 12, 12, 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Pin to Home',
+                              style: KalinkaTextStyles.settingsPageTitle,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              page.title ?? 'Catalog',
+                              style: KalinkaTextStyles.trayRowSublabel,
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close',
+                        style: kalinkaIconButtonStyle,
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: KalinkaColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    kSheetGutter,
+                    0,
+                    kSheetGutter,
+                    12,
+                  ),
+                  child: Text(
+                    'Your current filters are saved with this pin.',
+                    style: KalinkaTextStyles.trackRowSubtitle,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    kSheetGutter,
+                    0,
+                    kSheetGutter,
+                    8,
+                  ),
+                  child: Text(
+                    'Choose a preview',
+                    style: KalinkaTextStyles.trayRowLabel,
+                  ),
+                ),
+                HomePreviewChoices(
+                  sourceColor:
+                      ref
+                          .read(sourceDisplayInfoProvider)[sourceOfId(page.id!)]
+                          ?.color ??
+                      KalinkaColors.accent,
+                  onSelected: (type) => Navigator.pop(context, type),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: kSheetGutter,
+                    vertical: 12,
+                  ),
+                  child: Text(
+                    'Tap a layout to pin it.',
+                    textAlign: TextAlign.center,
+                    style: KalinkaTextStyles.trayRowSublabel,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (type != null &&
+          context.mounted &&
+          ref.read(serverStorageKeyProvider) == server) {
+        await saveHomeChange(
+          context,
+          notifier.pin(candidate.withPreview(type)),
+        );
+      }
+    }
+
     return IconButton(
       tooltip: pinned ? 'Unpin catalog' : 'Pin catalog to Home',
       iconSize: 20,
@@ -57,117 +166,7 @@ class CatalogPinButton extends ConsumerWidget {
       isSelected: pinned,
       icon: const Icon(CupertinoIcons.pin),
       selectedIcon: const Icon(CupertinoIcons.pin_slash),
-      onPressed: () async {
-        final server = ref.read(connectionSettingsProvider).baseUrl;
-        final notifier = ref.read(pinnedCatalogsProvider.notifier);
-        if (pinned) {
-          await saveHomeChange(context, notifier.unpin(candidate.key));
-          return;
-        }
-        final type = await showKalinkaBottomSheet<HomePreviewType>(
-          context: context,
-          mayFillScreen: true,
-          contentBuilder: (context) => ConstrainedBox(
-            // A short decision sheet, even on a tall tablet. Enlarged text
-            // and short windows scroll within the available space.
-            constraints: const BoxConstraints(maxHeight: 560),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(kSheetGutter, 12, 12, 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Pin to Home',
-                                style: KalinkaTextStyles.settingsPageTitle,
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                page.title ?? 'Catalog',
-                                style: KalinkaTextStyles.trayRowSublabel,
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Close',
-                          style: kalinkaIconButtonStyle,
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(
-                            Icons.close_rounded,
-                            color: KalinkaColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      kSheetGutter,
-                      0,
-                      kSheetGutter,
-                      12,
-                    ),
-                    child: Text(
-                      'Your current filters are saved with this pin.',
-                      style: KalinkaTextStyles.trackRowSubtitle,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      kSheetGutter,
-                      0,
-                      kSheetGutter,
-                      8,
-                    ),
-                    child: Text(
-                      'Choose a preview',
-                      style: KalinkaTextStyles.trayRowLabel,
-                    ),
-                  ),
-                  HomePreviewChoices(
-                    sourceColor:
-                        ref
-                            .read(sourceDisplayInfoProvider)[sourceOfId(
-                              page.id!,
-                            )]
-                            ?.color ??
-                        KalinkaColors.accent,
-                    onSelected: (type) => Navigator.pop(context, type),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: kSheetGutter,
-                      vertical: 12,
-                    ),
-                    child: Text(
-                      'Tap a layout to pin it.',
-                      textAlign: TextAlign.center,
-                      style: KalinkaTextStyles.trayRowSublabel,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-        if (type != null &&
-            context.mounted &&
-            ref.read(connectionSettingsProvider).baseUrl == server) {
-          await saveHomeChange(
-            context,
-            notifier.pin(candidate.withPreview(type)),
-          );
-        }
-      },
+      onPressed: pins == null ? null : toggle,
     );
   }
 }
