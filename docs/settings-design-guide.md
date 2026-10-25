@@ -117,6 +117,12 @@ Use sentence-case **Ready**, **Warning**, **Error**, **Disabled**, and operation
 
 Keep a backend message with its status. An Error/Warning with an explanation gets 12dp padding, a 2dp left rule in the status colour and a 7% status-colour background; place the message 8dp below the status line using 14dp/21dp primary text. Preserve backend wording and inline formatting. Show this message once, including when the plugin has no editable settings; do not repeat it in the fields card. A return to Ready removes the obsolete error. Plugin pages expose a contextual status label to assistive technology; errors and operations can announce updates without moving focus.
 
+## Plugin settings
+
+A plugin's settings follow its introduction and controls as labelled cards, with nothing folded away. Each collection, each section and each run of fields opened by a heading takes a card under a section label, the collection's help as a caption under its label; fields before any of these share an unlabelled first card. The server sets the order: a collection follows the field it is placed after, a section comes before the field it is placed before. A section with a switch of its own starts its card with that switch, and its other rows dim while it is off. A section inside a card opens in place under a small label, or with none where it only groups other sections. A status field reads as a line under the help of the setting before it, never as a row of its own.
+
+A collection lists one row per entry: a 36dp icon tile, where the entry points, and its kind beneath. A row opens the entry in a sheet. The status the server reports for the collection follows the rows, and the card ends with one compact neutral button per kind of entry (**Folder on the server**, **Network share**), or a single **Add** where there is one kind; a long label is cut at large text rather than overflowing. A button opens the sheet for that kind, titled with it and describing it, so the sheet never asks for the kind again. The form's first group has no heading, as the sheet's title already introduces it.
+
 ## Streamer content
 
 On the Streamer tab, the Expert settings switch ends Configuration's top bar, as on a renderer's page; where the top bar is hidden beside the navigation rail, it ends the tab row instead. It is the same round `{}` button and the same setting: one switch for the whole app, kept on the device so it survives switching tabs, leaving and restarting. On, the tab's body is the expert list in place of the groups below; there is no separate Advanced settings page.

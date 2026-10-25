@@ -9,13 +9,18 @@ import '../configuration_appearance.dart';
 class SettingsCard extends StatelessWidget {
   final List<Widget> children;
 
-  const SettingsCard({super.key, required this.children});
+  /// Space either side; the page's own by default.
+  final double? gutter;
+
+  const SettingsCard({super.key, required this.children, this.gutter});
 
   @override
   Widget build(BuildContext context) {
-    final gutter = ConfigurationAppearance.active(context)
-        ? ConfigurationAppearance.gutter(context)
-        : 16.0;
+    final gutter =
+        this.gutter ??
+        (ConfigurationAppearance.active(context)
+            ? ConfigurationAppearance.gutter(context)
+            : 16.0);
     return Container(
       margin: EdgeInsets.fromLTRB(gutter, 0, gutter, 12),
       decoration: BoxDecoration(

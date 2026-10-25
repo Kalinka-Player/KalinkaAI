@@ -39,10 +39,9 @@ import 'package:kalinka/widgets/settings_renderer.dart' show SchemaModuleCard;
 const _path = 'input_modules.localfiles.music_sources';
 const _folders = 'input_modules.localfiles.music_folders';
 
-final Map<String, dynamic> _moduleJson =
-    (jsonDecode(File('test/fixtures/localfiles_module.json').readAsStringSync())
-            as Map)
-        .cast<String, dynamic>();
+final Map<String, dynamic> _moduleJson = (jsonDecode(
+  File('test/fixtures/localfiles_module.json').readAsStringSync(),
+) as Map).cast<String, dynamic>();
 
 final ModuleSpec _module = ModuleSpec.fromJson(_moduleJson);
 
@@ -345,10 +344,13 @@ void main() {
       );
 
       expect(find.text('Music sources'), findsOneWidget);
-      expect(find.text('Network share'), findsOneWidget);
       expect(find.text('nas.local · Music'), findsOneWidget);
-      expect(find.text('Folder on the server'), findsOneWidget);
       expect(find.text('/mnt/usb/Music'), findsOneWidget);
+      // Each row names its kind, and each kind has a button to add one.
+      for (final kind in ['Network share', 'Folder on the server']) {
+        expect(find.text(kind), findsNWidgets(2));
+        expect(find.widgetWithText(KalinkaButton, kind), findsOneWidget);
+      }
     });
 
     testWidgets('puts what the server says about an entry under its card', (
@@ -436,9 +438,8 @@ void main() {
       final store = _Store({_path: <Map<String, dynamic>>[]});
       await _pump(tester, store);
 
-      await tester.tap(find.widgetWithText(KalinkaButton, 'Add'));
+      await tester.tap(find.widgetWithText(KalinkaButton, 'Network share'));
       await tester.pumpAndSettle();
-      await _tap(tester, 'Network share');
       await _type(tester, 'Server', '192.168.1.20');
       await _tap(tester, 'ADD');
 
@@ -521,49 +522,19 @@ void main() {
   });
 
   group('adding one', () {
-    Future<_Store> opened(WidgetTester tester) async {
+    testWidgets('opens as the kind its button names', (tester) async {
       final store = _Store({_path: <Map<String, dynamic>>[]});
       await _pump(tester, store);
-      await tester.tap(find.widgetWithText(KalinkaButton, 'Add'));
-      await tester.pumpAndSettle();
-      return store;
-    }
-
-    testWidgets('starts as the first shape, switched at the top of the sheet', (
-      tester,
-    ) async {
-      final store = await opened(tester);
-      expect(_input('Folder'), findsOneWidget);
-
-      await _tap(tester, 'Network share');
-      expect(store.entries.single['kind'], 'smb');
-      expect(_input('Server'), findsOneWidget);
-    });
-
-    testWidgets('switching back finds what was typed for that shape', (
-      tester,
-    ) async {
-      final store = await opened(tester);
-      await _type(tester, 'Folder', '/mnt/usb/Music');
-      await _tap(tester, 'Network share');
-      await _tap(tester, 'Folder on the server');
-
-      expect(
-        readEntryPath(store.entries.single, 'location.path'),
-        '/mnt/usb/Music',
+      await tester.tap(
+        find.widgetWithText(KalinkaButton, 'Folder on the server'),
       );
-    });
+      await tester.pumpAndSettle();
 
-    testWidgets('a field still being typed in keeps to its own shape', (
-      tester,
-    ) async {
-      final store = await opened(tester);
-      await tester.enterText(_input('Folder'), '/mnt/usb/Music');
-      await _tap(tester, 'Network share');
-
-      final share = store.entries.single;
-      expect(share['kind'], 'smb');
-      expect(readEntryPath(share, 'location.path'), isNull);
+      expect(find.text('FOLDER ON THE SERVER'), findsOneWidget);
+      expect(_input('Folder'), findsOneWidget);
+      expect(_input('Server'), findsNothing);
+      await _tap(tester, 'ADD');
+      expect(store.entries.single['kind'], 'local');
     });
   });
 
@@ -606,30 +577,28 @@ void main() {
       expect(find.text('NAS'), findsNothing);
     });
 
-    testWidgets(
-      'a click takes the one clicked, not the one moved under it',
-      (tester) async {
-        final store = offering([nas, studio]);
-        await _pump(tester, store);
-        await _tap(tester, 'nas.local · Music');
-        await tester.enterText(_input('Server'), 'stu');
-        await tester.pump();
+    testWidgets('a click takes the one clicked, not the one moved under it', (
+      tester,
+    ) async {
+      final store = offering([nas, studio]);
+      await _pump(tester, store);
+      await _tap(tester, 'nas.local · Music');
+      await tester.enterText(_input('Server'), 'stu');
+      await tester.pump();
 
-        final click = await tester.startGesture(
-          tester.getCenter(find.text('Studio')),
-          kind: PointerDeviceKind.mouse,
-        );
-        await tester.pump();
-        await click.up();
-        await tester.pumpAndSettle();
+      final click = await tester.startGesture(
+        tester.getCenter(find.text('Studio')),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await click.up();
+      await tester.pumpAndSettle();
 
-        expect(
-          readEntryPath(store.entries.single, 'location.host'),
-          '192.168.1.30',
-        );
-      },
-      variant: TargetPlatformVariant.only(TargetPlatform.linux),
-    );
+      expect(
+        readEntryPath(store.entries.single, 'location.host'),
+        '192.168.1.30',
+      );
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
     testWidgets('are asked for again while the sheet is open', (tester) async {
       final store = offering([]);
@@ -673,8 +642,7 @@ void main() {
         matching: find.byType(SettingsTextInput),
       );
 
-      expect(leftOf(find.text('MUSIC SOURCES')), left);
-      expect(leftOf(find.text('LOCATION')), left);
+      expect(leftOf(find.text('NETWORK SHARE')), left);
       expect(leftOf(find.text('Server')), left);
       expect(leftOf(serverField), left);
       expect(rightOf(serverField), right);

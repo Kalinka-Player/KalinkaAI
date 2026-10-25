@@ -236,6 +236,10 @@ class FieldSpec {
   final List<String>? enumValues;
   final Constraints? constraints;
 
+  /// Opens a group of its own, under this title, where a page lays its
+  /// settings out in groups.
+  final String? heading;
+
   const FieldSpec({
     required this.path,
     required this.label,
@@ -250,6 +254,7 @@ class FieldSpec {
     this.setup = Setup.hidden,
     this.enumValues,
     this.constraints,
+    this.heading,
   });
 
   factory FieldSpec.fromJson(Map<String, dynamic> j) => FieldSpec(
@@ -270,6 +275,7 @@ class FieldSpec {
             (j['constraints'] as Map).cast<String, dynamic>(),
           )
         : null,
+    heading: j['heading'] as String?,
   );
 }
 
@@ -387,6 +393,10 @@ class CollectionSpec {
   /// apps that cannot show the collection. One that shows it hides them.
   final List<String> replaces;
 
+  /// Path of a read-only field reporting on the entries, shown with them
+  /// rather than on its own.
+  final String? status;
+
   const CollectionSpec({
     required this.path,
     required this.title,
@@ -395,6 +405,7 @@ class CollectionSpec {
     this.variants = const [],
     this.after,
     this.replaces = const [],
+    this.status,
   });
 
   factory CollectionSpec.fromJson(Map<String, dynamic> j) => CollectionSpec(
@@ -407,6 +418,7 @@ class CollectionSpec {
     replaces: ((j['replaces'] as List?) ?? [])
         .map((e) => e.toString())
         .toList(),
+    status: j['status'] as String?,
   );
 }
 
@@ -420,6 +432,10 @@ class SectionSpec {
   final List<CollectionSpec> collections;
   final List<SectionSpec> sections;
 
+  /// Path of the sibling field the section comes before; null puts it after
+  /// all of them.
+  final String? before;
+
   const SectionSpec({
     required this.id,
     required this.title,
@@ -429,6 +445,7 @@ class SectionSpec {
     this.fields = const [],
     this.collections = const [],
     this.sections = const [],
+    this.before,
   });
 
   factory SectionSpec.fromJson(Map<String, dynamic> j) => SectionSpec(
@@ -440,6 +457,7 @@ class SectionSpec {
     fields: _listOf(j['fields'], FieldSpec.fromJson),
     collections: _listOf(j['collections'], CollectionSpec.fromJson),
     sections: _listOf(j['sections'], SectionSpec.fromJson),
+    before: j['before'] as String?,
   );
 }
 

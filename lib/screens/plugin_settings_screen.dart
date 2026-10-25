@@ -10,8 +10,8 @@ import '../widgets/settings_controls/settings_binding.dart';
 import '../widgets/settings_renderer.dart';
 
 /// One installed plugin's configuration, opened from its row: its switch and
-/// upkeep at the top, About at the top right, then the rows its card holds
-/// in Server settings.
+/// upkeep at the top, About at the top right, then its settings in labelled
+/// cards.
 class PluginSettingsScreen extends ConsumerWidget {
   final CatalogPlugin plugin;
   final PluginEntryActions actions;
@@ -52,22 +52,9 @@ class PluginSettingsScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 18),
         if (state.module case final module? when state.hasSettings)
-          Container(
-            margin: EdgeInsets.symmetric(horizontal: gutter),
-            decoration: BoxDecoration(
-              color: KalinkaColors.surfaceRaised,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: KalinkaColors.borderSubtle),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: SettingsScope(
-              binding: ServerSettingsBinding(settings, notifier),
-              child: SchemaModuleBody(
-                module: module,
-                underHeader: false,
-                showLiveMessage: false,
-              ),
-            ),
+          SettingsScope(
+            binding: ServerSettingsBinding(settings, notifier),
+            child: SchemaModuleGroups(module: module, gutter: gutter),
           )
         else
           Padding(
