@@ -717,6 +717,39 @@ void main() {
         SoundcardStep.idle,
       );
     });
+
+    test('a refusal names the box as the app calls it', () async {
+      final unreachable = BoxActionException(
+        'unreachable',
+        boxRefusal('unreachable'),
+      );
+      final box = FakeBox()..refusal = unreachable;
+      final remote = FakeBox()..refusal = unreachable;
+      final (container, streamer, _) = await start(box);
+      final output = SoundcardBox(
+        api: remote,
+        identity: const BoxIdentity(rendererId: 'r-far'),
+        rendererId: 'r-far',
+      );
+
+      Future<void> refused(SoundcardBox target, String message) => expectLater(
+        container.read(soundcardChangeProvider(target).notifier).apply(card),
+        throwsA(
+          isA<BoxActionException>()
+              .having((e) => e.code, 'code', 'unreachable')
+              .having((e) => e.message, 'message', message),
+        ),
+      );
+
+      await refused(
+        streamer,
+        'The streamer did not answer. Check that it is on and connected.',
+      );
+      await refused(
+        output,
+        'The output did not answer. Check that it is on and connected.',
+      );
+    });
   });
 
   group('soundcardSummary', () {
@@ -1071,6 +1104,52 @@ void main() {
       );
       expect(copy.where((t) => t.toLowerCase().contains('streamer')), isEmpty);
       expect(callingItBoxOrPi(copy), isEmpty);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a busy Pi that only plays is the output', (tester) async {
+      final remote = FakeBox(
+        answers: [supervisorInfo(serverId: null, rendererId: 'r-far')],
+        reports: [
+          soundcardReport(
+            name: 'HiFiBerry Digi2 Pro',
+            suggested: ['hifiberry-digi-pro'],
+          ),
+        ],
+      )..refusal = BoxActionException('busy', boxRefusal('busy'));
+      final container = await _container(
+        box: FakeBox(),
+        proxy: FakeProxy([rendererRow('r-far', address: '192.168.1.40')]),
+        others: {'192.168.1.40': remote},
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: RendererSoundcardSection(rendererId: 'r-far'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sound card'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('HiFiBerry Digi+ Pro or Digi2 Pro').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+
+      expect(remote.applied.single.$1, 'hifiberry-digi-pro');
+      final toast = container.read(toastProvider).single;
+      expect(
+        toast.message,
+        'The output is busy with another action. Try again in a moment.',
+      );
+      expect(toast.isError, isTrue);
       await tester.pump(const Duration(seconds: 6));
     });
   });

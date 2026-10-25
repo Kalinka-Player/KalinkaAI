@@ -240,6 +240,31 @@ class BoxActionException implements Exception {
   String toString() => message;
 }
 
+/// What to show when the supervisor refuses with [code], for a box the app
+/// calls the [noun].
+String boxRefusal(String code, {String noun = 'streamer'}) => switch (code) {
+  'unreachable' =>
+    'The $noun did not answer. Check that it is on and connected.',
+  'busy' => 'The $noun is busy with another action. Try again in a moment.',
+  'shutting_down' => 'The $noun is already restarting or powering off.',
+  'upgrade_in_progress' =>
+    'Kalinka is being updated. Try again when the update finishes.',
+  'network_change_in_progress' =>
+    'The $noun is changing its network. Try again when it finishes.',
+  'too_soon' => 'The server was restarted moments ago. Give it a little time.',
+  'wrong_server' =>
+    'A different Kalinka $noun now answers at this address. Reconnect to '
+        'your server first.',
+  // Asked of the streamer or of a Pi that is only an output, so neither
+  // names it.
+  'unknown_soundcard' => 'That sound card cannot be set up here.',
+  'soundcard_failed' =>
+    'Setting that sound card up failed. Try again in a moment.',
+  'unknown_timezone' =>
+    'This box does not have that time zone. Choose one from its list.',
+  _ => 'The $noun could not do that.',
+};
+
 /// The box's supervisor on the connected server's host.
 ///
 /// Every call throws [BoxActionException] when the box refuses or cannot be
@@ -392,38 +417,14 @@ class DioSupervisorApi implements SupervisorApi {
     } on DioException catch (e) {
       final response = e.response;
       if (response == null) {
-        throw const BoxActionException(
-          'unreachable',
-          'The streamer did not answer. Check that it is on and connected.',
-        );
+        throw BoxActionException('unreachable', boxRefusal('unreachable'));
       }
       final detail = response.data is Map ? response.data['detail'] : null;
-      final code = detail is Map ? detail['code']?.toString() : null;
-      throw BoxActionException(code ?? 'error', _refusals[code] ?? _refused);
+      final code =
+          (detail is Map ? detail['code']?.toString() : null) ?? 'error';
+      throw BoxActionException(code, boxRefusal(code));
     }
   }
-
-  static const _refused = 'The streamer could not do that.';
-
-  static const _refusals = {
-    'busy': 'The streamer is busy with another action. Try again in a moment.',
-    'shutting_down': 'The streamer is already restarting or powering off.',
-    'upgrade_in_progress':
-        'Kalinka is being updated. Try again when the update finishes.',
-    'network_change_in_progress':
-        'The streamer is changing its network. Try again when it finishes.',
-    'too_soon': 'The server was restarted moments ago. Give it a little time.',
-    'wrong_server':
-        'A different Kalinka streamer now answers at this address. Reconnect to '
-        'your server first.',
-    // Asked of the streamer or of a Pi that is only an output, so neither
-    // names it.
-    'unknown_soundcard': 'That sound card cannot be set up here.',
-    'soundcard_failed':
-        'Setting that sound card up failed. Try again in a moment.',
-    'unknown_timezone':
-        'This box does not have that time zone. Choose one from its list.',
-  };
 }
 
 /// The supervisor beside the connected server, or null when the server is

@@ -196,6 +196,10 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     final bool restarts;
     try {
       restarts = await box.api.setSoundcard(card.name, box.identity);
+    } on BoxActionException catch (e) {
+      state = SoundcardStep.idle;
+      // The supervisor words its refusals for the streamer.
+      throw BoxActionException(e.code, boxRefusal(e.code, noun: box.noun));
     } catch (_) {
       state = SoundcardStep.idle;
       rethrow;
