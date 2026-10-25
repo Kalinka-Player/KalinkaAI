@@ -20,6 +20,8 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search/library_rescan_control.dart';
 
+import 'support/server_answer.dart';
+
 IndexerStatus _status({
   double? last = 1000.25,
   bool pending = false,
@@ -133,6 +135,7 @@ void main() {
         kalinkaProxyProvider.overrideWithValue(api),
         sourceModulesProvider.overrideWith((ref) => const <ModuleInfo>[]),
         connectionStateProvider.overrideWith(_Connected.new),
+        serverAnswering('box-1'),
         playerStateProvider.overrideWithValue(PlaybackState.empty),
       ],
     );

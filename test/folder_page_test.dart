@@ -21,6 +21,8 @@ import 'package:kalinka/widgets/search_cards/search_folder_row.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 import 'package:kalinka/widgets/shelf_heading.dart';
 
+import 'support/server_answer.dart';
+
 class _FixedConnection extends ConnectionStateNotifier {
   @override
   ConnectionStatus build() => ConnectionStatus.connected;
@@ -156,6 +158,7 @@ Future<ProviderContainer> _pumpLibrary(
       kalinkaProxyProvider.overrideWithValue(_FolderApi(_listings)),
       sourceModulesProvider.overrideWith((ref) => const <ModuleInfo>[]),
       connectionStateProvider.overrideWith(_FixedConnection.new),
+      serverAnswering('box-1'),
       playerStateProvider.overrideWithValue(PlaybackState.empty),
     ],
   );

@@ -22,6 +22,8 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'server_answer.dart';
+
 /// The queue, set from the test.
 class SettableQueue extends PlayQueueStateStore {
   SettableQueue(this._initial);
@@ -151,6 +153,7 @@ Future<ProviderContainer> pumpHomeShell(
         (ref, path) => Completer<WebSocketChannel>().future,
       ),
       urlResolverProvider.overrideWithValue(UrlResolver('')),
+      serverAnswering('home-shell'),
       ...overrides,
     ],
   );

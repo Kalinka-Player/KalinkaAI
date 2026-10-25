@@ -23,6 +23,8 @@ import 'package:kalinka/widgets/search/track_group_actions.dart';
 import 'package:kalinka/widgets/selection_overlay.dart';
 import 'package:kalinka/widgets/source_badge.dart';
 
+import 'support/server_answer.dart';
+
 const _shelfId = 'kalinka:collections:catalog:collections';
 const _c1 = 'kalinka:collections:playlist:c1';
 const _c2 = 'kalinka:collections:playlist:c2';
@@ -306,6 +308,7 @@ void main() {
         playQueueProvider.overrideWithValue(queue),
         sourceModulesProvider.overrideWith((ref) => _modules),
         connectionStateProvider.overrideWith(_FixedConnection.new),
+        serverAnswering('box-1'),
         playerStateProvider.overrideWithValue(PlaybackState.empty),
         collectionsShelfProvider.overrideWith((ref) => Future.value(null)),
         indexerStatusProvider.overrideWith(_IdleIndexer.new),

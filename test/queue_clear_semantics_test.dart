@@ -20,6 +20,8 @@ import 'package:kalinka/screens/music_player_screen.dart';
 import 'package:kalinka/widgets/clear_all_confirm_dialog.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'support/server_answer.dart';
+
 // Full-screen repro for the clear-all crash with semantics enabled (TalkBack):
 // 'identical(childRenderObject, parentRenderObject)' assertion in
 // _SemanticsGeometry.computeChildGeometry during flushSemantics.
@@ -103,6 +105,7 @@ void main() {
           kalinkaProxyProvider.overrideWithValue(api),
           playQueueStateStoreProvider.overrideWith(() => queueNotifier),
           connectionStateProvider.overrideWith(() => _FakeConnectionNotifier()),
+          serverAnswering('box-1'),
           playbackTimeMsProvider.overrideWith(
             () => _FakePlaybackTimeNotifier(),
           ),

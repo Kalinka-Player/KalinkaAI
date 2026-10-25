@@ -14,6 +14,7 @@ import '../../providers/search_session_provider.dart';
 import '../../providers/shell_nav_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
+import '../browse_rows_shimmer.dart' show LoadingSpinner;
 import '../home/home_layout.dart';
 import '../home/pinned_catalogs_section.dart';
 import '../measure_size.dart';
@@ -79,11 +80,16 @@ class SearchZeroState extends ConsumerWidget {
     final pins = ref.watch(pinnedCatalogsProvider);
     // Nothing of the listener's own on Home yet: no pins and no collections
     // shown here (the rail carries them where it shows). Still loading counts
-    // as none, so a new listener's Home never jumps.
+    // as none, so a new listener's Home never jumps. Pins wait for the server
+    // to be known, and count as some meanwhile, so Home does not move when
+    // they arrive.
     final collections = showCollections
         ? ref.watch(collectionsShelfProvider).value
         : null;
-    final empty = pins.isEmpty && (collections == null || collections.isEmpty);
+    final empty =
+        pins != null &&
+        pins.isEmpty &&
+        (collections == null || collections.isEmpty);
     const top = 8.0;
     return RefreshIndicator(
       onRefresh: ref.read(searchSessionProvider.notifier).refreshAll,
@@ -134,7 +140,9 @@ class SearchZeroState extends ConsumerWidget {
             ),
             if (!empty && showCollections)
               CollectionsSection(onOpenCatalog: onOpenCatalog),
-            if (pins.isNotEmpty) ...[
+            if (pins == null)
+              const LoadingSpinner()
+            else if (pins.isNotEmpty) ...[
               PinnedCatalogsSection(pins: pins),
               // After the pins, quietly: where to change them.
               _CustomiseLine(

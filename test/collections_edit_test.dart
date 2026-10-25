@@ -16,6 +16,8 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 
+import 'support/server_answer.dart';
+
 const _shelfId = 'kalinka:collections:catalog:collections';
 const _c1 = 'kalinka:collections:playlist:c1';
 
@@ -165,6 +167,7 @@ void main() {
         kalinkaProxyProvider.overrideWithValue(api),
         sourceModulesProvider.overrideWith((ref) => _modules),
         connectionStateProvider.overrideWith(_FixedConnection.new),
+        serverAnswering('box-1'),
         playerStateProvider.overrideWithValue(PlaybackState.empty),
         collectionsShelfProvider.overrideWith((ref) => Future.value(null)),
         indexerStatusProvider.overrideWith(_IdleIndexer.new),

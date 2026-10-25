@@ -238,7 +238,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('home-pin-hint')), findsNothing);
         expect(find.text('Want Home to look different?'), findsOneWidget);
-        final pin = container.read(pinnedCatalogsProvider).single;
+        final pin = container.read(pinnedCatalogsProvider)!.single;
         await container.read(pinnedCatalogsProvider.notifier).unpin(pin.key);
         await tester.pumpAndSettle();
         await tester.ensureVisible(invitation);
@@ -421,7 +421,7 @@ void main() {
       expect(find.byType(HomePreviewIllustration), findsNWidgets(4));
       await tester.tap(find.text('Cards'));
       await tester.pumpAndSettle();
-      final saved = container.read(pinnedCatalogsProvider).single;
+      final saved = container.read(pinnedCatalogsProvider)!.single;
       expect(saved.filter.genreIds, ['jazz']);
       expect(saved.preview, HomePreviewType.cards);
       expect(saved.genreNames['jazz'], 'Jazz');
@@ -597,7 +597,7 @@ void main() {
       expect(find.byType(KalinkaDialog), findsNothing);
       expect(container.read(pinnedCatalogsProvider), hasLength(2));
       expect(
-        container.read(pinnedCatalogsProvider).first.preview,
+        container.read(pinnedCatalogsProvider)!.first.preview,
         HomePreviewType.artwork,
       );
       final previewAction = find.ancestor(
@@ -689,7 +689,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsNothing);
       expect(
-        container.read(pinnedCatalogsProvider).first.preview,
+        container.read(pinnedCatalogsProvider)!.first.preview,
         HomePreviewType.cards,
       );
       expect(
@@ -733,7 +733,7 @@ void main() {
       await tester.pumpAndSettle();
       await gesture.up();
       await tester.pumpAndSettle();
-      expect(container.read(pinnedCatalogsProvider).last.page.title, 'first');
+      expect(container.read(pinnedCatalogsProvider)!.last.page.title, 'first');
       await tester.tap(find.byTooltip('Unpin second'));
       await tester.pumpAndSettle();
       expect(find.text('Remove “second” from Home?'), findsOneWidget);
@@ -742,7 +742,7 @@ void main() {
       await tester.tap(find.text('Unpin'));
       await tester.pumpAndSettle();
       expect(container.read(pinnedCatalogsProvider), hasLength(1));
-      expect(container.read(pinnedCatalogsProvider).single.page.title, 'first');
+      expect(container.read(pinnedCatalogsProvider)!.single.page.title, 'first');
       await tester.tap(find.byKey(const ValueKey('settings-back')));
       await tester.pumpAndSettle();
       expect(find.byType(CustomiseHomeScreen), findsNothing);
@@ -845,7 +845,7 @@ void main() {
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
-      final pin = container.read(pinnedCatalogsProvider).single;
+      final pin = container.read(pinnedCatalogsProvider)!.single;
       await container
           .read(pinnedCatalogsProvider.notifier)
           .setPreview(pin.key, HomePreviewType.artwork);
@@ -923,7 +923,7 @@ void main() {
       await tester.tap(find.byTooltip('Compact'));
       await tester.pumpAndSettle();
       expect(
-        container.read(pinnedCatalogsProvider).single.preview,
+        container.read(pinnedCatalogsProvider)!.single.preview,
         HomePreviewType.compact,
       );
       await tester.pump(const Duration(seconds: 3));

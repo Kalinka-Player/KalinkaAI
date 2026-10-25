@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../providers/connection_settings_provider.dart';
+import '../../providers/box_control_provider.dart';
 import '../../providers/pinned_catalogs_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
@@ -31,7 +31,7 @@ class _HomePreviewSwitchState extends ConsumerState<HomePreviewSwitch> {
   final _menu = MenuController();
   final _buttonFocus = FocusNode();
   Timer? _idle;
-  Uri? _openedServer;
+  ServerStorageKey? _openedServer;
 
   void _resetIdle() {
     _idle?.cancel();
@@ -41,7 +41,7 @@ class _HomePreviewSwitchState extends ConsumerState<HomePreviewSwitch> {
   }
 
   void _opened() {
-    _openedServer = ref.read(connectionSettingsProvider).baseUrl;
+    _openedServer = ref.read(serverStorageKeyProvider);
     widget.onMenuChanged(_menu.close);
     _resetIdle();
   }
@@ -60,7 +60,8 @@ class _HomePreviewSwitchState extends ConsumerState<HomePreviewSwitch> {
   }
 
   void _select(HomePreviewType type) {
-    if (ref.read(connectionSettingsProvider).baseUrl != _openedServer) {
+    final server = ref.read(serverStorageKeyProvider);
+    if (server == null || server != _openedServer) {
       _menu.close();
       return;
     }

@@ -68,6 +68,7 @@ import 'package:kalinka/widgets/settings_controls/module_header_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
 
+import 'support/server_answer.dart';
 import 'support/soundcard_fakes.dart' show FakeBox;
 
 PluginCatalog _catalog({
@@ -443,6 +444,7 @@ Future<ProviderContainer> _container(
       ],
       if (restart != null) restartProvider.overrideWith(() => restart),
       connectionStateProvider.overrideWith(_Connected.new),
+      serverAnswering('box-1'),
       settingsProvider.overrideWith(() => _Settings(settings)),
       // With events, the real module state reads the proxy and follows them.
       if (events != null)
