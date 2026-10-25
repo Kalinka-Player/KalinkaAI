@@ -1254,6 +1254,28 @@ void main() {
       await tester.pump(const Duration(seconds: 6));
     });
 
+    testWidgets('Back keeps the output’s settings while the box sets the card '
+        'up, before it restarts', (tester) async {
+      final box = FakeBox(restarts: true)
+        ..answersAfterApply = [null, supervisorInfo(rendererId: 'r-local')];
+      await openOutput(tester, box, FakeProxy([rendererRow('r-local')]));
+      final apply = box.holdApply = Completer<void>();
+
+      await chooseJustBoom(tester);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RendererSettingsScreen), findsOneWidget);
+      expect(find.text('Setting the sound card up…'), findsOneWidget);
+
+      apply.complete();
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(RendererSettingsScreen), findsNothing);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
     testWidgets('a box not back in time offers the way on, and Continue lets '
         'the app go on with what it knew of the card', (tester) async {
       final box = FakeBox(restarts: true)..answersAfterApply = [null];
