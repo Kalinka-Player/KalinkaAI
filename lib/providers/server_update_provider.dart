@@ -17,6 +17,9 @@ class ServerUpdateInfo {
   final String? supervisorCurrentVersion;
   final String? supervisorLatestVersion;
   final bool supervisorUpdateAvailable;
+  final String? webCurrentVersion;
+  final String? webLatestVersion;
+  final bool webUpdateAvailable;
 
   const ServerUpdateInfo({
     required this.currentVersion,
@@ -29,6 +32,9 @@ class ServerUpdateInfo {
     this.supervisorCurrentVersion,
     this.supervisorLatestVersion,
     this.supervisorUpdateAvailable = false,
+    this.webCurrentVersion,
+    this.webLatestVersion,
+    this.webUpdateAvailable = false,
   });
 
   /// True when the app should offer the upgrade.
@@ -55,6 +61,8 @@ class ServerUpdateInfo {
               supervisorCurrentVersion,
               supervisorLatestVersion,
             ),
+          if (webUpdateAvailable)
+            _change('Web player', webCurrentVersion, webLatestVersion),
         ];
 
   static String _change(String name, String? current, String? latest) {
@@ -88,6 +96,9 @@ final serverUpdateProvider = FutureProvider<ServerUpdateInfo?>((ref) async {
       supervisorLatestVersion: info['supervisor_latest_version'] as String?,
       supervisorUpdateAvailable:
           (info['supervisor_update_available'] ?? false) as bool,
+      webCurrentVersion: info['web_current_version'] as String?,
+      webLatestVersion: info['web_latest_version'] as String?,
+      webUpdateAvailable: (info['web_update_available'] ?? false) as bool,
     );
   } catch (e) {
     _logger.w('Server update check failed', error: e);

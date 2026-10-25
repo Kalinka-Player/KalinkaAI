@@ -40,6 +40,11 @@ const _renderer = {
   'renderer_latest_version': '1.3.0',
   'renderer_update_available': true,
 };
+const _web = {
+  'web_current_version': '0.21.1',
+  'web_latest_version': '0.21.2',
+  'web_update_available': true,
+};
 
 Future<_Upgrade> _pump(
   WidgetTester tester,
@@ -110,17 +115,20 @@ void main() {
       ['Server: 5.9.0 → 5.10.0'],
     ),
     ({..._currentBundle, ..._renderer}, ['Renderer: 1.2.0 → 1.3.0']),
+    ({..._currentBundle, ..._web}, ['Web player: 0.21.1 → 0.21.2']),
     (
       {
         ..._currentBundle,
         ..._renderer,
         ..._supervisor,
+        ..._web,
         'latest_version': '5.10.0',
       },
       [
         'Server: 5.9.0 → 5.10.0',
         'Renderer: 1.2.0 → 1.3.0',
         'Supervisor: 0.4.0 → 0.5.0',
+        'Web player: 0.21.1 → 0.21.2',
       ],
     ),
     (
