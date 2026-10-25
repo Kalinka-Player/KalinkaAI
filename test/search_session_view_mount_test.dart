@@ -511,6 +511,34 @@ void main() {
     });
   }
 
+  testWidgets('with reduced motion the backdrop rises with the first pin', (
+    tester,
+  ) async {
+    final container = await pumpSurface(tester, reduceMotion: true);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('home-pin-hint')), findsOneWidget);
+    final centred = tester.getRect(backdrop);
+
+    await container
+        .read(pinnedCatalogsProvider.notifier)
+        .pin(
+          PinnedCatalog(
+            page: CatalogPage.category(
+              id: 'kalinka:localfiles:catalog:new',
+              title: 'New',
+            ),
+            filter: const BrowseFilterQuery(),
+            preview: HomePreviewType.compact,
+          ),
+        );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey('home-pin-hint')), findsNothing);
+    expect(tester.getRect(backdrop).top, lessThan(centred.top));
+    expect(tester.getRect(backdrop).top, lessThan(0));
+  });
+
   testWidgets('an album flung down, left and opened again keeps its cover', (
     tester,
   ) async {

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show SchedulerPhase;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart' show SearchSuggestion;
@@ -189,7 +190,18 @@ class _CentringState extends State<_Centring>
     return math.max(0.0, widget.room * t - height) * t / 2;
   }
 
-  void _report() => widget.onShift?.call(_shiftAt(_curve.value));
+  void _report() {
+    // With reduced motion the move lands at once, during the build, when the
+    // listener may not rebuild anything; it hears after the frame.
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _report();
+      });
+      return;
+    }
+    widget.onShift?.call(_shiftAt(_curve.value));
+  }
 
   @override
   void didChangeDependencies() {
