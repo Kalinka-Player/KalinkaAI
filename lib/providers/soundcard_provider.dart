@@ -193,6 +193,12 @@ class SoundcardChange extends Notifier<SoundcardStep> {
   SoundcardOption? get card => _card;
   SoundcardOption? _card;
 
+  /// Whether the box did not come back in time and the change waits for
+  /// [keepWaiting] or [stopWaiting]. Kept here, as the page that started the
+  /// change may have been rebuilt since.
+  bool get notBack => state == SoundcardStep.restarting && !_following;
+  bool _following = false;
+
   /// Throws [BoxActionException] when the box refuses; what happens after it
   /// accepted is reported in toasts, and returned.
   Future<SoundcardOutcome> apply(SoundcardOption card) async {
@@ -232,6 +238,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     required bool wentDown,
   }) async {
     _restarted = true;
+    _following = true;
     state = SoundcardStep.restarting;
     try {
       return await _followBack(card, wentDown: wentDown);
@@ -239,6 +246,8 @@ class SoundcardChange extends Notifier<SoundcardStep> {
       // Back to idle, or the box stays marked restarting and holds the app.
       if (ref.mounted) state = SoundcardStep.idle;
       rethrow;
+    } finally {
+      _following = false;
     }
   }
 

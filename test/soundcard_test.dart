@@ -911,7 +911,8 @@ void main() {
         'Raspberry Pi HDMI is set up but did not come up. Choose another '
         'card.',
       );
-    });  });
+    });
+  });
 
   group('in settings', () {
     Future<FakeBox> pump(
@@ -1198,6 +1199,37 @@ void main() {
 
       expect(find.text('The Pi is not back yet'), findsNothing);
       expect(find.byType(RendererSettingsScreen), findsOneWidget);
+      expect(find.byType(MiniPlayer), findsOneWidget);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a page opened again still offers the way on', (tester) async {
+      final box = FakeBox(restarts: true)..answersAfterApply = [null];
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(2)),
+        api: _ShellApi(),
+        overrides: [
+          supervisorApiProvider.overrideWithValue(box),
+          serverIdentityProvider.overrideWith((ref) async => 'box-1'),
+          demoModeProvider.overrideWithValue(false),
+          soundcardPollProvider.overrideWithValue(Duration.zero),
+        ],
+      );
+      final route = container.read(rendererSettingsRouteProvider.notifier)
+        ..open('r-local', 'Living room');
+      await tester.pumpAndSettle();
+      await chooseJustBoom(tester);
+      expect(find.text('Keep waiting'), findsOneWidget);
+
+      route.close();
+      await tester.pumpAndSettle();
+      route.open('r-local', 'Living room');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Keep waiting'), findsOneWidget);
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
       expect(find.byType(MiniPlayer), findsOneWidget);
       await tester.pump(const Duration(seconds: 6));
     });
