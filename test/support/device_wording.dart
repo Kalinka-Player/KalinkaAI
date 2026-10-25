@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'soundcard_fakes.dart';
 
-final _boxOrPi = RegExp(r'\b(box|the Pi)\b', caseSensitive: false);
+final _boxOrPi = RegExp(r'\b(box|Pi)\b', caseSensitive: false);
 
 // They name hardware, not the device the app talks to.
 final _hardware = [
