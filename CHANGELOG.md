@@ -11,7 +11,7 @@ paragraph, however long; blank lines separate paragraphs.
 ## Unreleased
 
 ### Fixed
-- A sound card change calls the device the streamer, as the Streamer settings do: the screen shown while it restarts reads Restarting the streamer, and its messages no longer say the Pi or the box. Names of the Pi's own outputs, such as Raspberry Pi HDMI, stay.
+- A sound card change calls the device the streamer, as the Streamer settings do, or the output on a Pi that only plays: the screen shown while it restarts reads Restarting the streamer or Restarting the output, and its messages no longer say the Pi or the box. Names of the Pi's own outputs, such as Raspberry Pi HDMI, stay.
 
 ## 0.21.1
 
