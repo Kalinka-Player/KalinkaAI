@@ -296,12 +296,13 @@ class SoundcardChange extends Notifier<SoundcardStep> {
       return SoundcardOutcome.noHat;
     }
     if (pcm == null) {
+      final advice = card.kind == 'onboard'
+          ? 'Choose another card.'
+          : 'Check that the HAT sits firmly on the pins.';
       _finish(
         restarted
-            ? 'The box is back, but the sound card did not come up. Check '
-                  'that the HAT sits firmly on the pins.'
-            : '${card.label} is set up, but did not come up. Check that the '
-                  'HAT sits firmly on the pins.',
+            ? 'The box is back, but the sound card did not come up. $advice'
+            : '${card.label} is set up, but did not come up. $advice',
         isError: true,
         reloadSettings: restarted,
       );

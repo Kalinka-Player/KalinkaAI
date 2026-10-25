@@ -525,6 +525,48 @@ void main() {
       expect(box.reportReads, 10);
     });
 
+    test(
+      'an onboard output that does not come up is not blamed on a HAT',
+      () async {
+        const hdmi = SoundcardOption(
+          name: 'rpi-bcm2835-hdmi',
+          label: 'Raspberry Pi HDMI',
+          kind: 'onboard',
+        );
+        final restarted = FakeBox(
+          restarts: true,
+          answers: [null, supervisorInfo()],
+          reports: [soundcardReport()],
+        );
+        final (container, target, _) = await start(restarted);
+        final (inPlace, inPlaceTarget, _) = await start(FakeBox());
+
+        expect(
+          await container
+              .read(soundcardChangeProvider(target).notifier)
+              .apply(hdmi),
+          SoundcardOutcome.silent,
+        );
+        expect(
+          await inPlace
+              .read(soundcardChangeProvider(inPlaceTarget).notifier)
+              .apply(hdmi),
+          SoundcardOutcome.silent,
+        );
+
+        expect(
+          toasts(container).last,
+          'The box is back, but the sound card did not come up. Choose another '
+          'card.',
+        );
+        expect(
+          toasts(inPlace).last,
+          'Raspberry Pi HDMI is set up, but did not come up. Choose another '
+          'card.',
+        );
+      },
+    );
+
     test('a box that never comes back is reported as such', () async {
       final box = FakeBox(restarts: true, answers: [null]);
       final (container, target, _) = await start(box);
@@ -860,6 +902,14 @@ void main() {
       expect(
         soundcardTrouble(soundcardReport(configured: 'justboom-dac')),
         startsWith('JustBoom DAC HAT is set up but did not come up'),
+      );
+    });
+
+    test('does not blame an onboard output on a HAT', () {
+      expect(
+        soundcardTrouble(soundcardReport(configured: 'rpi-bcm2835-hdmi')),
+        'Raspberry Pi HDMI is set up but did not come up. Choose another '
+        'card.',
       );
     });  });
 
