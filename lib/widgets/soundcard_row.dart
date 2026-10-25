@@ -154,7 +154,7 @@ Future<SoundcardOption?> pickSoundcard(
   final picked = await showKalinkaBottomSheet<String>(
     context: context,
     mayFillScreen: true,
-    contentBuilder: (_) => SoundcardPicker(box: box, report: report),
+    contentBuilder: (_) => SoundcardPicker(noun: box.noun, report: report),
   );
   final card = report.option(picked);
   if (card == null || card.name == report.configured || !context.mounted) {
@@ -174,24 +174,27 @@ Future<bool> confirmSoundcard(
 }) async =>
     await showKalinkaDialog<bool>(
       context: context,
-      builder: (_) =>
-          _ConfirmSoundcard(box: box, card: card, afterRestart: afterRestart),
+      builder: (_) => _ConfirmSoundcard(
+        noun: box.noun,
+        card: card,
+        afterRestart: afterRestart,
+      ),
     ) ==
     true;
 
-/// Every card [box] can be set up for, the detected ones first, then by
+/// Every card the [noun] can be set up for, the detected ones first, then by
 /// maker, the Pi's own outputs and no HAT; pops the name of the one tapped.
 class SoundcardPicker extends StatelessWidget {
-  final SoundcardBox box;
+  final String noun;
   final SoundcardReport report;
 
-  const SoundcardPicker({super.key, required this.box, required this.report});
+  const SoundcardPicker({super.key, required this.noun, required this.report});
 
   Map<String, List<SoundcardOption>> get _groups {
     final groups = <String, List<SoundcardOption>>{};
     final found = [for (final name in report.suggested) ?report.option(name)];
     if (found.isNotEmpty) {
-      groups['FOUND ON THIS ${box.noun.toUpperCase()}'] = found;
+      groups['FOUND ON THIS ${noun.toUpperCase()}'] = found;
     }
     for (final option in report.options) {
       final group = switch (option.kind) {
@@ -238,12 +241,12 @@ class SoundcardPicker extends StatelessWidget {
 }
 
 class _ConfirmSoundcard extends StatelessWidget {
-  final SoundcardBox box;
+  final String noun;
   final SoundcardOption card;
   final String? afterRestart;
 
   const _ConfirmSoundcard({
-    required this.box,
+    required this.noun,
     required this.card,
     this.afterRestart,
   });
@@ -257,7 +260,7 @@ class _ConfirmSoundcard extends StatelessWidget {
       iconGlyphColor: KalinkaColors.accentTint,
       title: 'Change the sound card?',
       message:
-          'Sets the ${box.noun} up for ${card.label}. If its boot settings '
+          'Sets the $noun up for ${card.label}. If its boot settings '
           'change, it restarts once, which takes a minute or two.'
           '${afterRestart == null ? '' : ' $afterRestart'}',
       actions: [
