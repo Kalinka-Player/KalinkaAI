@@ -8,6 +8,11 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## Unreleased
+
+### Fixed
+- A sound card change calls the device the streamer, as the rest of the app does: the screen shown while it restarts reads Restarting the streamer, and its messages no longer say the Pi or the box. Names of the Pi's own outputs, such as Raspberry Pi HDMI, stay.
+
 ## 0.21.1
 
 A redone multi-select bar, a media notification that stays up while music plays, and fixes for the rail, Home and search. It needs no newer server or supervisor than 0.21.0.
