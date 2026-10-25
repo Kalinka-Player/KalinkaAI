@@ -99,9 +99,11 @@ final rendererSoundcardBoxProvider = FutureProvider.autoDispose
         return null;
       }
       // The server's own box, reached here before its own probe found it.
+      // Matched against the remembered server too, so a dropped connection
+      // does not turn it into an output.
       final hostsServer =
           info.serverId != null &&
-          info.serverId == await ref.watch(serverIdentityProvider.future);
+          info.serverId == await ref.watch(knownServerIdentityProvider.future);
       return SoundcardBox(
         api: api,
         identity: BoxIdentity(serverId: info.serverId, rendererId: rendererId),
@@ -201,10 +203,13 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     final bool restarts;
     try {
       restarts = await box.api.setSoundcard(card.name, box.identity);
-    } on BoxActionException catch (e) {
+    } on BoxActionException catch (e, stack) {
       state = SoundcardStep.idle;
       // The supervisor words its refusals for the streamer.
-      throw BoxActionException(e.code, boxRefusal(e.code, noun: box.noun));
+      Error.throwWithStackTrace(
+        BoxActionException(e.code, boxRefusal(e.code, noun: box.noun)),
+        stack,
+      );
     } catch (_) {
       state = SoundcardStep.idle;
       rethrow;

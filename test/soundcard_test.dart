@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/renderer_config.dart';
+import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/renderer_settings_provider.dart';
 import 'package:kalinka/providers/soundcard_provider.dart';
@@ -25,6 +26,7 @@ Future<ProviderContainer> _container({
   required FakeBox box,
   FakeProxy? proxy,
   Map<String, SupervisorApi> others = const {},
+  String? serverId = 'box-1',
   List<Override> overrides = const [],
 }) async {
   final container = ProviderContainer(
@@ -34,6 +36,7 @@ Future<ProviderContainer> _container({
         box: box,
         proxy: proxy,
         others: others,
+        serverId: serverId,
       ),
       ...overrides,
     ],
@@ -324,6 +327,30 @@ void main() {
       ))!;
       expect(identical(box.api, remote), isTrue);
       expect(box.identity, const BoxIdentity(rendererId: 'r-far'));
+    });
+
+    test('the server’s own box found at its renderer’s address stays the '
+        'streamer while the server is down', () async {
+      Future<String> noun({String? remembered}) async {
+        final container = await _container(
+          box: FakeBox(answers: [null]),
+          proxy: FakeProxy([rendererRow('r-local', address: '192.168.1.30')]),
+          others: {'192.168.1.30': FakeBox()},
+          serverId: null,
+        );
+        if (remembered != null) {
+          await container
+              .read(sharedPrefsProvider)
+              .setString('Kalinka.serverIdAt.kalinka.local:8000', remembered);
+        }
+        final box = await container.read(
+          rendererSoundcardBoxProvider('r-local').future,
+        );
+        return box!.noun;
+      }
+
+      expect(await noun(remembered: 'box-1'), 'streamer');
+      expect(await noun(), 'output');
     });
 
     test(
