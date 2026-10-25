@@ -6,6 +6,8 @@ import '../providers/renderer_provider.dart';
 import '../providers/renderer_settings_provider.dart';
 import '../providers/settings_provider.dart' show expertModeProvider;
 import '../providers/soundcard_provider.dart';
+import '../providers/supervisor_api.dart';
+import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/connection_banner.dart';
 import '../widgets/configuration_appearance.dart';
@@ -71,6 +73,39 @@ class _RendererSettingsScreenState
   RendererSettingsNotifier get _notifier =>
       ref.read(rendererSettingsProvider(widget.rendererId).notifier);
 
+  late final _soundcardHost = SoundcardHost(setUp: _setUpSoundcard);
+
+  /// Set while the sound card change this page started waits on a box that
+  /// did not come back in time.
+  bool _notBack = false;
+
+  Future<void> _setUpSoundcard(SoundcardBox box, SoundcardOption card) async {
+    final change = ref.read(soundcardChangeProvider(box).notifier);
+    final toasts = ref.read(toastProvider.notifier);
+    setState(() => _notBack = false);
+    try {
+      _settleSoundcard(await change.apply(card));
+    } on BoxActionException catch (e) {
+      toasts.show(e.message, isError: true);
+    }
+  }
+
+  Future<void> _keepWaiting(SoundcardBox box, SoundcardOption card) async {
+    final change = ref.read(soundcardChangeProvider(box).notifier);
+    setState(() => _notBack = false);
+    _settleSoundcard(await change.keepWaiting(card));
+  }
+
+  void _settleSoundcard(SoundcardOutcome outcome) {
+    if (!mounted) return;
+    setState(() => _notBack = outcome == SoundcardOutcome.notBack);
+  }
+
+  void _stopWaiting(SoundcardBox box) {
+    setState(() => _notBack = false);
+    ref.read(soundcardChangeProvider(box).notifier).stopWaiting();
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(rendererSettingsProvider(widget.rendererId));
@@ -112,6 +147,8 @@ class _RendererSettingsScreenState
 
     return SlideInPanel(
       onClose: widget.onClose,
+      // While the box is down, the overlay is all that says why the app waits.
+      beforeClose: () async => box == null,
       onCoverageChanged: widget.onCoverageChanged,
       overlays: [
         if (box != null && card != null)
@@ -119,6 +156,10 @@ class _RendererSettingsScreenState
             box: box,
             card: card,
             afterwards: 'The output comes back by itself.',
+            notBack: _notBack,
+            onKeepWaiting: () => _keepWaiting(box, card),
+            onContinue: () => _stopWaiting(box),
+            continueLabel: 'Continue',
           ),
       ],
       // Material, not a plain Container: the page's text fields and ink need
@@ -175,7 +216,10 @@ class _RendererSettingsScreenState
         padding: const EdgeInsets.only(bottom: 32),
         children: [
           if (state.error != null) _ErrorNote(message: state.error!),
-          RendererSoundcardSection(rendererId: widget.rendererId),
+          RendererSoundcardSection(
+            rendererId: widget.rendererId,
+            host: _soundcardHost,
+          ),
           for (final section in state.sections)
             SchemaSectionRenderer(
               key: ValueKey(section.id),

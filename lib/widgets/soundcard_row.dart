@@ -271,7 +271,14 @@ class _ConfirmSoundcard extends StatelessWidget {
 class RendererSoundcardSection extends ConsumerWidget {
   final String rendererId;
 
-  const RendererSoundcardSection({super.key, required this.rendererId});
+  /// Runs the change, when the page does.
+  final SoundcardHost? host;
+
+  const RendererSoundcardSection({
+    super.key,
+    required this.rendererId,
+    this.host,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -291,7 +298,7 @@ class RendererSoundcardSection extends ConsumerWidget {
           ),
         ),
         SettingsCard(
-          children: [SoundcardRow(box: box, report: report)],
+          children: [SoundcardRow(box: box, report: report, host: host)],
         ),
       ],
     );

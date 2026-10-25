@@ -89,6 +89,12 @@ class FakeBox implements SupervisorApi {
   /// While set, `/info` answers only once it completes.
   Completer<void>? holdInfo;
 
+  /// While set, `/v1/soundcard` answers only once it completes.
+  Completer<void>? holdReport;
+
+  int infoReads = 0;
+  int reportReads = 0;
+
   /// How a null answer in [answers] reads: nothing listening, or no answer.
   SupervisorReach noAnswer = SupervisorReach.absent;
 
@@ -115,6 +121,7 @@ class FakeBox implements SupervisorApi {
 
   @override
   Future<SupervisorInfo?> info() async {
+    infoReads++;
     await holdInfo?.future;
     return _next(answers);
   }
@@ -129,7 +136,11 @@ class FakeBox implements SupervisorApi {
   }
 
   @override
-  Future<SoundcardReport?> soundcard() async => _next(reports);
+  Future<SoundcardReport?> soundcard() async {
+    reportReads++;
+    await holdReport?.future;
+    return _next(reports);
+  }
 
   @override
   Future<bool> setSoundcard(String card, BoxIdentity identity) async {

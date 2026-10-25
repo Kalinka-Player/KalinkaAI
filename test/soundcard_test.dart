@@ -6,17 +6,23 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalinka/data_model/data_model.dart' show RendererInfo;
 import 'package:kalinka/data_model/renderer_config.dart';
+import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
+import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/renderer_settings_provider.dart';
+import 'package:kalinka/providers/renderer_settings_route_provider.dart';
 import 'package:kalinka/providers/soundcard_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/screens/renderer_settings_screen.dart';
 import 'package:kalinka/widgets/box_section.dart';
+import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/settings_controls/option_picker.dart';
 import 'package:kalinka/widgets/soundcard_row.dart';
 
+import 'support/home_shell.dart';
 import 'support/soundcard_fakes.dart';
 
 Future<ProviderContainer> _container({
@@ -129,6 +135,16 @@ RendererConfigSnapshot _outputConfig(
 class _Connected extends ConnectionStateNotifier {
   @override
   ConnectionStatus build() => ConnectionStatus.connected;
+}
+
+/// A server whose local output has settings, behind the main screen.
+class _ShellApi extends HomeApi {
+  @override
+  Future<List<RendererInfo>> listRenderers() async => [rendererRow('r-local')];
+
+  @override
+  Future<RendererConfigSnapshot> getRendererConfig(String rendererId) async =>
+      _outputConfig('default');
 }
 
 void main() {
@@ -443,6 +459,37 @@ void main() {
       );
     });
 
+    test('holds the app only until the box answers', () async {
+      final box = FakeBox(
+        restarts: true,
+        answers: [null, supervisorInfo()],
+        reports: [
+          soundcardReport(name: 'JustBoom DAC', pcm: 'hw:CARD=Boom,DEV=0'),
+        ],
+      );
+      final (container, target, proxy) = await start(box);
+      final down = box.holdInfo = Completer<void>();
+      final write = proxy.holdUpdate = Completer<void>();
+
+      final outcome = container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+      await pumpEventQueue();
+      expect(container.read(restartingBoxesProvider), {target});
+
+      down.complete();
+      await pumpEventQueue();
+      expect(proxy.updates, hasLength(1));
+      expect(
+        container.read(soundcardChangeProvider(target)),
+        SoundcardStep.switching,
+      );
+      expect(container.read(restartingBoxesProvider), isEmpty);
+
+      write.complete();
+      expect(await outcome, SoundcardOutcome.playing);
+    });
+
     test('a card that does not come up is reported as such', () async {
       final box = FakeBox(
         restarts: true,
@@ -462,6 +509,22 @@ void main() {
       expect(toast.isError, isTrue);
     });
 
+    test('waits a short while for a card the box came back without', () async {
+      final box = FakeBox(
+        restarts: true,
+        answers: [null, supervisorInfo()],
+        reports: [soundcardReport()],
+      );
+      final (container, target, _) = await start(box);
+
+      final outcome = await container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(card);
+
+      expect(outcome, SoundcardOutcome.silent);
+      expect(box.reportReads, 10);
+    });
+
     test('a box that never comes back is reported as such', () async {
       final box = FakeBox(restarts: true, answers: [null]);
       final (container, target, _) = await start(box);
@@ -471,7 +534,26 @@ void main() {
           .apply(card);
 
       expect(outcome, SoundcardOutcome.notBack);
+      expect(box.infoReads, 100);
       expect(toasts(container).last, contains('has not come back'));
+    });
+
+    test('a box that is not back holds the app until the change stops '
+        'waiting', () async {
+      final (container, target, _) = await start(
+        FakeBox(restarts: true, answers: [null]),
+      );
+      final change = container.read(soundcardChangeProvider(target).notifier);
+
+      expect(await change.apply(card), SoundcardOutcome.notBack);
+      expect(container.read(restartingBoxesProvider), {target});
+
+      change.stopWaiting();
+      expect(
+        container.read(soundcardChangeProvider(target)),
+        SoundcardStep.idle,
+      );
+      expect(container.read(restartingBoxesProvider), isEmpty);
     });
 
     test('waiting on for a late box plays through its card', () async {
@@ -779,8 +861,7 @@ void main() {
         soundcardTrouble(soundcardReport(configured: 'justboom-dac')),
         startsWith('JustBoom DAC HAT is set up but did not come up'),
       );
-    });
-  });
+    });  });
 
   group('in settings', () {
     Future<FakeBox> pump(
@@ -967,6 +1048,107 @@ void main() {
       expect(proxy.updates.single.$2, {outputDevicePath: _hifiberryPcm});
       expect(find.text('HiFiBerry Digi+ Pro'), findsOneWidget);
       expect(find.textContaining('not detected'), findsNothing);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    Future<void> chooseJustBoom(WidgetTester tester) async {
+      await tester.tap(find.text('Sound card'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('JustBoom DAC HAT'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Back keeps the output’s settings while the box is down, and '
+        'closes them once it answers', (tester) async {
+      final box = FakeBox(restarts: true)
+        ..answersAfterApply = [null, supervisorInfo(rendererId: 'r-local')];
+      final proxy = FakeProxy([rendererRow('r-local')])
+        ..rendererConfig = _outputConfig('default');
+      final container = ProviderContainer(
+        overrides: [
+          ...soundcardOverrides(await boxPrefs(), box: box, proxy: proxy),
+          connectionStateProvider.overrideWith(_Connected.new),
+        ],
+      );
+      addTearDown(container.dispose);
+      var open = true;
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: StatefulBuilder(
+                builder: (context, setState) => open
+                    ? RendererSettingsScreen(
+                        rendererId: 'r-local',
+                        rendererName: 'Living room',
+                        onClose: () => setState(() => open = false),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final down = box.holdInfo = Completer<void>();
+
+      await chooseJustBoom(tester);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RendererSettingsScreen), findsOneWidget);
+      expect(find.text('Restarting the Pi'), findsWidgets);
+
+      final write = proxy.holdUpdate = Completer<void>();
+      box.reports
+        ..clear()
+        ..add(soundcardReport(name: 'JustBoom DAC', pcm: 'hw:CARD=Boom,DEV=0'));
+      down.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Restarting the Pi'), findsNothing);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(RendererSettingsScreen), findsNothing);
+
+      write.complete();
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a box not back in time offers the way on, and Continue lets '
+        'the app go on', (tester) async {
+      final box = FakeBox(restarts: true)..answersAfterApply = [null];
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(2)),
+        api: _ShellApi(),
+        overrides: [
+          supervisorApiProvider.overrideWithValue(box),
+          serverIdentityProvider.overrideWith((ref) async => 'box-1'),
+          demoModeProvider.overrideWithValue(false),
+          soundcardPollProvider.overrideWithValue(Duration.zero),
+        ],
+      );
+      container
+          .read(rendererSettingsRouteProvider.notifier)
+          .open('r-local', 'Living room');
+      await tester.pumpAndSettle();
+
+      await chooseJustBoom(tester);
+
+      expect(find.text('The Pi is not back yet'), findsOneWidget);
+      expect(find.text('Keep waiting'), findsOneWidget);
+      expect(find.byType(MiniPlayer), findsNothing);
+
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('The Pi is not back yet'), findsNothing);
+      expect(find.byType(RendererSettingsScreen), findsOneWidget);
+      expect(find.byType(MiniPlayer), findsOneWidget);
       await tester.pump(const Duration(seconds: 6));
     });
   });
