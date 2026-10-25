@@ -8,8 +8,8 @@ import '../kalinka_button.dart';
 import '../progress_timeline.dart';
 
 /// Covers the wizard, or an output's settings, while the Pi the output plays
-/// on restarts to switch a sound card on. The wizard also offers the way on
-/// when it does not come back in time.
+/// on restarts to switch a sound card on, and offers the way on when it does
+/// not come back in time.
 class SoundcardRestartOverlay extends ConsumerWidget {
   final SoundcardBox box;
   final SoundcardOption card;
@@ -22,6 +22,7 @@ class SoundcardRestartOverlay extends ConsumerWidget {
   final bool notBack;
   final VoidCallback? onKeepWaiting;
   final VoidCallback? onContinue;
+  final String continueLabel;
 
   const SoundcardRestartOverlay({
     super.key,
@@ -31,6 +32,7 @@ class SoundcardRestartOverlay extends ConsumerWidget {
     this.notBack = false,
     this.onKeepWaiting,
     this.onContinue,
+    this.continueLabel = 'Continue setup',
   });
 
   @override
@@ -87,7 +89,7 @@ class SoundcardRestartOverlay extends ConsumerWidget {
               children: [
                 Expanded(
                   child: KalinkaButton(
-                    label: 'Continue setup',
+                    label: continueLabel,
                     variant: KalinkaButtonVariant.neutral,
                     fullWidth: true,
                     onTap: onContinue,

@@ -17,6 +17,7 @@ import 'package:kalinka/providers/renderer_host_provider.dart';
 import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
+import 'package:kalinka/providers/soundcard_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/screens/onboarding_screen.dart';
@@ -388,10 +389,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Apply'));
       await tester.pumpAndSettle();
+      expect(container.read(restartingBoxesProvider), isNotEmpty);
       await tester.tap(find.text('Continue setup'));
       await tester.pumpAndSettle();
 
       expect(find.text('The Pi is not back yet'), findsNothing);
+      expect(container.read(restartingBoxesProvider), isEmpty);
       expect(find.text('Sound'), findsOne);
       expect(proxy.configReads, hasLength(reads + 1));
       expect(container.read(oobeResumeProvider), isNull);

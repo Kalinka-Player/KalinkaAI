@@ -291,9 +291,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final run = _soundcardRun;
     if (!mounted || run == null) return;
     setState(() => _soundcardRun = null);
-    final restarted = ref
-        .read(soundcardChangeProvider(run.box).notifier)
-        .restarted;
+    final change = ref.read(soundcardChangeProvider(run.box).notifier)
+      ..stopWaiting();
+    final restarted = change.restarted;
     await ref.read(oobeResumeProvider.notifier).forget();
     if (!mounted || !restarted) return;
     unawaited(ref.read(rendererListProvider.notifier).refresh());

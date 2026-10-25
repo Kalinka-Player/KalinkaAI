@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,8 @@ import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
+import 'package:kalinka/providers/soundcard_provider.dart';
+import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/coach_marks_overlay.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
@@ -19,8 +23,10 @@ import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/search/search_composer.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 import 'package:kalinka/widgets/server_chip.dart';
+import 'package:kalinka/widgets/shell_navigation.dart';
 
 import 'support/home_shell.dart';
+import 'support/soundcard_fakes.dart';
 
 class _Renderers extends RendererListNotifier {
   @override
@@ -450,6 +456,53 @@ void main() {
     );
     await tester.pumpAndSettle();
     expectOverPlayer();
+  });
+
+  testWidgets('a box restarting for its sound card holds the mini-player and '
+      'the rail only until it answers', (tester) async {
+    final box = FakeBox(
+      restarts: true,
+      answers: [null, supervisorInfo()],
+      reports: [soundcardReport()],
+    );
+    final target = SoundcardBox(
+      api: box,
+      identity: const BoxIdentity(serverId: 'box-1'),
+      rendererId: 'smsl',
+    );
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(2)),
+      size: const Size(800, 800),
+      overrides: [soundcardPollProvider.overrideWithValue(Duration.zero)],
+    );
+    final down = box.holdInfo = Completer<void>();
+    final card = box.holdReport = Completer<void>();
+    bool railEnabled() =>
+        tester.widget<ShellNavigation>(find.byType(ShellNavigation)).enabled;
+
+    unawaited(
+      container
+          .read(soundcardChangeProvider(target).notifier)
+          .apply(soundcardOptions[1]),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(MiniPlayer), findsNothing);
+    expect(railEnabled(), isFalse);
+
+    down.complete();
+    await tester.pumpAndSettle();
+    expect(
+      container.read(soundcardChangeProvider(target)),
+      SoundcardStep.switching,
+    );
+    expect(find.byType(MiniPlayer), findsOneWidget);
+    expect(railEnabled(), isTrue);
+
+    card.complete();
+    await tester.pumpAndSettle();
+    expect(container.read(soundcardChangeProvider(target)), SoundcardStep.idle);
+    await tester.pump(const Duration(seconds: 6));
   });
 
   testWidgets('the first-run tour starts at the search entry', (tester) async {
