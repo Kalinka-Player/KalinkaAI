@@ -20,6 +20,8 @@ import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/screens/onboarding_screen.dart';
+import 'package:kalinka/widgets/kalinka_dialog.dart';
+import 'package:kalinka/widgets/onboarding/soundcard_restart_overlay.dart';
 import 'package:kalinka/widgets/onboarding/step_sound.dart';
 import 'package:kalinka/widgets/soundcard_row.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -396,6 +398,63 @@ void main() {
       expect(find.text('Sound'), findsOne);
       expect(proxy.configReads, hasLength(reads + 1));
       expect(container.read(oobeResumeProvider), isNull);
+      await _drain(tester);
+    });
+
+    testWidgets('calls the device the streamer throughout a sound card '
+        'change', (tester) async {
+      final box = FakeBox(reports: [_found], restarts: true)
+        ..answersAfterApply = [null];
+      final container = await atSoundStep(
+        tester,
+        box,
+        proxy: FakeProxy([rendererRow('r-local')]),
+      );
+      final copy = <String>{};
+      container.listen(
+        toastProvider,
+        (_, toasts) => copy.addAll([for (final t in toasts) t.message]),
+      );
+      void read(Type shownIn) => copy.addAll([
+        for (final text in tester.widgetList<RichText>(
+          find.descendant(
+            of: find.byType(shownIn),
+            matching: find.byType(RichText),
+          ),
+        ))
+          text.text.toPlainText(),
+      ]);
+      final restart = box.holdInfo = Completer<void>();
+
+      await tester.tap(find.text('Set it up'));
+      await tester.pumpAndSettle();
+      read(KalinkaDialog);
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      read(SoundcardRestartOverlay);
+      restart.complete();
+      await tester.pumpAndSettle();
+      read(SoundcardRestartOverlay);
+      box.answers
+        ..clear()
+        ..add(supervisorInfo(rendererId: 'r-local'));
+      box.reports
+        ..clear()
+        ..add(_playing);
+      await tester.tap(find.text('Keep waiting'));
+      await tester.pumpAndSettle();
+
+      expect(
+        copy,
+        containsAll([
+          'Change the sound card?',
+          'Restarting the streamer',
+          'The streamer is not back yet',
+          'The streamer is back, playing through HiFiBerry Digi2 Pro.',
+        ]),
+      );
+      final device = RegExp(r'\b(box|the Pi)\b', caseSensitive: false);
+      expect(copy.where(device.hasMatch), isEmpty);
       await _drain(tester);
     });
 
