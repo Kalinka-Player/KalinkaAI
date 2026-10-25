@@ -27,12 +27,6 @@ const _resultsFilterKey = 'Kalinka.resultsFilter';
 /// search.
 const _matchSourceKey = 'Kalinka.resultsSource';
 
-/// Every server's catalog filters, as kept before they were kept per server.
-const _catalogFiltersKey = 'Kalinka.catalogFilters';
-
-/// The folder each page of folders was left on, by server and page.
-const _folderPathsKey = 'Kalinka.folderPaths';
-
 /// Minimum time the "working…" state stays up, even if results resolve
 /// instantly — the request may be slow, so the UI must always read as busy
 /// rather than flickering a frame of loading.
@@ -676,10 +670,9 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   Map<String, String> _savedResultsGenreNames = {};
   Map<String, BrowseFilterQuery> _loadedCatalogFilters = {};
   ServerStorageKey? _catalogFiltersOf;
-  Map<String, List<Map<String, dynamic>>> _savedFolderPaths = {};
 
   /// The connected server's catalog filters, loaded again once another server
-  /// answers. Nothing is kept before the server is known.
+  /// answers. Nothing is kept until the server has said who it is.
   Map<String, BrowseFilterQuery> get _savedCatalogFilters {
     final server = ref.read(serverStorageKeyProvider);
     if (server != _catalogFiltersOf) {
@@ -695,7 +688,6 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     ref.onDispose(() => _disposed = true);
     // Kept by earlier versions for every next search.
     _prefs.remove(_resultsFilterKey);
-    _savedFolderPaths = _loadFolderPaths();
     // Another server's results and pages mean nothing on this one.
     ref.listen(connectionSettingsProvider.select((s) => s.baseUrl), (
       previous,
@@ -1706,8 +1698,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   Map<String, BrowseFilterQuery> _loadCatalogFilters(ServerStorageKey? server) {
     if (server == null) return {};
-    final json =
-        _prefs.getString(server.catalogFilters) ?? _adoptCatalogFilters(server);
+    final json = _prefs.getString(server.catalogFilters);
     if (json == null) return {};
     try {
       return {
@@ -1732,17 +1723,10 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     _saveCatalogFilters();
   }
 
-  /// The filters kept for every server before they were kept per server,
-  /// taken by the first server known.
-  String? _adoptCatalogFilters(ServerStorageKey server) => moveStoredString(
-    _prefs,
-    from: _catalogFiltersKey,
-    to: server.catalogFilters,
-  );
-
   void _saveCatalogFilters() {
-    final key = _catalogFiltersOf?.catalogFilters;
-    if (key == null) return;
+    final server = _catalogFiltersOf;
+    if (server == null || !server.confirmed) return;
+    final key = server.catalogFilters;
     if (_savedCatalogFilters.isEmpty) {
       _prefs.remove(key);
     } else {
@@ -1759,34 +1743,17 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   /// Folder paths differ from one server's library to the next, so each is
   /// kept per server as well as per page.
-  String? _folderPathKey(String pageId) =>
-      ref.read(serverStorageKeyProvider)?.folderPath(pageId);
-
-  List<CatalogPage> _savedFolderPath(String pageId, String? provider) => [
-    for (final folder in _folderPathOf(pageId) ?? const [])
-      CatalogPage.savedFolder(folder, provider: provider),
-  ];
-
-  /// [pageId]'s saved path, taking one kept under this address before
-  /// servers were told apart by id.
-  List<Map<String, dynamic>>? _folderPathOf(String pageId) {
-    final server = ref.read(serverStorageKeyProvider);
-    if (server == null) return null;
-    final key = server.folderPath(pageId);
-    final saved = _savedFolderPaths[key];
-    if (saved != null || !server.isServerId) return saved;
-    final adopted = _savedFolderPaths.remove(
-      ServerStorageKey.ofAddress(ref.read(connectionSettingsProvider).baseUrl)
-          .folderPath(pageId),
-    );
-    if (adopted == null) return null;
-    _savedFolderPaths[key] = adopted;
-    _saveFolderPaths();
-    return adopted;
+  List<CatalogPage> _savedFolderPath(String pageId, String? provider) {
+    final key = ref.read(serverStorageKeyProvider)?.folderPath(pageId);
+    return [
+      for (final folder in _loadFolderPaths()[key] ?? const [])
+        CatalogPage.savedFolder(folder, provider: provider),
+    ];
   }
 
+  /// Read afresh each time: a server's answer may have moved entries since.
   Map<String, List<Map<String, dynamic>>> _loadFolderPaths() {
-    final json = _prefs.getString(_folderPathsKey);
+    final json = _prefs.getString(ServerStorageKey.folderPaths);
     if (json == null) return {};
     try {
       return {
@@ -1806,24 +1773,21 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   void _rememberFolderPath() {
     final pageId = state.catalogPage.id;
-    if (pageId == null) return;
-    final key = _folderPathKey(pageId);
-    if (key == null) return;
+    final server = ref.read(serverStorageKeyProvider);
+    if (pageId == null || server == null || !server.confirmed) return;
+    final key = server.folderPath(pageId);
+    final paths = _loadFolderPaths();
     if (state.folderPath.isEmpty) {
-      _savedFolderPaths.remove(key);
+      paths.remove(key);
     } else {
-      _savedFolderPaths[key] = [
+      paths[key] = [
         for (final folder in state.folderPath) folder.toFolderJson(),
       ];
     }
-    _saveFolderPaths();
-  }
-
-  void _saveFolderPaths() {
-    if (_savedFolderPaths.isEmpty) {
-      _prefs.remove(_folderPathsKey);
+    if (paths.isEmpty) {
+      _prefs.remove(ServerStorageKey.folderPaths);
     } else {
-      _prefs.setString(_folderPathsKey, jsonEncode(_savedFolderPaths));
+      _prefs.setString(ServerStorageKey.folderPaths, jsonEncode(paths));
     }
   }
 }

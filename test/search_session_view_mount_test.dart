@@ -188,7 +188,7 @@ void main() {
   }) {
     if (withHomeContent) {
       prefs.setString(
-        'Kalinka.pinnedCatalogs.v1:http://localhost:8080',
+        'Kalinka.pinnedCatalogs.v1:id:box-1',
         jsonEncode([
           for (var i = 0; i < 10; i++)
             PinnedCatalog(

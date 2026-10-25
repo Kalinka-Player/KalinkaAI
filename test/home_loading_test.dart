@@ -48,6 +48,18 @@ BrowseItem _root(String source) => BrowseItem(
   catalog: Catalog(id: 'kalinka:$source:catalog:root', title: source),
 );
 
+/// One compact pin titled [title], as the app keeps a list of them.
+String _savedPin(String title) => jsonEncode([
+  PinnedCatalog(
+    page: CatalogPage.category(
+      id: 'kalinka:Alpha:catalog:${title.length}',
+      title: title,
+    ),
+    filter: const BrowseFilterQuery(),
+    preview: HomePreviewType.compact,
+  ).toJson(),
+]);
+
 class _DelayedApi implements KalinkaPlayerProxy {
   final roots = Completer<BrowseItemsList>();
   final preview = Completer<BrowseItemsList>();
@@ -233,19 +245,9 @@ void main() {
   );
 
   testWidgets(
-    'Home shows no pins until the server says who it is, and keeps them '
-    'through a reconnect',
+    'Home shows no pins until the server says who it is, keeps them while it '
+    'is away, and waits for it again once back',
     (tester) async {
-      String saved(String title) => jsonEncode([
-        PinnedCatalog(
-          page: CatalogPage.category(
-            id: 'kalinka:Alpha:catalog:${title.length}',
-            title: title,
-          ),
-          filter: const BrowseFilterQuery(),
-          preview: HomePreviewType.compact,
-        ).toJson(),
-      ]);
       final servers = ServersByHost()
         ..ids['localhost'] = 'box-a'
         ..silent.add('localhost');
@@ -255,8 +257,8 @@ void main() {
         modules: Future.value([_module('Alpha')]),
         servers: servers,
         saved: {
-          'Kalinka.pinnedCatalogs.v1:id:box-a': saved('Box pick'),
-          'Kalinka.pinnedCatalogs.v1:http://localhost:8080': saved(
+          'Kalinka.pinnedCatalogs.v1:id:box-a': _savedPin('Box pick'),
+          'Kalinka.pinnedCatalogs.v1:http://localhost:8080': _savedPin(
             'Address pick',
           ),
         },
@@ -282,9 +284,9 @@ void main() {
       expect(servers.asked, 1);
       expectLoading();
 
-      // A failed call is asked again after ten seconds.
+      // A failed call is asked again, first after two seconds.
       servers.silent.clear();
-      await settle(const Duration(seconds: 10));
+      await settle(const Duration(seconds: 2));
       expect(servers.asked, 2);
       expectPins();
 
@@ -294,11 +296,12 @@ void main() {
       connection.set(ConnectionStatus.reconnecting);
       await settle();
       expectPins();
+      // Back, whoever is at the address now has to say so first.
       servers.silent.add('localhost');
       connection.set(ConnectionStatus.connected);
       await settle();
       expect(servers.asked, 3);
-      expectPins();
+      expectLoading();
 
       servers.silent.clear();
       connection.set(ConnectionStatus.reconnecting);
@@ -307,6 +310,29 @@ void main() {
       await settle();
       expect(servers.asked, 4);
       expectPins();
+    },
+  );
+
+  testWidgets(
+    'with the server away from the start, Home shows the pins of the one '
+    'last recorded at its address',
+    (tester) async {
+      final servers = ServersByHost()..silent.add('localhost');
+      final container = await _mount(
+        tester,
+        api: _DelayedApi(),
+        modules: Future.value([_module('Alpha')]),
+        servers: servers,
+        saved: {
+          'Kalinka.serverIdAt.localhost:8080': 'box-a',
+          'Kalinka.pinnedCatalogs.v1:id:box-a': _savedPin('Box pick'),
+        },
+      );
+      (container.read(connectionStateProvider.notifier) as SettableConnection)
+          .set(ConnectionStatus.reconnecting);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.byType(LoadingSpinner), findsNothing);
+      expect(find.text('Box pick'), findsOneWidget);
     },
   );
 

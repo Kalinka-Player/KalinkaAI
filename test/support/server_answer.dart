@@ -9,13 +9,22 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 
 /// The server answering as [id] at whichever address it is reached; a null
-/// [id] is a server too old to report one.
-Override serverAnswering(String? id) => serverAnswerProvider.overrideWith(
-  (ref) async => (
+/// [id] is a server too old to report one. Moves nothing kept under the
+/// address: use [ServersByHost] for that.
+Override serverAnswering(String? id) =>
+    serverAnswerProvider.overrideWith(() => _Answering(id));
+
+class _Answering extends ServerAnswerNotifier {
+  _Answering(this.id);
+
+  final String? id;
+
+  @override
+  Future<ServerAnswer> build() async => (
     server: ref.watch(connectionSettingsProvider.select((s) => s.baseUrl)),
     id: id,
-  ),
-);
+  );
+}
 
 /// Answers `/renderer/sessions` as the server at each host would.
 class ServersByHost implements HttpClientAdapter {
@@ -26,8 +35,9 @@ class ServersByHost implements HttpClientAdapter {
   /// Hosts whose server does not answer.
   final silent = <String>{};
 
-  /// Hosts whose server is older than `/renderer/sessions`.
-  final withoutRoute = <String>{};
+  /// The status a host's server answers the route with instead, such as 404
+  /// from one older than it.
+  final statuses = <String, int>{};
 
   int asked = 0;
 
@@ -56,14 +66,14 @@ class ServersByHost implements HttpClientAdapter {
         reason: '$host does not answer',
       );
     }
-    final missing = withoutRoute.contains(host);
+    final status = statuses[host];
     return ResponseBody.fromString(
       jsonEncode(
-        missing
-            ? {'detail': 'Not Found'}
+        status != null
+            ? {'detail': 'Refused'}
             : {'server_id': ?ids[host], 'sessions': []},
       ),
-      missing ? 404 : 200,
+      status ?? 200,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       },

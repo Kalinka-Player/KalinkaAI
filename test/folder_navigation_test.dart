@@ -5,8 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
+import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 
+import 'support/home_shell.dart' show SettableConnection;
 import 'support/server_answer.dart';
 
 BrowseItem _folder(String name, {bool canAdd = true, String? art}) =>
@@ -53,6 +55,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
+        connectionStateProvider.overrideWith(SettableConnection.new),
         serverAnswering('box-1'),
       ],
     );
@@ -144,6 +147,7 @@ void main() {
     final restarted = ProviderContainer(
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
+        connectionStateProvider.overrideWith(SettableConnection.new),
         serverAnswering('box-1'),
       ],
     );

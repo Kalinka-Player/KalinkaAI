@@ -54,7 +54,13 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pins = ref.watch(pinnedCatalogsProvider);
+    // Nothing here can be changed until the server has said who it is.
+    final pins =
+        ref.watch(
+          serverStorageKeyProvider.select((key) => key?.confirmed ?? false),
+        )
+        ? ref.watch(pinnedCatalogsProvider)
+        : null;
     final noSources =
         pins != null &&
         pins.isEmpty &&
