@@ -1,6 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
-import 'package:dio/dio.dart' show DioException;
+import 'package:dio/dio.dart' show Dio, DioException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -26,37 +27,99 @@ class BoxControl {
 /// old to report one.
 typedef ServerAnswer = ({Uri server, String? id});
 
-const _askAgainAfter = Duration(seconds: 10);
+/// The pause before a server that did not answer is asked again for the
+/// [attempt]th time: doubling from two seconds to a minute.
+Duration _pauseBefore(int attempt) =>
+    Duration(seconds: attempt < 5 ? 2 << attempt : 60);
 
-/// The connected server's answer to who it is. Loading while not connected,
-/// and an error while the server does not answer, asked again every
-/// [_askAgainAfter]. Either way it keeps the last answer.
-///
-/// Not retried by Riverpod, whose retries would hold [serverIdentityProvider]
-/// loading instead of null.
-final serverAnswerProvider = FutureProvider<ServerAnswer>((ref) async {
-  final server = ref.watch(connectionSettingsProvider.select((s) => s.baseUrl));
-  if (ref.watch(connectionStateProvider) != ConnectionStatus.connected) {
-    return Completer<ServerAnswer>().future;
-  }
+/// Whether [status] says the route is not there for this app, which asking
+/// again will not change: missing on a server older than it, or refused. A
+/// timeout, throttling or a server error other than 501 may pass.
+bool _routeMissing(int? status) =>
+    status == 501 ||
+    (status != null &&
+        status >= 400 &&
+        status < 500 &&
+        status != 408 &&
+        status != 429);
+
+Future<ServerAnswer> _askWhoItIs(Dio client, Uri server) async {
   try {
-    final data = (await ref.watch(httpClientProvider).get('/renderer/sessions'))
-        .data;
+    final data = (await client.get('/renderer/sessions')).data;
     final id = data is Map ? data['server_id'] : null;
     return (server: server, id: id is String && id.isNotEmpty ? id : null);
   } on DioException catch (e) {
-    // A server from before the route answers it as missing.
-    if (e.response?.statusCode case 404 || 405) {
+    if (_routeMissing(e.response?.statusCode)) {
       return (server: server, id: null);
-    }
-    // Disposed if the connection changed while asking.
-    if (ref.mounted) {
-      final again = Timer(_askAgainAfter, ref.invalidateSelf);
-      ref.onDispose(again.cancel);
     }
     rethrow;
   }
-}, retry: (_, _) => null);
+}
+
+/// The connected server's answer to who it is, asked once per connection.
+/// Loading while not connected; an error while the server does not answer,
+/// asked again with a growing pause. Only an answer changes it, so asking
+/// again rebuilds nothing that watches it.
+class ServerAnswerNotifier extends AsyncNotifier<ServerAnswer> {
+  @override
+  Future<ServerAnswer> build() async {
+    final server = ref.watch(
+      connectionSettingsProvider.select((s) => s.baseUrl),
+    );
+    final prefs = ref.read(sharedPrefsProvider);
+    // The server last recorded here owns what was kept under the address.
+    // Read before this connection's answer is recorded over it.
+    final recorded = prefs.getString(
+      _knownServerKey(ref.read(connectionSettingsProvider)),
+    );
+    if (recorded != null) {
+      _claimAddressState(prefs, server, ServerStorageKey.ofServer(recorded));
+    }
+    if (ref.watch(connectionStateProvider) != ConnectionStatus.connected) {
+      return Completer<ServerAnswer>().future;
+    }
+    final client = ref.watch(httpClientProvider);
+    var current = true;
+    Timer? again;
+    ref.onDispose(() {
+      current = false;
+      again?.cancel();
+    });
+
+    Future<ServerAnswer> ask() async {
+      final answer = await _askWhoItIs(client, server);
+      if (recorded == null) {
+        _claimAddressState(prefs, server, ServerStorageKey.of(answer));
+      }
+      return answer;
+    }
+
+    void askAgain(int attempt) {
+      again = Timer(_pauseBefore(attempt), () async {
+        try {
+          final answer = await ask();
+          if (current) state = AsyncData(answer);
+        } on DioException {
+          if (current) askAgain(attempt + 1);
+        }
+      });
+    }
+
+    try {
+      return await ask();
+    } on DioException {
+      if (current) askAgain(0);
+      rethrow;
+    }
+  }
+}
+
+final serverAnswerProvider =
+    AsyncNotifierProvider<ServerAnswerNotifier, ServerAnswer>(
+      ServerAnswerNotifier.new,
+      // Riverpod's own retries would hold serverIdentityProvider loading.
+      retry: (_, _) => null,
+    );
 
 /// The connected server's identity, as the server itself reports it; null
 /// whenever it is not connected.
@@ -74,60 +137,144 @@ final serverIdentityProvider = FutureProvider<String?>((ref) async {
 /// Where the app keeps what belongs to one server: under its id, or its
 /// address for a server too old to report one. Every per-server key is here.
 class ServerStorageKey {
+  /// The folder each page of folders was left on, by server and page.
+  static const folderPaths = 'Kalinka.folderPaths';
+
+  /// Every server's catalog filters, as kept before they were kept per server.
+  static const everyServersCatalogFilters = 'Kalinka.catalogFilters';
+
   final String scope;
 
-  const ServerStorageKey._(this.scope);
+  /// Said by the server on this connection. Nothing is saved under a key that
+  /// is not: the server now at the address may be another.
+  final bool confirmed;
 
-  ServerStorageKey.ofServer(String id) : this._('id:$id');
+  const ServerStorageKey._(this.scope, {this.confirmed = false});
+
+  ServerStorageKey.ofServer(String id, {bool confirmed = false})
+    : this._('id:$id', confirmed: confirmed);
 
   /// The scope pins were kept under before servers were told apart by id.
-  ServerStorageKey.ofAddress(Uri baseUrl) : this._('$baseUrl');
+  ServerStorageKey.ofAddress(Uri baseUrl, {bool confirmed = false})
+    : this._('$baseUrl', confirmed: confirmed);
 
-  bool get isServerId => scope.startsWith('id:');
+  factory ServerStorageKey.of(ServerAnswer answer, {bool confirmed = false}) {
+    final id = answer.id;
+    return id == null
+        ? ServerStorageKey.ofAddress(answer.server, confirmed: confirmed)
+        : ServerStorageKey.ofServer(id, confirmed: confirmed);
+  }
 
   String get pinnedCatalogs => 'Kalinka.pinnedCatalogs.v1:$scope';
 
   String get catalogFilters => 'Kalinka.catalogFilters:$scope';
 
-  /// [pageId]'s entry in the map of folders pages were left on.
+  /// [pageId]'s entry in [folderPaths].
   String folderPath(String pageId) => '$scope $pageId';
 
   @override
   bool operator ==(Object other) =>
-      other is ServerStorageKey && other.scope == scope;
+      other is ServerStorageKey &&
+      other.scope == scope &&
+      other.confirmed == confirmed;
 
   @override
-  int get hashCode => scope.hashCode;
+  int get hashCode => Object.hash(scope, confirmed);
 
   @override
-  String toString() => 'ServerStorageKey($scope)';
+  String toString() =>
+      'ServerStorageKey($scope${confirmed ? '' : ', unconfirmed'})';
 }
 
-/// The string kept under [from], moved to [to]; null when there is none.
-String? moveStoredString(
+/// Moves what was kept under [address] before servers were told apart by id
+/// to [owner], with the catalog filters once kept for every server. Nothing
+/// [owner] has already is replaced.
+void _claimAddressState(
+  SharedPreferences prefs,
+  Uri address,
+  ServerStorageKey owner,
+) {
+  final from = ServerStorageKey.ofAddress(address);
+  if (owner.scope != from.scope) {
+    if (prefs.getString(owner.pinnedCatalogs) == null) {
+      _moveString(prefs, from: from.pinnedCatalogs, to: owner.pinnedCatalogs);
+    }
+    _moveFolderPaths(prefs, from: from.scope, to: owner.scope);
+  }
+  if (prefs.getString(owner.catalogFilters) == null) {
+    _moveString(
+      prefs,
+      from: ServerStorageKey.everyServersCatalogFilters,
+      to: owner.catalogFilters,
+    );
+  }
+}
+
+void _moveString(
   SharedPreferences prefs, {
   required String from,
   required String to,
 }) {
   final value = prefs.getString(from);
-  if (value == null) return null;
+  if (value == null) return;
   prefs.setString(to, value).then((saved) {
     if (saved) prefs.remove(from);
   }, onError: (Object _) {});
-  return value;
 }
 
-/// The connected server's [ServerStorageKey]; null until the server at this
-/// address has answered. Kept through a reconnect to the same address, so
-/// Home does not blank each time the server is away.
+void _moveFolderPaths(
+  SharedPreferences prefs, {
+  required String from,
+  required String to,
+}) {
+  final json = prefs.getString(ServerStorageKey.folderPaths);
+  // Most connections have nothing to move, and need not decode the map.
+  if (json == null || !json.contains('"$from ')) return;
+  final Map<String, dynamic> paths;
+  try {
+    paths = Map<String, dynamic>.from(jsonDecode(json) as Map);
+  } catch (_) {
+    return;
+  }
+  for (final key in [...paths.keys]) {
+    if (!key.startsWith('$from ')) continue;
+    final path = paths.remove(key);
+    paths.putIfAbsent('$to ${key.substring(from.length + 1)}', () => path);
+  }
+  prefs.setString(ServerStorageKey.folderPaths, jsonEncode(paths)).ignore();
+}
+
+/// The connected server's [ServerStorageKey]. While connected, only this
+/// connection's answer gives one, as another server may have taken the
+/// address. While away, the last server confirmed at the address keeps its
+/// key, unconfirmed; failing that, once a connection has failed, the one last
+/// recorded there.
 final serverStorageKeyProvider = Provider<ServerStorageKey?>((ref) {
   final server = ref.watch(connectionSettingsProvider.select((s) => s.baseUrl));
-  final answer = ref.watch(serverAnswerProvider).value;
-  if (answer == null || answer.server != server) return null;
-  final id = answer.id;
-  return id == null
-      ? ServerStorageKey.ofAddress(server)
-      : ServerStorageKey.ofServer(id);
+  final connection = ref.watch(connectionStateProvider);
+  final answer = ref.watch(serverAnswerProvider);
+  switch (connection) {
+    case ConnectionStatus.none:
+      return null;
+    case ConnectionStatus.connected:
+      return switch (answer) {
+        AsyncData(:final value) when value.server == server =>
+          ServerStorageKey.of(value, confirmed: true),
+        _ => null,
+      };
+    case _:
+      final last = answer.value;
+      if (last != null && last.server == server) {
+        return ServerStorageKey.of(last);
+      }
+      // Not while a first connection is under way: its answer is usually
+      // moments off, and the pins would blink out as it connects.
+      if (connection == ConnectionStatus.connecting) return null;
+      final recorded = ref
+          .read(sharedPrefsProvider)
+          .getString(_knownServerKey(ref.read(connectionSettingsProvider)));
+      return recorded == null ? null : ServerStorageKey.ofServer(recorded);
+  }
 });
 
 /// The server last seen at [settings]' address, so its box is still known

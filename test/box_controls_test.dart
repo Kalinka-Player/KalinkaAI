@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,6 +24,8 @@ import 'package:kalinka/widgets/escalation_card.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/server_answer.dart';
+
 class _FakeBox implements SupervisorApi {
   _FakeBox({
     this.answer,
@@ -35,15 +38,19 @@ class _FakeBox implements SupervisorApi {
   String? state;
   BoxActionException? refusal;
   final runs = <(BoxAction, String)>[];
+  int probes = 0;
 
   @override
   Future<SupervisorInfo?> info() async => answer;
 
   @override
-  Future<({SupervisorReach reach, SupervisorInfo? info})> probe() async => (
-    reach: answer == null ? noAnswer : SupervisorReach.answered,
-    info: answer,
-  );
+  Future<({SupervisorReach reach, SupervisorInfo? info})> probe() async {
+    probes++;
+    return (
+      reach: answer == null ? noAnswer : SupervisorReach.answered,
+      info: answer,
+    );
+  }
 
   @override
   Future<String?> serverState() async => state;
@@ -386,6 +393,46 @@ void main() {
       final (container, adapter) = await make(ConnectionStatus.offline);
       expect(await container.read(serverIdentityProvider.future), isNull);
       expect(adapter.requests, isEmpty);
+    });
+
+    test('asking a silent server again does not look for its box again', () {
+      fakeAsync((async) {
+        // Known here before, so its box is looked for while it is silent.
+        SharedPreferences.setMockInitialValues({
+          ..._address,
+          _knownKey: 'box-1',
+        });
+        late SharedPreferences prefs;
+        SharedPreferences.getInstance().then((value) => prefs = value);
+        async.flushMicrotasks();
+        final servers = ServersByHost()..silent.add('kalinka.local');
+        final box = _FakeBox(answer: _info());
+        final container = ProviderContainer(
+          overrides: [
+            sharedPrefsProvider.overrideWithValue(prefs),
+            supervisorApiProvider.overrideWithValue(box),
+            demoModeProvider.overrideWithValue(false),
+            connectionStateProvider.overrideWith(
+              () => _Connection(ConnectionStatus.connected),
+            ),
+            servers.client,
+          ],
+        )..listen(boxProbeProvider, (_, _) {});
+        async.elapse(const Duration(seconds: 30));
+        expect(servers.asked, 5);
+        expect(box.probes, 1);
+
+        servers.ids['kalinka.local'] = 'box-1';
+        servers.silent.clear();
+        async.elapse(const Duration(seconds: 40));
+        expect(servers.asked, 6);
+        expect(box.probes, 2);
+        expect(
+          container.read(boxProbeProvider).value?.control?.serverId,
+          'box-1',
+        );
+        container.dispose();
+      });
     });
   });
 

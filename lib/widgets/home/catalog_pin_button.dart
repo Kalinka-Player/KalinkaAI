@@ -49,6 +49,9 @@ class CatalogPinButton extends ConsumerWidget {
     );
     final pins = ref.watch(pinnedCatalogsProvider);
     final pinned = pins?.any((pin) => pin.key == candidate.key) ?? false;
+    final confirmed = ref.watch(
+      serverStorageKeyProvider.select((key) => key?.confirmed ?? false),
+    );
     Future<void> toggle() async {
       final server = ref.read(serverStorageKeyProvider);
       final notifier = ref.read(pinnedCatalogsProvider.notifier);
@@ -166,7 +169,7 @@ class CatalogPinButton extends ConsumerWidget {
       isSelected: pinned,
       icon: const Icon(CupertinoIcons.pin),
       selectedIcon: const Icon(CupertinoIcons.pin_slash),
-      onPressed: pins == null ? null : toggle,
+      onPressed: pins == null || !confirmed ? null : toggle,
     );
   }
 }

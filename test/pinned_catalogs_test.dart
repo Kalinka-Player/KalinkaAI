@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart' show DioException;
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,6 +40,7 @@ PinnedCatalog pin(
 );
 
 const _firstAddressKey = 'Kalinka.pinnedCatalogs.v1:http://first:8000';
+const _firstRecordKey = 'Kalinka.serverIdAt.first:8000';
 
 void main() {
   late SharedPreferences prefs;
@@ -265,18 +267,37 @@ void main() {
     );
   });
 
-  test(
-    'a server from before the route keeps its pins under its address',
-    () async {
-      servers.withoutRoute.add('first');
-      await prefs.setString(
-        _firstAddressKey,
-        jsonEncode([pin('one').toJson()]),
-      );
-      expect((await known(container)).single.page.provider, 'one');
-      expect(prefs.getString(_firstAddressKey), isNotNull);
-    },
-  );
+  for (final status in [403, 404, 405, 501]) {
+    test(
+      'a server refusing the route with $status keeps its pins under its address',
+      () async {
+        servers.statuses['first'] = status;
+        await prefs.setString(
+          _firstAddressKey,
+          jsonEncode([pin('one').toJson()]),
+        );
+        expect((await known(container)).single.page.provider, 'one');
+        expect(prefs.getString(_firstAddressKey), isNotNull);
+      },
+    );
+  }
+
+  test('a server error is asked again, less often each time', () {
+    fakeAsync((async) {
+      servers.statuses['first'] = 503;
+      final asking = open()..listen(pinnedCatalogsProvider, (_, _) {});
+      for (final (at, asked) in [(0, 1), (2, 2), (6, 3), (14, 4)]) {
+        async.elapse(Duration(seconds: at) - async.elapsed);
+        async.elapse(const Duration(milliseconds: 1));
+        expect(servers.asked, asked, reason: 'at ${at}s');
+        expect(asking.read(pinnedCatalogsProvider), isNull);
+      }
+      servers.statuses.remove('first');
+      async.elapse(const Duration(seconds: 16));
+      expect(servers.asked, 5);
+      expect(asking.read(pinnedCatalogsProvider), isEmpty);
+    });
+  });
 
   test(
     'a server that does not answer, or is not connected, shows no pins',
@@ -302,30 +323,113 @@ void main() {
   );
 
   test(
-    'a reconnect to the same address keeps the pins, whether or not it answers',
+    'away, the pins stay unchanged; back, none show until the server answers',
     () async {
-      final shown = <List<PinnedCatalog>?>[];
-      container.listen(
-        pinnedCatalogsProvider,
-        (_, next) => shown.add(next),
-        fireImmediately: true,
-      );
       await known(container);
-      await container.read(pinnedCatalogsProvider.notifier).pin(pin('one'));
+      final notifier = container.read(pinnedCatalogsProvider.notifier);
+      await notifier.pin(pin('one'));
       final connection = container.read(
         connectionStateProvider.notifier,
       ) as SettableConnection;
       connection.set(ConnectionStatus.reconnecting);
       expect(container.read(pinnedCatalogsProvider), hasLength(1));
+      await expectLater(notifier.pin(pin('two')), throwsStateError);
+
       servers.silent.add('first');
-      await reconnect(container);
-      expect(container.read(pinnedCatalogsProvider), hasLength(1));
+      connection.set(ConnectionStatus.connected);
+      expect(container.read(pinnedCatalogsProvider), isNull);
+      await expectLater(
+        container.read(serverAnswerProvider.future),
+        throwsA(isA<DioException>()),
+      );
+      expect(container.read(pinnedCatalogsProvider), isNull);
+
       servers.silent.remove('first');
       await reconnect(container);
       expect(container.read(pinnedCatalogsProvider), hasLength(1));
-      expect(shown.map((pins) => pins?.length), [null, 0, 1]);
     },
   );
+
+  test(
+    'another server at the address shows no pins until it answers',
+    () async {
+      await known(container);
+      await container.read(pinnedCatalogsProvider.notifier).pin(pin('one'));
+      servers
+        ..ids['first'] = 'box-c'
+        ..silent.add('first');
+      await reconnect(container);
+      expect(container.read(pinnedCatalogsProvider), isNull);
+      await expectLater(
+        container.read(pinnedCatalogsProvider.notifier).pin(pin('two')),
+        throwsStateError,
+      );
+
+      servers.silent.clear();
+      await reconnect(container);
+      expect(container.read(pinnedCatalogsProvider), isEmpty);
+      expect(
+        jsonDecode(prefs.getString('Kalinka.pinnedCatalogs.v1:id:box-a')!),
+        hasLength(1),
+      );
+    },
+  );
+
+  for (final recorded in ['box-a', null]) {
+    test(
+      'pins kept under the address go to the server answering there when '
+      '${recorded == null ? 'none was recorded' : 'it was the one recorded'}',
+      () async {
+        await prefs.setString(
+          _firstAddressKey,
+          jsonEncode([pin('one').toJson()]),
+        );
+        if (recorded != null) {
+          await prefs.setString(_firstRecordKey, recorded);
+        }
+        expect((await known(container)).single.page.provider, 'one');
+      },
+    );
+  }
+
+  test('pins kept under the address go to the server recorded there, not to '
+      'another that answers', () async {
+    await prefs.setString(_firstAddressKey, jsonEncode([pin('one').toJson()]));
+    await prefs.setString(_firstRecordKey, 'box-x');
+    container.read(rememberServerIdentityProvider);
+    expect(await known(container), isEmpty);
+    await Future<void>.delayed(Duration.zero);
+    expect(prefs.getString(_firstAddressKey), isNull);
+    expect(prefs.getString('Kalinka.pinnedCatalogs.v1:id:box-x'), isNotNull);
+
+    // The record now names box-a, which still does not get them.
+    expect(prefs.getString(_firstRecordKey), 'box-a');
+    await reconnect(container);
+    expect(container.read(pinnedCatalogsProvider), isEmpty);
+  });
+
+  test('with the server away from the start, the pins of the one last recorded '
+      'at the address show, unchanged until it answers', () async {
+    await prefs.setString(_firstAddressKey, jsonEncode([pin('one').toJson()]));
+    await prefs.setString(_firstRecordKey, 'box-a');
+    servers.silent.add('first');
+    final connection =
+        container.read(connectionStateProvider.notifier) as SettableConnection;
+    connection.set(ConnectionStatus.connecting);
+    expect(container.read(pinnedCatalogsProvider), isNull);
+
+    connection.set(ConnectionStatus.reconnecting);
+    expect(container.read(pinnedCatalogsProvider)!.single.page.provider, 'one');
+    final notifier = container.read(pinnedCatalogsProvider.notifier);
+    await expectLater(notifier.pin(pin('two')), throwsStateError);
+    connection.set(ConnectionStatus.offline);
+    expect(container.read(pinnedCatalogsProvider), hasLength(1));
+
+    servers.silent.clear();
+    await reconnect(container);
+    await notifier.pin(pin('two'));
+    expect(container.read(pinnedCatalogsProvider), hasLength(2));
+  });
 
   test('nothing is pinned before the server is known', () async {
     expect(container.read(pinnedCatalogsProvider), isNull);

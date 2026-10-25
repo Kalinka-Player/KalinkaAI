@@ -341,6 +341,10 @@ const _settle = Duration(milliseconds: 900);
 /// Where the catalog filters of the server `makeContainer` answers as live.
 const _boxFiltersKey = 'Kalinka.catalogFilters:id:box-1';
 
+/// The server `makeContainer` answers as, asked for real so that what was
+/// kept under its address moves.
+ServersByHost _boxOne() => ServersByHost()..ids['localhost'] = 'box-1';
+
 void main() {
   late SharedPreferences prefs;
 
@@ -1246,7 +1250,7 @@ void main() {
           'a': const BrowseFilterQuery(genreIds: ['jazz']).toJson(),
         }),
       );
-      final container = makeContainer(_FakeApi());
+      final container = makeContainer(_FakeApi(), servers: _boxOne());
       await container.read(serverAnswerProvider.future);
       container
           .read(searchSessionProvider.notifier)
@@ -1259,9 +1263,49 @@ void main() {
       expect(prefs.getString(_boxFiltersKey), isNotNull);
     });
 
+    test(
+      'a folder and filters kept under the address go to the server recorded '
+      'there, not to another that answers',
+      () async {
+        const library = 'kalinka:localfiles:catalog:files';
+        await prefs.setString('Kalinka.serverIdAt.localhost:8080', 'box-x');
+        await prefs.setString(
+          'Kalinka.folderPaths',
+          jsonEncode({
+            'http://localhost:8080 $library': [
+              {'id': 'jazz', 'title': 'Jazz'},
+            ],
+          }),
+        );
+        await prefs.setString(
+          'Kalinka.catalogFilters',
+          jsonEncode({
+            library: const BrowseFilterQuery(genreIds: ['jazz']).toJson(),
+          }),
+        );
+        final container = makeContainer(_FakeApi(), servers: _boxOne());
+        await container.read(serverAnswerProvider.future);
+        container
+            .read(searchSessionProvider.notifier)
+            .openCatalog(
+              id: library,
+              title: 'Library',
+              filters: const [_genreField],
+              folderLayout: true,
+            );
+        final shown = container.read(searchSessionProvider);
+        expect(shown.folderPath, isEmpty);
+        expect(shown.catalogFilter.isEmpty, isTrue);
+        await Future<void>.delayed(Duration.zero);
+        expect(prefs.getString('Kalinka.folderPaths'), contains('id:box-x'));
+        expect(prefs.getString('Kalinka.catalogFilters:id:box-x'), isNotNull);
+        expect(prefs.getString(_boxFiltersKey), isNull);
+      },
+    );
+
     test('a folder kept under the address goes to the server there', () async {
       const library = 'kalinka:localfiles:catalog:files';
-      final container = makeContainer(_FakeApi());
+      final container = makeContainer(_FakeApi(), servers: _boxOne());
       final address = container.read(connectionSettingsProvider).baseUrl;
       await prefs.setString(
         'Kalinka.folderPaths',
