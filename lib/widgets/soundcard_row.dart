@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/presentation_schema.dart' show OptionSpec;
 import '../providers/soundcard_provider.dart';
 import '../providers/supervisor_api.dart';
-import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'kalinka_button.dart';
@@ -16,8 +15,8 @@ import 'settings_controls/settings_card.dart';
 /// Sets a box up for the card the person picked and confirmed.
 typedef SetUpSoundcard = void Function(SoundcardBox box, SoundcardOption card);
 
-/// A host that runs sound card changes itself, as the setup wizard does,
-/// rather than leaving them to the row that was tapped.
+/// Runs the change a row's picker confirmed. Only a page that offers the ways
+/// on for a box that is not back may host one, as nothing else ends the wait.
 class SoundcardHost {
   final SetUpSoundcard setUp;
 
@@ -32,19 +31,13 @@ class SoundcardHost {
 class SoundcardRow extends ConsumerWidget {
   final SoundcardBox box;
   final SoundcardReport report;
-
-  /// Set when shown in a pane of the tablet layout.
-  final bool inPanel;
-
-  /// Runs the change, when the row is hosted by one that does.
-  final SoundcardHost? host;
+  final SoundcardHost host;
 
   const SoundcardRow({
     super.key,
     required this.box,
     required this.report,
-    this.inPanel = false,
-    this.host,
+    required this.host,
   });
 
   @override
@@ -55,15 +48,13 @@ class SoundcardRow extends ConsumerWidget {
       sublabel: switch (step) {
         SoundcardStep.applying => 'Setting the sound card up…',
         SoundcardStep.restarting => 'Restarting to switch the card on…',
+        SoundcardStep.notBack => 'Not back from its restart yet',
         SoundcardStep.switching => 'Switching the output to the card…',
         SoundcardStep.idle => soundcardSummary(report),
       },
       onTap: () {
-        if (step != SoundcardStep.idle) return;
-        if (host case final host?) {
+        if (step == SoundcardStep.idle) {
           chooseSoundcardFor(context, box, report, host);
-        } else {
-          chooseSoundcard(context, ref, box, report, inPanel: inPanel);
         }
       },
     );
@@ -94,8 +85,8 @@ String soundcardSummary(SoundcardReport report) {
 String? soundcardTrouble(SoundcardReport report) {
   if (report.activePcm != null) return null;
   if (report.option(report.configured) case final configured?) {
-    return '${configured.label} is set up but did not come up. Check that '
-        'the HAT sits firmly on the pins, or choose another card.';
+    return '${configured.label} is set up but did not come up. '
+        '${soundcardAdvice(configured)}';
   }
   final suggested = report.suggested;
   if (suggested.isEmpty) return null;
@@ -104,26 +95,6 @@ String? soundcardTrouble(SoundcardReport report) {
       : null;
   return '${found ?? 'A DAC HAT'} was found but is not set up, so nothing '
       'plays through it yet.';
-}
-
-/// Lets the person pick a card for [box], confirms it, and applies it. The
-/// card already set up needs nothing; a refusal is reported in a toast.
-Future<void> chooseSoundcard(
-  BuildContext context,
-  WidgetRef ref,
-  SoundcardBox box,
-  SoundcardReport report, {
-  bool inPanel = false,
-}) async {
-  final card = await pickSoundcard(context, box, report);
-  if (card == null) return;
-  try {
-    await ref.read(soundcardChangeProvider(box).notifier).apply(card);
-  } on BoxActionException catch (e) {
-    ref
-        .read(toastProvider.notifier)
-        .show(e.message, isError: true, inPanel: inPanel);
-  }
 }
 
 /// Lets the person pick and confirm a card for [box], for [host] to set up.
@@ -285,8 +256,13 @@ class _ConfirmSoundcard extends StatelessWidget {
 /// supervisor can set up its sound card.
 class RendererSoundcardSection extends ConsumerWidget {
   final String rendererId;
+  final SoundcardHost host;
 
-  const RendererSoundcardSection({super.key, required this.rendererId});
+  const RendererSoundcardSection({
+    super.key,
+    required this.rendererId,
+    required this.host,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -306,7 +282,7 @@ class RendererSoundcardSection extends ConsumerWidget {
           ),
         ),
         SettingsCard(
-          children: [SoundcardRow(box: box, report: report)],
+          children: [SoundcardRow(box: box, report: report, host: host)],
         ),
       ],
     );

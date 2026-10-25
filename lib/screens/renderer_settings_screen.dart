@@ -6,6 +6,8 @@ import '../providers/renderer_provider.dart';
 import '../providers/renderer_settings_provider.dart';
 import '../providers/settings_provider.dart' show expertModeProvider;
 import '../providers/soundcard_provider.dart';
+import '../providers/supervisor_api.dart';
+import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/connection_banner.dart';
 import '../widgets/configuration_appearance.dart';
@@ -71,6 +73,51 @@ class _RendererSettingsScreenState
   RendererSettingsNotifier get _notifier =>
       ref.read(rendererSettingsProvider(widget.rendererId).notifier);
 
+  late final _soundcardHost = SoundcardHost(setUp: _setUpSoundcard);
+
+  /// The box a change from this page last set up.
+  SoundcardBox? _changing;
+
+  Future<void> _setUpSoundcard(SoundcardBox box, SoundcardOption card) {
+    _changing = box;
+    return _runSoundcardChange(
+      card,
+      ref.read(soundcardChangeProvider(box).notifier).apply,
+    );
+  }
+
+  /// Closed during the apply, the page would be gone by the time the box
+  /// restarts, leaving nothing to end the wait if it does not come back.
+  bool _mayClose(SoundcardBox? restarting) {
+    final changing = _changing;
+    return restarting == null &&
+        (changing == null ||
+            ref.read(soundcardChangeProvider(changing)) !=
+                SoundcardStep.applying);
+  }
+
+  Future<void> _keepWaiting(SoundcardBox box, SoundcardOption card) =>
+      _runSoundcardChange(
+        card,
+        ref.read(soundcardChangeProvider(box).notifier).keepWaiting,
+      );
+
+  /// The change tells in toasts how it went once the box took the card; this
+  /// covers it failing before then, or outright.
+  Future<void> _runSoundcardChange(
+    SoundcardOption card,
+    Future<SoundcardOutcome> Function(SoundcardOption card) run,
+  ) async {
+    final toasts = ref.read(toastProvider.notifier);
+    try {
+      await run(card);
+    } on BoxActionException catch (e) {
+      toasts.show(e.message, isError: true);
+    } catch (e) {
+      toasts.show('Could not set up ${card.label}: $e', isError: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(rendererSettingsProvider(widget.rendererId));
@@ -106,19 +153,25 @@ class _RendererSettingsScreenState
             boxes.where((b) => b.rendererId == widget.rendererId).firstOrNull,
       ),
     );
-    final card = box == null
+    final change = box == null
         ? null
-        : ref.read(soundcardChangeProvider(box).notifier).card;
+        : ref.read(soundcardChangeProvider(box).notifier);
+    final card = change?.card;
 
     return SlideInPanel(
       onClose: widget.onClose,
+      // While the box is down, the overlay is all that says why the app waits.
+      beforeClose: () async => _mayClose(box),
       onCoverageChanged: widget.onCoverageChanged,
       overlays: [
-        if (box != null && card != null)
+        if (box != null && change != null && card != null)
           SoundcardRestartOverlay(
             box: box,
             card: card,
             afterwards: 'The output comes back by itself.',
+            onKeepWaiting: () => _keepWaiting(box, card),
+            onContinue: change.stopWaiting,
+            continueLabel: 'Continue',
           ),
       ],
       // Material, not a plain Container: the page's text fields and ink need
@@ -175,7 +228,10 @@ class _RendererSettingsScreenState
         padding: const EdgeInsets.only(bottom: 32),
         children: [
           if (state.error != null) _ErrorNote(message: state.error!),
-          RendererSoundcardSection(rendererId: widget.rendererId),
+          RendererSoundcardSection(
+            rendererId: widget.rendererId,
+            host: _soundcardHost,
+          ),
           for (final section in state.sections)
             SchemaSectionRenderer(
               key: ValueKey(section.id),

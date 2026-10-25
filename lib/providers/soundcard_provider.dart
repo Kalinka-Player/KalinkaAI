@@ -145,10 +145,23 @@ final soundcardPollProvider = Provider<Duration>(
 /// Polls of the box, about five minutes, before a restart counts as failed.
 const _restartPolls = 100;
 
+/// Polls of a box that is back, about half a minute, for its new card. The
+/// firmware sets a card up at boot, so one still missing by then is not
+/// coming.
+const _cardPolls = 10;
+
 /// Polls of the server, about two minutes, for the renderer to come back.
 const _rendererPolls = 40;
 
-enum SoundcardStep { idle, applying, restarting, switching }
+enum SoundcardStep {
+  idle,
+  applying,
+  restarting,
+
+  /// The box did not come back in time, and still counts as restarting.
+  notBack,
+  switching,
+}
 
 /// How a change of sound card ended.
 enum SoundcardOutcome {
@@ -164,9 +177,16 @@ enum SoundcardOutcome {
   /// The box answers, but the card did not come up.
   silent,
 
-  /// The box did not come back from its restart in time.
+  /// The box did not come back from its restart in time. The change stays at
+  /// [SoundcardStep.notBack] until [SoundcardChange.keepWaiting] or
+  /// [SoundcardChange.stopWaiting].
   notBack,
 }
+
+/// What to try when [card] is set up but did not come up.
+String soundcardAdvice(SoundcardOption card) => card.kind == 'onboard'
+    ? 'Choose another card.'
+    : 'Check that the HAT sits firmly on the pins, or choose another card.';
 
 /// Sets [box] up for a card and, when the box restarts to load it, follows it
 /// back and points its renderer at the new card. Kept past the page that
@@ -178,10 +198,17 @@ class SoundcardChange extends Notifier<SoundcardStep> {
 
   @override
   SoundcardStep build() {
+    // Held while the box is away; the step moves on once it is back.
     listenSelf(
       (_, step) => ref
           .read(restartingBoxesProvider.notifier)
-          .mark(box, restarting: _restarted && step != SoundcardStep.idle),
+          .mark(
+            box,
+            restarting:
+                _restarted &&
+                (step == SoundcardStep.restarting ||
+                    step == SoundcardStep.notBack),
+          ),
     );
     return SoundcardStep.idle;
   }
@@ -227,6 +254,13 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     return _follow(card, wentDown: true);
   }
 
+  /// Gives up on a box that did not come back in time, so the app no longer
+  /// holds for it. What is known of its card is kept: the box cannot be asked
+  /// again while it is down.
+  void stopWaiting() {
+    if (state == SoundcardStep.notBack) state = SoundcardStep.idle;
+  }
+
   Future<SoundcardOutcome> _follow(
     SoundcardOption card, {
     required bool wentDown,
@@ -246,20 +280,23 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     SoundcardOption card, {
     required bool wentDown,
   }) async {
-    final report = await _backAfterRestart(
-      waitForCard: card.kind != 'none',
-      wentDown: wentDown,
-    );
-    if (!ref.mounted) return SoundcardOutcome.notBack;
-    if (report == null) {
-      _finish(
-        'The ${box.noun} has not come back after five minutes. Check that it '
-        'has power and a network connection.',
-        isError: true,
-      );
+    if (!await _backAfterRestart(wentDown: wentDown)) {
+      if (ref.mounted) {
+        state = SoundcardStep.notBack;
+        _toast(
+          'The ${box.noun} has not come back after five minutes. Check that '
+          'it has power and a network connection.',
+          isError: true,
+        );
+      }
       return SoundcardOutcome.notBack;
     }
+    // The server went down with its own box, so the app holds until it is
+    // back on the server too.
     if (box.hostsServer) await _reconnect();
+    if (!ref.mounted) return SoundcardOutcome.notBack;
+    state = SoundcardStep.switching;
+    final report = await _cardAfterRestart(waitForCard: card.kind != 'none');
     if (!ref.mounted) return SoundcardOutcome.notBack;
     return _settle(card, report, restarted: true);
   }
@@ -296,12 +333,12 @@ class SoundcardChange extends Notifier<SoundcardStep> {
       return SoundcardOutcome.noHat;
     }
     if (pcm == null) {
+      final advice = soundcardAdvice(card);
       _finish(
         restarted
             ? 'The ${box.noun} is back, but the sound card did not come up. '
-                  'Check that the HAT sits firmly on the pins.'
-            : '${card.label} is set up, but did not come up. Check that the '
-                  'HAT sits firmly on the pins.',
+                  '$advice'
+            : '${card.label} is set up, but did not come up. $advice',
         isError: true,
         reloadSettings: restarted,
       );
@@ -325,24 +362,34 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     return SoundcardOutcome.playing;
   }
 
-  /// The box's report once it has gone down, unless [wentDown] says it was
-  /// seen down already, and answered again with its new card up, or with
-  /// none when [waitForCard] is false; null if it never came back.
-  Future<SoundcardReport?> _backAfterRestart({
-    required bool waitForCard,
-    required bool wentDown,
-  }) async {
+  /// Whether the box answered again once it had gone down, unless [wentDown]
+  /// says it was seen down already.
+  Future<bool> _backAfterRestart({required bool wentDown}) async {
     var down = wentDown;
-    SoundcardReport? last;
     for (var i = 0; i < _restartPolls; i++) {
       await Future<void>.delayed(ref.read(soundcardPollProvider));
-      if (!ref.mounted) return null;
-      if (await box.api.info() == null) {
+      if (!ref.mounted) return false;
+      final info = await box.api.info();
+      if (!ref.mounted) return false;
+      if (info == null) {
         down = true;
-        continue;
+      } else if (down) {
+        return true;
       }
-      if (!down) continue;
-      last = await box.api.soundcard();
+    }
+    return false;
+  }
+
+  /// The report of a box that is back, with its new card up, or at once when
+  /// [waitForCard] is false; the last one if the card does not come up.
+  Future<SoundcardReport?> _cardAfterRestart({
+    required bool waitForCard,
+  }) async {
+    SoundcardReport? last;
+    for (var i = 0; i < _cardPolls; i++) {
+      if (i > 0) await Future<void>.delayed(ref.read(soundcardPollProvider));
+      if (!ref.mounted) return last;
+      last = await box.api.soundcard() ?? last;
       if (last != null && (!waitForCard || last.activePcm != null)) return last;
     }
     return last;

@@ -228,13 +228,27 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (_soundcardRun != null) return;
     setState(() => _soundcardRun = (box: box, card: card, notBack: false));
     await _saveProgress();
-    final change = ref.read(soundcardChangeProvider(box).notifier);
+    await _followSoundcard(
+      card,
+      ref.read(soundcardChangeProvider(box).notifier).apply,
+    );
+  }
+
+  /// A change that fails ends the run, or the step stays held for it.
+  Future<void> _followSoundcard(
+    SoundcardOption card,
+    Future<SoundcardOutcome> Function(SoundcardOption card) run,
+  ) async {
+    final toasts = ref.read(toastProvider.notifier);
     try {
-      _settleSoundcard(await change.apply(card));
+      _settleSoundcard(await run(card));
+      return;
     } on BoxActionException catch (e) {
-      ref.read(toastProvider.notifier).show(e.message, isError: true);
-      await _endSoundcardRun();
+      toasts.show(e.message, isError: true);
+    } catch (e) {
+      toasts.show('Could not set up ${card.label}: $e', isError: true);
     }
+    await _endSoundcardRun();
   }
 
   /// Saves what is staged and remembers the server and the step, so a run the
@@ -267,10 +281,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     setState(
       () => _soundcardRun = (box: run.box, card: run.card, notBack: false),
     );
-    _settleSoundcard(
-      await ref
-          .read(soundcardChangeProvider(run.box).notifier)
-          .keepWaiting(run.card),
+    await _followSoundcard(
+      run.card,
+      ref.read(soundcardChangeProvider(run.box).notifier).keepWaiting,
     );
   }
 
@@ -291,9 +304,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final run = _soundcardRun;
     if (!mounted || run == null) return;
     setState(() => _soundcardRun = null);
-    final restarted = ref
-        .read(soundcardChangeProvider(run.box).notifier)
-        .restarted;
+    final change = ref.read(soundcardChangeProvider(run.box).notifier)
+      ..stopWaiting();
+    final restarted = change.restarted;
     await ref.read(oobeResumeProvider.notifier).forget();
     if (!mounted || !restarted) return;
     unawaited(ref.read(rendererListProvider.notifier).refresh());
@@ -458,7 +471,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 child: SoundcardRestartOverlay(
                   box: run.box,
                   card: run.card,
-                  notBack: run.notBack,
                   onKeepWaiting: _keepWaiting,
                   onContinue: _endSoundcardRun,
                 ),
