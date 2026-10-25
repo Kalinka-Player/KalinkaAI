@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart' show DioException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'connection_settings_provider.dart';
 import 'connection_state_provider.dart';
@@ -48,8 +49,11 @@ final serverAnswerProvider = FutureProvider<ServerAnswer>((ref) async {
     if (e.response?.statusCode case 404 || 405) {
       return (server: server, id: null);
     }
-    final again = Timer(_askAgainAfter, ref.invalidateSelf);
-    ref.onDispose(again.cancel);
+    // Disposed if the connection changed while asking.
+    if (ref.mounted) {
+      final again = Timer(_askAgainAfter, ref.invalidateSelf);
+      ref.onDispose(again.cancel);
+    }
     rethrow;
   }
 }, retry: (_, _) => null);
@@ -97,6 +101,20 @@ class ServerStorageKey {
 
   @override
   String toString() => 'ServerStorageKey($scope)';
+}
+
+/// The string kept under [from], moved to [to]; null when there is none.
+String? moveStoredString(
+  SharedPreferences prefs, {
+  required String from,
+  required String to,
+}) {
+  final value = prefs.getString(from);
+  if (value == null) return null;
+  prefs.setString(to, value).then((saved) {
+    if (saved) prefs.remove(from);
+  }, onError: (Object _) {});
+  return value;
 }
 
 /// The connected server's [ServerStorageKey]; null until the server at this

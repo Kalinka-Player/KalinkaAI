@@ -1259,6 +1259,36 @@ void main() {
       expect(prefs.getString(_boxFiltersKey), isNotNull);
     });
 
+    test('a folder kept under the address goes to the server there', () async {
+      const library = 'kalinka:localfiles:catalog:files';
+      final container = makeContainer(_FakeApi());
+      final address = container.read(connectionSettingsProvider).baseUrl;
+      await prefs.setString(
+        'Kalinka.folderPaths',
+        jsonEncode({
+          '$address $library': [
+            {'id': 'jazz', 'title': 'Jazz'},
+          ],
+        }),
+      );
+      await container.read(serverAnswerProvider.future);
+      container
+          .read(searchSessionProvider.notifier)
+          .openCatalog(id: library, title: 'Library', folderLayout: true);
+      expect(
+        [
+          for (final folder in container.read(searchSessionProvider).folderPath)
+            folder.title,
+        ],
+        ['Jazz'],
+      );
+      expect(prefs.getString('Kalinka.folderPaths'), contains('id:box-1'));
+      expect(
+        prefs.getString('Kalinka.folderPaths'),
+        isNot(contains('$address')),
+      );
+    });
+
     test('nothing is kept for a server not known yet', () {
       final servers = ServersByHost()..silent.add('localhost');
       final container = makeContainer(_FakeApi(), servers: servers);
