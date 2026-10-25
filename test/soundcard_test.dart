@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/renderer_config.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
@@ -17,20 +18,25 @@ import 'package:kalinka/widgets/box_section.dart';
 import 'package:kalinka/widgets/settings_controls/option_picker.dart';
 import 'package:kalinka/widgets/soundcard_row.dart';
 
+import 'support/device_wording.dart';
 import 'support/soundcard_fakes.dart';
 
 Future<ProviderContainer> _container({
   required FakeBox box,
   FakeProxy? proxy,
   Map<String, SupervisorApi> others = const {},
+  List<Override> overrides = const [],
 }) async {
   final container = ProviderContainer(
-    overrides: soundcardOverrides(
-      await boxPrefs(),
-      box: box,
-      proxy: proxy,
-      others: others,
-    ),
+    overrides: [
+      ...soundcardOverrides(
+        await boxPrefs(),
+        box: box,
+        proxy: proxy,
+        others: others,
+      ),
+      ...overrides,
+    ],
   );
   addTearDown(container.dispose);
   return container;
@@ -233,7 +239,7 @@ void main() {
           isA<BoxActionException>().having(
             (e) => e.message,
             'message',
-            'This streamer cannot be set up for that sound card.',
+            'That sound card cannot be set up here.',
           ),
         ),
       );
@@ -345,11 +351,16 @@ void main() {
       FakeBox box,
     ) async {
       final proxy = FakeProxy([rendererRow('r-local')]);
-      final container = await _container(box: box, proxy: proxy);
+      final container = await _container(
+        box: box,
+        proxy: proxy,
+        overrides: [connectionStateProvider.overrideWith(_Connected.new)],
+      );
       final soundcardBox = SoundcardBox(
         api: box,
         identity: const BoxIdentity(serverId: 'box-1'),
         rendererId: 'r-local',
+        hostsServer: true,
       );
       return (container, soundcardBox, proxy);
     }
@@ -978,6 +989,88 @@ void main() {
       expect(proxy.updates.single.$2, {outputDevicePath: _hifiberryPcm});
       expect(find.text('HiFiBerry Digi+ Pro'), findsOneWidget);
       expect(find.textContaining('not detected'), findsNothing);
+      await tester.pump(const Duration(seconds: 6));
+    });
+
+    testWidgets('a Pi that only plays is the output, not the streamer, '
+        'while its card changes', (tester) async {
+      final far = supervisorInfo(serverId: null, rendererId: 'r-far');
+      final remote = FakeBox(
+        restarts: true,
+        answers: [far],
+        reports: [
+          soundcardReport(
+            name: 'HiFiBerry Digi2 Pro',
+            suggested: ['hifiberry-digi-pro'],
+          ),
+        ],
+      )..answersAfterApply = [null, far];
+      final proxy = FakeProxy([rendererRow('r-far', address: '192.168.1.40')])
+        ..rendererConfig = _deviceConfig('HiFiBerry Digi+ Pro');
+      final container = await _container(
+        box: FakeBox(),
+        proxy: proxy,
+        others: {'192.168.1.40': remote},
+        overrides: [connectionStateProvider.overrideWith(_Connected.new)],
+      );
+      final copy = <String>{};
+      container.listen(
+        toastProvider,
+        (_, toasts) => copy.addAll([for (final t in toasts) t.message]),
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: RendererSettingsScreen(
+                rendererId: 'r-far',
+                rendererName: 'Den',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sound card'));
+      await tester.pumpAndSettle();
+      copy.addAll(shownText(tester));
+      await tester.tap(find.text('HiFiBerry Digi+ Pro or Digi2 Pro').first);
+      await tester.pumpAndSettle();
+      copy.addAll(shownText(tester));
+      final restart = remote.holdInfo = Completer<void>();
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      copy.addAll(shownText(tester));
+      remote.reports
+        ..clear()
+        ..add(
+          soundcardReport(
+            name: 'HiFiBerry Digi2 Pro',
+            configured: 'hifiberry-digi-pro',
+            pcm: _hifiberryPcm,
+          ),
+        );
+      restart.complete();
+      await tester.pumpAndSettle();
+
+      expect(proxy.updates.single.$1, 'r-far');
+      expect(
+        copy,
+        containsAll([
+          'FOUND ON THIS OUTPUT',
+          'Sets the output up for HiFiBerry Digi+ Pro or Digi2 Pro. If its '
+              'boot settings change, it restarts once, which takes a minute '
+              'or two.',
+          'Restarting the output',
+          'The output’s boot settings',
+          'The output restarts to switch HiFiBerry Digi+ Pro or Digi2 Pro on.',
+          'The output is back, playing through HiFiBerry Digi2 Pro.',
+        ]),
+      );
+      expect(copy.where((t) => t.toLowerCase().contains('streamer')), isEmpty);
+      expect(callingItBoxOrPi(copy), isEmpty);
       await tester.pump(const Duration(seconds: 6));
     });
   });

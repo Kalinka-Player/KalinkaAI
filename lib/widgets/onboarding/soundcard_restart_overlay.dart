@@ -38,14 +38,13 @@ class SoundcardRestartOverlay extends ConsumerWidget {
     final step = ref.watch(soundcardChangeProvider(box));
     final switching = step == SoundcardStep.switching;
     final hat = card.kind != 'none';
+    final noun = box.noun;
     return ProgressScrim(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            notBack
-                ? 'The streamer is not back yet'
-                : 'Restarting the streamer',
+            notBack ? 'The $noun is not back yet' : 'Restarting the $noun',
             style: KalinkaTextStyles.dialogTitle,
             textAlign: TextAlign.center,
           ),
@@ -64,12 +63,12 @@ class SoundcardRestartOverlay extends ConsumerWidget {
           const SizedBox(height: 28),
           TimelineStep(
             label: 'Setting up ${card.label}',
-            sublabel: 'The streamer’s boot settings',
+            sublabel: 'The $noun’s boot settings',
             done: true,
             active: false,
           ),
           TimelineStep(
-            label: 'Restarting the streamer',
+            label: 'Restarting the $noun',
             sublabel: 'Waiting for it to come back',
             done: switching,
             active: !switching && !notBack,

@@ -24,6 +24,11 @@ class SoundcardBox {
   /// The connected server runs on it, so goes down with it.
   final bool hostsServer;
 
+  /// What the app calls it. The streamer is the server's host, so a Pi that
+  /// only plays is called the output, or a restart would seem to stop the
+  /// server.
+  String get noun => hostsServer ? 'streamer' : 'output';
+
   const SoundcardBox({
     required this.api,
     required this.identity,
@@ -198,7 +203,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     if (!restarts) {
       return _settle(card, await box.api.soundcard(), restarted: false);
     }
-    _toast('The streamer restarts to switch ${card.label} on.');
+    _toast('The ${box.noun} restarts to switch ${card.label} on.');
     return _follow(card, wentDown: false);
   }
 
@@ -234,7 +239,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     if (!ref.mounted) return SoundcardOutcome.notBack;
     if (report == null) {
       _finish(
-        'The streamer has not come back after five minutes. Check that it '
+        'The ${box.noun} has not come back after five minutes. Check that it '
         'has power and a network connection.',
         isError: true,
       );
@@ -270,8 +275,8 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     if (card.kind == 'none') {
       _finish(
         restarted
-            ? 'The streamer is back, set up without a HAT.'
-            : 'The streamer is set up without a HAT.',
+            ? 'The ${box.noun} is back, set up without a HAT.'
+            : 'The ${box.noun} is set up without a HAT.',
         reloadSettings: restarted,
       );
       return SoundcardOutcome.noHat;
@@ -279,7 +284,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     if (pcm == null) {
       _finish(
         restarted
-            ? 'The streamer is back, but the sound card did not come up. '
+            ? 'The ${box.noun} is back, but the sound card did not come up. '
                   'Check that the HAT sits firmly on the pins.'
             : '${card.label} is set up, but did not come up. Check that the '
                   'HAT sits firmly on the pins.',
@@ -299,7 +304,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     }
     _finish(
       restarted
-          ? 'The streamer is back, playing through $name.'
+          ? 'The ${box.noun} is back, playing through $name.'
           : 'Playing through $name.',
       reloadSettings: true,
     );
