@@ -359,7 +359,8 @@ void main() {
           isA<BoxActionException>().having(
             (e) => e.message,
             'message',
-            'This box does not have that time zone. Choose one from its list.',
+            'The streamer does not have that time zone. Choose one from its '
+                'list.',
           ),
         ),
       );

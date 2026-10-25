@@ -261,7 +261,7 @@ String boxRefusal(String code, {String noun = 'streamer'}) => switch (code) {
   'soundcard_failed' =>
     'Setting that sound card up failed. Try again in a moment.',
   'unknown_timezone' =>
-    'This box does not have that time zone. Choose one from its list.',
+    'The $noun does not have that time zone. Choose one from its list.',
   _ => 'The $noun could not do that.',
 };
 
