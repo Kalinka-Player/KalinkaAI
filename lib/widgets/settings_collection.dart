@@ -10,8 +10,10 @@ import '../providers/collection_entry_binding.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
 import '../utils/json_equality.dart';
+import 'configuration_appearance.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'kalinka_button.dart';
+import 'settings_controls/inline_markdown.dart';
 import 'settings_controls/issue_notes.dart';
 import 'settings_controls/settings_binding.dart';
 import 'settings_controls/settings_enum_pills.dart';
@@ -20,15 +22,24 @@ import 'settings_controls/settings_section.dart';
 import 'settings_renderer.dart' show SchemaFieldRenderer, schemaIcon;
 import 'tap_highlight.dart';
 
-/// A collection of records as a column of cards, each opening a sheet that
-/// edits one entry with the page's own controls.
+/// A collection of records as rows of the card it sits in, each opening a
+/// sheet that edits one entry with the page's own controls, and a button to
+/// add each kind of entry.
 ///
 /// Every edit in the sheet stages the whole list at once, so the backend
 /// judges it as the user types; closing it stages the list as it was found.
 class SchemaCollectionRenderer extends StatefulWidget {
   final CollectionSpec collection;
 
-  const SchemaCollectionRenderer({super.key, required this.collection});
+  /// Names the list above its entries; off where a heading over the card
+  /// already does.
+  final bool showTitle;
+
+  const SchemaCollectionRenderer({
+    super.key,
+    required this.collection,
+    this.showTitle = true,
+  });
 
   @override
   State<SchemaCollectionRenderer> createState() =>
@@ -80,13 +91,11 @@ class _SchemaCollectionRendererState extends State<SchemaCollectionRenderer> {
     ];
   }
 
-  Future<void> _add() async {
-    final variants = _collection.variants;
-    if (variants.isEmpty) return;
+  Future<void> _add(VariantSpec variant) async {
     final discriminator = _collection.discriminator;
     final entry = <String, dynamic>{
       'id': newRecordId(),
-      ?discriminator: variants.first.key,
+      ?discriminator: variant.key,
     };
     await _open(_entries(), null, entry);
   }
@@ -122,47 +131,160 @@ class _SchemaCollectionRendererState extends State<SchemaCollectionRenderer> {
     final binding = SettingsScope.of(context);
     _follow(binding);
     final entries = entriesOf(binding.effectiveValue(_collection.path));
-    return SettingsRow(
-      label: _collection.title,
-      sublabel: _collection.help,
-      isStaged: binding.isStaged(_collection.path),
-      isVertical: true,
-      // About the list as a whole; an entry's own go under its card.
-      issues: binding.issuesFor(_collection.path),
-      action: KalinkaButton(
-        label: 'Add',
-        variant: KalinkaButtonVariant.neutral,
-        size: KalinkaButtonSize.compact,
-        leading: const Icon(Icons.add, size: 16, color: KalinkaColors.accent),
-        onTap: _add,
+    final staged = binding.isStaged(_collection.path);
+    final status = switch (_collection.status) {
+      final path? => binding.effectiveValue(path)?.toString().trim() ?? '',
+      null => '',
+    };
+    final variants = _collection.variants;
+    return Container(
+      // Tinted like a staged SettingsRow, painted over so nothing shifts.
+      color: staged
+          ? KalinkaColors.statusPending.withValues(alpha: 0.04)
+          : Colors.transparent,
+      foregroundDecoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(
+            color: staged ? KalinkaColors.statusPending : Colors.transparent,
+          ),
+        ),
       ),
-      control: Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (var i = 0; i < entries.length; i++)
+          if (widget.showTitle)
             Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: _EntryCard(
-                key: ValueKey(entries[i]['id']),
-                variant: _collection.variantOf(entries[i]),
-                entry: entries[i],
-                issues: _issuesOf(binding, entries[i]),
-                onTap: () => _edit(i),
+              padding: const EdgeInsets.fromLTRB(
+                kSettingsGutter,
+                12,
+                kSettingsGutter,
+                4,
+              ),
+              child: _Title(collection: _collection, staged: staged),
+            ),
+          for (var i = 0; i < entries.length; i++) ...[
+            if (i > 0) const _EntryDivider(),
+            _EntryRow(
+              key: ValueKey(entries[i]['id']),
+              variant: _collection.variantOf(entries[i]),
+              entry: entries[i],
+              issues: _issuesOf(binding, entries[i]),
+              onTap: () => _edit(i),
+            ),
+          ],
+          if (status.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                kSettingsGutter,
+                8,
+                kSettingsGutter,
+                0,
+              ),
+              child: InlineMarkdown(
+                text: status,
+                style: KalinkaTextStyles.trayRowSublabel.copyWith(height: 1.4),
               ),
             ),
+          if (variants.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                kSettingsGutter,
+                12,
+                kSettingsGutter,
+                12,
+              ),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final variant in variants)
+                    // As wide as its label, short of the row: a long one at
+                    // large text is cut rather than overflowing.
+                    IntrinsicWidth(
+                      child: KalinkaButton(
+                        label: variants.length == 1 ? 'Add' : variant.label,
+                        variant: KalinkaButtonVariant.neutral,
+                        size: KalinkaButtonSize.compact,
+                        fullWidth: true,
+                        leading: const Icon(
+                          Icons.add,
+                          size: 16,
+                          color: KalinkaColors.accent,
+                        ),
+                        onTap: () => _add(variant),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          // About the list as a whole; an entry's own go under its row.
+          IssueNotes(
+            issues: binding.issuesFor(_collection.path),
+            padding: const EdgeInsets.fromLTRB(
+              kSettingsGutter,
+              0,
+              kSettingsGutter,
+              12,
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _EntryCard extends StatelessWidget {
+class _Title extends StatelessWidget {
+  final CollectionSpec collection;
+  final bool staged;
+
+  const _Title({required this.collection, required this.staged});
+
+  @override
+  Widget build(BuildContext context) {
+    final help = collection.help;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 2,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(collection.title, style: KalinkaTextStyles.trayRowLabel),
+            if (staged && ConfigurationAppearance.active(context))
+              const ChangedSettingLabel(),
+          ],
+        ),
+        if (help != null) ...[
+          const SizedBox(height: 2),
+          InlineMarkdown(text: help, style: KalinkaTextStyles.trayRowSublabel),
+        ],
+      ],
+    );
+  }
+}
+
+class _EntryDivider extends StatelessWidget {
+  const _EntryDivider();
+
+  @override
+  Widget build(BuildContext context) => const Divider(
+    height: 1,
+    thickness: 1,
+    // Level with the text, past the icon tile.
+    indent: kSettingsGutter + 48,
+    color: KalinkaColors.borderSubtle,
+  );
+}
+
+/// An entry as a row: where it is, then what kind of place that is.
+class _EntryRow extends StatelessWidget {
   final VariantSpec? variant;
   final Map<String, dynamic> entry;
   final List<ConfigIssue> issues;
   final VoidCallback onTap;
 
-  const _EntryCard({
+  const _EntryRow({
     super.key,
     required this.variant,
     required this.entry,
@@ -173,64 +295,80 @@ class _EntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final summary = variant?.summaryOf(entry) ?? '';
+    final kind = variant?.label ?? '';
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Material(
-          color: KalinkaColors.surfaceElevated,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: BorderSide(
-              color: issueBorderColor(issues) ?? KalinkaColors.borderDefault,
+        InkWell(
+          onTap: onTap,
+          mouseCursor: clickCursor(interactive: true),
+          overlayColor: kalinkaOverlay,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: kSettingsGutter,
+              vertical: 10,
             ),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onTap,
-            mouseCursor: clickCursor(interactive: true),
-            overlayColor: kalinkaOverlay,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-              child: Row(
-                children: [
-                  Icon(
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: KalinkaColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color:
+                          issueBorderColor(issues) ??
+                          KalinkaColors.borderSubtle,
+                    ),
+                  ),
+                  child: Icon(
                     schemaIcon(variant?.icon),
                     size: 18,
                     color: KalinkaColors.textSecondary,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        summary.isEmpty ? kind : summary,
+                        style: KalinkaTextStyles.trayRowLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (summary.isNotEmpty && kind.isNotEmpty)
                         Text(
-                          variant?.label ?? '',
-                          style: KalinkaTextStyles.trayRowLabel,
+                          kind,
+                          style: KalinkaTextStyles.trayRowSublabel,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (summary.isNotEmpty)
-                          Text(
-                            summary,
-                            style: KalinkaTextStyles.trayRowSublabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
-                  const Icon(
-                    Icons.chevron_right,
-                    size: 18,
-                    color: KalinkaColors.textMuted,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: KalinkaColors.textMuted,
+                ),
+              ],
             ),
           ),
         ),
-        IssueNotes(issues: issues),
+        IssueNotes(
+          issues: issues,
+          padding: const EdgeInsets.fromLTRB(
+            kSettingsGutter + 48,
+            0,
+            kSettingsGutter,
+            10,
+          ),
+        ),
       ],
     );
   }
@@ -262,11 +400,7 @@ class _EntrySheet extends StatefulWidget {
 
 class _EntrySheetState extends State<_EntrySheet> {
   late Map<String, dynamic> _entry = copyEntry(widget.entry);
-  late Map<String, dynamic> _opened = copyEntry(widget.entry);
-
-  /// What each shape of a new entry held when the user switched away from
-  /// it, so switching back finds it again.
-  final Map<Object?, Map<String, dynamic>> _drafts = {};
+  late final Map<String, dynamic> _opened = copyEntry(widget.entry);
 
   Timer? _suggesting;
   ModalRoute<dynamic>? _route;
@@ -352,19 +486,6 @@ class _EntrySheetState extends State<_EntrySheet> {
     return mounted && _open;
   }
 
-  /// Makes a new entry another shape, keeping what the one it leaves held.
-  Future<void> _switchKind(String key) async {
-    final discriminator = _collection.discriminator;
-    if (discriminator == null || _entry[discriminator] == key) return;
-    if (!await _settled()) return;
-    setState(() {
-      _drafts[_entry[discriminator]] = _entry;
-      _opened = {'id': _entry['id'], discriminator: key};
-      _entry = _drafts[key] ?? copyEntry(_opened);
-    });
-    _push();
-  }
-
   /// Switches a part of the entry to another shape. Back to the shape it had
   /// when the sheet opened, it gets what it held then — a saved password is
   /// kept only while the login it belongs to is sent back as it was.
@@ -404,7 +525,6 @@ class _EntrySheetState extends State<_EntrySheet> {
       builder: (context, page, _) {
         final entry = _entry;
         final variant = _collection.variantOf(entry);
-        final description = variant?.description;
         return SettingsScope(
           binding: CollectionEntryBinding(
             page: page,
@@ -420,48 +540,13 @@ class _EntrySheetState extends State<_EntrySheet> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // The kind was picked by the button that opened the sheet.
                 SheetHeader(
-                  title: _isNew
-                      ? 'ADD TO ${_collection.title.toUpperCase()}'
-                      : _collection.title.toUpperCase(),
+                  title: (variant?.label ?? _collection.title).toUpperCase(),
                   summary: _isNew
-                      ? ''
-                      : [
-                          ?variant?.label,
-                          ?variant?.summaryOf(entry),
-                        ].where((part) => part.isNotEmpty).join(' · '),
+                      ? variant?.description ?? ''
+                      : variant?.summaryOf(entry) ?? '',
                 ),
-                if (_isNew && _collection.variants.length > 1)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      kSheetGutter,
-                      0,
-                      kSheetGutter,
-                      8,
-                    ),
-                    child: SettingsEnumPills(
-                      options: [for (final v in _collection.variants) v.label],
-                      selected: variant?.label ?? '',
-                      onChanged: (label) => _switchKind(
-                        _collection.variants
-                            .firstWhere((v) => v.label == label)
-                            .key,
-                      ),
-                    ),
-                  ),
-                if (_isNew && description != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      kSheetGutter,
-                      0,
-                      kSheetGutter,
-                      12,
-                    ),
-                    child: Text(
-                      description,
-                      style: KalinkaTextStyles.trayRowSublabel,
-                    ),
-                  ),
                 const SheetDivider(),
                 Flexible(
                   child: SingleChildScrollView(
@@ -544,7 +629,7 @@ class _EntryForm extends StatelessWidget {
     if (shape != null) {
       _addFields(shape.fields, shown, advanced);
       for (final group in shape.groups) {
-        _addGroup(group, shown, advanced);
+        _addGroup(group, shown, advanced, topLevel: true);
       }
     }
     final binding = SettingsScope.of(context);
@@ -601,8 +686,9 @@ class _EntryForm extends StatelessWidget {
   void _addGroup(
     GroupSpec group,
     List<Widget> shown,
-    List<FieldSpec> advanced,
-  ) {
+    List<FieldSpec> advanced, {
+    bool topLevel = false,
+  }) {
     final rows = <Widget>[];
     final chosen = group.variantOf(entry);
     if (chosen != null) {
@@ -630,15 +716,18 @@ class _EntryForm extends StatelessWidget {
       }
     }
     if (rows.isEmpty) return;
-    shown.add(
-      Padding(
-        padding: const EdgeInsets.fromLTRB(kSheetGutter, 14, kSheetGutter, 0),
-        child: Text(
-          group.title.toUpperCase(),
-          style: KalinkaTextStyles.sectionHeaderMuted,
+    // The sheet's header already heads the first group.
+    if (!topLevel || shown.isNotEmpty) {
+      shown.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(kSheetGutter, 14, kSheetGutter, 0),
+          child: Text(
+            group.title.toUpperCase(),
+            style: KalinkaTextStyles.sectionHeaderMuted,
+          ),
         ),
-      ),
-    );
+      );
+    }
     shown.addAll(rows);
   }
 }

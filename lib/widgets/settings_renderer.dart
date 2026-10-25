@@ -116,11 +116,15 @@ class SchemaFieldRenderer extends StatelessWidget {
   /// As [SettingsRow.gutter].
   final double gutter;
 
+  /// A read-only field reporting on this one, shown under its help.
+  final FieldSpec? statusField;
+
   const SchemaFieldRenderer({
     super.key,
     required this.field,
     this.listSuggestions = false,
     this.gutter = kSettingsGutter,
+    this.statusField,
   });
 
   @override
@@ -131,6 +135,10 @@ class SchemaFieldRenderer extends StatelessWidget {
     final help = field.help;
     final isStaged = binding.isStaged(field.path);
     final value = binding.effectiveValue(field.path) ?? field.defaultValue;
+    final status = switch (statusField) {
+      final status? => binding.effectiveValue(status.path)?.toString().trim(),
+      null => null,
+    };
 
     // Plain read-only values are metadata, with no input border or fill.
     // Rich status messages retain their card and markdown presentation.
@@ -224,6 +232,7 @@ class SchemaFieldRenderer extends StatelessWidget {
     return SettingsRow(
       label: label,
       sublabel: help,
+      status: status == null || status.isEmpty ? null : status,
       isStaged: isStaged,
       isVertical: vertical,
       gutter: gutter,
@@ -412,38 +421,92 @@ Widget buildFieldControl({
 }
 
 // ---------------------------------------------------------------------------
-// Rows: fields with the collections that follow them
+// Rows: fields with the collections and sections placed among them
 // ---------------------------------------------------------------------------
 
-/// Rows for the [fields] shown, each of [collections] right after the field it
-/// follows — hidden or not, so a collection keeps its place when the field
-/// before it moves into a header, or is one the collection replaces.
+/// One thing a module or section lays out.
+sealed class _Placed {
+  const _Placed();
+}
+
+class _Field extends _Placed {
+  final FieldSpec spec;
+  const _Field(this.spec);
+}
+
+class _Collection extends _Placed {
+  final CollectionSpec spec;
+  const _Collection(this.spec);
+}
+
+class _Section extends _Placed {
+  final SectionSpec spec;
+  const _Section(this.spec);
+}
+
+/// The [fields] shown, each of [collections] right after the field it
+/// follows and each of [sections] right before the one it precedes — hidden
+/// or not, so neither moves when that field goes into a header, or is one a
+/// collection stands in for.
 ///
-/// [replaced] is every path a collection of the module replaces, wherever in
-/// the module that collection sits, as the setup wizard reads it too.
-List<Widget> _fieldRows(
+/// [replaced] is every path a collection of the module shows in its own
+/// way, wherever in the module that collection sits.
+List<_Placed> _laidOut(
   List<FieldSpec> fields,
-  List<CollectionSpec> collections, {
+  List<CollectionSpec> collections,
+  List<SectionSpec> sections, {
   Set<FieldSpec> hidden = const {},
   Set<String> replaced = const {},
 }) {
-  Widget collection(CollectionSpec c) =>
-      SchemaCollectionRenderer(key: ValueKey(c.path), collection: c);
-  Iterable<Widget> after(String? path) =>
-      collections.where((c) => c.after == path).map(collection);
   final placed = {null, ...fields.map((f) => f.path)};
-  final gone = {...replaced, for (final c in collections) ...c.replaces};
+  final gone = {...replaced, ..._shownByCollections(collections)};
   return [
-    ...after(null),
+    for (final c in collections)
+      if (c.after == null) _Collection(c),
     for (final field in fields) ...[
-      if (!hidden.contains(field) && !gone.contains(field.path))
-        SchemaFieldRenderer(key: ValueKey(field.path), field: field),
-      ...after(field.path),
+      for (final s in sections)
+        if (s.before == field.path) _Section(s),
+      if (!hidden.contains(field) && !gone.contains(field.path)) _Field(field),
+      for (final c in collections)
+        if (c.after == field.path) _Collection(c),
     ],
-    // One that follows a field the page does not have still belongs on it.
-    ...collections.where((c) => !placed.contains(c.after)).map(collection),
+    // One placed by a field the page does not have still belongs on it.
+    for (final c in collections)
+      if (!placed.contains(c.after)) _Collection(c),
+    for (final s in sections)
+      if (s.before == null || !placed.contains(s.before)) _Section(s),
   ];
 }
+
+/// Fields [collections] show in their own way: the older ones they replace
+/// and the status they carry.
+Set<String> _shownByCollections(Iterable<CollectionSpec> collections) => {
+  for (final c in collections) ...[...c.replaces, ?c.status],
+};
+
+List<Widget> _rowsOf(
+  List<_Placed> items, {
+  Set<String> replaced = const {},
+  bool showServerUpdate = true,
+}) => [
+  for (final item in items)
+    switch (item) {
+      _Field(:final spec) => SchemaFieldRenderer(
+        key: ValueKey(spec.path),
+        field: spec,
+      ),
+      _Collection(:final spec) => SchemaCollectionRenderer(
+        key: ValueKey(spec.path),
+        collection: spec,
+      ),
+      _Section(:final spec) => SchemaSectionRenderer(
+        key: ValueKey(spec.id),
+        section: spec,
+        replaced: replaced,
+        showServerUpdate: showServerUpdate,
+      ),
+    },
+];
 
 const _rowDivider = Divider(
   height: 1,
@@ -503,21 +566,17 @@ class SchemaSectionRenderer extends StatelessWidget {
         ? null
         : _firstFieldWithPathSuffix(section.fields, '.status_view');
 
-    final rows = [
-      ..._fieldRows(
+    final rows = _rowsOf(
+      _laidOut(
         section.fields,
         section.collections,
+        section.sections,
         hidden: {?enabledField, ?statusField},
         replaced: replaced,
       ),
-      for (final s in section.sections)
-        SchemaSectionRenderer(
-          key: ValueKey(s.id),
-          section: s,
-          replaced: replaced,
-          showServerUpdate: showServerUpdate,
-        ),
-    ];
+      replaced: replaced,
+      showServerUpdate: showServerUpdate,
+    );
 
     // Toggleable sub-feature section: route through the dedicated header
     // widget with the body unchanged.
@@ -816,44 +875,27 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
   }
 }
 
-/// What a module configures, below its header: its live message, banners and
-/// rows, dimmed while the module is switched off. [SchemaModuleCard] folds it
-/// away under its header; a plugin's settings page shows it whole.
+/// What a module configures, below its header in [SchemaModuleCard]: its live
+/// message, banners and rows, dimmed while the module is switched off.
 class SchemaModuleBody extends ConsumerWidget {
   final ModuleSpec module;
 
-  /// Ruled off from a header above it; a page of its own starts unruled.
-  final bool underHeader;
-
-  /// Plugin pages put this message beside their status, above the controls.
-  final bool showLiveMessage;
-
-  const SchemaModuleBody({
-    super.key,
-    required this.module,
-    this.underHeader = true,
-    this.showLiveMessage = true,
-  });
+  const SchemaModuleBody({super.key, required this.module});
 
   /// Backend prunes EXPERT content out of the simple page tree, so the only
   /// filter here is "drop the .enabled field the header shows".
   static List<Widget> rowsOf(ModuleSpec module) {
-    final enabledField = module.enabledField;
-    final replaced = {for (final c in module.allCollections) ...c.replaces};
-    return [
-      ..._fieldRows(
+    final replaced = _shownByCollections(module.allCollections);
+    return _rowsOf(
+      _laidOut(
         module.fields,
         module.collections,
-        hidden: {?enabledField},
+        module.sections,
+        hidden: {?module.enabledField},
         replaced: replaced,
       ),
-      for (final s in module.sections)
-        SchemaSectionRenderer(
-          key: ValueKey(s.id),
-          section: s,
-          replaced: replaced,
-        ),
-    ];
+      replaced: replaced,
+    );
   }
 
   @override
@@ -863,7 +905,7 @@ class SchemaModuleBody extends ConsumerWidget {
     final ModuleInfo? live = liveSnapshot == null
         ? null
         : lookupModule(liveSnapshot, module.id, module.kind);
-    final message = showLiveMessage ? live?.message : null;
+    final message = live?.message;
     final enabledField = module.enabledField;
     final dimmed =
         enabledField != null &&
@@ -885,20 +927,225 @@ class SchemaModuleBody extends ConsumerWidget {
                   : WarningNoteSeverity.warning,
             ),
           for (final b in module.banners) SchemaBanner(banner: b),
-          // Module content renders flat, with a divider above each row so it
-          // reads as continuous content under the header rather than floating.
-          for (final (i, row) in rowsOf(module).indexed) ...[
-            if (i > 0 ||
-                underHeader ||
-                module.banners.isNotEmpty ||
-                (message != null && message.isNotEmpty))
-              _rowDivider,
-            row,
+          // A divider above each row, so it reads as continuous content under
+          // the header rather than floating.
+          for (final row in rowsOf(module)) ...[_rowDivider, row],
+        ],
+      ),
+    );
+  }
+}
+
+/// A plugin's settings page: what the module configures as labelled cards —
+/// one for each collection, each section, and each run of fields a heading
+/// opens — with nothing folded away. Sections inside a card open in place,
+/// and a status field reads as the live state of the field before it.
+class SchemaModuleGroups extends StatelessWidget {
+  final ModuleSpec module;
+  final double gutter;
+
+  const SchemaModuleGroups({
+    super.key,
+    required this.module,
+    required this.gutter,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final binding = SettingsScope.of(context);
+    final replaced = _shownByCollections(module.allCollections);
+    final groups = <_Group>[];
+    _Group? run;
+    for (final item in _laidOut(
+      module.fields,
+      module.collections,
+      module.sections,
+      hidden: {?module.enabledField},
+      replaced: replaced,
+    )) {
+      switch (item) {
+        case _Field(:final spec):
+          if (run == null || spec.heading != null) {
+            run = _Group(spec.heading);
+            groups.add(run);
+          }
+          run.items.add(item);
+        case _Collection(:final spec):
+          run = null;
+          groups.add(
+            _Group(spec.title, caption: spec.help)
+              ..rows.add(
+                SchemaCollectionRenderer(
+                  key: ValueKey(spec.path),
+                  collection: spec,
+                  showTitle: false,
+                ),
+              ),
+          );
+        case _Section(:final spec):
+          run = null;
+          groups.add(
+            _Group(spec.title)
+              ..rows.addAll(_cardRows(binding, spec, replaced, titled: false)),
+          );
+      }
+    }
+    for (final group in groups) {
+      group.rows.addAll(_flatRows(binding, group.items, replaced));
+    }
+    final shown = groups.where((g) => g.rows.isNotEmpty).toList();
+    final enabledField = module.enabledField;
+    final off = enabledField != null && !_isOn(binding, enabledField);
+    return Opacity(
+      opacity: off ? 0.45 : 1.0,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final b in module.banners) SchemaBanner(banner: b),
+          for (final (i, group) in shown.indexed) ...[
+            if (group.label case final label?)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  gutter,
+                  i == 0 ? 6 : 20,
+                  gutter,
+                  10,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label.toUpperCase(),
+                      style: KalinkaTextStyles.sectionHeaderMuted,
+                    ),
+                    if (group.caption case final caption?) ...[
+                      const SizedBox(height: 4),
+                      InlineMarkdown(
+                        text: caption,
+                        style: KalinkaTextStyles.trayRowSublabel,
+                      ),
+                    ],
+                  ],
+                ),
+              )
+            else if (i > 0)
+              const SizedBox(height: 8),
+            SettingsCard(gutter: gutter, children: [_separated(group.rows)]),
           ],
         ],
       ),
     );
   }
+
+  static bool _isOn(SettingsBinding binding, FieldSpec field) =>
+      (binding.effectiveValue(field.path) ?? field.defaultValue) == true;
+
+  /// A section's settings as rows of the card it sits in. A section with a
+  /// switch of its own leads with it and dims the rest while it is off.
+  static List<Widget> _cardRows(
+    SettingsBinding binding,
+    SectionSpec section,
+    Set<String> replaced, {
+    required bool titled,
+  }) {
+    // Its own, not one of a model laid out inline within it.
+    final enabled = section.fields
+        .where((f) => f.path == '${section.id}.enabled')
+        .firstOrNull;
+    final items = _laidOut(
+      section.fields,
+      section.collections,
+      section.sections,
+      replaced: replaced,
+    );
+    return [
+      // One that only groups other sections has nothing of its own to head.
+      if (titled && enabled == null && section.fields.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            kSettingsGutter,
+            14,
+            kSettingsGutter,
+            0,
+          ),
+          child: Text(
+            section.title.toUpperCase(),
+            style: KalinkaTextStyles.sectionHeaderMuted,
+          ),
+        ),
+      ..._flatRows(
+        binding,
+        items,
+        replaced,
+        lead: enabled,
+        leadOff: enabled != null && !_isOn(binding, enabled),
+      ),
+    ];
+  }
+
+  /// [items] as rows, a status field joining the row of the field before it.
+  /// While [leadOff], every row but [lead]'s is dimmed.
+  static List<Widget> _flatRows(
+    SettingsBinding binding,
+    List<_Placed> items,
+    Set<String> replaced, {
+    FieldSpec? lead,
+    bool leadOff = false,
+  }) {
+    bool isStatus(_Placed? item) =>
+        item is _Field &&
+        item.spec.readonly &&
+        item.spec.path.endsWith('.status_view');
+    // Only a row SchemaFieldRenderer ends in a SettingsRow has room for it.
+    bool takesStatus(FieldSpec spec) =>
+        !spec.readonly && spec.widget != WidgetKind.numberSlider;
+    final rows = <Widget>[];
+    // Always wrapped, so toggling the lead keeps the rows' state.
+    void add(Widget row, {bool isLead = false}) =>
+        rows.add(Opacity(opacity: leadOff && !isLead ? 0.45 : 1.0, child: row));
+    for (var i = 0; i < items.length; i++) {
+      switch (items[i]) {
+        case _Field(:final spec):
+          final next = i + 1 < items.length ? items[i + 1] : null;
+          final status = takesStatus(spec) && isStatus(next)
+              ? (next! as _Field).spec
+              : null;
+          if (status != null) i++;
+          add(
+            SchemaFieldRenderer(
+              key: ValueKey(spec.path),
+              field: spec,
+              statusField: status,
+            ),
+            isLead: spec == lead,
+          );
+        case _Collection(:final spec):
+          add(
+            SchemaCollectionRenderer(
+              key: ValueKey(spec.path),
+              collection: spec,
+            ),
+          );
+        case _Section(:final spec):
+          for (final row in _cardRows(binding, spec, replaced, titled: true)) {
+            add(row);
+          }
+      }
+    }
+    return rows;
+  }
+}
+
+/// One card of [SchemaModuleGroups], under [label] where it has one.
+class _Group {
+  final String? label;
+  final String? caption;
+
+  /// Fields of a run, turned into [rows] once the run ends.
+  final List<_Placed> items = [];
+  final List<Widget> rows = [];
+
+  _Group(this.label, {this.caption});
 }
 
 // ---------------------------------------------------------------------------

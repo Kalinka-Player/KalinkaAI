@@ -27,6 +27,9 @@ class SettingsRow extends StatelessWidget {
   /// A button beside the label of a vertical row, acting on the whole of it.
   final Widget? action;
 
+  /// Live state under the help, such as whether what the row turns on works.
+  final String? status;
+
   /// Space either side of the content: [kSettingsGutter] in a settings card,
   /// a sheet's own gutter in a sheet.
   final double gutter;
@@ -40,6 +43,7 @@ class SettingsRow extends StatelessWidget {
     this.isVertical = false,
     this.issues = const [],
     this.action,
+    this.status,
     this.gutter = kSettingsGutter,
   });
 
@@ -112,6 +116,13 @@ class SettingsRow extends StatelessWidget {
           InlineMarkdown(
             text: sublabel!,
             style: KalinkaTextStyles.trayRowSublabel,
+          ),
+        ],
+        if (status != null) ...[
+          const SizedBox(height: 6),
+          InlineMarkdown(
+            text: status!,
+            style: KalinkaTextStyles.trayRowSublabel.copyWith(height: 1.4),
           ),
         ],
       ],

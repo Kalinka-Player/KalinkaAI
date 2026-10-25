@@ -130,10 +130,9 @@ void main() {
     expect(find.text('Music folders'), findsNothing);
     expect(find.text('/srv/music'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(KalinkaButton, 'Add'));
+    await tester.tap(find.widgetWithText(KalinkaButton, 'Network share'));
     await tester.pumpAndSettle();
-    expect(find.text('ADD TO MUSIC SOURCES'), findsOneWidget);
-    expect(find.text('Network share'), findsOneWidget);
+    expect(find.text('NETWORK SHARE'), findsOneWidget);
   });
 
   testWidgets('a server without them is asked for its folders', (tester) async {
