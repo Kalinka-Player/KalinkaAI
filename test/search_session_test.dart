@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/search_results.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
+import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/catalog_sources_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
@@ -19,6 +21,7 @@ import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/widgets/search/search_zero_state.dart';
 
+import 'support/home_shell.dart' show SettableConnection;
 import 'support/server_answer.dart';
 
 /// Minimal fake proxy: only the methods the search session calls are
@@ -320,8 +323,23 @@ const _textField = FilterSpec(
   label: 'Search albums',
 );
 
+BrowseItem _folder(String name) => BrowseItem(
+  id: 'kalinka:localfiles:catalog:folder.$name',
+  name: name,
+  canBrowse: true,
+  canAdd: true,
+  catalog: Catalog(
+    id: 'kalinka:localfiles:catalog:folder.$name',
+    title: name,
+    previewConfig: Preview(type: PreviewType.folder),
+  ),
+);
+
 /// Longer than the minimum loading hold.
 const _settle = Duration(milliseconds: 900);
+
+/// Where the catalog filters of the server `makeContainer` answers as live.
+const _boxFiltersKey = 'Kalinka.catalogFilters:id:box-1';
 
 void main() {
   late SharedPreferences prefs;
@@ -340,6 +358,7 @@ void main() {
     List<ModuleInfo>? modules,
     Duration? modulesAfter,
     bool liveModules = false,
+    ServersByHost? servers,
   }) {
     final container = ProviderContainer(
       overrides: [
@@ -351,8 +370,13 @@ void main() {
           sourceModulesProvider.overrideWith(
             (ref) => Future.delayed(modulesAfter!, () => modules ?? _modules),
           ),
-        connectionStateProvider.overrideWith(_FixedConnection.new),
-        serverAnswering('box-1'),
+        if (servers == null) ...[
+          connectionStateProvider.overrideWith(_FixedConnection.new),
+          serverAnswering('box-1'),
+        ] else ...[
+          connectionStateProvider.overrideWith(SettableConnection.new),
+          servers.client,
+        ],
         // The real provider opens the wire-event WebSocket (retry timer).
         playerStateProvider.overrideWithValue(PlaybackState.empty),
       ],
@@ -1121,8 +1145,9 @@ void main() {
       );
     });
 
-    test('each catalog comes back under its own filter', () {
+    test('each catalog comes back under its own filter', () async {
       final container = makeContainer(_FakeApi());
+      await container.read(serverAnswerProvider.future);
       final notifier = container.read(searchSessionProvider.notifier);
       BrowseFilterQuery filter() =>
           container.read(searchSessionProvider).catalogFilter;
@@ -1140,6 +1165,7 @@ void main() {
       expect(filter().isEmpty, isTrue);
       notifier.resetToRoot();
       final restarted = makeContainer(_FakeApi());
+      await restarted.read(serverAnswerProvider.future);
       restarted
           .read(searchSessionProvider.notifier)
           .openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
@@ -1167,13 +1193,91 @@ void main() {
       expect(filter.genreIds, isEmpty);
     });
 
+    test(
+      'filters and folders are kept per server and come back with it',
+      () async {
+        final servers = ServersByHost()..ids['localhost'] = 'box-a';
+        final container = makeContainer(_FakeApi(), servers: servers);
+        await container.read(serverAnswerProvider.future);
+        final notifier = container.read(searchSessionProvider.notifier);
+        SearchSessionState state() => container.read(searchSessionProvider);
+        void openLibrary() => notifier.openCatalog(
+          id: 'kalinka:localfiles:catalog:files',
+          title: 'Library',
+          filters: const [_genreField],
+          folderLayout: true,
+        );
+        Future<void> answeredBy(String id) async {
+          servers.ids['localhost'] = id;
+          final connection = container.read(
+            connectionStateProvider.notifier,
+          ) as SettableConnection;
+          connection.set(ConnectionStatus.reconnecting);
+          connection.set(ConnectionStatus.connected);
+          await container.read(serverAnswerProvider.future);
+        }
+
+        openLibrary();
+        notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+        notifier.openFolder(_folder('Jazz'));
+        notifier.backToCatalogsRoot();
+
+        await answeredBy('box-b');
+        openLibrary();
+        expect(state().catalogFilter.isEmpty, isTrue);
+        expect(state().folderPath, isEmpty);
+        notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['rock']));
+        notifier.backToCatalogsRoot();
+
+        await answeredBy('box-a');
+        openLibrary();
+        expect(state().catalogFilter.genreIds, ['jazz']);
+        expect(
+          [for (final folder in state().folderPath) folder.title],
+          ['Jazz'],
+        );
+      },
+    );
+
+    test('the filters kept for every server go to the first known', () async {
+      await prefs.setString(
+        'Kalinka.catalogFilters',
+        jsonEncode({
+          'a': const BrowseFilterQuery(genreIds: ['jazz']).toJson(),
+        }),
+      );
+      final container = makeContainer(_FakeApi());
+      await container.read(serverAnswerProvider.future);
+      container
+          .read(searchSessionProvider.notifier)
+          .openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
+      expect(container.read(searchSessionProvider).catalogFilter.genreIds, [
+        'jazz',
+      ]);
+      await Future<void>.delayed(Duration.zero);
+      expect(prefs.getString('Kalinka.catalogFilters'), isNull);
+      expect(prefs.getString(_boxFiltersKey), isNotNull);
+    });
+
+    test('nothing is kept for a server not known yet', () {
+      final servers = ServersByHost()..silent.add('localhost');
+      final container = makeContainer(_FakeApi(), servers: servers);
+      final notifier = container.read(searchSessionProvider.notifier);
+      notifier.openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
+      notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+      expect(
+        prefs.getKeys().where((k) => k.startsWith('Kalinka.catalogFilters')),
+        isEmpty,
+      );
+    });
+
     group('of catalogs absent from the root listing', () {
       const kept = 'kalinka:jamendo:catalog:popular';
       const gone = 'kalinka:jamendo:catalog:retired';
 
       setUp(() {
         prefs.setString(
-          'Kalinka.catalogFilters',
+          _boxFiltersKey,
           '{"$kept":{"genreIds":["jazz"]},"$gone":{"genreIds":["rock"]}}',
         );
       });
@@ -1183,7 +1287,7 @@ void main() {
         container.read(searchSessionProvider.notifier).refresh();
         await Future.delayed(const Duration(milliseconds: 50));
 
-        final saved = prefs.getString('Kalinka.catalogFilters');
+        final saved = prefs.getString(_boxFiltersKey);
         expect(saved, contains(kept));
         expect(saved, contains(gone));
       });
@@ -1194,7 +1298,7 @@ void main() {
           const collections = _CollectionsApi.shelfId;
           const gone = 'kalinka:collections:catalog:retired';
           prefs.setString(
-            'Kalinka.catalogFilters',
+            _boxFiltersKey,
             '{"$collections":{"text":"night"},"$gone":{"genreIds":["rock"]}}',
           );
           final container = makeContainer(
@@ -1205,7 +1309,7 @@ void main() {
           container.read(searchSessionProvider.notifier).refresh();
           await Future.delayed(const Duration(milliseconds: 100));
 
-          final saved = prefs.getString('Kalinka.catalogFilters');
+          final saved = prefs.getString(_boxFiltersKey);
           expect(saved, contains(collections));
           expect(saved, contains(gone));
         },
