@@ -17,9 +17,7 @@ class SoundcardRestartOverlay extends ConsumerWidget {
   /// What happens once the Pi is back, after how long it takes.
   final String afterwards;
 
-  /// Set once the Pi did not come back in time; then [onKeepWaiting] and
-  /// [onContinue] are the ways on.
-  final bool notBack;
+  /// The ways on once the Pi did not come back in time.
   final VoidCallback? onKeepWaiting;
   final VoidCallback? onContinue;
   final String continueLabel;
@@ -29,7 +27,6 @@ class SoundcardRestartOverlay extends ConsumerWidget {
     required this.box,
     required this.card,
     this.afterwards = 'Setup carries on afterwards.',
-    this.notBack = false,
     this.onKeepWaiting,
     this.onContinue,
     this.continueLabel = 'Continue setup',
@@ -39,6 +36,7 @@ class SoundcardRestartOverlay extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final step = ref.watch(soundcardChangeProvider(box));
     final switching = step == SoundcardStep.switching;
+    final notBack = step == SoundcardStep.notBack;
     final hat = card.kind != 'none';
     return ProgressScrim(
       child: Column(

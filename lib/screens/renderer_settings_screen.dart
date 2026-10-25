@@ -75,26 +75,32 @@ class _RendererSettingsScreenState
 
   late final _soundcardHost = SoundcardHost(setUp: _setUpSoundcard);
 
-  Future<void> _setUpSoundcard(SoundcardBox box, SoundcardOption card) async {
-    final change = ref.read(soundcardChangeProvider(box).notifier);
+  Future<void> _setUpSoundcard(SoundcardBox box, SoundcardOption card) =>
+      _runSoundcardChange(
+        card,
+        ref.read(soundcardChangeProvider(box).notifier).apply,
+      );
+
+  Future<void> _keepWaiting(SoundcardBox box, SoundcardOption card) =>
+      _runSoundcardChange(
+        card,
+        ref.read(soundcardChangeProvider(box).notifier).keepWaiting,
+      );
+
+  /// The change tells in toasts how it went once the box took the card; this
+  /// covers it failing before then, or outright.
+  Future<void> _runSoundcardChange(
+    SoundcardOption card,
+    Future<SoundcardOutcome> Function(SoundcardOption card) run,
+  ) async {
     final toasts = ref.read(toastProvider.notifier);
     try {
-      await change.apply(card);
+      await run(card);
     } on BoxActionException catch (e) {
       toasts.show(e.message, isError: true);
+    } catch (e) {
+      toasts.show('Could not set up ${card.label}: $e', isError: true);
     }
-    // The step stays restarting when the box is not back, so nothing else
-    // rebuilds the page to offer the ways on.
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _keepWaiting(SoundcardBox box, SoundcardOption card) async {
-    final waiting = ref
-        .read(soundcardChangeProvider(box).notifier)
-        .keepWaiting(card);
-    setState(() {});
-    await waiting;
-    if (mounted) setState(() {});
   }
 
   @override
@@ -148,7 +154,6 @@ class _RendererSettingsScreenState
             box: box,
             card: card,
             afterwards: 'The output comes back by itself.',
-            notBack: change.notBack,
             onKeepWaiting: () => _keepWaiting(box, card),
             onContinue: change.stopWaiting,
             continueLabel: 'Continue',

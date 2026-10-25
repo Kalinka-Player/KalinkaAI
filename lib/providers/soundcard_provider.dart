@@ -141,7 +141,15 @@ const _cardPolls = 10;
 /// Polls of the server, about two minutes, for the renderer to come back.
 const _rendererPolls = 40;
 
-enum SoundcardStep { idle, applying, restarting, switching }
+enum SoundcardStep {
+  idle,
+  applying,
+  restarting,
+
+  /// The box did not come back in time, and still counts as restarting.
+  notBack,
+  switching,
+}
 
 /// How a change of sound card ended.
 enum SoundcardOutcome {
@@ -157,11 +165,16 @@ enum SoundcardOutcome {
   /// The box answers, but the card did not come up.
   silent,
 
-  /// The box did not come back from its restart in time. It counts as
-  /// restarting until [SoundcardChange.keepWaiting] or
+  /// The box did not come back from its restart in time. The change stays at
+  /// [SoundcardStep.notBack] until [SoundcardChange.keepWaiting] or
   /// [SoundcardChange.stopWaiting].
   notBack,
 }
+
+/// What to try when [card] is set up but did not come up.
+String soundcardAdvice(SoundcardOption card) => card.kind == 'onboard'
+    ? 'Choose another card.'
+    : 'Check that the HAT sits firmly on the pins, or choose another card.';
 
 /// Sets [box] up for a card and, when the box restarts to load it, follows it
 /// back and points its renderer at the new card. Kept past the page that
@@ -173,13 +186,16 @@ class SoundcardChange extends Notifier<SoundcardStep> {
 
   @override
   SoundcardStep build() {
-    // Only while the box is away: once it answers, its output is back.
+    // Held while the box is away; the step moves on once it is back.
     listenSelf(
       (_, step) => ref
           .read(restartingBoxesProvider.notifier)
           .mark(
             box,
-            restarting: _restarted && step == SoundcardStep.restarting,
+            restarting:
+                _restarted &&
+                (step == SoundcardStep.restarting ||
+                    step == SoundcardStep.notBack),
           ),
     );
     return SoundcardStep.idle;
@@ -192,12 +208,6 @@ class SoundcardChange extends Notifier<SoundcardStep> {
   /// The card the change under way, or the last one, sets up.
   SoundcardOption? get card => _card;
   SoundcardOption? _card;
-
-  /// Whether the box did not come back in time and the change waits for
-  /// [keepWaiting] or [stopWaiting]. Kept here, as the page that started the
-  /// change may have been rebuilt since.
-  bool get notBack => state == SoundcardStep.restarting && !_following;
-  bool _following = false;
 
   /// Throws [BoxActionException] when the box refuses; what happens after it
   /// accepted is reported in toasts, and returned.
@@ -226,11 +236,10 @@ class SoundcardChange extends Notifier<SoundcardStep> {
   }
 
   /// Gives up on a box that did not come back in time, so the app no longer
-  /// holds for it.
+  /// holds for it. What is known of its card is kept: the box cannot be asked
+  /// again while it is down.
   void stopWaiting() {
-    if (state != SoundcardStep.restarting) return;
-    state = SoundcardStep.idle;
-    ref.invalidate(soundcardReportProvider(box));
+    if (state == SoundcardStep.notBack) state = SoundcardStep.idle;
   }
 
   Future<SoundcardOutcome> _follow(
@@ -238,7 +247,6 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     required bool wentDown,
   }) async {
     _restarted = true;
-    _following = true;
     state = SoundcardStep.restarting;
     try {
       return await _followBack(card, wentDown: wentDown);
@@ -246,8 +254,6 @@ class SoundcardChange extends Notifier<SoundcardStep> {
       // Back to idle, or the box stays marked restarting and holds the app.
       if (ref.mounted) state = SoundcardStep.idle;
       rethrow;
-    } finally {
-      _following = false;
     }
   }
 
@@ -256,8 +262,8 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     required bool wentDown,
   }) async {
     if (!await _backAfterRestart(wentDown: wentDown)) {
-      // Still restarting, so the app holds until the person waits on or stops.
       if (ref.mounted) {
+        state = SoundcardStep.notBack;
         _toast(
           'The box has not come back after five minutes. Check that it has '
           'power and a network connection.',
@@ -266,9 +272,12 @@ class SoundcardChange extends Notifier<SoundcardStep> {
       }
       return SoundcardOutcome.notBack;
     }
-    final report = await _cardAfterRestart(waitForCard: card.kind != 'none');
-    if (!ref.mounted) return SoundcardOutcome.notBack;
+    // The server went down with its own box, so the app holds until it is
+    // back on the server too.
     if (box.hostsServer) await _reconnect();
+    if (!ref.mounted) return SoundcardOutcome.notBack;
+    state = SoundcardStep.switching;
+    final report = await _cardAfterRestart(waitForCard: card.kind != 'none');
     if (!ref.mounted) return SoundcardOutcome.notBack;
     return _settle(card, report, restarted: true);
   }
@@ -305,9 +314,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
       return SoundcardOutcome.noHat;
     }
     if (pcm == null) {
-      final advice = card.kind == 'onboard'
-          ? 'Choose another card.'
-          : 'Check that the HAT sits firmly on the pins.';
+      final advice = soundcardAdvice(card);
       _finish(
         restarted
             ? 'The box is back, but the sound card did not come up. $advice'
@@ -336,7 +343,7 @@ class SoundcardChange extends Notifier<SoundcardStep> {
   }
 
   /// Whether the box answered again once it had gone down, unless [wentDown]
-  /// says it was seen down already. The step moves on to switching then.
+  /// says it was seen down already.
   Future<bool> _backAfterRestart({required bool wentDown}) async {
     var down = wentDown;
     for (var i = 0; i < _restartPolls; i++) {
@@ -347,7 +354,6 @@ class SoundcardChange extends Notifier<SoundcardStep> {
       if (info == null) {
         down = true;
       } else if (down) {
-        state = SoundcardStep.switching;
         return true;
       }
     }

@@ -92,6 +92,9 @@ class FakeBox implements SupervisorApi {
   /// While set, `/v1/soundcard` answers only once it completes.
   Completer<void>? holdReport;
 
+  /// While set, `/info` throws it rather than answering.
+  Object? fault;
+
   int infoReads = 0;
   int reportReads = 0;
 
@@ -123,6 +126,7 @@ class FakeBox implements SupervisorApi {
   Future<SupervisorInfo?> info() async {
     infoReads++;
     await holdInfo?.future;
+    if (fault case final fault?) throw fault;
     return _next(answers);
   }
 
