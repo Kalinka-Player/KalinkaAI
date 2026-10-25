@@ -536,9 +536,11 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: _choice(
-            icon: network.signal >= -65
-                ? Icons.wifi_rounded
-                : Icons.network_wifi_2_bar_rounded,
+            icon: switch (network.level) {
+              3 => Icons.signal_wifi_4_bar_rounded,
+              2 => Icons.network_wifi_3_bar_rounded,
+              _ => Icons.network_wifi_1_bar_rounded,
+            },
             title: network.ssid,
             subtitle: network.description,
             onTap: network.supported ? () => _chooseNetwork(network) : null,
