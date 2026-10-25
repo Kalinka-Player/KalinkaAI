@@ -588,6 +588,20 @@ void main() {
     },
   );
 
+  test('network level and description share their cut-offs', () {
+    for (final (signal, level, description) in [
+      (-42, 3, 'Strong signal'),
+      (-55, 3, 'Strong signal'),
+      (-56, 2, 'Good signal'),
+      (-70, 2, 'Good signal'),
+      (-71, 1, 'Weak signal'),
+    ]) {
+      final network = ProvisioningNetwork('Home', signal, 'wpa2');
+      expect(network.level, level, reason: '$signal dBm');
+      expect(network.description, description, reason: '$signal dBm');
+    }
+  });
+
   test('Wi-Fi picker reads all pages and leaves credentials unsent', () async {
     final transport = FakeTransport()..canScan = true;
     final controller = ProvisioningController(transport, (_, _) async => null);
@@ -683,6 +697,58 @@ void main() {
       expect(transport.commands.map((c) => c['op']), ['complete']);
     },
   );
+
+  testWidgets('each network row draws the strength its subtitle names', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final transport = FakeTransport()..canScan = true;
+    // Studio sits where the old -65 dBm icon cut-off disagreed with the text.
+    transport.networkList.addAll([
+      {'ssid': 'Studio', 'signal': -60, 'security': 'wpa2'},
+      {'ssid': 'Garden', 'signal': -78, 'security': 'wpa2'},
+    ]);
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(home: ProvisioningScreen(transport: transport)),
+      ),
+    );
+    await tester.pump();
+    transport.stream.add(const NearbyBox('radio', 'Box'));
+    await tester.pump();
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose your Wi-Fi.'), findsOneWidget);
+    Finder inRow(String ssid, Finder matching) => find.descendant(
+      of: find.ancestor(of: find.text(ssid), matching: find.byType(InkWell)),
+      matching: matching,
+    );
+    for (final (ssid, subtitle, icon) in [
+      ('Home', 'Strong signal', Icons.signal_wifi_4_bar_rounded),
+      ('Office', 'Strong signal', Icons.signal_wifi_4_bar_rounded),
+      (
+        'Public',
+        'Open network — not supported yet',
+        Icons.network_wifi_3_bar_rounded,
+      ),
+      ('Café', 'Good signal', Icons.network_wifi_3_bar_rounded),
+      ('Studio', 'Good signal', Icons.network_wifi_3_bar_rounded),
+      ('Garden', 'Weak signal', Icons.network_wifi_1_bar_rounded),
+    ]) {
+      expect(inRow(ssid, find.text(subtitle)), findsOneWidget, reason: ssid);
+      expect(inRow(ssid, find.byIcon(icon)), findsOneWidget, reason: ssid);
+      expect(
+        inRow(ssid, find.byIcon(Icons.wifi_rounded)),
+        findsNothing,
+        reason: ssid,
+      );
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
 
   testWidgets(
     'network picker fills SSID, rejects unsupported choices and permits manual entry',

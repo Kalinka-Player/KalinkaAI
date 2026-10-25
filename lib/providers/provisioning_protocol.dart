@@ -90,12 +90,20 @@ class ProvisioningNetwork {
   const ProvisioningNetwork(this.ssid, this.signal, this.security);
 
   bool get supported => security == 'wpa2';
+
+  // 1 to 3; the list's icon reads this too, so it always agrees with the text.
+  int get level => signal >= -55
+      ? 3
+      : signal >= -70
+      ? 2
+      : 1;
+
   String get description => supported
-      ? '${signal >= -55
-            ? 'Strong'
-            : signal >= -70
-            ? 'Good'
-            : 'Weak'} signal'
+      ? '${switch (level) {
+          3 => 'Strong',
+          2 => 'Good',
+          _ => 'Weak',
+        }} signal'
       : security == 'open'
       ? 'Open network — not supported yet'
       : 'Security type not supported yet';
