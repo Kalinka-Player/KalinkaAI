@@ -1243,6 +1243,107 @@ void main() {
       },
     );
 
+    for (final next in ['box-b', 'box-a']) {
+      final another = next != 'box-a';
+      test(
+        another
+            ? 'a page left open on one server keeps nothing for the next at '
+                  'the address, and the session starts over'
+            : 'a page left open stays open, and its folder kept, when the same '
+                  'server is back at the address',
+        () async {
+          final servers = ServersByHost()..ids['localhost'] = 'box-a';
+          final container = makeContainer(_FakeApi(), servers: servers);
+          await container.read(serverAnswerProvider.future);
+          final notifier = container.read(searchSessionProvider.notifier);
+          SearchSessionState state() => container.read(searchSessionProvider);
+          notifier.openSource((
+            module: ModuleInfo(
+              name: 'qobuz',
+              title: 'Qobuz',
+              enabled: true,
+              state: ModuleState.ready,
+            ),
+            root: BrowseItem(
+              id: 'kalinka:qobuz:catalog:root',
+              name: 'Qobuz',
+              canBrowse: true,
+              canAdd: false,
+            ),
+          ));
+          notifier.backToCatalogsRoot();
+          expect(state().parked, isNotEmpty);
+          notifier.openCatalog(
+            id: 'kalinka:localfiles:catalog:files',
+            title: 'Library',
+            filters: const [_genreField],
+            folderLayout: true,
+          );
+          notifier.openFolder(_folder('Jazz'));
+          notifier.openFolder(_folder('Miles Davis'));
+          final kept = prefs.getString('Kalinka.folderPaths');
+
+          servers.ids['localhost'] = next;
+          final connection = container.read(
+            connectionStateProvider.notifier,
+          ) as SettableConnection;
+          connection.set(ConnectionStatus.reconnecting);
+          connection.set(ConnectionStatus.connected);
+          await container.read(serverAnswerProvider.future);
+          notifier.showEnclosingFolder();
+          notifier.setCatalogFilter(
+            const BrowseFilterQuery(genreIds: ['rock']),
+          );
+          await Future<void>.delayed(Duration.zero);
+
+          final filters = prefs.getKeys().where(
+            (k) => k.startsWith('Kalinka.catalogFilters'),
+          );
+          if (another) {
+            expect(prefs.getString('Kalinka.folderPaths'), kept);
+            expect(filters, isEmpty);
+            expect(state().catalogPage.isRoot, isTrue);
+            expect(state().folderPath, isEmpty);
+            expect(state().previousVisits, isEmpty);
+            expect(state().parked, isEmpty);
+          } else {
+            expect(prefs.getString('Kalinka.folderPaths'), isNot(kept));
+            expect(filters, ['Kalinka.catalogFilters:id:box-a']);
+            expect(
+              [for (final folder in state().folderPath) folder.title],
+              ['Jazz'],
+            );
+          }
+        },
+      );
+    }
+
+    test('the session starts over by itself once another server answers at '
+        'the address', () async {
+      final servers = ServersByHost()..ids['localhost'] = 'box-a';
+      final container = makeContainer(_FakeApi(), servers: servers);
+      await container.read(serverAnswerProvider.future);
+      // Watched, as Home does: a provider nothing listens to is paused.
+      container.listen(searchSessionProvider, (_, _) {});
+      final notifier = container.read(searchSessionProvider.notifier);
+      notifier.openCatalog(
+        id: 'kalinka:localfiles:catalog:files',
+        title: 'Library',
+        folderLayout: true,
+      );
+      notifier.openFolder(_folder('Jazz'));
+
+      servers.ids['localhost'] = 'box-b';
+      final connection = container.read(
+        connectionStateProvider.notifier,
+      ) as SettableConnection;
+      connection.set(ConnectionStatus.reconnecting);
+      connection.set(ConnectionStatus.connected);
+      await container.read(serverAnswerProvider.future);
+      await Future<void>.delayed(Duration.zero);
+      expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
+    });
+
     test('the filters kept for every server go to the first known', () async {
       await prefs.setString(
         'Kalinka.catalogFilters',
