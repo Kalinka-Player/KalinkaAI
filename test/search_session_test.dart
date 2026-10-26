@@ -1375,6 +1375,36 @@ void main() {
       expect(prefs.getString('Kalinka.folderPaths'), isNot(contains('addr:')));
     });
 
+    test('filters kept while the server had no id join those of its id, which '
+        'keep their own', () async {
+      const noIdKey = 'Kalinka.catalogFilters:addr:http://localhost:8080';
+      await prefs.setString(
+        noIdKey,
+        jsonEncode({
+          'a': const BrowseFilterQuery(genreIds: ['jazz']).toJson(),
+          'b': const BrowseFilterQuery(genreIds: ['soul']).toJson(),
+        }),
+      );
+      await prefs.setString(
+        _boxFiltersKey,
+        jsonEncode({
+          'a': const BrowseFilterQuery(genreIds: ['blues']).toJson(),
+        }),
+      );
+      final container = makeContainer(_FakeApi(), servers: _boxOne());
+      await container.read(serverAnswerProvider.future);
+      final notifier = container.read(searchSessionProvider.notifier);
+      List<String> genresOf(String id) {
+        notifier.openCatalog(id: id, title: id, filters: const [_genreField]);
+        return container.read(searchSessionProvider).catalogFilter.genreIds;
+      }
+
+      expect(genresOf('a'), ['blues']);
+      expect(genresOf('b'), ['soul']);
+      await Future<void>.delayed(Duration.zero);
+      expect(prefs.getString(noIdKey), isNull);
+    });
+
     test('nothing is kept for a server not known yet', () {
       final servers = ServersByHost()..silent.add('localhost');
       final container = makeContainer(_FakeApi(), servers: servers);
