@@ -32,8 +32,17 @@ class ModulesStateNotifier extends AsyncNotifier<ModulesAndDevices> {
     if (!settings.isSet) {
       return ModulesAndDevices(inputModules: const [], devices: const []);
     }
-    ref.listen(playQueueEventBusProvider, (_, next) => next.whenData(_onEvent));
-    final fetched = await ref.read(kalinkaProxyProvider).listModules();
+    ref.listen(playQueueEventBusProvider, (_, next) {
+      if (next case AsyncData(:final value)) _onEvent(value);
+    });
+    final ModulesAndDevices fetched;
+    try {
+      fetched = await ref.read(kalinkaProxyProvider).listModules();
+    } catch (_) {
+      // The socket already told us; a failed GET is no reason to drop that.
+      if (_pushed case final pushed?) return pushed;
+      rethrow;
+    }
     // A listing pushed while the request was out is the newer one.
     return _pushed ?? fetched;
   }
