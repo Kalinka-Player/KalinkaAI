@@ -14,7 +14,9 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/pinned_catalogs_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
+import 'package:kalinka/providers/timezone_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/widgets/box_section.dart';
 import 'package:kalinka/widgets/expert_settings_screen.dart';
@@ -22,6 +24,7 @@ import 'package:kalinka/widgets/configuration_appearance.dart';
 import 'package:kalinka/widgets/settings_controls/settings_action_row.dart';
 import 'package:kalinka/widgets/escalation_card.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
+import 'package:kalinka/widgets/timezone_row.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/server_answer.dart';
@@ -433,6 +436,78 @@ void main() {
         );
         container.dispose();
       });
+    });
+  });
+
+  group('the time zone row, looking for a box that did not answer', () {
+    const missing = BoxProbe.missing(NoBoxControl.notAnswering);
+
+    Future<(ProviderContainer, ServersByHost)> pump(
+      WidgetTester tester, {
+      required bool answered,
+    }) async {
+      SharedPreferences.setMockInitialValues(_address);
+      final prefs = await SharedPreferences.getInstance();
+      final servers = ServersByHost();
+      if (answered) {
+        servers.ids['kalinka.local'] = 'box-1';
+      } else {
+        servers.silent.add('kalinka.local');
+      }
+      final container = ProviderContainer(
+        overrides: [
+          sharedPrefsProvider.overrideWithValue(prefs),
+          connectionStateProvider.overrideWith(
+            () => _Connection(ConnectionStatus.connected),
+          ),
+          servers.client,
+          boxProbeProvider.overrideWith((ref) async => missing),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(pinnedCatalogsProvider, (_, _) {});
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(body: TimezoneRow(box: BoxTimezone(missing))),
+          ),
+        ),
+      );
+      // Dio's request needs the clock to move, not only a frame.
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(servers.asked, 1);
+      return (container, servers);
+    }
+
+    Future<void> tapRetry(WidgetTester tester) async {
+      await tester.tap(find.text('Time zone'));
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+
+    testWidgets('does not ask a server that has answered who it is again', (
+      tester,
+    ) async {
+      final (container, servers) = await pump(tester, answered: true);
+      expect(container.read(pinnedCatalogsProvider), isEmpty);
+
+      servers.silent.add('kalinka.local');
+      await tapRetry(tester);
+      expect(servers.asked, 1);
+      expect(container.read(pinnedCatalogsProvider), isEmpty);
+    });
+
+    testWidgets('asks a server that has not answered at once', (tester) async {
+      final (container, servers) = await pump(tester, answered: false);
+      expect(container.read(pinnedCatalogsProvider), isNull);
+
+      servers
+        ..silent.clear()
+        ..ids['kalinka.local'] = 'box-1';
+      await tapRetry(tester);
+      expect(servers.asked, 2);
+      expect(container.read(pinnedCatalogsProvider), isEmpty);
     });
   });
 
