@@ -113,6 +113,13 @@ class ServerAnswerNotifier extends AsyncNotifier<ServerAnswer> {
       rethrow;
     }
   }
+
+  /// Asks now, rather than after the pause, if asking on this connection
+  /// failed. A server that has answered is not asked again: a failure then
+  /// would hide what is kept for it until the next answer.
+  void askNow() {
+    if (state is AsyncError) ref.invalidateSelf();
+  }
 }
 
 final serverAnswerProvider =
