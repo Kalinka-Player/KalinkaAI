@@ -10,7 +10,7 @@ import 'kalinka_button.dart';
 /// Displays procedural art, title, and subtitle.
 ///
 /// While the library pipeline works, a small muted caption below the subtitle
-/// shows the stage and percentage ("Indexing · 45%") so a fresh install
+/// shows the stage and percentage ("Finding music · 45%") so a fresh install
 /// explains itself without hiding the search call to action.
 ///
 /// When [isOffline] is true (no server connection), the content is dimmed and

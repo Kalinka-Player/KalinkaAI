@@ -353,7 +353,9 @@ void main() {
       expect(find.text('Rescan library'), findsOneWidget);
       final button = find.widgetWithText(TextButton, 'Rescan library');
       final lastChecked = tester.getRect(find.textContaining('Last checked'));
-      final enrichment = tester.getRect(find.text('Enrichment · 73%'));
+      final enrichment = tester.getRect(
+        find.text('Adding artwork & details · 73%'),
+      );
       final action = tester.getRect(button);
       expect(action.left, greaterThan(lastChecked.right));
       expect(enrichment.left, lastChecked.left);
