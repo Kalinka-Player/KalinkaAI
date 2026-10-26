@@ -92,7 +92,7 @@ extension PlayQueueEventPatterns on PlayQueueEvent {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( PlaybackStateChangedEvent value)?  playbackStateChanged,TResult Function( RequestMoreTracksEvent value)?  requestMoreTracks,TResult Function( TracksAddedEvent value)?  tracksAdded,TResult Function( TracksRemovedEvent value)?  tracksRemoved,TResult Function( TrackMovedEvent value)?  trackMoved,TResult Function( TrackUnavailableEvent value)?  trackUnavailable,TResult Function( PlaybackErrorEvent value)?  playbackError,TResult Function( PlaybackModeChangedEvent value)?  playbackModeChanged,TResult Function( ReplayPlayQueueEvent value)?  replayEvent,TResult Function( RenderersChangedEvent value)?  renderersChanged,TResult Function( CurrentRendererChangedEvent value)?  currentRendererChanged,TResult Function( PlaybackControlChangedEvent value)?  playbackControlChanged,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( PlaybackStateChangedEvent value)?  playbackStateChanged,TResult Function( RequestMoreTracksEvent value)?  requestMoreTracks,TResult Function( TracksAddedEvent value)?  tracksAdded,TResult Function( TracksRemovedEvent value)?  tracksRemoved,TResult Function( TrackMovedEvent value)?  trackMoved,TResult Function( TrackUnavailableEvent value)?  trackUnavailable,TResult Function( PlaybackErrorEvent value)?  playbackError,TResult Function( PlaybackModeChangedEvent value)?  playbackModeChanged,TResult Function( ReplayPlayQueueEvent value)?  replayEvent,TResult Function( RenderersChangedEvent value)?  renderersChanged,TResult Function( CurrentRendererChangedEvent value)?  currentRendererChanged,TResult Function( PlaybackControlChangedEvent value)?  playbackControlChanged,TResult Function( ModulesChangedEvent value)?  modulesChanged,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case PlaybackStateChangedEvent() when playbackStateChanged != null:
@@ -107,7 +107,8 @@ return playbackModeChanged(_that);case ReplayPlayQueueEvent() when replayEvent !
 return replayEvent(_that);case RenderersChangedEvent() when renderersChanged != null:
 return renderersChanged(_that);case CurrentRendererChangedEvent() when currentRendererChanged != null:
 return currentRendererChanged(_that);case PlaybackControlChangedEvent() when playbackControlChanged != null:
-return playbackControlChanged(_that);case _:
+return playbackControlChanged(_that);case ModulesChangedEvent() when modulesChanged != null:
+return modulesChanged(_that);case _:
   return orElse();
 
 }
@@ -125,7 +126,7 @@ return playbackControlChanged(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( PlaybackStateChangedEvent value)  playbackStateChanged,required TResult Function( RequestMoreTracksEvent value)  requestMoreTracks,required TResult Function( TracksAddedEvent value)  tracksAdded,required TResult Function( TracksRemovedEvent value)  tracksRemoved,required TResult Function( TrackMovedEvent value)  trackMoved,required TResult Function( TrackUnavailableEvent value)  trackUnavailable,required TResult Function( PlaybackErrorEvent value)  playbackError,required TResult Function( PlaybackModeChangedEvent value)  playbackModeChanged,required TResult Function( ReplayPlayQueueEvent value)  replayEvent,required TResult Function( RenderersChangedEvent value)  renderersChanged,required TResult Function( CurrentRendererChangedEvent value)  currentRendererChanged,required TResult Function( PlaybackControlChangedEvent value)  playbackControlChanged,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( PlaybackStateChangedEvent value)  playbackStateChanged,required TResult Function( RequestMoreTracksEvent value)  requestMoreTracks,required TResult Function( TracksAddedEvent value)  tracksAdded,required TResult Function( TracksRemovedEvent value)  tracksRemoved,required TResult Function( TrackMovedEvent value)  trackMoved,required TResult Function( TrackUnavailableEvent value)  trackUnavailable,required TResult Function( PlaybackErrorEvent value)  playbackError,required TResult Function( PlaybackModeChangedEvent value)  playbackModeChanged,required TResult Function( ReplayPlayQueueEvent value)  replayEvent,required TResult Function( RenderersChangedEvent value)  renderersChanged,required TResult Function( CurrentRendererChangedEvent value)  currentRendererChanged,required TResult Function( PlaybackControlChangedEvent value)  playbackControlChanged,required TResult Function( ModulesChangedEvent value)  modulesChanged,}){
 final _that = this;
 switch (_that) {
 case PlaybackStateChangedEvent():
@@ -140,7 +141,8 @@ return playbackModeChanged(_that);case ReplayPlayQueueEvent():
 return replayEvent(_that);case RenderersChangedEvent():
 return renderersChanged(_that);case CurrentRendererChangedEvent():
 return currentRendererChanged(_that);case PlaybackControlChangedEvent():
-return playbackControlChanged(_that);}
+return playbackControlChanged(_that);case ModulesChangedEvent():
+return modulesChanged(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -154,7 +156,7 @@ return playbackControlChanged(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( PlaybackStateChangedEvent value)?  playbackStateChanged,TResult? Function( RequestMoreTracksEvent value)?  requestMoreTracks,TResult? Function( TracksAddedEvent value)?  tracksAdded,TResult? Function( TracksRemovedEvent value)?  tracksRemoved,TResult? Function( TrackMovedEvent value)?  trackMoved,TResult? Function( TrackUnavailableEvent value)?  trackUnavailable,TResult? Function( PlaybackErrorEvent value)?  playbackError,TResult? Function( PlaybackModeChangedEvent value)?  playbackModeChanged,TResult? Function( ReplayPlayQueueEvent value)?  replayEvent,TResult? Function( RenderersChangedEvent value)?  renderersChanged,TResult? Function( CurrentRendererChangedEvent value)?  currentRendererChanged,TResult? Function( PlaybackControlChangedEvent value)?  playbackControlChanged,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( PlaybackStateChangedEvent value)?  playbackStateChanged,TResult? Function( RequestMoreTracksEvent value)?  requestMoreTracks,TResult? Function( TracksAddedEvent value)?  tracksAdded,TResult? Function( TracksRemovedEvent value)?  tracksRemoved,TResult? Function( TrackMovedEvent value)?  trackMoved,TResult? Function( TrackUnavailableEvent value)?  trackUnavailable,TResult? Function( PlaybackErrorEvent value)?  playbackError,TResult? Function( PlaybackModeChangedEvent value)?  playbackModeChanged,TResult? Function( ReplayPlayQueueEvent value)?  replayEvent,TResult? Function( RenderersChangedEvent value)?  renderersChanged,TResult? Function( CurrentRendererChangedEvent value)?  currentRendererChanged,TResult? Function( PlaybackControlChangedEvent value)?  playbackControlChanged,TResult? Function( ModulesChangedEvent value)?  modulesChanged,}){
 final _that = this;
 switch (_that) {
 case PlaybackStateChangedEvent() when playbackStateChanged != null:
@@ -169,7 +171,8 @@ return playbackModeChanged(_that);case ReplayPlayQueueEvent() when replayEvent !
 return replayEvent(_that);case RenderersChangedEvent() when renderersChanged != null:
 return renderersChanged(_that);case CurrentRendererChangedEvent() when currentRendererChanged != null:
 return currentRendererChanged(_that);case PlaybackControlChangedEvent() when playbackControlChanged != null:
-return playbackControlChanged(_that);case _:
+return playbackControlChanged(_that);case ModulesChangedEvent() when modulesChanged != null:
+return modulesChanged(_that);case _:
   return null;
 
 }
@@ -186,7 +189,7 @@ return playbackControlChanged(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( PlaybackState state,  int seq)?  playbackStateChanged,TResult Function( int seq)?  requestMoreTracks,TResult Function( List<Track> tracks,  int seq,  int? index)?  tracksAdded,TResult Function( List<int> indices,  int seq)?  tracksRemoved,TResult Function( int fromIndex,  int toIndex,  int seq)?  trackMoved,TResult Function( int index,  bool unavailable,  int seq,  String? reason)?  trackUnavailable,TResult Function( String message,  int seq)?  playbackError,TResult Function( PlaybackMode mode,  int seq)?  playbackModeChanged,TResult Function( PlayQueueState state,  int serverTimeNs,  int seq)?  replayEvent,TResult Function( List<RendererInfo> renderers,  int seq)?  renderersChanged,TResult Function( String? rendererId,  String? selectedRendererId,  int seq)?  currentRendererChanged,TResult Function( PlaybackControl control,  int seq)?  playbackControlChanged,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( PlaybackState state,  int seq)?  playbackStateChanged,TResult Function( int seq)?  requestMoreTracks,TResult Function( List<Track> tracks,  int seq,  int? index)?  tracksAdded,TResult Function( List<int> indices,  int seq)?  tracksRemoved,TResult Function( int fromIndex,  int toIndex,  int seq)?  trackMoved,TResult Function( int index,  bool unavailable,  int seq,  String? reason)?  trackUnavailable,TResult Function( String message,  int seq)?  playbackError,TResult Function( PlaybackMode mode,  int seq)?  playbackModeChanged,TResult Function( PlayQueueState state,  int serverTimeNs,  int seq)?  replayEvent,TResult Function( List<RendererInfo> renderers,  int seq)?  renderersChanged,TResult Function( String? rendererId,  String? selectedRendererId,  int seq)?  currentRendererChanged,TResult Function( PlaybackControl control,  int seq)?  playbackControlChanged,TResult Function( ModulesAndDevices modules,  int seq)?  modulesChanged,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case PlaybackStateChangedEvent() when playbackStateChanged != null:
 return playbackStateChanged(_that.state,_that.seq);case RequestMoreTracksEvent() when requestMoreTracks != null:
@@ -200,7 +203,8 @@ return playbackModeChanged(_that.mode,_that.seq);case ReplayPlayQueueEvent() whe
 return replayEvent(_that.state,_that.serverTimeNs,_that.seq);case RenderersChangedEvent() when renderersChanged != null:
 return renderersChanged(_that.renderers,_that.seq);case CurrentRendererChangedEvent() when currentRendererChanged != null:
 return currentRendererChanged(_that.rendererId,_that.selectedRendererId,_that.seq);case PlaybackControlChangedEvent() when playbackControlChanged != null:
-return playbackControlChanged(_that.control,_that.seq);case _:
+return playbackControlChanged(_that.control,_that.seq);case ModulesChangedEvent() when modulesChanged != null:
+return modulesChanged(_that.modules,_that.seq);case _:
   return orElse();
 
 }
@@ -218,7 +222,7 @@ return playbackControlChanged(_that.control,_that.seq);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( PlaybackState state,  int seq)  playbackStateChanged,required TResult Function( int seq)  requestMoreTracks,required TResult Function( List<Track> tracks,  int seq,  int? index)  tracksAdded,required TResult Function( List<int> indices,  int seq)  tracksRemoved,required TResult Function( int fromIndex,  int toIndex,  int seq)  trackMoved,required TResult Function( int index,  bool unavailable,  int seq,  String? reason)  trackUnavailable,required TResult Function( String message,  int seq)  playbackError,required TResult Function( PlaybackMode mode,  int seq)  playbackModeChanged,required TResult Function( PlayQueueState state,  int serverTimeNs,  int seq)  replayEvent,required TResult Function( List<RendererInfo> renderers,  int seq)  renderersChanged,required TResult Function( String? rendererId,  String? selectedRendererId,  int seq)  currentRendererChanged,required TResult Function( PlaybackControl control,  int seq)  playbackControlChanged,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( PlaybackState state,  int seq)  playbackStateChanged,required TResult Function( int seq)  requestMoreTracks,required TResult Function( List<Track> tracks,  int seq,  int? index)  tracksAdded,required TResult Function( List<int> indices,  int seq)  tracksRemoved,required TResult Function( int fromIndex,  int toIndex,  int seq)  trackMoved,required TResult Function( int index,  bool unavailable,  int seq,  String? reason)  trackUnavailable,required TResult Function( String message,  int seq)  playbackError,required TResult Function( PlaybackMode mode,  int seq)  playbackModeChanged,required TResult Function( PlayQueueState state,  int serverTimeNs,  int seq)  replayEvent,required TResult Function( List<RendererInfo> renderers,  int seq)  renderersChanged,required TResult Function( String? rendererId,  String? selectedRendererId,  int seq)  currentRendererChanged,required TResult Function( PlaybackControl control,  int seq)  playbackControlChanged,required TResult Function( ModulesAndDevices modules,  int seq)  modulesChanged,}) {final _that = this;
 switch (_that) {
 case PlaybackStateChangedEvent():
 return playbackStateChanged(_that.state,_that.seq);case RequestMoreTracksEvent():
@@ -232,7 +236,8 @@ return playbackModeChanged(_that.mode,_that.seq);case ReplayPlayQueueEvent():
 return replayEvent(_that.state,_that.serverTimeNs,_that.seq);case RenderersChangedEvent():
 return renderersChanged(_that.renderers,_that.seq);case CurrentRendererChangedEvent():
 return currentRendererChanged(_that.rendererId,_that.selectedRendererId,_that.seq);case PlaybackControlChangedEvent():
-return playbackControlChanged(_that.control,_that.seq);}
+return playbackControlChanged(_that.control,_that.seq);case ModulesChangedEvent():
+return modulesChanged(_that.modules,_that.seq);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -246,7 +251,7 @@ return playbackControlChanged(_that.control,_that.seq);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( PlaybackState state,  int seq)?  playbackStateChanged,TResult? Function( int seq)?  requestMoreTracks,TResult? Function( List<Track> tracks,  int seq,  int? index)?  tracksAdded,TResult? Function( List<int> indices,  int seq)?  tracksRemoved,TResult? Function( int fromIndex,  int toIndex,  int seq)?  trackMoved,TResult? Function( int index,  bool unavailable,  int seq,  String? reason)?  trackUnavailable,TResult? Function( String message,  int seq)?  playbackError,TResult? Function( PlaybackMode mode,  int seq)?  playbackModeChanged,TResult? Function( PlayQueueState state,  int serverTimeNs,  int seq)?  replayEvent,TResult? Function( List<RendererInfo> renderers,  int seq)?  renderersChanged,TResult? Function( String? rendererId,  String? selectedRendererId,  int seq)?  currentRendererChanged,TResult? Function( PlaybackControl control,  int seq)?  playbackControlChanged,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( PlaybackState state,  int seq)?  playbackStateChanged,TResult? Function( int seq)?  requestMoreTracks,TResult? Function( List<Track> tracks,  int seq,  int? index)?  tracksAdded,TResult? Function( List<int> indices,  int seq)?  tracksRemoved,TResult? Function( int fromIndex,  int toIndex,  int seq)?  trackMoved,TResult? Function( int index,  bool unavailable,  int seq,  String? reason)?  trackUnavailable,TResult? Function( String message,  int seq)?  playbackError,TResult? Function( PlaybackMode mode,  int seq)?  playbackModeChanged,TResult? Function( PlayQueueState state,  int serverTimeNs,  int seq)?  replayEvent,TResult? Function( List<RendererInfo> renderers,  int seq)?  renderersChanged,TResult? Function( String? rendererId,  String? selectedRendererId,  int seq)?  currentRendererChanged,TResult? Function( PlaybackControl control,  int seq)?  playbackControlChanged,TResult? Function( ModulesAndDevices modules,  int seq)?  modulesChanged,}) {final _that = this;
 switch (_that) {
 case PlaybackStateChangedEvent() when playbackStateChanged != null:
 return playbackStateChanged(_that.state,_that.seq);case RequestMoreTracksEvent() when requestMoreTracks != null:
@@ -260,7 +265,8 @@ return playbackModeChanged(_that.mode,_that.seq);case ReplayPlayQueueEvent() whe
 return replayEvent(_that.state,_that.serverTimeNs,_that.seq);case RenderersChangedEvent() when renderersChanged != null:
 return renderersChanged(_that.renderers,_that.seq);case CurrentRendererChangedEvent() when currentRendererChanged != null:
 return currentRendererChanged(_that.rendererId,_that.selectedRendererId,_that.seq);case PlaybackControlChangedEvent() when playbackControlChanged != null:
-return playbackControlChanged(_that.control,_that.seq);case _:
+return playbackControlChanged(_that.control,_that.seq);case ModulesChangedEvent() when modulesChanged != null:
+return modulesChanged(_that.modules,_that.seq);case _:
   return null;
 
 }
@@ -1129,6 +1135,76 @@ class _$PlaybackControlChangedEventCopyWithImpl<$Res>
   return _then(PlaybackControlChangedEvent(
 control: null == control ? _self.control : control // ignore: cast_nullable_to_non_nullable
 as PlaybackControl,seq: null == seq ? _self.seq : seq // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class ModulesChangedEvent implements PlayQueueEvent {
+  const ModulesChangedEvent({required this.modules, required this.seq});
+  
+
+ final  ModulesAndDevices modules;
+@override final  int seq;
+
+/// Create a copy of PlayQueueEvent
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ModulesChangedEventCopyWith<ModulesChangedEvent> get copyWith => _$ModulesChangedEventCopyWithImpl<ModulesChangedEvent>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is ModulesChangedEvent&&(identical(other.modules, modules) || other.modules == modules)&&(identical(other.seq, seq) || other.seq == seq));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,modules,seq);
+}
+
+@override
+String toString() {
+    return 'PlayQueueEvent.modulesChanged(modules: $modules, seq: $seq)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ModulesChangedEventCopyWith<$Res> implements $PlayQueueEventCopyWith<$Res> {
+  factory $ModulesChangedEventCopyWith(ModulesChangedEvent value, $Res Function(ModulesChangedEvent) _then) = _$ModulesChangedEventCopyWithImpl;
+@override @useResult
+$Res call({
+ ModulesAndDevices modules, int seq
+});
+
+
+
+
+}
+/// @nodoc
+class _$ModulesChangedEventCopyWithImpl<$Res>
+    implements $ModulesChangedEventCopyWith<$Res> {
+  _$ModulesChangedEventCopyWithImpl(this._self, this._then);
+
+  final ModulesChangedEvent _self;
+  final $Res Function(ModulesChangedEvent) _then;
+
+/// Create a copy of PlayQueueEvent
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? modules = null,Object? seq = null,}) {
+  return _then(ModulesChangedEvent(
+modules: null == modules ? _self.modules : modules // ignore: cast_nullable_to_non_nullable
+as ModulesAndDevices,seq: null == seq ? _self.seq : seq // ignore: cast_nullable_to_non_nullable
 as int,
   ));
 }

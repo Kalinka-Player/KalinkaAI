@@ -44,6 +44,11 @@ class PlayQueueState {
   @JsonKey(includeToJson: false, fromJson: PlaybackControl.fromJson)
   final PlaybackControl playbackControl;
 
+  /// The module listing as the replay reported it. Null on a server before
+  /// API 0.19, where `GET /server/modules` is the only source.
+  @JsonKey(includeToJson: false)
+  final ModulesAndDevices? modules;
+
   const PlayQueueState({
     required this.playbackState,
     required this.trackList,
@@ -53,6 +58,7 @@ class PlayQueueState {
     this.currentRendererId,
     this.selectedRendererId,
     this.playbackControl = const PlaybackControl.queue(),
+    this.modules,
   });
 
   static final PlayQueueState empty = PlayQueueState(
@@ -66,6 +72,7 @@ class PlayQueueState {
     PlaybackState? playbackState,
     List<Track>? trackList,
     PlaybackMode? playbackMode,
+    ModulesAndDevices? modules,
     required int seq,
   }) => PlayQueueState(
     playbackState: playbackState ?? this.playbackState,
@@ -76,6 +83,7 @@ class PlayQueueState {
     currentRendererId: currentRendererId,
     selectedRendererId: selectedRendererId,
     playbackControl: playbackControl,
+    modules: modules ?? this.modules,
   );
 
   /// Apply an event to produce a new state (immutable pattern).
@@ -174,6 +182,7 @@ class PlayQueueState {
           currentRendererId: currentRendererId,
           selectedRendererId: selectedRendererId,
           playbackControl: playbackControl,
+          modules: modules,
         );
       case CurrentRendererChangedEvent(
         :final rendererId,
@@ -190,6 +199,7 @@ class PlayQueueState {
           currentRendererId: rendererId,
           selectedRendererId: selectedRendererId,
           playbackControl: playbackControl,
+          modules: modules,
         );
       case PlaybackControlChangedEvent(:final control, :final seq):
         // Back to the queue, the plugin's track goes with it; the queue's own
@@ -205,7 +215,10 @@ class PlayQueueState {
           currentRendererId: currentRendererId,
           selectedRendererId: selectedRendererId,
           playbackControl: control,
+          modules: modules,
         );
+      case ModulesChangedEvent(:final modules, :final seq):
+        return copyWith(modules: modules, seq: seq);
       case ReplayPlayQueueEvent(:final state, :final serverTimeNs, :final seq):
         final nextPlaybackState =
             state.playbackState.copyWith(state.playbackState)
@@ -223,6 +236,7 @@ class PlayQueueState {
           currentRendererId: state.currentRendererId,
           selectedRendererId: state.selectedRendererId,
           playbackControl: state.playbackControl,
+          modules: state.modules,
         );
     }
   }
@@ -327,7 +341,8 @@ enum PlayQueueEventType {
   playbackModeChanged,
   renderersChanged,
   currentRendererChanged,
-  playbackControlChanged;
+  playbackControlChanged,
+  modulesChanged;
 
   String toJson() => _$PlayQueueEventTypeEnumMap[this]!;
 
@@ -408,6 +423,13 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
     required PlaybackControl control,
     required int seq,
   }) = PlaybackControlChangedEvent;
+
+  /// Every module and device as `GET /server/modules` lists them, sent when a
+  /// health check finds one reporting something new (API 0.19).
+  const factory PlayQueueEvent.modulesChanged({
+    required ModulesAndDevices modules,
+    required int seq,
+  }) = ModulesChangedEvent;
 
   factory PlayQueueEvent.fromJson(Map<String, dynamic> json) {
     final eventTypeStr = json['event_type'] as String;
@@ -504,6 +526,11 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
       case 'playback_control_changed':
         return PlayQueueEvent.playbackControlChanged(
           control: PlaybackControl.fromJson(json['control']),
+          seq: seq,
+        );
+      case 'modules_changed':
+        return PlayQueueEvent.modulesChanged(
+          modules: ModulesAndDevices.fromJson(json),
           seq: seq,
         );
       default:
