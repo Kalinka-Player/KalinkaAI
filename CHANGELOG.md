@@ -8,6 +8,22 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.22.0
+
+Plugin settings laid out as labelled cards, the library's progress on Home stage by stage, and the browser player in the update banner. My Library's new settings order and the browser player in the banner need server 5.14.0; against an older server the settings keep their old order and the banner is as before.
+
+### Added
+- While the library updates, Home shows an Updating library line under the prompts and sources. It opens a Library activity card listing every stage the server reports, Finding music, Adding artwork & details and Preparing smart search, each with its percentage and bar while it works and a tick once done.
+- The update banner lists a new browser player as Web player with its old and new versions, as it does the renderer and the supervisor. An update of the browser player alone used to show "Software updates available" with nothing under it.
+
+### Changed
+- A plugin's settings page gives each section, collection and group of fields a card of its own under a label, with nothing folded away. A section's own switch leads its card and dims the rest while off, and a status reads as a line under the setting it describes. With server 5.14.0, My Library puts AI search and the enricher right after its sources, and the AcoustID key is no longer three foldouts deep.
+- A collection, such as My Library's sources, lists its entries as rows with the status the server reports for each, and has an add button per kind. The sheet opens as that kind and no longer asks for it again.
+- The pin hint on Home has its icon beside its words, and its Customise Home button is brighter.
+
+### Fixed
+- With Change server or the player sheet open, the mini-player no longer shows through the rail's border.
+
 ## 0.21.2
 
 Fixes for changing the sound card and for the Wi-Fi list in setup. It needs no newer server or supervisor than 0.21.0; supervisor 0.6.1, out alongside it, makes the Pi's HDMI and headphone outputs play after they are chosen.

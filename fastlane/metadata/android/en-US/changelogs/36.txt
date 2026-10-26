@@ -1,0 +1,5 @@
+- Plugin settings as labelled cards, nothing folded away
+- Add a source by its kind
+- Library progress on Home, stage by stage
+- Update banner names the browser player
+- Mini-player no longer shows through the rail
