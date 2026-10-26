@@ -505,6 +505,21 @@ void main() {
     expect(container.read(pinnedCatalogsProvider), isEmpty);
   });
 
+  test('pins kept under the address are looked for once a run, not on each '
+      'reconnect', () async {
+    container.read(rememberServerIdentityProvider);
+    await known(container);
+    await Future<void>.delayed(Duration.zero);
+    expect(prefs.getString(_firstRecordKey), 'box-a');
+
+    await prefs.setString(_firstAddressKey, jsonEncode([pin('one').toJson()]));
+    await reconnect(container);
+    expect(container.read(pinnedCatalogsProvider), isEmpty);
+    expect(prefs.getString(_firstAddressKey), isNotNull);
+
+    expect((await known(open())).single.page.provider, 'one');
+  });
+
   test('with the server away from the start, the pins of the one last recorded '
       'at the address show, unchanged until it answers', () async {
     await prefs.setString(_firstAddressKey, jsonEncode([pin('one').toJson()]));

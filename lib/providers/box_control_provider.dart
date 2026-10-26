@@ -54,21 +54,30 @@ Future<ServerAnswer> _askWhoItIs(Dio client, Uri server) async {
 /// reason, asked again with a growing pause. Only an answer changes it, so
 /// asking again rebuilds nothing that watches it.
 class ServerAnswerNotifier extends AsyncNotifier<ServerAnswer> {
+  /// Addresses whose state from before servers had ids has gone to its owner
+  /// in this run. Nothing is saved there since, so it is not looked for again
+  /// on each change of the connection.
+  final _claimed = <Uri>{};
+
   @override
   Future<ServerAnswer> build() async {
     final server = ref.watch(
       connectionSettingsProvider.select((s) => s.baseUrl),
     );
     final prefs = ref.read(sharedPrefsProvider);
+    void claim(ServerStorageKey owner) {
+      if (_claimed.contains(server)) return;
+      _claimStateBeforeIds(prefs, server, owner);
+      _claimed.add(server);
+    }
+
     // The server last recorded here owns what was kept under the address
     // before servers had ids. Read before this connection's answer is
     // recorded over it.
     final recorded = prefs.getString(
       _knownServerKey(ref.read(connectionSettingsProvider)),
     );
-    if (recorded != null) {
-      _claimStateBeforeIds(prefs, server, ServerStorageKey.ofServer(recorded));
-    }
+    if (recorded != null) claim(ServerStorageKey.ofServer(recorded));
     if (ref.watch(connectionStateProvider) != ConnectionStatus.connected) {
       return Completer<ServerAnswer>().future;
     }
@@ -83,7 +92,7 @@ class ServerAnswerNotifier extends AsyncNotifier<ServerAnswer> {
     Future<ServerAnswer> ask() async {
       final answer = await _askWhoItIs(client, server);
       final owner = ServerStorageKey.of(answer);
-      if (recorded == null) _claimStateBeforeIds(prefs, server, owner);
+      if (recorded == null) claim(owner);
       // An id new here may be the server that had none, since updated.
       if (answer.id != null && answer.id != recorded) {
         _moveServerState(
