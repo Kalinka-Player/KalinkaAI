@@ -47,6 +47,10 @@ class SearchZeroState extends ConsumerWidget {
   final Widget? sources;
   final bool showSources;
 
+  /// Under the ways in: what the library is doing while it works. Brings
+  /// its own gap under it, so it takes no room while idle.
+  final Widget? activity;
+
   /// How far down the search sits while centred, so the glow behind it
   /// follows.
   final ValueChanged<double>? onCentringShift;
@@ -64,6 +68,7 @@ class SearchZeroState extends ConsumerWidget {
     this.showCollections = true,
     this.sources,
     this.showSources = true,
+    this.activity,
     this.onCentringShift,
     this.roomLent,
   });
@@ -117,6 +122,7 @@ class SearchZeroState extends ConsumerWidget {
                     const SizedBox(height: 16),
                   ] else
                     const SizedBox(height: 12),
+                  ?activity,
                   if (empty)
                     _PinHint(
                       onCustomise: () =>
@@ -288,22 +294,28 @@ class _PinHint extends StatelessWidget {
     return Column(
       key: const ValueKey('home-pin-hint'),
       children: [
-        const Icon(
-          CupertinoIcons.pin,
-          size: 24,
-          color: KalinkaColors.textSecondary,
-        ),
-        const SizedBox(height: 10),
         ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 320),
-          child: Text(
-            'Pin any catalogue or saved search to see it here.',
-            textAlign: TextAlign.center,
-            style: KalinkaTextStyles.trackRowSubtitle.copyWith(
-              fontSize: KalinkaTypography.baseSize + 3,
-              color: KalinkaColors.textSecondary,
-              height: 1.45,
-            ),
+          constraints: const BoxConstraints(maxWidth: 350),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                CupertinoIcons.pin,
+                size: 20,
+                color: KalinkaColors.textSecondary,
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  'Pin any catalogue or saved search to see it here.',
+                  style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+                    fontSize: KalinkaTypography.baseSize + 3,
+                    color: KalinkaColors.textSecondary,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 20),
@@ -313,7 +325,7 @@ class _PinHint extends StatelessWidget {
           style: TextButton.styleFrom(
             minimumSize: const Size(48, 48),
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            foregroundColor: KalinkaColors.textSecondary,
+            foregroundColor: KalinkaColors.textPrimary,
             textStyle: KalinkaFonts.sans(
               fontSize: KalinkaTypography.baseSize + 3,
               fontWeight: FontWeight.w500,

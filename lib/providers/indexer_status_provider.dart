@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
@@ -8,32 +9,53 @@ import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
 
 /// Library-pipeline stages surfaced to the user, in pipeline order. The
-/// server's `clap_audio` maps to [analyzingAudio]; `clap_text` and any later
-/// embedding stage fold into [preparingAi].
+/// server's `indexing` is [findingMusic]; `clap_audio`, `clap_text` and any
+/// later embedding stage fold into [smartSearch], which is all they feed.
 enum IndexerDisplayStage {
-  indexing('Indexing'),
-  analyzingAudio('Analyzing audio'),
-  enrichment('Enrichment'),
-  preparingAi('Preparing AI search');
+  findingMusic('Finding music'),
+  enrichment('Adding artwork & details'),
+  smartSearch('Preparing smart search');
 
   final String label;
   const IndexerDisplayStage(this.label);
+}
+
+/// One reported stage, summed across the modules that report it.
+class IndexerStageProgress {
+  final IndexerDisplayStage stage;
+
+  /// Outstanding work, or a scan still looking; a stage without either is
+  /// done for now.
+  final bool active;
+
+  /// Progress (0-100) while [active], monotonically non-decreasing while it
+  /// stays active: raw numbers can dip when new work is queued mid-run. Null
+  /// while unknown, as while a scan is still listing folders.
+  final double? progressPct;
+
+  const IndexerStageProgress(
+    this.stage, {
+    this.active = false,
+    this.progressPct,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is IndexerStageProgress &&
+      other.stage == stage &&
+      other.active == active &&
+      other.progressPct == progressPct;
+
+  @override
+  int get hashCode => Object.hash(stage, active, progressPct);
 }
 
 /// Pipeline progress published as its own provider so the 5s poll loop does
 /// not churn the wider search state. Widgets that render the progress banner
 /// watch this provider directly; everything else is unaffected by ticks.
 class IndexerStatusState {
-  /// Earliest pipeline stage that still has outstanding work — the one the
-  /// banner names. Stages overlap on the server (enrichment starts while the
-  /// scan is still finding files), but showing the earliest keeps the label
-  /// from jumping back and forth. Null when the whole pipeline is idle.
-  final IndexerDisplayStage? stage;
-
-  /// Progress (0-100) of [stage], monotonically non-decreasing while the
-  /// stage is displayed: raw numbers can dip when new work is queued
-  /// mid-run. Resets when the displayed stage changes.
-  final double? progressPct;
+  /// Every stage the server reports, in pipeline order.
+  final List<IndexerStageProgress> stages;
 
   final StageStatus? scan;
   final bool requesting;
@@ -41,29 +63,42 @@ class IndexerStatusState {
   final int libraryRevision;
 
   const IndexerStatusState({
-    this.stage,
-    this.progressPct,
+    this.stages = const [],
     this.scan,
     this.requesting = false,
     this.requestError,
     this.libraryRevision = 0,
   });
 
+  /// Earliest stage with work under way — the one a one-line caption names.
+  /// Stages overlap on the server (enrichment starts while the scan is still
+  /// finding files), but naming the earliest keeps the label from jumping
+  /// back and forth. Null when the whole pipeline is idle.
+  IndexerStageProgress? get current {
+    for (final stage in stages) {
+      if (stage.active) return stage;
+    }
+    return null;
+  }
+
+  IndexerDisplayStage? get stage => current?.stage;
+  double? get progressPct => current?.progressPct;
+
   bool get scanBusy =>
       requesting || scan?.scanPending == true || scan?.scanning == true;
 
   IndexerStatusState withRequest({required bool requesting, String? error}) =>
       IndexerStatusState(
-        stage: stage,
-        progressPct: progressPct,
+        stages: stages,
         scan: scan,
         requesting: requesting,
         requestError: error,
         libraryRevision: libraryRevision,
       );
 
-  /// Shared caption for progress surfaces: "Indexing · 45%", or "Indexing…"
-  /// while the percentage is unknown. Null when the pipeline is idle.
+  /// Shared caption for progress surfaces: "Finding music · 45%", or
+  /// "Finding music…" while the percentage is unknown. Null when the pipeline
+  /// is idle.
   String? get caption {
     final stage = this.stage;
     if (stage == null) return null;
@@ -200,32 +235,47 @@ class IndexerStatusNotifier extends Notifier<IndexerStatusState> {
         scan!.lastScanAt != previousScan?.lastScanAt &&
         (previousScan != null || state.requesting);
     final revision = state.libraryRevision + (completed ? 1 : 0);
-    IndexerDisplayStage? displayedStage;
-    double? progress;
+    final stages = <IndexerStageProgress>[];
     for (final stage in IndexerDisplayStage.values) {
+      var reported = false;
+      var looking = false;
       var total = 0;
       var outstanding = 0;
-      for (final stages in status.modules.values) {
-        for (final entry in stages.entries) {
+      for (final module in status.modules.values) {
+        for (final entry in module.entries) {
           if (_displayStageFor(entry.key) != stage) continue;
+          reported = true;
+          // Checking unchanged folders creates no work, but is a scan.
+          looking |= entry.value.scanning;
           total += entry.value.total;
           outstanding += entry.value.pending + entry.value.inProgress;
         }
       }
-      if (outstanding == 0) continue;
+      if (!reported) continue;
+      if (outstanding == 0) {
+        stages.add(IndexerStageProgress(stage, active: looking));
+        continue;
+      }
       final raw = total == 0
           ? 0.0
           : (100.0 * (total - outstanding) / total).clamp(0.0, 99.0).toDouble();
-      final prev = !completed && state.stage == stage
-          ? state.progressPct
-          : null;
-      displayedStage = stage;
-      progress = prev == null ? raw : math.max(prev, raw);
-      break;
+      final prev = completed
+          ? null
+          : state.stages
+                .where((s) => s.stage == stage && s.active)
+                .firstOrNull
+                ?.progressPct;
+      stages.add(
+        IndexerStageProgress(
+          stage,
+          active: true,
+          progressPct: prev == null ? raw : math.max(prev, raw),
+        ),
+      );
     }
     state = IndexerStatusState(
-      stage: displayedStage,
-      progressPct: progress,
+      // Unchanged stages keep their identity, so selects on them stay quiet.
+      stages: listEquals(stages, state.stages) ? state.stages : stages,
       scan: scan,
       libraryRevision: revision,
       requestError: state.requestError,
@@ -236,13 +286,11 @@ class IndexerStatusNotifier extends Notifier<IndexerStatusState> {
   IndexerDisplayStage _displayStageFor(String serverStage) {
     switch (serverStage) {
       case 'indexing':
-        return IndexerDisplayStage.indexing;
-      case 'clap_audio':
-        return IndexerDisplayStage.analyzingAudio;
+        return IndexerDisplayStage.findingMusic;
       case 'enrichment':
         return IndexerDisplayStage.enrichment;
-      default: // clap_text and any future enrichment-dependent stage
-        return IndexerDisplayStage.preparingAi;
+      default: // clap_audio, clap_text and any future embedding stage
+        return IndexerDisplayStage.smartSearch;
     }
   }
 }

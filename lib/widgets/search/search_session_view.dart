@@ -38,6 +38,7 @@ import 'browse_visit_scope.dart';
 import 'catalog_page_view.dart';
 import 'catalog_sliver_header.dart';
 import 'folder_trail.dart';
+import 'library_activity.dart';
 import 'collections_edit_bar.dart' show leaveCollectionEditing;
 import '../home/home_layout.dart';
 import '../home/catalog_pin_button.dart';
@@ -1594,6 +1595,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       showCollections: !widget.navigationVisible,
       showSources: !widget.navigationVisible,
       sources: HomeSourceList(onOpen: _openSourceFromHome),
+      activity: const LibraryActivityLine(),
       onCentringShift: (shift) => _discoverCentring.value = shift,
       roomLent: widget.roomLent,
       leading: [
@@ -1615,8 +1617,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Only present while the library pipeline is still running.
-                const _IndexerProgressCard(),
                 _DiscoverHero(
                   entryKey: _entryKey,
                   hint: _hintText(session, smart: smart),
@@ -2208,88 +2208,6 @@ class _SearchEntryButton extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Pipeline progress as a card at the top of the Catalogs scroll: a spinner +
-/// stage caption ("Indexing · 45%") over a crimson progress line, shown while
-/// the library is indexing / enriching / embedding and gone when the pipeline
-/// is idle. Placed in-scroll (above "What shall we play?") so it's actually
-/// visible rather than a hairline strip under the header. Its own consumer so
-/// the 5s poll ticks rebuild only this card, not the whole search surface.
-class _IndexerProgressCard extends ConsumerWidget {
-  const _IndexerProgressCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(indexerStatusProvider);
-    final stage = status.stage;
-    if (stage == null) return const SizedBox.shrink();
-    final pct = status.progressPct;
-    final progress = pct != null ? (pct / 100).clamp(0.0, 1.0) : null;
-
-    // Name the stage but always make clear it's My Library being built.
-    final String action = switch (stage) {
-      IndexerDisplayStage.indexing => 'Indexing My Library',
-      IndexerDisplayStage.analyzingAudio => 'Analyzing audio in My Library',
-      IndexerDisplayStage.enrichment => 'Enriching My Library',
-      IndexerDisplayStage.preparingAi => 'Preparing My Library for AI',
-    };
-    final label = pct != null
-        ? '$action · ${pct.toStringAsFixed(0)}%'
-        : '$action…';
-
-    return Container(
-      margin: const EdgeInsets.only(top: 4, bottom: 16),
-      padding: const EdgeInsets.fromLTRB(14, 9, 14, 10),
-      decoration: BoxDecoration(
-        color: KalinkaColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: KalinkaColors.borderDefault),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.travel_explore_rounded,
-                size: 17,
-                color: KalinkaColors.accent,
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Text(
-                  label,
-                  // Screen readers skip or literalize '·'.
-                  semanticsLabel: label.replaceAll(' · ', ', '),
-                  style: KalinkaTextStyles.trackRowSubtitle.copyWith(
-                    color: KalinkaColors.textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 9),
-          // Bar aligns under the text, not the icon (icon 17 + 11 gap = 28).
-          Padding(
-            padding: const EdgeInsets.only(left: 28),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 3,
-                backgroundColor: KalinkaColors.borderSubtle,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  KalinkaColors.accent,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
