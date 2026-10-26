@@ -60,13 +60,14 @@ class ServerAnswerNotifier extends AsyncNotifier<ServerAnswer> {
       connectionSettingsProvider.select((s) => s.baseUrl),
     );
     final prefs = ref.read(sharedPrefsProvider);
-    // The server last recorded here owns what was kept under the address.
-    // Read before this connection's answer is recorded over it.
+    // The server last recorded here owns what was kept under the address
+    // before servers had ids. Read before this connection's answer is
+    // recorded over it.
     final recorded = prefs.getString(
       _knownServerKey(ref.read(connectionSettingsProvider)),
     );
     if (recorded != null) {
-      _claimAddressState(prefs, server, ServerStorageKey.ofServer(recorded));
+      _claimStateBeforeIds(prefs, server, ServerStorageKey.ofServer(recorded));
     }
     if (ref.watch(connectionStateProvider) != ConnectionStatus.connected) {
       return Completer<ServerAnswer>().future;
@@ -81,8 +82,15 @@ class ServerAnswerNotifier extends AsyncNotifier<ServerAnswer> {
 
     Future<ServerAnswer> ask() async {
       final answer = await _askWhoItIs(client, server);
-      if (recorded == null) {
-        _claimAddressState(prefs, server, ServerStorageKey.of(answer));
+      final owner = ServerStorageKey.of(answer);
+      if (recorded == null) _claimStateBeforeIds(prefs, server, owner);
+      // An id new here may be the server that had none, since updated.
+      if (answer.id != null && answer.id != recorded) {
+        _moveServerState(
+          prefs,
+          from: ServerStorageKey.ofAddress(server),
+          to: owner,
+        );
       }
       return answer;
     }
@@ -147,9 +155,13 @@ class ServerStorageKey {
   ServerStorageKey.ofServer(String id, {bool confirmed = false})
     : this._('id:$id', confirmed: confirmed);
 
-  /// The scope pins were kept under before servers were told apart by id.
+  /// A server too old to report an id, told apart by its address alone.
   ServerStorageKey.ofAddress(Uri baseUrl, {bool confirmed = false})
-    : this._('$baseUrl', confirmed: confirmed);
+    : this._('addr:$baseUrl', confirmed: confirmed);
+
+  /// Where pins and folder paths were kept before servers were told apart by
+  /// id. Nothing is saved there any more.
+  ServerStorageKey._beforeIds(Uri baseUrl) : this._('$baseUrl');
 
   factory ServerStorageKey.of(ServerAnswer answer, {bool confirmed = false}) {
     final id = answer.id;
@@ -180,27 +192,39 @@ class ServerStorageKey {
 }
 
 /// Moves what was kept under [address] before servers were told apart by id
-/// to [owner], with the catalog filters once kept for every server. Nothing
-/// [owner] has already is replaced.
-void _claimAddressState(
+/// to [owner], with the catalog filters once kept for every server. Those
+/// keys are no longer written, so once moved they stay gone.
+void _claimStateBeforeIds(
   SharedPreferences prefs,
   Uri address,
   ServerStorageKey owner,
-) {
-  final from = ServerStorageKey.ofAddress(address);
-  if (owner.scope != from.scope) {
-    if (prefs.getString(owner.pinnedCatalogs) == null) {
-      _moveString(prefs, from: from.pinnedCatalogs, to: owner.pinnedCatalogs);
-    }
-    _moveFolderPaths(prefs, from: from.scope, to: owner.scope);
+) => _moveServerState(
+  prefs,
+  from: ServerStorageKey._beforeIds(address),
+  filtersFrom: ServerStorageKey.everyServersCatalogFilters,
+  to: owner,
+);
+
+/// Moves [from]'s pins, catalog filters and folder paths to [to]. Nothing
+/// [to] has already is replaced. [filtersFrom] is where [from]'s catalog
+/// filters are kept, if not under its own key.
+void _moveServerState(
+  SharedPreferences prefs, {
+  required ServerStorageKey from,
+  required ServerStorageKey to,
+  String? filtersFrom,
+}) {
+  if (prefs.getString(to.pinnedCatalogs) == null) {
+    _moveString(prefs, from: from.pinnedCatalogs, to: to.pinnedCatalogs);
   }
-  if (prefs.getString(owner.catalogFilters) == null) {
+  if (prefs.getString(to.catalogFilters) == null) {
     _moveString(
       prefs,
-      from: ServerStorageKey.everyServersCatalogFilters,
-      to: owner.catalogFilters,
+      from: filtersFrom ?? from.catalogFilters,
+      to: to.catalogFilters,
     );
   }
+  _moveFolderPaths(prefs, from: from.scope, to: to.scope);
 }
 
 void _moveString(

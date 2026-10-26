@@ -1339,6 +1339,42 @@ void main() {
       );
     });
 
+    test('a server without an id takes its filters and folders along once it '
+        'has one', () async {
+      final servers = ServersByHost();
+      final container = makeContainer(_FakeApi(), servers: servers);
+      await container.read(serverAnswerProvider.future);
+      final notifier = container.read(searchSessionProvider.notifier);
+      SearchSessionState state() => container.read(searchSessionProvider);
+      void openLibrary() => notifier.openCatalog(
+        id: 'kalinka:localfiles:catalog:files',
+        title: 'Library',
+        filters: const [_genreField],
+        folderLayout: true,
+      );
+      openLibrary();
+      notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+      notifier.openFolder(_folder('Jazz'));
+      notifier.backToCatalogsRoot();
+
+      servers.ids['localhost'] = 'box-a';
+      final connection = container.read(
+        connectionStateProvider.notifier,
+      ) as SettableConnection;
+      connection.set(ConnectionStatus.reconnecting);
+      connection.set(ConnectionStatus.connected);
+      await container.read(serverAnswerProvider.future);
+      openLibrary();
+      expect(state().catalogFilter.genreIds, ['jazz']);
+      expect([for (final folder in state().folderPath) folder.title], ['Jazz']);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        prefs.getKeys().where((k) => k.startsWith('Kalinka.catalogFilters')),
+        ['Kalinka.catalogFilters:id:box-a'],
+      );
+      expect(prefs.getString('Kalinka.folderPaths'), isNot(contains('addr:')));
+    });
+
     test('nothing is kept for a server not known yet', () {
       final servers = ServersByHost()..silent.add('localhost');
       final container = makeContainer(_FakeApi(), servers: servers);
