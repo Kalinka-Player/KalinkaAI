@@ -50,9 +50,9 @@ Future<ServerAnswer> _askWhoItIs(Dio client, Uri server) async {
 }
 
 /// The connected server's answer to who it is, asked once per connection.
-/// Loading while not connected; an error while the server does not answer,
-/// asked again with a growing pause. Only an answer changes it, so asking
-/// again rebuilds nothing that watches it.
+/// Loading while not connected; an error while asking fails, for whatever
+/// reason, asked again with a growing pause. Only an answer changes it, so
+/// asking again rebuilds nothing that watches it.
 class ServerAnswerNotifier extends AsyncNotifier<ServerAnswer> {
   @override
   Future<ServerAnswer> build() async {
@@ -100,7 +100,7 @@ class ServerAnswerNotifier extends AsyncNotifier<ServerAnswer> {
         try {
           final answer = await ask();
           if (current) state = AsyncData(answer);
-        } on DioException {
+        } catch (_) {
           if (current) askAgain(attempt + 1);
         }
       });
@@ -108,7 +108,7 @@ class ServerAnswerNotifier extends AsyncNotifier<ServerAnswer> {
 
     try {
       return await ask();
-    } on DioException {
+    } catch (_) {
       if (current) askAgain(0);
       rethrow;
     }

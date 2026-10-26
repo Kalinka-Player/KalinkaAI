@@ -356,6 +356,28 @@ void main() {
     });
   });
 
+  test('a failure other than the server not answering is asked again too', () {
+    fakeAsync((async) {
+      const unreadable = 'Kalinka.pinnedCatalogs.v1:id:box-a';
+      servers.silent.add('first');
+      final asking = open()..listen(pinnedCatalogsProvider, (_, _) {});
+      async.elapse(const Duration(milliseconds: 1));
+      expect(servers.asked, 1);
+
+      // Not a string, so reading it on the answer throws.
+      prefs.setInt(unreadable, 1);
+      servers.silent.clear();
+      async.elapse(const Duration(seconds: 2));
+      expect(servers.asked, 2);
+      expect(asking.read(pinnedCatalogsProvider), isNull);
+
+      prefs.remove(unreadable);
+      async.elapse(const Duration(seconds: 4));
+      expect(servers.asked, 3);
+      expect(asking.read(pinnedCatalogsProvider), isEmpty);
+    });
+  });
+
   test(
     'a server that does not answer, or is not connected, shows no pins',
     () async {
