@@ -170,6 +170,21 @@ void main() {
     expect(_qobuz(container), ModuleState.ready);
   });
 
+  test('a GET that fails after a push keeps the pushed listing', () async {
+    final api = _Api(_listing(ModuleState.error))..pending = Completer();
+    final container = await _container(api, events);
+    _watch(container);
+    await pumpEventQueue();
+
+    events.add(_changed(ModuleState.ready, 2));
+    await pumpEventQueue();
+    api.pending!.completeError(Exception('timed out'));
+    await pumpEventQueue();
+
+    expect(container.read(modulesStateProvider).hasError, isFalse);
+    expect(_qobuz(container), ModuleState.ready);
+  });
+
   test('invalidating asks the GET again', () async {
     final api = _Api(_listing(ModuleState.error));
     final container = await _container(api, events);
