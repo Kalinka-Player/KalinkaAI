@@ -267,9 +267,9 @@ void main() {
     );
   });
 
-  for (final status in [403, 404, 405, 501]) {
+  for (final status in [404, 405]) {
     test(
-      'a server refusing the route with $status keeps its pins under its address',
+      'a server without the route ($status) keeps its pins under its address',
       () async {
         servers.statuses['first'] = status;
         await prefs.setString(
@@ -280,6 +280,24 @@ void main() {
         expect(prefs.getString(_firstAddressKey), isNotNull);
       },
     );
+  }
+
+  for (final status in [401, 403]) {
+    test('a server refusing the route with $status is not taken for one '
+        'without an id', () async {
+      await known(container);
+      servers.statuses['first'] = status;
+      await reconnect(container);
+      expect(container.read(pinnedCatalogsProvider), isNull);
+      await expectLater(
+        container.read(pinnedCatalogsProvider.notifier).pin(pin('one')),
+        throwsStateError,
+      );
+      expect(
+        prefs.getKeys().where((k) => k.startsWith('Kalinka.pinnedCatalogs')),
+        isEmpty,
+      );
+    });
   }
 
   test('a server error is asked again, less often each time', () {

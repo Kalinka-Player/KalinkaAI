@@ -32,16 +32,9 @@ typedef ServerAnswer = ({Uri server, String? id});
 Duration _pauseBefore(int attempt) =>
     Duration(seconds: attempt < 5 ? 2 << attempt : 60);
 
-/// Whether [status] says the route is not there for this app, which asking
-/// again will not change: missing on a server older than it, or refused. A
-/// timeout, throttling or a server error other than 501 may pass.
-bool _routeMissing(int? status) =>
-    status == 501 ||
-    (status != null &&
-        status >= 400 &&
-        status < 500 &&
-        status != 408 &&
-        status != 429);
+/// Whether [status] says the route is missing, as on a server older than it.
+/// Any other refusal, such as 401 or 403, says nothing about the server.
+bool _routeMissing(int? status) => status == 404 || status == 405;
 
 Future<ServerAnswer> _askWhoItIs(Dio client, Uri server) async {
   try {
