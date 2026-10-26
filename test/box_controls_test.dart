@@ -198,6 +198,11 @@ class _Adapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+class _FailingAnswer extends ServerAnswerNotifier {
+  @override
+  Future<ServerAnswer> build() async => throw StateError('not a Dio error');
+}
+
 void main() {
   group('boxControlProvider', () {
     test('offers the box of the connected server', () async {
@@ -368,7 +373,10 @@ void main() {
   });
 
   group('serverIdentityProvider', () {
-    Future<(ProviderContainer, _Adapter)> make(ConnectionStatus status) async {
+    Future<(ProviderContainer, _Adapter)> make(
+      ConnectionStatus status, {
+      List overrides = const [],
+    }) async {
       SharedPreferences.setMockInitialValues(_address);
       final prefs = await SharedPreferences.getInstance();
       final adapter = _Adapter();
@@ -380,6 +388,7 @@ void main() {
               ..httpClientAdapter = adapter,
           ),
           connectionStateProvider.overrideWith(() => _Connection(status)),
+          ...overrides,
         ],
       );
       addTearDown(container.dispose);
@@ -396,6 +405,14 @@ void main() {
       final (container, adapter) = await make(ConnectionStatus.offline);
       expect(await container.read(serverIdentityProvider.future), isNull);
       expect(adapter.requests, isEmpty);
+    });
+
+    test('a server whose answer fails for any reason is not known', () async {
+      final (container, _) = await make(
+        ConnectionStatus.connected,
+        overrides: [serverAnswerProvider.overrideWith(_FailingAnswer.new)],
+      );
+      expect(await container.read(serverIdentityProvider.future), isNull);
     });
 
     test('asking a silent server again does not look for its box again', () {

@@ -146,7 +146,8 @@ final serverIdentityProvider = FutureProvider<String?>((ref) async {
   }
   try {
     return (await ref.watch(serverAnswerProvider.future)).id;
-  } on DioException {
+  } catch (_) {
+    // serverAnswerProvider fails with whatever asking threw, not only Dio's.
     return null;
   }
 });
