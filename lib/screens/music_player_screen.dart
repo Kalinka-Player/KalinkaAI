@@ -691,6 +691,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                       width: railWidth,
                       child: DecoratedBox(
                         decoration: const BoxDecoration(
+                          // The rule is translucent: without a ground, what
+                          // the rail comes down over shows through it.
+                          color: KalinkaColors.background,
                           border: Border(
                             right: BorderSide(
                               color: KalinkaColors.borderSubtle,
