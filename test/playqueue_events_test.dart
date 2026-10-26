@@ -14,7 +14,7 @@ const _qobuz = PlaybackControl.exclusive(
   title: 'Qobuz Connect',
 );
 
-Map<String, dynamic> _replayJson({Object? control}) => {
+Map<String, dynamic> _replayJson({Object? control, Object? modules}) => {
   'playback_state': {'state': 'PLAYING'},
   'track_list': [],
   'playback_mode': {
@@ -24,6 +24,48 @@ Map<String, dynamic> _replayJson({Object? control}) => {
   },
   'seq': 1,
   'playback_control': ?control,
+  'modules': ?modules,
+};
+
+/// As `GET /server/modules` lists them.
+Map<String, dynamic> _modulesJson({String qobuz = 'error'}) => {
+  'input_modules': [
+    {
+      'name': 'qobuz',
+      'title': 'Qobuz',
+      'icon': null,
+      'enabled': true,
+      'state': qobuz,
+      'error_message': qobuz == 'error' ? 'Not paired yet.' : null,
+      'missing_packages': [],
+      'builtin': false,
+      'capabilities': ['catalogs'],
+    },
+    {
+      'name': 'collections',
+      'title': 'Collections',
+      'icon': null,
+      'enabled': true,
+      'state': 'ready',
+      'error_message': null,
+      'missing_packages': [],
+      'builtin': true,
+      'capabilities': [],
+    },
+  ],
+  'devices': [
+    {
+      'name': 'musiccast',
+      'title': 'MusicCast',
+      'icon': null,
+      'enabled': true,
+      'state': 'ready',
+      'error_message': null,
+      'missing_packages': [],
+      'builtin': false,
+      'capabilities': [],
+    },
+  ],
 };
 
 void main() {
@@ -435,6 +477,84 @@ void main() {
         'seq': 1,
       });
       expect(preEvents.renderers, isNull);
+    });
+  });
+
+  group('module listing', () {
+    test('parses modules_changed in the shape GET /server/modules lists', () {
+      final event = PlayQueueEvent.fromJson({
+        'event_type': 'modules_changed',
+        'seq': 9,
+        ..._modulesJson(),
+      });
+
+      expect(event, isA<ModulesChangedEvent>());
+      final changed = event as ModulesChangedEvent;
+      expect(changed.seq, 9);
+      final qobuz = changed.modules.inputModules.first;
+      expect(qobuz.name, 'qobuz');
+      expect(qobuz.state, ModuleState.error);
+      expect(qobuz.message, 'Not paired yet.');
+      expect(qobuz.can(ModuleCapability.catalogs), isTrue);
+      expect(changed.modules.inputModules.last.builtin, isTrue);
+      expect(changed.modules.devices.single.name, 'musiccast');
+    });
+
+    test('the replay carries the listing; a server before 0.19 sends none', () {
+      final replayed = PlayQueueState.fromJson(
+        _replayJson(modules: _modulesJson()),
+      );
+      expect(replayed.modules!.inputModules.map((m) => m.name), [
+        'qobuz',
+        'collections',
+      ]);
+      expect(replayed.modules!.devices.single.state, ModuleState.ready);
+
+      expect(PlayQueueState.fromJson(_replayJson()).modules, isNull);
+    });
+
+    test('the state follows the replay and each change, and keeps it', () {
+      final replayed = _stateWith(const []).apply(
+        PlayQueueEvent.replayEvent(
+          state: PlayQueueState.fromJson(_replayJson(modules: _modulesJson())),
+          serverTimeNs: 0,
+          seq: 1,
+        ),
+        0,
+      );
+      expect(replayed.modules!.inputModules.first.state, ModuleState.error);
+
+      final paired = replayed.apply(
+        PlayQueueEvent.modulesChanged(
+          modules: ModulesAndDevices.fromJson(_modulesJson(qobuz: 'ready')),
+          seq: 2,
+        ),
+        0,
+      );
+      expect(paired.modules!.inputModules.first.state, ModuleState.ready);
+      expect(paired.seq, 2);
+
+      final after = paired
+          .apply(
+            PlayQueueEvent.tracksAdded(
+              tracks: [Track(id: 'a', title: 'A', duration: 10)],
+              seq: 3,
+            ),
+            0,
+          )
+          .apply(
+            const PlayQueueEvent.renderersChanged(renderers: [], seq: 4),
+            0,
+          )
+          .apply(const PlayQueueEvent.currentRendererChanged(seq: 5), 0)
+          .apply(
+            const PlayQueueEvent.playbackControlChanged(
+              control: _qobuz,
+              seq: 6,
+            ),
+            0,
+          );
+      expect(after.modules, same(paired.modules));
     });
   });
 
