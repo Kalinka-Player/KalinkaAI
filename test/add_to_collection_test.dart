@@ -10,6 +10,8 @@ import 'package:kalinka/providers/collections_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
+import 'package:kalinka/providers/wire_event_provider.dart'
+    show playQueueEventBusProvider;
 import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/queue_management_tray.dart';
 import 'package:kalinka/widgets/search/add_to_collection_sheet.dart';
@@ -124,6 +126,9 @@ void main() {
         sharedPrefsProvider.overrideWithValue(prefs),
         kalinkaProxyProvider.overrideWithValue(api),
         collectionChoicesProvider.overrideWith((ref) => Future.value(choices)),
+        playQueueEventBusProvider.overrideWith(
+          (ref) => const Stream<PlayQueueEvent>.empty(),
+        ),
       ],
     );
     addTearDown(container.dispose);

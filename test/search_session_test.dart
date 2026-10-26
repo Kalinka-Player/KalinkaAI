@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/data_model/playqueue_events.dart' show PlayQueueEvent;
 import 'package:kalinka/data_model/search_results.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/catalog_sources_provider.dart';
@@ -17,6 +18,8 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/modules_state_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
+import 'package:kalinka/providers/wire_event_provider.dart'
+    show playQueueEventBusProvider;
 import 'package:kalinka/widgets/search/search_zero_state.dart';
 
 /// Minimal fake proxy: only the methods the search session calls are
@@ -352,6 +355,9 @@ void main() {
         connectionStateProvider.overrideWith(_FixedConnection.new),
         // The real provider opens the wire-event WebSocket (retry timer).
         playerStateProvider.overrideWithValue(PlaybackState.empty),
+        playQueueEventBusProvider.overrideWith(
+          (ref) => const Stream<PlayQueueEvent>.empty(),
+        ),
       ],
     );
     addTearDown(container.dispose);

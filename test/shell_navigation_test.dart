@@ -161,8 +161,8 @@ Future<ProviderContainer> _pump(
         pluginCatalogEnabled: true,
       ),
     ),
-    modulesStateProvider.overrideWith(
-      (ref) async =>
+    modulesStateProvider.overrideWithBuild(
+      (ref, _) async =>
           ModulesAndDevices(inputModules: _modules, devices: const []),
     ),
     pluginCatalogProvider.overrideWith(

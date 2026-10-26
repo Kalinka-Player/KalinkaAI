@@ -167,8 +167,8 @@ void main() {
               pluginCatalogEnabled: true,
             ),
           ),
-          modulesStateProvider.overrideWith(
-            (ref) async =>
+          modulesStateProvider.overrideWithBuild(
+            (ref, _) async =>
                 ModulesAndDevices(inputModules: const [], devices: const []),
           ),
           pluginCatalogProvider.overrideWith(
@@ -326,8 +326,8 @@ void main() {
               pluginCatalogEnabled: true,
             ),
           ),
-          modulesStateProvider.overrideWith(
-            (ref) async => ModulesAndDevices(
+          modulesStateProvider.overrideWithBuild(
+            (ref, _) async => ModulesAndDevices(
               inputModules: [module('alpha')],
               devices: const [],
             ),
