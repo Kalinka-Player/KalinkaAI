@@ -465,6 +465,24 @@ void main() {
     expect(container.read(pinnedCatalogsProvider), isEmpty);
   });
 
+  test('pins kept under the address do not wait for another server when the '
+      'one recorded there has its own', () async {
+    await prefs.setString(_firstAddressKey, jsonEncode([pin('one').toJson()]));
+    await prefs.setString(
+      'Kalinka.pinnedCatalogs.v1:id:box-x',
+      jsonEncode([pin('two').toJson()]),
+    );
+    await prefs.setString(_firstRecordKey, 'box-x');
+    container.read(rememberServerIdentityProvider);
+    expect(await known(container), isEmpty);
+    await Future<void>.delayed(Duration.zero);
+    expect(prefs.getString(_firstAddressKey), isNull);
+    expect(prefs.getString(_firstRecordKey), 'box-a');
+
+    await reconnect(container);
+    expect(container.read(pinnedCatalogsProvider), isEmpty);
+  });
+
   test('with the server away from the start, the pins of the one last recorded '
       'at the address show, unchanged until it answers', () async {
     await prefs.setString(_firstAddressKey, jsonEncode([pin('one').toJson()]));

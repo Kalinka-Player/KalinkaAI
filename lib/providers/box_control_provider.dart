@@ -205,9 +205,9 @@ void _claimStateBeforeIds(
   to: owner,
 );
 
-/// Moves [from]'s pins, catalog filters and folder paths to [to]. Nothing
-/// [to] has already is replaced. [filtersFrom] is where [from]'s catalog
-/// filters are kept, if not under its own key.
+/// Moves [from]'s pins, catalog filters and folder paths to [to], leaving
+/// [from] empty. Nothing [to] has already is replaced. [filtersFrom] is where
+/// [from]'s catalog filters are kept, if not under its own key.
 void _moveServerState(
   SharedPreferences prefs, {
   required ServerStorageKey from,
@@ -216,6 +216,9 @@ void _moveServerState(
 }) {
   if (prefs.getString(to.pinnedCatalogs) == null) {
     _moveString(prefs, from: from.pinnedCatalogs, to: to.pinnedCatalogs);
+  } else {
+    // Left behind, they would go to the next server recorded here.
+    prefs.remove(from.pinnedCatalogs).ignore();
   }
   _moveCatalogFilters(
     prefs,

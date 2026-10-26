@@ -169,7 +169,7 @@ class CatalogPinButton extends ConsumerWidget {
       isSelected: pinned,
       icon: const Icon(CupertinoIcons.pin),
       selectedIcon: const Icon(CupertinoIcons.pin_slash),
-      onPressed: pins == null || !confirmed ? null : toggle,
+      onPressed: confirmed ? toggle : null,
     );
   }
 }
