@@ -671,10 +671,24 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   Map<String, BrowseFilterQuery> _loadedCatalogFilters = {};
   ServerStorageKey? _catalogFiltersOf;
 
+  /// The [ServerStorageKey.scope] of the server this session's pages came
+  /// from; null until one is known.
+  String? _sessionServer;
+
+  /// The connected server's key while this session is that server's, so
+  /// nothing left open on one server is kept for another. A call that saves
+  /// what is kept per server calls [_followServer] before reading the state.
+  ServerStorageKey? get _serverKey {
+    final key = ref.read(serverStorageKeyProvider);
+    if (key == null) return null;
+    _sessionServer ??= key.scope;
+    return key.scope == _sessionServer ? key : null;
+  }
+
   /// The connected server's catalog filters, loaded again once another server
   /// answers. Nothing is kept until the server has said who it is.
   Map<String, BrowseFilterQuery> get _savedCatalogFilters {
-    final server = ref.read(serverStorageKeyProvider);
+    final server = _serverKey;
     if (server != _catalogFiltersOf) {
       _catalogFiltersOf = server;
       _loadedCatalogFilters = _loadCatalogFilters(server);
@@ -688,14 +702,20 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     ref.onDispose(() => _disposed = true);
     // Kept by earlier versions for every next search.
     _prefs.remove(_resultsFilterKey);
+    _sessionServer = ref.read(serverStorageKeyProvider)?.scope;
     // Another server's results and pages mean nothing on this one.
     ref.listen(connectionSettingsProvider.select((s) => s.baseUrl), (
       previous,
       next,
     ) {
       if (previous == next) return;
-      resetToRoot();
-      ref.read(catalogCardsReloadProvider.notifier).bump();
+      _sessionServer = null;
+      _leaveServer();
+    });
+    // Nor do those of one that has taken over the address. Not at once: a
+    // call that has read the state may be what read the new key.
+    ref.listen(serverStorageKeyProvider, (_, next) {
+      if (next != null) scheduleMicrotask(_followServer);
     });
     return SearchSessionState(
       history: _loadHistory(),
@@ -869,6 +889,24 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     }
   }
 
+  /// Starts the session over if another server now answers at the address,
+  /// and says whether it did: what was asked of the page shown is then moot.
+  bool _followServer() {
+    if (_disposed) return false;
+    final next = ref.read(serverStorageKeyProvider)?.scope;
+    if (next == null || next == _sessionServer) return false;
+    final left = _sessionServer;
+    _sessionServer = next;
+    if (left == null) return false;
+    _leaveServer();
+    return true;
+  }
+
+  void _leaveServer() {
+    resetToRoot();
+    ref.read(catalogCardsReloadProvider.notifier).bump();
+  }
+
   /// Back to the Catalogs root with the ephemeral workspace (results and the
   /// catalog page) discarded. History is written live on each [submit].
   void resetToRoot() {
@@ -920,6 +958,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     required SearchSessionState Function() start,
     bool keepShown = true,
   }) {
+    _followServer();
     if (destination == state.destination) return;
     final parked = {
       ...state.parked,
@@ -1098,6 +1137,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     bool restoreFolder = true,
     BrowseItem? item,
   }) {
+    _followServer();
     // An item's page already in the history is returned to rather than
     // stacked again, so album → artist → album cannot grow Back without end.
     if (item != null && initialFilter == null) {
@@ -1213,6 +1253,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// between folders stays one visit, so Back leaves the page rather than
   /// retracing them. The trail is the folders that hold it.
   void openFolder(BrowseItem folder) {
+    if (_followServer()) return;
     if (!state.catalogPage.folderLayout) {
       openBrowseItem(folder);
       return;
@@ -1228,6 +1269,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   /// Show the folder [depth] steps in from the page's top, which zero is.
   void showFolderAt(int depth) {
+    if (_followServer()) return;
     if (depth < 0 || depth >= state.folderPath.length) return;
     state = state.copyWith(folderPath: state.folderPath.sublist(0, depth));
     _rememberFolderPath();
@@ -1251,6 +1293,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   /// Saves the catalog filter. Choosing a type replaces an expanded shelf.
   void setCatalogFilter(BrowseFilterQuery filter, {bool reset = false}) {
+    if (_followServer()) return;
     final id = state.catalogPage.id;
     if (id == null) return;
     _rememberCatalogFilter(
@@ -1744,7 +1787,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// Folder paths differ from one server's library to the next, so each is
   /// kept per server as well as per page.
   List<CatalogPage> _savedFolderPath(String pageId, String? provider) {
-    final key = ref.read(serverStorageKeyProvider)?.folderPath(pageId);
+    final key = _serverKey?.folderPath(pageId);
     return [
       for (final folder in _loadFolderPaths()[key] ?? const [])
         CatalogPage.savedFolder(folder, provider: provider),
@@ -1773,7 +1816,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
 
   void _rememberFolderPath() {
     final pageId = state.catalogPage.id;
-    final server = ref.read(serverStorageKeyProvider);
+    final server = _serverKey;
     if (pageId == null || server == null || !server.confirmed) return;
     final key = server.folderPath(pageId);
     final paths = _loadFolderPaths();
