@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -138,6 +140,24 @@ void main() {
     openLibrary(container);
 
     expect(shownPath(), ['Jazz', 'Miles Davis']);
+  });
+
+  test('a folder saved since by something else, as a server answering moves '
+      'one, is the one shown', () async {
+    session().openFolder(_folder('Jazz'));
+    session().backToCatalogsRoot();
+    await prefs.setString(
+      'Kalinka.folderPaths',
+      jsonEncode({
+        'id:box-1 kalinka:localfiles:catalog:files': [
+          {'id': 'kalinka:localfiles:catalog:folder.Blues', 'title': 'Blues'},
+        ],
+      }),
+    );
+
+    openLibrary(container);
+
+    expect(shownPath(), ['Blues']);
   });
 
   test('the folder left on outlives the app', () async {

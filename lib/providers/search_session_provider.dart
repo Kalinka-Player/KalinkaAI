@@ -671,6 +671,10 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   Map<String, BrowseFilterQuery> _loadedCatalogFilters = {};
   ServerStorageKey? _catalogFiltersOf;
 
+  /// Every server's saved folder paths, decoded from [_folderPathsJson].
+  Map<String, List<Map<String, dynamic>>> _folderPaths = {};
+  String? _folderPathsJson;
+
   /// The [ServerStorageKey.scope] of the server this session's pages came
   /// from; null until one is known.
   String? _sessionServer;
@@ -1794,9 +1798,20 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     ];
   }
 
-  /// Read afresh each time: a server's answer may have moved entries since.
+  /// Decoded again whenever the saved string has changed: a server's answer
+  /// may have moved entries since.
   Map<String, List<Map<String, dynamic>>> _loadFolderPaths() {
     final json = _prefs.getString(ServerStorageKey.folderPaths);
+    if (json != _folderPathsJson) {
+      _folderPathsJson = json;
+      _folderPaths = _decodeFolderPaths(json);
+    }
+    return _folderPaths;
+  }
+
+  static Map<String, List<Map<String, dynamic>>> _decodeFolderPaths(
+    String? json,
+  ) {
     if (json == null) return {};
     try {
       return {
@@ -1828,9 +1843,11 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       ];
     }
     if (paths.isEmpty) {
+      _folderPathsJson = null;
       _prefs.remove(ServerStorageKey.folderPaths);
     } else {
-      _prefs.setString(ServerStorageKey.folderPaths, jsonEncode(paths));
+      final json = _folderPathsJson = jsonEncode(paths);
+      _prefs.setString(ServerStorageKey.folderPaths, json);
     }
   }
 }
