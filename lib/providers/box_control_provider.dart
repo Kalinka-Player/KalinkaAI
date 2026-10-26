@@ -217,13 +217,11 @@ void _moveServerState(
   if (prefs.getString(to.pinnedCatalogs) == null) {
     _moveString(prefs, from: from.pinnedCatalogs, to: to.pinnedCatalogs);
   }
-  if (prefs.getString(to.catalogFilters) == null) {
-    _moveString(
-      prefs,
-      from: filtersFrom ?? from.catalogFilters,
-      to: to.catalogFilters,
-    );
-  }
+  _moveCatalogFilters(
+    prefs,
+    from: filtersFrom ?? from.catalogFilters,
+    to: to.catalogFilters,
+  );
   _moveFolderPaths(prefs, from: from.scope, to: to.scope);
 }
 
@@ -234,9 +232,40 @@ void _moveString(
 }) {
   final value = prefs.getString(from);
   if (value == null) return;
+  _save(prefs, value, to: to, thenRemove: from);
+}
+
+/// Adds the catalog filters under [from] to those under [to], which keep
+/// their own for a catalog both have.
+void _moveCatalogFilters(
+  SharedPreferences prefs, {
+  required String from,
+  required String to,
+}) {
+  final moving = _decodedMap(prefs.getString(from));
+  if (moving == null) return;
+  final kept = _decodedMap(prefs.getString(to));
+  _save(prefs, jsonEncode({...moving, ...?kept}), to: to, thenRemove: from);
+}
+
+void _save(
+  SharedPreferences prefs,
+  String value, {
+  required String to,
+  required String thenRemove,
+}) {
   prefs.setString(to, value).then((saved) {
-    if (saved) prefs.remove(from);
+    if (saved) prefs.remove(thenRemove);
   }, onError: (Object _) {});
+}
+
+Map<String, dynamic>? _decodedMap(String? json) {
+  if (json == null) return null;
+  try {
+    return Map<String, dynamic>.from(jsonDecode(json) as Map);
+  } catch (_) {
+    return null;
+  }
 }
 
 void _moveFolderPaths(
@@ -247,12 +276,8 @@ void _moveFolderPaths(
   final json = prefs.getString(ServerStorageKey.folderPaths);
   // Most connections have nothing to move, and need not decode the map.
   if (json == null || !json.contains('"$from ')) return;
-  final Map<String, dynamic> paths;
-  try {
-    paths = Map<String, dynamic>.from(jsonDecode(json) as Map);
-  } catch (_) {
-    return;
-  }
+  final paths = _decodedMap(json);
+  if (paths == null) return;
   for (final key in [...paths.keys]) {
     if (!key.startsWith('$from ')) continue;
     final path = paths.remove(key);
