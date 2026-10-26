@@ -144,8 +144,8 @@ Future<void> _pump(WidgetTester tester, _Store store, {Widget? child}) async {
     ProviderScope(
       overrides: [
         // Live module state is not what these tests are about; it never comes.
-        modulesStateProvider.overrideWith(
-          (ref) => Completer<ModulesAndDevices>().future,
+        modulesStateProvider.overrideWithBuild(
+          (ref, _) => Completer<ModulesAndDevices>().future,
         ),
       ],
       child: MaterialApp(

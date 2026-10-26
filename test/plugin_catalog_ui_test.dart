@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/data_model/playqueue_events.dart' show PlayQueueEvent;
 import 'package:kalinka/data_model/plugin_catalog.dart';
 import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/data_model/configuration_sections.dart';
@@ -31,6 +32,8 @@ import 'package:kalinka/screens/server_configuration_screen.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
+import 'package:kalinka/providers/wire_event_provider.dart'
+    show playQueueEventBusProvider;
 import 'package:kalinka/screens/music_player_screen.dart';
 import 'package:kalinka/screens/log_export_screen.dart';
 import 'package:kalinka/screens/plugin_about_screen.dart';
@@ -172,7 +175,10 @@ class _Proxy implements KalinkaPlayerProxy {
   Map<String, dynamic> capabilities;
   Map<String, dynamic>? updateInfo;
   int reads = 0;
+  _Live live = _Live();
   _Proxy(this.capabilities);
+  @override
+  Future<ModulesAndDevices> listModules() async => live.value;
   @override
   Future<List<RendererInfo>> listRenderers() async => [];
   @override
@@ -412,10 +418,13 @@ Future<ProviderContainer> _container(
   String? name,
   _Restart? restart,
   FakeBox? box,
+  Stream<PlayQueueEvent>? events,
 }) async {
   live ??= _Live();
+  proxy.live = live;
   SharedPreferences.setMockInitialValues({
     'Kalinka.name': ?name,
+    if (events != null) ...{'Kalinka.host': 'localhost', 'Kalinka.port': 8080},
     if (player) ...{
       'Kalinka.host': 'localhost',
       'Kalinka.port': 8080,
@@ -435,7 +444,11 @@ Future<ProviderContainer> _container(
       if (restart != null) restartProvider.overrideWith(() => restart),
       connectionStateProvider.overrideWith(_Connected.new),
       settingsProvider.overrideWith(() => _Settings(settings)),
-      modulesStateProvider.overrideWith((ref) async => live!.value),
+      // With events, the real module state reads the proxy and follows them.
+      if (events != null)
+        playQueueEventBusProvider.overrideWith((ref) => events)
+      else
+        modulesStateProvider.overrideWithBuild((ref, _) async => live!.value),
       kalinkaProxyProvider.overrideWith(
         (ref) =>
             ref.watch(connectionSettingsProvider).host == 'other' &&
@@ -3102,6 +3115,43 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('a row follows its plugin\'s status as the server reports it', (
+    tester,
+  ) async {
+    final events = StreamController<PlayQueueEvent>.broadcast();
+    addTearDown(events.close);
+    ModulesAndDevices qobuz(String state) => ModulesAndDevices(
+      inputModules: [
+        _module('localfiles'),
+        _module(
+          'qobuz',
+          state: state,
+          message: state == 'error' ? 'Not paired yet.' : null,
+        ),
+      ],
+      devices: [],
+    );
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true}),
+      _CatalogApi(_catalog()),
+      live: _Live(qobuz('error')),
+      settings: _settingsWith({'localfiles': true, 'qobuz': true}),
+      events: events.stream,
+    );
+    await _screen(tester, container, size: const Size(400, 1400));
+    expect(_badgeOf(tester, 'qobuz')!.label, 'ERROR');
+
+    events.add(PlayQueueEvent.modulesChanged(modules: qobuz('ready'), seq: 2));
+    await tester.pumpAndSettle();
+    expect(_badgeOf(tester, 'qobuz')!.label, 'READY');
+    expect(_badgeOf(tester, 'qobuz')!.color, KalinkaColors.statusOnline);
+
+    events.add(PlayQueueEvent.modulesChanged(modules: qobuz('error'), seq: 3));
+    await tester.pumpAndSettle();
+    expect(_badgeOf(tester, 'qobuz')!.label, 'ERROR');
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'the switch on its page stages a plugin on or off for the restart',

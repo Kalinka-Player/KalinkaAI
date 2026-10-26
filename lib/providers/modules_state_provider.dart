@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
+import '../data_model/playqueue_events.dart';
 import 'connection_settings_provider.dart';
 import 'connection_state_provider.dart';
 import 'kalinka_player_api_provider.dart';
+import 'wire_event_provider.dart';
 
 /// Full snapshot of `/server/modules` — every loaded input module and
 /// output device with its live state (READY / WARNING / ERROR /
@@ -13,17 +15,46 @@ import 'kalinka_player_api_provider.dart';
 /// the schema describes the layout, this provider describes the
 /// current state. They're decoupled so transient state changes don't
 /// invalidate the cached schema version.
-final modulesStateProvider = FutureProvider<ModulesAndDevices>((ref) async {
-  // A server-side rename refreshes the name; only the address matters here.
-  ref.watch(connectionSettingsProvider.select((s) => s.address));
-  refetchOnReconnect(ref);
-  final settings = ref.read(connectionSettingsProvider);
-  if (!settings.isSet) {
-    return ModulesAndDevices(inputModules: const [], devices: const []);
+///
+/// From API 0.19 the queue socket's replay and modules_changed events keep
+/// it current. The GET stays the source on older servers, on connect and
+/// when invalidated.
+class ModulesStateNotifier extends AsyncNotifier<ModulesAndDevices> {
+  ModulesAndDevices? _pushed;
+
+  @override
+  Future<ModulesAndDevices> build() async {
+    // A server-side rename refreshes the name; only the address matters here.
+    ref.watch(connectionSettingsProvider.select((s) => s.address));
+    refetchOnReconnect(ref);
+    _pushed = null;
+    final settings = ref.read(connectionSettingsProvider);
+    if (!settings.isSet) {
+      return ModulesAndDevices(inputModules: const [], devices: const []);
+    }
+    ref.listen(playQueueEventBusProvider, (_, next) => next.whenData(_onEvent));
+    final fetched = await ref.read(kalinkaProxyProvider).listModules();
+    // A listing pushed while the request was out is the newer one.
+    return _pushed ?? fetched;
   }
-  final api = ref.read(kalinkaProxyProvider);
-  return api.listModules();
-});
+
+  void _onEvent(PlayQueueEvent event) {
+    final modules = switch (event) {
+      ModulesChangedEvent(:final modules) => modules,
+      // Null from a server before 0.19, which leaves the GET's answer.
+      ReplayPlayQueueEvent(:final state) => state.modules,
+      _ => null,
+    };
+    if (modules == null) return;
+    _pushed = modules;
+    state = AsyncData(modules);
+  }
+}
+
+final modulesStateProvider =
+    AsyncNotifierProvider<ModulesStateNotifier, ModulesAndDevices>(
+      ModulesStateNotifier.new,
+    );
 
 /// Look up live state for one module by id and kind.
 ModuleInfo? lookupModule(
