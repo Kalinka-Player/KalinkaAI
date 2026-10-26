@@ -39,7 +39,11 @@ PinnedCatalog pin(
   preview: preview,
 );
 
+/// Where pins were kept before servers were told apart by id.
 const _firstAddressKey = 'Kalinka.pinnedCatalogs.v1:http://first:8000';
+
+/// Where a server too old to report an id keeps them.
+const _firstNoIdKey = 'Kalinka.pinnedCatalogs.v1:addr:http://first:8000';
 const _firstRecordKey = 'Kalinka.serverIdAt.first:8000';
 
 void main() {
@@ -260,10 +264,10 @@ void main() {
     await prefs.setString(_firstAddressKey, jsonEncode([pin('one').toJson()]));
     expect((await known(container)).single.page.provider, 'one');
     await container.read(pinnedCatalogsProvider.notifier).pin(pin('two'));
-    expect(jsonDecode(prefs.getString(_firstAddressKey)!), hasLength(2));
+    expect(jsonDecode(prefs.getString(_firstNoIdKey)!), hasLength(2));
     expect(
       prefs.getKeys().where((k) => k.startsWith('Kalinka.pinnedCatalogs')),
-      [_firstAddressKey],
+      [_firstNoIdKey],
     );
   });
 
@@ -277,10 +281,45 @@ void main() {
           jsonEncode([pin('one').toJson()]),
         );
         expect((await known(container)).single.page.provider, 'one');
-        expect(prefs.getString(_firstAddressKey), isNotNull);
+        expect(prefs.getString(_firstNoIdKey), isNotNull);
       },
     );
   }
+
+  test('a server without an id that took over the address keeps its pins '
+      'from the one recorded there', () async {
+    container.read(rememberServerIdentityProvider);
+    await known(container);
+    await Future<void>.delayed(Duration.zero);
+    expect(prefs.getString(_firstRecordKey), 'box-a');
+
+    servers.ids.remove('first');
+    await reconnect(container);
+    await container.read(pinnedCatalogsProvider.notifier).pin(pin('one'));
+    await reconnect(container);
+    expect(container.read(pinnedCatalogsProvider)!.single.page.provider, 'one');
+
+    servers.ids['first'] = 'box-a';
+    await reconnect(container);
+    expect(container.read(pinnedCatalogsProvider), isEmpty);
+    servers.ids.remove('first');
+    await reconnect(container);
+    expect(container.read(pinnedCatalogsProvider)!.single.page.provider, 'one');
+  });
+
+  test('a server without an id takes its pins along once it has one', () async {
+    container.read(rememberServerIdentityProvider);
+    servers.ids.remove('first');
+    await known(container);
+    await container.read(pinnedCatalogsProvider.notifier).pin(pin('one'));
+
+    servers.ids['first'] = 'box-c';
+    await reconnect(container);
+    expect(container.read(pinnedCatalogsProvider)!.single.page.provider, 'one');
+    await Future<void>.delayed(Duration.zero);
+    expect(prefs.getString(_firstNoIdKey), isNull);
+    expect(prefs.getString('Kalinka.pinnedCatalogs.v1:id:box-c'), isNotNull);
+  });
 
   for (final status in [401, 403]) {
     test('a server refusing the route with $status is not taken for one '
