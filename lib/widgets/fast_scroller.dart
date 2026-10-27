@@ -53,13 +53,14 @@ class FastScroller extends StatefulWidget {
   final DeferringScrollController controller;
 
   /// How many items have loaded, and how many the list holds (negative while
-  /// unknown). The thumb spans them all.
+  /// unknown). The thumb spans them all. Left out where the list holds
+  /// everything already.
   final int loaded;
   final int total;
 
   /// Asks for the first [count] items, the thumb having gone past those
   /// loaded; 0 once it is back among them.
-  final ValueChanged<int> onReach;
+  final ValueChanged<int>? onReach;
 
   /// What the held thumb says about the item at an index, if anything.
   final String? Function(int index)? labelAt;
@@ -71,10 +72,10 @@ class FastScroller extends StatefulWidget {
   const FastScroller({
     super.key,
     required this.controller,
-    required this.loaded,
-    required this.total,
-    required this.onReach,
     required this.child,
+    this.loaded = 0,
+    this.total = -1,
+    this.onReach,
     this.labelAt,
     this.padding = EdgeInsets.zero,
   });
@@ -241,7 +242,7 @@ class _FastScrollerState extends State<FastScroller>
     final short =
         target > position.maxScrollExtent && widget.loaded < widget.total;
     // Asked first, so the load the jump sets off is already the whole way.
-    widget.onReach(
+    widget.onReach?.call(
       short
           ? ((target + position.viewportDimension) / _perItem(position)).ceil()
           : 0,
@@ -273,7 +274,7 @@ class _FastScrollerState extends State<FastScroller>
             !_held &&
             _fraction != null) {
           _fraction = null;
-          widget.onReach(0);
+          widget.onReach?.call(0);
         }
         return false;
       },

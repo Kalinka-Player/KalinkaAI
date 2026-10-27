@@ -7,6 +7,7 @@ import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../browse_filters/active_filter_chips.dart';
 import '../browse_filters/filters_match_nothing.dart';
+import '../fast_scroller.dart';
 import 'browse_visit_scope.dart';
 import 'inspired_block.dart';
 import 'name_matches_block.dart';
@@ -17,19 +18,45 @@ import 'search_loading_indicator.dart';
 /// opened with View All is a visit of its own, left with Back. Holds a single query —
 /// a new search replaces it. Going back to Catalogs is the title bar's `‹`
 /// (or system back), never a button here.
-class ResultsView extends ConsumerWidget {
+class ResultsView extends ConsumerStatefulWidget {
   const ResultsView({super.key});
 
   static const _gutter = 16.0;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ResultsView> createState() => _ResultsViewState();
+}
+
+class _ResultsViewState extends ConsumerState<ResultsView> {
+  static const _gutter = ResultsView._gutter;
+
+  final _controller = DeferringScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final list = _buildList(context);
+    if (!FastScroller.wanted(context)) return list;
+    return FastScroller(
+      controller: _controller,
+      padding: const EdgeInsets.only(bottom: 8),
+      child: list,
+    );
+  }
+
+  Widget _buildList(BuildContext context) {
     final session = visitOf(context, ref);
     final notifier = ref.read(searchSessionProvider.notifier);
     final results = session.results;
 
     // Slivers, so a block opened in full builds only the rows in view.
     return CustomScrollView(
+      controller: _controller,
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(_gutter, 21, _gutter, 24),
