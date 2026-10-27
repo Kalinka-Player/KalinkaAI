@@ -19,6 +19,7 @@ import '../home/home_layout.dart';
 import '../home/pinned_catalogs_section.dart';
 import '../measure_size.dart';
 import '../modifier_click.dart';
+import '../pull_to_refresh.dart';
 import 'collections_section.dart';
 
 /// The Catalogs root body: the search invitation (passed in via [leading]),
@@ -91,10 +92,8 @@ class SearchZeroState extends ConsumerWidget {
         pins.isEmpty &&
         (collections == null || collections.isEmpty);
     const top = 8.0;
-    return RefreshIndicator(
+    return PullToRefresh(
       onRefresh: ref.read(searchSessionProvider.notifier).refreshAll,
-      color: KalinkaColors.accent,
-      backgroundColor: KalinkaColors.surfaceRaised,
       child: LayoutBuilder(
         builder: (context, constraints) => ListView(
           // Coming back from a catalog returns to where the root was left, not

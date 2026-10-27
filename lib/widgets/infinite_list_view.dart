@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'fast_scroller.dart';
+import 'pull_to_refresh.dart';
 
 /// One chunk of a longer list, plus the collection's [total] so the scroller
 /// knows when it has reached the end. [total] < 0 means "unknown" — it then
@@ -141,6 +142,14 @@ class InfiniteListView<T> extends StatefulWidget {
   /// Keeps the thumb clear of what [sliverHeader] pins over the list.
   final EdgeInsets fastScrollPadding;
 
+  /// Lets the list be pulled down at its top to load again from there, its
+  /// rows staying up meanwhile. An [errorBuilder] body must then scroll even
+  /// when short ([AlwaysScrollableScrollPhysics]) to be pulled.
+  final bool pullToRefresh;
+
+  /// Anything else a pull reloads, alongside the list.
+  final Future<void> Function()? onPullToRefresh;
+
   const InfiniteListView({
     super.key,
     required this.fetchChunk,
@@ -170,6 +179,8 @@ class InfiniteListView<T> extends StatefulWidget {
     this.fastScroll = false,
     this.fastScrollLabel,
     this.fastScrollPadding = EdgeInsets.zero,
+    this.pullToRefresh = false,
+    this.onPullToRefresh,
   }) : assert(sideHeader == null || sideHeaderWidth > 0),
        assert(sideHeader == null || sliverHeader == null);
 
@@ -369,6 +380,36 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
     _maybeFillViewport();
   }
 
+  /// Loads the list again from its top, where it was pulled, keeping what
+  /// it shows until the first chunk lands; the rest follows as it scrolls.
+  /// A failure leaves it as it was, and throws.
+  Future<void> _reload() async {
+    final gen = _generation;
+    final chunk = await widget.fetchChunk(0, widget.chunkSize);
+    if (!mounted || gen != _generation) return;
+    // A chunk still on its way would land past rows that are gone.
+    _generation++;
+    setState(() {
+      _kept.clear();
+      _items
+        ..clear()
+        ..addAll(chunk.items);
+      _total = chunk.total;
+      _wanted = 0;
+      _reachedShortChunk = chunk.items.length < widget.chunkSize;
+      _initialLoading = false;
+      _initialError = null;
+      _loadingMore = false;
+      _loadMoreFailed = false;
+    });
+    widget.onLoadedCount?.call(_items.length, false);
+    _maybeFillViewport();
+  }
+
+  Future<void> _pulled() async {
+    await Future.wait([_reload(), ?widget.onPullToRefresh?.call()]);
+  }
+
   Future<void> _loadMore() async {
     if (_loadingMore || _loadMoreFailed || !_hasMore) return;
     setState(() => _loadingMore = true);
@@ -442,8 +483,13 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
   bool get _customLayout =>
       widget.sideHeader != null || widget.sliverHeader != null;
 
+  /// A list that can be pulled can be when it is short.
+  ScrollPhysics? get _physics =>
+      widget.pullToRefresh ? const AlwaysScrollableScrollPhysics() : null;
+
   Widget _customScroll(Widget items) => CustomScrollView(
     controller: _controller,
+    physics: _physics,
     slivers: [
       ?widget.sliverHeader,
       SliverPadding(
@@ -468,20 +514,23 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final list = _buildList(context);
-    if (!widget.fastScroll || !FastScroller.wanted(context)) return list;
-    final label = widget.fastScrollLabel;
-    return FastScroller(
-      controller: _controller,
-      loaded: _items.length,
-      total: _total,
-      onReach: _reach,
-      labelAt: label == null
-          ? null
-          : (index) => index < _items.length ? label(_items[index]) : null,
-      padding: widget.fastScrollPadding,
-      child: list,
-    );
+    var list = _buildList(context);
+    if (widget.fastScroll && FastScroller.wanted(context)) {
+      final label = widget.fastScrollLabel;
+      list = FastScroller(
+        controller: _controller,
+        loaded: _items.length,
+        total: _total,
+        onReach: _reach,
+        labelAt: label == null
+            ? null
+            : (index) => index < _items.length ? label(_items[index]) : null,
+        padding: widget.fastScrollPadding,
+        child: list,
+      );
+    }
+    if (!widget.pullToRefresh) return list;
+    return PullToRefresh(onRefresh: _pulled, child: list);
   }
 
   Widget _buildList(BuildContext context) {
@@ -492,6 +541,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
         );
       }
       return ListView(
+        physics: _physics,
         padding: widget.padding,
         children: [
           if (widget.header != null) widget.header!,
@@ -516,10 +566,11 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
       }
       // Keep a short empty state centred in the remaining viewport, but let
       // a tall header scroll on small screens and with enlarged system text.
-      if (widget.header == null) return empty;
+      if (widget.header == null && !widget.pullToRefresh) return empty;
       return CustomScrollView(
+        physics: _physics,
         slivers: [
-          SliverToBoxAdapter(child: widget.header!),
+          if (widget.header != null) SliverToBoxAdapter(child: widget.header!),
           // Avoid intrinsic sizing: some empty states use LayoutBuilder to
           // adapt their card, which cannot answer intrinsic-height queries.
           SliverLayoutBuilder(
@@ -644,6 +695,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
     }
     return ListView.builder(
       controller: _controller,
+      physics: _physics,
       padding: widget.padding,
       itemCount: itemCount,
       itemBuilder: buildItem,
