@@ -469,6 +469,10 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           ? (place) => _keepPlace(places, listing.id!, place)
           : null,
       pullToRefresh: true,
+      // The shelves its header holds reload with it.
+      onPullToRefresh: identical(listing, page) && page.sections.isNotEmpty
+          ? () => SectionShelves.refresh(ref, page.sections)
+          : null,
       fastScroll: true,
       fastScrollLabel: page.folderLayout ? _initialOf : null,
       fastScrollPadding: EdgeInsets.only(
@@ -769,8 +773,10 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     );
   }
 
-  /// How far into the artist's mixed listing each relation has read.
-  final _relationOffsets = <ArtistRelation, int>{};
+  /// Where in the artist's mixed listing each relation's chunk ends, by
+  /// relation and item count: a chunk landing late, past a reload, cannot
+  /// move where the next one starts.
+  final _relationOffsets = <(ArtistRelation, int), int>{};
 
   /// One of an artist's relations as a listing of its own, paged through the
   /// artist's mixed listing so its order is the source's.
@@ -782,7 +788,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       final kept = <BrowseItem>[];
       // Advanced only once the chunk is whole, so a failed read is retried
       // from where it began rather than skipping what it had kept.
-      var from = offset == 0 ? 0 : (_relationOffsets[relation] ?? 0);
+      var from = offset == 0 ? 0 : (_relationOffsets[(relation, offset)] ?? 0);
       while (kept.length < limit) {
         final list = await api.browse(id, offset: from, limit: limit);
         from += list.items.length;
@@ -792,12 +798,12 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             ? list.items.length < limit
             : from >= list.total;
         if (list.items.isEmpty || ended) {
-          _relationOffsets[relation] = from;
+          _relationOffsets[(relation, offset + kept.length)] = from;
           // Read to its end: what is kept is all there is.
           return ItemChunk(items: kept, total: offset + kept.length);
         }
       }
-      _relationOffsets[relation] = from;
+      _relationOffsets[(relation, offset + kept.length)] = from;
       return ItemChunk(items: kept);
     };
   }

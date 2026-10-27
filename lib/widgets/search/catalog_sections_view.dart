@@ -136,17 +136,31 @@ class _CatalogSectionsViewState extends ConsumerState<CatalogSectionsView> {
   /// answer lands. One that was empty may not be any more; one that failed
   /// says so in its own space.
   Future<void> _refresh() async {
-    final requests = [for (final shelf in _shelves) shelf.request];
-    // A shelf out of view, or left out as empty, watches nothing meanwhile.
+    // One out of view loads when it comes into view; one left out as empty
+    // must be asked whether it still is.
+    final requests = [
+      for (final shelf in _shelves)
+        if (ref.exists(catalogSectionProvider(shelf.request)) ||
+            _empty.contains(shelf.request))
+          shelf.request,
+    ];
+    // Read before it is held: holding builds one that was not alive, which
+    // fetches it already.
+    final alive = [
+      for (final request in requests)
+        ref.exists(catalogSectionProvider(request)),
+    ];
+    // A shelf left out as empty watches nothing meanwhile.
     final held = [
       for (final request in requests)
         ref.listenManual(catalogSectionProvider(request), (_, _) {}),
     ];
     try {
       final lists = await Future.wait([
-        for (final request in requests)
-          ref
-              .refresh(catalogSectionProvider(request).future)
+        for (var i = 0; i < requests.length; i++)
+          (alive[i]
+                  ? ref.refresh(catalogSectionProvider(requests[i]).future)
+                  : ref.read(catalogSectionProvider(requests[i]).future))
               .then<BrowseItemsList?>((list) => list, onError: (_) => null),
       ]);
       if (!mounted) return;
@@ -277,6 +291,18 @@ class SectionShelves extends StatelessWidget {
   final List<BrowseItem> sections;
 
   const SectionShelves({super.key, required this.sections});
+
+  /// Fetches [sections]' shelves again, each keeping what it shows until
+  /// its answer lands; one that fails says so in its own space.
+  static Future<void> refresh(WidgetRef ref, List<BrowseItem> sections) =>
+      Future.wait([
+        for (final section in sections)
+          if (_plan(section, const BrowseFilterQuery(), 0) case final shelf?)
+            if (ref.exists(catalogSectionProvider(shelf.request)))
+              ref
+                  .refresh(catalogSectionProvider(shelf.request).future)
+                  .then<void>((_) {}, onError: (_) {}),
+      ]);
 
   @override
   Widget build(BuildContext context) {

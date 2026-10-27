@@ -315,16 +315,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
     try {
       final chunk = await widget.fetchChunk(0, widget.chunkSize);
       if (!mounted || gen != _generation) return;
-      setState(() {
-        _items
-          ..clear()
-          ..addAll(chunk.items);
-        _total = chunk.total;
-        _reachedShortChunk = chunk.items.length < widget.chunkSize;
-        _initialLoading = false;
-      });
-      widget.onLoadedCount?.call(_items.length, false);
-      _maybeFillViewport();
+      _takeFirst(chunk);
     } catch (e) {
       if (!mounted || gen != _generation) return;
       setState(() {
@@ -389,6 +380,11 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
     if (!mounted || gen != _generation) return;
     // A chunk still on its way would land past rows that are gone.
     _generation++;
+    _takeFirst(chunk);
+  }
+
+  /// Shows [chunk] as the whole list, from its top.
+  void _takeFirst(ItemChunk<T> chunk) {
     setState(() {
       _kept.clear();
       _items
