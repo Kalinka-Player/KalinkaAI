@@ -10,6 +10,7 @@ import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../browse_rows_shimmer.dart';
 import '../home/preview_shelf.dart';
+import '../pull_to_refresh.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/browse_navigation_scope.dart';
 import '../shelf_heading.dart';
@@ -68,7 +69,7 @@ int _rowLimit(Catalog catalog, [List<BrowseItem>? items]) {
 /// catalog itself to a flat list, which is the same listing a shelf shows.
 /// Shelves load independently, so a slow one never holds up the rest, and a
 /// shelf that cannot honour the page's filter is not shown at all.
-class CatalogSectionsView extends StatefulWidget {
+class CatalogSectionsView extends ConsumerStatefulWidget {
   final CatalogPage page;
   final BrowseFilterQuery query;
 
@@ -97,10 +98,11 @@ class CatalogSectionsView extends StatefulWidget {
   });
 
   @override
-  State<CatalogSectionsView> createState() => _CatalogSectionsViewState();
+  ConsumerState<CatalogSectionsView> createState() =>
+      _CatalogSectionsViewState();
 }
 
-class _CatalogSectionsViewState extends State<CatalogSectionsView> {
+class _CatalogSectionsViewState extends ConsumerState<CatalogSectionsView> {
   // Empty shelves take no height, so later shelves load until one has rows
   // or all have reported empty.
   final _empty = <CatalogSectionRequest>{};
@@ -130,12 +132,51 @@ class _CatalogSectionsViewState extends State<CatalogSectionsView> {
     }
   }
 
+  /// Fetches every shelf again, each showing what it had until its own
+  /// answer lands. One that was empty may not be any more; one that failed
+  /// says so in its own space.
+  Future<void> _refresh() async {
+    final requests = [for (final shelf in _shelves) shelf.request];
+    // A shelf out of view, or left out as empty, watches nothing meanwhile.
+    final held = [
+      for (final request in requests)
+        ref.listenManual(catalogSectionProvider(request), (_, _) {}),
+    ];
+    try {
+      final lists = await Future.wait([
+        for (final request in requests)
+          ref
+              .refresh(catalogSectionProvider(request).future)
+              .then<BrowseItemsList?>((list) => list, onError: (_) => null),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        for (var i = 0; i < requests.length; i++) {
+          if (lists[i]?.items.isNotEmpty ?? false) _empty.remove(requests[i]);
+        }
+      });
+    } finally {
+      // Let go once a shelf this brings back is built and watching.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        for (final subscription in held) {
+          subscription.close();
+        }
+      });
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      PullToRefresh(onRefresh: _refresh, child: _buildShelves());
+
+  Widget _buildShelves() {
+    const physics = AlwaysScrollableScrollPhysics();
     final shelves = _shelves;
     if (widget.sliverHeader != null) {
       final empty = shelves.every((shelf) => _empty.contains(shelf.request));
       return CustomScrollView(
+        physics: physics,
         slivers: [
           widget.sliverHeader!,
           SliverToBoxAdapter(child: widget.header),
@@ -156,15 +197,30 @@ class _CatalogSectionsViewState extends State<CatalogSectionsView> {
       );
     }
     if (shelves.every((shelf) => _empty.contains(shelf.request))) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          widget.header,
-          Expanded(child: widget.empty),
+      return CustomScrollView(
+        physics: physics,
+        slivers: [
+          SliverToBoxAdapter(child: widget.header),
+          // Not filled to the end, which would ask the empty state its
+          // intrinsic height.
+          SliverLayoutBuilder(
+            builder: (context, constraints) => SliverToBoxAdapter(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight:
+                      (constraints.viewportMainAxisExtent -
+                              constraints.precedingScrollExtent)
+                          .clamp(0.0, double.infinity),
+                ),
+                child: widget.empty,
+              ),
+            ),
+          ),
         ],
       );
     }
     return ListView.builder(
+      physics: physics,
       padding: const EdgeInsets.only(bottom: 24),
       itemCount: shelves.length + 1,
       itemBuilder: (context, index) {

@@ -468,6 +468,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       onLeave: page.folderLayout
           ? (place) => _keepPlace(places, listing.id!, place)
           : null,
+      pullToRefresh: true,
       fastScroll: true,
       fastScrollLabel: page.folderLayout ? _initialOf : null,
       fastScrollPadding: EdgeInsets.only(
@@ -684,6 +685,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       errorBuilder: (context, _) => sideHeader != null || sliverHeader != null
           ? _CatalogError(onReturn: widget.onBackToCatalogs)
           : CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverToBoxAdapter(child: header),
                 SliverFillRemaining(
@@ -838,8 +840,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       ],
     );
     // Whether it lists releases or tracks is not known yet, so not how they
-    // will look either.
-    if (relations.isLoading) {
+    // will look either. Pulled to reload, it keeps what it knew meanwhile.
+    if (!relations.hasValue && !relations.hasError) {
       return ListView(children: [header, const LoadingSpinner()]);
     }
     final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
@@ -861,6 +863,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           columnGap: grid ? 0 : 16,
           rowGap: grid ? 0 : 6,
           fetchChunk: _relationFetch(page.id!, shown),
+          pullToRefresh: true,
+          onPullToRefresh: () =>
+              ref.refresh(artistRelationsProvider(page.id!).future),
           fastScroll: true,
           fastScrollPadding: const EdgeInsets.only(bottom: 8),
           rowsDependOn: (loaded) => (
@@ -920,6 +925,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                 ),
           emptyBuilder: (context) => const _CatalogEmpty(),
           errorBuilder: (context, _) => CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverToBoxAdapter(child: header),
               SliverFillRemaining(
