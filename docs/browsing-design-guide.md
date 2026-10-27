@@ -248,7 +248,9 @@ Use metadata columns at wide sizes and compact rows at narrow sizes. Preserve du
 
 ### Folder
 
-A folder page is one history entry however far its folders are walked: moving into a folder, up a level or along the trail changes what the page shows in place, and Back leaves the page. The trail preserves the real path and sits in the top bar after Back, in place of the page's title, its last crumb the folder shown; declared actions stay. Keep subfolders and tracks understandable using the provider's ordering contract. Folder layouts remain catalogs for pin eligibility where the shared model declares that relationship.
+A folder page is one history entry however far its folders are walked: moving into a folder, up a level or along the trail changes what the page shows in place, and Back leaves the page. The trail preserves the real path and sits in the top bar after Back, in place of the page's title, its last crumb the folder shown; declared actions stay. A folder walked back into, up the trail or down again, opens where it was left with what it had loaded, for the 32 folders left last on the server. Keep subfolders and tracks understandable using the provider's ordering contract.
+
+On Android, whose lists have no scrollbar to drag, a folder at least four screens long has a fast scroller: a 48dp thumb at the trailing edge, below the actions held under the bar, in `textMuted` (`textSecondary` while held), showing while the list scrolls and fading 1.5s after it stops. It spans the whole folder, loaded or not; dragged past what has loaded, it loads up to where it is in one request, and the list follows. Held over subfolders, which list by name, a 56dp `surfaceOverlay` bubble beside it shows the initial of the folder at the top; tracks, listed by file name, get none. Rows passed on the way, and on reopening a folder far down, do not load their artwork. Folder layouts remain catalogs for pin eligibility where the shared model declares that relationship.
 
 ## Playback contexts
 

@@ -10,6 +10,7 @@ import '../../providers/catalog_cards_provider.dart';
 import '../../providers/artist_relations_provider.dart';
 import '../../providers/collection_edit_provider.dart';
 import '../../providers/collections_provider.dart';
+import '../../providers/connection_settings_provider.dart';
 import '../../providers/indexer_status_provider.dart';
 import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/listing_presentation_provider.dart';
@@ -46,6 +47,15 @@ import 'collections_section.dart';
 import 'container_page_actions.dart';
 import 'library_rescan_control.dart';
 import 'track_group_actions.dart';
+
+/// Where each folder was left, so that walking back into it finds the same
+/// place. Another server's folders are not these.
+final _folderPlacesProvider = Provider<Map<String, ListPlace<BrowseItem>>>((
+  ref,
+) {
+  ref.watch(connectionSettingsProvider.select((s) => s.baseUrl));
+  return {};
+});
 
 /// One browsed page in the browsing history (back lives in the title bar).
 /// The banner scrolls away with the items; every row opens its own page. A
@@ -169,6 +179,28 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   /// The folder's actions have scrolled up to the trail and are held there.
   bool _actionsHeld = false;
   String? _shownListingId;
+
+  /// Where the folder shown was left, if it was shown before.
+  ListPlace<BrowseItem>? _place;
+  static const _keptPlaces = 32;
+
+  static void _keepPlace(
+    Map<String, ListPlace<BrowseItem>> places,
+    String id,
+    ListPlace<BrowseItem> place,
+  ) {
+    places.remove(id);
+    places[id] = place;
+    if (places.length > _keptPlaces) places.remove(places.keys.first);
+  }
+
+  /// Folders list by name, so the fast scroller names each by its initial;
+  /// tracks follow by file name, which their titles do not show.
+  static String? _initialOf(BrowseItem item) {
+    if (item.browseTypeIn(folder: true) != BrowseType.folder) return null;
+    final name = item.name?.trim() ?? '';
+    return name.isEmpty ? null : name.characters.first.toUpperCase();
+  }
 
   static const _heldInset = 4.0;
 
@@ -296,11 +328,15 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     // Covers take the shape their shelf declares; a category's card is 3:1.
     final coverShape = layout?.itemAspectRatio ?? 1.0;
     final cardShape = gridKind == BrowseType.catalog ? 3.0 : coverShape;
-    // Any folder shown, the same one again included, opens at its top.
+    // A folder walked back into opens where it was left, with what it had
+    // loaded, which the rows' headings count from.
+    final places = ref.read(_folderPlacesProvider);
     if (listing.id != _shownListingId) {
       _shownListingId = listing.id;
       _actionsTop = null;
       _actionsHeld = false;
+      _place = page.folderLayout ? places[listing.id] : null;
+      if (_place case final place?) _total = place.total;
     }
 
     final sliverHeader = catalogChrome
@@ -406,6 +442,21 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       reloadKey: '${listing.id}|${query.serverKey(capabilities)}|$revision',
       refreshKey: (_artRefresh, libraryRevision),
       onLoadedCount: _countRows,
+      place: _place,
+      onLeave: page.folderLayout
+          ? (place) => _keepPlace(places, listing.id!, place)
+          : null,
+      fastScroll: page.folderLayout,
+      fastScrollLabel: _initialOf,
+      fastScrollPadding: EdgeInsets.only(
+        top: catalogChrome
+            ? CatalogSliverHeader.pinnedExtent(
+                context,
+                actions: _FolderActions.anyFor(page, listing),
+              )
+            : 0,
+        bottom: 8,
+      ),
       // Album and folder headings change as later chunks land.
       rowsDependOn: isAlbum || page.folderLayout
           ? null

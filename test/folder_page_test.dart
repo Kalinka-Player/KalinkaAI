@@ -28,6 +28,7 @@ class _FixedConnection extends ConnectionStateNotifier {
 
 class _FolderApi implements KalinkaPlayerProxy {
   final Map<String, List<BrowseItem>> byId;
+  final asked = <(String, int, int)>[];
 
   _FolderApi(this.byId);
 
@@ -38,6 +39,7 @@ class _FolderApi implements KalinkaPlayerProxy {
     int limit = 10,
     String? filter,
   }) async {
+    asked.add((id, offset, limit));
     final items = byId[id] ?? const <BrowseItem>[];
     final end = (offset + limit).clamp(0, items.length);
     return BrowseItemsList(
@@ -120,6 +122,12 @@ final _listings = <String, List<BrowseItem>>{
   ],
   _playlistsId: [_playlist('p1', 'Evening')],
   _idOf('Box set'): [for (var i = 0; i < 30; i++) _track('b$i', 'Take $i')],
+  _idOf('Shelf'): [for (var i = 0; i < 10; i++) _folder('Shelf $i')],
+  // Five folders to each initial, A0 to Z4.
+  _idOf('Archive'): [
+    for (var i = 0; i < 130; i++)
+      _folder('${String.fromCharCode(65 + i ~/ 5)}${i % 5}'),
+  ],
   _idOf('Fifty'): [
     _folder('Scans'),
     for (var i = 1; i <= 50; i++) _track('f$i', 'Part $i'),
@@ -149,11 +157,12 @@ late SharedPreferences _prefs;
 Future<ProviderContainer> _pumpLibrary(
   WidgetTester tester, {
   List<BrowseItem> openedFolders = const [],
+  _FolderApi? api,
 }) async {
   final container = ProviderContainer(
     overrides: [
       sharedPrefsProvider.overrideWithValue(_prefs),
-      kalinkaProxyProvider.overrideWithValue(_FolderApi(_listings)),
+      kalinkaProxyProvider.overrideWithValue(api ?? _FolderApi(_listings)),
       sourceModulesProvider.overrideWith((ref) => const <ModuleInfo>[]),
       connectionStateProvider.overrideWith(_FixedConnection.new),
       playerStateProvider.overrideWithValue(PlaybackState.empty),
@@ -228,6 +237,11 @@ List<int?> _numbers(WidgetTester tester) => [
 ];
 
 final _list = find.byType(Scrollable).first;
+
+double _scrolled(WidgetTester tester) =>
+    tester.state<ScrollableState>(_list).position.pixels;
+
+final _thumb = find.byKey(const ValueKey('fast-scroll-thumb'));
 
 void main() {
   setUp(() async {
@@ -679,11 +693,96 @@ void main() {
     await tester.pumpAndSettle();
     expect(_shown(container), 'Jazz');
 
-    // Back into the folder it was held in, which opens at its top.
+    // Back into the folder it was held in, which opens where it was left.
     await tester.tap(find.text('Box set'));
     await tester.pumpAndSettle();
     expect(_shown(container), 'Box set');
-    expect(_upButton, findsOneWidget);
+    expect(_upButton.hitTestable(), findsOneWidget);
+  });
+
+  testWidgets('a folder walked back into opens where it was left', (
+    tester,
+  ) async {
+    final api = _FolderApi(_listings);
+    final container = await _pumpLibrary(
+      tester,
+      api: api,
+      openedFolders: [_folder('Archive')],
+    );
+    await tester.drag(_list, const Offset(0, -1500));
+    await tester.pumpAndSettle();
+    final left = _scrolled(tester);
+    expect(left, greaterThan(0));
+
+    final row = find.byType(SearchFolderRow).hitTestable().first;
+    final name = tester.widget<SearchFolderRow>(row).item.name!;
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(_shown(container), name);
+    expect(_scrolled(tester), 0);
+
+    final asked = api.asked.length;
+    await tester.tap(_upButton.hitTestable());
+    await tester.pumpAndSettle();
+    expect(_shown(container), 'Archive');
+    expect(_scrolled(tester), left);
+    expect(find.text(name).hitTestable(), findsOneWidget);
+    // What it had loaded comes back with it.
+    expect(api.asked.length, asked);
+  });
+
+  testWidgets('a long folder\'s thumb drags it past what has loaded', (
+    tester,
+  ) async {
+    final api = _FolderApi(_listings);
+    await _pumpLibrary(tester, api: api, openedFolders: [_folder('Archive')]);
+    expect(_thumb, findsNothing);
+
+    await tester.drag(_list, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(_thumb.hitTestable(), findsOneWidget);
+    expect(find.text('Z4'), findsNothing);
+
+    final hold = await tester.startGesture(tester.getCenter(_thumb));
+    await hold.moveBy(const Offset(0, -40));
+    await tester.pump();
+    // Held, it names the initial of the folders it is at.
+    expect(find.text('A'), findsOneWidget);
+
+    await hold.moveBy(const Offset(0, 1000));
+    await tester.pumpAndSettle();
+    await hold.up();
+    await tester.pumpAndSettle();
+    expect(find.text('A'), findsNothing);
+    expect(find.text('Z4').hitTestable(), findsOneWidget);
+    // The rest loaded in one go rather than a chunk at a time.
+    expect(api.asked.where((a) => a.$1 == _idOf('Archive')), hasLength(2));
+
+    // It fades once the list rests.
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(_thumb, findsNothing);
+  });
+
+  testWidgets(
+    'a folder has no thumb where lists have a scrollbar of their own',
+    (tester) async {
+      await _pumpLibrary(tester, openedFolders: [_folder('Archive')]);
+      await tester.drag(_list, const Offset(0, -300));
+      await tester.pumpAndSettle();
+      expect(_thumb, findsNothing);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
+
+  testWidgets('a folder only a little longer than the screen has no thumb', (
+    tester,
+  ) async {
+    await _pumpLibrary(tester, openedFolders: [_folder('Shelf')]);
+    await tester.drag(_list, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(_scrolled(tester), greaterThan(0));
+    expect(_thumb, findsNothing);
   });
 
   testWidgets('a folder held joins a selection, and a tap then toggles it', (
