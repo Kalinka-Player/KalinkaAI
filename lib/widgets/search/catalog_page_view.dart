@@ -221,8 +221,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     final top = _actionsTop;
     // The header is the list's first row, so its offsets are scroll offsets.
     // Reopened far down, the header is gone and its actions long passed.
+    // Unmeasured otherwise, it stays as it was.
     final reached = top == null
-        ? restored && pixels > 0
+        ? (restored ? pixels > 0 : _actionsHeld)
         : pixels >= top - _heldInset;
     if (reached != _actionsHeld) setState(() => _actionsHeld = reached);
   }
@@ -337,11 +338,17 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     // A folder walked back into opens where it was left, with what it had
     // loaded, which the rows' headings count from.
     final places = ref.read(_folderPlacesProvider);
+    final reloadKey =
+        '${listing.id}|${query.serverKey(capabilities)}|$revision';
     if (listing.id != _shownListingId) {
       _shownListingId = listing.id;
       _actionsTop = null;
       _actionsHeld = false;
-      _place = page.folderLayout ? places[listing.id] : null;
+      // A place left under another reload key is not reopened.
+      _place = switch (page.folderLayout ? places[listing.id] : null) {
+        final place? when place.reloadKey == reloadKey => place,
+        _ => null,
+      };
       if (_place case final place?) {
         _total = place.total;
         // Opening there scrolls nothing, so no notification holds the
@@ -454,7 +461,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           : PageStorageKey((visit.visitId, listing.id)),
       // Only the facets the server honours restart the list, so touching an
       // inert placeholder never costs a refetch.
-      reloadKey: '${listing.id}|${query.serverKey(capabilities)}|$revision',
+      reloadKey: reloadKey,
       refreshKey: (_artRefresh, libraryRevision),
       onLoadedCount: _countRows,
       place: _place,

@@ -348,7 +348,9 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
         if (!mounted || gen != _generation) return;
         fresh.addAll(chunk.items);
         total = chunk.total;
-        short = chunk.items.length < limit;
+        // Some sources cap a request below [limit]: only a chunk short of
+        // the usual size ends the list.
+        short = chunk.items.length < widget.chunkSize;
       }
     } catch (_) {
       return;
@@ -381,11 +383,12 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
       setState(() {
         _items.addAll(chunk.items);
         if (chunk.total >= 0) _total = chunk.total;
-        if (chunk.items.length < limit) _reachedShortChunk = true;
+        if (chunk.items.length < widget.chunkSize) _reachedShortChunk = true;
         _loadingMore = false;
       });
       widget.onLoadedCount?.call(_items.length, true);
-      if (_items.length < _wanted) {
+      // An empty chunk ends the chase, even where the total says otherwise.
+      if (chunk.items.isNotEmpty && _items.length < _wanted) {
         _loadMore();
       } else {
         _maybeFillViewport();
