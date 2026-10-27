@@ -37,6 +37,11 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
 
   static bool appliesTo(CatalogPage page) => page.isCatalog || page.isPlaylist;
 
+  /// How much of the header stays under the bar: a folder's actions, else
+  /// nothing.
+  static double pinnedExtent(BuildContext context, {required bool actions}) =>
+      actions ? FilterSearchField.heightFor(context) + 16 : 0;
+
   /// Whether the page has a search.
   static bool searches(BrowseFilterCapabilities caps) =>
       caps.text != FacetSupport.hidden;
@@ -170,7 +175,10 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
         final actionsHeight = widget.actions == null ? 0.0 : rowHeight + 8;
         // Only a folder's own actions stay under the bar, held there as its
         // trail is.
-        final pinnedHeight = widget.actions == null ? 0.0 : rowHeight + 16;
+        final pinnedHeight = CatalogSliverHeader.pinnedExtent(
+          context,
+          actions: widget.actions != null,
+        );
         final headingWidth = wide
             ? available - controlsWidth - identityGap
             : available;

@@ -1,4 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
+import 'fast_scroller.dart';
 
 /// One chunk of a longer list, plus the collection's [total] so the scroller
 /// knows when it has reached the end. [total] < 0 means "unknown" — it then
@@ -14,6 +18,26 @@ class ItemChunk<T> {
 /// only place the backend's chunking shows through — there is no page model
 /// above it.
 typedef ChunkFetcher<T> = Future<ItemChunk<T>> Function(int offset, int limit);
+
+/// Where a list was left: what it had loaded and how far down it was, to
+/// open there again. Items left under another reload key are not the list's.
+class ListPlace<T> {
+  final List<T> items;
+  final int total;
+  final bool ended;
+  final double offset;
+  final Object? reloadKey;
+  final Object? refreshKey;
+
+  const ListPlace({
+    required this.items,
+    required this.total,
+    required this.ended,
+    required this.offset,
+    this.reloadKey,
+    this.refreshKey,
+  });
+}
 
 /// A reusable infinite-scroll list. It loads an initial chunk, then keeps
 /// pulling the next one as the viewport nears the end — no page numbers, no
@@ -100,6 +124,23 @@ class InfiniteListView<T> extends StatefulWidget {
   /// outside. Null rebuilds every row whenever the list does.
   final Object? Function(List<T> loaded)? rowsDependOn;
 
+  /// Where this list was left before, to open there at once with what it had
+  /// loaded rather than at the top. Read only when the list is first built.
+  final ListPlace<T>? place;
+
+  /// Told where the list is as it goes.
+  final ValueChanged<ListPlace<T>>? onLeave;
+
+  /// Gives a long list a thumb to drag through all of it, where lists have
+  /// no scrollbar of their own ([FastScroller.wanted]).
+  final bool fastScroll;
+
+  /// What the held thumb says about the item it is at.
+  final String? Function(T item)? fastScrollLabel;
+
+  /// Keeps the thumb clear of what [sliverHeader] pins over the list.
+  final EdgeInsets fastScrollPadding;
+
   const InfiniteListView({
     super.key,
     required this.fetchChunk,
@@ -124,6 +165,11 @@ class InfiniteListView<T> extends StatefulWidget {
     this.refreshKey,
     this.onLoadedCount,
     this.rowsDependOn,
+    this.place,
+    this.onLeave,
+    this.fastScroll = false,
+    this.fastScrollLabel,
+    this.fastScrollPadding = EdgeInsets.zero,
   }) : assert(sideHeader == null || sideHeaderWidth > 0),
        assert(sideHeader == null || sliverHeader == null);
 
@@ -132,8 +178,18 @@ class InfiniteListView<T> extends StatefulWidget {
 }
 
 class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
-  final ScrollController _controller = ScrollController();
+  /// The most a jump far into the list loads at once.
+  static const _largestChunk = 500;
+
+  late final DeferringScrollController _controller;
   final List<T> _items = [];
+
+  /// How far down the list is, kept as it scrolls: by the time the list
+  /// goes, its scrollable has let go of the controller.
+  double _offset = 0;
+
+  /// How many items the fast scroller has asked for.
+  int _wanted = 0;
 
   int _total = -1;
   bool _initialLoading = true;
@@ -154,8 +210,32 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
   @override
   void initState() {
     super.initState();
-    _controller.addListener(_onScroll);
-    _loadInitial();
+    final place = widget.place;
+    final restored =
+        place != null &&
+        place.items.isNotEmpty &&
+        place.reloadKey == widget.reloadKey;
+    _controller = DeferringScrollController(
+      initialScrollOffset: restored ? place.offset : 0,
+    )..addListener(_onScroll);
+    if (!restored) {
+      _loadInitial();
+      return;
+    }
+    _items.addAll(place.items);
+    _total = place.total;
+    _reachedShortChunk = place.ended;
+    _initialLoading = false;
+    _offset = place.offset;
+    // Opening far down lays out every row above it on the way, only to drop
+    // them: none should ask for its image.
+    _controller.deferLoading = place.offset > 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _controller.deferLoading = false;
+      if (mounted) widget.onLoadedCount?.call(_items.length, false);
+    });
+    if (place.refreshKey != widget.refreshKey) _refresh();
+    _maybeFillViewport();
   }
 
   @override
@@ -172,6 +252,18 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
 
   @override
   void dispose() {
+    if (!_initialLoading && _items.isNotEmpty) {
+      widget.onLeave?.call(
+        ListPlace(
+          items: List.of(_items),
+          total: _total,
+          ended: _reachedShortChunk,
+          offset: _offset,
+          reloadKey: widget.reloadKey,
+          refreshKey: widget.refreshKey,
+        ),
+      );
+    }
     _controller.removeListener(_onScroll);
     _controller.dispose();
     super.dispose();
@@ -182,6 +274,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
       _items.clear();
       _kept.clear();
       _total = -1;
+      _wanted = 0;
       _reachedShortChunk = false;
       _initialLoading = true;
       _loadingMore = false;
@@ -258,17 +351,25 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
     if (_loadingMore || _loadMoreFailed || !_hasMore) return;
     setState(() => _loadingMore = true);
     final gen = _generation;
+    final limit = math.max(
+      widget.chunkSize,
+      math.min(_wanted - _items.length, _largestChunk),
+    );
     try {
-      final chunk = await widget.fetchChunk(_items.length, widget.chunkSize);
+      final chunk = await widget.fetchChunk(_items.length, limit);
       if (!mounted || gen != _generation) return;
       setState(() {
         _items.addAll(chunk.items);
         if (chunk.total >= 0) _total = chunk.total;
-        if (chunk.items.length < widget.chunkSize) _reachedShortChunk = true;
+        if (chunk.items.length < limit) _reachedShortChunk = true;
         _loadingMore = false;
       });
       widget.onLoadedCount?.call(_items.length, true);
-      _maybeFillViewport();
+      if (_items.length < _wanted) {
+        _loadMore();
+      } else {
+        _maybeFillViewport();
+      }
     } catch (_) {
       if (!mounted || gen != _generation) return;
       // Stop auto-retrying on error; a tap on the retry footer resumes.
@@ -284,7 +385,15 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
     _loadMore();
   }
 
+  /// Loads the first [count] items, the fast scroller having been taken
+  /// past those loaded.
+  void _reach(int count) {
+    _wanted = math.max(_wanted, count);
+    _loadMore();
+  }
+
   void _onScroll() {
+    if (_controller.hasClients) _offset = math.max(0.0, _controller.offset);
     if (_initialLoading || _initialError != null || !_controller.hasClients) {
       return;
     }
@@ -335,6 +444,23 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
 
   @override
   Widget build(BuildContext context) {
+    final list = _buildList(context);
+    if (!widget.fastScroll || !FastScroller.wanted(context)) return list;
+    final label = widget.fastScrollLabel;
+    return FastScroller(
+      controller: _controller,
+      loaded: _items.length,
+      total: _total,
+      onReach: _reach,
+      labelAt: label == null
+          ? null
+          : (index) => index < _items.length ? label(_items[index]) : null,
+      padding: widget.fastScrollPadding,
+      child: list,
+    );
+  }
+
+  Widget _buildList(BuildContext context) {
     if (_initialLoading) {
       if (_customLayout) {
         return _customScroll(
