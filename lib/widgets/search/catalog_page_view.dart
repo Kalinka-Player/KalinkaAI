@@ -208,6 +208,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     if (notification.depth != 0 || notification.metrics.axis != Axis.vertical) {
       return false;
     }
+    _holdActionsAt(notification.metrics.pixels);
+    return false;
+  }
+
+  void _holdActionsAt(double pixels, {bool restored = false}) {
     final actions = _actionsKey.currentContext?.findRenderObject();
     final header = _headerKey.currentContext?.findRenderObject();
     if (actions is RenderBox && header is RenderBox && actions.hasSize) {
@@ -215,10 +220,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     }
     final top = _actionsTop;
     // The header is the list's first row, so its offsets are scroll offsets.
-    final reached =
-        top != null && notification.metrics.pixels >= top - _heldInset;
+    // Reopened far down, the header is gone and its actions long passed.
+    final reached = top == null
+        ? restored && pixels > 0
+        : pixels >= top - _heldInset;
     if (reached != _actionsHeld) setState(() => _actionsHeld = reached);
-    return false;
   }
 
   /// See [_pollWhileComposing].
@@ -336,7 +342,16 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       _actionsTop = null;
       _actionsHeld = false;
       _place = page.folderLayout ? places[listing.id] : null;
-      if (_place case final place?) _total = place.total;
+      if (_place case final place?) {
+        _total = place.total;
+        // Opening there scrolls nothing, so no notification holds the
+        // actions.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _shownListingId == listing.id) {
+            _holdActionsAt(place.offset, restored: true);
+          }
+        });
+      }
     }
 
     final sliverHeader = catalogChrome
@@ -433,7 +448,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       double sideHeaderWidth = 0,
     }) => InfiniteListView(
       // Scroll kept for this visit only: the same page opened again starts
-      // at its top.
+      // at its top. A folder's place is kept in [_folderPlacesProvider].
       key: page.folderLayout
           ? ValueKey(listing.id)
           : PageStorageKey((visit.visitId, listing.id)),
@@ -449,12 +464,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       fastScroll: page.folderLayout,
       fastScrollLabel: _initialOf,
       fastScrollPadding: EdgeInsets.only(
-        top: catalogChrome
-            ? CatalogSliverHeader.pinnedExtent(
-                context,
-                actions: _FolderActions.anyFor(page, listing),
-              )
-            : 0,
+        // Without the chrome, the actions are held over the list instead.
+        top: CatalogSliverHeader.pinnedExtent(
+          context,
+          actions: _FolderActions.anyFor(page, listing),
+        ),
         bottom: 8,
       ),
       // Album and folder headings change as later chunks land.
