@@ -118,18 +118,67 @@ void main() {
     expect(state().shownListing.title, 'My Library');
   });
 
-  test('back leaves the page, not one folder', () {
+  test('back returns through the folders opened, then leaves the page', () {
     session().openFolder(_folder('Jazz'));
     session().openFolder(_folder('Miles Davis'));
-    session().showEnclosingFolder();
-    session().openFolder(_folder('Coltrane'));
-    // Moving between folders adds nothing to Back.
-    expect(state().previousVisits, isEmpty);
 
     session().goBack();
-
+    expect(shownPath(), ['Jazz']);
+    session().goBack();
+    expect(shownPath(), isEmpty);
+    expect(state().catalogPage.title, 'My Library');
+    session().goBack();
     expect(state().catalogPage.isRoot, isTrue);
-    expect(state().folderPath, isEmpty);
+  });
+
+  test('the way up from a folder just opened is Back', () {
+    session().openFolder(_folder('Jazz'));
+    final jazz = state().visitId;
+    session().openFolder(_folder('Miles Davis'));
+
+    session().showEnclosingFolder();
+
+    expect(shownPath(), ['Jazz']);
+    expect(state().visitId, jazz);
+    session().goBack();
+    expect(shownPath(), isEmpty);
+  });
+
+  test('the way up from a folder opened by itself is a visit', () {
+    session().openFolder(_folder('Jazz'));
+    session().openFolder(_folder('Miles Davis'));
+    session().backToCatalogsRoot();
+    // Opened again on the folder it was left on, with nothing above it.
+    openLibrary(container);
+
+    session().showEnclosingFolder();
+    expect(shownPath(), ['Jazz']);
+
+    session().goBack();
+    expect(shownPath(), ['Jazz', 'Miles Davis']);
+  });
+
+  test('a crumb further up is a visit Back returns from', () {
+    session().openFolder(_folder('Jazz'));
+    session().openFolder(_folder('Miles Davis'));
+    session().openFolder(_folder('Kind of Blue'));
+
+    session().showFolderAt(1);
+    expect(shownPath(), ['Jazz']);
+
+    session().goBack();
+    expect(shownPath(), ['Jazz', 'Miles Davis', 'Kind of Blue']);
+  });
+
+  test('back to a folder makes it the one the page was left on', () {
+    session().openFolder(_folder('Jazz'));
+    session().openFolder(_folder('Miles Davis'));
+    session().goBack();
+    session().backToCatalogsRoot();
+
+    openLibrary(container);
+
+    expect(shownPath(), ['Jazz']);
   });
 
   test('opening the page again shows the folder it was left on', () {
