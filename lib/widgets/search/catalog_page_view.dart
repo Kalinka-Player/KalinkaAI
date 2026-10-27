@@ -461,13 +461,13 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       onLeave: page.folderLayout
           ? (place) => _keepPlace(places, listing.id!, place)
           : null,
-      fastScroll: page.folderLayout,
-      fastScrollLabel: _initialOf,
+      fastScroll: true,
+      fastScrollLabel: page.folderLayout ? _initialOf : null,
       fastScrollPadding: EdgeInsets.only(
         // Without the chrome, the actions are held over the list instead.
         top: CatalogSliverHeader.pinnedExtent(
           context,
-          actions: _FolderActions.anyFor(page, listing),
+          actions: page.folderLayout && _FolderActions.anyFor(page, listing),
         ),
         bottom: 8,
       ),
@@ -854,6 +854,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           columnGap: grid ? 0 : 16,
           rowGap: grid ? 0 : 6,
           fetchChunk: _relationFetch(page.id!, shown),
+          fastScroll: true,
+          fastScrollPadding: const EdgeInsets.only(bottom: 8),
           rowsDependOn: (loaded) => (
             trackIdsMemo.details(loaded),
             trackIdsMemo.artists(loaded),

@@ -797,6 +797,23 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a long catalog has a thumb that drags to its end', (
+    tester,
+  ) async {
+    await _pump(tester, _Api());
+    final thumb = find.byKey(const ValueKey('fast-scroll-thumb'));
+    expect(thumb, findsNothing);
+
+    await tester.drag(_scrollable, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(thumb.hitTestable(), findsOneWidget);
+    expect(find.text('Album 79'), findsNothing);
+
+    await tester.drag(thumb, const Offset(0, 1000));
+    await tester.pumpAndSettle();
+    expect(find.text('Album 79').hitTestable(), findsOneWidget);
+  });
+
   testWidgets('Back restores the collapsed catalog title and controls', (
     tester,
   ) async {
