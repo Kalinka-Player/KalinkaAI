@@ -24,13 +24,12 @@ enum IndexerDisplayStage {
 class IndexerStageProgress {
   final IndexerDisplayStage stage;
 
-  /// Outstanding work, or a scan still looking; a stage without either is
-  /// done for now.
+  /// Outstanding work; a stage without any is done for now, even while a
+  /// periodic scan checks folders that turn out unchanged.
   final bool active;
 
   /// Progress (0-100) while [active], monotonically non-decreasing while it
-  /// stays active: raw numbers can dip when new work is queued mid-run. Null
-  /// while unknown, as while a scan is still listing folders.
+  /// stays active: raw numbers can dip when new work is queued mid-run.
   final double? progressPct;
 
   const IndexerStageProgress(
@@ -96,9 +95,8 @@ class IndexerStatusState {
         libraryRevision: libraryRevision,
       );
 
-  /// Shared caption for progress surfaces: "Finding music · 45%", or
-  /// "Finding music…" while the percentage is unknown. Null when the pipeline
-  /// is idle.
+  /// Shared caption for progress surfaces: "Finding music · 45%". Null when
+  /// the pipeline is idle.
   String? get caption {
     final stage = this.stage;
     if (stage == null) return null;
@@ -238,22 +236,20 @@ class IndexerStatusNotifier extends Notifier<IndexerStatusState> {
     final stages = <IndexerStageProgress>[];
     for (final stage in IndexerDisplayStage.values) {
       var reported = false;
-      var looking = false;
       var total = 0;
       var outstanding = 0;
       for (final module in status.modules.values) {
         for (final entry in module.entries) {
           if (_displayStageFor(entry.key) != stage) continue;
           reported = true;
-          // Checking unchanged folders creates no work, but is a scan.
-          looking |= entry.value.scanning;
           total += entry.value.total;
           outstanding += entry.value.pending + entry.value.inProgress;
         }
       }
       if (!reported) continue;
+      // A scan that has found nothing new reports no work, and shows none.
       if (outstanding == 0) {
-        stages.add(IndexerStageProgress(stage, active: looking));
+        stages.add(IndexerStageProgress(stage));
         continue;
       }
       final raw = total == 0
