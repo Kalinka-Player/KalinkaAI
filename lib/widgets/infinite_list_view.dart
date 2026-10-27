@@ -128,7 +128,7 @@ class InfiniteListView<T> extends StatefulWidget {
   /// loaded rather than at the top. Read only when the list is first built.
   final ListPlace<T>? place;
 
-  /// Told where the list is as it goes.
+  /// Told where the list was left, when it goes.
   final ValueChanged<ListPlace<T>>? onLeave;
 
   /// Gives a long list a thumb to drag through all of it, where lists have
@@ -324,11 +324,16 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
     var short = false;
     try {
       while (fresh.length < loaded && !short) {
-        final chunk = await widget.fetchChunk(fresh.length, widget.chunkSize);
+        // A list taken far down by the fast scroller refetches in big steps.
+        final limit = math.max(
+          widget.chunkSize,
+          math.min(loaded - fresh.length, _largestChunk),
+        );
+        final chunk = await widget.fetchChunk(fresh.length, limit);
         if (!mounted || gen != _generation) return;
         fresh.addAll(chunk.items);
         total = chunk.total;
-        short = chunk.items.length < widget.chunkSize;
+        short = chunk.items.length < limit;
       }
     } catch (_) {
       return;
@@ -388,8 +393,9 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
   /// Loads the first [count] items, the fast scroller having been taken
   /// past those loaded.
   void _reach(int count) {
-    _wanted = math.max(_wanted, count);
-    _loadMore();
+    // Where the thumb is now: taken back up, it no longer wants the rest.
+    _wanted = count;
+    if (count > _items.length) _loadMore();
   }
 
   void _onScroll() {

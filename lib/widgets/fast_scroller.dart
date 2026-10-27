@@ -58,7 +58,7 @@ class FastScroller extends StatefulWidget {
   final int total;
 
   /// Asks for the first [count] items, the thumb having gone past those
-  /// loaded.
+  /// loaded; 0 once it is back among them.
   final ValueChanged<int> onReach;
 
   /// What the held thumb says about the item at an index, if anything.
@@ -241,11 +241,11 @@ class _FastScrollerState extends State<FastScroller>
     final short =
         target > position.maxScrollExtent && widget.loaded < widget.total;
     // Asked first, so the load the jump sets off is already the whole way.
-    if (short) {
-      widget.onReach(
-        ((target + position.viewportDimension) / _perItem(position)).ceil(),
-      );
-    }
+    widget.onReach(
+      short
+          ? ((target + position.viewportDimension) / _perItem(position)).ceil()
+          : 0,
+    );
     position.jumpTo(math.min(target, position.maxScrollExtent));
     if (!short && !_held) {
       setState(() => _fraction = null);
@@ -270,8 +270,10 @@ class _FastScrollerState extends State<FastScroller>
       onNotification: (notification) {
         if (notification.depth == 0 &&
             notification.dragDetails != null &&
-            !_held) {
+            !_held &&
+            _fraction != null) {
           _fraction = null;
+          widget.onReach(0);
         }
         return false;
       },
