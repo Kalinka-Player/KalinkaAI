@@ -66,9 +66,13 @@ void main() {
     await container.read(indexerStatusProvider.notifier).refresh();
     final stages = container.read(indexerStatusProvider).stages;
     expect([for (final s in stages) s.stage], IndexerDisplayStage.values);
-    expect([for (final s in stages) s.active], [true, false, true]);
+    // The folder check found nothing new, so only smart search is at work.
+    expect([for (final s in stages) s.active], [false, false, true]);
     expect([for (final s in stages) s.progressPct], [null, null, 60]);
-    expect(container.read(indexerStatusProvider).caption, 'Finding music…');
+    expect(
+      container.read(indexerStatusProvider).caption,
+      'Preparing smart search · 60%',
+    );
   });
 
   Future<void> pump(WidgetTester tester, IndexerStatusState state) async {

@@ -197,12 +197,8 @@ class _StageRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = progress.active;
     final pct = progress.progressPct;
-    // Only a scan can be at work with no count yet.
-    final status = !active
-        ? 'Done'
-        : pct == null
-        ? 'Scanning…'
-        : '${pct.toStringAsFixed(0)}%';
+    // Work always comes with a count, so a row without one is done.
+    final status = pct == null ? 'Done' : '${pct.toStringAsFixed(0)}%';
     final style = KalinkaTextStyles.trackRowSubtitle.copyWith(
       fontSize: KalinkaTypography.baseSize + 1,
     );
