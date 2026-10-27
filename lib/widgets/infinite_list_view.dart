@@ -128,7 +128,7 @@ class InfiniteListView<T> extends StatefulWidget {
   /// loaded rather than at the top. Read only when the list is first built.
   final ListPlace<T>? place;
 
-  /// Told where the list was left, when it goes.
+  /// Told where the list was left, when it goes out of sight or away.
   final ValueChanged<ListPlace<T>>? onLeave;
 
   /// Gives a long list a thumb to drag through all of it, where lists have
@@ -191,6 +191,10 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
   /// How many items the fast scroller has asked for.
   int _wanted = 0;
 
+  /// Whether the list is in sight: one hidden under a newer page was left
+  /// then, and is not left again when it goes for good.
+  bool _shown = true;
+
   int _total = -1;
   bool _initialLoading = true;
   bool _loadingMore = false;
@@ -251,19 +255,30 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final shown = TickerMode.valuesOf(context).enabled;
+    if (_shown && !shown) _leave();
+    _shown = shown;
+  }
+
+  void _leave() {
+    if (_initialLoading || _items.isEmpty) return;
+    widget.onLeave?.call(
+      ListPlace(
+        items: List.of(_items),
+        total: _total,
+        ended: _reachedShortChunk,
+        offset: _offset,
+        reloadKey: widget.reloadKey,
+        refreshKey: widget.refreshKey,
+      ),
+    );
+  }
+
+  @override
   void dispose() {
-    if (!_initialLoading && _items.isNotEmpty) {
-      widget.onLeave?.call(
-        ListPlace(
-          items: List.of(_items),
-          total: _total,
-          ended: _reachedShortChunk,
-          offset: _offset,
-          reloadKey: widget.reloadKey,
-          refreshKey: widget.refreshKey,
-        ),
-      );
-    }
+    if (_shown) _leave();
     _controller.removeListener(_onScroll);
     _controller.dispose();
     super.dispose();

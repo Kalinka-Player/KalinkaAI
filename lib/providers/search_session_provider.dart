@@ -859,6 +859,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       }
     }
     state = next;
+    // Back to a folder, which is then the one the page was left on.
+    if (state.catalogPage.folderLayout) _rememberFolderPath();
     for (final (:leg, :source) in unanswered) {
       _runLeg(_queryGen, state.searchQuery, source, leg);
     }
@@ -1204,31 +1206,52 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// Return one visit; see [goBack].
   void backFromCatalog() => goBack();
 
-  /// Show [folder], listed in the folder shown now, in its place: moving
-  /// between folders stays one visit, so Back leaves the page rather than
-  /// retracing them. The trail is the folders that hold it.
+  /// Show [folder], listed in the folder shown now, as a visit of its own,
+  /// so Back returns to the folder it was opened from. The trail is the
+  /// folders that hold it.
   void openFolder(BrowseItem folder) {
     if (!state.catalogPage.folderLayout) {
       openBrowseItem(folder);
       return;
     }
-    state = state.copyWith(
-      folderPath: [
-        ...state.folderPath,
-        CatalogPage.fromItem(folder, provider: state.catalogPage.provider),
-      ],
+    _visit(
+      state.copyWith(
+        folderPath: [
+          ...state.folderPath,
+          CatalogPage.fromItem(folder, provider: state.catalogPage.provider),
+        ],
+      ),
     );
     _rememberFolderPath();
   }
 
-  /// Show the folder [depth] steps in from the page's top, which zero is.
+  /// Show the folder [depth] steps in from the page's top, which zero is:
+  /// Back, where that is the folder this one was opened from, else a visit.
   void showFolderAt(int depth) {
     if (depth < 0 || depth >= state.folderPath.length) return;
-    state = state.copyWith(folderPath: state.folderPath.sublist(0, depth));
+    final path = state.folderPath.sublist(0, depth);
+    final previous = state.previousVisits.lastOrNull;
+    if (previous != null &&
+        previous.activeView == FindMusicView.catalogs &&
+        previous.catalogPage.id == state.catalogPage.id &&
+        previous.catalogPage.folderLayout &&
+        _samePath(previous.folderPath, path)) {
+      goBack();
+      return;
+    }
+    _visit(state.copyWith(folderPath: path));
     _rememberFolderPath();
   }
 
-  /// Show the folder enclosing the one shown.
+  static bool _samePath(List<CatalogPage> a, List<CatalogPage> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id) return false;
+    }
+    return true;
+  }
+
+  /// Show the folder enclosing the one shown; see [showFolderAt].
   void showEnclosingFolder() => showFolderAt(state.folderPath.length - 1);
 
   /// Straight to Home's top, past every visit in it. Other destinations
