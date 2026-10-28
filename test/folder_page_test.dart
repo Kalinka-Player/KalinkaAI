@@ -124,6 +124,7 @@ final _listings = <String, List<BrowseItem>>{
   ],
   _playlistsId: [_playlist('p1', 'Evening')],
   _idOf('Box set'): [for (var i = 0; i < 30; i++) _track('b$i', 'Take $i')],
+  _idOf(_longName): [for (var i = 0; i < 30; i++) _track('q$i', 'Take $i')],
   _idOf('Shelf'): [for (var i = 0; i < 10; i++) _folder('Shelf $i')],
   // Five folders to each initial, A0 to Z4.
   _idOf('Archive'): [
@@ -702,6 +703,54 @@ void main() {
     expect(_shown(container), 'Box set');
     expect(_upButton.hitTestable(), findsOneWidget);
   });
+
+  for (final (where, width) in [('under', 420.0), ('beside', 1200.0)]) {
+    testWidgets('a two-line folder title scrolls away with its actions '
+        '$where it', (tester) async {
+      tester.view.physicalSize = Size(width, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pumpLibrary(tester, openedFolders: [_folder(_longName)]);
+      final title = find.byKey(const ValueKey('catalog-expanded-title'));
+      final identity = find.byKey(const ValueKey('catalog-identity'));
+      final fontSize = tester.widget<Text>(title).style!.fontSize!;
+      final height = tester.getSize(title).height;
+      expect(height, greaterThan(fontSize * 2));
+      final top = tester.getTopLeft(title).dy;
+      final scroll = tester.state<ScrollableState>(_list).position;
+
+      for (var offset = 0.0; offset < height; offset += 2) {
+        scroll.jumpTo(offset);
+        await tester.pumpAndSettle();
+        if (width < 800) {
+          // It slides under the bar, whole until out of sight.
+          expect(title, findsOneWidget);
+          expect(tester.getTopLeft(title).dy, top - offset);
+        }
+        if (title.evaluate().isEmpty) break;
+        final opacity = tester
+            .widget<Opacity>(
+              find.ancestor(of: identity, matching: find.byType(Opacity)).first,
+            )
+            .opacity;
+        if (offset <= 8) expect(opacity, greaterThan(0));
+        // Play all never passes over what is still showing of it.
+        if (opacity > 0) {
+          expect(
+            tester
+                .getRect(find.text('Play all'))
+                .overlaps(tester.getRect(identity)),
+            isFalse,
+          );
+        }
+      }
+
+      scroll.jumpTo(height + 1);
+      await tester.pumpAndSettle();
+      expect(title, findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('a folder walked back into opens where it was left', (
     tester,
