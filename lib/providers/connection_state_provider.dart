@@ -65,6 +65,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   int _probesInFlight = 0;
   int _pauses = 0;
   bool get _paused => _pauses > 0;
+  bool _retryAsked = false;
   // NTP can adjust a Pi's wall clock while it is waiting for the server.
   Duration? _reconnectStartedAt;
 
@@ -193,7 +194,10 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   /// Manually trigger a single reconnect attempt (e.g. from Retry button).
   /// While reconnecting is paused it waits for the release, which retries.
   void retryNow() {
-    if (_paused) return;
+    if (_paused) {
+      _retryAsked = true;
+      return;
+    }
     if (state == ConnectionStatus.offline) {
       _leaveOffline();
       escalationDismissed = false;
@@ -215,15 +219,23 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   void _release() {
     _pauses--;
     // A screen disposed with the picker open releases a microtask late.
-    if (_paused || !ref.mounted || !state.isInterrupted) return;
+    if (_paused || !ref.mounted) return;
+    final retryAsked = _retryAsked;
+    _retryAsked = false;
+    if (!state.isInterrupted) return;
     final offline = state == ConnectionStatus.offline;
     // Time spent in the picker does not count towards going offline.
     if (!offline) _reconnectStartedAt = _monotonicNow;
     // While backgrounded, resuming the app starts the timer.
     if (ref.read(appLifecycleProvider) != AppLifecycleState.resumed) return;
-    if (!offline) _startRetryTimer();
+    if (offline) {
+      _leaveOffline();
+      // Only a retry shows a dismissed escalation card again.
+      if (retryAsked) escalationDismissed = false;
+    }
+    _startRetryTimer();
     // A probe sent before the pause may still be on its way.
-    if (offline || _probesInFlight == 0) retryNow();
+    if (offline || _probesInFlight == 0) _attemptReconnect();
   }
 
   void _leaveOffline() {

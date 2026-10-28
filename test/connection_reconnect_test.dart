@@ -623,6 +623,25 @@ void main() {
         });
       });
 
+      test('closing it without a retry keeps the card dismissed', () {
+        fakeAsync((async) {
+          final api = _FakeApi(shouldSucceed: false);
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final notifier = container.read(connectionStateProvider.notifier);
+          notifier.startReconnecting();
+          async.elapse(const Duration(seconds: 35));
+          notifier.markEscalationDismissed();
+
+          notifier.pauseReconnect().release();
+          async.flushMicrotasks();
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+          expect(notifier.escalationDismissed, isTrue);
+        });
+      });
+
       test('the display opening meanwhile leaves offline until it closes', () {
         fakeAsync((async) {
           final api = _FakeApi(shouldSucceed: false);
