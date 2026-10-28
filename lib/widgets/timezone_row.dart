@@ -130,7 +130,7 @@ Future<void> chooseTimezone(
     ref
         .read(toastProvider.notifier)
         .show(
-          'The streamer did not answer. Check that it is on and connected.',
+          boxRefusal('unreachable'),
           isError: true,
           inPanel: inPanel,
         );
