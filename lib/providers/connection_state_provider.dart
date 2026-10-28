@@ -266,8 +266,13 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   }
 
   void _checkEscalation() {
-    // A failed probe may finish after a new connection attempt or disconnect.
-    if (state != ConnectionStatus.reconnecting || !escalationReached) return;
+    // A failed probe may finish after a new connection attempt or disconnect,
+    // or after a pause, whose release restarts the escalation window.
+    if (_paused ||
+        state != ConnectionStatus.reconnecting ||
+        !escalationReached) {
+      return;
+    }
     // The display has no Retry button and often starts before the server
     // listens, so it keeps probing until the server answers.
     if (ref.read(kioskActiveProvider)) return;

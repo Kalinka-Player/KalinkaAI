@@ -518,6 +518,33 @@ void main() {
         });
       });
 
+      test('a probe sent before it opened failing does not go offline', () {
+        fakeAsync((async) {
+          final api = _FakeApi(shouldSucceed: false)..reply = Completer<void>();
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final notifier = container.read(connectionStateProvider.notifier);
+          notifier.startReconnecting();
+          async.elapse(const Duration(seconds: 35));
+          expect(api.listModulesCalls, 1);
+
+          final pause = notifier.pauseReconnect();
+          api.reply!.complete();
+          async.flushMicrotasks();
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+
+          pause.release();
+          async.flushMicrotasks();
+          expect(api.listModulesCalls, 2);
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+        });
+      });
+
       test('closing it in the background waits for the app to return', () {
         fakeAsync((async) {
           final api = _FakeApi();

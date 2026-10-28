@@ -22,7 +22,7 @@ class _Server extends HomeApi {
   _Server({this.up = false, this.setUp = false});
 
   bool up;
-  final bool setUp;
+  bool setUp;
   int probes = 0;
   Completer<void>? settings;
 
@@ -43,6 +43,8 @@ class _Server extends HomeApi {
 
   @override
   Future<Map<String, dynamic>> getSettings() async {
+    // Answered by the server that was connected when it was asked.
+    final setUp = this.setUp;
     await settings?.future;
     return {
       'schema_version': 'v1',
@@ -196,6 +198,34 @@ void main() {
     expect(find.byType(OnboardingScreen), findsOneWidget);
     // The picker's scan runs out.
     await tester.pump(const Duration(seconds: 7));
+  });
+
+  testWidgets('a server picked while an earlier setup check runs is checked '
+      'once that one ends', (tester) async {
+    final server = _Server(up: true, setUp: true)..settings = Completer<void>();
+    final container = await _pumpPlayer(tester, server);
+    final connection = container.read(connectionStateProvider.notifier);
+    connection.startReconnecting();
+    connection.connected();
+    await tester.pump();
+
+    await _openPicker(tester);
+    server.setUp = false;
+    await tester.pump(const Duration(seconds: 7));
+    await tester.enterText(find.byType(TextField), '10.0.0.5:8000');
+    await tester.tap(find.text('Connect'));
+    await _settle(tester);
+    await _settle(tester);
+    expect(find.byType(DiscoveryScreen), findsNothing);
+    expect(find.byType(OnboardingScreen), findsNothing);
+
+    server.settings!.complete();
+    await _settle(tester);
+    await _settle(tester);
+    final wizard = tester.widget<OnboardingScreen>(
+      find.byType(OnboardingScreen),
+    );
+    expect(wizard.startAtSetup, isTrue);
   });
 
   for (final leave in ['Cancel', 'Back']) {
