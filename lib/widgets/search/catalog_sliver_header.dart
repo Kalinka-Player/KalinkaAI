@@ -256,27 +256,32 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
             maxHeight: expandedHeight,
             builder: (context, offset) {
               final shrink = offset.clamp(0.0, collapseExtent);
-              // A folder's actions hold where the identity passes, so there
-              // it hands over as soon as the header moves.
-              final compact = widget.actions == null
-                  ? shrink > 0 &&
-                        shrink >= math.min(_titleHeight, collapseExtent)
-                  : shrink > 0;
+              final settle = collapseExtent <= 0
+                  ? (offset > 0 ? 1.0 : 0.0)
+                  : (shrink / collapseExtent).clamp(0.0, 1.0);
+              // Beside a folder's actions, the identity fades over the first
+              // half of the collapse, and they cross its column in the second.
+              final fade = wide ? (1 - settle * 2).clamp(0.0, 1.0) : 1.0;
+              final spread = wide ? (settle * 2 - 1).clamp(0.0, 1.0) : settle;
+              final compact =
+                  fade == 0 ||
+                  (shrink > 0 &&
+                      shrink >= math.min(_titleHeight, collapseExtent));
               _report(compact);
               // Attribution follows the title up, fading as it nears the edge.
               final subtitleTop = headingTop + _titleHeight + 4 - shrink;
-              final subtitleOpacity = (subtitleTop / 16).clamp(0.0, 1.0);
+              final subtitleOpacity = math.min(
+                (subtitleTop / 16).clamp(0.0, 1.0),
+                fade,
+              );
               final left = wide ? 16 + available - controlsWidth : 16.0;
               final top = expandedTop - shrink;
-              final settle = collapseExtent <= 0
-                  ? 1.0
-                  : (shrink / collapseExtent).clamp(0.0, 1.0);
               // Up to 8dp under the bar, across the pane, and held there.
               final actionsTop = math.min(
                 math.max(top + 8, 8.0),
                 expandedHeight - shrink - rowHeight - 8,
               );
-              final actionsLeft = left + (16 - left) * settle;
+              final actionsLeft = left + (16 - left) * spread;
               return ColoredBox(
                 key: const ValueKey('catalog-header-surface'),
                 color: KalinkaColors.background.withValues(
@@ -292,38 +297,42 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
                           left: 16,
                           top: headingTop - shrink,
                           width: headingWidth,
-                          child: Row(
-                            key: const ValueKey('catalog-identity'),
-                            children: [
-                              Flexible(
-                                child: Semantics(
-                                  header: true,
-                                  child: Text(
-                                    page.title ?? '',
-                                    key: const ValueKey(
-                                      'catalog-expanded-title',
+                          child: Opacity(
+                            opacity: fade,
+                            child: Row(
+                              key: const ValueKey('catalog-identity'),
+                              children: [
+                                Flexible(
+                                  child: Semantics(
+                                    header: true,
+                                    child: Text(
+                                      page.title ?? '',
+                                      key: const ValueKey(
+                                        'catalog-expanded-title',
+                                      ),
+                                      style: titleStyle,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      // Pin follows the longest line, not
+                                      // the room the title was offered.
+                                      textWidthBasis:
+                                          TextWidthBasis.longestLine,
                                     ),
-                                    style: titleStyle,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    // Pin follows the longest line, not
-                                    // the room the title was offered.
-                                    textWidthBasis: TextWidthBasis.longestLine,
                                   ),
                                 ),
-                              ),
-                              if (pin) ...[
-                                const SizedBox(width: 8),
-                                SizedBox(
-                                  width: 48,
-                                  height: 48,
-                                  child: CatalogPinButton(
-                                    page: page,
-                                    filter: widget.query,
+                                if (pin) ...[
+                                  const SizedBox(width: 8),
+                                  SizedBox(
+                                    width: 48,
+                                    height: 48,
+                                    child: CatalogPinButton(
+                                      page: page,
+                                      filter: widget.query,
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
                         ),
                       if (subtitle.isNotEmpty && subtitleOpacity > 0)
