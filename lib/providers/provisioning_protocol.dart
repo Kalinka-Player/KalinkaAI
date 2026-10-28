@@ -54,7 +54,7 @@ class ProvisioningStatus {
         bytes[2] >= BoxState.values.length ||
         bytes[3] > 7) {
       throw const FormatException(
-        'This box needs a different version of the app.',
+        'This streamer needs a different version of the app.',
       );
     }
     final port = ByteData.sublistView(bytes).getUint16(8);
@@ -70,15 +70,16 @@ class ProvisioningStatus {
   }
 
   String get failureMessage => switch (reason) {
-    1 => 'The box could not accept these network details.',
+    1 => 'The streamer could not accept these network details.',
     2 => 'The Wi-Fi password was rejected. Check it and try again.',
     3 => 'Wi-Fi connected, but the router did not provide an address.',
     4 =>
-      'Could not join Wi-Fi. Check the network name and password, and move the box closer to the router.',
-    5 => 'Wi-Fi is unavailable on this box. Check its adapter or use Ethernet.',
+      'Could not join Wi-Fi. Check the network name and password, and move the streamer closer to the router.',
+    5 =>
+      'Wi-Fi is unavailable on this streamer. Check its adapter or use Ethernet.',
     6 =>
-      'The box could not save this network. Its saved networks were restored.',
-    7 => 'Another phone is setting up this box. Try again shortly.',
+      'The streamer could not save this network. Its saved networks were restored.',
+    7 => 'Another phone is setting up this streamer. Try again shortly.',
     _ => 'Wi-Fi setup failed. Try again.',
   };
 }
@@ -125,7 +126,7 @@ class ProvisioningNetworkPage {
 
   factory ProvisioningNetworkPage.decode(Uint8List bytes) {
     const invalid = FormatException(
-      'The box returned an invalid network list.',
+      'The streamer returned an invalid network list.',
     );
     if (bytes.length > 512) throw invalid;
     final data = jsonDecode(utf8.decode(bytes));

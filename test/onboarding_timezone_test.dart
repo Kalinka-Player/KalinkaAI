@@ -241,13 +241,13 @@ void main() {
     (
       'without a supervisor',
       null,
-      'No box supervisor answers on this server, so it keeps the time zone '
-          'of the computer it runs on. Set it there.',
+      'No Kalinka supervisor answers on this server, so it keeps the time '
+          'zone of the computer it runs on. Set it there.',
     ),
     (
       'whose supervisor cannot set it',
       supervisorInfo(),
-      'Updating Kalinka on this box lets the app set its time zone.',
+      'Updating Kalinka on this streamer lets the app set its time zone.',
     ),
     (
       'whose supervisor speaks another protocol',
@@ -258,7 +258,7 @@ void main() {
         serverId: 'box-1',
         actions: {setTimezoneAction},
       ),
-      'The box’s supervisor and this app do not speak the same version. '
+      'The streamer’s supervisor and this app do not speak the same version. '
           'Update both to set the time zone here.',
     ),
   ]) {
@@ -282,7 +282,7 @@ void main() {
     (
       'did not answer',
       FakeBox(answers: [null])..noAnswer = SupervisorReach.silent,
-      'The box did not answer. Tap to try again.',
+      'The streamer did not answer. Tap to try again.',
     ),
     (
       'answers for another server',
@@ -291,7 +291,7 @@ void main() {
           supervisorInfo(serverId: 'box-2', actions: const {setTimezoneAction}),
         ],
       ),
-      'A different Kalinka box answers at this address. Tap to try again.',
+      'A different Kalinka streamer answers at this address. Tap to try again.',
     ),
   ]) {
     testWidgets('a box that $name is looked for again on a tap', (
