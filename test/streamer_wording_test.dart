@@ -154,24 +154,32 @@ final e = 'Kalinka\'s box';
       }
     });
 
-    for (final width in [320.0, 360.0]) {
-      testWidgets('offers to set up a streamer on one line at ${width}dp', (
-        tester,
-      ) async {
-        await tester.binding.setSurfaceSize(Size(width, 640));
-        addTearDown(() => tester.binding.setSurfaceSize(null));
-        await pumpEmptyDiscovery(tester);
+    for (final (width, textScale, oneLine) in [
+      (320.0, 1.0, true),
+      (360.0, 1.0, true),
+      (320.0, 2.0, false),
+    ]) {
+      testWidgets(
+        'offers to set up a streamer at ${width}dp and ${textScale}x text',
+        (tester) async {
+          await tester.binding.setSurfaceSize(Size(width, 640));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          tester.platformDispatcher.textScaleFactorTestValue = textScale;
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          await pumpEmptyDiscovery(tester);
 
-        final label = tester.renderObject<RenderParagraph>(
-          find.text('SET UP A STREAMER'),
-        );
-        expect(
-          label.size.width,
-          greaterThanOrEqualTo(label.getMaxIntrinsicWidth(double.infinity)),
-        );
-        expect(find.text('Cancel'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-      });
+          final finder = find.text('SET UP A STREAMER');
+          final label = tester.renderObject<RenderParagraph>(finder);
+          final shown = tester.getRect(finder).width / label.size.width;
+          expect(shown, greaterThanOrEqualTo(0.9));
+          expect(
+            label.size.width >= label.getMaxIntrinsicWidth(double.infinity),
+            oneLine,
+          );
+          expect(find.text('Cancel'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        },
+      );
     }
   });
 }
