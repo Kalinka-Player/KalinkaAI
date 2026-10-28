@@ -399,6 +399,121 @@ void main() {
         expect(api.listModulesCalls, 2);
       });
     });
+
+    group('while the server picker is open (#181)', () {
+      test('nothing probes or rebuilds the socket until it closes', () {
+        fakeAsync((async) {
+          final api = _FakeApi();
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final lifecycle = container.read(
+            appLifecycleProvider.notifier,
+          ) as _ResumedLifecycle;
+          final notifier = container.read(connectionStateProvider.notifier);
+          final epoch = container.read(retryEpochProvider);
+          final timers = async.periodicTimerCount;
+
+          notifier.pauseReconnect();
+          notifier.startReconnecting();
+          async.elapse(const Duration(seconds: 20));
+          lifecycle.set(AppLifecycleState.paused);
+          lifecycle.set(AppLifecycleState.resumed);
+          async.elapse(const Duration(seconds: 20));
+
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+          expect(api.listModulesCalls, 0);
+          expect(container.read(retryEpochProvider), epoch);
+          expect(async.periodicTimerCount, timers);
+
+          notifier.resumeReconnect();
+          async.flushMicrotasks();
+          expect(api.listModulesCalls, 1);
+          expect(container.read(retryEpochProvider), epoch + 1);
+          expect(async.periodicTimerCount, timers + 1);
+          async.elapse(const Duration(seconds: 5));
+          expect(api.listModulesCalls, 2);
+        });
+      });
+
+      test('closing it brings an offline server back to reconnecting', () {
+        fakeAsync((async) {
+          final api = _FakeApi(shouldSucceed: false);
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final lifecycle = container.read(
+            appLifecycleProvider.notifier,
+          ) as _ResumedLifecycle;
+          final notifier = container.read(connectionStateProvider.notifier);
+          notifier.startReconnecting();
+          async.elapse(const Duration(seconds: 35));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.offline,
+          );
+          final calls = api.listModulesCalls;
+
+          notifier.pauseReconnect();
+          lifecycle.set(AppLifecycleState.paused);
+          lifecycle.set(AppLifecycleState.resumed);
+          async.elapse(const Duration(seconds: 30));
+          expect(api.listModulesCalls, calls);
+
+          notifier.resumeReconnect();
+          async.flushMicrotasks();
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+          expect(api.listModulesCalls, calls + 1);
+          async.elapse(const Duration(seconds: 5));
+          expect(api.listModulesCalls, calls + 2);
+        });
+      });
+
+      test('time spent in it does not count towards going offline', () {
+        fakeAsync((async) {
+          final api = _FakeApi(shouldSucceed: false);
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final notifier = container.read(connectionStateProvider.notifier);
+          notifier.startReconnecting();
+          async.elapse(const Duration(seconds: 10));
+
+          notifier.pauseReconnect();
+          async.elapse(const Duration(seconds: 60));
+          notifier.resumeReconnect();
+          async.elapse(const Duration(seconds: 25));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+
+          async.elapse(const Duration(seconds: 10));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.offline,
+          );
+        });
+      });
+
+      test('a probe sent before it opened does not rebuild the socket', () {
+        fakeAsync((async) {
+          final api = _FakeApi()..reply = Completer<void>();
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final notifier = container.read(connectionStateProvider.notifier);
+          final epoch = container.read(retryEpochProvider);
+          notifier.startReconnecting();
+          async.elapse(const Duration(seconds: 5));
+          expect(api.listModulesCalls, 1);
+
+          notifier.pauseReconnect();
+          api.reply!.complete();
+          async.flushMicrotasks();
+
+          expect(container.read(retryEpochProvider), epoch);
+        });
+      });
+    });
   });
 
   // Issue #21, second failure mode (Copilot review): the play-queue socket is

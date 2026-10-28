@@ -63,6 +63,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   Timer? _retryTimer;
   int _retryCount = 0;
   int _probesInFlight = 0;
+  bool _paused = false;
   // NTP can adjust a Pi's wall clock while it is waiting for the server.
   Duration? _reconnectStartedAt;
 
@@ -178,6 +179,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
 
   void _startRetryTimer() {
     _retryTimer?.cancel();
+    if (_paused) return;
     _retryTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       // A slow server would otherwise pile up one probe per tick.
       if (_probesInFlight == 0) _attemptReconnect();
@@ -198,6 +200,27 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     _attemptReconnect();
   }
 
+  /// Stops reconnecting while the person picks or sets up another server, so
+  /// the stored one cannot come back and take over the screen meanwhile.
+  /// The status still follows what the sockets report.
+  void pauseReconnect() {
+    _paused = true;
+    _cancelRetryTimer();
+  }
+
+  void resumeReconnect() {
+    if (!_paused) return;
+    _paused = false;
+    // A screen disposed with the picker open resumes a microtask late.
+    if (!ref.mounted || !state.isInterrupted) return;
+    if (state == ConnectionStatus.reconnecting) {
+      // Time spent in the picker does not count towards going offline.
+      _reconnectStartedAt = _monotonicNow;
+      _startRetryTimer();
+    }
+    retryNow();
+  }
+
   void _leaveOffline() {
     _retryCount = 0;
     _reconnectStartedAt = _monotonicNow;
@@ -205,6 +228,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   }
 
   Future<void> _attemptReconnect() async {
+    if (_paused) return;
     if (ref.read(appLifecycleProvider) != AppLifecycleState.resumed) return;
     _retryCount++;
     _logger.d('Reconnect attempt #$_retryCount');
@@ -225,6 +249,8 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     } finally {
       _probesInFlight--;
     }
+    // The probe was sent before the pause.
+    if (_paused) return;
 
     // Server reachable — rebuild the event socket. Reaching `connected` is
     // deliberately left to the socket itself (see websocket_provider): only
