@@ -6,7 +6,7 @@ description: Cut a new Kalinka app release — bump the version, write the chang
 # Kalinka release
 
 Cuts a Kalinka app release. Covers a patch, minor, or major bump. The repo is
-`madenvel/KalinkaAI`; a tag push triggers the release pipeline
+`Kalinka-Player/KalinkaAI`; a tag push triggers the release pipeline
 (`.github/workflows/release.yml`), which builds everything and publishes to
 GitHub Releases — nothing is built locally.
 

@@ -9,7 +9,7 @@ body:
         The app is the remote control — anything rendered on your phone, tablet or desktop screen.
         If the problem is the sound itself (gapless / bit-perfect playback, DAC output), library
         indexing, tag repair or AI mood search results, that's the server — file it on
-        [KalinkaPlayer](https://github.com/madenvel/KalinkaPlayer/issues/new/choose) instead.
+        [KalinkaPlayer](https://github.com/Kalinka-Player/KalinkaPlayer/issues/new/choose) instead.
       options:
         - label: This is an app/UI issue, not a server issue
           required: true

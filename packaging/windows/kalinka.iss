@@ -23,7 +23,7 @@ AppName=Kalinka
 AppVersion={#AppVersion}
 AppPublisher=Kalinka
 AppPublisherURL=https://kalinkaplayer.com
-AppSupportURL=https://github.com/madenvel/KalinkaAI/issues
+AppSupportURL=https://github.com/Kalinka-Player/KalinkaAI/issues
 DefaultDirName={autopf}\Kalinka
 DisableProgramGroupPage=yes
 ; Per-user install by default (no UAC prompt); machine-wide offered via dialog.

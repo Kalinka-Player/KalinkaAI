@@ -12,6 +12,6 @@ Kalinka turns your phone into the remote for a Kalinka Music Server running on a
 
 <b>Requirements</b>
 
-Kalinka needs a Kalinka Music Server 3.0.0 or later on your network: https://github.com/madenvel/KalinkaPlayer
+Kalinka needs a Kalinka Music Server 3.0.0 or later on your network: https://github.com/Kalinka-Player/KalinkaPlayer
 
 This is an alpha release — expect rough edges, and please report issues on GitHub.

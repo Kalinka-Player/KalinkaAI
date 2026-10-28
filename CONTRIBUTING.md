@@ -16,7 +16,7 @@ Use Flutter **3.47.6** (Dart **3.13**) to match CI, and the checked-in Gradle wr
 
 Fork the repository, create a feature branch, and open a pull request describing what changed and why. Run `flutter analyze` and `flutter test` for the area you touched; note that the repository is not `dart format` clean as a whole, so format only the code you actually changed rather than reformatting whole files.
 
-Some cross-cutting changes — anything touching generated models or events — need `build_runner` re-run, and may also require a matching change in the backend repository ([KalinkaPlayer](https://github.com/madenvel/KalinkaPlayer)). Mention it in the pull request when that is the case.
+Some cross-cutting changes — anything touching generated models or events — need `build_runner` re-run, and may also require a matching change in the backend repository ([KalinkaPlayer](https://github.com/Kalinka-Player/KalinkaPlayer)). Mention it in the pull request when that is the case.
 
 ## Licensing
 

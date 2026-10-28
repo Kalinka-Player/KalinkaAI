@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: 🔊 Server problem? (playback, indexing, AI search)
-    url: https://github.com/madenvel/KalinkaPlayer/issues/new/choose
+    url: https://github.com/Kalinka-Player/KalinkaPlayer/issues/new/choose
     about: Gapless / bit-perfect playback, ALSA & DAC output, library indexing, tag repair, AI mood search results, plugins — that's the server. File it on KalinkaPlayer.
