@@ -31,6 +31,9 @@ class NetworkSetupPanel extends StatefulWidget {
 }
 
 class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
+  static const _unreachable =
+      'Cannot reach network setup. Check the streamer connection and try again.';
+
   late final NetworkSetupApi _api =
       widget.api ?? NetworkSetupApi(widget.endpoint);
   final _form = GlobalKey<FormState>();
@@ -99,10 +102,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
           _submitted = true;
           _succeeded = true;
           _message = 'Your streamer is connected and ready to use.';
-        } else if (!_submitted &&
-            !_sending &&
-            _message ==
-                'Cannot reach network setup. Check the streamer connection and try again.') {
+        } else if (!_submitted && !_sending && _message == _unreachable) {
           _message = null;
         }
         if (_setup['scan_state'] == 'ready') _scanState = 2;
@@ -120,9 +120,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
     } catch (_) {
       if (!mounted || revision != _revision) return;
       if (!_submitted) {
-        setState(
-          () => _message = 'Cannot reach network setup. Check the streamer connection and try again.',
-        );
+        setState(() => _message = _unreachable);
       }
     } finally {
       _refreshing = false;

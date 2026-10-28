@@ -12,12 +12,13 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/discovery_provider.dart';
-import 'package:kalinka/providers/discovery_types.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/server_connect.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/widgets/discovery_screen.dart';
 import 'package:kalinka/widgets/server_sheet.dart';
+
+import 'support/discovery_fakes.dart';
 
 class _FakeApi implements KalinkaPlayerProxy {
   _FakeApi({this.demo = false, this.olderThanDemoMode = false})
@@ -74,20 +75,6 @@ class _Connection extends ConnectionStateNotifier {
   ConnectionStatus build() => ConnectionStatus.connected;
 }
 
-class _NothingFound extends DiscoveryNotifier {
-  @override
-  DiscoveryState build() => const DiscoveryState();
-
-  @override
-  Future<void> startScan() async {}
-
-  @override
-  Future<void> stopScan() async {}
-
-  @override
-  Future<void> rescan() async {}
-}
-
 Future<SharedPreferences> _prefs([Map<String, Object> stored = const {}]) {
   SharedPreferences.setMockInitialValues(stored);
   return SharedPreferences.getInstance();
@@ -141,7 +128,7 @@ Future<void> _pumpDiscovery(
         sharedPrefsProvider.overrideWithValue(prefs),
         kalinkaProxyProvider.overrideWithValue(api),
         connectionStateProvider.overrideWith(_Connection.new),
-        discoveryProvider.overrideWith(_NothingFound.new),
+        discoveryProvider.overrideWith(NothingFound.new),
         demoCheckProvider.overrideWithValue((_) async => demoAnswers),
       ],
       child: MaterialApp(
