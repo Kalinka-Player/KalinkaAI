@@ -1,0 +1,6 @@
+- Folders reopen where you left them
+- Back steps up through folders
+- Fast scroller on long lists
+- Pull down to reload any browsing page
+- Home's pins kept per streamer
+- No "Updating library" when nothing changed

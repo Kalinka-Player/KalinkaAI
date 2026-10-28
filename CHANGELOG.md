@@ -8,6 +8,25 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.22.1
+
+Folders that reopen where they were left, a fast scroller on long lists, pull to reload on every browsing page, and Home's pins kept per streamer. It needs no newer server than 0.22.0; a server older than 4.0.0 keeps its pins under its address, as before.
+
+### Added
+- Pulling down at the top of any catalog, folder, album, playlist, collection or artist page reloads it, as on Home. The rows stay up until the new listing lands, and a reload that fails leaves the page as it was and says "Could not reload". A collection being edited and search results don't reload, since a pull would drop the edit or run the search again.
+- On Android, long folders, catalog listings, albums, playlists, collections, artist pages and search results get a fast scroller while they scroll. Where the listing says how long it is, the thumb spans all of it and loads up to where it is dragged. On folders, a bubble beside it shows the initial of the folder at the top.
+
+### Changed
+- Going up a folder, or back into one already opened, returns to where it was left, with the rows it had loaded and without asking the server again. The 32 folders left most recently are kept until the server changes.
+- Opening a folder is now a step of its own, so Back goes up the way the folders were walked rather than leaving the page.
+- Home's pins, catalog filters and folder places are kept per streamer rather than per address. Two streamers reached by the same name no longer share one set of pins, and a streamer reached by its IP address shows its own. What was kept so far goes to the streamer last seen at that address. Until a streamer says who it is, Home shows a spinner where its pins go.
+- A folder page's title slides under the bar as the page scrolls, rather than vanishing at the first pixel, and Pin moves to the bar once the title is out of sight.
+
+### Fixed
+- The library's periodic check no longer shows "Updating library" on Home, or "Finding music…" under an empty queue, when it finds nothing new.
+- A listing from a source that returns fewer rows per request than asked for no longer stops loading early.
+- With reduced motion, Home's backdrop follows its top when the first pin or collection lifts it.
+
 ## 0.22.0
 
 Plugin settings laid out as labelled cards, the library's progress on Home stage by stage, and the browser player in the update banner. My Library's new settings order and the browser player in the banner need server 5.14.0; against an older server the settings keep their old order and the banner is as before.
