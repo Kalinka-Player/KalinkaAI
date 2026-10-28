@@ -412,7 +412,7 @@ void main() {
           final epoch = container.read(retryEpochProvider);
           final timers = async.periodicTimerCount;
 
-          notifier.pauseReconnect();
+          final pause = notifier.pauseReconnect();
           notifier.startReconnecting();
           async.elapse(const Duration(seconds: 20));
           lifecycle.set(AppLifecycleState.paused);
@@ -427,7 +427,7 @@ void main() {
           expect(container.read(retryEpochProvider), epoch);
           expect(async.periodicTimerCount, timers);
 
-          notifier.resumeReconnect();
+          pause.release();
           async.flushMicrotasks();
           expect(api.listModulesCalls, 1);
           expect(container.read(retryEpochProvider), epoch + 1);
@@ -453,13 +453,17 @@ void main() {
           );
           final calls = api.listModulesCalls;
 
-          notifier.pauseReconnect();
+          final pause = notifier.pauseReconnect();
           lifecycle.set(AppLifecycleState.paused);
           lifecycle.set(AppLifecycleState.resumed);
           async.elapse(const Duration(seconds: 30));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.offline,
+          );
           expect(api.listModulesCalls, calls);
 
-          notifier.resumeReconnect();
+          pause.release();
           async.flushMicrotasks();
           expect(
             container.read(connectionStateProvider),
@@ -479,9 +483,9 @@ void main() {
           notifier.startReconnecting();
           async.elapse(const Duration(seconds: 10));
 
-          notifier.pauseReconnect();
+          final pause = notifier.pauseReconnect();
           async.elapse(const Duration(seconds: 60));
-          notifier.resumeReconnect();
+          pause.release();
           async.elapse(const Duration(seconds: 25));
           expect(
             container.read(connectionStateProvider),
@@ -524,10 +528,10 @@ void main() {
           final notifier = container.read(connectionStateProvider.notifier);
           final timers = async.periodicTimerCount;
           notifier.startReconnecting();
-          notifier.pauseReconnect();
+          final pause = notifier.pauseReconnect();
           lifecycle.set(AppLifecycleState.paused);
 
-          notifier.resumeReconnect();
+          pause.release();
           async.elapse(const Duration(seconds: 20));
           expect(api.listModulesCalls, 0);
           expect(async.periodicTimerCount, timers);
@@ -548,15 +552,95 @@ void main() {
           final epoch = container.read(retryEpochProvider);
           notifier.startReconnecting();
           async.elapse(const Duration(seconds: 5));
-          notifier.pauseReconnect();
-
-          notifier.resumeReconnect();
+          notifier.pauseReconnect().release();
           async.flushMicrotasks();
           expect(api.listModulesCalls, 1);
 
           api.reply!.complete();
           async.flushMicrotasks();
           expect(container.read(retryEpochProvider), epoch + 1);
+        });
+      });
+
+      test('a retry asked for meanwhile runs once it closes', () {
+        fakeAsync((async) {
+          final api = _FakeApi(shouldSucceed: false);
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final notifier = container.read(connectionStateProvider.notifier);
+          notifier.startReconnecting();
+          async.elapse(const Duration(seconds: 35));
+          notifier.markEscalationDismissed();
+          final calls = api.listModulesCalls;
+          final timers = async.periodicTimerCount;
+
+          final pause = notifier.pauseReconnect();
+          notifier.retryNow();
+          async.elapse(const Duration(seconds: 10));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.offline,
+          );
+          expect(api.listModulesCalls, calls);
+          expect(async.periodicTimerCount, timers);
+
+          pause.release();
+          async.flushMicrotasks();
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+          expect(api.listModulesCalls, calls + 1);
+          expect(notifier.escalationDismissed, isFalse);
+          async.elapse(const Duration(seconds: 5));
+          expect(api.listModulesCalls, calls + 2);
+        });
+      });
+
+      test('the display opening meanwhile leaves offline until it closes', () {
+        fakeAsync((async) {
+          final api = _FakeApi(shouldSucceed: false);
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final notifier = container.read(connectionStateProvider.notifier);
+          notifier.startReconnecting();
+          async.elapse(const Duration(seconds: 35));
+          final calls = api.listModulesCalls;
+
+          final pause = notifier.pauseReconnect();
+          container.read(kioskProvider.notifier).enter();
+          async.elapse(const Duration(seconds: 10));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.offline,
+          );
+          expect(api.listModulesCalls, calls);
+
+          pause.release();
+          async.elapse(const Duration(seconds: 60));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+          expect(api.listModulesCalls, greaterThan(calls + 10));
+        });
+      });
+
+      test('it holds until every hold is released, each once', () {
+        fakeAsync((async) {
+          final api = _FakeApi(shouldSucceed: false);
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final notifier = container.read(connectionStateProvider.notifier);
+          final first = notifier.pauseReconnect();
+          final second = notifier.pauseReconnect();
+          notifier.startReconnecting();
+
+          first.release();
+          first.release();
+          async.elapse(const Duration(seconds: 10));
+          expect(api.listModulesCalls, 0);
+
+          second.release();
+          async.flushMicrotasks();
+          expect(api.listModulesCalls, 1);
         });
       });
     });

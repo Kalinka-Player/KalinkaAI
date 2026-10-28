@@ -63,7 +63,8 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   Timer? _retryTimer;
   int _retryCount = 0;
   int _probesInFlight = 0;
-  bool _paused = false;
+  int _pauses = 0;
+  bool get _paused => _pauses > 0;
   // NTP can adjust a Pi's wall clock while it is waiting for the server.
   Duration? _reconnectStartedAt;
 
@@ -100,7 +101,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
 
     // A display opened after the app gave up has no Retry button to press.
     ref.listen<bool>(kioskActiveProvider, (_, active) {
-      if (!active || state != ConnectionStatus.offline) return;
+      if (!active || state != ConnectionStatus.offline || _paused) return;
       _leaveOffline();
       // While backgrounded, resuming starts the timer.
       if (ref.read(appLifecycleProvider) != AppLifecycleState.resumed) return;
@@ -118,9 +119,8 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
           : _now().difference(_backgroundedAt!);
       _backgroundedAt = null;
 
-      // Foregrounded: restart reconnection immediately if it was paused.
-      if (state == ConnectionStatus.reconnecting ||
-          state == ConnectionStatus.offline) {
+      // Foregrounded: restart reconnection immediately, unless it is held.
+      if (state.isInterrupted && !_paused) {
         // If we'd escalated to `offline`, drop back into the active reconnect
         // cycle with a fresh escalation window before retrying. The event
         // socket hangs while `offline` (see websocket_provider), so it must see
@@ -191,7 +191,9 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   }
 
   /// Manually trigger a single reconnect attempt (e.g. from Retry button).
+  /// While reconnecting is paused it waits for the release, which retries.
   void retryNow() {
+    if (_paused) return;
     if (state == ConnectionStatus.offline) {
       _leaveOffline();
       escalationDismissed = false;
@@ -200,19 +202,20 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     _attemptReconnect();
   }
 
-  /// Stops reconnecting while the person picks or sets up another server, so
-  /// the stored one cannot come back and take over the screen meanwhile.
-  /// The status still follows what the sockets report.
-  void pauseReconnect() {
-    _paused = true;
+  /// Holds reconnecting off while the person picks or sets up another server,
+  /// so the stored one cannot come back and take over the screen meanwhile.
+  /// Until every hold is released nothing probes and the status stays where
+  /// the sockets put it.
+  ReconnectPause pauseReconnect() {
+    _pauses++;
     _cancelRetryTimer();
+    return ReconnectPause._(this);
   }
 
-  void resumeReconnect() {
-    if (!_paused) return;
-    _paused = false;
-    // A screen disposed with the picker open resumes a microtask late.
-    if (!ref.mounted || !state.isInterrupted) return;
+  void _release() {
+    _pauses--;
+    // A screen disposed with the picker open releases a microtask late.
+    if (_paused || !ref.mounted || !state.isInterrupted) return;
     final offline = state == ConnectionStatus.offline;
     // Time spent in the picker does not count towards going offline.
     if (!offline) _reconnectStartedAt = _monotonicNow;
@@ -230,7 +233,6 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   }
 
   Future<void> _attemptReconnect() async {
-    if (_paused) return;
     if (ref.read(appLifecycleProvider) != AppLifecycleState.resumed) return;
     _retryCount++;
     _logger.d('Reconnect attempt #$_retryCount');
@@ -276,5 +278,20 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   void _cancelRetryTimer() {
     _retryTimer?.cancel();
     _retryTimer = null;
+  }
+}
+
+/// One hold on reconnecting, from [ConnectionStateNotifier.pauseReconnect].
+class ReconnectPause {
+  ReconnectPause._(this._connection);
+
+  ConnectionStateNotifier? _connection;
+
+  /// Reconnecting resumes once every hold is released. A second call does
+  /// nothing.
+  void release() {
+    final connection = _connection;
+    _connection = null;
+    connection?._release();
   }
 }

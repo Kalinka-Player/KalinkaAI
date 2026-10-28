@@ -113,8 +113,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   bool _setupCheckBusy = false;
   bool _setupCheckDeferred = false;
 
-  // Kept for dispose, where ref can no longer be read.
-  late final ConnectionStateNotifier _connection;
+  // Held while the server picker is open.
+  ReconnectPause? _reconnectPause;
 
   // Tracks the on-screen playback-error dialog so a re-fired error (the state
   // store re-syncs on resume/reconnect) doesn't stack another copy. The token
@@ -169,7 +169,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       end: const Offset(0, 1),
     ).animate(curved);
 
-    _connection = ref.read(connectionStateProvider.notifier);
     // Every connection — at launch, via discovery, or seeded from the
     // serving origin on web — checks whether the server itself still needs
     // setup (see _checkServerNeedsSetup). On web it is the only route in.
@@ -201,7 +200,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   void dispose() {
     // The kiosk display replaces this screen once a server is picked. No
     // provider may change while the tree is being torn down.
-    if (_discoveryOpen) Future.microtask(_connection.resumeReconnect);
+    final pause = _reconnectPause;
+    if (pause != null) Future.microtask(pause.release);
     _miniPlayerHide.dispose();
     _miniPlayerExtent.dispose();
     super.dispose();
@@ -1252,13 +1252,16 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// The stored server stays as it is while another is chosen or set up,
   /// so it is not reconnected to under the picker and its routes.
   void _openDiscovery() {
-    _connection.pauseReconnect();
+    _reconnectPause ??= ref
+        .read(connectionStateProvider.notifier)
+        .pauseReconnect();
     setState(() => _discoveryOpen = true);
   }
 
   void _closeDiscovery() {
     setState(() => _discoveryOpen = false);
-    _connection.resumeReconnect();
+    _reconnectPause?.release();
+    _reconnectPause = null;
     if (_setupCheckDeferred) {
       _setupCheckDeferred = false;
       if (ref.read(connectionStateProvider) == ConnectionStatus.connected) {
