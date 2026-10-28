@@ -241,6 +241,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       }
     } finally {
       _setupCheckBusy = false;
+      // The picker may have closed on another server while this one ran.
+      if (mounted) _runDeferredSetupCheck();
     }
   }
 
@@ -1262,11 +1264,14 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     setState(() => _discoveryOpen = false);
     _reconnectPause?.release();
     _reconnectPause = null;
-    if (_setupCheckDeferred) {
-      _setupCheckDeferred = false;
-      if (ref.read(connectionStateProvider) == ConnectionStatus.connected) {
-        _checkServerNeedsSetup();
-      }
+    _runDeferredSetupCheck();
+  }
+
+  void _runDeferredSetupCheck() {
+    if (!_setupCheckDeferred || _setupCheckBusy || _discoveryOpen) return;
+    _setupCheckDeferred = false;
+    if (ref.read(connectionStateProvider) == ConnectionStatus.connected) {
+      _checkServerNeedsSetup();
     }
   }
 
