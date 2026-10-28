@@ -47,7 +47,6 @@ import 'collections_edit_bar.dart';
 import 'collections_section.dart';
 import 'container_page_actions.dart';
 import 'library_rescan_control.dart';
-import 'track_group_actions.dart';
 
 /// Where each folder was left, so that walking back into it finds the same
 /// place. Another server's folders are not these.
@@ -378,7 +377,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             onCollapsed: widget.onHeaderCollapsed,
             onCollapseExtent: widget.onHeaderCollapseExtent,
             actions: page.folderLayout && _FolderActions.anyFor(page, listing)
-                ? _FolderActions(page: page, listing: listing)
+                ? _FolderActions(
+                    page: page,
+                    listing: listing,
+                    narrowed: !filter.isEmpty,
+                  )
                 : null,
           )
         : null;
@@ -398,6 +401,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             key: _headerKey,
             page: page,
             listing: listing,
+            query: filter,
+            onQueryChanged: setQuery,
             actionsKey: _actionsKey,
             showIdentity: !catalogChrome,
           )
@@ -481,7 +486,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       pullToRefresh: true,
       // The shelves its header holds reload with it.
       onPullToRefresh: identical(listing, page) && page.sections.isNotEmpty
-          ? () => SectionShelves.refresh(ref, page.sections)
+          ? () => SectionShelves.refresh(ref, page.sections, query)
           : null,
       fastScroll: true,
       fastScrollLabel: page.folderLayout ? _initialOf : null,
@@ -775,7 +780,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                   horizontal: 16,
                   vertical: _heldInset,
                 ),
-                child: _FolderActions(page: page, listing: listing),
+                child: _FolderActions(
+                  page: page,
+                  listing: listing,
+                  narrowed: !filter.isEmpty,
+                ),
               ),
             ),
           ),
@@ -1161,30 +1170,61 @@ class _CatalogHeader extends StatelessWidget {
           )
         else if (page.canEdit)
           const CollectionsActions(),
-        // The search is a chip of its own where no field in the bar shows it.
-        LayoutBuilder(
-          builder: (context, constraints) => ActiveFilterChips(
-            capabilities: capabilities,
-            query: query,
-            showText:
-                capabilities.text == FacetSupport.hidden ||
-                (!showBanner &&
-                    !CatalogSliverHeader.searchInBar(
-                      constraints.maxWidth,
-                      MediaQuery.textScalerOf(context).scale(16) / 16,
-                    )),
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-            onChanged: onQueryChanged,
-            leading: [
-              if (expandedShelf case final type?)
-                ActiveFilterChip(
-                  label: filterTypeLabel(type),
-                  onRemove: onCollapse,
-                ),
-            ],
-          ),
+        _AppliedFilters(
+          capabilities: capabilities,
+          query: query,
+          onChanged: onQueryChanged,
+          inChrome: !showBanner,
+          leading: [
+            if (expandedShelf case final type?)
+              ActiveFilterChip(
+                label: filterTypeLabel(type),
+                onRemove: onCollapse,
+              ),
+          ],
         ),
       ],
+    );
+  }
+}
+
+/// A page's applied filters as chips. The search is a chip of its own where
+/// no field in the bar shows it.
+class _AppliedFilters extends StatelessWidget {
+  final BrowseFilterCapabilities capabilities;
+  final BrowseFilterQuery query;
+  final ValueChanged<BrowseFilterQuery> onChanged;
+
+  /// The page is under the catalog chrome, whose bar holds the search field
+  /// where it has room.
+  final bool inChrome;
+  final List<Widget> leading;
+
+  const _AppliedFilters({
+    required this.capabilities,
+    required this.query,
+    required this.onChanged,
+    required this.inChrome,
+    this.leading = const [],
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => ActiveFilterChips(
+        capabilities: capabilities,
+        query: query,
+        showText:
+            capabilities.text == FacetSupport.hidden ||
+            (inChrome &&
+                !CatalogSliverHeader.searchInBar(
+                  constraints.maxWidth,
+                  MediaQuery.textScalerOf(context).scale(16) / 16,
+                )),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+        onChanged: onChanged,
+        leading: leading,
+      ),
     );
   }
 }
@@ -1214,12 +1254,16 @@ class _GridTrack extends StatelessWidget {
 }
 
 /// The head of a page of folders under its breadcrumb: the folder shown's
-/// banner, its actions, and — at the page's own top — the page's shelves.
+/// banner, its actions, its filters and — at the page's own top — the page's
+/// shelves, narrowed by them too.
 class _FolderHeader extends StatelessWidget {
   final CatalogPage page;
 
   /// The folder shown, or [page] at its top.
   final CatalogPage listing;
+
+  final BrowseFilterQuery query;
+  final ValueChanged<BrowseFilterQuery> onQueryChanged;
 
   /// Marks the actions, which are held under the trail once scrolled to it.
   final GlobalKey actionsKey;
@@ -1229,6 +1273,8 @@ class _FolderHeader extends StatelessWidget {
     super.key,
     required this.page,
     required this.listing,
+    required this.query,
+    required this.onQueryChanged,
     required this.actionsKey,
     this.showIdentity = true,
   });
@@ -1252,12 +1298,22 @@ class _FolderHeader extends StatelessWidget {
           Padding(
             key: actionsKey,
             padding: kKalinkaActionRowPadding,
-            child: _FolderActions(page: page, listing: listing),
+            child: _FolderActions(
+              page: page,
+              listing: listing,
+              narrowed: !query.isEmpty,
+            ),
           ),
+        _AppliedFilters(
+          capabilities: page.filterCapabilities,
+          query: query,
+          onChanged: onQueryChanged,
+          inChrome: !showIdentity,
+        ),
         if (identical(listing, page) && page.sections.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: SectionShelves(sections: page.sections),
+            child: SectionShelves(sections: page.sections, query: query),
           ),
       ],
     );
@@ -1271,7 +1327,14 @@ class _FolderActions extends ConsumerWidget {
   final CatalogPage page;
   final CatalogPage listing;
 
-  const _FolderActions({required this.page, required this.listing});
+  /// A filter narrows the listing; see [ContainerPageActions.narrowed].
+  final bool narrowed;
+
+  const _FolderActions({
+    required this.page,
+    required this.listing,
+    required this.narrowed,
+  });
 
   static bool anyFor(CatalogPage page, CatalogPage listing) =>
       !identical(listing, page) || listing.canAdd;
@@ -1280,11 +1343,15 @@ class _FolderActions extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Row(
       children: [
-        if (listing.canAdd) ...[
-          PlayAllChip(trackIds: [listing.id!]),
-          const SizedBox(width: 8),
-          AddAllChip(trackIds: [listing.id!], name: listing.title),
-        ],
+        if (listing.canAdd)
+          Wrap(
+            spacing: 8,
+            children: ContainerPageActions.queueChips(
+              id: listing.id!,
+              name: listing.title,
+              narrowed: narrowed,
+            ),
+          ),
         const Spacer(),
         if (!identical(listing, page))
           ActionPillButton(

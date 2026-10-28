@@ -1358,7 +1358,8 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     }
     return (
       value: session.catalogFilter.text,
-      hint: 'Search ${page.title ?? 'catalog'}',
+      // A folder page searches the folder shown.
+      hint: 'Search ${session.shownListing.title ?? 'catalog'}',
       enabled: page.filterCapabilities.text == FacetSupport.supported,
       applied: session.catalogFilter.text.isNotEmpty,
       onSearch: (text) => _searchCatalog(visitId, text),

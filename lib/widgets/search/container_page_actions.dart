@@ -39,6 +39,33 @@ class ContainerPageActions extends ConsumerWidget {
   /// A collection: a playlist the server will edit for you.
   static bool isCollection(CatalogPage page) => page.isPlaylist && page.canEdit;
 
+  /// Play all and Enqueue for the whole of [id]. While [narrowed] they are
+  /// held, saying why: the server queues it whole, not the listing shown.
+  static List<Widget> queueChips({
+    required String id,
+    String? name,
+    int? trackCount,
+    bool narrowed = false,
+  }) => [
+    for (final chip in [
+      PlayAllChip(trackIds: [id], trackCount: trackCount, enabled: !narrowed),
+      AddAllChip(
+        trackIds: [id],
+        trackCount: trackCount,
+        name: name,
+        enabled: !narrowed,
+      ),
+    ])
+      narrowed
+          ? Tooltip(
+              message:
+                  'Clear the filters to queue all of '
+                  '${name ?? 'the catalog'}',
+              child: chip,
+            )
+          : chip,
+  ];
+
   /// The item the page stands for, made up from the page when it was opened
   /// without one.
   static BrowseItem itemOf(CatalogPage page) =>
@@ -61,7 +88,6 @@ class ContainerPageActions extends ConsumerWidget {
     final name = item.playlist?.name ?? item.name ?? page.title;
     // A playlist lists tracks; a catalog's items may each hold many.
     final tracks = page.isPlaylist ? total : null;
-    final queueable = !page.isCatalog || !narrowed;
 
     return Padding(
       padding: kKalinkaActionRowPadding,
@@ -74,27 +100,12 @@ class ContainerPageActions extends ConsumerWidget {
                     spacing: 8,
                     children: [
                       if (item.canAdd && !empty)
-                        for (final chip in [
-                          PlayAllChip(
-                            trackIds: [item.id],
-                            trackCount: tracks,
-                            enabled: queueable,
-                          ),
-                          AddAllChip(
-                            trackIds: [item.id],
-                            trackCount: tracks,
-                            name: name,
-                            enabled: queueable,
-                          ),
-                        ])
-                          queueable
-                              ? chip
-                              : Tooltip(
-                                  message:
-                                      'Clear the filters to queue all of '
-                                      '${name ?? 'the catalog'}',
-                                  child: chip,
-                                ),
+                        ...queueChips(
+                          id: item.id,
+                          name: name,
+                          trackCount: tracks,
+                          narrowed: page.isCatalog && narrowed,
+                        ),
                       if (collection)
                         ActionPillButton(
                           label: 'Edit',

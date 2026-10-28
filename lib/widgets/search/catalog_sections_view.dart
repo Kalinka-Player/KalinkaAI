@@ -290,19 +290,29 @@ _ShelfPlan? _plan(BrowseItem section, BrowseFilterQuery query, int revision) {
 class SectionShelves extends StatelessWidget {
   final List<BrowseItem> sections;
 
-  const SectionShelves({super.key, required this.sections});
+  /// The page's filter, which narrows each shelf as it does the page.
+  final BrowseFilterQuery query;
 
-  /// Fetches [sections]' shelves again, each keeping what it shows until
-  /// its answer lands; one that fails says so in its own space.
-  static Future<void> refresh(WidgetRef ref, List<BrowseItem> sections) =>
-      Future.wait([
-        for (final section in sections)
-          if (_plan(section, const BrowseFilterQuery(), 0) case final shelf?)
-            if (ref.exists(catalogSectionProvider(shelf.request)))
-              ref
-                  .refresh(catalogSectionProvider(shelf.request).future)
-                  .then<void>((_) {}, onError: (_) {}),
-      ]);
+  const SectionShelves({
+    super.key,
+    required this.sections,
+    this.query = const BrowseFilterQuery(),
+  });
+
+  /// Fetches [sections]' shelves under [query] again, each keeping what it
+  /// shows until its answer lands; one that fails says so in its own space.
+  static Future<void> refresh(
+    WidgetRef ref,
+    List<BrowseItem> sections, [
+    BrowseFilterQuery query = const BrowseFilterQuery(),
+  ]) => Future.wait([
+    for (final section in sections)
+      if (_plan(section, query, 0) case final shelf?)
+        if (ref.exists(catalogSectionProvider(shelf.request)))
+          ref
+              .refresh(catalogSectionProvider(shelf.request).future)
+              .then<void>((_) {}, onError: (_) {}),
+  ]);
 
   @override
   Widget build(BuildContext context) {
@@ -310,7 +320,7 @@ class SectionShelves extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final section in sections)
-          if (_plan(section, const BrowseFilterQuery(), 0) case final shelf?)
+          if (_plan(section, query, 0) case final shelf?)
             _SectionShelf(shelf: shelf, onViewAll: null, onEmpty: (_) {}),
       ],
     );
