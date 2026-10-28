@@ -213,12 +213,14 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     _paused = false;
     // A screen disposed with the picker open resumes a microtask late.
     if (!ref.mounted || !state.isInterrupted) return;
-    if (state == ConnectionStatus.reconnecting) {
-      // Time spent in the picker does not count towards going offline.
-      _reconnectStartedAt = _monotonicNow;
-      _startRetryTimer();
-    }
-    retryNow();
+    final offline = state == ConnectionStatus.offline;
+    // Time spent in the picker does not count towards going offline.
+    if (!offline) _reconnectStartedAt = _monotonicNow;
+    // While backgrounded, resuming the app starts the timer.
+    if (ref.read(appLifecycleProvider) != AppLifecycleState.resumed) return;
+    if (!offline) _startRetryTimer();
+    // A probe sent before the pause may still be on its way.
+    if (offline || _probesInFlight == 0) retryNow();
   }
 
   void _leaveOffline() {

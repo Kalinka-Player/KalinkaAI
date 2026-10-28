@@ -224,17 +224,11 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// discovery, or a setup run that was killed midway. Run the wizard's
   /// setup steps; the connection already exists, so discovery is skipped.
   Future<void> _checkServerNeedsSetup() async {
-    if (_wizardOpen || _setupCheckBusy) return;
-    // The picker connects before it closes; check whichever server it
-    // leaves connected once it has.
-    if (_discoveryOpen) {
-      _setupCheckDeferred = true;
-      return;
-    }
+    if (_wizardOpen || _deferredForPicker() || _setupCheckBusy) return;
     _setupCheckBusy = true;
     try {
       await ref.read(settingsProvider.notifier).loadConfig();
-      if (!mounted || _wizardOpen) return;
+      if (!mounted || _wizardOpen || _deferredForPicker()) return;
       if (await leaveDemoAddressIfNotADemo(ref)) {
         showSafeToast(demoServerUnavailable, isError: true);
         return;
@@ -242,12 +236,19 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       final values = ref.read(settingsProvider).values;
       if (values[OnboardingStatusNotifier.serverOobeFlagPath] == false) {
         final offerNetwork = await offerNetworkSetup(ref);
-        if (!mounted || _wizardOpen) return;
+        if (!mounted || _wizardOpen || _deferredForPicker()) return;
         _openWizard(startAtSetup: true, offerNetwork: offerNetwork);
       }
     } finally {
       _setupCheckBusy = false;
     }
+  }
+
+  /// The picker connects before it closes; the server it leaves connected is
+  /// checked once it has, including when it opened mid-check.
+  bool _deferredForPicker() {
+    if (_discoveryOpen) _setupCheckDeferred = true;
+    return _discoveryOpen;
   }
 
   Route<void> _onboardingRoute({
