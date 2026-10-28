@@ -513,6 +513,52 @@ void main() {
           expect(container.read(retryEpochProvider), epoch);
         });
       });
+
+      test('closing it in the background waits for the app to return', () {
+        fakeAsync((async) {
+          final api = _FakeApi();
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final lifecycle = container.read(
+            appLifecycleProvider.notifier,
+          ) as _ResumedLifecycle;
+          final notifier = container.read(connectionStateProvider.notifier);
+          final timers = async.periodicTimerCount;
+          notifier.startReconnecting();
+          notifier.pauseReconnect();
+          lifecycle.set(AppLifecycleState.paused);
+
+          notifier.resumeReconnect();
+          async.elapse(const Duration(seconds: 20));
+          expect(api.listModulesCalls, 0);
+          expect(async.periodicTimerCount, timers);
+
+          lifecycle.set(AppLifecycleState.resumed);
+          async.flushMicrotasks();
+          expect(api.listModulesCalls, 1);
+          async.elapse(const Duration(seconds: 5));
+          expect(api.listModulesCalls, 2);
+        });
+      });
+
+      test('closing it does not send a second probe beside a waiting one', () {
+        fakeAsync((async) {
+          final api = _FakeApi()..reply = Completer<void>();
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final notifier = container.read(connectionStateProvider.notifier);
+          final epoch = container.read(retryEpochProvider);
+          notifier.startReconnecting();
+          async.elapse(const Duration(seconds: 5));
+          notifier.pauseReconnect();
+
+          notifier.resumeReconnect();
+          async.flushMicrotasks();
+          expect(api.listModulesCalls, 1);
+
+          api.reply!.complete();
+          async.flushMicrotasks();
+          expect(container.read(retryEpochProvider), epoch + 1);
+        });
+      });
     });
   });
 

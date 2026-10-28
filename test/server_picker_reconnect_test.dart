@@ -24,6 +24,7 @@ class _Server extends HomeApi {
   bool up;
   final bool setUp;
   int probes = 0;
+  Completer<void>? settings;
 
   @override
   Future<ModulesAndDevices> listModules() async {
@@ -41,10 +42,13 @@ class _Server extends HomeApi {
       const PresentationSchema(schemaVersion: 'v1', pages: []);
 
   @override
-  Future<Map<String, dynamic>> getSettings() async => {
-    'schema_version': 'v1',
-    'values': {OnboardingStatusNotifier.serverOobeFlagPath: setUp},
-  };
+  Future<Map<String, dynamic>> getSettings() async {
+    await settings?.future;
+    return {
+      'schema_version': 'v1',
+      'values': {OnboardingStatusNotifier.serverOobeFlagPath: setUp},
+    };
+  }
 }
 
 /// The real reconnect loop, from a live connection.
@@ -168,6 +172,30 @@ void main() {
       find.byType(OnboardingScreen),
     );
     expect(wizard.startAtSetup, isTrue);
+  });
+
+  testWidgets('a setup check running when the picker opens waits for it to '
+      'close', (tester) async {
+    final server = _Server(up: true)..settings = Completer<void>();
+    final container = await _pumpPlayer(tester, server);
+    final connection = container.read(connectionStateProvider.notifier);
+    connection.startReconnecting();
+    connection.connected();
+    await tester.pump();
+
+    await _openPicker(tester);
+    server.settings!.complete();
+    await _settle(tester);
+    expect(find.byType(OnboardingScreen), findsNothing);
+    expect(_onTop(tester, find.byType(DiscoveryScreen)), isTrue);
+
+    await tester.tap(find.text('Cancel'));
+    await _settle(tester);
+    await _settle(tester);
+    expect(find.byType(DiscoveryScreen), findsNothing);
+    expect(find.byType(OnboardingScreen), findsOneWidget);
+    // The picker's scan runs out.
+    await tester.pump(const Duration(seconds: 7));
   });
 
   for (final leave in ['Cancel', 'Back']) {
