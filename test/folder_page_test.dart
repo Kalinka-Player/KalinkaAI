@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
@@ -12,10 +13,12 @@ import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/selection_state_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/widgets/breadcrumb_crumb.dart';
+import 'package:kalinka/widgets/browse_filters/active_filter_chips.dart';
 import 'package:kalinka/widgets/column_separator.dart';
 import 'package:kalinka/widgets/procedural_album_art.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search/folder_trail.dart';
+import 'package:kalinka/widgets/search/track_group_actions.dart';
 import 'package:kalinka/widgets/search_cards/row_columns.dart';
 import 'package:kalinka/widgets/search_cards/search_folder_row.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
@@ -32,6 +35,9 @@ class _FolderApi implements KalinkaPlayerProxy {
   final Map<String, List<BrowseItem>> byId;
   final asked = <(String, int, int)>[];
 
+  /// The filter document each listing was last asked with.
+  final filters = <String, String?>{};
+
   _FolderApi(this.byId);
 
   @override
@@ -42,6 +48,7 @@ class _FolderApi implements KalinkaPlayerProxy {
     String? filter,
   }) async {
     asked.add((id, offset, limit));
+    filters[id] = filter;
     final items = byId[id] ?? const <BrowseItem>[];
     final end = (offset + limit).clamp(0, items.length);
     return BrowseItemsList(
@@ -53,9 +60,37 @@ class _FolderApi implements KalinkaPlayerProxy {
   }
 
   @override
+  Future<FilterValueList> getFilterValues(
+    String catalogId,
+    String field, {
+    int offset = 0,
+    int limit = 50,
+    String query = '',
+  }) async => const FilterValueList(
+    offset: 0,
+    limit: 50,
+    total: 1,
+    items: [FilterValue(id: 'jazz', name: 'Jazz')],
+  );
+
+  @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName}');
 }
+
+const _folderFields = [
+  FilterSpec(
+    id: 'q',
+    kind: FilterKind.text,
+    label: 'Search folders and tracks',
+  ),
+  FilterSpec(
+    id: 'genre',
+    kind: FilterKind.choice,
+    label: 'Genre',
+    ops: [FilterOp.any],
+  ),
+];
 
 const _libraryId = 'kalinka:localfiles:catalog:files';
 const _playlistsId = 'kalinka:localfiles:catalog:playlists';
@@ -161,6 +196,9 @@ Future<ProviderContainer> _pumpLibrary(
   WidgetTester tester, {
   List<BrowseItem> openedFolders = const [],
   _FolderApi? api,
+  List<FilterSpec> filters = const [],
+  BrowseFilterQuery? filter,
+  List<BrowseItem> sections = const [],
 }) async {
   final container = ProviderContainer(
     overrides: [
@@ -177,9 +215,11 @@ Future<ProviderContainer> _pumpLibrary(
   session.openCatalog(
     id: _libraryId,
     title: 'My Library',
-    sections: [_playlistsShelf],
+    filters: filters,
+    sections: sections.isEmpty ? [_playlistsShelf] : sections,
     folderLayout: true,
   );
+  if (filter != null) session.setCatalogFilter(filter);
   for (final folder in openedFolders) {
     session.openFolder(folder);
   }
@@ -469,6 +509,123 @@ void main() {
 
     expect(find.text('Play all'), findsNothing);
     expect(_heading('TRACKS'), findsNothing);
+  });
+
+  group('under a filter', () {
+    const jazz = BrowseFilterQuery(genreIds: ['jazz']);
+    const jazzDocument = '{"genre":{"any":["jazz"]}}';
+    final chips = find.byType(ActiveFilterChips);
+
+    testWidgets('each folder walked into is listed by it', (tester) async {
+      final api = _FolderApi(_listings);
+      await _pumpLibrary(
+        tester,
+        api: api,
+        filters: _folderFields,
+        filter: jazz,
+      );
+      expect(api.filters[_libraryId], jazzDocument);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(SearchFolderRow),
+          matching: find.text('Jazz'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(api.filters[_idOf('Jazz')], jazzDocument);
+      expect(
+        find.descendant(of: chips, matching: find.text('Jazz')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('clearing its chips lists the folder whole again', (
+      tester,
+    ) async {
+      final api = _FolderApi(_listings);
+      final container = await _pumpLibrary(
+        tester,
+        api: api,
+        filters: _folderFields,
+        filter: jazz,
+        openedFolders: [_folder('Jazz', canAdd: false)],
+      );
+
+      await tester.tap(
+        find.descendant(of: chips, matching: find.text('Clear filters')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(container.read(searchSessionProvider).catalogFilter.isEmpty, true);
+      expect(api.filters[_idOf('Jazz')], isNull);
+      expect(
+        find.descendant(of: chips, matching: find.text('Jazz')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a folder\'s Play all and Enqueue wait until it is lifted', (
+      tester,
+    ) async {
+      await _pumpLibrary(
+        tester,
+        filters: _folderFields,
+        filter: jazz,
+        openedFolders: [
+          _folder('Jazz', canAdd: false),
+          _folder('Kind of Blue'),
+        ],
+      );
+
+      expect(
+        tester.widget<PlayAllChip>(find.byType(PlayAllChip)).enabled,
+        false,
+      );
+      expect(tester.widget<AddAllChip>(find.byType(AddAllChip)).enabled, false);
+      expect(
+        find.byTooltip('Clear the filters to queue all of Kind of Blue'),
+        findsNWidgets(2),
+      );
+    });
+
+    testWidgets('the library\'s shelves narrow by it too', (tester) async {
+      final searchable = BrowseItem(
+        id: _playlistsId,
+        name: 'Playlists',
+        canBrowse: true,
+        canAdd: false,
+        catalog: Catalog(
+          id: _playlistsId,
+          title: 'Playlists',
+          filters: [_folderFields.first],
+          previewConfig: Preview(
+            type: PreviewType.imageText,
+            contentType: PreviewContentType.playlist,
+            itemsCount: 3,
+          ),
+        ),
+      );
+      final api = _FolderApi(_listings);
+      await _pumpLibrary(
+        tester,
+        api: api,
+        filters: _folderFields,
+        filter: const BrowseFilterQuery(text: 'eve'),
+        sections: [searchable],
+      );
+
+      expect(find.text('PLAYLISTS'), findsOneWidget);
+      expect(api.filters[_playlistsId], '{"q":{"contains":"eve"}}');
+    });
+
+    testWidgets('a shelf that cannot be narrowed by it leaves', (tester) async {
+      await _pumpLibrary(tester, filters: _folderFields, filter: jazz);
+
+      expect(find.text('PLAYLISTS'), findsNothing);
+      expect(find.text('Jazz'), findsWidgets);
+    });
   });
 
   testWidgets('a folder row shows its folder in place', (tester) async {

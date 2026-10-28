@@ -254,6 +254,8 @@ Each folder shown is a visit of its own, so Back returns along the way the folde
 
 The fast scroller's thumb keeps below the actions held under the bar. Held over subfolders, which list by name, a 56dp `surfaceOverlay` bubble beside it shows the initial of the folder at the top; tracks, listed by file name, get none, and nor does any other listing, whose order is not known to be by name. Rows above a folder reopened far down do not load their artwork. Folder layouts remain catalogs for pin eligibility where the shared model declares that relationship.
 
+A folder page filters as its source declares, like any catalog: the bar's search (hinted with the folder shown's name) and **Filters** narrow the folder shown and every folder walked into under it, the applied chips sit under the folder's actions, and the page's own shelves at its top narrow by the same filter, one that cannot honour it leaving. Play all and Enqueue queue a folder whole, so while a filter narrows it they stay in place, disabled, with the tooltip to clear the filters. What a filter keeps is the source's to say: the local library keeps the tracks it matches by title, artist, album or path within their music source, and the subfolders holding any, each still described whole.
+
 ## Playback contexts
 
 | Action origin | Required playback context |
