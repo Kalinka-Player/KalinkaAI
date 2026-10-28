@@ -110,10 +110,12 @@ PlayQueueState queueOf(int count, {int index = 0}) => PlayQueueState(
 
 /// The main screen, connected, with the queue as [queue] and Home's sections
 /// quiet. The window is [size]; [overrides] go after the harness's own.
+/// [connection] makes the connection's notifier, which must start connected.
 Future<ProviderContainer> pumpHomeShell(
   WidgetTester tester, {
   required SettableQueue queue,
   HomeApi? api,
+  ConnectionStateNotifier Function() connection = SettableConnection.new,
   Size size = const Size(400, 800),
   bool coachMarksShown = true,
   List<ModuleInfo> sources = const [],
@@ -141,7 +143,7 @@ Future<ProviderContainer> pumpHomeShell(
       sharedPrefsProvider.overrideWithValue(prefs),
       kalinkaProxyProvider.overrideWithValue(api ?? HomeApi()),
       playQueueStateStoreProvider.overrideWith(() => queue),
-      connectionStateProvider.overrideWith(SettableConnection.new),
+      connectionStateProvider.overrideWith(connection),
       playbackTimeMsProvider.overrideWith(_StillClock.new),
       indexerStatusProvider.overrideWith(_IdleIndexer.new),
       sourceModulesProvider.overrideWith((ref) => sources),
