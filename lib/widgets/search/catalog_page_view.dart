@@ -8,6 +8,7 @@ import '../../data_model/browse_filters.dart';
 import '../../data_model/data_model.dart';
 import '../../providers/catalog_cards_provider.dart';
 import '../../providers/artist_relations_provider.dart';
+import '../../providers/box_control_provider.dart';
 import '../../providers/collection_edit_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/connection_settings_provider.dart';
@@ -54,7 +55,16 @@ final _folderPlacesProvider = Provider<Map<String, ListPlace<BrowseItem>>>((
   ref,
 ) {
   ref.watch(connectionSettingsProvider.select((s) => s.baseUrl));
-  return {};
+  final places = <String, ListPlace<BrowseItem>>{};
+  // Another server may take over the address; a lost connection is not that.
+  String? server = ref.read(serverStorageKeyProvider)?.scope;
+  ref.listen(serverStorageKeyProvider, (_, next) {
+    final scope = next?.scope;
+    if (scope == null || scope == server) return;
+    if (server != null) places.clear();
+    server = scope;
+  });
+  return places;
 });
 
 /// One browsed page in the browsing history (back lives in the title bar).
