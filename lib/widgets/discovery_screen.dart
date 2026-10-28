@@ -242,7 +242,11 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
                   size: 20,
                   color: KalinkaColors.accentTint,
                 ),
-                label: const Text('SET UP A STREAMER'),
+                // Beside Cancel on a 320dp phone it would wrap.
+                label: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('SET UP A STREAMER'),
+                ),
                 onPressed: () async {
                   final endpoint = await Navigator.of(context)
                       .push<ProvisionedEndpoint>(
