@@ -111,6 +111,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // connected-listener from stacking a second wizard or racing itself.
   bool _wizardOpen = false;
   bool _setupCheckBusy = false;
+  bool _setupCheckDeferred = false;
+
+  // Kept for dispose, where ref can no longer be read.
+  late final ConnectionStateNotifier _connection;
 
   // Tracks the on-screen playback-error dialog so a re-fired error (the state
   // store re-syncs on resume/reconnect) doesn't stack another copy. The token
@@ -165,6 +169,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       end: const Offset(0, 1),
     ).animate(curved);
 
+    _connection = ref.read(connectionStateProvider.notifier);
     // Every connection — at launch, via discovery, or seeded from the
     // serving origin on web — checks whether the server itself still needs
     // setup (see _checkServerNeedsSetup). On web it is the only route in.
@@ -188,14 +193,15 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         return;
       }
       // Set up but no stored server (e.g. after Disconnect): plain discovery.
-      if (!ref.read(connectionSettingsProvider).isSet) {
-        setState(() => _discoveryOpen = true);
-      }
+      if (!ref.read(connectionSettingsProvider).isSet) _openDiscovery();
     });
   }
 
   @override
   void dispose() {
+    // The kiosk display replaces this screen once a server is picked. No
+    // provider may change while the tree is being torn down.
+    if (_discoveryOpen) Future.microtask(_connection.resumeReconnect);
     _miniPlayerHide.dispose();
     _miniPlayerExtent.dispose();
     super.dispose();
@@ -219,6 +225,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// setup steps; the connection already exists, so discovery is skipped.
   Future<void> _checkServerNeedsSetup() async {
     if (_wizardOpen || _setupCheckBusy) return;
+    // The picker connects before it closes; check whichever server it
+    // leaves connected once it has.
+    if (_discoveryOpen) {
+      _setupCheckDeferred = true;
+      return;
+    }
     _setupCheckBusy = true;
     try {
       await ref.read(settingsProvider.notifier).loadConfig();
@@ -272,7 +284,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       case ServerSheetAction.openSettings:
         _openSettings();
       case ServerSheetAction.openDiscovery:
-        setState(() => _discoveryOpen = true);
+        _openDiscovery();
       case ServerSheetAction.openPlugins:
         _openPlugins();
       case ServerSheetAction.powerOff:
@@ -368,7 +380,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           dialogSide: KalinkaDialogSide.browsing,
         );
       case ShellAction.changeServer:
-        setState(() => _discoveryOpen = true);
+        _openDiscovery();
       case ShellAction.powerOff:
         _powerOffServer();
     }
@@ -383,7 +395,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     _closeExpandedPlayer();
     // Any other destination leaves the server picker as its Cancel does,
     // back to what it covered, then goes on there.
-    if (_discoveryOpen) setState(() => _discoveryOpen = false);
+    if (_discoveryOpen) _closeDiscovery();
     if (destination == ShellDestination.configuration && _pluginsOpen) return;
     setState(() => _navigating = true);
     try {
@@ -495,7 +507,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   size: 16,
                   color: KalinkaColors.accentTint,
                 ),
-                onTap: () => setState(() => _discoveryOpen = true),
+                onTap: _openDiscovery,
               ),
               const SizedBox(height: 12),
               KalinkaButton(
@@ -1215,9 +1227,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         child: SafeArea(
           top: false,
           bottom: isTablet,
-          child: EscalationCard(
-            onScanForServers: () => setState(() => _discoveryOpen = true),
-          ),
+          child: EscalationCard(onScanForServers: _openDiscovery),
         ),
       ),
     );
@@ -1232,10 +1242,28 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         return DiscoveryScreen(
           allowCancel: settings.isSet,
           currentServerHost: settings.isSet ? settings.host : null,
-          onClose: () => setState(() => _discoveryOpen = false),
+          onClose: _closeDiscovery,
         );
       },
     );
+  }
+
+  /// The stored server stays as it is while another is chosen or set up,
+  /// so it is not reconnected to under the picker and its routes.
+  void _openDiscovery() {
+    _connection.pauseReconnect();
+    setState(() => _discoveryOpen = true);
+  }
+
+  void _closeDiscovery() {
+    setState(() => _discoveryOpen = false);
+    _connection.resumeReconnect();
+    if (_setupCheckDeferred) {
+      _setupCheckDeferred = false;
+      if (ref.read(connectionStateProvider) == ConnectionStatus.connected) {
+        _checkServerNeedsSetup();
+      }
+    }
   }
 
   Widget _buildTabletLayout(
@@ -1319,8 +1347,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                             child: ServerSheet(
                               onClose: () =>
                                   setState(() => _serverSheetOpen = false),
-                              onOpenDiscovery: () =>
-                                  setState(() => _discoveryOpen = true),
+                              onOpenDiscovery: _openDiscovery,
                               onOpenSettings: _openSettings,
                               onOpenPlugins: _openPlugins,
                               onPowerOff: _powerOffServer,
