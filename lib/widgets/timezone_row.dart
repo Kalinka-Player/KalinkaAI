@@ -61,7 +61,9 @@ class _TimezoneRowState extends ConsumerState<TimezoneRow> {
       final looking = retry && ref.watch(boxProbeProvider).isLoading;
       return SettingsActionRow(
         label: 'Time zone',
-        sublabel: looking ? 'Looking for the box…' : timezoneUnavailable(box),
+        sublabel: looking
+            ? 'Looking for the streamer…'
+            : timezoneUnavailable(box),
         leading: leading,
         trailing: retry ? Icons.refresh : null,
         onTap: retry && !looking
@@ -91,15 +93,16 @@ class _TimezoneRowState extends ConsumerState<TimezoneRow> {
 /// Why [box] cannot be set to another zone from the app.
 String timezoneUnavailable(BoxTimezone box) => switch (box.probe.missing) {
   NoBoxControl.noSupervisor =>
-    'No box supervisor answers on this server, so it keeps the time zone of '
-        'the computer it runs on. Set it there.',
-  NoBoxControl.notAnswering => 'The box did not answer. Tap to try again.',
+    'No Kalinka supervisor answers on this server, so it keeps the time zone '
+        'of the computer it runs on. Set it there.',
+  NoBoxControl.notAnswering =>
+    'The streamer did not answer. Tap to try again.',
   NoBoxControl.otherServer =>
-    'A different Kalinka box answers at this address. Tap to try again.',
+    'A different Kalinka streamer answers at this address. Tap to try again.',
   NoBoxControl.incompatible =>
-    'The box’s supervisor and this app do not speak the same version. '
+    'The streamer’s supervisor and this app do not speak the same version. '
         'Update both to set the time zone here.',
-  null => 'Updating Kalinka on this box lets the app set its time zone.',
+  null => 'Updating Kalinka on this streamer lets the app set its time zone.',
 };
 
 /// Lets the person pick one of the zones [box] offers, confirms it, and
@@ -127,7 +130,7 @@ Future<void> chooseTimezone(
     ref
         .read(toastProvider.notifier)
         .show(
-          'The box did not answer. Check that it is on and connected.',
+          'The streamer did not answer. Check that it is on and connected.',
           isError: true,
           inPanel: inPanel,
         );
@@ -280,8 +283,9 @@ class _ConfirmTimezone extends StatelessWidget {
       iconGlyphColor: KalinkaColors.accentTint,
       title: 'Change the time zone?',
       message:
-          'The box shows the time in ${timezoneLabel(zone)} from now on. A '
-          'now-playing display on it restarts to follow; playback carries on.',
+          'The streamer shows the time in ${timezoneLabel(zone)} from now '
+          'on. A now-playing display on it restarts to follow; playback '
+          'carries on.',
       actions: [
         KalinkaButton(
           label: 'Cancel',

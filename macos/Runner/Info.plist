@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Connect a nearby Kalinka box to your Wi-Fi.</string>
+	<string>Connect a nearby Kalinka streamer to your Wi-Fi.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Find and connect to Kalinka players on your network.</string>
 	<key>NSBonjourServices</key>

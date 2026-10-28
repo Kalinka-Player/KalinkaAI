@@ -37,7 +37,7 @@ class HotspotSetupGuide extends StatelessWidget {
               SelectableText('Kalinka-Setup-XXXX'),
               SizedBox(height: 8),
               Text(
-                'Choose the network starting with Kalinka-Setup-. The last four characters identify your box.',
+                'Choose the network starting with Kalinka-Setup-. The last four characters identify your streamer.',
               ),
             ],
           ),
@@ -67,7 +67,7 @@ class HotspotSetupGuide extends StatelessWidget {
                 label: const Text('Copy password'),
               ),
               const Text(
-                'All lowercase, with a hyphen. This password is for the box’s hotspot.',
+                'All lowercase, with a hyphen. This password is for the streamer’s hotspot.',
               ),
             ],
           ),

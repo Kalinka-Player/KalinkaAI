@@ -91,7 +91,7 @@ class TimezoneChange extends Notifier<String?> {
       if (!ref.mounted) return true;
       ref.invalidate(boxTimezoneProvider);
       toast.show(
-        'The box shows the time in ${timezoneLabel(set)}.',
+        'The streamer shows the time in ${timezoneLabel(set)}.',
         inPanel: inPanel,
       );
       return true;

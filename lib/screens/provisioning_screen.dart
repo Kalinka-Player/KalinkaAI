@@ -277,7 +277,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
                     child: OnboardingProgress(
                       stepNumber: _boxStep ? 1 : 2,
                       stepCount: 2,
-                      stepLabels: const ['YOUR BOX', 'WI-FI'],
+                      stepLabels: const ['YOUR STREAMER', 'WI-FI'],
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -368,11 +368,11 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     final connecting = _setup.phase == SetupPhase.connecting;
     return [
       _heading(
-        connecting ? 'Connecting to your box' : 'Meet your Kalinka.',
+        connecting ? 'Connecting to your streamer' : 'Meet your Kalinka.',
         icon: Icons.speaker_outlined,
       ),
       _deck(
-        connecting ? 'Accept the Bluetooth pairing request on your phone.' : 'Switch on your box and keep it nearby.\nWe’ll take it from here.',
+        connecting ? 'Accept the Bluetooth pairing request on your phone.' : 'Switch on your streamer and keep it nearby.\nWe’ll take it from here.',
       ),
       if (connecting)
         SetupLoadingCard(
@@ -381,8 +381,8 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
         )
       else ...[
         SetupDiscoveryHeader(
-          title: 'NEARBY BOXES',
-          activityLabel: 'Searching for nearby boxes',
+          title: 'NEARBY STREAMERS',
+          activityLabel: 'Searching for nearby streamers',
           searching: _setup.phase == SetupPhase.scanning,
           onScan: () {
             _chosenBox = null;
@@ -404,14 +404,14 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
         if (_setup.boxes.isEmpty)
           SetupLoadingCard(
             title: _setup.phase == SetupPhase.scanning
-                ? 'Looking for your box…'
-                : 'No boxes found yet',
-            subtitle: 'Keep Bluetooth on and your box powered up.',
+                ? 'Looking for your streamer…'
+                : 'No streamers found yet',
+            subtitle: 'Keep Bluetooth on and your streamer powered up.',
             loading: false,
           ),
         const SizedBox(height: 20),
         Text(
-          'Already connected to Wi-Fi? Find your box in the player list.',
+          'Already connected to Wi-Fi? Find your streamer in the player list.',
           style: _bodyStyle.copyWith(fontSize: 13),
         ),
       ],
@@ -504,12 +504,12 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
           ? (_customSsid
                 ? 'Enter the exact name and password for your network.'
                 : 'Enter the password for your network.')
-          : 'Connect ${_setup.selected?.name ?? 'your box'} to the same network as your phone.',
+          : 'Connect ${_setup.selected?.name ?? 'your streamer'} to the same network as your phone.',
     ),
     if (_setup.scanningWifi)
       const SetupLoadingCard(
         title: 'Finding networks…',
-        subtitle: 'Your box is looking for Wi-Fi nearby.',
+        subtitle: 'Your streamer is looking for Wi-Fi nearby.',
       )
     else if (!_networkChosen) ...[
       Row(
@@ -557,7 +557,9 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
       _credentials(),
     if (_setup.error != null) _note(_setup.error!, error: true),
     if (_setup.status?.isTest == true)
-      _note('Test box · Sample networks. Your laptop’s Wi-Fi stays unchanged.'),
+      _note(
+        'Test streamer · Sample networks. Your laptop’s Wi-Fi stays unchanged.',
+      ),
   ];
 
   Widget _credentials() => Form(
@@ -672,7 +674,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Sent securely to your box.',
+                'Sent securely to your streamer.',
                 style: _bodyStyle.copyWith(fontSize: 12),
               ),
             ),
@@ -728,7 +730,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     final messages = [
       'Authenticating with your router…',
       'Waiting for an IP address…',
-      'Saving the network on your box…',
+      'Saving the network on your streamer…',
       'Waiting for Kalinka to respond…',
     ];
     return [
@@ -736,12 +738,12 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
         failed
             ? (reaching
                   ? 'Couldn’t reach Kalinka.'
-                  : 'Couldn’t connect your box.')
+                  : 'Couldn’t connect your streamer.')
             : changing
             ? 'Choose a fresh connection.'
             : reaching
-            ? 'Your box is on Wi-Fi.'
-            : 'Bringing your box online.',
+            ? 'Your streamer is on Wi-Fi.'
+            : 'Bringing your streamer online.',
         icon: failed
             ? Icons.error_outline_rounded
             : changing

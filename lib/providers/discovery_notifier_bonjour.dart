@@ -109,7 +109,7 @@ class BonjourDiscoveryNotifier extends DiscoveryNotifier {
             ]);
             return ResolvedInstance(
               instanceName: service.name ?? service.host ?? '',
-              label: service.name ?? 'Kalinka box',
+              label: service.name ?? 'Kalinka streamer',
               endpoints: endpoints,
               serverId: _txt(service, 'server_id'),
               displayName: _txt(service, 'display_name'),
