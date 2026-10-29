@@ -8,7 +8,6 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'support/discovery_fakes.dart';
 
 final _box = RegExp(r'\bbox(es)?\b', caseSensitive: false);
-final _wordChar = RegExp(r'[\w$]');
 
 /// The text of each string literal in [source], by the offset it starts at.
 /// Comments are left out, and an interpolation reads as a space; a literal
@@ -17,7 +16,7 @@ Map<int, String> stringLiterals(String source) {
   final found = <int, String>{};
   var i = 0;
   bool at(String s) => source.startsWith(s, i);
-  bool word(int j) => j >= 0 && _wordChar.hasMatch(source[j]);
+  bool word(int j) => j >= 0 && RegExp(r'[\w$]').hasMatch(source[j]);
 
   void comment() {
     if (at('//')) {
