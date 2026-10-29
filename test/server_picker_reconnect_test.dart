@@ -116,7 +116,7 @@ bool _onTop(WidgetTester tester, Finder screen) =>
     ModalRoute.of(tester.element(screen))!.isCurrent;
 
 void main() {
-  testWidgets('the stored server coming back stays behind Set up a box', (
+  testWidgets('the stored server coming back stays behind Set up a streamer', (
     tester,
   ) async {
     UniversalBle.setInstance(_PermissionPrompt());
@@ -129,7 +129,7 @@ void main() {
     await tester.pump();
 
     await _openPicker(tester);
-    await tester.tap(find.text('SET UP A BOX'));
+    await tester.tap(find.text('SET UP A STREAMER'));
     await _settle(tester);
     await tester.tap(find.text('Search using Bluetooth'));
     await _settle(tester);

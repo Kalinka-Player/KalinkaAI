@@ -18,6 +18,12 @@ Fork the repository, create a feature branch, and open a pull request describing
 
 Some cross-cutting changes — anything touching generated models or events — need `build_runner` re-run, and may also require a matching change in the backend repository ([KalinkaPlayer](https://github.com/Kalinka-Player/KalinkaPlayer)). Mention it in the pull request when that is the case.
 
+## CI and merging
+
+The Tests workflow runs `flutter analyze` and the full `flutter test` suite on each pull request's test merge with its base branch, on merge-queue commits, and on every push to `main`. Keep the checkout on the event's commit, not just the PR head: independently passing changes can fail when combined. Only superseded PR runs are cancelled; each push to `main` keeps its own run.
+
+The `main` ruleset must require **Analyze** and **Unit and widget tests**, with **Require branches to be up to date before merging** enabled. After another PR merges, update the next branch and wait for fresh checks before merging it. Old green checks cannot establish that it works with the new base. If using a merge queue, the workflow's `merge_group` trigger runs the same checks on the queued combination. Do not bypass these checks for routine merges.
+
 ## Licensing
 
 Source code is Apache License 2.0. Visual assets (icons, logos, images) are **not** open-source and are covered by a separate private licence — see `LICENSE-ASSETS`. Contributions must not add third-party assets without checking their licence first.
