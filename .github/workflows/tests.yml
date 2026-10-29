@@ -1,10 +1,14 @@
 name: Tests
 
-# Analysis and the unit and widget tests, on every pull request and on main.
+# Analysis and the full unit and widget suite, on PR merges, queued merges and main.
 # The main ruleset requires these jobs by name, so keep the names stable.
+# Keep checkout on the event's commit: pull_request uses GitHub's test merge
+# with the base branch; merge_group uses the queue's combined commit.
 
 on:
   pull_request:
+  merge_group:
+    types: [checks_requested]
   push:
     branches: [main]
   workflow_dispatch:
@@ -13,8 +17,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: tests-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Supersede old PR checks, but finish every main/queue run so a later merge
+  # cannot hide a failure on an earlier commit.
+  group: tests-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Keep in step with release.yml.
