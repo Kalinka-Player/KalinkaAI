@@ -95,7 +95,8 @@ String timezoneUnavailable(BoxTimezone box) => switch (box.probe.missing) {
   NoBoxControl.noSupervisor =>
     'No Kalinka supervisor answers on this server, so it keeps the time zone '
         'of the computer it runs on. Set it there.',
-  NoBoxControl.notAnswering => 'The streamer did not answer. Tap to try again.',
+  NoBoxControl.notAnswering =>
+    'The streamer did not answer. Tap to try again.',
   NoBoxControl.otherServer =>
     'A different Kalinka streamer answers at this address. Tap to try again.',
   NoBoxControl.incompatible =>
@@ -128,7 +129,11 @@ Future<void> chooseTimezone(
   if (zones == null) {
     ref
         .read(toastProvider.notifier)
-        .show(boxRefusal('unreachable'), isError: true, inPanel: inPanel);
+        .show(
+          boxRefusal('unreachable'),
+          isError: true,
+          inPanel: inPanel,
+        );
     return;
   }
   final picked = await showKalinkaBottomSheet<String>(
