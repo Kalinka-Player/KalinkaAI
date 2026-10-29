@@ -893,6 +893,37 @@ void main() {
     await tester.pump(const Duration(seconds: 30));
   });
 
+  testWidgets('a renderer that refuses to play offers its own settings', (
+    tester,
+  ) async {
+    // Only the current output has a gear, and this one cannot become current.
+    final api = _FakeApi(
+      failWith: const RendererSwitchException(
+        'this output\'s sound card has no volume control of its own',
+        byRenderer: true,
+      ),
+    );
+    final container = ProviderContainer(overrides: overrides(api));
+    addTearDown(container.dispose);
+    await tester.pumpWidget(wrap(api, container: container));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
+    await tester.pumpAndSettle();
+    await tester.tapAt(tester.getCenter(find.text('Kitchen')));
+    await tester.pumpAndSettle();
+
+    final toast = container.read(toastProvider).single;
+    expect(toast.isError, isTrue);
+    expect(toast.action?.label, 'Settings');
+    toast.action!.onPressed();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RendererSettingsScreen), findsOneWidget);
+    expect(api.configuredRenderer, 'r-kitchen');
+    await tester.pump(const Duration(seconds: 30));
+  });
+
   testWidgets('a renderer the server cannot talk to is shown but not usable', (
     tester,
   ) async {
