@@ -74,9 +74,9 @@ class _NetworkSetupScreenState extends ConsumerState<NetworkSetupScreen> {
       stepNumber: 1,
       stepCount: 1,
       stepLabels: const ['NETWORK'],
-      title: 'Connect your streamer',
+      title: 'Connect your box',
       subtitle: _showHotspotGuide
-          ? 'Connect your phone or computer to the streamer’s temporary Wi-Fi network.'
+          ? 'Connect your phone or computer to the box’s temporary Wi-Fi network.'
           : 'Keep your existing wired or Wi-Fi connection, or choose another network.',
       onBack: Navigator.of(context).canPop()
           ? () => Navigator.of(context).pop()

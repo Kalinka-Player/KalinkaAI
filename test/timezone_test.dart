@@ -74,7 +74,7 @@ void main() {
     expect(find.text('Asia/Kolkata'), findsOne);
     expect(
       container.read(toastProvider).single.message,
-      'The streamer shows the time in Asia/Kolkata.',
+      'The box shows the time in Asia/Kolkata.',
     );
     await _drain(tester);
   });
@@ -230,9 +230,7 @@ void main() {
 
     expect(find.text('Time zone'), findsOne);
     expect(
-      find.text(
-        'Updating Kalinka on this streamer lets the app set its time zone.',
-      ),
+      find.text('Updating Kalinka on this box lets the app set its time zone.'),
       findsOne,
     );
     await tester.tap(find.text('Time zone'));

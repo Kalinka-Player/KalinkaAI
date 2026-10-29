@@ -489,7 +489,7 @@ void main() {
       await tester.tap(find.text('Connect'));
       await tester.pump();
       expect(find.text('STEP 2 OF 2'), findsOneWidget);
-      expect(find.text('Your streamer is on Wi-Fi.'), findsOneWidget);
+      expect(find.text('Your box is on Wi-Fi.'), findsOneWidget);
       expect(find.text('Retry'), findsNothing);
       await tester.pump(const Duration(seconds: 11));
       expect(find.text('Retry'), findsNothing);

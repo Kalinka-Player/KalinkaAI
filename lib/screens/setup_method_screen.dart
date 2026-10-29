@@ -24,15 +24,17 @@ class SetupMethodScreen extends StatelessWidget {
     body: OnboardingStepScaffold(
       stepNumber: 1,
       stepCount: 1,
-      title: 'Set up a streamer',
-      subtitle: 'Choose how to send your network settings. You can also connect the streamer to your router with an Ethernet cable.',
+      title: 'Set up a box',
+      subtitle: 'Choose how to send your network settings. You can also connect the box to your router with an Ethernet cable.',
       onBack: () => Navigator.of(context).pop(),
       children: [
         ListTile(
           leading: const Icon(Icons.bluetooth),
           title: const Text('Search using Bluetooth'),
           subtitle: Text(
-            kIsWeb ? 'Available in the Kalinka native app.' : 'Find nearby streamers and send Wi-Fi settings over Bluetooth.',
+            kIsWeb
+                ? 'Available in the Kalinka native app.'
+                : 'Find nearby boxes and send Wi-Fi settings over Bluetooth.',
           ),
           enabled: !kIsWeb,
           onTap: kIsWeb

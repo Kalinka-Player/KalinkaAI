@@ -514,7 +514,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final (title, subtitle, body, nextLabel) = switch (_step) {
       1 => (
         'Network',
-        'Use Ethernet or Wi-Fi to connect your streamer. Keep the current connection or choose another network.',
+        'Use Ethernet or Wi-Fi to connect your box. Keep the current connection or choose another network.',
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -93,16 +93,16 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
             3 => 'The router did not assign an address. Check the router and try again.',
             4 => 'The connection timed out. Check the network and try again.',
             6 => 'The network settings could not be saved.',
-            _ => 'The streamer could not connect. Try again or use Ethernet.',
+            _ => 'The box could not connect. Try again or use Ethernet.',
           };
         } else if (state == 2) {
           _submitted = true;
           _succeeded = true;
-          _message = 'Your streamer is connected and ready to use.';
+          _message = 'Your box is connected and ready to use.';
         } else if (!_submitted &&
             !_sending &&
             _message ==
-                'Cannot reach network setup. Check the streamer connection and try again.') {
+                'Cannot reach network setup. Check the box connection and try again.') {
           _message = null;
         }
         if (_setup['scan_state'] == 'ready') _scanState = 2;
@@ -121,7 +121,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
       if (!mounted || revision != _revision) return;
       if (!_submitted) {
         setState(
-          () => _message = 'Cannot reach network setup. Check the streamer connection and try again.',
+          () => _message = 'Cannot reach network setup. Check the box connection and try again.',
         );
       }
     } finally {
@@ -177,8 +177,8 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
         'setup': {..._setup, 'state': 1},
       };
       _message = _data?['hotspot'] == true
-          ? 'Connecting your streamer… When the hotspot closes, reconnect this device to your home network. If the connection fails, the hotspot will return for another attempt.'
-          : 'Connecting your streamer… This page will reconnect when it is ready.';
+          ? 'Connecting your box… When the hotspot closes, reconnect this device to your home network. If the connection fails, the hotspot will return for another attempt.'
+          : 'Connecting your box… This page will reconnect when it is ready.';
       widget.onStatus?.call({...?_data, 'submitted': true});
     });
     if (mounted) setState(() => _sendingJoin = false);
@@ -339,7 +339,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
       Padding(
         padding: const EdgeInsets.only(top: 12),
         child: Text(
-          'Choose the country where the streamer is used. This sets the available Wi-Fi channels.',
+          'Choose the country where the box is used. This sets the available Wi-Fi channels.',
           style: KalinkaTextStyles.trayRowSublabel,
         ),
       ),
@@ -360,7 +360,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
       if (scanning)
         const SetupLoadingCard(
           title: 'Finding Wi-Fi networks…',
-          subtitle: 'Your streamer is checking for nearby networks.',
+          subtitle: 'Your box is checking for nearby networks.',
           loading: false,
         )
       else ...[
@@ -515,20 +515,21 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
             ),
           if (_data == null && _message == null) ...[
             const SetupDiscoveryHeader(
-              title: 'YOUR STREAMER',
-              activityLabel: 'Looking for your streamer',
+              title: 'YOUR BOX',
+              activityLabel: 'Looking for your box',
               searching: true,
             ),
             const SizedBox(height: 12),
             const SetupLoadingCard(
-              title: 'Looking for your streamer…',
-              subtitle: 'Keep your streamer powered on and stay connected to its network.',
+              title: 'Looking for your box…',
+              subtitle:
+                  'Keep your box powered on and stay connected to its network.',
               loading: false,
             ),
           ],
           if (_data?['available'] == false)
             const Text(
-              'This streamer does not offer Wi-Fi setup. You can keep the current connection or use Ethernet.',
+              'This box does not offer Wi-Fi setup. You can keep the current connection or use Ethernet.',
             ),
           if (_succeeded) ...[
             const SizedBox(height: 16),

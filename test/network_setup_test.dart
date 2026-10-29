@@ -215,12 +215,12 @@ void main() {
     final api = FakeSetupApi(status(kind: 'wired', state: 4));
     api.readStatus = () => response.future;
     await mountPanel(tester, api);
-    expect(find.text('Looking for your streamer…'), findsOneWidget);
+    expect(find.text('Looking for your box…'), findsOneWidget);
     expect(find.text('Network connection'), findsNothing);
     expect(api.commands, isEmpty);
     response.complete(api.response);
     await tester.pump();
-    expect(find.text('Looking for your streamer…'), findsNothing);
+    expect(find.text('Looking for your box…'), findsNothing);
     expect(find.text('Connected by Ethernet'), findsOneWidget);
     expect(find.text('Finding Wi-Fi networks…'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
@@ -441,7 +441,7 @@ void main() {
       expect(reconnected, true);
       expect(find.text('Connected by Wi-Fi'), findsNothing);
       expect(
-        find.text('Your streamer is connected and ready to use.'),
+        find.text('Your box is connected and ready to use.'),
         findsNothing,
       );
       await tester.pumpWidget(const SizedBox());
@@ -459,7 +459,7 @@ void main() {
       api.response.addAll(status(kind: 'wifi', state: 2));
       await finishScan(tester);
       expect(
-        find.text('Your streamer is connected and ready to use.'),
+        find.text('Your box is connected and ready to use.'),
         findsOneWidget,
       );
       expect(find.text('Change Wi-Fi network'), findsOneWidget);
@@ -469,7 +469,7 @@ void main() {
       api.response.addAll(status(kind: 'wifi', state: 4));
       await finishScan(tester);
       expect(
-        find.text('Your streamer is connected and ready to use.'),
+        find.text('Your box is connected and ready to use.'),
         findsOneWidget,
       );
       await tester.tap(find.text('Change Wi-Fi network'));
@@ -487,7 +487,7 @@ void main() {
       ]);
       expect(find.text('Finding Wi-Fi networks…'), findsOneWidget);
       expect(
-        find.text('Your streamer is connected and ready to use.'),
+        find.text('Your box is connected and ready to use.'),
         findsNothing,
       );
       await tester.pumpWidget(const SizedBox());
@@ -787,7 +787,7 @@ void main() {
     await tester.ensureVisible(find.text('Use the temporary Wi-Fi hotspot'));
     await tester.tap(find.text('Use the temporary Wi-Fi hotspot'));
     await tester.pumpAndSettle();
-    expect(find.text('Connect your streamer'), findsOneWidget);
+    expect(find.text('Connect your box'), findsOneWidget);
     expect(find.byType(HotspotSetupGuide), findsOneWidget);
     expect(find.text('kalinka-setup'), findsOneWidget);
     await tester.tap(find.text('Back'));

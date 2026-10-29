@@ -44,9 +44,9 @@ class OnboardingTimezoneSection extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'This device is on ${timezoneLabel(local)}. The '
-                      'streamer shows its clock and runs its night-time '
-                      'updates in its own zone.',
+                      'This device is on ${timezoneLabel(local)}. The box '
+                      'shows its clock and runs its night-time updates in '
+                      'its own zone.',
                       style: KalinkaTextStyles.trayRowSublabel,
                     ),
                     const SizedBox(height: 10),

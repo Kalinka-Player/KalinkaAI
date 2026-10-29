@@ -242,7 +242,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
                   size: 20,
                   color: KalinkaColors.accentTint,
                 ),
-                label: const Text('SET UP A STREAMER'),
+                label: const Text('SET UP A BOX'),
                 onPressed: () async {
                   final endpoint = await Navigator.of(context)
                       .push<ProvisionedEndpoint>(

@@ -35,7 +35,7 @@ class BleProvisioningTransport implements ProvisioningTransport {
   Stream<NearbyBox> get boxes => UniversalBle.scanStream.map(
     (d) => NearbyBox(
       d.deviceId,
-      d.name?.isNotEmpty == true ? d.name! : 'Kalinka streamer',
+      d.name?.isNotEmpty == true ? d.name! : 'Kalinka box',
     ),
   );
 
@@ -105,7 +105,7 @@ class BleProvisioningTransport implements ProvisioningTransport {
     final generation = _generation;
     final id = _readyDevice;
     if (id == null) {
-      return Future.error(StateError('No paired streamer is selected.'));
+      return Future.error(StateError('No paired box is selected.'));
     }
     return _run(() async {
       _check(generation);

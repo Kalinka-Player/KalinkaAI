@@ -161,8 +161,8 @@ class ProvisioningController extends ChangeNotifier {
     } catch (_) {
       if (_current(generation)) {
         error =
-            'Could not pair with this streamer. Accept the pairing prompt and try again. '
-            'If the streamer was reflashed, forget it in Bluetooth settings first.';
+            'Could not pair with this box. Accept the pairing prompt and try again. '
+            'If the box was reflashed, forget it in Bluetooth settings first.';
       }
     }
     if (!_current(generation)) return;
@@ -218,7 +218,7 @@ class ProvisioningController extends ChangeNotifier {
     } catch (_) {
       if (_current(generation)) {
         error =
-            'Could not confirm the streamer’s status. Retry to check whether it joined Wi-Fi.';
+            'Could not confirm the box’s status. Retry to check whether it joined Wi-Fi.';
         phase = SetupPhase.joining;
       }
     }
@@ -305,7 +305,7 @@ class ProvisioningController extends ChangeNotifier {
     }
     if (_current(generation)) {
       error =
-          'The streamer has not confirmed a connection. Retry to check its status.';
+          'The box has not confirmed a connection. Retry to check its status.';
     }
   }
 
@@ -354,7 +354,7 @@ class ProvisioningController extends ChangeNotifier {
     } catch (_) {
       if (_current(generation)) {
         error =
-            'The streamer has not reopened network selection. Keep the phone close and '
+            'The box has not reopened network selection. Keep the phone close and '
             'try again while Bluetooth setup is available.';
         phase = SetupPhase.choosing;
         _changed();
@@ -435,8 +435,8 @@ class ProvisioningController extends ChangeNotifier {
     } catch (_) {
       if (current()) {
         wifiScanError =
-            'Could not get networks from the streamer. Retry the scan, '
-            'reconnect to the streamer, or enter the network name below.';
+            'Could not get networks from the box. Retry the scan, '
+            'reconnect to the box, or enter the network name below.';
       }
     } finally {
       if (current()) {
@@ -486,7 +486,7 @@ class ProvisioningController extends ChangeNotifier {
     if (_current(generation)) {
       error = status!.isTest
           ? 'Test credentials received. Start Kalinka on the laptop to test the network handoff.'
-          : 'The streamer joined Wi-Fi but could not be reached. Put this phone on the same network, '
+          : 'The box joined Wi-Fi but could not be reached. Put this phone on the same network, '
                 'allow Local Network access, and check that the router allows devices to communicate.';
       _changed();
     }
