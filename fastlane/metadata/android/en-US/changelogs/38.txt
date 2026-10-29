@@ -1,0 +1,5 @@
+- Filters on a folder: search and genres in My Library with server 5.15.0
+- Settings from the toast of an output that refuses to play
+- Setup no longer interrupted by the server you were on
+- The device is called a streamer throughout setup
+- A dismissed reconnecting card stays dismissed

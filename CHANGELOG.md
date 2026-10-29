@@ -8,10 +8,23 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
-## Unreleased
+## 0.23.0
+
+Filters on a folder, the settings of an output that refuses to play one tap away, and setup that the stored server no longer interrupts. My Library's folders offer a search and genres with server 5.15.0; against an older server a folder offers no filters, as before.
+
+### Added
+- A folder page shows the filters applied to it as chips under its actions, as a catalog does, and the bar's search is hinted with the folder shown. While filters narrow a folder, Play all and Enqueue stay in place but disabled, since the server queues the folder whole, and their tooltip says to clear the filters. The shelves at the top of My Library narrow by the same filters, and one that cannot honour them leaves.
+- When an output refuses to take playback, such as one set to Card mixer volume on a sound card without a mixer, the failed switch's toast has a Settings action that opens that output's settings. Until now only the current output had a settings gear, so a refusing output's settings were out of reach until playback stopped.
 
 ### Changed
 - Setup, the server list, the Network step and the time zone setting call the device a streamer, as Settings already do. The server list's button reads Set up a streamer, setup's messages and the Bluetooth permission prompt on iOS and macOS no longer say box, and a streamer that announces no name is listed as Kalinka streamer.
+- While the server picker is open, from Change server, the server sheet or the reconnecting card's scan, the app stops reconnecting to the stored server, so Set up a streamer and its Bluetooth steps are no longer interrupted when that server finishes starting and asks to be set up. Cancel, Back or going elsewhere reconnects to it straight away, and a server that comes back or is picked while the picker is open is checked for setup once it closes.
+
+### Fixed
+- When a different streamer answers at the same address, a folder no longer comes back with the previous streamer's rows.
+- A check for whether the server needs setup no longer opens setup over the server picker, and a server picked while one is running is still checked.
+- Closing the server picker on an offline server no longer brings back a reconnecting card that was dismissed.
+- A double tap on a toast's action runs it once.
 
 ## 0.22.1
 
