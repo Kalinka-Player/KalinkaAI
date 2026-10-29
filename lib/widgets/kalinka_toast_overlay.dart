@@ -76,8 +76,9 @@ class KalinkaToastOverlay extends ConsumerWidget {
 
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final bottomPadding = isTablet ? 0.0 : bottomOffset + bottomInset + 8.0;
+    // A leaving toast's action is gone already, so a second tap can't rerun it.
     Widget card(ToastEntry toast) => IgnorePointer(
-      ignoring: toast.action == null,
+      ignoring: toast.action == null || toast.dismissing,
       child: _ToastCard(
         entry: toast,
         onDismiss: () => ref.read(toastProvider.notifier).dismiss(toast.id),

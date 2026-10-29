@@ -30,7 +30,7 @@ class ToastEntry {
   /// has one place to put a toast.
   final bool inPanel;
 
-  /// A button on the toast. The only part of any toast that takes taps.
+  /// A button on the toast. Only a toast with one takes taps.
   final ToastAction? action;
 
   /// When true the [_ToastCard] widget plays its exit animation.
@@ -130,7 +130,7 @@ class ToastNotifier extends Notifier<List<ToastEntry>> {
 
   /// Takes the toast away now, as its display timer would.
   void dismiss(String id) {
-    if (_isDisposed || !state.any((e) => e.id == id)) return;
+    if (_isDisposed || !state.any((e) => e.id == id && !e.dismissing)) return;
     _timers.remove(id)?.cancel();
     _beginDismiss(id);
   }
