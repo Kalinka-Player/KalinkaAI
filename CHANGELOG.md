@@ -8,6 +8,20 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.23.0
+
+Folder filters, and a fix for a server address taken over by another.
+
+## What's new
+- **A folder's own filters show above its listing**, the same way a catalog's do, and narrow what it lists without leaving the folder.
+- **Play all and Enqueue wait while a folder's filters narrow it**, saying so, since the server queues a folder whole rather than the listing filtered.
+
+## Fixes
+- **A folder's remembered place is no longer carried over to another server answering at the same address.** Only a server that has said who it is keeps a folder's place, so one that takes over an address starts its folders at the top rather than wherever the previous server's user left off.
+
+## Before you upgrade
+It needs no newer server than 0.22.0.
+
 ## 0.22.1
 
 Folders that reopen where they were left, a fast scroller on long lists, pull to reload on every browsing page, and Home's pins kept per streamer. It needs no newer server than 0.22.0; a server older than 4.0.0 keeps its pins under its address, as before.
