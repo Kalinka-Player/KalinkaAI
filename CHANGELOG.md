@@ -8,11 +8,6 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
-## Unreleased
-
-### Changed
-- Setup, the server list, the Network step and the time zone setting call the device a streamer, as Settings already do. The server list's button reads Set up a streamer, setup's messages and the Bluetooth permission prompt on iOS and macOS no longer say box, and a streamer that announces no name is listed as Kalinka streamer.
-
 ## 0.22.1
 
 Folders that reopen where they were left, a fast scroller on long lists, pull to reload on every browsing page, and Home's pins kept per streamer. It needs no newer server than 0.22.0; a server older than 4.0.0 keeps its pins under its address, as before.
