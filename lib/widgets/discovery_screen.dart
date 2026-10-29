@@ -242,7 +242,11 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
                   size: 20,
                   color: KalinkaColors.accentTint,
                 ),
-                label: const _SnugLabel('SET UP A STREAMER'),
+                // Beside Cancel on a 320dp phone it would wrap.
+                label: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('SET UP A STREAMER'),
+                ),
                 onPressed: () async {
                   final endpoint = await Navigator.of(context)
                       .push<ProvisionedEndpoint>(
@@ -846,41 +850,6 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
           ],
         ],
       ),
-    );
-  }
-}
-
-/// [text] on one line, shrunk by up to a tenth where that is enough to fit,
-/// as beside Cancel on a 320dp phone. Past that it wraps, so large system
-/// text stays large.
-class _SnugLabel extends StatelessWidget {
-  final String text;
-
-  const _SnugLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    var style = DefaultTextStyle.of(context).style;
-    if (MediaQuery.boldTextOf(context)) {
-      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
-    }
-    final label = Text(text);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final painter = TextPainter(
-          text: TextSpan(text: text, style: style),
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-          maxLines: 1,
-        )..layout();
-        final width = painter.width;
-        painter.dispose();
-        if (width <= constraints.maxWidth ||
-            width * 0.9 > constraints.maxWidth) {
-          return label;
-        }
-        return FittedBox(fit: BoxFit.scaleDown, child: label);
-      },
     );
   }
 }
