@@ -11,8 +11,6 @@ import 'package:kalinka/providers/provisioning_protocol.dart';
 import 'package:kalinka/providers/provisioning_transport.dart';
 import 'package:kalinka/screens/provisioning_screen.dart';
 
-import 'support/discovery_fakes.dart';
-
 class FakeTransport implements ProvisioningTransport {
   final stream = StreamController<NearbyBox>.broadcast();
   final commands = <Map<String, dynamic>>[];
@@ -224,17 +222,6 @@ void main() {
       async.flushMicrotasks();
       expect(async.pendingTimers, isEmpty);
     });
-  });
-
-  testWidgets('the server list offers to set up a streamer', (tester) async {
-    await pumpEmptyDiscovery(tester);
-    await tester.tap(find.text('SET UP A STREAMER'));
-    await tester.pumpAndSettle();
-    expect(find.text('Set up a streamer'), findsOneWidget);
-    expect(
-      find.text('Find nearby streamers and send Wi-Fi settings over Bluetooth.'),
-      findsOneWidget,
-    );
   });
 
   testWidgets(

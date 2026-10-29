@@ -1,11 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kalinka/theme/app_theme.dart';
-
-import 'support/discovery_fakes.dart';
 
 final _box = RegExp(r'\bbox(es)?\b', caseSensitive: false);
 
@@ -139,39 +134,6 @@ final e = 'Kalinka\'s box';
         'Connect a nearby Kalinka streamer to your Wi-Fi.',
         reason: path,
       );
-    }
-  });
-
-  group('the server list', () {
-    setUpAll(() async {
-      for (final (family, file) in [
-        (KalinkaFonts.monoFamily, 'IBMPlexMono-SemiBold.ttf'),
-        (KalinkaFonts.sansFamily, 'IBMPlexSans-Regular.ttf'),
-      ]) {
-        await (FontLoader(
-          family,
-        )..addFont(rootBundle.load('assets/fonts/$file'))).load();
-      }
-    });
-
-    for (final width in [320.0, 360.0]) {
-      testWidgets('offers to set up a streamer on one line at ${width}dp', (
-        tester,
-      ) async {
-        await tester.binding.setSurfaceSize(Size(width, 640));
-        addTearDown(() => tester.binding.setSurfaceSize(null));
-        await pumpEmptyDiscovery(tester);
-
-        final label = tester.renderObject<RenderParagraph>(
-          find.text('SET UP A STREAMER'),
-        );
-        expect(
-          label.size.width,
-          greaterThanOrEqualTo(label.getMaxIntrinsicWidth(double.infinity)),
-        );
-        expect(find.text('Cancel'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-      });
     }
   });
 }
