@@ -3,6 +3,14 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+/// The one thing worth doing about a toast, offered as a button on it.
+class ToastAction {
+  final String label;
+  final VoidCallback onPressed;
+
+  const ToastAction(this.label, this.onPressed);
+}
+
 /// A single in-app toast notification.
 class ToastEntry {
   final String id;
@@ -22,6 +30,9 @@ class ToastEntry {
   /// has one place to put a toast.
   final bool inPanel;
 
+  /// A button on the toast. The only part of any toast that takes taps.
+  final ToastAction? action;
+
   /// When true the [_ToastCard] widget plays its exit animation.
   /// The entry is removed from the list ~250 ms after this flips.
   final bool dismissing;
@@ -33,6 +44,7 @@ class ToastEntry {
     this.isLoading = false,
     this.compact = false,
     this.inPanel = false,
+    this.action,
     this.dismissing = false,
   });
 
@@ -49,6 +61,7 @@ class ToastEntry {
     isLoading: isLoading ?? this.isLoading,
     compact: compact ?? this.compact,
     inPanel: inPanel,
+    action: action,
     dismissing: dismissing ?? this.dismissing,
   );
 }
@@ -58,6 +71,7 @@ class ToastNotifier extends Notifier<List<ToastEntry>> {
   static const _animationExtraMs = 250;
   static const _successDisplayMs = 2000;
   static const _errorDisplayMs = 5000;
+  static const _actionDisplayMs = 8000;
 
   final Map<String, Timer> _timers = {};
   String? _trackDeletionToastId;
@@ -87,20 +101,38 @@ class ToastNotifier extends Notifier<List<ToastEntry>> {
     return [];
   }
 
-  /// Show a toast. Success toasts dismiss after 2 s; error toasts after 5 s.
+  /// Show a toast. Success toasts dismiss after 2 s; error toasts after 5 s;
+  /// one with an [action] after 8 s, to leave time to reach it.
   ///
   /// Set [inPanel] when the action was taken inside a pane of the tablet
   /// layout, so the toast lands over the player's pane instead of browsing's
   /// corner.
-  void show(String message, {bool isError = false, bool inPanel = false}) {
+  void show(
+    String message, {
+    bool isError = false,
+    bool inPanel = false,
+    ToastAction? action,
+  }) {
     if (_isDisposed) return;
     final id = _appendToast(
       message: message,
       isError: isError,
       inPanel: inPanel,
+      action: action,
     );
-    final displayMs = isError ? _errorDisplayMs : _successDisplayMs;
+    final displayMs = action != null
+        ? _actionDisplayMs
+        : isError
+        ? _errorDisplayMs
+        : _successDisplayMs;
     _restartDisplayTimer(id, displayMs);
+  }
+
+  /// Takes the toast away now, as its display timer would.
+  void dismiss(String id) {
+    if (_isDisposed || !state.any((e) => e.id == id)) return;
+    _timers.remove(id)?.cancel();
+    _beginDismiss(id);
   }
 
   /// Aggregate sequential queue track deletions into a single toast.
@@ -230,6 +262,7 @@ class ToastNotifier extends Notifier<List<ToastEntry>> {
     bool isLoading = false,
     bool compact = false,
     bool inPanel = false,
+    ToastAction? action,
   }) {
     if (_isDisposed) return '';
     final id = '${DateTime.now().millisecondsSinceEpoch}_${_counter++}';
@@ -240,6 +273,7 @@ class ToastNotifier extends Notifier<List<ToastEntry>> {
       isLoading: isLoading,
       compact: compact,
       inPanel: inPanel,
+      action: action,
     );
 
     var list = [...state, entry];

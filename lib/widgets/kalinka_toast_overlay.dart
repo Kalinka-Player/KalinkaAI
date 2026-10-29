@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/click_cursor.dart';
+import 'tap_highlight.dart';
 
 /// Height of the MiniPlayer (not including SafeArea bottom inset).
 const double kMiniPlayerHeight = 72.0;
@@ -49,7 +51,8 @@ enum ToastScope {
 /// screen). On tablet (isTablet: true): toasts appear at bottom-right of
 /// whichever half [scope] assigns them to.
 ///
-/// Wrap in [IgnorePointer] at the call site so toasts never capture taps.
+/// Taps go through to whatever is under a toast, except on a toast with an
+/// action: its card takes them.
 class KalinkaToastOverlay extends ConsumerWidget {
   final bool isTablet;
 
@@ -73,6 +76,13 @@ class KalinkaToastOverlay extends ConsumerWidget {
 
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final bottomPadding = isTablet ? 0.0 : bottomOffset + bottomInset + 8.0;
+    Widget card(ToastEntry toast) => IgnorePointer(
+      ignoring: toast.action == null,
+      child: _ToastCard(
+        entry: toast,
+        onDismiss: () => ref.read(toastProvider.notifier).dismiss(toast.id),
+      ),
+    );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -90,11 +100,8 @@ class KalinkaToastOverlay extends ConsumerWidget {
             ),
             // Compact toasts sit as a right-aligned pill; others stretch.
             child: toast.compact && !isTablet
-                ? Align(
-                    alignment: Alignment.centerRight,
-                    child: _ToastCard(entry: toast),
-                  )
-                : _ToastCard(entry: toast),
+                ? Align(alignment: Alignment.centerRight, child: card(toast))
+                : card(toast),
           ),
         SizedBox(height: bottomPadding),
       ],
@@ -123,9 +130,9 @@ class KalinkaToastHost extends ConsumerWidget {
 
   // The Material is what the text takes its style from; without one in scope
   // MaterialApp's debug fallback strikes a yellow double underline through it.
-  static Widget _layer(Widget overlay) => IgnorePointer(
-    child: Material(type: MaterialType.transparency, child: overlay),
-  );
+  // A transparent one takes no taps of its own.
+  static Widget _layer(Widget overlay) =>
+      Material(type: MaterialType.transparency, child: overlay);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -183,7 +190,10 @@ class KalinkaToastHost extends ConsumerWidget {
 class _ToastCard extends StatefulWidget {
   final ToastEntry entry;
 
-  const _ToastCard({required this.entry});
+  /// Called once the entry's action has run.
+  final VoidCallback onDismiss;
+
+  const _ToastCard({required this.entry, required this.onDismiss});
 
   @override
   State<_ToastCard> createState() => _ToastCardState();
@@ -235,6 +245,7 @@ class _ToastCardState extends State<_ToastCard>
   @override
   Widget build(BuildContext context) {
     final isError = widget.entry.isError;
+    final action = widget.entry.action;
     return FadeTransition(
       opacity: _opacity,
       child: SlideTransition(
@@ -299,7 +310,47 @@ class _ToastCardState extends State<_ToastCard>
                   style: KalinkaTextStyles.toastText,
                 ),
               ),
+              if (action != null) ...[
+                const SizedBox(width: 6),
+                _ToastActionButton(
+                  label: action.label,
+                  onPressed: () {
+                    action.onPressed();
+                    widget.onDismiss();
+                  },
+                ),
+              ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Neutral text button: the toast says what went wrong, this is where to go.
+class _ToastActionButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+
+  const _ToastActionButton({required this.label, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      child: InkWell(
+        onTap: onPressed,
+        mouseCursor: clickCursor(interactive: true),
+        overlayColor: kalinkaOverlay,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            label,
+            style: KalinkaTextStyles.toastText.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),

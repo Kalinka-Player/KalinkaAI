@@ -275,7 +275,12 @@ class RenderersUnsupportedException implements Exception {
 /// [message] is already phrased for the user.
 class RendererSwitchException implements Exception {
   final String message;
-  const RendererSwitchException(this.message);
+
+  /// The renderer itself stood in the way: it refused the session or never
+  /// answered. Its own settings are where a fix would be.
+  final bool byRenderer;
+
+  const RendererSwitchException(this.message, {this.byRenderer = false});
 
   @override
   String toString() => message;
@@ -1231,13 +1236,15 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
       throw RendererSwitchException(e.reason);
     } on DioException catch (e) {
       final data = e.response?.data;
+      final status = e.response?.statusCode;
       throw RendererSwitchException(
         rendererSwitchRefusal(
-          status: e.response?.statusCode,
+          status: status,
           detail: data is Map ? data['detail'] as String? : null,
           rendererId: rendererId,
           rendererName: rendererName,
         ),
+        byRenderer: status == 504,
       );
     }
   }

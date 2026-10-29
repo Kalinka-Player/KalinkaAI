@@ -19,7 +19,7 @@ const _boundaryKey = Key('boundary');
 final _navKey = GlobalKey<NavigatorState>();
 
 /// The app as [KalinkaApp] assembles it: the toast host wrapping the navigator.
-Future<ProviderContainer> _pumpApp(WidgetTester tester) async {
+Future<ProviderContainer> _pumpApp(WidgetTester tester, {Widget? home}) async {
   final container = ProviderContainer();
   addTearDown(container.dispose);
   await tester.pumpWidget(
@@ -30,7 +30,7 @@ Future<ProviderContainer> _pumpApp(WidgetTester tester) async {
         child: MaterialApp(
           navigatorKey: _navKey,
           builder: (_, child) => KalinkaToastHost(child: child!),
-          home: const Scaffold(body: SizedBox.expand()),
+          home: home ?? const Scaffold(body: SizedBox.expand()),
         ),
       ),
     ),
@@ -129,6 +129,58 @@ void main() {
         tester.renderObject<RenderParagraph>(find.text(_busy)).text as TextSpan;
     expect(span.style?.decoration ?? TextDecoration.none, TextDecoration.none);
     expect(span.style?.fontFamily, KalinkaFonts.sansFamily);
+    await _retireToast(tester);
+  });
+
+  testWidgets('taps go through a toast to whatever is under it', (
+    tester,
+  ) async {
+    var taps = 0;
+    final toasts = await _pumpApp(
+      tester,
+      home: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => taps++,
+        child: const SizedBox.expand(),
+      ),
+    );
+
+    toasts.read(toastProvider.notifier).show(_busy, isError: true);
+    await tester.pumpAndSettle();
+    await tester.tapAt(tester.getCenter(_card(_busy)));
+
+    expect(taps, 1);
+    await _retireToast(tester);
+  });
+
+  testWidgets('a toast\'s action runs and takes the toast away', (
+    tester,
+  ) async {
+    var taps = 0;
+    var actions = 0;
+    final toasts = await _pumpApp(
+      tester,
+      home: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => taps++,
+        child: const SizedBox.expand(),
+      ),
+    );
+
+    toasts
+        .read(toastProvider.notifier)
+        .show(
+          _busy,
+          isError: true,
+          action: ToastAction('Settings', () => actions++),
+        );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(actions, 1);
+    expect(taps, 0, reason: 'the action is not also a tap on the screen');
+    expect(find.text(_busy), findsNothing);
     await _retireToast(tester);
   });
 

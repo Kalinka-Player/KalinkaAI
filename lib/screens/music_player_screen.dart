@@ -1457,11 +1457,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                             left: 20,
                             right: 20,
                             bottom: 24,
-                            child: const IgnorePointer(
-                              child: KalinkaToastOverlay(
-                                isTablet: true,
-                                scope: ToastScope.panel,
-                              ),
+                            child: const KalinkaToastOverlay(
+                              isTablet: true,
+                              scope: ToastScope.panel,
                             ),
                           ),
                         ],
