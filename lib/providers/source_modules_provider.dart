@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' show Color, IconData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
+import '../data_model/module_icons.dart';
 import '../utils/schema_icons.dart';
 import 'modules_state_provider.dart';
 
@@ -14,6 +15,7 @@ class SourceDisplayInfo {
   /// Drawn in place of [abbreviation] where the source declares an icon this
   /// app has.
   final IconData? icon;
+  final ModuleIcons? icons;
   final Color color;
 
   /// The server's own source, which wears no badge: it is the app itself
@@ -25,6 +27,7 @@ class SourceDisplayInfo {
     required this.title,
     required this.abbreviation,
     this.icon,
+    this.icons,
     required this.color,
     this.builtin = false,
   });
@@ -133,6 +136,7 @@ final sourceDisplayInfoProvider = Provider<Map<String, SourceDisplayInfo>>((
       title: m.title,
       abbreviation: m.title.isNotEmpty ? m.title[0].toUpperCase() : '?',
       icon: iconNamed(m.icon),
+      icons: m.icons,
       color: colorForSourceName(m.name),
       builtin: m.builtin,
     );

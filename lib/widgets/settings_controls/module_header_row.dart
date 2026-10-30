@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../../data_model/module_icons.dart';
+import '../module_artwork.dart';
 import 'settings_toggle.dart';
 
 /// Status of a module/device.
@@ -114,6 +116,7 @@ class ModuleHeaderRow extends StatelessWidget {
   final String title;
   final String subtitle;
   final IconData icon;
+  final ModuleIcons? icons;
   final Color iconColor;
   final ModuleStatus? status;
   final bool expanded;
@@ -134,6 +137,7 @@ class ModuleHeaderRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.icon,
+    this.icons,
     required this.iconColor,
     this.status,
     required this.expanded,
@@ -182,7 +186,13 @@ class ModuleHeaderRow extends StatelessWidget {
               color: iconColor.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 15, color: iconColor),
+            child: Center(
+              child: ModuleArtwork(
+                icons: icons,
+                size: 26,
+                fallback: Icon(icon, size: 15, color: iconColor),
+              ),
+            ),
           ),
           const SizedBox(width: 10),
           // Module info

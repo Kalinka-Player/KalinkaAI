@@ -5,6 +5,8 @@
 // to render what it receives — no re-mapping, no name-based heuristics, no
 // hard-coded labels or banners.
 
+import 'module_icons.dart';
+
 /// Two-tier UI prominence, matching the backend.
 ///
 /// * [simple] — appears on the structured settings page (the user-facing
@@ -467,6 +469,7 @@ class ModuleSpec {
   final String title;
   final String? icon;
   final String? iconColor;
+  final ModuleIcons? icons;
   final List<String> previewFields;
   final List<BannerSpec> banners;
   // Top-level scalar fields of the module's config. Backend hoists these
@@ -482,6 +485,7 @@ class ModuleSpec {
     required this.title,
     this.icon,
     this.iconColor,
+    this.icons,
     this.previewFields = const [],
     this.banners = const [],
     this.fields = const [],
@@ -495,6 +499,7 @@ class ModuleSpec {
     title: j['title'] as String,
     icon: j['icon'] as String?,
     iconColor: j['icon_color'] as String?,
+    icons: ModuleIcons.tryParse(j['icons']),
     previewFields: ((j['preview_fields'] as List?) ?? [])
         .map((e) => e.toString())
         .toList(),

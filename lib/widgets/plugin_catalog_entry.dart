@@ -11,6 +11,7 @@ import '../providers/plugin_state.dart';
 import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
 import 'configuration_appearance.dart';
+import 'module_artwork.dart';
 import 'settings_controls/module_header_row.dart';
 import 'kalinka_button.dart';
 import 'settings_controls/settings_toggle.dart';
@@ -162,7 +163,18 @@ class PluginRow extends StatelessWidget {
     final body = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ConfigurationItemIcon(icon: pluginIcon(plugin, state)),
+        ConfigurationItemIcon(
+          icon: pluginIcon(plugin, state),
+          artwork: ModuleArtwork(
+            icons: state.live?.icons,
+            size: 40,
+            fallback: Icon(
+              pluginIcon(plugin, state),
+              size: 32,
+              color: KalinkaColors.textSecondary,
+            ),
+          ),
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../theme/app_theme.dart';
+import '../../data_model/module_icons.dart';
+import '../module_artwork.dart';
 import '../../utils/click_cursor.dart';
 import '../loading_shimmer.dart';
 
@@ -12,6 +14,7 @@ class CatalogTile extends StatelessWidget {
   final String title;
   final String? subtitle;
   final IconData icon;
+  final ModuleIcons? icons;
   final Color? tint;
   final VoidCallback? onTap;
 
@@ -20,6 +23,7 @@ class CatalogTile extends StatelessWidget {
     required this.title,
     this.subtitle,
     required this.icon,
+    this.icons,
     this.tint,
     required this.onTap,
   });
@@ -32,7 +36,11 @@ class CatalogTile extends StatelessWidget {
       onTap: onTap,
       child: ListTile(
         enabled: onTap != null,
-        leading: Icon(icon, color: tint, size: 24 * scale),
+        leading: ModuleArtwork(
+          icons: icons,
+          size: 24 * scale,
+          fallback: Icon(icon, color: tint, size: 24 * scale),
+        ),
         title: Text(
           title,
           style: _scaled(KalinkaTextStyles.trackRowTitle, scale),

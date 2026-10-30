@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../data_model/presentation_schema.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/app_theme.dart';
@@ -8,6 +9,7 @@ import '../settings_controls/settings_card.dart';
 import '../settings_controls/settings_toggle.dart';
 import 'onboarding_fields.dart';
 import 'onboarding_step_scaffold.dart';
+import '../module_artwork.dart';
 
 /// Wizard step: choose which sources feed the library — the on/off half of
 /// the question. What each chosen source needs comes on the next step, so
@@ -86,7 +88,13 @@ class _SourceRow extends ConsumerWidget {
               color: KalinkaColors.surfaceOverlay,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 18, color: iconColor),
+            child: Center(
+              child: ModuleArtwork(
+                icons: module.icons,
+                size: 28,
+                fallback: Icon(icon, size: 18, color: iconColor),
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
