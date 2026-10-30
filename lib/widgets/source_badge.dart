@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import '../providers/source_modules_provider.dart';
 import '../theme/app_theme.dart';
+import 'module_artwork.dart';
 
 enum SourceBadgeSize { standard, small }
 
@@ -88,12 +89,17 @@ class SourceBadge extends ConsumerWidget {
           borderRadius: radius,
         ),
         // The icon takes the letter's height, so a row of badges lines up.
-        child: _SourceMark(
-          icon: info.icon,
-          letter: info.abbreviation,
-          letterSize: fs,
-          iconSize: fs,
-          color: color,
+        child: ModuleArtwork(
+          icons: info.icons,
+          small: true,
+          size: MediaQuery.textScalerOf(context).scale(fs),
+          fallback: _SourceMark(
+            icon: info.icon,
+            letter: info.abbreviation,
+            letterSize: fs,
+            iconSize: fs,
+            color: color,
+          ),
         ),
       ),
     );
@@ -130,12 +136,16 @@ class SourceTile extends ConsumerWidget {
           border: Border.all(color: color.withValues(alpha: 0.30), width: 1),
           borderRadius: BorderRadius.circular(5),
         ),
-        child: _SourceMark(
-          icon: info?.icon,
-          letter: letter,
-          letterSize: size / 2,
-          iconSize: size * 0.6,
-          color: color,
+        child: ModuleArtwork(
+          icons: info?.icons,
+          size: size * 0.8,
+          fallback: _SourceMark(
+            icon: info?.icon,
+            letter: letter,
+            letterSize: size / 2,
+            iconSize: size * 0.6,
+            color: color,
+          ),
         ),
       ),
     );
