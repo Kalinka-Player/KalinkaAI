@@ -166,7 +166,7 @@ class PluginRow extends StatelessWidget {
         ConfigurationItemIcon(
           icon: pluginIcon(plugin, state),
           artwork: ModuleArtwork(
-            icons: state.live?.icons,
+            icons: state.live?.icons ?? state.module?.icons ?? plugin.icons,
             size: 40,
             fallback: Icon(
               pluginIcon(plugin, state),

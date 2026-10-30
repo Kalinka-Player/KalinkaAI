@@ -7,11 +7,14 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/module_icons.dart';
+import 'package:kalinka/data_model/plugin_catalog.dart';
 import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/providers/module_icon_cache.dart';
+import 'package:kalinka/providers/plugin_state.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/widgets/module_artwork.dart';
+import 'package:kalinka/widgets/plugin_catalog_entry.dart';
 import 'package:kalinka/widgets/source_badge.dart';
 
 const _icons = ModuleIcons(
@@ -73,7 +76,7 @@ void main() {
     (Brightness.light, 3.0),
   ]) {
     testWidgets(
-      'wide attribution renders at 10/11 dp, $brightness, text scale $scale',
+      'wide attribution renders at 18/20 dp without padding, $brightness, text scale $scale',
       (tester) async {
         final calls = <Uri>[];
         await tester.binding.setSurfaceSize(const Size(320, 850));
@@ -146,7 +149,7 @@ void main() {
         final marks = tester
             .widgetList<ModuleArtwork>(find.byType(ModuleArtwork))
             .toList();
-        expect(marks.map((mark) => mark.size), [11 * scale, 10 * scale]);
+        expect(marks.map((mark) => mark.size), [20 * scale, 18 * scale]);
         for (final element in find.byType(ModuleArtwork).evaluate()) {
           final mark = element.widget as ModuleArtwork;
           final size = tester.getSize(find.byWidget(mark));
@@ -167,6 +170,181 @@ void main() {
         final rendered = tester.widgetList<RawImage>(find.byType(RawImage));
         expect(rendered, hasLength(2));
         expect(rendered.every((image) => image.image != null), isTrue);
+        final containers = tester.widgetList<Container>(
+          find.descendant(
+            of: find.byType(SourceBadge),
+            matching: find.byType(Container),
+          ),
+        );
+        expect(
+          containers.every((container) => container.decoration == null),
+          isTrue,
+        );
+        expect(
+          containers.every((container) => container.padding == EdgeInsets.zero),
+          isTrue,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'minimum artwork height fits attribution and small source tiles',
+    (tester) async {
+      final icons = ModuleIcons.tryParse({
+        'small': {
+          'url': '/small',
+          'mime_type': 'image/png',
+          'min_height': 21,
+          'aspect_ratio': 1.1,
+        },
+        'standard': {
+          'url': '/standard',
+          'mime_type': 'image/png',
+          'min_height': 21,
+          'aspect_ratio': 1.1,
+        },
+      })!;
+      expect(icons.small.toJson()['min_height'], 21);
+      for (final height in [-1, 65, double.nan, double.infinity]) {
+        expect(
+          ModuleIconImage.tryParse({
+            'url': '/small',
+            'mime_type': 'image/png',
+            'min_height': height,
+          }),
+          isNull,
+        );
+      }
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            urlResolverProvider.overrideWithValue(UrlResolver('http://server')),
+            moduleIconCacheProvider.overrideWithValue(
+              ModuleIconCache(
+                client: MockClient((_) async => http.Response.bytes(_png, 200)),
+              ),
+            ),
+            sourceModulesProvider.overrideWith(
+              (ref) => [
+                ModuleInfo(
+                  name: 'spotify',
+                  title: 'Spotify',
+                  icons: icons,
+                  enabled: true,
+                  state: ModuleState.ready,
+                ),
+                ModuleInfo(
+                  name: 'other',
+                  title: 'Other',
+                  enabled: true,
+                  state: ModuleState.ready,
+                ),
+              ],
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Column(
+                children: [
+                  SourceBadge(
+                    entityId: 'kalinka:spotify:track:1',
+                    size: SourceBadgeSize.small,
+                  ),
+                  SourceTile(source: 'spotify', size: 18),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final element in find.byType(ModuleArtwork).evaluate()) {
+        final size = tester.getSize(find.byWidget(element.widget));
+        expect(size.height, 21);
+        expect(size.width, closeTo(23.1, 0.001));
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final installed in [false, true]) {
+    testWidgets(
+      'catalog row uses ${installed ? 'installed' : 'catalog'} artwork',
+      (tester) async {
+        final plugin = CatalogPlugin.fromJson({
+          'id': 'example',
+          'name': 'Example',
+          'description': 'Music source',
+          'type': 'input_module',
+          'tier': 'official',
+          'maturity': 'stable',
+          'delivery': 'independent',
+          'icons': {
+            'small': {
+              'url': 'https://catalog.example/icon.svg',
+              'mime_type': 'image/svg+xml',
+            },
+            'standard': {
+              'url': 'https://catalog.example/icon.svg',
+              'mime_type': 'image/svg+xml',
+            },
+            'monochrome': true,
+          },
+        });
+        final requests = <Uri>[];
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              urlResolverProvider.overrideWithValue(
+                UrlResolver('http://server'),
+              ),
+              moduleIconCacheProvider.overrideWithValue(
+                ModuleIconCache(
+                  client: MockClient((request) async {
+                    requests.add(request.url);
+                    return http.Response('', 404);
+                  }),
+                ),
+              ),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: PluginRow(
+                  plugin: plugin,
+                  state: PluginState(
+                    live: installed
+                        ? ModuleInfo(
+                            name: 'example',
+                            title: 'Example',
+                            icons: _icons,
+                            enabled: false,
+                            state: ModuleState.disabled,
+                          )
+                        : null,
+                  ),
+                  actions: PluginEntryActions(
+                    onEnabledChanged: (_) {},
+                    onOpenSettings: () {},
+                    onOpenAbout: () {},
+                    onOperation: (_) {},
+                    onDismissFailure: () {},
+                    canManage: false,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(requests, [
+          Uri.parse(
+            installed
+                ? 'http://server/standard'
+                : 'https://catalog.example/icon.svg',
+          ),
+        ]);
         expect(tester.takeException(), isNull);
       },
     );

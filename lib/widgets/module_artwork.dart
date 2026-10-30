@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -26,10 +28,13 @@ class ModuleArtwork extends ConsumerWidget {
     if (artwork == null) return fallback;
     final icon = small ? artwork.small : artwork.standard;
     final url = ref.watch(urlResolverProvider).abs(icon.url);
-    final width = small ? size * icon.aspectRatio : size;
+    final height = math.max(size, icon.minHeight);
+    final width = small
+        ? height * icon.aspectRatio
+        : math.max(height, icon.minHeight * icon.aspectRatio);
     return SizedBox(
       width: width,
-      height: size,
+      height: height,
       child: FutureBuilder(
         future: ref
             .watch(moduleIconCacheProvider)
@@ -42,7 +47,7 @@ class ModuleArtwork extends ConsumerWidget {
           return Image.memory(
             snapshot.requireData,
             width: width,
-            height: size,
+            height: height,
             fit: BoxFit.contain,
             excludeFromSemantics: true,
             color: artwork.monochrome

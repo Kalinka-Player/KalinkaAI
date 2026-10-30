@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -41,14 +43,14 @@ bool sourceBadgeVisible(WidgetRef ref, String entityId) {
   return info != null && !info.builtin;
 }
 
-/// Displays a source attribution badge: a pill holding the source's icon, or
-/// the first letter of its name where it declares none, in the source colour.
+/// Displays source artwork or its fallback icon without surrounding chrome.
+/// Sources without an icon use their initial in a coloured pill.
 ///
 /// Automatically hides when only one source is configured — with nothing to
 /// tell apart, a badge is noise.
 ///
-/// [size.standard]: 11dp font, 5dp h-padding, 2dp v-padding (list rows, now-playing)
-/// [size.small]:    10dp font, 4dp h-padding, 1.5dp v-padding (queue rows, tiles)
+/// Icons use 20dp in list rows and now-playing, 18dp in queues and tiles.
+/// Letter fallbacks retain their compact pill padding.
 class SourceBadge extends ConsumerWidget {
   final String entityId;
   final SourceBadgeSize size;
@@ -71,8 +73,10 @@ class SourceBadge extends ConsumerWidget {
     final info = ref.watch(sourceDisplayInfoProvider)[source]!;
 
     final color = info.color;
+    final hasIcon = info.icons != null || info.icon != null;
 
     final double fs = size == SourceBadgeSize.small ? 10.0 : 11.0;
+    final double iconSize = size == SourceBadgeSize.small ? 18.0 : 20.0;
     final double px = size == SourceBadgeSize.small ? 4.0 : 5.0;
     final double py = size == SourceBadgeSize.small ? 1.5 : 2.0;
     final BorderRadius radius =
@@ -82,23 +86,29 @@ class SourceBadge extends ConsumerWidget {
       label: info.title,
       excludeSemantics: true,
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: px, vertical: py),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.14),
-          border: Border.all(color: color.withValues(alpha: 0.30), width: 1),
-          borderRadius: radius,
-        ),
-        // The icon takes the letter's height, so a row of badges lines up.
+        padding: hasIcon
+            ? EdgeInsets.zero
+            : EdgeInsets.symmetric(horizontal: px, vertical: py),
+        decoration: hasIcon
+            ? null
+            : BoxDecoration(
+                color: color.withValues(alpha: 0.14),
+                border: Border.all(
+                  color: color.withValues(alpha: 0.30),
+                  width: 1,
+                ),
+                borderRadius: radius,
+              ),
         child: ModuleArtwork(
           icons: info.icons,
           small: true,
-          size: MediaQuery.textScalerOf(context).scale(fs),
+          size: MediaQuery.textScalerOf(context).scale(iconSize),
           fallback: _SourceMark(
             icon: info.icon,
             letter: info.abbreviation,
             letterSize: fs,
-            iconSize: fs,
-            color: color,
+            iconSize: iconSize,
+            color: hasIcon ? Theme.of(context).colorScheme.onSurface : color,
           ),
         ),
       ),
@@ -122,29 +132,41 @@ class SourceTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final info = ref.watch(sourceDisplayInfoProvider)[source];
     final color = info?.color ?? colorForSourceName(source);
+    final hasIcon = info?.icons != null || info?.icon != null;
+    final icon = info?.icons?.standard;
+    final height = math.max(size, icon?.minHeight ?? 0);
+    final width = math.max(
+      size,
+      (icon?.minHeight ?? 0) * (icon?.aspectRatio ?? 1),
+    );
     final letter =
         info?.abbreviation ?? (source.isEmpty ? '?' : source[0].toUpperCase());
     return Semantics(
       label: info?.title ?? source,
       excludeSemantics: true,
       child: Container(
-        width: size,
-        height: size,
+        width: width,
+        height: height,
         alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.14),
-          border: Border.all(color: color.withValues(alpha: 0.30), width: 1),
-          borderRadius: BorderRadius.circular(5),
-        ),
+        decoration: hasIcon
+            ? null
+            : BoxDecoration(
+                color: color.withValues(alpha: 0.14),
+                border: Border.all(
+                  color: color.withValues(alpha: 0.30),
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(5),
+              ),
         child: ModuleArtwork(
           icons: info?.icons,
-          size: size * 0.8,
+          size: size,
           fallback: _SourceMark(
             icon: info?.icon,
             letter: letter,
             letterSize: size / 2,
-            iconSize: size * 0.6,
-            color: color,
+            iconSize: size,
+            color: hasIcon ? Theme.of(context).colorScheme.onSurface : color,
           ),
         ),
       ),

@@ -3,11 +3,13 @@ class ModuleIconImage {
   final String url;
   final String mimeType;
   final double aspectRatio;
+  final double minHeight;
 
   const ModuleIconImage({
     required this.url,
     required this.mimeType,
     this.aspectRatio = 1,
+    this.minHeight = 0,
   });
 
   static ModuleIconImage? tryParse(dynamic value) {
@@ -15,19 +17,25 @@ class ModuleIconImage {
     final url = value['url'];
     final mime = value['mime_type'];
     final ratio = value['aspect_ratio'] ?? 1;
+    final minHeight = value['min_height'] ?? 0;
     if (url is! String ||
         url.isEmpty ||
         (mime != 'image/png' && mime != 'image/svg+xml') ||
         ratio is! num ||
         !ratio.isFinite ||
         ratio <= 0 ||
-        ratio > 8) {
+        ratio > 8 ||
+        minHeight is! num ||
+        !minHeight.isFinite ||
+        minHeight < 0 ||
+        minHeight > 64) {
       return null;
     }
     return ModuleIconImage(
       url: url,
       mimeType: mime,
       aspectRatio: ratio.toDouble(),
+      minHeight: minHeight.toDouble(),
     );
   }
 
@@ -35,6 +43,7 @@ class ModuleIconImage {
     'url': url,
     'mime_type': mimeType,
     'aspect_ratio': aspectRatio,
+    'min_height': minHeight,
   };
 }
 
