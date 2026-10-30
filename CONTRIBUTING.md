@@ -10,6 +10,14 @@ Changes are reviewed and tested to the same standard however they were produced.
 
 If AI assistance played a significant part in a pull request you send, a note in the description is welcome — it helps direct review.
 
+## Which pull requests are taken
+
+Issues are welcome, on the [issue forms](https://github.com/Kalinka-Player/KalinkaAI/issues/new/choose). Pull requests are taken only for an open issue labelled [`help wanted`](https://github.com/Kalinka-Player/KalinkaAI/labels/help%20wanted). That label marks what needs someone else's hands, usually hardware the maintainer doesn't have, such as an iPhone, iPad or Mac. Everything else is fixed by Kalinka Bot, which works through the same issue list, so a pull request for it would duplicate work already planned.
+
+If the issue you want to fix isn't labelled `help wanted`, or there is no issue yet, open one or comment on it asking for the label. Once it has it, send the pull request with `Fixes #<number>` in its description. A pull request that doesn't fix a `help wanted` issue is closed automatically.
+
+The description must show the change was tested on the device the issue is about: which device, OS and version it ran on, what you checked, and the evidence. That is a screenshot or screen recording for a change to something you see, and logs or terminal output otherwise.
+
 ## Sending a change
 
 Use Flutter **3.47.6** (Dart **3.13**) to match CI, and the checked-in Gradle wrapper for Android builds.
