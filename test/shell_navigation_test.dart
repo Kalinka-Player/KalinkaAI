@@ -646,9 +646,7 @@ void main() {
         expect(tester.getSize(resultsShortcut), const Size(48, 48));
       }
       await capture('$name-results');
-      final invitation = find.byKey(
-        const ValueKey('home-pin-hint-customise'),
-      );
+      final invitation = find.byKey(const ValueKey('home-pin-hint-customise'));
       await tester.scrollUntilVisible(
         invitation,
         160,
@@ -693,4 +691,73 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  // The window the desktop app opens at is too short for every item: the
+  // rest go behind More, from the foot up, rather than the rail scrolling.
+  testWidgets('a short rail folds what does not fit behind More', (
+    tester,
+  ) async {
+    final container = await _pump(tester, size: const Size(1024, 637));
+    await tester.pumpAndSettle();
+    final rail = find
+        .descendant(
+          of: find.byType(ShellNavigation),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    expect(tester.state<ScrollableState>(rail).position.maxScrollExtent, 0);
+    for (final id in [
+      'home',
+      'results',
+      'source-localfiles',
+      'source-tidal',
+      'source-jamendo',
+      'more',
+    ]) {
+      expect(_nav(id).hitTestable(), findsOneWidget, reason: id);
+    }
+    const folded = ['collections', 'configuration', 'changeServer'];
+    for (final id in folded) {
+      expect(_nav(id), findsNothing, reason: id);
+    }
+
+    await tester.tap(_nav('more'));
+    await tester.pumpAndSettle();
+    for (final id in folded) {
+      expect(_nav(id).hitTestable(), findsOneWidget, reason: id);
+    }
+    // Level with More, past the rail's edge.
+    final shelf = find
+        .ancestor(of: _nav('collections'), matching: find.byType(Material))
+        .first;
+    expect(
+      tester.getCenter(shelf).dy,
+      closeTo(tester.getCenter(_nav('more')).dy, 0.5),
+    );
+    expect(
+      tester.getRect(shelf).left,
+      greaterThan(
+        tester.getRect(find.byKey(const ValueKey('navigation-rail'))).right,
+      ),
+    );
+
+    await tester.tap(_nav('collections'));
+    await tester.pumpAndSettle();
+    expect(
+      container.read(searchSessionProvider).destination,
+      BrowseDestination.collections,
+    );
+    expect(_nav('collections'), findsNothing);
+    // The destination shown is behind it.
+    expect(
+      find.descendant(
+        of: _nav('more'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Semantics && widget.properties.selected == true,
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

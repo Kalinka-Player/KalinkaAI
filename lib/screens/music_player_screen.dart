@@ -370,6 +370,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         !_serverBusy,
     onNavigate: _navigate,
     onAction: _onShellAction,
+    // The phone's player is a route above the rail's shelf, so it would hide
+    // it; it goes, as it does for the rest of the rail.
+    onMore: _closeExpandedPlayer,
   );
 
   void _onShellAction(ShellAction action) {
