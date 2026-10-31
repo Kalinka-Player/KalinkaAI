@@ -104,7 +104,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     final durationMs = ref.read(nowPlayingDurationMsProvider);
     final urlResolver = ref.read(urlResolverProvider);
 
-    final imageUrl = currentTrack?.album?.image?.large;
+    final imageUrl = currentTrack?.artwork?.largest;
     final resolvedImageUrl = imageUrl != null
         ? urlResolver.abs(imageUrl)
         : null;

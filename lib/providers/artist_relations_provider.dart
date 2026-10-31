@@ -35,5 +35,4 @@ final artistPortraitProvider = FutureProvider.family<String?, String>((
   return imagePathOf(item.image);
 });
 
-String? imagePathOf(AlbumImage? image) =>
-    image?.large ?? image?.small ?? image?.thumbnail;
+String? imagePathOf(AlbumImage? image) => image?.largest;

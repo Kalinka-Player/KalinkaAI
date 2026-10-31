@@ -35,8 +35,7 @@ class TrackThumb extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final path =
-        item.image?.small ?? item.image?.thumbnail ?? item.image?.large;
+    final path = item.image?.smallest;
     final stand = ProceduralAlbumArt(trackId: item.id, size: size);
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),

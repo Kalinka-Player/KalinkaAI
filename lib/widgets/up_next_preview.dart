@@ -256,8 +256,7 @@ class _UpcomingTrack extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final image = track.album?.image;
-    final url = image?.small ?? image?.thumbnail ?? image?.large;
+    final url = track.artwork?.smallest;
     final resolved = url == null
         ? null
         : ref.watch(urlResolverProvider).abs(url);
