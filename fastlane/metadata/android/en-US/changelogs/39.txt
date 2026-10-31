@@ -1,4 +1,3 @@
-- Music sources shown by their own logos (server 5.16.0)
+- Support for custom plugin icons, shown beside tracks, on Home, on the rail and in the plugin catalog (server 5.16.0)
 - The album's year on its page
 - The rail folds behind More instead of scrolling
-- Home lists each source with its icon
