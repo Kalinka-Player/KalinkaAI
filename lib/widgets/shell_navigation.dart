@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/box_control_provider.dart';
+import '../data_model/module_icons.dart';
 import '../providers/catalog_sources_provider.dart';
 import '../providers/collections_provider.dart';
 import '../providers/connection_state_provider.dart';
@@ -15,6 +16,7 @@ import '../providers/supervisor_api.dart';
 import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
 import 'measure_size.dart';
+import 'module_artwork.dart';
 
 enum ShellDestination { home, results, source, collections, configuration }
 
@@ -153,6 +155,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
         iconColor: source == null
             ? null
             : colorForSourceName(source.module.name),
+        icons: source?.module.icons,
         selected: selected,
         extended: extended,
         onPressed: enabled && available
@@ -590,6 +593,7 @@ class _NavigationButton extends StatelessWidget {
   final String? compactLabel;
   final String? tooltip;
   final IconData icon;
+  final ModuleIcons? icons;
 
   /// The icon's own colour while it can be followed; null takes the label's.
   final Color? iconColor;
@@ -603,6 +607,7 @@ class _NavigationButton extends StatelessWidget {
     this.compactLabel,
     this.tooltip,
     required this.icon,
+    this.icons,
     this.iconColor,
     required this.selected,
     required this.extended,
@@ -612,7 +617,15 @@ class _NavigationButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final glyph = ExcludeSemantics(
-      child: Icon(icon, size: 24, color: onPressed == null ? null : iconColor),
+      child: ModuleArtwork(
+        icons: icons,
+        size: 24,
+        fallback: Icon(
+          icon,
+          size: 24,
+          color: onPressed == null ? null : iconColor,
+        ),
+      ),
     );
     final text = ExcludeSemantics(
       child: Text(

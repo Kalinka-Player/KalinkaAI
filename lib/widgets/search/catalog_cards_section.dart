@@ -74,6 +74,7 @@ class CatalogCardsSection extends ConsumerWidget {
                     CatalogTile(
                       key: ValueKey('catalog-source-${source.module.name}'),
                       title: source.module.title,
+                      icons: source.module.icons,
                       icon:
                           iconNamed(source.module.icon) ??
                           Icons.library_music_outlined,

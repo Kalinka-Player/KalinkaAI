@@ -1,4 +1,5 @@
 import 'plugin_compatibility.dart';
+import 'module_icons.dart';
 
 /// Display metadata only. No identity, compatibility or install decisions are
 /// inferred from names, version strings or a plugin's official/unofficial tier.
@@ -45,6 +46,7 @@ class CatalogPlugin {
   /// One short line for its row, where the catalog has one. `{player}` stands
   /// for the streamer it runs on.
   final String? summary;
+  final ModuleIcons? icons;
 
   /// What it lets people do, by name: `browse`, `direct_playback`.
   final List<String> provides;
@@ -65,6 +67,7 @@ class CatalogPlugin {
     required this.license,
     required this.distribution,
     this.summary,
+    this.icons,
     this.provides = const [],
     this.source,
     this.models = const [],
@@ -88,6 +91,7 @@ class CatalogPlugin {
       license: json['license'] as String? ?? 'Not supplied',
       distribution: json['distribution'] as String? ?? '',
       summary: json['summary'] as String?,
+      icons: ModuleIcons.tryParse(json['icons']),
       provides: _strings(json['provides']),
       source: _publicLink(_map(json['source'])['repository']),
       models: _strings(support['models']),

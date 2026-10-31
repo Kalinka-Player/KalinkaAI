@@ -809,6 +809,7 @@ class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
             title: m.title,
             subtitle: subtitle,
             icon: icon,
+            icons: live?.icons ?? m.icons,
             iconColor: color,
             status: status,
             expanded: _expanded,

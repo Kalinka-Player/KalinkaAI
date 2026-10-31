@@ -70,7 +70,8 @@ class ChangedSettingLabel extends StatelessWidget {
 /// The same icon tile for every row on the Configuration overview.
 class ConfigurationItemIcon extends StatelessWidget {
   final IconData icon;
-  const ConfigurationItemIcon({super.key, required this.icon});
+  final Widget? artwork;
+  const ConfigurationItemIcon({super.key, required this.icon, this.artwork});
 
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
@@ -81,7 +82,10 @@ class ConfigurationItemIcon extends StatelessWidget {
         color: KalinkaColors.surfaceElevated,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Icon(icon, size: 32, color: KalinkaColors.textSecondary),
+      child: Center(
+        child:
+            artwork ?? Icon(icon, size: 32, color: KalinkaColors.textSecondary),
+      ),
     ),
   );
 }

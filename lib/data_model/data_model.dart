@@ -1,4 +1,5 @@
 import '../utils/html_unescape.dart';
+import 'module_icons.dart';
 
 enum PlayerStateType { stopped, playing, paused, buffering, error }
 
@@ -1652,6 +1653,7 @@ class ModuleInfo {
   /// The material icon name the module's config declares for it, drawn on
   /// its badge in place of its letter; null where it declares none.
   final String? icon;
+  final ModuleIcons? icons;
   final bool enabled;
   final ModuleState state;
 
@@ -1684,6 +1686,7 @@ class ModuleInfo {
     required this.name,
     required this.title,
     this.icon,
+    this.icons,
     required this.enabled,
     required this.state,
     this.message,
@@ -1699,6 +1702,7 @@ class ModuleInfo {
     name: json["name"],
     title: json["title"],
     icon: json["icon"] as String?,
+    icons: ModuleIcons.tryParse(json['icons']),
     enabled: json["enabled"],
     state: ModuleStateExtension.fromValue(json["state"]),
     message: json["error_message"] as String?,
@@ -1718,6 +1722,7 @@ class ModuleInfo {
     "name": name,
     "title": title,
     if (icon != null) "icon": icon,
+    if (icons != null) "icons": icons!.toJson(),
     "enabled": enabled,
     "state": ModuleStateExtension.toValue(state),
     if (message != null) "error_message": message,
@@ -1761,6 +1766,7 @@ class ModulesAndDevices {
       name: m.name,
       title: m.title,
       icon: m.icon,
+      icons: m.icons,
       enabled: m.enabled,
       state: m.state,
       message: m.message,
