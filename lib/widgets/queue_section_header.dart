@@ -9,6 +9,10 @@ class QueueSectionHeader extends StatelessWidget {
   static const double verticalPadding = 8;
   static const double height = 46;
 
+  // Don't inherit the label's weight/tracking.
+  static final TextStyle _suffixStyle = KalinkaTextStyles.trackCountBadge
+      .copyWith(fontWeight: FontWeight.w400, letterSpacing: 0);
+
   final String label;
   final int? trackCount;
   final bool showShuffleBadge;
@@ -49,13 +53,24 @@ class QueueSectionHeader extends StatelessWidget {
                 Expanded(
                   child: Row(
                     children: [
+                      // One paragraph, so the suffix gets all the room the
+                      // label leaves and truncates before the label does.
                       Flexible(
-                        flex: 2,
-                        child: Text(
-                          label,
-                          style: KalinkaTextStyles.sectionHeader,
+                        child: Text.rich(
+                          TextSpan(
+                            text: label,
+                            style: KalinkaTextStyles.sectionHeader,
+                            children: [
+                              if (suffix != null && suffix!.isNotEmpty)
+                                TextSpan(
+                                  text: ' · ${suffix!}',
+                                  style: _suffixStyle,
+                                ),
+                            ],
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
+                          softWrap: false,
                         ),
                       ),
                       if (trackCount != null) ...[
@@ -63,18 +78,6 @@ class QueueSectionHeader extends StatelessWidget {
                         Text(
                           '· $trackCount',
                           style: KalinkaTextStyles.trackCountBadge,
-                        ),
-                      ],
-                      if (suffix != null && suffix!.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            '· ${suffix!}',
-                            style: KalinkaTextStyles.trackCountBadge,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            softWrap: false,
-                          ),
                         ),
                       ],
                       if (showShuffleBadge) ...[
