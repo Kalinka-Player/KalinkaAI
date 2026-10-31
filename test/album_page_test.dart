@@ -33,7 +33,13 @@ const _longTitlePage = CatalogPage.category(
   description: 'Daft Punk',
 );
 
-BrowseItem _track(int index, {int? number, int? disc, String? artist}) {
+BrowseItem _track(
+  int index, {
+  int? number,
+  int? disc,
+  String? artist,
+  int? year,
+}) {
   final id = 'kalinka:demo:track:$index';
   return BrowseItem(
     id: id,
@@ -47,7 +53,7 @@ BrowseItem _track(int index, {int? number, int? disc, String? artist}) {
       trackNumber: number,
       discNumber: disc,
       performer: Artist(id: 'artist', name: artist ?? 'The Beatles'),
-      album: Album(id: _page.id!, title: 'Abbey Road'),
+      album: Album(id: _page.id!, title: 'Abbey Road', year: year),
     ),
   );
 }
@@ -365,6 +371,33 @@ void main() {
   ) async {
     await pumpPage(tester, _AlbumApi([_track(1), _track(2), _track(3)]));
     expect(find.text('3 tracks · 9 min'), findsOneWidget);
+  });
+
+  testWidgets('the album\'s year leads its summary', (tester) async {
+    await pumpPage(
+      tester,
+      _AlbumApi([for (var i = 1; i <= 3; i++) _track(i, year: 1969)]),
+    );
+    expect(find.text('1969 · 3 tracks · 9 min'), findsOneWidget);
+  });
+
+  testWidgets('the year the album was opened with shows without its tracks', (
+    tester,
+  ) async {
+    await pumpPage(
+      tester,
+      _AlbumApi([_track(1), _track(2), _track(3)]),
+      page: CatalogPage.fromItem(
+        BrowseItem(
+          id: _page.id!,
+          name: 'Abbey Road',
+          canBrowse: true,
+          canAdd: true,
+          album: Album(id: _page.id!, title: 'Abbey Road', year: 1969),
+        ),
+      ),
+    );
+    expect(find.text('1969 · 3 tracks · 9 min'), findsOneWidget);
   });
 
   testWidgets('paginated duration waits for the complete album', (

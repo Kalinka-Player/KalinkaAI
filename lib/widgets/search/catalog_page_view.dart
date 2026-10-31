@@ -137,22 +137,28 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   final _albumTrackDurations = <int, int>{};
   int? _reportedAlbumDuration;
   int? _albumDuration;
+  int? _albumYear;
 
   /// What this page's own build last read of what the fetches found.
   Object? _builtFrom;
-  Object get _fetched => (_total, _albumDuration, _firstKind);
+  Object get _fetched => (_total, _albumDuration, _albumYear, _firstKind);
+
+  /// The year the album was opened with, else its first loaded track's.
+  int? get _shownAlbumYear => widget.page.item?.album?.year ?? _albumYear;
 
   void _countRows(int rows, bool appended) {
-    // The head reads the total and duration a fetch just read; a refresh may
-    // correct them without changing how many rows there are. A chunk that
-    // only adds rows leaves the page, and the rows already built, alone.
+    // The head reads the total, duration and year a fetch just read; a
+    // refresh may correct them without changing how many rows there are. A
+    // chunk that only adds rows leaves the page, and the rows already built,
+    // alone.
     if (appended && _fetched == _builtFrom) return;
     setState(() {});
   }
 
-  void _readAlbumDuration(BrowseItemsList list, int offset) {
+  void _readAlbumDetails(BrowseItemsList list, int offset) {
     if (offset == 0) {
       _albumTrackDurations.clear();
+      _albumYear = null;
       final reported = widget.page.totalDurationSeconds;
       _reportedAlbumDuration = reported != null && reported > 0
           ? reported
@@ -163,6 +169,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       _albumTrackDurations[offset + i] = track?.duration ?? 0;
       final reported = track?.album?.duration;
       if (reported != null && reported > 0) _reportedAlbumDuration ??= reported;
+      _albumYear ??= track?.album?.year;
     }
     // Never present a paginated subtotal as the album's length. Zero/missing
     // track durations also mean that a reliable sum is not available yet.
@@ -390,6 +397,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             onChange: (size) => widget.onAlbumHeaderHeight?.call(size.height),
             child: AlbumPageHeader(
               page: page,
+              year: _shownAlbumYear,
               trackCount: _total < 0 ? null : _total,
               totalDurationSeconds: _albumDuration,
               showArtwork: widget.onAlbumHeaderHeight == null,
@@ -534,7 +542,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           _firstKinds[listingKey] = list.items.first.browseType;
         }
         _total = list.total;
-        if (isAlbum) _readAlbumDuration(list, offset);
+        if (isAlbum) _readAlbumDetails(list, offset);
         return ItemChunk(items: list.items, total: list.total);
       },
       // Inset past the artwork of the row it follows, so the thumbnails read
@@ -729,6 +737,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             sideHeaderWidth: (width * 0.4).clamp(220.0, 520.0),
             sideHeader: AlbumIdentityColumn(
               page: page,
+              year: _shownAlbumYear,
               trackCount: _total < 0 ? null : _total,
               totalDurationSeconds: _albumDuration,
             ),
