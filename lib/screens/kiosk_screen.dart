@@ -353,8 +353,8 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                 artist: t.performer?.name,
                 album: t.album?.title,
                 year: t.album?.year,
-                largeImage: t.album?.image?.large,
-                smallImage: t.album?.image?.small,
+                largeImage: t.artwork?.large,
+                smallImage: t.artwork?.small,
               ),
       ),
     );

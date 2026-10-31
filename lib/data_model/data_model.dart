@@ -365,6 +365,25 @@ class Track {
   /// playback — `audio/flac`.
   final String? mimeType;
 
+  /// The track's own cover, where it can differ from its album's. Older
+  /// servers and sources that do not tell them apart omit it.
+  final AlbumImage? image;
+
+  /// The cover to show for this track: its own, with its album's filling
+  /// any size it lacks.
+  AlbumImage? get artwork {
+    final own = image;
+    final albums = album?.image;
+    if (own == null || own.largest == null) return albums;
+    if (albums == null) return own;
+    return AlbumImage(
+      small: own.small ?? albums.small,
+      thumbnail: own.thumbnail ?? albums.thumbnail,
+      large: own.large ?? albums.large,
+      aspectRatio: own.large != null ? own.aspectRatio : albums.aspectRatio,
+    );
+  }
+
   Track({
     required this.id,
     required this.title,
@@ -377,6 +396,7 @@ class Track {
     this.unavailable = false,
     this.unavailableReason,
     this.mimeType,
+    this.image,
   });
 
   factory Track.fromJson(Map<String, dynamic> json) => Track(
@@ -392,6 +412,7 @@ class Track {
     discNumber: _positivePosition(json["disc_number"]),
     unavailable: json["unavailable"] as bool? ?? false,
     mimeType: json["mime_type"] as String?,
+    image: json["image"] == null ? null : AlbumImage.fromJson(json["image"]),
   );
 
   Map<String, dynamic> toJson() => {
@@ -405,6 +426,7 @@ class Track {
     if (discNumber != null) "disc_number": discNumber,
     "unavailable": unavailable,
     if (mimeType != null) "mime_type": mimeType,
+    if (image != null) "image": image!.toJson(),
   };
 
   /// Changing [unavailable] also replaces [unavailableReason], so a track
@@ -423,6 +445,7 @@ class Track {
         ? this.unavailableReason
         : unavailableReason,
     mimeType: mimeType,
+    image: image,
   );
 
   static int? _positivePosition(Object? value) {
@@ -498,6 +521,12 @@ class AlbumImage {
 
   static String? _presentUrl(Object? value) =>
       value is String && value.isNotEmpty ? value : null;
+
+  /// The URL for a small slot: the smallest size there is.
+  String? get smallest => small ?? thumbnail ?? large;
+
+  /// The URL for a large slot: the largest size there is.
+  String? get largest => large ?? small ?? thumbnail;
 
   Map<String, dynamic> toJson() => {
     "small": small,
@@ -1201,7 +1230,7 @@ class BrowseItem {
     } else if (catalog != null) {
       return catalog?.image;
     } else if (track != null) {
-      return track?.album?.image;
+      return track?.artwork;
     }
     return null;
   }
