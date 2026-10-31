@@ -2,8 +2,9 @@ name: Contributions
 
 # A pull request from outside the project is taken only for an open issue
 # labelled "help wanted" (CONTRIBUTING.md): one that does not say it fixes one
-# is closed, with a comment saying how to get an issue marked. The maintainer
-# and Kalinka Bot are exempt, and so is a pull request either of them reopens.
+# is closed, with a comment saying how to get an issue marked. Owners, members,
+# collaborators and Kalinka Bot are exempt, and so is a pull request the
+# maintainer or Kalinka Bot reopens.
 #
 # pull_request_target, so the token may comment on and close a fork's pull
 # request. Nothing from the pull request is checked out or run: the job reads
@@ -29,7 +30,8 @@ jobs:
             const LABEL = 'help wanted';
             const pr = context.payload.pull_request;
             const { owner, repo } = context.repo;
-            if (EXEMPT.includes(pr.user.login) || EXEMPT.includes(context.payload.sender.login)) {
+            const insider = ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(pr.author_association);
+            if (insider || EXEMPT.includes(pr.user.login) || EXEMPT.includes(context.payload.sender.login)) {
               core.info(`Opened or reopened by ${context.payload.sender.login}: not checked.`);
               return;
             }
@@ -58,9 +60,11 @@ jobs:
             for (const { name, number } of refs.values()) {
               try {
                 const { data } = await github.rest.issues.get({ owner, repo: name, issue_number: number });
-                const labelled = data.labels.some(l => (typeof l === 'string' ? l : l.name) === LABEL);
+                const labelled = data.labels.some(l => (typeof l === 'string' ? l : l.name).toLowerCase() === LABEL.toLowerCase());
                 if (!data.pull_request && data.state === 'open' && labelled) wanted.push(`${name}#${number}`);
               } catch (err) {
+                // Only a missing issue is not wanted; any other failure leaves the PR open.
+                if (err.status !== 404 && err.status !== 410) throw err;
                 core.info(`${name}#${number}: ${err.message}`);
               }
             }
@@ -72,7 +76,7 @@ jobs:
             const site = `${context.serverUrl}/${owner}/${repo}`;
             await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: [
               `Thanks for the pull request. This project takes pull requests only for an open issue labelled ` +
-              `[\`${LABEL}\`](${site}/labels/help%20wanted), and this one doesn't say it fixes one, so it is closed.`,
+              `[\`${LABEL}\`](${site}/labels/${encodeURIComponent(LABEL)}), and this one doesn't say it fixes one, so it is closed.`,
               `Issues are welcome: open one, or ask on an existing one for it to be marked \`${LABEL}\`. Once it is, ` +
               `open a new pull request with \`Fixes #<number>\` in its description. ` +
               `[CONTRIBUTING.md](${site}/blob/main/CONTRIBUTING.md) says what the pull request needs.`,
