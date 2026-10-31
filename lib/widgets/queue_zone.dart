@@ -254,7 +254,7 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
           itemBuilder: (context, i) {
             final track = trackList[i];
             return QueueItemRow(
-              key: ValueKey('saved_${track.id}'),
+              key: ObjectKey(track),
               track: track,
               index: i,
               displayIndex: i,
@@ -356,7 +356,9 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
                       final track = queueTracks[i];
                       final absoluteIndex = currentIndex + 1 + i;
                       return QueueItemRow(
-                        key: ValueKey('upnext_${track.id}'),
+                        // A song can occur more than once in the queue.
+                        // Keep the occurrence stable as it is moved.
+                        key: ObjectKey(track),
                         columns: columns,
                         track: track,
                         index: absoluteIndex,
@@ -390,7 +392,7 @@ class _QueueZoneState extends ConsumerState<QueueZone> {
                       final track = previousTracks[i];
                       final queueIndex = currentIndex - 1 - i;
                       return QueueItemRow(
-                        key: ValueKey('history_${track.id}_$i'),
+                        key: ObjectKey(track),
                         columns: columns,
                         track: track,
                         index: queueIndex,

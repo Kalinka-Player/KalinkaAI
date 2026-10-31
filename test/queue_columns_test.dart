@@ -13,6 +13,7 @@ import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/queue_columns.dart';
+import 'package:kalinka/widgets/queue_item_row.dart';
 import 'package:kalinka/widgets/queue_section_header.dart';
 import 'package:kalinka/widgets/queue_zone.dart';
 
@@ -131,12 +132,15 @@ void main() {
     ) async {
       final key = GlobalKey();
       await _pump(tester, width: width, scale: scale, captureKey: key);
-      for (final (heading, rowKey, index, time) in [
-        ('NOW PLAYING', 'nowplaying_track-1', 1, '-3:20'),
-        ('UP NEXT', 'upnext_track-2', 2, '3:20'),
+      for (final (heading, index, time) in [
+        ('NOW PLAYING', 1, '-3:20'),
+        ('UP NEXT', 2, '3:20'),
       ]) {
         final header = _header(heading);
-        final row = find.byKey(ValueKey(rowKey));
+        final row = find.byWidgetPredicate(
+          (widget) =>
+              widget is QueueItemRow && widget.track.id == 'track-$index',
+        );
         final album = _cell(
           row,
           'Evening sessions $index — live at the old concert hall',

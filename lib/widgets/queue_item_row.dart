@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
 import '../data_model/kalinka_ws_api.dart';
+import '../providers/app_state_provider.dart';
+import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_player_api_provider.dart';
 import '../providers/playback_failure_provider.dart';
 import '../providers/playback_time_provider.dart';
@@ -21,7 +23,8 @@ import 'track_tile_layout.dart';
 /// A single queue item row with thumbnail, title, artist, and trailing slot.
 ///
 /// Up Next rows always show a drag handle. History rows show the track duration
-/// and are rendered in a dimmed style (no handle, no swipe-to-delete).
+/// and are rendered in a dimmed style without a handle. All rows can be swiped
+/// left to remove; history rows can also be swiped right to play next.
 class QueueItemRow extends ConsumerWidget {
   final Track track;
   final int index;
@@ -84,6 +87,8 @@ class QueueItemRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final connected =
+        ref.watch(connectionStateProvider) == ConnectionStatus.connected;
     final api = ref.read(kalinkaWsApiProvider);
     final kalinkaProxy = ref.read(kalinkaProxyProvider);
     final urlResolver = ref.read(urlResolverProvider);
@@ -378,16 +383,41 @@ class QueueItemRow extends ConsumerWidget {
     );
 
     return SwipeToDeleteRow(
-      enabled: !isHistory && !isDragging,
+      enabled: connected && !isDragging,
+      onPlayNext: isHistory
+          ? () async {
+              final queue = ref.read(playQueueStateStoreProvider);
+              final currentIndex = queue.playbackState.index;
+              if (currentIndex == null ||
+                  index < 0 ||
+                  index >= currentIndex ||
+                  currentIndex >= queue.trackList.length ||
+                  queue.trackList[index] != track) {
+                return;
+              }
+              final toast = ref.read(toastProvider.notifier);
+              toast.beginQueueActivity('Moving track to play next…');
+              try {
+                // Removing a played occurrence shifts the current track back
+                // one slot. Its old index is therefore the next slot after it.
+                await kalinkaProxy.move(index, currentIndex);
+                toast.endQueueActivity('Playing next: ${track.title}');
+              } catch (e) {
+                toast.endQueueActivity(
+                  'Failed to play next: $e',
+                  isError: true,
+                );
+              }
+            }
+          : null,
       onDelete: () async {
+        final toast = ref.read(toastProvider.notifier);
         onDelete?.call();
         try {
           await kalinkaProxy.remove(index);
-          ref.read(toastProvider.notifier).showTrackRemoved(track.title);
+          toast.showTrackRemoved(track.title);
         } catch (e) {
-          ref
-              .read(toastProvider.notifier)
-              .show('Failed to remove: $e', isError: true);
+          toast.show('Failed to remove: $e', isError: true);
         }
       },
       child: MouseRegion(cursor: SystemMouseCursors.click, child: rowContent),
