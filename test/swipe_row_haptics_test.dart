@@ -91,4 +91,61 @@ void main() {
       expect(deletes, 1);
     });
   });
+
+  group('played queue row swipes', () {
+    late List<String> actions;
+
+    Widget row() => SwipeToDeleteRow(
+      onDelete: () => actions.add('remove'),
+      onPlayNext: () => actions.add('next'),
+      child: _row,
+    );
+
+    setUp(() => actions = []);
+
+    testWidgets('right swipe pops and plays next; left swipe still removes', (
+      tester,
+    ) async {
+      final haptics = HapticRecorder.install();
+      await _pump(tester, row());
+      await _swipe(tester, [20, 20, 120]);
+      expect(haptics.calls, ['selectionClick', 'native:hapticCorkPop']);
+      expect(actions, ['next']);
+      await _swipe(tester, [-20, -20, -120]);
+      expect(actions, ['next', 'remove']);
+      expect(haptics.calls.last, 'native:hapticDelete');
+    });
+
+    testWidgets('short and cancelled right swipes do nothing', (tester) async {
+      await _pump(tester, row());
+      await _swipe(tester, [20, 20]);
+      expect(actions, isEmpty);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('row')),
+      );
+      await gesture.moveBy(const Offset(20, 0));
+      await gesture.moveBy(const Offset(160, 0));
+      await tester.pump();
+      await gesture.cancel();
+      await tester.pumpAndSettle();
+      expect(actions, isEmpty);
+
+      await _swipe(tester, [20, 20, 120]);
+      expect(actions, ['next']);
+    });
+
+    testWidgets('a new swipe takes over an unfinished spring', (tester) async {
+      await _pump(tester, row());
+      final center = tester.getCenter(find.text('row'));
+      final first = await tester.startGesture(center);
+      await first.moveBy(const Offset(20, 0));
+      await first.moveBy(const Offset(20, 0));
+      await first.up();
+      await tester.pump(const Duration(milliseconds: 16));
+
+      await _swipe(tester, [20, 20, 160]);
+      expect(actions, ['next']);
+    });
+  });
 }
