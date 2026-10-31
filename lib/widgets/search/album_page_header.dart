@@ -125,16 +125,18 @@ class _SourceLine extends ConsumerWidget {
 }
 
 /// What an album is, beside its tracks on a wide pane: the square cover,
-/// title, artist, source and extent. The page scrolls this content together
-/// with the tracks, including enlarged text.
+/// title, artist, source, year and extent. The page scrolls this content
+/// together with the tracks, including enlarged text.
 class AlbumIdentityColumn extends StatelessWidget {
   final CatalogPage page;
+  final int? year;
   final int? trackCount;
   final int? totalDurationSeconds;
 
   const AlbumIdentityColumn({
     super.key,
     required this.page,
+    this.year,
     this.trackCount,
     this.totalDurationSeconds,
   });
@@ -144,6 +146,7 @@ class AlbumIdentityColumn extends StatelessWidget {
     final title = page.title ?? '';
     final artist = page.description?.trim() ?? '';
     final summary = _summary(
+      year,
       trackCount,
       totalDurationSeconds ?? page.totalDurationSeconds,
     );
@@ -236,7 +239,8 @@ class AlbumTrackActions extends StatelessWidget {
   );
 }
 
-String _summary(int? trackCount, int? duration) => [
+String _summary(int? year, int? trackCount, int? duration) => [
+  if (year != null) '$year',
   if (trackCount != null) '$trackCount ${trackCount == 1 ? 'track' : 'tracks'}',
   if (duration != null && duration > 0) formatTotalDuration(duration),
 ].join(' · ');
@@ -249,6 +253,7 @@ typedef AlbumHeaderInsets = ({double title, double shade});
 /// even long titles and enlarged system text stay on a dark enough surface.
 class AlbumPageHeader extends StatefulWidget {
   final CatalogPage page;
+  final int? year;
   final int? trackCount;
   final int? totalDurationSeconds;
 
@@ -263,6 +268,7 @@ class AlbumPageHeader extends StatefulWidget {
   const AlbumPageHeader({
     super.key,
     required this.page,
+    this.year,
     this.trackCount,
     this.totalDurationSeconds,
     this.showArtwork = true,
@@ -315,6 +321,7 @@ class _AlbumPageHeaderState extends State<AlbumPageHeader> {
     final title = page.title ?? '';
     final artist = page.description?.trim() ?? '';
     final summary = _summary(
+      widget.year,
       trackCount,
       widget.totalDurationSeconds ?? page.totalDurationSeconds,
     );
