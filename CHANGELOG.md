@@ -8,6 +8,23 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.24.0
+
+Music sources shown by their own logos, the album's year on its page, and a rail that folds behind More instead of scrolling. Logos and years need server 5.16.0; against an older server each source keeps its icon and no year is shown, as before.
+
+### Added
+- Music sources show their own logo where the app names them: the attribution mark in list rows, the queue, tiles and now playing, Home's sources, the rail, catalog tiles, a plugin's settings, setup's music sources and the plugin catalog. With server 5.16.0, Jamendo and UPnP have one, as do Qobuz 5.4.0, TIDAL 0.5.0, Spotify 0.3.0 and Roon 0.3.0, out alongside. A source without one keeps its icon.
+- An album page leads its summary with the album's year, as in "1969 · 17 tracks · 47 min", in its header and in the wide layout's side column. It comes from the album the page was opened from, or else from its tracks, so a page opened from a track or from now playing shows it too. With server 5.16.0, My Library, Jamendo and Qobuz 5.4.0 send the year, so album rows and now playing show it as well.
+
+### Changed
+- Home lists each music source with its icon beside its name.
+- A source's attribution mark shows its logo or icon on its own, in the text colour, rather than inside a coloured pill. A source with neither keeps its initial in a pill.
+- On a window too short for the whole rail, everything but Home now folds behind More, from the bottom up: Power off, Change server and Restart, then Configuration, then Collections and the sources from the last up, then Results. The rail no longer scrolls, and More's shelf runs on in more rows where the window is too narrow for one.
+
+### Fixed
+- More on the rail closes the phone's player sheet, which covered its shelf, as every other rail item does.
+- Sources that arrive after the rail first appears count when it works out what fits.
+
 ## 0.23.0
 
 Filters on a folder, the settings of an output that refuses to play one tap away, and setup that the stored server no longer interrupts. My Library's folders offer a search and genres with server 5.15.0; against an older server a folder offers no filters, as before.

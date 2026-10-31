@@ -1,0 +1,4 @@
+- Music sources shown by their own logos (server 5.16.0)
+- The album's year on its page
+- The rail folds behind More instead of scrolling
+- Home lists each source with its icon
