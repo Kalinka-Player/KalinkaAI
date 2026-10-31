@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -53,6 +55,9 @@ class ShellNavigation extends ConsumerStatefulWidget {
   onNavigate;
   final void Function(ShellAction action) onAction;
 
+  /// Called as More unfolds its shelf, over what is beside the rail.
+  final VoidCallback? onMore;
+
   const ShellNavigation({
     super.key,
     this.configurationOpen = false,
@@ -61,28 +66,28 @@ class ShellNavigation extends ConsumerStatefulWidget {
     this.extended = false,
     required this.onNavigate,
     required this.onAction,
+    this.onMore,
   });
 
   @override
   ConsumerState<ShellNavigation> createState() => _ShellNavigationState();
 }
 
+/// One of the rail's items: as it stands in the rail, with what sets it off
+/// from its neighbours, and as it is on More's shelf, folding the shelf first.
+typedef _Item = ({
+  String id,
+  bool selected,
+  Widget standing,
+  Widget Function(VoidCallback close) folded,
+});
+
 class _ShellNavigationState extends ConsumerState<ShellNavigation> {
-  // What the rail's parts take, to tell how many of the server's controls
-  // fit under the rest.
-  double _listHeight = 0;
-  double _footHeight = 0;
-  final _controlHeights = <ShellAction, double>{};
-  double _moreHeight = 0;
+  // What each of the rail's items takes, by id, to tell how many fit.
+  final _heights = <String, double>{};
 
-  void _measuredControl(ShellAction action, double height) =>
-      setState(() => _controlHeights[action] = height);
-
-  void _measured({double? list, double? foot, double? more}) => setState(() {
-    _listHeight = list ?? _listHeight;
-    _footHeight = foot ?? _footHeight;
-    _moreHeight = more ?? _moreHeight;
-  });
+  void _measured(String id, double height) =>
+      setState(() => _heights[id] = height);
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +106,29 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
     final collections = ref.watch(collectionsShelfProvider).value?.plan;
     final box = ref.watch(boxControlProvider).value;
 
-    Widget destination(
+    _Item item(
+      String id,
+      Widget Function({bool extended, VoidCallback? then}) build, {
+      bool selected = false,
+      Widget? above,
+      Widget? below,
+    }) {
+      final button = build(extended: extended);
+      return (
+        id: id,
+        selected: selected,
+        standing: above == null && below == null
+            ? button
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [?above, button, ?below],
+              ),
+        folded: (close) => build(then: close),
+      );
+    }
+
+    _Item destination(
       String id,
       String label,
       IconData icon,
@@ -111,43 +138,56 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
       String? compactLabel,
       String? tooltip,
       CatalogSource? source,
-    }) => _NavigationButton(
-      key: ValueKey('navigation-$id'),
-      label: label,
-      compactLabel: compactLabel,
-      tooltip: tooltip,
-      icon: icon,
-      // A source's icon in its own colour, as its badges are.
-      iconColor: source == null ? null : colorForSourceName(source.module.name),
-      icons: source?.module.icons,
+      Widget? above,
+      Widget? below,
+    }) => item(
+      id,
       selected: selected,
-      extended: extended,
-      onPressed: enabled && available
-          ? () => widget.onNavigate(destination, source)
-          : null,
+      above: above,
+      below: below,
+      ({extended = false, then}) => _NavigationButton(
+        key: ValueKey('navigation-$id'),
+        label: label,
+        compactLabel: compactLabel,
+        tooltip: tooltip,
+        icon: icon,
+        // A source's icon in its own colour, as its badges are.
+        iconColor: source == null
+            ? null
+            : colorForSourceName(source.module.name),
+        icons: source?.module.icons,
+        selected: selected,
+        extended: extended,
+        onPressed: enabled && available
+            ? () {
+                then?.call();
+                widget.onNavigate(destination, source);
+              }
+            : null,
+      ),
     );
 
-    Widget control(
-      _Control control, {
-      bool extended = false,
-      VoidCallback? then,
-    }) => _NavigationButton(
-      key: ValueKey('navigation-${control.action.name}'),
-      label: control.label,
-      tooltip: control.tooltip,
-      icon: control.icon,
-      // In berry: the one of them that leaves the box off.
-      iconColor: control.action == ShellAction.powerOff
-          ? KalinkaColors.accent
-          : null,
+    _Item control(_Control control) => item(
+      control.action.name,
       selected: control.selected,
-      extended: extended,
-      onPressed: enabled
-          ? () {
-              then?.call();
-              widget.onAction(control.action);
-            }
-          : null,
+      ({extended = false, then}) => _NavigationButton(
+        key: ValueKey('navigation-${control.action.name}'),
+        label: control.label,
+        tooltip: control.tooltip,
+        icon: control.icon,
+        // In berry: the one of them that leaves the box off.
+        iconColor: control.action == ShellAction.powerOff
+            ? KalinkaColors.accent
+            : null,
+        selected: control.selected,
+        extended: extended,
+        onPressed: enabled
+            ? () {
+                then?.call();
+                widget.onAction(control.action);
+              }
+            : null,
+      ),
     );
 
     const divider = Padding(
@@ -182,6 +222,81 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
           selected: false,
         ),
     ];
+    final home = destination(
+      'home',
+      'Home',
+      Icons.home_outlined,
+      ShellDestination.home,
+      selected: shown == BrowseDestination.home,
+    );
+    // Under Home, from the top.
+    final top = <_Item>[
+      destination(
+        'results',
+        'Search results',
+        Icons.manage_search,
+        ShellDestination.results,
+        compactLabel: 'Results',
+        tooltip: session.resultsAvailable
+            ? 'Search results: ${session.searchQuery}'
+            : 'Search results appear after your first search',
+        selected: shown == BrowseDestination.results,
+        available: session.resultsAvailable,
+        below: divider,
+      ),
+      for (final source in sources.value ?? <CatalogSource>[])
+        destination(
+          'source-${source.module.name}',
+          source.module.title,
+          iconNamed(source.module.icon) ?? Icons.library_music_outlined,
+          ShellDestination.source,
+          selected: shown == BrowseDestination.source(source.module.name),
+          available: connected && source.root.canBrowse,
+          source: source,
+        ),
+      if (sources.hasError && connected)
+        item(
+          'retry-sources',
+          ({extended = false, then}) => _NavigationButton(
+            key: const ValueKey('navigation-retry-sources'),
+            label: 'Retry sources',
+            icon: Icons.refresh,
+            selected: false,
+            extended: extended,
+            onPressed: enabled
+                ? () {
+                    then?.call();
+                    ref.invalidate(catalogSourcesProvider);
+                  }
+                : null,
+          ),
+        ),
+      // Apart from the sources: it holds tracks from any of them.
+      if (collections != null)
+        destination(
+          'collections',
+          'Collections',
+          Icons.queue_music_rounded,
+          ShellDestination.collections,
+          selected: shown == BrowseDestination.collections,
+          available: connected,
+          above: const SizedBox(height: 8),
+        ),
+    ];
+    // At the rail's foot.
+    final foot = <_Item>[
+      if (configuration)
+        destination(
+          'configuration',
+          'Configuration',
+          Icons.settings_outlined,
+          ShellDestination.configuration,
+          compactLabel: 'Config',
+          selected: widget.configurationOpen && !widget.changeServerOpen,
+          below: controls.isEmpty ? null : divider,
+        ),
+      for (final c in controls) control(c),
+    ];
     Widget more({bool open = false, VoidCallback? onPressed}) =>
         _NavigationButton(
           key: const ValueKey('navigation-more'),
@@ -192,20 +307,23 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
           extended: extended,
           onPressed: onPressed,
         );
-    // Each measured on its own, out of sight, whether it stands or not.
+    // Each measured on its own, out of sight, whether it stands or not; by
+    // id, as a measure reports only a change, and sources arrive in between.
     final measures = Offstage(
       child: ExcludeFocus(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final c in controls)
+            for (final i in [home, ...top, ...foot])
               MeasureSize(
-                onChange: (size) => _measuredControl(c.action, size.height),
-                child: control(c, extended: extended),
+                key: ValueKey(i.id),
+                onChange: (size) => _measured(i.id, size.height),
+                child: i.standing,
               ),
             MeasureSize(
-              onChange: (size) => _measured(more: size.height),
+              key: const ValueKey('more'),
+              onChange: (size) => _measured('more', size.height),
               child: more(),
             ),
           ],
@@ -219,102 +337,46 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              // As many as fit stand; the rest go behind More.
+              // As many as fit stand, from the top, and the rest go behind
+              // More, so the rail does not scroll: the server's controls go
+              // first, then Configuration, then the destinations from the
+              // bottom up. Home always stands.
+              final all = [...top, ...foot];
               final room =
                   constraints.maxHeight -
-                  _listHeight -
-                  _footHeight -
-                  4 * _railInset;
-              double heightOf(Iterable<_Control> some) => some.fold(
-                0.0,
-                (sum, c) => sum + (_controlHeights[c.action] ?? 0),
-              );
-              var standing = controls.length;
-              if (heightOf(controls) > room) {
-                standing = controls.length - 1;
+                  4 * _railInset -
+                  (_heights[home.id] ?? 0);
+              final moreHeight = _heights['more'] ?? 0;
+              double heightOf(Iterable<_Item> some) =>
+                  some.fold(0.0, (sum, i) => sum + (_heights[i.id] ?? 0));
+              var standing = all.length;
+              if (heightOf(all) > room) {
+                standing = all.length - 1;
                 while (standing > 0 &&
-                    heightOf(controls.take(standing)) + _moreHeight > room) {
+                    heightOf(all.take(standing)) + moreHeight > room) {
                   standing--;
                 }
               }
-              final folded = controls.skip(standing).toList();
-              // One scroll on a short window; otherwise the server's controls
-              // keep to the foot.
+              final folded = all.skip(standing).toList();
+              // Only a window too short for Home and More alone scrolls.
+              final scrolls =
+                  heightOf(all.take(standing)) +
+                      (folded.isEmpty ? 0 : moreHeight) >
+                  room;
               return CustomScrollView(
+                physics: scrolls ? null : const NeverScrollableScrollPhysics(),
                 slivers: [
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(vertical: _railInset),
                     sliver: SliverToBoxAdapter(
-                      child: MeasureSize(
-                        onChange: (size) => _measured(list: size.height),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            destination(
-                              'home',
-                              'Home',
-                              Icons.home_outlined,
-                              ShellDestination.home,
-                              selected: shown == BrowseDestination.home,
-                            ),
-                            destination(
-                              'results',
-                              'Search results',
-                              Icons.manage_search,
-                              ShellDestination.results,
-                              compactLabel: 'Results',
-                              tooltip: session.resultsAvailable
-                                  ? 'Search results: ${session.searchQuery}'
-                                  : 'Search results appear after your first '
-                                        'search',
-                              selected: shown == BrowseDestination.results,
-                              available: session.resultsAvailable,
-                            ),
-                            divider,
-                            for (final source
-                                in sources.value ?? <CatalogSource>[])
-                              destination(
-                                'source-${source.module.name}',
-                                source.module.title,
-                                iconNamed(source.module.icon) ??
-                                    Icons.library_music_outlined,
-                                ShellDestination.source,
-                                selected:
-                                    shown ==
-                                    BrowseDestination.source(
-                                      source.module.name,
-                                    ),
-                                available: connected && source.root.canBrowse,
-                                source: source,
-                              ),
-                            if (sources.hasError && connected)
-                              _NavigationButton(
-                                label: 'Retry sources',
-                                icon: Icons.refresh,
-                                selected: false,
-                                extended: extended,
-                                onPressed: enabled
-                                    ? () =>
-                                          ref.invalidate(catalogSourcesProvider)
-                                    : null,
-                              ),
-                            // Apart from the sources: it holds tracks from any
-                            // of them.
-                            if (collections != null) ...[
-                              const SizedBox(height: 8),
-                              destination(
-                                'collections',
-                                'Collections',
-                                Icons.queue_music_rounded,
-                                ShellDestination.collections,
-                                selected:
-                                    shown == BrowseDestination.collections,
-                                available: connected,
-                              ),
-                            ],
-                          ],
-                        ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          home.standing,
+                          for (final i in all.take(standing).take(top.length))
+                            i.standing,
+                        ],
                       ),
                     ),
                   ),
@@ -326,37 +388,16 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
                         mainAxisAlignment: MainAxisAlignment.end,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          MeasureSize(
-                            onChange: (size) => _measured(foot: size.height),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (configuration)
-                                  destination(
-                                    'configuration',
-                                    'Configuration',
-                                    Icons.settings_outlined,
-                                    ShellDestination.configuration,
-                                    compactLabel: 'Config',
-                                    selected:
-                                        widget.configurationOpen &&
-                                        !widget.changeServerOpen,
-                                  ),
-                                if (configuration && controls.isNotEmpty)
-                                  divider,
-                              ],
-                            ),
-                          ),
-                          for (final c in controls.take(standing))
-                            control(c, extended: extended),
+                          for (final i in all.take(standing).skip(top.length))
+                            i.standing,
                           if (folded.isNotEmpty)
                             _OverflowShelf(
                               enabled: enabled,
-                              selected: folded.any((c) => c.selected),
+                              selected: folded.any((i) => i.selected),
+                              onOpen: widget.onMore,
                               button: more,
-                              controls: (close) => [
-                                for (final c in folded) control(c, then: close),
+                              items: (close) => [
+                                for (final i in folded) i.folded(close),
                               ],
                             ),
                           measures,
@@ -374,25 +415,29 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
   }
 }
 
-/// The server's controls that do not fit the rail, behind More; they unfold
-/// side by side on a shelf to the rail's right.
+/// The rail's items that do not fit it, behind More; they unfold side by side
+/// on a shelf to the rail's right.
 class _OverflowShelf extends StatefulWidget {
   final bool enabled;
 
-  /// One of the controls is the destination shown.
+  /// One of the items is the destination shown.
   final bool selected;
+
+  /// Called as the shelf unfolds.
+  final VoidCallback? onOpen;
 
   /// The More item, highlighted while [open].
   final Widget Function({bool open, VoidCallback? onPressed}) button;
 
-  /// The controls, each closing the shelf through the callback first.
-  final List<Widget> Function(VoidCallback close) controls;
+  /// The items, each closing the shelf through the callback first.
+  final List<Widget> Function(VoidCallback close) items;
 
   const _OverflowShelf({
     required this.enabled,
     required this.selected,
+    this.onOpen,
     required this.button,
-    required this.controls,
+    required this.items,
   });
 
   @override
@@ -431,6 +476,7 @@ class _OverflowShelfState extends State<_OverflowShelf>
   }
 
   void _show() {
+    widget.onOpen?.call();
     setState(() => _open = true);
     _portal.show();
     _unfold.forward();
@@ -450,7 +496,7 @@ class _OverflowShelfState extends State<_OverflowShelf>
       groupId: this,
       onTapOutside: (_) => _close(),
       // Placed from where More is, not by following it: a follower above
-      // the controls' tooltips, which are overlay children themselves,
+      // the items' tooltips, which are overlay children themselves,
       // leaves them no position to lay out from.
       child: OverlayPortal.overlayChildLayoutBuilder(
         controller: _portal,
@@ -466,7 +512,6 @@ class _OverflowShelfState extends State<_OverflowShelf>
     );
   }
 
-  /// Level with More, from just past the rail's edge.
   Widget _shelf(BuildContext context, OverlayChildLayoutInfo info) {
     // More is out of view.
     if (info.childPaintTransform.determinant() == 0) {
@@ -476,11 +521,9 @@ class _OverflowShelfState extends State<_OverflowShelf>
       info.childPaintTransform,
       Offset.zero & info.childSize,
     );
-    return Positioned(
-      left: more.right + 8,
-      top: more.center.dy,
-      child: FractionalTranslation(
-        translation: const Offset(0, -0.5),
+    return Positioned.fill(
+      child: CustomSingleChildLayout(
+        delegate: _ShelfLayout(more),
         child: TapRegion(
           groupId: this,
           child: FadeTransition(
@@ -499,11 +542,10 @@ class _OverflowShelfState extends State<_OverflowShelf>
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(_railInset),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  child: Wrap(
                     children: [
-                      for (final control in widget.controls(_close))
-                        SizedBox(width: kKalinkaRailWidth - 1, child: control),
+                      for (final item in widget.items(_close))
+                        SizedBox(width: kKalinkaRailWidth - 1, child: item),
                     ],
                   ),
                 ),
@@ -514,6 +556,36 @@ class _OverflowShelfState extends State<_OverflowShelf>
       ),
     );
   }
+}
+
+/// Level with More, from just past the rail's edge, and kept in the window:
+/// where it is too narrow for the shelf, the items run on in more rows.
+class _ShelfLayout extends SingleChildLayoutDelegate {
+  final Rect more;
+
+  const _ShelfLayout(this.more);
+
+  /// From the rail's edge, and from the window's.
+  static const _gap = 8.0;
+
+  // Unbounded in height: the unfolding is an Align, which would fill it.
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints(
+        maxWidth: math.max(0, constraints.maxWidth - more.right - 2 * _gap),
+      );
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) => Offset(
+    more.right + _gap,
+    (more.center.dy - childSize.height / 2).clamp(
+      _gap,
+      math.max(_gap, size.height - childSize.height - _gap),
+    ),
+  );
+
+  @override
+  bool shouldRelayout(_ShelfLayout oldDelegate) => oldDelegate.more != more;
 }
 
 class _NavigationButton extends StatelessWidget {
