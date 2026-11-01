@@ -1409,13 +1409,17 @@ class _FolderActions extends ConsumerWidget {
           ),
         if (listing.onStorage && listing.id != null) ...[
           if (listing.canAdd) const SizedBox(width: 8),
-          DriveFolderActions(
-            entityId: listing.id!,
-            title: listing.title ?? 'this folder',
+          // Given the room left, to fold its pills into one where it is short.
+          Expanded(
+            child: DriveFolderActions(
+              entityId: listing.id!,
+              title: listing.title ?? 'this folder',
+            ),
           ),
-        ],
-        const Spacer(),
-        if (!identical(listing, page))
+        ] else
+          const Spacer(),
+        if (!identical(listing, page)) ...[
+          const SizedBox(width: 8),
           ActionPillButton(
             icon: Icons.drive_folder_upload_outlined,
             semanticsLabel: 'Up one folder',
@@ -1423,6 +1427,7 @@ class _FolderActions extends ConsumerWidget {
               ref.read(searchSessionProvider.notifier).showEnclosingFolder();
             },
           ),
+        ],
       ],
     );
   }
