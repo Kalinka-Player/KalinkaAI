@@ -193,6 +193,30 @@ void main() {
     expect(state().catalogPage.isRoot, isTrue);
   });
 
+  test('a path deeper than the visits kept still climbs to its top', () {
+    for (var n = 0; n < 45; n++) {
+      session().openFolder(_folder('Level $n'));
+    }
+
+    for (var n = 0; n < 45; n++) {
+      session().goBack();
+    }
+    expect(shownPath(), isEmpty);
+    expect(state().catalogPage.title, 'My Library');
+    session().goBack();
+    expect(state().catalogPage.isRoot, isTrue);
+
+    openLibrary(container);
+    for (var n = 0; n < 45; n++) {
+      session().openFolder(_folder('Level $n'));
+    }
+    session().showFolderAt(0);
+    expect(shownPath(), isEmpty);
+    expect(state().previousVisits, isEmpty);
+    session().goBack();
+    expect(state().catalogPage.isRoot, isTrue);
+  });
+
   test('the top of Drives by its crumb, then Back, leaves Drives', () {
     session().backToCatalogsRoot();
     session().openCatalog(

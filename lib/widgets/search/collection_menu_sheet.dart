@@ -158,7 +158,7 @@ Future<void> _deleteCollection(
     final session = ref.read(searchSessionProvider);
     if (session.activeView == FindMusicView.catalogs &&
         session.catalogPage.id == item.id) {
-      ref.read(searchSessionProvider.notifier).goBack();
+      ref.read(searchSessionProvider.notifier).returnToPreviousVisit();
     }
     toast.show('$name deleted');
   } catch (e) {
