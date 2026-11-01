@@ -135,6 +135,9 @@ class ActionPillButton extends StatelessWidget {
     );
   }
 
+  /// How wide a pill with an icon and no label sets.
+  static const iconOnlyWidth = 2 * 11 + _iconSize;
+
   static TextStyle _labelStyle(Color color) => KalinkaFonts.sans(
     fontSize: KalinkaTypography.baseSize + 2,
     fontWeight: FontWeight.w600,

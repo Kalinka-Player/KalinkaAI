@@ -159,8 +159,11 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
         }
         final available = width - 32;
         final pinWidth = pin ? 56.0 : 0.0;
-        // Play all, Enqueue and Up one folder.
-        final folderActions = widget.actions == null ? 0.0 : 400 * scale;
+        // Play all, Enqueue and Up one folder, and on storage the library
+        // and eject pills.
+        final folderActions = widget.actions == null
+            ? 0.0
+            : (page.onStorage ? 560 : 400) * scale;
         // The title keeps its line where it can, and wraps to two before
         // a folder's actions give up the identity's row.
         const identityGap = 24.0;

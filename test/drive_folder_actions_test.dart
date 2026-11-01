@@ -4,9 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kalinka/data_model/storage.dart';
 import 'package:kalinka/providers/demo_mode.dart';
+import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/storage_volumes_provider.dart';
 import 'package:kalinka/widgets/search/drive_folder_actions.dart';
-import 'package:kalinka/widgets/struck_icon.dart';
+import 'package:kalinka/widgets/search_cards/action_pill_button.dart';
 
 const _stick = StorageVolume(
   id: '3A1F',
@@ -25,27 +26,38 @@ LocationLibrary _library({bool holds = false, bool removable = false}) =>
       restartRequired: true,
     );
 
-IconButton _libraryButton(WidgetTester tester) =>
-    tester.widget<IconButton>(find.byKey(const ValueKey('drive-library')));
+ActionPillButton _libraryButton(WidgetTester tester) => tester
+    .widget<ActionPillButton>(find.byKey(const ValueKey('drive-library')));
 
 class _Volumes extends StorageVolumesNotifier {
   @override
   Future<List<StorageVolume>> build() async => const [_stick];
 }
 
-Future<void> _pump(WidgetTester tester, StorageLocation? location) async {
+Future<void> _pump(
+  WidgetTester tester,
+  StorageLocation? location, {
+  double width = 600,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         storageVolumesProvider.overrideWith(_Volumes.new),
         driveLocationProvider.overrideWith((ref, id) async => location),
         demoModeProvider.overrideWithValue(false),
+        sourceDisplayInfoProvider.overrideWithValue(const {}),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
         home: Scaffold(
-          body: DriveFolderActions(
-            entityId: 'kalinka:drives:catalog:root',
-            title: 'Jazz',
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: width,
+              child: const DriveFolderActions(
+                entityId: 'kalinka:drives:catalog:root',
+                title: 'Jazz',
+              ),
+            ),
           ),
         ),
       ),
@@ -66,8 +78,8 @@ void main() {
       ),
     );
 
-    expect(_libraryButton(tester).isSelected, isFalse);
-    expect(_libraryButton(tester).tooltip, 'Add to My Library');
+    expect(_libraryButton(tester).label, 'Add to library');
+    expect(find.byTooltip('Add to My Library'), findsOneWidget);
     expect(find.byKey(const ValueKey('drive-eject')), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('drive-library')));
@@ -79,7 +91,7 @@ void main() {
     expect(find.text('Add “Jazz” to My Library?'), findsNothing);
   });
 
-  testWidgets('a folder that is a library source is struck, to take it out', (
+  testWidgets('a folder that is a library source is in it, to take out', (
     tester,
   ) async {
     await _pump(
@@ -92,9 +104,9 @@ void main() {
       ),
     );
 
-    expect(_libraryButton(tester).isSelected, isTrue);
-    expect(find.byType(StruckIcon), findsOneWidget);
-    expect(_libraryButton(tester).tooltip, 'Remove from My Library');
+    expect(_libraryButton(tester).label, 'In library');
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    expect(find.byTooltip('Remove from My Library'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('drive-library')));
     await tester.pumpAndSettle();
@@ -115,11 +127,11 @@ void main() {
       ),
     );
 
-    expect(_libraryButton(tester).isSelected, isTrue);
-    expect(_libraryButton(tester).onPressed, isNull);
+    expect(_libraryButton(tester).label, 'In library');
+    expect(_libraryButton(tester).enabled, isFalse);
     expect(
-      _libraryButton(tester).tooltip,
-      'In My Library with a folder above it',
+      find.byTooltip('In My Library with a folder above it'),
+      findsOneWidget,
     );
   });
 
@@ -134,6 +146,29 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('drive-eject')), findsOneWidget);
+  });
+
+  testWidgets('where the row is short, the actions fold into one sheet', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      StorageLocation(
+        volumeId: '3A1F',
+        path: '/media/kalinka/3A1F',
+        library: _library(),
+      ),
+      width: 60,
+    );
+
+    expect(find.byKey(const ValueKey('drive-library')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('drive-more')));
+    await tester.pumpAndSettle();
+    expect(find.text('Eject SANDISK'), findsOneWidget);
+
+    await tester.tap(find.text('Add to My Library'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add “Jazz” to My Library?'), findsOneWidget);
   });
 
   testWidgets('a page no library answers for has no drive actions', (

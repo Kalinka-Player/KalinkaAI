@@ -5,13 +5,16 @@ import '../../data_model/storage.dart';
 import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/restart_provider.dart';
 import '../../providers/search_session_provider.dart';
+import '../../providers/source_modules_provider.dart';
 import '../../providers/storage_volumes_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../theme/app_theme.dart';
 import '../demo_read_only_dialog.dart';
 import '../kalinka_button.dart';
+import '../kalinka_bottom_sheet.dart';
 import '../kalinka_dialog.dart';
-import '../struck_icon.dart';
+import '../search_cards/action_pill_button.dart';
+import '../source_badge.dart';
 
 /// Where a Drives page is on storage, asked again as the volumes change.
 /// Null for a page that is not a folder of a volume, and on an older server.
@@ -25,9 +28,9 @@ final driveLocationProvider = FutureProvider.autoDispose
       }
     });
 
-/// A Drives folder's own actions, icons beside Play all as Pin is: add it to
-/// the library or, struck through, take it out again, and eject at the top
-/// of a removable drive.
+/// A Drives folder's own actions beside Play all: add it to the library or
+/// take it out again, and eject at the top of a removable drive. Pills where
+/// the row has room for them, else one More pill that offers them in a sheet.
 class DriveFolderActions extends ConsumerWidget {
   final String entityId;
   final String title;
@@ -48,39 +51,147 @@ class DriveFolderActions extends ConsumerWidget {
       if (v.id == location.volumeId) volume = v;
     }
     final library = location.library;
-    final ejectable =
-        location.subpath.isEmpty && (volume?.isRemovable ?? false);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (library != null)
-          IconButton(
-            key: const ValueKey('drive-library'),
-            tooltip: !library.holds
-                ? 'Add to ${library.title}'
-                : library.removable
-                ? 'Remove from ${library.title}'
-                : 'In ${library.title} with a folder above it',
-            iconSize: 20,
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            isSelected: library.holds,
-            icon: const Icon(Icons.library_add_outlined),
-            selectedIcon: const StruckIcon(Icons.library_add_outlined),
-            onPressed: !library.holds || library.removable
-                ? () => _change(context, ref, library)
-                : null,
-          ),
-        if (ejectable)
-          IconButton(
-            key: const ValueKey('drive-eject'),
-            tooltip: 'Eject ${volume!.label}',
-            iconSize: 20,
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            icon: const Icon(Icons.eject_outlined),
-            onPressed: () => _eject(context, ref, volume!),
-          ),
-      ],
+    final eject = location.subpath.isEmpty && (volume?.isRemovable ?? false)
+        ? volume
+        : null;
+    if (library == null && eject == null) return const SizedBox.shrink();
+    final libraryIcon =
+        ref.watch(sourceDisplayInfoProvider)[library?.module]?.icon ??
+        Icons.library_music_outlined;
+    return LayoutBuilder(
+      builder: (context, box) {
+        final widths = [
+          if (library != null)
+            ActionPillButton.widthOf(context, _libraryLabel(library)),
+          if (eject != null) ActionPillButton.iconOnlyWidth,
+        ];
+        final needed =
+            widths.fold(0.0, (sum, w) => sum + w) + 8 * (widths.length - 1);
+        final Widget actions = needed <= box.maxWidth
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: 8,
+                children: [
+                  if (library != null) _libraryPill(context, ref, library),
+                  if (eject != null) _ejectPill(context, ref, eject),
+                ],
+              )
+            : ActionPillButton(
+                key: const ValueKey('drive-more'),
+                icon: Icons.more_horiz_rounded,
+                semanticsLabel: 'More for $title',
+                onTap: () =>
+                    _showMenu(context, ref, library, eject, libraryIcon),
+              );
+        return Align(alignment: Alignment.centerLeft, child: actions);
+      },
     );
+  }
+
+  static String _libraryLabel(LocationLibrary library) =>
+      library.holds ? 'In library' : 'Add to library';
+
+  Widget _libraryPill(
+    BuildContext context,
+    WidgetRef ref,
+    LocationLibrary library,
+  ) {
+    final changeable = !library.holds || library.removable;
+    return Tooltip(
+      message: !library.holds
+          ? 'Add to ${library.title}'
+          : library.removable
+          ? 'Remove from ${library.title}'
+          : 'In ${library.title} with a folder above it',
+      child: ActionPillButton(
+        key: const ValueKey('drive-library'),
+        label: _libraryLabel(library),
+        // The library's own tile, as its rows are badged, says which one.
+        leading: library.holds
+            ? null
+            : SourceTile(source: library.module, size: 18),
+        icon: library.holds ? Icons.check_rounded : null,
+        semanticsLabel: library.holds
+            ? 'In ${library.title}'
+            : 'Add to ${library.title}',
+        enabled: changeable,
+        onTap: changeable ? () => _change(context, ref, library) : null,
+      ),
+    );
+  }
+
+  Widget _ejectPill(
+    BuildContext context,
+    WidgetRef ref,
+    StorageVolume volume,
+  ) => Tooltip(
+    message: 'Eject ${volume.label}',
+    child: ActionPillButton(
+      key: const ValueKey('drive-eject'),
+      icon: Icons.eject_rounded,
+      semanticsLabel: 'Eject ${volume.label}',
+      onTap: () => _eject(context, ref, volume),
+    ),
+  );
+
+  Future<void> _showMenu(
+    BuildContext context,
+    WidgetRef ref,
+    LocationLibrary? library,
+    StorageVolume? eject,
+    IconData libraryIcon,
+  ) async {
+    final chosen = await showKalinkaBottomSheet<_DriveAction>(
+      context: context,
+      contentBuilder: (sheet) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SheetHeader(
+            title: eject != null ? 'DRIVE' : 'FOLDER',
+            summary: title,
+          ),
+          if (library != null)
+            SheetRow(
+              key: const ValueKey('drive-menu-library'),
+              icon: libraryIcon,
+              iconBackground: KalinkaColors.surfaceElevated,
+              iconColor: KalinkaColors.textSecondary,
+              label: library.holds
+                  ? 'Remove from ${library.title}'
+                  : 'Add to ${library.title}',
+              sublabel: !library.holds
+                  ? 'Index its music and keep it'
+                  : library.removable
+                  ? 'Its files stay on the drive'
+                  : 'In ${library.title} with a folder above it',
+              onTap: !library.holds || library.removable
+                  ? () => Navigator.pop(sheet, _DriveAction.library)
+                  : null,
+            ),
+          if (library != null && eject != null) const SheetDivider(),
+          if (eject != null)
+            SheetRow(
+              key: const ValueKey('drive-menu-eject'),
+              icon: Icons.eject_rounded,
+              iconBackground: KalinkaColors.surfaceElevated,
+              iconColor: KalinkaColors.textSecondary,
+              label: 'Eject ${eject.label}',
+              sublabel: 'So it can be unplugged',
+              onTap: () => Navigator.pop(sheet, _DriveAction.eject),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+    // Acted on from the page: the sheet's own context goes with the sheet.
+    if (chosen == null || !context.mounted) return;
+    switch (chosen) {
+      case _DriveAction.library:
+        await _change(context, ref, library!);
+      case _DriveAction.eject:
+        await _eject(context, ref, eject!);
+    }
   }
 
   /// Adds the folder to [library], or takes it out of the library holding it.
@@ -202,3 +313,5 @@ class LibraryChangeDialog extends StatelessWidget {
     );
   }
 }
+
+enum _DriveAction { library, eject }
