@@ -56,9 +56,12 @@ final serverInfoProvider = FutureProvider.autoDispose<ServerInfo>((ref) async {
 });
 
 /// Whether the server's folders can be browsed to pick one, rather than typed.
-final storageSupportedProvider = Provider<bool>(
-  (ref) => ref.watch(serverInfoProvider).value?.storage == true,
-);
+/// Fails closed while the server is asked again, as the last one's answer
+/// still shows then.
+final storageSupportedProvider = Provider<bool>((ref) {
+  final info = ref.watch(serverInfoProvider);
+  return !info.isLoading && !info.hasError && info.value?.storage == true;
+});
 
 /// Fail closed during connection changes, errors and on older servers.
 final pluginCatalogEnabledProvider = Provider<bool>((ref) {

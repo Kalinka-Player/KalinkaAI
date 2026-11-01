@@ -1941,10 +1941,12 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     if (server == null) return;
     final paths = _loadFolderPaths();
     final kept = paths.length;
-    paths.removeWhere((key, _) {
-      final pageId = key.substring(key.lastIndexOf(' ') + 1);
-      return key == server.folderPath(pageId) && sourceOfId(pageId) == source;
-    });
+    final prefix = server.folderPath('');
+    paths.removeWhere(
+      (key, _) =>
+          key.startsWith(prefix) &&
+          sourceOfId(key.substring(prefix.length)) == source,
+    );
     if (paths.length != kept) _saveFolderPaths(paths);
   }
 

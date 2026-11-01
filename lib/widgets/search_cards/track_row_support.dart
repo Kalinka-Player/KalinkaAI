@@ -31,6 +31,11 @@ IconData? itemIcon(String? name) => switch (name) {
   _ => null,
 };
 
+/// Whether [item]'s thumbnail is the icon its source names, as it is where
+/// it has no art.
+bool drawsItemIcon(BrowseItem item) =>
+    item.image?.smallest == null && itemIcon(item.icon) != null;
+
 /// What shows where [item] has no art: the icon its source names, on a quiet
 /// tile, or art made up from its id.
 class ArtStandIn extends StatelessWidget {
