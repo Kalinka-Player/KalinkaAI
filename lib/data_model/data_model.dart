@@ -923,6 +923,15 @@ class Catalog {
   /// not applicable.
   final List<String> sources;
 
+  /// What it lists changes without Kalinka, as a drive's folders do when
+  /// files are copied to it, so it is listed again each time it is shown.
+  final bool live;
+
+  /// A folder of a volume the server mounted, or the list of them: the
+  /// server says where it is on storage, and it may list what a volume
+  /// that went away held.
+  final bool onStorage;
+
   Catalog({
     required this.id,
     required this.title,
@@ -932,6 +941,8 @@ class Catalog {
     this.previewConfig,
     this.role,
     this.sources = const [],
+    this.live = false,
+    this.onStorage = false,
   });
 
   static final empty = Catalog(
@@ -958,6 +969,8 @@ class Catalog {
     sources: json["sources"] == null
         ? const []
         : List<String>.from(json["sources"]),
+    live: json["live"] == true,
+    onStorage: json["on_storage"] == true,
   );
 
   Map<String, dynamic> toJson() => {
@@ -969,6 +982,8 @@ class Catalog {
     "preview_config": previewConfig?.toJson(),
     "role": role?.toValue(),
     "sources": sources,
+    if (live) "live": live,
+    if (onStorage) "on_storage": onStorage,
   };
 
   Catalog copyWith({
@@ -980,6 +995,8 @@ class Catalog {
     Preview? previewConfig,
     CatalogRole? role,
     List<String>? sources,
+    bool? live,
+    bool? onStorage,
   }) {
     return Catalog(
       id: id ?? this.id,
@@ -990,6 +1007,8 @@ class Catalog {
       previewConfig: previewConfig ?? this.previewConfig,
       role: role ?? this.role,
       sources: sources ?? this.sources,
+      live: live ?? this.live,
+      onStorage: onStorage ?? this.onStorage,
     );
   }
 }
@@ -1156,6 +1175,10 @@ class BrowseItem {
   final NameMatch? match;
   final List<BrowseItem>? sections;
 
+  /// What to draw where the item has no art, as its source names it
+  /// (`track`, `folder`, `usb_drive`…); null leaves it to art made up.
+  final String? icon;
+
   const BrowseItem({
     required this.id,
     this.name,
@@ -1171,6 +1194,7 @@ class BrowseItem {
     this.catalog,
     this.match,
     this.sections,
+    this.icon,
   });
 
   static final empty = BrowseItem(
@@ -1202,6 +1226,7 @@ class BrowseItem {
     Playlist? playlist,
     Catalog? catalog,
     List<BrowseItem>? sections,
+    String? icon,
   }) {
     return BrowseItem(
       id: id ?? this.id,
@@ -1217,6 +1242,7 @@ class BrowseItem {
       playlist: playlist ?? this.playlist,
       catalog: catalog ?? this.catalog,
       sections: sections ?? this.sections,
+      icon: icon ?? this.icon,
     );
   }
 
@@ -1315,6 +1341,7 @@ class BrowseItem {
         : List<BrowseItem>.from(
             json["sections"].map((x) => BrowseItem.fromJson(x)),
           ),
+    icon: json["icon"],
   );
 
   Map<String, dynamic> toJson() => {
@@ -1334,6 +1361,7 @@ class BrowseItem {
     "sections": sections == null
         ? null
         : List<dynamic>.from(sections!.map((x) => x.toJson())),
+    "icon": icon,
   };
 }
 
@@ -1711,6 +1739,10 @@ class ModuleInfo {
   /// Read these declarations before offering optional features.
   final List<String> capabilities;
 
+  /// A number to show on the source's icon, such as the drives Drives
+  /// lists; null where it counts nothing (API 0.21).
+  final int? count;
+
   ModuleInfo({
     required this.name,
     required this.title,
@@ -1723,6 +1755,7 @@ class ModuleInfo {
     this.missingPackages = const [],
     this.builtin = false,
     this.capabilities = const [],
+    this.count,
   });
 
   bool can(String capability) => capabilities.contains(capability);
@@ -1745,6 +1778,7 @@ class ModuleInfo {
     capabilities:
         (json["capabilities"] as List?)?.map((e) => e.toString()).toList() ??
         const [],
+    count: (json["count"] as num?)?.toInt(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -1759,6 +1793,7 @@ class ModuleInfo {
     "missing_packages": missingPackages,
     "builtin": builtin,
     "capabilities": capabilities,
+    if (count != null) "count": count,
   };
 }
 

@@ -51,4 +51,5 @@ const _$PlayQueueEventTypeEnumMap = {
   PlayQueueEventType.currentRendererChanged: 'current_renderer_changed',
   PlayQueueEventType.playbackControlChanged: 'playback_control_changed',
   PlayQueueEventType.modulesChanged: 'modules_changed',
+  PlayQueueEventType.volumesChanged: 'volumes_changed',
 };

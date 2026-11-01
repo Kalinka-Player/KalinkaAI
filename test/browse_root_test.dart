@@ -214,9 +214,11 @@ void main() {
                   enabled: true,
                   state: ModuleState.ready,
                   builtin: root == builtin,
+                  // Collections, built in, declares no catalogs.
                   capabilities: [
                     ModuleCapability.aiSearch,
-                    if (root != receiver) ModuleCapability.catalogs,
+                    if (root != receiver && root != builtin)
+                      ModuleCapability.catalogs,
                   ],
                 ),
             ],

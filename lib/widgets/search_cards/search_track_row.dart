@@ -11,7 +11,6 @@ import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/playback_utils.dart';
 import '../modifier_click.dart';
-import '../procedural_album_art.dart';
 import '../source_badge.dart';
 import '../swipe_to_act_row.dart';
 import '../tap_highlight.dart';
@@ -362,12 +361,10 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
                         fit: BoxFit.cover,
                         gaplessPlayback: true,
                         filterQuality: FilterQuality.low,
-                        errorBuilder: (_, _, _) => ProceduralAlbumArt(
-                          trackId: widget.item.id,
-                          size: 44,
-                        ),
+                        errorBuilder: (_, _, _) =>
+                            ArtStandIn(item: widget.item, size: 44),
                       )
-                    : ProceduralAlbumArt(trackId: widget.item.id, size: 44),
+                    : ArtStandIn(item: widget.item, size: 44),
               ),
             if (longPressing && longPressProgress > 0)
               Positioned.fill(

@@ -7,6 +7,7 @@ IconData? iconNamed(String? name) => switch (name) {
   'lan_outlined' => Icons.lan_outlined,
   'music_note_outlined' => Icons.music_note_outlined,
   'speaker_outlined' => Icons.speaker_outlined,
+  'storage_outlined' => Icons.storage_outlined,
   'waves_outlined' => Icons.waves_outlined,
   'extension_outlined' => Icons.extension_outlined,
   _ => null,

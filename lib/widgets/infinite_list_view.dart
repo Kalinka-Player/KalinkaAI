@@ -150,6 +150,10 @@ class InfiniteListView<T> extends StatefulWidget {
   /// Anything else a pull reloads, alongside the list.
   final Future<void> Function()? onPullToRefresh;
 
+  /// Sizes the list to its rows, for one in a sheet that grows with what it
+  /// holds. A list with a [sideHeader] or [sliverHeader] ignores it.
+  final bool shrinkWrap;
+
   const InfiniteListView({
     super.key,
     required this.fetchChunk,
@@ -181,6 +185,7 @@ class InfiniteListView<T> extends StatefulWidget {
     this.fastScrollPadding = EdgeInsets.zero,
     this.pullToRefresh = false,
     this.onPullToRefresh,
+    this.shrinkWrap = false,
   }) : assert(sideHeader == null || sideHeaderWidth > 0),
        assert(sideHeader == null || sliverHeader == null);
 
@@ -538,6 +543,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
       }
       return ListView(
         physics: _physics,
+        shrinkWrap: widget.shrinkWrap,
         padding: widget.padding,
         children: [
           if (widget.header != null) widget.header!,
@@ -692,6 +698,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
     return ListView.builder(
       controller: _controller,
       physics: _physics,
+      shrinkWrap: widget.shrinkWrap,
       padding: widget.padding,
       itemCount: itemCount,
       itemBuilder: buildItem,

@@ -134,6 +134,14 @@ class CatalogPage {
   final bool canAdd;
   final Preview? preview;
 
+  /// What it lists changes without Kalinka, so it is listed again each time
+  /// it is shown ([Catalog.live]).
+  final bool live;
+
+  /// A folder of a volume the server mounted, or the list of them
+  /// ([Catalog.onStorage]).
+  final bool onStorage;
+
   /// The item the page was opened from, when it was one: an album, artist,
   /// playlist or collection keeps the metadata its listing already supplied.
   final BrowseItem? item;
@@ -152,6 +160,8 @@ class CatalogPage {
       folderLayout = false,
       canAdd = false,
       preview = null,
+      live = false,
+      onStorage = false,
       item = null;
 
   const CatalogPage.category({
@@ -168,6 +178,8 @@ class CatalogPage {
     this.folderLayout = false,
     this.canAdd = false,
     this.preview,
+    this.live = false,
+    this.onStorage = false,
     this.item,
   });
 
@@ -191,6 +203,8 @@ class CatalogPage {
     'folderLayout': folderLayout,
     'canAdd': canAdd,
     'preview': preview?.toJson(),
+    if (live) 'live': live,
+    if (onStorage) 'onStorage': onStorage,
   };
 
   factory CatalogPage.fromJson(Map<String, dynamic> json) =>
@@ -208,6 +222,8 @@ class CatalogPage {
         ],
         folderLayout: json['folderLayout'] == true,
         canAdd: json['canAdd'] == true,
+        live: json['live'] == true,
+        onStorage: json['onStorage'] == true,
         preview: json['preview'] == null
             ? null
             : Preview.fromJson(
@@ -255,6 +271,8 @@ class CatalogPage {
         folderLayout: item.opensAsFolder,
         canAdd: item.canAdd,
         preview: item.catalog?.previewConfig,
+        live: item.catalog?.live ?? false,
+        onStorage: item.catalog?.onStorage ?? false,
         item: item,
       );
 
@@ -270,6 +288,8 @@ class CatalogPage {
     artPath: json['artPath'] as String?,
     folderLayout: true,
     canAdd: json['canAdd'] == true,
+    live: json['live'] == true,
+    onStorage: json['onStorage'] == true,
   );
 
   /// What of a folder outlives the app: enough to show it again before its
@@ -280,6 +300,8 @@ class CatalogPage {
     if (description != null) 'description': description,
     if (artPath != null) 'artPath': artPath,
     'canAdd': canAdd,
+    if (live) 'live': live,
+    if (onStorage) 'onStorage': onStorage,
   };
 
   bool get isRoot => id == null;
@@ -303,6 +325,8 @@ class CatalogPage {
       folderLayout: folderLayout,
       canAdd: canAdd,
       preview: preview,
+      live: live,
+      onStorage: onStorage,
       item: item?.copyWith(
         name: title,
         playlist: playlist == null
@@ -1068,6 +1092,43 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     ).copyWith(visitId: ++_lastVisitId),
   );
 
+  /// Forgets [name]'s pages, which no longer show what the source holds.
+  /// Shown, they give way to the destination before them.
+  void closeSource(String name) {
+    _forgetFolderPaths(name);
+    final destination = BrowseDestination.source(name);
+    if (state.destination != destination) {
+      if (!state.parked.containsKey(destination)) return;
+      state = state.copyWith(parked: {...state.parked}..remove(destination));
+      return;
+    }
+    _show(
+      state.parked.containsKey(_cameFrom) ? _cameFrom : BrowseDestination.home,
+      restore: true,
+      keepShown: false,
+      // Any other is parked, so restored rather than started.
+      start: _homeTop,
+    );
+  }
+
+  /// Closes every source with pages on the server's storage: a volume went
+  /// away, and what they list may have gone with it.
+  void closeStorageSources() {
+    bool onStorage(SearchSessionState visit) =>
+        visit.catalogPage.onStorage ||
+        visit.previousVisits.any((v) => v.catalogPage.onStorage);
+    final names = {
+      for (final MapEntry(:key, :value) in {
+        state.destination: state,
+        ...state.parked,
+      }.entries)
+        if (BrowseDestination.sourceOf(key) case final name?
+            when onStorage(value))
+          name,
+    };
+    names.forEach(closeSource);
+  }
+
   /// The collections listing [plan] is and the collections opened from it.
   /// With [restore], as they were left; otherwise at the listing.
   void openCollections(CatalogCardPlan plan, {bool restore = true}) => _show(
@@ -1139,6 +1200,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     bool folderLayout = false,
     bool canAdd = false,
     Preview? preview,
+    bool live = false,
+    bool onStorage = false,
     BrowseFilterQuery? initialFilter,
     bool restoreFolder = true,
     BrowseItem? item,
@@ -1175,6 +1238,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       folderLayout: folderLayout,
       canAdd: canAdd,
       preview: preview,
+      live: live,
+      onStorage: onStorage,
       item: item,
     );
     _visit(
@@ -1225,6 +1290,8 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       folderLayout: page.folderLayout,
       canAdd: page.canAdd,
       preview: page.preview,
+      live: page.live,
+      onStorage: page.onStorage,
       initialFilter: filter,
       restoreFolder: restoreFolder,
       item: page.item,
@@ -1865,6 +1932,23 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         for (final folder in state.folderPath) folder.toFolderJson(),
       ];
     }
+    _saveFolderPaths(paths);
+  }
+
+  /// Drops the folder trails this server keeps for [source]'s pages.
+  void _forgetFolderPaths(String source) {
+    final server = _serverKey;
+    if (server == null) return;
+    final paths = _loadFolderPaths();
+    final kept = paths.length;
+    paths.removeWhere((key, _) {
+      final pageId = key.substring(key.lastIndexOf(' ') + 1);
+      return key == server.folderPath(pageId) && sourceOfId(pageId) == source;
+    });
+    if (paths.length != kept) _saveFolderPaths(paths);
+  }
+
+  void _saveFolderPaths(Map<String, List<Map<String, dynamic>>> paths) {
     if (paths.isEmpty) {
       _folderPathsJson = null;
       _prefs.remove(ServerStorageKey.folderPaths);

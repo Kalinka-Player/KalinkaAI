@@ -8,17 +8,16 @@ import 'source_modules_provider.dart';
 
 typedef CatalogSource = ({ModuleInfo module, BrowseItem root});
 
-/// Only explicit plugin capabilities decide which sources Home offers.
-/// Root IDs come from browse; neither names nor manufactured IDs are used.
+/// Only declared capabilities decide which sources Home offers, built-in or
+/// plugin. Root IDs come from browse; neither names nor manufactured IDs are
+/// used.
 final catalogSourcesProvider = FutureProvider<List<CatalogSource>>((ref) async {
   ref.watch(catalogCardsReloadProvider);
   final api = ref.watch(kalinkaProxyProvider);
   final modules = await ref.watch(sourceModulesProvider.future);
   final eligible = {
     for (final module in modules)
-      if (module.enabled &&
-          !module.builtin &&
-          module.can(ModuleCapability.catalogs))
+      if (module.enabled && module.can(ModuleCapability.catalogs))
         module.name: module,
   };
   if (eligible.isEmpty) return [];

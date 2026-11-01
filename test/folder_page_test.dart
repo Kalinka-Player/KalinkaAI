@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/data_model/storage.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
@@ -12,6 +13,7 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/selection_state_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
+import 'package:kalinka/providers/storage_volumes_provider.dart';
 import 'package:kalinka/widgets/breadcrumb_crumb.dart';
 import 'package:kalinka/widgets/browse_filters/active_filter_chips.dart';
 import 'package:kalinka/widgets/column_separator.dart';
@@ -191,6 +193,88 @@ const _longName =
     'The Complete Columbia Studio Recordings of the Second Great Quintet';
 
 late SharedPreferences _prefs;
+
+/// The drives plugged in, as a test swaps them.
+class _Drives extends StorageVolumesNotifier {
+  @override
+  Future<List<StorageVolume>> build() async => [_drive('BOOTFS')];
+
+  void swap(String id) => state = AsyncData([_drive(id)]);
+}
+
+StorageVolume _drive(String id) => StorageVolume(
+  id: id,
+  kind: VolumeKind.removable,
+  label: id,
+  mountPoint: '/media/kalinka/$id',
+);
+
+const _drivesRoot = 'kalinka:drives:catalog:root';
+
+BrowseItem _driveFolder(String name) => BrowseItem(
+  id: 'kalinka:drives:catalog:folder.$name',
+  name: name,
+  canBrowse: true,
+  canAdd: true,
+  catalog: Catalog(
+    id: 'kalinka:drives:catalog:folder.$name',
+    title: name,
+    previewConfig: Preview(type: PreviewType.folder),
+    live: true,
+    onStorage: true,
+  ),
+);
+
+void _openDrives(ProviderContainer container) => container
+    .read(searchSessionProvider.notifier)
+    .openCatalog(
+      id: _drivesRoot,
+      title: 'Drives',
+      folderLayout: true,
+      live: true,
+      onStorage: true,
+    );
+
+void _openLibrary(ProviderContainer container) => container
+    .read(searchSessionProvider.notifier)
+    .openCatalog(id: _libraryId, title: 'My Library');
+
+/// Drives' top page, on one drive, with nothing but the page around it.
+Future<ProviderContainer> _pumpDrives(
+  WidgetTester tester,
+  _FolderApi api,
+) async {
+  final container = ProviderContainer(
+    overrides: [
+      sharedPrefsProvider.overrideWithValue(_prefs),
+      kalinkaProxyProvider.overrideWithValue(api),
+      sourceModulesProvider.overrideWith((ref) => const <ModuleInfo>[]),
+      connectionStateProvider.overrideWith(_FixedConnection.new),
+      serverAnswering('box-1'),
+      playerStateProvider.overrideWithValue(PlaybackState.empty),
+      storageVolumesProvider.overrideWith(_Drives.new),
+    ],
+  );
+  addTearDown(container.dispose);
+  _openDrives(container);
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: Scaffold(
+          body: Consumer(
+            builder: (context, ref, _) => CatalogPageView(
+              page: ref.watch(searchSessionProvider).catalogPage,
+              onBackToCatalogs: () {},
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return container;
+}
 
 Future<ProviderContainer> _pumpLibrary(
   WidgetTester tester, {
@@ -387,6 +471,63 @@ void main() {
       );
     },
   );
+
+  testWidgets('a drive plugged in where another was lists its own folders', (
+    tester,
+  ) async {
+    final api = _FolderApi({
+      _drivesRoot: [_driveFolder('overlays')],
+    });
+    final container = await _pumpDrives(tester, api);
+    expect(find.text('overlays'), findsOneWidget);
+
+    // Left, then the stick swapped for another, then Drives opened again.
+    _openLibrary(container);
+    await tester.pumpAndSettle();
+    api.byId[_drivesRoot] = [_driveFolder('Jazz')];
+    (container.read(storageVolumesProvider.notifier) as _Drives).swap('MUSIC');
+    _openDrives(container);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Jazz'), findsOneWidget);
+    expect(find.text('overlays'), findsNothing);
+
+    // Swapped while shown, the page lists the drive plugged in.
+    api.byId[_drivesRoot] = [_driveFolder('Rock')];
+    (container.read(storageVolumesProvider.notifier) as _Drives).swap('SPARE');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Rock'), findsOneWidget);
+  });
+
+  testWidgets('a drive folder shows what was copied to it since', (
+    tester,
+  ) async {
+    final api = _FolderApi({
+      _drivesRoot: [_driveFolder('Jazz')],
+    });
+    final container = await _pumpDrives(tester, api);
+
+    // Walked back into after files were copied.
+    _openLibrary(container);
+    await tester.pumpAndSettle();
+    api.byId[_drivesRoot] = [_driveFolder('Blues'), _driveFolder('Jazz')];
+    _openDrives(container);
+    await tester.pumpAndSettle();
+    expect(find.text('Blues'), findsOneWidget);
+
+    // Shown while they were copied from another window.
+    api.byId[_drivesRoot] = [
+      _driveFolder('Blues'),
+      _driveFolder('Jazz'),
+      _driveFolder('Rock'),
+    ];
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text('Rock'), findsOneWidget);
+  });
 
   testWidgets('a folder numbers its tracks before their covers', (
     tester,

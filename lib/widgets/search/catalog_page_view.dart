@@ -16,7 +16,10 @@ import '../../providers/indexer_status_provider.dart';
 import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/listing_presentation_provider.dart';
 import '../../providers/search_session_provider.dart';
+import 'drive_folder_actions.dart';
+import '../../providers/playback_time_provider.dart' show appLifecycleProvider;
 import '../../providers/source_modules_provider.dart';
+import '../../providers/storage_volumes_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../browse_filters/active_filter_chips.dart';
@@ -122,10 +125,23 @@ class CatalogPageView extends ConsumerStatefulWidget {
   ConsumerState<CatalogPageView> createState() => _CatalogPageViewState();
 }
 
+/// Hands out a fresh number each time a live listing is shown.
+final _liveReadsProvider = Provider<_LiveReads>((ref) => _LiveReads());
+
+class _LiveReads {
+  int _last = 0;
+
+  int next() => ++_last;
+}
+
 class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   /// The listing's size as the server last said, -1 before it has. The head
   /// shows it, and its actions have nothing to act on when it is 0.
   int _total = -1;
+
+  /// Bumped each time a live listing is shown or the app resumes, so it is
+  /// read again behind the rows it had.
+  int _liveRead = 0;
 
   /// What each listing shown here led with. Where its catalog does not say
   /// what it holds, the first item decides how it lays out a grid and how
@@ -354,10 +370,28 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     // A folder walked back into opens where it was left, with what it had
     // loaded, which the rows' headings count from.
     final places = ref.read(_folderPlacesProvider);
+    // A drive mounted where another was has the same page ids.
+    final volumes = listing.onStorage
+        ? ref.watch(
+            storageVolumesProvider.select(
+              (v) => (mountedVolumeIds(
+                v.value ?? const [],
+              ).toList()..sort()).join(' '),
+            ),
+          )
+        : '';
     final reloadKey =
-        '${listing.id}|${query.serverKey(capabilities)}|$revision';
+        '${listing.id}|${query.serverKey(capabilities)}|$revision|$volumes';
+    if (listing.live) {
+      ref.listen(appLifecycleProvider, (previous, next) {
+        if (next == AppLifecycleState.resumed && previous != next) {
+          setState(() => _liveRead = ref.read(_liveReadsProvider).next());
+        }
+      });
+    }
     if (listing.id != _shownListingId) {
       _shownListingId = listing.id;
+      if (listing.live) _liveRead = ref.read(_liveReadsProvider).next();
       _actionsTop = null;
       _actionsHeld = false;
       // A place left under another reload key is not reopened.
@@ -485,7 +519,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       // Only the facets the server honours restart the list, so touching an
       // inert placeholder never costs a refetch.
       reloadKey: reloadKey,
-      refreshKey: (_artRefresh, libraryRevision),
+      refreshKey: (_artRefresh, libraryRevision, _liveRead),
       onLoadedCount: _countRows,
       place: _place,
       onLeave: page.folderLayout
@@ -1346,7 +1380,7 @@ class _FolderActions extends ConsumerWidget {
   });
 
   static bool anyFor(CatalogPage page, CatalogPage listing) =>
-      !identical(listing, page) || listing.canAdd;
+      !identical(listing, page) || listing.canAdd || listing.onStorage;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1361,6 +1395,13 @@ class _FolderActions extends ConsumerWidget {
               narrowed: narrowed,
             ),
           ),
+        if (listing.onStorage && listing.id != null) ...[
+          if (listing.canAdd) const SizedBox(width: 8),
+          DriveFolderActions(
+            entityId: listing.id!,
+            title: listing.title ?? 'this folder',
+          ),
+        ],
         const Spacer(),
         if (!identical(listing, page))
           ActionPillButton(

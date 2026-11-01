@@ -17,12 +17,16 @@ class ServerInfo {
   /// The server checks installed plugins for newer catalog releases.
   final bool pluginUpdateChecks;
 
+  /// The server lists its volumes and the folders on them (API 0.21).
+  final bool storage;
+
   const ServerInfo({
     required this.version,
     required this.latencyMs,
     this.pluginCatalogEnabled = false,
     this.pluginInstallation = false,
     this.pluginUpdateChecks = false,
+    this.storage = false,
   });
 }
 
@@ -47,8 +51,14 @@ final serverInfoProvider = FutureProvider.autoDispose<ServerInfo>((ref) async {
     pluginCatalogEnabled: browsing,
     pluginInstallation: browsing && can('installation'),
     pluginUpdateChecks: browsing && can('update_checks'),
+    storage: info['storage'] is Map && info['storage']['folders'] == true,
   );
 });
+
+/// Whether the server's folders can be browsed to pick one, rather than typed.
+final storageSupportedProvider = Provider<bool>(
+  (ref) => ref.watch(serverInfoProvider).value?.storage == true,
+);
 
 /// Fail closed during connection changes, errors and on older servers.
 final pluginCatalogEnabledProvider = Provider<bool>((ref) {
