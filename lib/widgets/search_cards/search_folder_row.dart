@@ -82,11 +82,14 @@ class _SearchFolderRowState extends ConsumerState<SearchFolderRow>
                       child: Stack(
                         children: [
                           TrackThumb(item: item, size: 68, radius: 8),
-                          const Positioned(
-                            right: 4,
-                            bottom: 4,
-                            child: CornerGlyph(Icons.folder_outlined),
-                          ),
+                          // A source naming its rows' icon draws a folder as
+                          // one already.
+                          if (item.icon == null)
+                            const Positioned(
+                              right: 4,
+                              bottom: 4,
+                              child: CornerGlyph(Icons.folder_outlined),
+                            ),
                           if (longPressing && longPressProgress > 0)
                             Positioned.fill(
                               child: CustomPaint(

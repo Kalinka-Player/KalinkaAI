@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
 import 'server_update_banner.dart';
 import 'configuration_appearance.dart';
+import 'settings_controls/folder_picker.dart';
 import 'settings_controls/footer_note.dart';
 import 'settings_controls/inline_markdown.dart';
 import 'settings_controls/issue_notes.dart';
@@ -394,7 +395,7 @@ Widget buildFieldControl({
     case WidgetKind.url:
       if (field.dynamicOptions) {
         final suggestions = options.optionsFor(field.path) ?? const [];
-        return listSuggestions
+        final control = listSuggestions
             ? SettingsComboList(
                 value: (value ?? '').toString(),
                 options: suggestions,
@@ -407,6 +408,16 @@ Widget buildFieldControl({
                 borderColor: issueBorderColor(issues),
                 onChanged: onChanged,
               );
+        if (field.widget != WidgetKind.path) return control;
+        // A folder on the server is picked rather than typed, where the
+        // server can be browsed.
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: control),
+            FolderPickerButton(onPicked: onChanged),
+          ],
+        );
       }
       return SettingsTextInput(
         value: (value ?? '').toString(),

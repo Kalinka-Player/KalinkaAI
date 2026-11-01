@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/browse_filters.dart';
@@ -132,6 +133,7 @@ Future<ProviderContainer> _pump(
   bool reducedMotion = false,
   Key? captureKey,
   _Api? api,
+  List<Override> extra = const [],
 }) => pumpHomeShell(
   tester,
   queue: SettableQueue(queueOf(3)),
@@ -169,6 +171,7 @@ Future<ProviderContainer> _pump(
       (ref) async => const PluginCatalog(status: 'available'),
     ),
     serverUpdateProvider.overrideWith((ref) async => null),
+    ...extra,
   ],
 );
 
@@ -694,6 +697,56 @@ void main() {
 
   // The window the desktop app opens at is too short for every item: the
   // rest go behind More, from the foot up, rather than the rail scrolling.
+  testWidgets('a source carries its icon and the count the server gives it', (
+    tester,
+  ) async {
+    final drives = ModuleInfo(
+      name: 'drives',
+      title: 'Drives',
+      icon: 'storage_outlined',
+      enabled: true,
+      state: ModuleState.ready,
+      capabilities: const [ModuleCapability.catalogs],
+      builtin: true,
+      count: 2,
+    );
+    await _pump(
+      tester,
+      extra: [
+        catalogSourcesProvider.overrideWith(
+          (ref) async => [
+            for (final module in [..._modules, drives])
+              (module: module, root: _catalog(module.name, module.title)),
+          ],
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+
+    final rail = _nav('source-drives');
+    expect(
+      find.descendant(of: rail, matching: find.byIcon(Icons.storage_outlined)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.descendant(
+          of: rail,
+          matching: find.byKey(const ValueKey('navigation-count')),
+        ),
+        matching: find.text('2'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: _nav('source-localfiles'),
+        matching: find.byKey(const ValueKey('navigation-count')),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('a short rail folds what does not fit behind More', (
     tester,
   ) async {

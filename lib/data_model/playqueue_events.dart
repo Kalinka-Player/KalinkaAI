@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+
 import '../data_model/data_model.dart';
+import 'storage.dart';
 
 part 'playqueue_events.freezed.dart';
 part 'playqueue_events.g.dart';
@@ -219,6 +221,9 @@ class PlayQueueState {
         );
       case ModulesChangedEvent(:final modules, :final seq):
         return copyWith(modules: modules, seq: seq);
+      case VolumesChangedEvent():
+        // Kept by the volumes provider, which fetches them on every connect.
+        return this;
       case ReplayPlayQueueEvent(:final state, :final serverTimeNs, :final seq):
         final nextPlaybackState =
             state.playbackState.copyWith(state.playbackState)
@@ -342,7 +347,8 @@ enum PlayQueueEventType {
   renderersChanged,
   currentRendererChanged,
   playbackControlChanged,
-  modulesChanged;
+  modulesChanged,
+  volumesChanged;
 
   String toJson() => _$PlayQueueEventTypeEnumMap[this]!;
 
@@ -430,6 +436,13 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
     required ModulesAndDevices modules,
     required int seq,
   }) = ModulesChangedEvent;
+
+  /// Every volume as `GET /server/storage/volumes` lists them, sent when one
+  /// is mounted, unmounted or changes state (API 0.21).
+  const factory PlayQueueEvent.volumesChanged({
+    required List<StorageVolume> volumes,
+    required int seq,
+  }) = VolumesChangedEvent;
 
   factory PlayQueueEvent.fromJson(Map<String, dynamic> json) {
     final eventTypeStr = json['event_type'] as String;
@@ -531,6 +544,11 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
       case 'modules_changed':
         return PlayQueueEvent.modulesChanged(
           modules: ModulesAndDevices.fromJson(json),
+          seq: seq,
+        );
+      case 'volumes_changed':
+        return PlayQueueEvent.volumesChanged(
+          volumes: StorageVolume.listFromJson(json['volumes']),
           seq: seq,
         );
       default:

@@ -67,7 +67,7 @@ void main() {
             (ref) async => [
               module('receiver'),
               module('custom', catalogs: true),
-              module('builtin', catalogs: true, builtin: true),
+              module('builtin', builtin: true),
               module('disabled', catalogs: true, enabled: false),
             ],
           ),

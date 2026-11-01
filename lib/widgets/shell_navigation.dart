@@ -138,6 +138,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
       String? compactLabel,
       String? tooltip,
       CatalogSource? source,
+      int? count,
       Widget? above,
       Widget? below,
     }) => item(
@@ -156,6 +157,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
             ? null
             : colorForSourceName(source.module.name),
         icons: source?.module.icons,
+        count: count,
         selected: selected,
         extended: extended,
         onPressed: enabled && available
@@ -253,6 +255,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
           selected: shown == BrowseDestination.source(source.module.name),
           available: connected && source.root.canBrowse,
           source: source,
+          count: source.module.count,
         ),
       if (sources.hasError && connected)
         item(
@@ -595,6 +598,9 @@ class _NavigationButton extends StatelessWidget {
   final IconData icon;
   final ModuleIcons? icons;
 
+  /// How many of what it opens there are, shown on its icon.
+  final int? count;
+
   /// The icon's own colour while it can be followed; null takes the label's.
   final Color? iconColor;
   final bool selected;
@@ -608,6 +614,7 @@ class _NavigationButton extends StatelessWidget {
     this.tooltip,
     required this.icon,
     this.icons,
+    this.count,
     this.iconColor,
     required this.selected,
     required this.extended,
@@ -616,16 +623,30 @@ class _NavigationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final glyph = ExcludeSemantics(
-      child: ModuleArtwork(
-        icons: icons,
+    final artwork = ModuleArtwork(
+      icons: icons,
+      size: 24,
+      fallback: Icon(
+        icon,
         size: 24,
-        fallback: Icon(
-          icon,
-          size: 24,
-          color: onPressed == null ? null : iconColor,
-        ),
+        color: onPressed == null ? null : iconColor,
       ),
+    );
+    final glyph = ExcludeSemantics(
+      child: count == null
+          ? artwork
+          // Neutral: a tally on chrome, not a choice (PALETTE.md).
+          : Badge(
+              key: const ValueKey('navigation-count'),
+              label: Text('$count'),
+              backgroundColor: KalinkaColors.surfaceOverlay,
+              textColor: KalinkaColors.textPrimary,
+              textStyle: KalinkaFonts.mono(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+              child: artwork,
+            ),
     );
     final text = ExcludeSemantics(
       child: Text(
@@ -642,7 +663,7 @@ class _NavigationButton extends StatelessWidget {
     final message = extended ? tooltip : tooltip ?? label;
     final button = MergeSemantics(
       child: Semantics(
-        label: label,
+        label: count == null ? label : '$label, $count',
         selected: selected,
         child: TextButton(
           onPressed: onPressed,

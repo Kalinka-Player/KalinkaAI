@@ -18,6 +18,7 @@ import '../providers/renderer_settings_route_provider.dart';
 import '../providers/restart_provider.dart';
 import '../providers/soundcard_provider.dart' show restartingBoxesProvider;
 import '../providers/search_session_provider.dart';
+import '../providers/storage_volumes_provider.dart';
 import '../providers/server_connect.dart';
 import '../providers/settings_provider.dart';
 import '../providers/shell_nav_provider.dart';
@@ -617,6 +618,26 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     if (route.isActive) Navigator.of(context).removeRoute(route);
   }
 
+  /// Opens the source that browses the server's drives, at its top.
+  Future<void> _openDrives() async {
+    final List<CatalogSource> sources;
+    try {
+      sources = await ref.read(catalogSourcesProvider.future);
+    } catch (_) {
+      return;
+    }
+    for (final source in sources) {
+      if (source.root.catalog?.onStorage != true) continue;
+      // At the drives themselves, even from a folder of one shown.
+      if (mounted) {
+        ref.read(searchSessionProvider.notifier)
+          ..closeSource(source.module.name)
+          ..openSource(source, restore: false);
+      }
+      return;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen(
@@ -655,6 +676,29 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         }
       },
     );
+
+    // A drive plugged into the server, wherever the listener is in the app.
+    ref.listen(storageVolumesProvider, (previous, next) {
+      // A fetch (connect, another server) is not a drive plugged in.
+      if (previous == null || previous.isLoading) return;
+      final before = previous.value;
+      final after = next.value;
+      if (before == null || after == null) return;
+      // Pages left on an unplugged drive show nothing that is there.
+      final left = mountedVolumeIds(before).difference(mountedVolumeIds(after));
+      if (left.isNotEmpty) {
+        ref.read(searchSessionProvider.notifier).closeStorageSources();
+      }
+      for (final drive in newlyPlugged(before, after)) {
+        final summary = drive.summary;
+        ref
+            .read(toastProvider.notifier)
+            .show(
+              '${drive.label} connected${summary == null ? '' : ' · $summary'}',
+              action: ToastAction('Open', _openDrives),
+            );
+      }
+    });
 
     // Slide the mini-player down when the search entry overlay opens, back up
     // when it closes. Driven here (not in the phone layout) so the animation

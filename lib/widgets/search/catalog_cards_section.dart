@@ -39,9 +39,7 @@ class CatalogCardsSection extends ConsumerWidget {
             final count = modules
                 ?.where(
                   (module) =>
-                      module.enabled &&
-                      !module.builtin &&
-                      module.can(ModuleCapability.catalogs),
+                      module.enabled && module.can(ModuleCapability.catalogs),
                 )
                 .length;
             if (count == 0) return const SizedBox.shrink();

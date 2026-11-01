@@ -24,6 +24,7 @@ import '../data_model/data_model.dart'
         SeekStatusMessage,
         StatusMessage,
         TrackList;
+import '../data_model/storage.dart';
 import '../data_model/presentation_schema.dart'
     show ConfigIssue, PresentationSchema;
 import '../data_model/renderer_config.dart'
@@ -41,6 +42,14 @@ class CollectionChangedException implements Exception {
 
   @override
   String toString() => 'Collection $collectionId changed since it was read';
+}
+
+/// The sentence a FastAPI refusal carries in `detail`, when it is one.
+String? _detail(DioException e) {
+  if (e is ServerRefusalException) return e.reason;
+  final data = e.response?.data;
+  final detail = data is Map ? data['detail'] : null;
+  return detail is String ? detail : null;
 }
 
 abstract class KalinkaPlayerProxy {
@@ -189,6 +198,29 @@ abstract class KalinkaPlayerProxy {
   /// [getServerUpdateInfo]. The server 409s if that no longer matches.
   Future<void> upgradeServer(String version);
   Future<ModulesAndDevices> listModules();
+
+  /// The server's volumes (API 0.21).
+  Future<List<StorageVolume>> listStorageVolumes();
+
+  /// Unmounts a drive Kalinka mounted, powering a USB disk down.
+  Future<void> ejectVolume(String volumeId);
+
+  /// Where a Drives page is on storage, and what a library makes of it.
+  Future<StorageLocation> storageLocation(String entityId);
+
+  /// The folders in [path] on the server, or the places folders can be in
+  /// when it is null.
+  Future<ServerFolderList> listServerFolders({
+    String? path,
+    int offset = 0,
+    int limit = 50,
+  });
+
+  /// Adds a Drives folder to the library that answered for it.
+  Future<AdoptResult> adoptStorage(String entityId);
+
+  /// Takes a Drives folder that is a library source out of that library.
+  Future<AdoptResult> releaseStorage(String entityId);
 
   /// PUT body: `{"schema_version": ..., "changes": {<flat dotted path>: value}}`.
   ///
@@ -1015,6 +1047,89 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
       }
       return ModulesAndDevices.fromJson(response.data);
     });
+  }
+
+  @override
+  Future<List<StorageVolume>> listStorageVolumes() async {
+    try {
+      final response = await client.get('/server/storage/volumes');
+      return StorageVolume.listFromJson(response.data['volumes']);
+    } on DioException catch (e) {
+      // A server before 0.21 has no volumes to tell of.
+      if (e.response?.statusCode == 404) return const [];
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> ejectVolume(String volumeId) async {
+    try {
+      await client.post(
+        '/server/storage/volumes/${Uri.encodeComponent(volumeId)}/eject',
+      );
+    } on DioException catch (e) {
+      throw Exception(_detail(e) ?? 'Could not eject the drive');
+    }
+  }
+
+  @override
+  Future<StorageLocation> storageLocation(String entityId) async {
+    try {
+      final response = await client.get(
+        '/server/storage/location',
+        queryParameters: {'entity_id': entityId},
+      );
+      return StorageLocation.fromJson(Map<String, dynamic>.from(response.data));
+    } on DioException catch (e) {
+      throw Exception(_detail(e) ?? 'Not a folder on a drive');
+    }
+  }
+
+  @override
+  Future<ServerFolderList> listServerFolders({
+    String? path,
+    int offset = 0,
+    int limit = 50,
+  }) async {
+    try {
+      final response = await client.get(
+        '/server/storage/folders',
+        queryParameters: {'path': ?path, 'offset': offset, 'limit': limit},
+      );
+      return ServerFolderList.fromJson(
+        Map<String, dynamic>.from(response.data),
+      );
+    } on DioException catch (e) {
+      throw Exception(_detail(e) ?? 'This folder cannot be read');
+    }
+  }
+
+  @override
+  Future<AdoptResult> adoptStorage(String entityId) async {
+    try {
+      final response = await client.post(
+        '/server/storage/adopt',
+        data: jsonEncode({'entity_id': entityId}),
+      );
+      return AdoptResult.fromJson(Map<String, dynamic>.from(response.data));
+    } on DioException catch (e) {
+      throw Exception(_detail(e) ?? 'Could not add this folder to the library');
+    }
+  }
+
+  @override
+  Future<AdoptResult> releaseStorage(String entityId) async {
+    try {
+      final response = await client.post(
+        '/server/storage/release',
+        data: jsonEncode({'entity_id': entityId}),
+      );
+      return AdoptResult.fromJson(Map<String, dynamic>.from(response.data));
+    } on DioException catch (e) {
+      throw Exception(
+        _detail(e) ?? 'Could not take this folder out of the library',
+      );
+    }
   }
 
   @override

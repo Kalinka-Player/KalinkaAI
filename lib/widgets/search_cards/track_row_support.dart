@@ -19,6 +19,40 @@ import '../procedural_album_art.dart';
 /// the genuinely identical logic lives here so the per-type widgets only carry
 /// what actually differs (their layout).
 
+/// The icon a source names for an item without art, or null for a name
+/// this app does not draw.
+IconData? itemIcon(String? name) => switch (name) {
+  'track' => Icons.music_note_rounded,
+  'folder' => Icons.folder_rounded,
+  'usb_drive' => Icons.usb_rounded,
+  'network_share' => Icons.lan_outlined,
+  'disk' => Icons.storage_outlined,
+  'internal_storage' => Icons.dns_outlined,
+  _ => null,
+};
+
+/// What shows where [item] has no art: the icon its source names, on a quiet
+/// tile, or art made up from its id.
+class ArtStandIn extends StatelessWidget {
+  final BrowseItem item;
+  final double size;
+
+  const ArtStandIn({super.key, required this.item, required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = itemIcon(item.icon);
+    if (icon == null) return ProceduralAlbumArt(trackId: item.id, size: size);
+    return Container(
+      width: size,
+      height: size,
+      color: KalinkaColors.surfaceElevated,
+      alignment: Alignment.center,
+      child: Icon(icon, size: size * 0.45, color: KalinkaColors.textSecondary),
+    );
+  }
+}
+
 /// The cover a track row leads with: what the item carries, and the
 /// generated stand-in where it carries none or the fetch fails.
 class TrackThumb extends ConsumerWidget {
@@ -36,7 +70,7 @@ class TrackThumb extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final path = item.image?.smallest;
-    final stand = ProceduralAlbumArt(trackId: item.id, size: size);
+    final stand = ArtStandIn(item: item, size: size);
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: path == null

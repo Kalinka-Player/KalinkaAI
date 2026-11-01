@@ -740,6 +740,92 @@ void main() {
       expect(state().previousVisits, isEmpty);
     });
 
+    test('a closed source is forgotten, and left when shown', () {
+      final container = makeContainer(_FakeApi());
+      final notifier = container.read(searchSessionProvider.notifier);
+      SearchSessionState state() => container.read(searchSessionProvider);
+      CatalogSource source(String name) => (
+        module: ModuleInfo(
+          name: name,
+          title: name,
+          enabled: true,
+          state: ModuleState.ready,
+        ),
+        root: BrowseItem(
+          id: 'kalinka:$name:catalog:root',
+          name: name,
+          canBrowse: true,
+          canAdd: false,
+        ),
+      );
+      BrowseItem folder(String id) =>
+          BrowseItem(id: id, name: id, canBrowse: true, canAdd: false);
+      final drives = BrowseDestination.source('drives');
+
+      notifier.openSource(source('drives'));
+      notifier.openBrowseItem(folder('kalinka:drives:catalog:folder.a'));
+      notifier.openSource(source('qobuz'));
+      notifier.closeSource('drives');
+      expect(state().destination, BrowseDestination.source('qobuz'));
+      expect(state().parked, isNot(contains(drives)));
+
+      // Opened again, it starts at its top, not the folder it was left on.
+      notifier.openSource(source('drives'));
+      expect(state().catalogPage.id, 'kalinka:drives:catalog:root');
+      expect(state().previousVisits, isEmpty);
+
+      // Shown, it gives way to where it was opened from.
+      notifier.openBrowseItem(folder('kalinka:drives:catalog:folder.b'));
+      notifier.closeSource('drives');
+      expect(state().destination, BrowseDestination.source('qobuz'));
+      expect(state().catalogPage.id, 'kalinka:qobuz:catalog:root');
+      expect(state().parked, isNot(contains(drives)));
+
+      // Or to Home, where nothing else was.
+      notifier.closeSource('qobuz');
+      expect(state().atHome, isTrue);
+      expect(state().parked, isEmpty);
+    });
+
+    test('a volume going away closes the sources with pages on storage', () {
+      final container = makeContainer(_FakeApi());
+      final notifier = container.read(searchSessionProvider.notifier);
+      SearchSessionState state() => container.read(searchSessionProvider);
+      CatalogSource source(String name, {bool onStorage = false}) => (
+        module: ModuleInfo(
+          name: name,
+          title: name,
+          enabled: true,
+          state: ModuleState.ready,
+        ),
+        root: BrowseItem(
+          id: 'kalinka:$name:catalog:root',
+          name: name,
+          canBrowse: true,
+          canAdd: false,
+          catalog: Catalog(
+            id: 'kalinka:$name:catalog:root',
+            title: name,
+            onStorage: onStorage,
+          ),
+        ),
+      );
+
+      notifier.openSource(source('drives', onStorage: true));
+      notifier.openSource(source('qobuz'));
+      notifier.closeStorageSources();
+      expect(
+        state().parked,
+        isNot(contains(BrowseDestination.source('drives'))),
+      );
+      expect(state().destination, BrowseDestination.source('qobuz'));
+
+      // Shown, a source on storage gives way as a closed one does.
+      notifier.openSource(source('drives', onStorage: true));
+      notifier.closeStorageSources();
+      expect(state().destination, BrowseDestination.source('qobuz'));
+    });
+
     test('opening a page already in the history goes back to it', () {
       final container = makeContainer(_FakeApi());
       final notifier = container.read(searchSessionProvider.notifier);

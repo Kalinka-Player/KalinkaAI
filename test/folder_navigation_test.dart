@@ -191,6 +191,26 @@ void main() {
     expect(shownPath(), ['Jazz', 'Miles Davis']);
   });
 
+  test('a closed source forgets the folders left open on its pages', () {
+    session().openFolder(_folder('Jazz'));
+    session().backToCatalogsRoot();
+    void openDrives() => session().openCatalog(
+      id: 'kalinka:drives:catalog:root',
+      title: 'Drives',
+      folderLayout: true,
+    );
+    openDrives();
+    session().openFolder(_folder('overlays'));
+    session().backToCatalogsRoot();
+
+    session().closeSource('drives');
+
+    openDrives();
+    expect(shownPath(), isEmpty);
+    openLibrary(container);
+    expect(shownPath(), ['Jazz']);
+  });
+
   test('a folder saved since by something else, as a server answering moves '
       'one, is the one shown', () async {
     session().openFolder(_folder('Jazz'));

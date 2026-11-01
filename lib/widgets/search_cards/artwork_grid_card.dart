@@ -10,11 +10,11 @@ import '../../theme/app_theme.dart';
 import '../catalog_art.dart';
 import '../fitted_art.dart';
 import '../modifier_click.dart';
-import '../procedural_album_art.dart';
 import '../source_badge.dart';
 import '../tap_highlight.dart' show kalinkaOverlay;
 import 'browse_navigation_scope.dart';
 import 'row_play_button.dart';
+import 'track_row_support.dart' show ArtStandIn;
 
 /// An artwork grid item: square covers and round artist portraits followed by
 /// a name and detail, or a catalog's card with its name on it. The cover and
@@ -254,7 +254,7 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
         final fallback = ClipRect(
           child: FittedBox(
             fit: BoxFit.cover,
-            child: ProceduralAlbumArt(trackId: item.id, size: size),
+            child: ArtStandIn(item: item, size: size),
           ),
         );
         final shape = round ? 1.0 : widget.shape;
