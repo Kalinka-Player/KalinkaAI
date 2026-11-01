@@ -21,7 +21,7 @@ class ToastEntry {
   /// queue-activity toast while a request is in flight.
   final bool isLoading;
 
-  /// Render as a compact right-aligned pill rather than a full-width toast.
+  /// Size the right-aligned pill to its content within the shared width cap.
   final bool compact;
 
   /// Raised by something that happened inside a panel — shown over the

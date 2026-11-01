@@ -19,7 +19,11 @@ const _boundaryKey = Key('boundary');
 final _navKey = GlobalKey<NavigatorState>();
 
 /// The app as [KalinkaApp] assembles it: the toast host wrapping the navigator.
-Future<ProviderContainer> _pumpApp(WidgetTester tester, {Widget? home}) async {
+Future<ProviderContainer> _pumpApp(
+  WidgetTester tester, {
+  Widget? home,
+  TextScaler textScaler = TextScaler.noScaling,
+}) async {
   final container = ProviderContainer();
   addTearDown(container.dispose);
   await tester.pumpWidget(
@@ -29,7 +33,10 @@ Future<ProviderContainer> _pumpApp(WidgetTester tester, {Widget? home}) async {
         container: container,
         child: MaterialApp(
           navigatorKey: _navKey,
-          builder: (_, child) => KalinkaToastHost(child: child!),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+            child: KalinkaToastHost(child: child!),
+          ),
           home: home ?? const Scaffold(body: SizedBox.expand()),
         ),
       ),
@@ -71,6 +78,131 @@ Future<int> _pixelAt(WidgetTester tester, Offset at) async {
 }
 
 void main() {
+  testWidgets('notifications stay capped and right-aligned as panes resize', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final toasts = await _pumpApp(tester);
+    toasts
+        .read(toastProvider.notifier)
+        .show('Service unavailable', isError: true);
+    toasts.read(toastProvider.notifier).show('Queue cleared');
+
+    for (final size in [
+      const Size(800, 600),
+      const Size(375, 812),
+      const Size(333, 600),
+      const Size(332, 600), // Exactly the cap plus both 16dp gutters.
+      const Size(320, 600),
+      const Size(812, 375), // Landscape phone, without the navigation rail.
+      const Size(1440, 900), // Toast belongs to browsing in the split layout.
+    ]) {
+      tester.view.physicalSize = size;
+      await tester.pumpAndSettle();
+
+      final right = size.width == 1440 ? 987.0 : size.width - 16;
+      final width = size.width < 332 ? size.width - 32 : 300.0;
+      for (final message in ['Service unavailable', 'Queue cleared']) {
+        final rect = tester.getRect(_card(message));
+        expect(rect.width, width, reason: '$message at $size');
+        expect(rect.right, right, reason: '$message at $size');
+        if (size.width <= 332) expect(rect.left, 16);
+      }
+      expect(tester.takeException(), isNull);
+    }
+    await _retireToast(tester);
+  });
+
+  testWidgets('player-pane notifications use the same cap and right gutter', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1440, 900);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final toasts = await _pumpApp(
+      tester,
+      home: const Scaffold(
+        body: Align(
+          alignment: Alignment.centerRight,
+          child: SizedBox(
+            width: 432,
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 20,
+                  right: 20,
+                  bottom: 24,
+                  child: KalinkaToastOverlay(
+                    isTablet: true,
+                    scope: ToastScope.panel,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    toasts
+        .read(toastProvider.notifier)
+        .show(_busy, isError: true, inPanel: true);
+    await tester.pumpAndSettle();
+
+    expect(find.text(_busy), findsOneWidget);
+    final rect = tester.getRect(_card(_busy));
+    expect(rect.width, 300);
+    expect(rect.right, 1420);
+    expect(tester.takeException(), isNull);
+    await _retireToast(tester);
+  });
+
+  testWidgets('queue activity stays compact but long messages obey the cap', (
+    tester,
+  ) async {
+    final toasts = await _pumpApp(tester);
+    toasts.read(toastProvider.notifier).beginQueueActivity('Adding…');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final compact = tester.getRect(_card('Adding…'));
+    expect(compact.width, lessThan(300));
+    expect(compact.right, 784);
+
+    toasts.read(toastProvider.notifier).endQueueActivity(_busy, isError: true);
+    await tester.pumpAndSettle();
+
+    final wrapped = tester.getRect(_card(_busy));
+    expect(wrapped.width, 300);
+    expect(wrapped.right, compact.right);
+    expect(wrapped.height, greaterThan(compact.height));
+    expect(tester.takeException(), isNull);
+    await _retireToast(tester);
+  });
+
+  testWidgets('a narrow notification wraps enlarged text without clipping', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 600);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final toasts = await _pumpApp(tester, textScaler: TextScaler.linear(2));
+    toasts.read(toastProvider.notifier).show(_busy, isError: true);
+    await tester.pumpAndSettle();
+
+    final rect = tester.getRect(_card(_busy));
+    final paragraph = tester.renderObject<RenderParagraph>(find.text(_busy));
+    expect(rect.width, 288);
+    expect(rect.right, 304);
+    expect(paragraph.didExceedMaxLines, isFalse);
+    expect(rect.contains(tester.getRect(find.text(_busy)).bottomRight), isTrue);
+    expect(tester.takeException(), isNull);
+    await _retireToast(tester);
+  });
+
   testWidgets('a toast raised behind a covering route paints over it', (
     tester,
   ) async {
