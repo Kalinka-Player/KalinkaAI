@@ -144,21 +144,40 @@ void main() {
     expect(shownPath(), isEmpty);
   });
 
-  test('the way up from a folder opened by itself is a visit', () {
+  test('the way up from a folder opened by itself moves up in place', () {
     session().openFolder(_folder('Jazz'));
     session().openFolder(_folder('Miles Davis'));
     session().backToCatalogsRoot();
     // Opened again on the folder it was left on, with nothing above it.
     openLibrary(container);
+    final depth = state().previousVisits.length;
 
     session().showEnclosingFolder();
     expect(shownPath(), ['Jazz']);
+    expect(state().previousVisits, hasLength(depth));
 
     session().goBack();
-    expect(shownPath(), ['Jazz', 'Miles Davis']);
+    expect(shownPath(), isEmpty);
+    session().goBack();
+    expect(state().catalogPage.isRoot, isTrue);
   });
 
-  test('a crumb further up is a visit Back returns from', () {
+  test('back from a folder opened by itself goes to the one enclosing it', () {
+    session().openFolder(_folder('Jazz'));
+    session().openFolder(_folder('Miles Davis'));
+    session().backToCatalogsRoot();
+    openLibrary(container);
+
+    session().goBack();
+    expect(shownPath(), ['Jazz']);
+    session().goBack();
+    expect(shownPath(), isEmpty);
+    expect(state().catalogPage.title, 'My Library');
+  });
+
+  test('a crumb further up unwinds to it, and Back goes on up from there', () {
+    final library = state().visitId;
+    final depth = state().previousVisits.length;
     session().openFolder(_folder('Jazz'));
     session().openFolder(_folder('Miles Davis'));
     session().openFolder(_folder('Kind of Blue'));
@@ -167,7 +186,61 @@ void main() {
     expect(shownPath(), ['Jazz']);
 
     session().goBack();
-    expect(shownPath(), ['Jazz', 'Miles Davis', 'Kind of Blue']);
+    expect(shownPath(), isEmpty);
+    expect(state().visitId, library);
+    expect(state().previousVisits, hasLength(depth));
+    session().goBack();
+    expect(state().catalogPage.isRoot, isTrue);
+  });
+
+  test('the top of Drives by its crumb, then Back, leaves Drives', () {
+    session().backToCatalogsRoot();
+    session().openCatalog(
+      id: 'kalinka:drives:catalog:root',
+      title: 'Drives',
+      folderLayout: true,
+    );
+    for (final name in ['SANDISK', 'Jazz', 'Miles Davis']) {
+      session().openFolder(
+        BrowseItem(
+          id: 'kalinka:drives:catalog:folder.$name',
+          name: name,
+          canBrowse: true,
+          canAdd: true,
+          catalog: Catalog(
+            id: 'kalinka:drives:catalog:folder.$name',
+            title: name,
+            previewConfig: Preview(type: PreviewType.folder),
+          ),
+        ),
+      );
+    }
+
+    session().showFolderAt(0);
+    expect(state().shownListing.title, 'Drives');
+
+    session().goBack();
+    expect(state().catalogPage.isRoot, isTrue);
+  });
+
+  test('a page already on the way back is returned to from a folder', () {
+    const albumId = 'kalinka:localfiles:album:kob';
+    const album = BrowseItem(
+      id: albumId,
+      name: 'Kind of Blue',
+      canBrowse: true,
+      canAdd: true,
+    );
+    void openAlbum() =>
+        session().openCatalog(id: albumId, title: 'Kind of Blue', item: album);
+    openAlbum();
+    openLibrary(container);
+    session().openFolder(_folder('Jazz'));
+
+    openAlbum();
+
+    expect(state().catalogPage.id, albumId);
+    expect(shownPath(), isEmpty);
   });
 
   test('back to a folder makes it the one the page was left on', () {

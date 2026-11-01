@@ -142,7 +142,7 @@ void main() {
     await tester.tap(find.text('$name 0'));
     await tester.pumpAndSettle();
 
-    // Not the folder this one was opened from, so a visit of its own.
+    // Walked down from, so it is the visit it was.
     await tester.tap(
       find.descendant(
         of: find.byType(FolderTrail),
@@ -151,7 +151,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(_shown(container), 'My Library');
-    expect(container.read(searchSessionProvider).visitId, isNot(library));
+    expect(container.read(searchSessionProvider).visitId, library);
     expect(_list(tester).pixels, 1500);
   });
 }
