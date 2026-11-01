@@ -833,10 +833,20 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     );
   }
 
-  /// Return to the previous visit as it was left: its page, filters,
-  /// folder, query, results and source shortcut. With none left in this
-  /// destination, Home.
+  /// Back: from a folder, the one enclosing it ([showFolderAt]); otherwise
+  /// the previous visit as it was left: its page, filters, folder, query,
+  /// results and source shortcut. With none left in this destination, Home.
   void goBack() {
+    if (state.activeView == FindMusicView.catalogs &&
+        state.catalogPage.folderLayout &&
+        state.folderPath.isNotEmpty) {
+      showFolderAt(state.folderPath.length - 1);
+      return;
+    }
+    _returnToPrevious();
+  }
+
+  void _returnToPrevious() {
     final stack = state.previousVisits;
     if (stack.isEmpty) {
       if (state.destination == BrowseDestination.home) {
@@ -1220,7 +1230,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         state = state.copyWith(
           previousVisits: state.previousVisits.sublist(0, earlier + 1),
         );
-        goBack();
+        _returnToPrevious();
         return;
       }
     }
@@ -1342,24 +1352,37 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     _rememberFolderPath();
   }
 
-  /// Show the folder [depth] steps in from the page's top, which zero is:
-  /// Back, where that is the folder this one was opened from, else a visit.
+  /// Show the folder [depth] steps in from the page's top, which zero is,
+  /// leaving behind the folders walked down from it: the folder path is
+  /// the way back, so nothing is stacked. A folder walked through comes
+  /// back as it was left; one the page opened below moves up in place.
   void showFolderAt(int depth) {
     if (_followServer()) return;
     if (depth < 0 || depth >= state.folderPath.length) return;
     final path = state.folderPath.sublist(0, depth);
-    final previous = state.previousVisits.lastOrNull;
-    if (previous != null &&
-        previous.activeView == FindMusicView.catalogs &&
-        previous.catalogPage.id == state.catalogPage.id &&
-        previous.catalogPage.folderLayout &&
-        _samePath(previous.folderPath, path)) {
-      goBack();
+    final stack = [...state.previousVisits];
+    while (stack.isNotEmpty &&
+        _inFolder(stack.last, path) &&
+        stack.last.folderPath.length > depth) {
+      stack.removeLast();
+    }
+    final walked = stack.isNotEmpty && _inFolder(stack.last, path);
+    state = state.copyWith(previousVisits: stack);
+    if (walked) {
+      _returnToPrevious();
       return;
     }
-    _visit(state.copyWith(folderPath: path));
+    state = state.copyWith(folderPath: path, visitId: ++_lastVisitId);
     _rememberFolderPath();
   }
+
+  /// Whether [visit] shows the page shown at its folder [path], or inside it.
+  bool _inFolder(SearchSessionState visit, List<CatalogPage> path) =>
+      visit.activeView == FindMusicView.catalogs &&
+      visit.catalogPage.id == state.catalogPage.id &&
+      visit.catalogPage.folderLayout &&
+      visit.folderPath.length >= path.length &&
+      _samePath(visit.folderPath.sublist(0, path.length), path);
 
   static bool _samePath(List<CatalogPage> a, List<CatalogPage> b) {
     if (a.length != b.length) return false;
@@ -1417,7 +1440,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         previous.activeView == FindMusicView.catalogs &&
         previous.catalogPage.id == state.catalogPage.id &&
         previous.expandedShelf == null) {
-      goBack();
+      _returnToPrevious();
       // The filter is the page's, chosen in either visit.
       state = state.copyWith(catalogFilter: filter);
       return;
@@ -1683,7 +1706,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         previous.activeView == FindMusicView.results &&
         previous.queryGen == state.queryGen &&
         previous.expandedBlock == null) {
-      goBack();
+      _returnToPrevious();
       return;
     }
     state = state.copyWith(clearExpandedBlock: true);
