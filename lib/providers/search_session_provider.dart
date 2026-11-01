@@ -1365,7 +1365,9 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
         stack.last.folderPath.length > depth) {
       stack.removeLast();
     }
-    if (stack.isNotEmpty && _inFolder(stack.last, path)) {
+    if (stack.isNotEmpty &&
+        _inFolder(stack.last, path) &&
+        stack.last.folderPath.length == depth) {
       returnToPreviousVisit(stack);
       return;
     }
