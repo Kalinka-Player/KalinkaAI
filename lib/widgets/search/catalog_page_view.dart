@@ -143,6 +143,10 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   /// read again behind the rows it had.
   int _liveRead = 0;
 
+  /// Whether this page's visit was the one shown at the last build: a kept
+  /// visit is not rebuilt from scratch when Back shows it again.
+  bool _wasShown = false;
+
   /// What each listing shown here led with. Where its catalog does not say
   /// what it holds, the first item decides how it lays out a grid and how
   /// it shimmers when it loads again, never the rest of the listing.
@@ -370,7 +374,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     // A folder walked back into opens where it was left, with what it had
     // loaded, which the rows' headings count from.
     final places = ref.read(_folderPlacesProvider);
-    // A drive mounted where another was has the same page ids.
+    // A drive mounted where another was has the same page ids, so a page on
+    // storage is read again as volumes come and go, in place.
     final volumes = listing.onStorage
         ? ref.watch(
             storageVolumesProvider.select(
@@ -381,17 +386,24 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           )
         : '';
     final reloadKey =
-        '${listing.id}|${query.serverKey(capabilities)}|$revision|$volumes';
-    if (listing.live) {
+        '${listing.id}|${query.serverKey(capabilities)}|$revision';
+    final shown =
+        ref.watch(searchSessionProvider.select((s) => s.visitId)) ==
+        visit.visitId;
+    if (listing.live && shown) {
       ref.listen(appLifecycleProvider, (previous, next) {
         if (next == AppLifecycleState.resumed && previous != next) {
           setState(() => _liveRead = ref.read(_liveReadsProvider).next());
         }
       });
     }
+    final reshown = shown && !_wasShown;
+    _wasShown = shown;
+    if (listing.live && (reshown || listing.id != _shownListingId)) {
+      _liveRead = ref.read(_liveReadsProvider).next();
+    }
     if (listing.id != _shownListingId) {
       _shownListingId = listing.id;
-      if (listing.live) _liveRead = ref.read(_liveReadsProvider).next();
       _actionsTop = null;
       _actionsHeld = false;
       // A place left under another reload key is not reopened.
@@ -519,7 +531,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       // Only the facets the server honours restart the list, so touching an
       // inert placeholder never costs a refetch.
       reloadKey: reloadKey,
-      refreshKey: (_artRefresh, libraryRevision, _liveRead),
+      refreshKey: (_artRefresh, libraryRevision, _liveRead, volumes),
       onLoadedCount: _countRows,
       place: _place,
       onLeave: page.folderLayout

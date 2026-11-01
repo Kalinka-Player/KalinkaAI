@@ -18,7 +18,9 @@ import '../providers/renderer_settings_route_provider.dart';
 import '../providers/restart_provider.dart';
 import '../providers/soundcard_provider.dart' show restartingBoxesProvider;
 import '../providers/search_session_provider.dart';
+import '../data_model/storage.dart';
 import '../providers/storage_volumes_provider.dart';
+import '../providers/server_address.dart';
 import '../providers/server_connect.dart';
 import '../providers/settings_provider.dart';
 import '../providers/shell_nav_provider.dart';
@@ -77,6 +79,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // remounting it (which would reload config and drop staged edits).
   final _settingsKey = GlobalKey();
   final _pluginsKey = GlobalKey<PluginCatalogScreenState>();
+
+  /// The volumes last listed, and the server that listed them.
+  ({ServerAddress address, List<StorageVolume> volumes})? _volumesSeen;
   final _customiseKey = GlobalKey();
   // The rail moves between the layouts: beside the panes on tablet, over the
   // phone layout's side there, so the mini-player can run under it.
@@ -678,12 +683,16 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
 
     // A drive plugged into the server, wherever the listener is in the app.
-    ref.listen(storageVolumesProvider, (previous, next) {
-      // A fetch (connect, another server) is not a drive plugged in.
-      if (previous == null || previous.isLoading) return;
-      final before = previous.value;
+    ref.listen(storageVolumesProvider, (_, next) {
       final after = next.value;
-      if (before == null || after == null) return;
+      if (next.isLoading || after == null) return;
+      final address = ref.read(connectionSettingsProvider).address;
+      final seen = _volumesSeen;
+      _volumesSeen = (address: address, volumes: after);
+      // The first list from a server is not a drive plugged in; one after a
+      // reconnect is compared with what was there before it.
+      if (seen == null || seen.address != address) return;
+      final before = seen.volumes;
       // Pages left on an unplugged drive show nothing that is there.
       final left = mountedVolumeIds(before).difference(mountedVolumeIds(after));
       if (left.isNotEmpty) {

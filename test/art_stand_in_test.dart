@@ -33,6 +33,28 @@ void main() {
     expect(find.byType(ProceduralAlbumArt), findsNWidgets(2));
   });
 
+  test('a row draws its icon only where it has no art to show', () {
+    BrowseItem folder({AlbumImage? cover}) => BrowseItem(
+      id: 'kalinka:drives:catalog:folder.eA',
+      canBrowse: true,
+      canAdd: true,
+      icon: 'folder',
+      catalog: Catalog(
+        id: 'kalinka:drives:catalog:folder.eA',
+        title: 'Jazz',
+        image: cover,
+      ),
+    );
+
+    expect(drawsItemIcon(folder()), isTrue);
+    expect(
+      drawsItemIcon(folder(cover: AlbumImage(small: '/cover.jpg'))),
+      isFalse,
+    );
+    expect(drawsItemIcon(_item('robot')), isFalse);
+    expect(drawsItemIcon(_item(null)), isFalse);
+  });
+
   test('the icon comes with the item from the server', () {
     final item = BrowseItem.fromJson({
       'id': 'kalinka:drives:catalog:folder.eA',

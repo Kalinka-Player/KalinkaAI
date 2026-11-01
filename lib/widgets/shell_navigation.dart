@@ -255,7 +255,10 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
           selected: shown == BrowseDestination.source(source.module.name),
           available: connected && source.root.canBrowse,
           source: source,
-          count: source.module.count,
+          count: switch (source.module.count) {
+            final count? when count > 0 => count,
+            _ => null,
+          },
         ),
       if (sources.hasError && connected)
         item(

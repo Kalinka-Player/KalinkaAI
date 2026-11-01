@@ -221,9 +221,9 @@ class PlayQueueState {
         );
       case ModulesChangedEvent(:final modules, :final seq):
         return copyWith(modules: modules, seq: seq);
-      case VolumesChangedEvent():
+      case VolumesChangedEvent(:final seq):
         // Kept by the volumes provider, which fetches them on every connect.
-        return this;
+        return copyWith(seq: seq);
       case ReplayPlayQueueEvent(:final state, :final serverTimeNs, :final seq):
         final nextPlaybackState =
             state.playbackState.copyWith(state.playbackState)

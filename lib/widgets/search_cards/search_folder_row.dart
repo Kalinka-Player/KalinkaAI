@@ -82,9 +82,8 @@ class _SearchFolderRowState extends ConsumerState<SearchFolderRow>
                       child: Stack(
                         children: [
                           TrackThumb(item: item, size: 68, radius: 8),
-                          // A source naming its rows' icon draws a folder as
-                          // one already.
-                          if (item.icon == null)
+                          // Unless the thumbnail is already the folder icon.
+                          if (!drawsItemIcon(item))
                             const Positioned(
                               right: 4,
                               bottom: 4,

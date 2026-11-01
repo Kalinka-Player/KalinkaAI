@@ -18,6 +18,7 @@ import 'package:kalinka/widgets/breadcrumb_crumb.dart';
 import 'package:kalinka/widgets/browse_filters/active_filter_chips.dart';
 import 'package:kalinka/widgets/column_separator.dart';
 import 'package:kalinka/widgets/procedural_album_art.dart';
+import 'package:kalinka/widgets/search/browse_visit_scope.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search/folder_trail.dart';
 import 'package:kalinka/widgets/search/track_group_actions.dart';
@@ -240,10 +241,13 @@ void _openLibrary(ProviderContainer container) => container
     .openCatalog(id: _libraryId, title: 'My Library');
 
 /// Drives' top page, on one drive, with nothing but the page around it.
+/// [kept] builds it as the browse view keeps a visit: under its own visit,
+/// whatever the session shows.
 Future<ProviderContainer> _pumpDrives(
   WidgetTester tester,
-  _FolderApi api,
-) async {
+  _FolderApi api, {
+  bool kept = false,
+}) async {
   final container = ProviderContainer(
     overrides: [
       sharedPrefsProvider.overrideWithValue(_prefs),
@@ -257,17 +261,26 @@ Future<ProviderContainer> _pumpDrives(
   );
   addTearDown(container.dispose);
   _openDrives(container);
+  final visit = container.read(searchSessionProvider);
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
         home: Scaffold(
-          body: Consumer(
-            builder: (context, ref, _) => CatalogPageView(
-              page: ref.watch(searchSessionProvider).catalogPage,
-              onBackToCatalogs: () {},
-            ),
-          ),
+          body: kept
+              ? BrowseVisitScope(
+                  visit: visit,
+                  child: CatalogPageView(
+                    page: visit.catalogPage,
+                    onBackToCatalogs: () {},
+                  ),
+                )
+              : Consumer(
+                  builder: (context, ref, _) => CatalogPageView(
+                    page: ref.watch(searchSessionProvider).catalogPage,
+                    onBackToCatalogs: () {},
+                  ),
+                ),
         ),
       ),
     ),
@@ -527,6 +540,28 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(find.text('Rock'), findsOneWidget);
+  });
+
+  testWidgets('a drive page kept under another reads again when Back shows '
+      'it, and not while hidden', (tester) async {
+    final api = _FolderApi({
+      _drivesRoot: [_driveFolder('Jazz')],
+    });
+    final container = await _pumpDrives(tester, api, kept: true);
+
+    _openLibrary(container);
+    await tester.pumpAndSettle();
+    final asked = api.asked.length;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(api.asked, hasLength(asked));
+
+    api.byId[_drivesRoot] = [_driveFolder('Blues'), _driveFolder('Jazz')];
+    container.read(searchSessionProvider.notifier).goBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Blues'), findsOneWidget);
   });
 
   testWidgets('a folder numbers its tracks before their covers', (

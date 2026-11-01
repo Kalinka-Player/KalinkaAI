@@ -147,6 +147,18 @@ void main() {
       );
     });
 
+    test('a volumes change moves the queue on to its sequence', () {
+      final state = _stateWith(const []);
+
+      final next = state.apply(
+        const PlayQueueEvent.volumesChanged(volumes: [], seq: 7),
+        0,
+      );
+
+      expect(next.seq, 7);
+      expect(next.trackList, isEmpty);
+    });
+
     test('a plugin taking the output leaves the playback state as it was', () {
       final queued = Track(id: 'q', title: 'Queued', duration: 10);
       final state = _stateWith([queued]);

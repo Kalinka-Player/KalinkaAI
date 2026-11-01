@@ -211,6 +211,34 @@ void main() {
     expect(shownPath(), ['Jazz']);
   });
 
+  test('a closed source forgets a folder whose id has a space in it', () {
+    void openDrives() => session().openCatalog(
+      id: 'kalinka:drives:catalog:root',
+      title: 'Drives',
+      folderLayout: true,
+    );
+    openDrives();
+    session().openFolder(
+      BrowseItem(
+        id: 'kalinka:drives:catalog:folder.My Music',
+        name: 'My Music',
+        canBrowse: true,
+        canAdd: true,
+        catalog: Catalog(
+          id: 'kalinka:drives:catalog:folder.My Music',
+          title: 'My Music',
+          previewConfig: Preview(type: PreviewType.folder),
+        ),
+      ),
+    );
+    session().backToCatalogsRoot();
+
+    session().closeSource('drives');
+
+    openDrives();
+    expect(shownPath(), isEmpty);
+  });
+
   test('a folder saved since by something else, as a server answering moves '
       'one, is the one shown', () async {
     session().openFolder(_folder('Jazz'));
