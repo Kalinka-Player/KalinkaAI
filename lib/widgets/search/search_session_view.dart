@@ -573,8 +573,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       session.atHome;
 
   /// One back press unwinds one layer: the search overlay, the filter card,
-  /// a selection or a collection edit, then the previous visit. Shared by the title-bar arrow and
-  /// the system back gesture; at Home the back leaves the app.
+  /// a selection or a collection edit, then the enclosing folder or the
+  /// previous visit. Shared by the title-bar arrow and the system back
+  /// gesture; at Home the back leaves the app.
   void _handleBack() {
     if (_focused) {
       _closeSearch();
