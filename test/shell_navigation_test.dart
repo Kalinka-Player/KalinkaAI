@@ -114,7 +114,7 @@ class _Settings extends SettingsNotifier {
   @override
   SettingsState build() => const SettingsState();
   @override
-  Future<void> loadConfig() async {}
+  Future<void> loadConfig({bool preserveStagedChanges = false}) async {}
   void stage() => state = state.copyWith(stagedChanges: {'example': true});
 }
 

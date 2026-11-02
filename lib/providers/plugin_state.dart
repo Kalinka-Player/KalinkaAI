@@ -8,6 +8,53 @@ import 'modules_state_provider.dart';
 import 'plugin_catalog_provider.dart';
 import 'settings_provider.dart';
 
+/// The catalog supplies discovery metadata, not the inventory of installed
+/// plugins. Keep local and prerelease plugins configurable without inventing
+/// catalog identity, compatibility, or package operations for them.
+List<CatalogPlugin> pluginsWithInstalledModules(
+  List<CatalogPlugin> catalog,
+  ModulesAndDevices? modules,
+  PresentationSchema? schema,
+) {
+  final plugins = [...catalog];
+  void add(Iterable<ModuleInfo> installed, String kind) {
+    for (final live in installed) {
+      // Native renderer configuration belongs to the output picker.
+      if (live.builtin ||
+          (kind == 'device' && live.name == 'kalinka-renderer') ||
+          plugins.any((p) => p.id == live.name && p.moduleKind == kind)) {
+        continue;
+      }
+      ModuleSpec? spec;
+      for (final page in schema?.pages ?? const <PageSpec>[]) {
+        for (final module in page.modules) {
+          if (module.id == live.name && module.kind == kind) spec = module;
+        }
+      }
+      plugins.add(
+        CatalogPlugin(
+          listed: false,
+          id: live.name,
+          name: live.title,
+          description: '',
+          type: kind == 'device' ? 'output_device' : 'input_module',
+          tier: '',
+          maturity: '',
+          delivery: '',
+          creator: '',
+          license: '',
+          distribution: '',
+          icons: live.icons ?? spec?.icons,
+        ),
+      );
+    }
+  }
+
+  add(modules?.inputModules ?? const [], 'input_module');
+  add(modules?.devices ?? const [], 'device');
+  return plugins;
+}
+
 /// Where a catalog plugin stands on the connected server: whether it is
 /// installed, switched on, working, and what its settings are.
 class PluginState {
@@ -78,7 +125,7 @@ class PluginState {
       hasPendingChanges: staged.any(
         (path) => path.startsWith(root) || paths?.contains(path) == true,
       ),
-      update: live == null ? null : update,
+      update: live == null || !plugin.listed ? null : update,
       operation: operation,
       failure: failure,
     );

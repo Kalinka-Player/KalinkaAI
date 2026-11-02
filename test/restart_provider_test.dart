@@ -14,16 +14,39 @@ import 'package:kalinka/providers/settings_provider.dart';
 
 const _status = 'base_config.server.supervisor_status';
 const _name = 'base_config.server.service_name';
+const _pair = 'input_modules.bluetooth.pair_phone';
 
 class _Api implements KalinkaPlayerProxy {
   bool online = false;
   int restarts = 0;
   int probes = 0;
   int reads = 0;
+  final events = <String>[];
+  bool failAction = false;
+  @override
+  Future<List<ConfigIssue>> validateSettings({
+    required String schemaVersion,
+    required Map<String, dynamic> changes,
+  }) async => [];
+  @override
+  Future<Set<String>?> saveSettings({
+    required String schemaVersion,
+    required Map<String, dynamic> changes,
+  }) async {
+    events.add('save:${changes.keys.join(",")}');
+    if (failAction && changes.containsKey(_pair)) {
+      throw StateError('Pairing failed');
+    }
+    return null;
+  }
+
   String status = 'Installed (0.2.0).';
 
   @override
-  Future<void> restartServer() async => restarts++;
+  Future<void> restartServer() async {
+    restarts++;
+    events.add('restart');
+  }
 
   @override
   Future<ModulesAndDevices> listModules() async {
@@ -37,7 +60,15 @@ class _Api implements KalinkaPlayerProxy {
       const PresentationSchema(
         schemaVersion: 'v1',
         pages: [],
-        expertFields: [],
+        expertFields: [
+          FieldSpec(
+            path: _pair,
+            label: 'Pair phone',
+            widget: WidgetKind.toggle,
+            type: 'boolean',
+            applyImmediately: true,
+          ),
+        ],
       );
 
   @override
@@ -45,7 +76,7 @@ class _Api implements KalinkaPlayerProxy {
     reads++;
     return {
       'schema_version': 'v1',
-      'values': {_status: status, _name: 'Renamed server'},
+      'values': {_status: status, _name: 'Renamed server', _pair: false},
     };
   }
 
@@ -68,6 +99,45 @@ void main() {
     });
     prefs = await SharedPreferences.getInstance();
   });
+
+  for (final failAction in [false, true]) {
+    test('mixed settings run pairing after restart; failure=$failAction', () {
+      fakeAsync((clock) {
+        final api = _Api()
+          ..online = true
+          ..failAction = failAction;
+        final container = ProviderContainer(
+          overrides: [
+            sharedPrefsProvider.overrideWithValue(prefs),
+            kalinkaProxyProvider.overrideWithValue(api),
+            boxControlProvider.overrideWith((ref) async => null),
+          ],
+        );
+        final settings = container.read(settingsProvider.notifier);
+        settings.loadConfig();
+        clock.flushMicrotasks();
+        settings.stageChange(_name, 'Updated name');
+        settings.stageChange(_pair, true);
+        container.read(restartProvider.notifier).executeRestart();
+        clock.flushMicrotasks();
+        expect(api.events, ['save:$_name', 'restart']);
+        api.online = false;
+        expect(container.read(settingsProvider).stagedChanges, {_pair: true});
+        clock.elapse(const Duration(seconds: 3));
+        api.online = true;
+        clock.elapse(const Duration(seconds: 2));
+        clock.flushMicrotasks();
+        expect(api.events, ['save:$_name', 'restart', 'save:$_pair']);
+        expect(container.read(restartProvider).isDone, !failAction);
+        expect(
+          container.read(settingsProvider).stagedChanges,
+          failAction ? {_pair: true} : isEmpty,
+        );
+        expect(container.read(settingsProvider).values[_pair], false);
+        container.dispose();
+      });
+    });
+  }
 
   for (final status in [
     'Installed (0.2.0).',

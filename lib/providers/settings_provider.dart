@@ -54,6 +54,12 @@ class SettingsState {
   int get pendingCount => stagedChanges.length;
   bool get hasPendingChanges => stagedChanges.isNotEmpty;
 
+  bool isImmediateAction(String path) =>
+      schema?.field(path)?.applyImmediately == true;
+
+  bool get onlyImmediateChanges =>
+      hasPendingChanges && stagedChanges.keys.every(isImmediateAction);
+
   /// Staged value if present, else the last-known server value.
   dynamic getEffective(String path) {
     if (stagedChanges.containsKey(path)) return stagedChanges[path];
@@ -177,7 +183,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
     return const SettingsState();
   }
 
-  Future<void> loadConfig() async {
+  Future<void> loadConfig({bool preserveStagedChanges = false}) async {
     final server = _server();
     state = state.copyWith(isLoading: true, error: null);
     try {
@@ -208,7 +214,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
         values: values,
         secretsSet: secretsSet,
         enumOptions: enumOptions,
-        stagedChanges: {},
+        stagedChanges: preserveStagedChanges ? state.stagedChanges : {},
         issues: {},
         isLoading: false,
       );
@@ -423,12 +429,21 @@ class SettingsNotifier extends Notifier<SettingsState> {
     return entry;
   }
 
-  Future<void> applyChanges() async {
+  Future<void> applyChanges({
+    bool deferImmediate = false,
+    bool onlyImmediate = false,
+  }) async {
     final version = state.schemaVersion;
     if (version == null || state.stagedChanges.isEmpty) return;
     // Only what is sent here is saved; an edit staged during the round trip
     // stays pending.
-    final changes = Map<String, dynamic>.from(state.stagedChanges);
+    final changes = {
+      for (final entry in state.stagedChanges.entries)
+        if ((!deferImmediate || !state.isImmediateAction(entry.key)) &&
+            (!onlyImmediate || state.isImmediateAction(entry.key)))
+          entry.key: entry.value,
+    };
+    if (changes.isEmpty) return;
     final server = _server();
     try {
       final api = ref.read(kalinkaProxyProvider);

@@ -188,7 +188,7 @@ class _QuietSettings extends SettingsNotifier {
   SettingsState build() => const SettingsState();
 
   @override
-  Future<void> loadConfig() async {}
+  Future<void> loadConfig({bool preserveStagedChanges = false}) async {}
 }
 
 void main() {

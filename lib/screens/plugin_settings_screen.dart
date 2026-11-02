@@ -37,14 +37,16 @@ class PluginSettingsScreen extends ConsumerWidget {
       id: 'settings',
       onClose: onClose,
       handlesBack: handlesBack,
-      headerAction: IconButton(
-        key: ValueKey('plugin-about-${plugin.id}'),
-        tooltip: 'About ${plugin.name}',
-        onPressed: actions.onOpenAbout,
-        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-        color: KalinkaColors.textSecondary,
-        icon: const Icon(Icons.info_outline, size: 22),
-      ),
+      headerAction: !plugin.listed
+          ? null
+          : IconButton(
+              key: ValueKey('plugin-about-${plugin.id}'),
+              tooltip: 'About ${plugin.name}',
+              onPressed: actions.onOpenAbout,
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              color: KalinkaColors.textSecondary,
+              icon: const Icon(Icons.info_outline, size: 22),
+            ),
       builder: (state, gutter) => [
         Padding(
           padding: EdgeInsets.symmetric(horizontal: gutter),

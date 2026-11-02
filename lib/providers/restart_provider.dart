@@ -107,7 +107,11 @@ class RestartNotifier extends Notifier<RestartState> {
           subtitle: subtitle,
         );
 
-        await ref.read(settingsProvider.notifier).applyChanges();
+        // Pairing and similar live actions must run after the restart, or
+        // stopping Core would immediately cancel the action it just started.
+        await ref
+            .read(settingsProvider.notifier)
+            .applyChanges(deferImmediate: true);
         if (!current()) return;
         completed.add(RestartStep.saving);
 
@@ -185,7 +189,24 @@ class RestartNotifier extends Notifier<RestartState> {
 
       // A requested setting is not proof that its package operation worked.
       // Read the actual result and discover newly installed/removed controls.
-      await ref.read(settingsProvider.notifier).loadConfig();
+      await ref
+          .read(settingsProvider.notifier)
+          .loadConfig(preserveStagedChanges: true);
+      if (!current()) return;
+      if (trigger &&
+          ref
+              .read(settingsProvider)
+              .stagedChanges
+              .keys
+              .any(ref.read(settingsProvider).isImmediateAction)) {
+        await ref
+            .read(settingsProvider.notifier)
+            .applyChanges(onlyImmediate: true);
+        if (!current()) return;
+        await ref
+            .read(settingsProvider.notifier)
+            .loadConfig(preserveStagedChanges: true);
+      }
       if (!current()) return;
       ref.invalidate(boxProbeProvider);
       // Modules and their capabilities follow the settings just applied.

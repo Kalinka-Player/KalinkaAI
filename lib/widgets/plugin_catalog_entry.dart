@@ -73,6 +73,7 @@ IconData pluginIcon(CatalogPlugin plugin, PluginState state) =>
     iconNamed(state.live?.icon) ??
     switch (plugin.id) {
       'localfiles' => Icons.folder_outlined,
+      'bluetooth' => Icons.bluetooth,
       'qobuz' => Icons.headphones_outlined,
       'spotify' => Icons.speaker_phone_outlined,
       'upnp' => Icons.cast,
@@ -544,6 +545,7 @@ class PluginNote extends StatelessWidget {
   bool canManage, {
   bool brief = false,
 }) {
+  if (!plugin.listed) return null;
   final PluginOperation operation;
   final String label;
   String? reason;
@@ -639,7 +641,7 @@ class PluginControls extends StatelessWidget {
           runSpacing: 8,
           children: [
             toggle,
-            if (update != null || !plugin.bundled)
+            if (plugin.listed && (update != null || !plugin.bundled))
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -674,7 +676,9 @@ class PluginControls extends StatelessWidget {
               ),
           ],
         ),
-        if (!actions.canManage && (update != null || !plugin.bundled))
+        if (plugin.listed &&
+            !actions.canManage &&
+            (update != null || !plugin.bundled))
           const Padding(
             padding: EdgeInsets.only(top: 10),
             child: PluginNote(
@@ -702,7 +706,7 @@ Widget? pluginAboutAction(
   PluginState state,
   PluginEntryActions actions,
 ) {
-  if (plugin.bundled) return null;
+  if (!plugin.listed || plugin.bundled) return null;
   if (state.installed) {
     return Tooltip(
       message: actions.canManage
