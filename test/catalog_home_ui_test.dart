@@ -146,7 +146,7 @@ class _QuietSettings extends SettingsNotifier {
   SettingsState build() => const SettingsState();
 
   @override
-  Future<void> loadConfig() async {}
+  Future<void> loadConfig({bool preserveStagedChanges = false}) async {}
 }
 
 void main() {
@@ -742,7 +742,10 @@ void main() {
       await tester.tap(find.text('Unpin'));
       await tester.pumpAndSettle();
       expect(container.read(pinnedCatalogsProvider), hasLength(1));
-      expect(container.read(pinnedCatalogsProvider)!.single.page.title, 'first');
+      expect(
+        container.read(pinnedCatalogsProvider)!.single.page.title,
+        'first',
+      );
       await tester.tap(find.byKey(const ValueKey('settings-back')));
       await tester.pumpAndSettle();
       expect(find.byType(CustomiseHomeScreen), findsNothing);

@@ -40,7 +40,8 @@ class RootApi implements KalinkaPlayerProxy {
     final items = [
       root('receiver'),
       root('custom'),
-      root('builtin'),
+      root('drives'),
+      root('collections'),
       root('disabled'),
     ];
     return BrowseItemsList(
@@ -67,7 +68,8 @@ void main() {
             (ref) async => [
               module('receiver'),
               module('custom', catalogs: true),
-              module('builtin', builtin: true),
+              module('drives', catalogs: true, builtin: true),
+              module('collections', builtin: true),
               module('disabled', catalogs: true, enabled: false),
             ],
           ),
@@ -75,9 +77,9 @@ void main() {
       );
       addTearDown(container.dispose);
       final sources = await container.read(catalogSourcesProvider.future);
-      expect(sources.single.module.name, 'custom');
-      expect(sources.single.root.id, 'kalinka:custom:catalog:actual-root');
-      expect(api.calls, [':0', ':1', ':2', ':3']);
+      expect(sources.map((s) => s.module.name), ['custom', 'drives']);
+      expect(sources.last.root.id, 'kalinka:drives:catalog:actual-root');
+      expect(api.calls, [':0', ':1', ':2', ':3', ':4']);
     },
   );
   test('no catalog capabilities means no browse probing', () async {

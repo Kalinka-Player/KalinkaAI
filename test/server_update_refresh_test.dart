@@ -44,7 +44,7 @@ class _InertSettingsNotifier extends SettingsNotifier {
   SettingsState build() => const SettingsState();
 
   @override
-  Future<void> loadConfig() async {}
+  Future<void> loadConfig({bool preserveStagedChanges = false}) async {}
 }
 
 Future<ProviderContainer> _makeContainer(_CountingApi api) async {

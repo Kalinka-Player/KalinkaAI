@@ -99,7 +99,10 @@ class _Settings extends SettingsNotifier {
   int loads = 0;
   int saves = 0;
   @override
-  Future<void> applyChanges() async {
+  Future<void> applyChanges({
+    bool deferImmediate = false,
+    bool onlyImmediate = false,
+  }) async {
     saves++;
     state = state.copyWith(
       values: {...state.values, ...state.stagedChanges},
@@ -110,7 +113,7 @@ class _Settings extends SettingsNotifier {
   @override
   SettingsState build() => initial;
   @override
-  Future<void> loadConfig() async {
+  Future<void> loadConfig({bool preserveStagedChanges = false}) async {
     loads++;
   }
 
@@ -621,6 +624,78 @@ Finder _onPage<T>(Finder matching) =>
 final _changesBar = find.byKey(const ValueKey('configuration-changes'));
 
 void main() {
+  for (final feed in ['available', 'unavailable', 'error', 'disabled']) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'unlisted Bluetooth settings survive $feed feed at $scale text',
+        (tester) async {
+          final api = _CatalogApi(
+            PluginCatalog(status: feed == 'error' ? 'available' : feed),
+          );
+          if (feed == 'error') {
+            api.failure = const PluginCatalogException('The feed is down.');
+          }
+          final container = await _container(
+            _Proxy({
+              'enabled': feed != 'disabled',
+              'catalog_browsing': true,
+              'installation': true,
+            }),
+            api,
+            live: _Live(
+              ModulesAndDevices(
+                inputModules: [
+                  _module('bluetooth'),
+                  ModuleInfo.fromJson({
+                    ..._module('drives').toJson(),
+                    'builtin': true,
+                  }),
+                ],
+                devices: [_module('kalinka-renderer')],
+              ),
+            ),
+            settings: _settingsWith({'bluetooth': true}),
+          );
+          await _screen(
+            tester,
+            container,
+            size: const Size(375, 850),
+            scale: scale,
+          );
+          expect(
+            find.byKey(const ValueKey('plugin-bluetooth')),
+            findsOneWidget,
+          );
+          expect(find.byKey(const ValueKey('plugin-drives')), findsNothing);
+          expect(find.text('Unofficial'), findsNothing);
+          await _open(tester, 'bluetooth');
+          expect(find.text('bluetooth settings'), findsOneWidget);
+          expect(find.text('Store region'), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('plugin-about-bluetooth')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const ValueKey('plugin-uninstall-bluetooth')),
+            findsNothing,
+          );
+          final toggle = find.byKey(const ValueKey('plugin-enabled-bluetooth'));
+          await tester.ensureVisible(toggle);
+          await tester.tap(toggle);
+          await tester.pumpAndSettle();
+          expect(
+            container
+                .read(settingsProvider)
+                .stagedChanges['input_modules.bluetooth.enabled'],
+            false,
+          );
+          expect(api.runs, isEmpty);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   for (final withSettings in [true, false]) {
     testWidgets(
       'live plugin errors stay with status and appear once, settings: $withSettings',
@@ -1140,6 +1215,42 @@ void main() {
       },
     );
   }
+
+  testWidgets('pairing applies without restarting Core', (tester) async {
+    const pair = 'input_modules.bluetooth.pair_phone';
+    final restart = _Restart();
+    final settings = SettingsState(
+      schemaVersion: 'v1',
+      schema: PresentationSchema(
+        schemaVersion: 'v1',
+        pages: [],
+        expertFields: [
+          FieldSpec.fromJson({
+            'path': pair,
+            'label': 'Pair phone',
+            'widget': 'toggle',
+            'type': 'boolean',
+            'apply_immediately': true,
+          }),
+        ],
+      ),
+      stagedChanges: const {pair: true},
+    );
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true}),
+      _CatalogApi(_catalog()),
+      restart: restart,
+      settings: settings,
+    );
+    await _screen(tester, container);
+    expect(find.textContaining('restart required'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('pending-changes-apply')));
+    await tester.pumpAndSettle();
+    expect(restart.calls, 0);
+    expect((container.read(settingsProvider.notifier) as _Settings).saves, 1);
+    expect(container.read(settingsProvider).hasPendingChanges, false);
+    expect(find.byType(RestartOverlay), findsNothing);
+  });
 
   for (final result in ['success', 'validation', 'failure']) {
     testWidgets('apply on exit handles $result without losing changes', (
