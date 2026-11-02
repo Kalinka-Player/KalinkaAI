@@ -7,9 +7,10 @@ import 'package:kalinka/providers/server_update_provider.dart';
 import 'package:kalinka/providers/upgrade_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/server_update_banner.dart';
+import 'package:kalinka/widgets/upgrade_confirm_dialog.dart';
 
 class _Api implements KalinkaPlayerProxy {
-  final Map<String, dynamic>? info;
+  Map<String, dynamic>? info;
   _Api(this.info);
   @override
   Future<Map<String, dynamic>?> getServerUpdateInfo() async => info;
@@ -20,8 +21,8 @@ class _Api implements KalinkaPlayerProxy {
 class _Upgrade extends UpgradeNotifier {
   String? requestedVersion;
   @override
-  Future<void> executeUpgrade(String version) async =>
-      requestedVersion = version;
+  Future<void> executeUpgrade(ServerUpdateInfo confirmed) async =>
+      requestedVersion = confirmed.latestVersion;
 }
 
 const _currentBundle = {
@@ -51,13 +52,14 @@ Future<_Upgrade> _pump(
   Map<String, dynamic>? info, {
   Size size = const Size(375, 812),
   double scale = 1,
+  _Api? api,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final upgrade = _Upgrade();
   final container = ProviderContainer(
     overrides: [
-      kalinkaProxyProvider.overrideWithValue(_Api(info)),
+      kalinkaProxyProvider.overrideWithValue(api ?? _Api(info)),
       upgradeProvider.overrideWith(() => upgrade),
     ],
   );
@@ -108,6 +110,36 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('the confirmation lists the server\'s answer when a re-check '
+      'lands while it is open', (tester) async {
+    final api = _Api({..._currentBundle, ..._web});
+    final upgrade = await _pump(tester, null, api: api);
+    await tester.tap(find.text('Software updates available'));
+    await tester.pumpAndSettle();
+    final inDialog = find.descendant(
+      of: find.byType(UpgradeConfirmDialog),
+      matching: find.textContaining('Server: 5.9.0 → 5.10.0'),
+    );
+    expect(inDialog, findsNothing);
+
+    api.info = {..._currentBundle, ..._web, 'latest_version': '5.10.0'};
+    ProviderScope.containerOf(tester.element(find.byType(ServerUpdateBanner)))
+        .invalidate(serverUpdateProvider);
+    await tester.pumpAndSettle();
+
+    expect(inDialog, findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(UpgradeConfirmDialog),
+        matching: find.textContaining('Web player: 0.21.1 → 0.21.2'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Restart & Update'));
+    await tester.pumpAndSettle();
+    expect(upgrade.requestedVersion, '5.10.0');
+  });
 
   for (final (response, expected) in [
     (

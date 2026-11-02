@@ -150,6 +150,16 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
                         color: KalinkaColors.textSecondary,
                       ),
                     ),
+                    if (upgradeState.note != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        upgradeState.note!,
+                        textAlign: TextAlign.center,
+                        style: KalinkaTextStyles.trayRowSublabel.copyWith(
+                          color: KalinkaColors.textSecondary,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 28),
                     _buildProgressBar(upgradeState),
                     const SizedBox(height: 24),
@@ -164,16 +174,17 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
                         ),
                       ),
                       const SizedBox(height: 16),
-                      GestureDetector(
-                        onTap: _close,
-                        child: Text(
-                          'Close',
-                          style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                            color: KalinkaColors.textSecondary,
-                            decoration: TextDecoration.underline,
-                            decorationColor: KalinkaColors.textSecondary,
-                          ),
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        spacing: 24,
+                        children: [
+                          if (upgradeState.canRetry)
+                            _link(
+                              'Retry',
+                              ref.read(upgradeProvider.notifier).retry,
+                            ),
+                          _link('Close', _close),
+                        ],
                       ),
                     ],
                   ],
@@ -185,6 +196,18 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
       ),
     );
   }
+
+  Widget _link(String label, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Text(
+      label,
+      style: KalinkaTextStyles.trayRowSublabel.copyWith(
+        color: KalinkaColors.textSecondary,
+        decoration: TextDecoration.underline,
+        decorationColor: KalinkaColors.textSecondary,
+      ),
+    ),
+  );
 
   Widget _buildProgressBar(UpgradeState upgradeState) {
     final progress = upgradeState.completedSteps.length / 2.0;
