@@ -25,6 +25,10 @@ if [ "${1:-}" != "--no-build" ]; then
   flutter build web --release --dart-define=GIT_DESCRIBE="$GIT_DESCRIBE"
 fi
 [ -d build/web ] || { echo "build/web missing — run without --no-build first" >&2; exit 1; }
+# The supervisor serves the setup hotspot's activation page from this package.
+for f in activate.html activate.css; do
+  [ -f "build/web/$f" ] || { echo "build/web/$f missing — rebuild build/web" >&2; exit 1; }
+done
 
 PKG="kalinka-web_${VERSION}_all"
 STAGE="build/deb/${PKG}"
