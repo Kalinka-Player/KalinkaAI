@@ -237,7 +237,13 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
     while (_now().isBefore(deadline)) {
       await Future.delayed(_pollInterval);
       final update = await _readUpdate();
-      if (update != null && !update.packagesBehind) return null;
+      // update_available covers the whole install, including a package the
+      // server sends no flag for, as before 5.14.0 for the web player.
+      if (update != null &&
+          !update.packagesBehind &&
+          !(update.packagesOnly && update.updateAvailable)) {
+        return null;
+      }
     }
     return 'The packages did not finish updating — check the server manually.';
   }

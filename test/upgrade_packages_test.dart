@@ -99,6 +99,41 @@ void main() {
     });
   });
 
+  test('a packages-only upgrade on a server that names no package waits '
+      'until it offers no update', () {
+    fakeAsync((async) {
+      const behind = {
+        'current_version': '5.13.0',
+        'latest_version': '5.13.0',
+        'update_available': true,
+        'upgrade_supported': true,
+      };
+      const listed = ServerUpdateInfo(
+        currentVersion: '5.13.0',
+        latestVersion: '5.13.0',
+        updateAvailable: true,
+        upgradeSupported: true,
+      );
+      final server = UpgradeServer(behind, version: '5.13.0');
+      final container = upgradeContainer(server, async);
+
+      container.read(upgradeProvider.notifier).executeUpgrade(listed);
+      async.elapse(const Duration(seconds: 6));
+
+      expect(server.requested, ['5.13.0']);
+      var state = container.read(upgradeProvider);
+      expect(state.isDone, isFalse);
+      expect(state.currentStep, UpgradeStep.updatingPackages);
+
+      server.update = {...behind, 'update_available': false};
+      async.elapse(const Duration(seconds: 3));
+
+      state = container.read(upgradeProvider);
+      expect(state.isDone, isTrue);
+      expect(state.error, isNull);
+    });
+  });
+
   test(
     'a packages-only upgrade that never finishes says so at the deadline',
     () {
