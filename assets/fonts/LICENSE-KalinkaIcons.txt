@@ -1,7 +1,9 @@
 KalinkaIcons is built by scripts/build_icon_font.py from these icons, each licensed under the Apache License, Version 2.0:
 
-- usb-flash-drive, from Material Design Icons by Pictogrammers (https://pictogrammers.com)
-- hard_drive, from Material Symbols by Google (https://fonts.google.com/icons)
+- usb-flash-drive, from Material Design Icons, copyright Pictogrammers (https://pictogrammers.com)
+- hard_drive, from Material Symbols, copyright Google LLC (https://fonts.google.com/icons)
+
+Modified by the Kalinka authors: the SVG outlines are converted into TrueType glyphs, rescaled to the font's em and with their cubic curves approximated by quadratic ones.
 
 
                                  Apache License
