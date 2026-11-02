@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart' show Logger;
 
+import '../utils/version_order.dart';
 import 'kalinka_player_api_provider.dart';
 import 'server_update_provider.dart';
 
@@ -171,11 +172,18 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
           : UpgradeStep.installing,
       targetVersion: update.latestVersion,
       packagesOnly: update.packagesOnly,
-      note: update.latestVersion == confirmed.latestVersion
-          ? null
-          : 'Version ${update.latestVersion} came out after the update '
-                'was listed.',
+      note: _note(update, confirmed),
     );
+  }
+
+  static String? _note(ServerUpdateInfo update, ServerUpdateInfo confirmed) {
+    final version = update.latestVersion;
+    final listed = confirmed.latestVersion;
+    if (version == null || listed == null || version == listed) return null;
+    // A release can also be pulled, taking the update back to an earlier one.
+    return isNewerVersion(version, listed)
+        ? 'Version $version came out after the update was listed.'
+        : 'The server now offers version $version instead of $listed.';
   }
 
   /// Read through the banner's provider, so the banner shows the same answer.

@@ -222,6 +222,35 @@ void main() {
     });
   });
 
+  test('an update that went back to an earlier release does not say it came '
+      'out later', () {
+    fakeAsync((async) {
+      const listed = ServerUpdateInfo(
+        currentVersion: '5.14.0',
+        latestVersion: '5.14.1',
+        updateAvailable: true,
+        upgradeSupported: true,
+      );
+      final server = UpgradeServer(
+        updateInfo(current: '5.14.0', latest: '5.14.0', web: true),
+      );
+      final container = upgradeContainer(server, async);
+
+      container.read(upgradeProvider.notifier).executeUpgrade(listed);
+      async.elapse(Duration.zero);
+
+      expect(server.requested, ['5.14.0']);
+      expect(
+        container.read(upgradeProvider).note,
+        'The server now offers version 5.14.0 instead of 5.14.1.',
+      );
+
+      server.update = updateInfo(current: '5.14.0', latest: '5.14.0');
+      async.elapse(const Duration(seconds: 3));
+      expect(container.read(upgradeProvider).isDone, isTrue);
+    });
+  });
+
   test('a 409 after the update moved on is sent once more, with the new '
       'version', () {
     fakeAsync((async) {
