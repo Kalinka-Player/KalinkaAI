@@ -460,6 +460,12 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
           child: LayoutBuilder(
             builder: (context, constraints) {
               final wide = tier.index >= _MiniPlayerTier.progress.index;
+              final modes =
+                  tier.index >= _MiniPlayerTier.modes.index && !exclusive;
+              // The named output is framed; the bare icon keeps clear space
+              // around its ink.
+              final framedOutput = tier.index >= _MiniPlayerTier.output.index;
+              final outputAir = framedOutput ? 0.0 : _outputAir;
               // Only art + text take the tap-to-open / swipe gestures; the
               // play button stays outside so the swipe recognizer can't steal
               // its taps.
@@ -513,18 +519,15 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                     Expanded(child: track),
                   if (wide)
                     Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 16),
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 560),
-                            child: AwayLock(
-                              away: isOffline,
-                              child: PlaybackProgressSlider(
-                                durationMs: durationMs,
-                                enabled: currentTrack != null,
-                                inline: true,
-                              ),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 560),
+                          child: AwayLock(
+                            away: isOffline,
+                            child: PlaybackProgressSlider(
+                              durationMs: durationMs,
+                              enabled: currentTrack != null,
+                              inline: true,
                             ),
                           ),
                         ),
@@ -562,13 +565,22 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                   ],
                   if (tier.index >= _MiniPlayerTier.progress.index)
                     const ColumnSeparator(),
-                  if (currentTrack != null) const BitPerfectBadge(),
-                  const SizedBox(width: 4),
+                  // From here the gaps are set between what the controls
+                  // draw, not their hit areas, so they read the same at every
+                  // width. The badge takes the track text's room before it; a
+                  // separator brings its own.
+                  if (currentTrack != null)
+                    BitPerfectBadge(
+                      margin: wide
+                          ? const EdgeInsets.only(right: _badgeGap)
+                          : const EdgeInsets.only(left: _badgeGap),
+                    ),
+                  if (!wide) SizedBox(width: _room(0, outputAir, _badgeGap)),
                   // Outside the gesture area too, for the same reason as the play
                   // button: the swipe recognizer must not steal its taps.
                   AwayLock(
                     away: isOffline,
-                    child: tier.index >= _MiniPlayerTier.output.index
+                    child: framedOutput
                         ? RendererSwitcherDropdown(
                             key: widget.outputSwitcherKey,
                             maxNameWidth: 140,
@@ -576,33 +588,43 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                           )
                         : RendererSwitcherButton(
                             key: widget.outputSwitcherKey,
-                            hitDiameter: 44,
-                            iconSize: 24,
+                            hitDiameter: _outputHit,
+                            iconSize: _outputIcon,
                           ),
                   ),
                   // Skipping joins play first, then shuffle and repeat
                   // outside them, as on the player; once it has them the
-                  // transport takes larger buttons, spaced apart and set off
-                  // from the output.
-                  SizedBox(width: transport ? 16 : 12),
-                  if (tier.index >= _MiniPlayerTier.modes.index &&
-                      !exclusive) ...[
+                  // transport takes larger buttons.
+                  SizedBox(
+                    width: _room(
+                      outputAir,
+                      modes
+                          ? _shuffleAir
+                          : transport
+                          ? _skipAir
+                          : 0,
+                    ),
+                  ),
+                  if (modes) ...[
                     AwayLock(
                       away: isOffline,
-                      child: const ShuffleButton(hitDiameter: 40, iconSize: 20),
+                      child: const ShuffleButton(
+                        hitDiameter: _modeHit,
+                        iconSize: _modeIcon,
+                      ),
                     ),
-                    const SizedBox(width: _transportGap),
+                    SizedBox(width: _room(_shuffleAir, _skipAir)),
                   ],
                   if (transport) ...[
                     AwayLock(
                       away: isOffline,
                       child: const SkipButton(
                         next: false,
-                        hitDiameter: 44,
-                        iconSize: 30,
+                        hitDiameter: _skipHit,
+                        iconSize: _skipIcon,
                       ),
                     ),
-                    const SizedBox(width: _transportGap),
+                    SizedBox(width: _room(_skipAir, 0)),
                   ],
                   _buildPlayPauseButton(
                     playerState: playerState,
@@ -612,22 +634,24 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                     large: transport,
                   ),
                   if (transport) ...[
-                    const SizedBox(width: _transportGap),
+                    SizedBox(width: _room(0, _skipAir)),
                     AwayLock(
                       away: isOffline,
                       child: const SkipButton(
                         next: true,
-                        hitDiameter: 44,
-                        iconSize: 30,
+                        hitDiameter: _skipHit,
+                        iconSize: _skipIcon,
                       ),
                     ),
                   ],
-                  if (tier.index >= _MiniPlayerTier.modes.index &&
-                      !exclusive) ...[
-                    const SizedBox(width: _transportGap),
+                  if (modes) ...[
+                    SizedBox(width: _room(_skipAir, _repeatAir)),
                     AwayLock(
                       away: isOffline,
-                      child: const RepeatButton(hitDiameter: 40, iconSize: 20),
+                      child: const RepeatButton(
+                        hitDiameter: _modeHit,
+                        iconSize: _modeIcon,
+                      ),
                     ),
                   ],
                 ],
@@ -713,8 +737,33 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     );
   }
 
-  /// Room between the wide bar's transport buttons.
-  static const double _transportGap = 8;
+  /// Visible room between neighbouring controls, ink to ink: the least that
+  /// keeps shuffle's and skip's hit areas apart.
+  static const double _controlGap = 28;
+
+  /// Visible room on either side of the 1:1 badge.
+  static const double _badgeGap = 14;
+
+  // The round controls' hit areas and glyphs, and the clear space from each
+  // one's edge to its ink: the glyph is centred, and Material leaves a share
+  // of the icon empty at its sides — 1/6 for the speakers and shuffle, 1/8
+  // for repeat, 1/4 for skip. Play's white disc fills its hit area.
+  static const double _outputHit = 44, _outputIcon = 24;
+  static const double _outputAir =
+      (_outputHit - _outputIcon) / 2 + _outputIcon / 6;
+  static const double _modeHit = 40, _modeIcon = 20;
+  static const double _shuffleAir = (_modeHit - _modeIcon) / 2 + _modeIcon / 6;
+  static const double _repeatAir = (_modeHit - _modeIcon) / 2 + _modeIcon / 8;
+  static const double _skipHit = 44, _skipIcon = 30;
+  static const double _skipAir = (_skipHit - _skipIcon) / 2 + _skipIcon / 4;
+
+  /// Spacing that leaves [visible] between the ink of two neighbours keeping
+  /// [before] and [after] clear inside their hit areas.
+  static double _room(
+    double before,
+    double after, [
+    double visible = _controlGap,
+  ]) => math.max(0, visible - before - after);
 
   /// Stationary 46×46 play/pause control — 52×52 among the wide bar's
   /// transport — sharing the now-playing

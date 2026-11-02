@@ -11,7 +11,11 @@ import '../theme/app_theme.dart';
 class BitPerfectBadge extends ConsumerWidget {
   final double scale;
 
-  const BitPerfectBadge({super.key, this.scale = 1});
+  /// Room around the badge, gone with it when it hides. Defaults to 6 before
+  /// it, scaled.
+  final EdgeInsetsGeometry? margin;
+
+  const BitPerfectBadge({super.key, this.scale = 1, this.margin});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -23,7 +27,7 @@ class BitPerfectBadge extends ConsumerWidget {
       label: 'Bit-perfect playback',
       excludeSemantics: true,
       child: Container(
-        margin: EdgeInsets.only(left: 6 * scale),
+        margin: margin ?? EdgeInsets.only(left: 6 * scale),
         padding: EdgeInsets.symmetric(
           horizontal: 5 * scale,
           vertical: 2 * scale,
