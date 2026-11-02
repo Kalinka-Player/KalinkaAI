@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -85,124 +84,101 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
     final target = upgradeState.targetVersion;
     return FadeTransition(
       opacity: _fadeController,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          color: const Color(0xFF0A0A0D).withValues(alpha: 0.93),
-          child: SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      child: Container(
-                        key: ValueKey(upgradeState.isDone),
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          color: upgradeState.isDone
-                              ? KalinkaColors.statusOnline.withValues(
-                                  alpha: 0.14,
-                                )
-                              : KalinkaColors.surfaceRaised,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: upgradeState.isDone
-                                ? KalinkaColors.statusOnline.withValues(
-                                    alpha: 0.25,
-                                  )
-                                : KalinkaColors.borderDefault,
-                          ),
-                        ),
-                        child: upgradeState.isDone
-                            ? const Icon(
-                                Icons.check_rounded,
-                                size: 28,
-                                color: KalinkaColors.statusOnline,
-                              )
-                            : RotationTransition(
-                                turns: _spinController,
-                                child: const Icon(
-                                  Icons.system_update_alt,
-                                  size: 26,
-                                  color: KalinkaColors.textSecondary,
-                                ),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      upgradeState.isDone
-                          ? 'Upgrade complete'
-                          : 'Upgrading server',
-                      style: KalinkaTextStyles.dialogTitle,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      switch ((
-                        upgradeState.isDone,
-                        upgradeState.packagesOnly,
-                      )) {
-                        (true, false) => 'Now running version $target.',
-                        (true, true) => 'All packages are up to date.',
-                        (false, false) =>
-                          'Installing version $target… this can '
-                              'take several minutes.',
-                        (false, true) =>
-                          'Installing the new packages… this can '
-                              'take several minutes.',
-                      },
-                      textAlign: TextAlign.center,
-                      style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                        fontSize: KalinkaTypography.baseSize + 1,
-                        color: KalinkaColors.textSecondary,
-                      ),
-                    ),
-                    if (upgradeState.note != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        upgradeState.note!,
-                        textAlign: TextAlign.center,
-                        style: KalinkaTextStyles.trayRowSublabel.copyWith(
+      child: ProgressScrim(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: Container(
+                key: ValueKey(upgradeState.isDone),
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: upgradeState.isDone
+                      ? KalinkaColors.statusOnline.withValues(alpha: 0.14)
+                      : KalinkaColors.surfaceRaised,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: upgradeState.isDone
+                        ? KalinkaColors.statusOnline.withValues(alpha: 0.25)
+                        : KalinkaColors.borderDefault,
+                  ),
+                ),
+                child: upgradeState.isDone
+                    ? const Icon(
+                        Icons.check_rounded,
+                        size: 28,
+                        color: KalinkaColors.statusOnline,
+                      )
+                    : RotationTransition(
+                        turns: _spinController,
+                        child: const Icon(
+                          Icons.system_update_alt,
+                          size: 26,
                           color: KalinkaColors.textSecondary,
                         ),
                       ),
-                    ],
-                    const SizedBox(height: 28),
-                    _buildProgressBar(upgradeState),
-                    const SizedBox(height: 24),
-                    ..._buildSteps(upgradeState),
-                    if (upgradeState.error != null) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        upgradeState.error!,
-                        textAlign: TextAlign.center,
-                        style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                          color: KalinkaColors.statusOffline,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        spacing: 24,
-                        children: [
-                          if (upgradeState.canRetry)
-                            _link(
-                              'Retry',
-                              ref.read(upgradeProvider.notifier).retry,
-                            ),
-                          _link('Close', _close),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
               ),
             ),
-          ),
+            const SizedBox(height: 24),
+            Text(
+              upgradeState.isDone ? 'Upgrade complete' : 'Upgrading server',
+              style: KalinkaTextStyles.dialogTitle,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              switch ((upgradeState.isDone, upgradeState.packagesOnly)) {
+                (true, false) => 'Now running version $target.',
+                (true, true) => 'All packages are up to date.',
+                (false, false) =>
+                  'Installing version $target… this can '
+                      'take several minutes.',
+                (false, true) =>
+                  'Installing the new packages… this can '
+                      'take several minutes.',
+              },
+              textAlign: TextAlign.center,
+              style: KalinkaTextStyles.trayRowSublabel.copyWith(
+                fontSize: KalinkaTypography.baseSize + 1,
+                color: KalinkaColors.textSecondary,
+              ),
+            ),
+            if (upgradeState.note != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                upgradeState.note!,
+                textAlign: TextAlign.center,
+                style: KalinkaTextStyles.trayRowSublabel.copyWith(
+                  color: KalinkaColors.textSecondary,
+                ),
+              ),
+            ],
+            const SizedBox(height: 28),
+            _buildProgressBar(upgradeState),
+            const SizedBox(height: 24),
+            ..._buildSteps(upgradeState),
+            if (upgradeState.error != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                upgradeState.error!,
+                textAlign: TextAlign.center,
+                style: KalinkaTextStyles.trayRowSublabel.copyWith(
+                  color: KalinkaColors.statusOffline,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: 24,
+                children: [
+                  if (upgradeState.canRetry)
+                    _link('Retry', ref.read(upgradeProvider.notifier).retry),
+                  _link('Close', _close),
+                ],
+              ),
+            ],
+          ],
         ),
       ),
     );
