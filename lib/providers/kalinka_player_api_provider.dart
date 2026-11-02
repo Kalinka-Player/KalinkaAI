@@ -373,9 +373,19 @@ class RendererSwitchException implements Exception {
 class ServerUpgradeException implements Exception {
   final String message;
 
-  /// 409 when the requested version is no longer the server's update.
+  /// Null when the server did not answer; 409 when it refused for now.
   final int? statusCode;
   const ServerUpgradeException(this.message, {this.statusCode});
+
+  /// Whether the same request can succeed later: a conflict that clears, as
+  /// while renderers upgrade first, a server error, or no answer. A demo
+  /// server (403), an install that cannot upgrade (501) or a malformed
+  /// request (400) refuses it every time.
+  bool get transient => switch (statusCode) {
+    null || 409 => true,
+    501 => false,
+    final code => code >= 500,
+  };
 
   @override
   String toString() => message;
@@ -1075,19 +1085,20 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
         data: jsonEncode({'version': version}),
       );
       if (response.statusCode != 200) {
-        throw const ServerUpgradeException(
+        throw ServerUpgradeException(
           'The server rejected the upgrade request',
+          statusCode: response.statusCode,
         );
       }
     } on DioException catch (e) {
       // The server's own words when it gave any: renderers being brought
       // forward first is a wait, not a failure, and only it can say so.
-      final detail = e.response?.data is Map
-          ? (e.response?.data['detail'] as String?)
-          : null;
+      final detail = _detail(e);
       throw ServerUpgradeException(
         detail?.isNotEmpty == true
             ? detail!
+            : e.response == null
+            ? 'The server did not answer the upgrade request'
             : 'The server rejected the upgrade request',
         statusCode: e.response?.statusCode,
       );

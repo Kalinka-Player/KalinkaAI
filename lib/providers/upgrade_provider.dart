@@ -17,7 +17,8 @@ class UpgradeState {
   final Set<UpgradeStep> completedSteps;
   final String? error;
 
-  /// The server refused the request, so nothing is installing yet.
+  /// The server refused the request for now, so nothing is installing yet
+  /// and sending it again can succeed; see [ServerUpgradeException.transient].
   final bool canRetry;
   final bool isDone;
 
@@ -123,7 +124,7 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
         error: e is ServerUpgradeException
             ? e.message
             : 'The server rejected the upgrade request.',
-        canRetry: true,
+        canRetry: e is ServerUpgradeException && e.transient,
       );
       return;
     }
