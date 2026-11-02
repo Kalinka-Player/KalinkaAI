@@ -106,7 +106,7 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
       try {
         await api.upgradeServer(update.latestVersion!);
       } on ServerUpgradeException catch (e) {
-        if (e.statusCode != 409) rethrow;
+        if (!e.versionMoved) rethrow;
         final moved = await _readUpdate();
         if (_upToDate(moved)) return;
         if (moved == null ||

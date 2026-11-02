@@ -252,8 +252,29 @@ void main() {
     });
   });
 
-  test('a 409 on an unchanged update shows the server\'s words, and Retry '
-      'sends it again', () {
+  test('a 409 the server words as a stale version, with the update '
+      'unchanged, is not sent again', () {
+    fakeAsync((async) {
+      const detail =
+          "Requested version '5.14.1' is not the available update '5.14.2'";
+      final server = UpgradeServer(
+        updateInfo(current: '5.14.0', latest: '5.14.1'),
+      )..refusals.add(const ServerUpgradeException(detail, statusCode: 409));
+      final container = upgradeContainer(server, async);
+
+      container.read(upgradeProvider.notifier).executeUpgrade(_listed);
+      async.elapse(Duration.zero);
+
+      expect(server.requested, ['5.14.1']);
+      expect(server.updateReads, 2);
+      final state = container.read(upgradeProvider);
+      expect(state.error, detail);
+      expect(state.canRetry, isTrue);
+    });
+  });
+
+  test('any other 409 shows the server\'s words at once, and Retry sends it '
+      'again', () {
     fakeAsync((async) {
       final server =
           UpgradeServer(updateInfo(current: '5.14.0', latest: '5.14.1'))
@@ -266,7 +287,7 @@ void main() {
       async.elapse(Duration.zero);
 
       expect(server.requested, ['5.14.1']);
-      expect(server.updateReads, 2);
+      expect(server.updateReads, 1);
       var state = container.read(upgradeProvider);
       expect(state.error, _waitForRenderers);
       expect(state.canRetry, isTrue);
