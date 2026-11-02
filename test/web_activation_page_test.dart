@@ -51,6 +51,11 @@ void main() {
     expect(page, isNot(contains('<script')));
   });
 
+  test('the activation page downloads no fonts before its refresh', () {
+    expect(sheet, isNot(contains('@font-face')));
+    expect(sheet, isNot(contains('@import')));
+  });
+
   test('every file the pages load lands in build/web', () {
     final urls = [
       ...relativeLinks(page),
@@ -59,11 +64,7 @@ void main() {
     ];
     expect(
       urls,
-      containsAll([
-        'activate.css',
-        'assets/assets/images/kalinka_icon.svg',
-        'assets/assets/fonts/IBMPlexSans-Regular.ttf',
-      ]),
+      containsAll(['activate.css', 'assets/assets/images/kalinka_icon.svg']),
     );
     for (final url in urls) {
       expect(bundled(url), isTrue, reason: url);
