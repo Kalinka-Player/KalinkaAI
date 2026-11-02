@@ -387,6 +387,12 @@ class ServerUpgradeException implements Exception {
     final code => code >= 500,
   };
 
+  /// The server's update moved on from the version asked for. Its other 409s,
+  /// such as renderers upgrading first or no update left, carry other words
+  /// (update_check.validate_upgrade_request and upgrade_route on the server).
+  bool get versionMoved =>
+      statusCode == 409 && message.contains('is not the available update');
+
   @override
   String toString() => message;
 }
