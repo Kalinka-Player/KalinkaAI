@@ -20,6 +20,9 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Kalinka player — control playback from your browser.">
+  <!-- Flutter swaps in its own viewport tag at start; this one sizes the loading mark until then. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <meta name="color-scheme" content="dark">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -32,11 +35,55 @@
 
   <title>Kalinka</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- The app's canvas colour (KalinkaColors.background) from the first paint,
+       so CanvasKit loading over a slow link is not a white page. -->
+  <style>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background: #080808;
+    }
+
+    #loading {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    #loading img {
+      width: 56px;
+      height: 56px;
+      animation: loading 1.4s ease-in-out infinite alternate;
+    }
+
+    @keyframes loading {
+      from {
+        opacity: 0.35;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #loading img {
+        animation: none;
+      }
+    }
+  </style>
 </head>
 
 <body>
+  <div id="loading" role="progressbar" aria-label="Loading Kalinka">
+    <img src="assets/assets/images/kalinka_icon.svg" alt="" width="56" height="56">
+  </div>
   <!-- {{...}} tokens are substituted by `flutter build web`. -->
   <script>
+    window.addEventListener(
+      "flutter-first-frame",
+      () => document.getElementById("loading")?.remove(),
+      { once: true },
+    );
     {{flutter_js}}
     {{flutter_build_config}}
     _flutter.loader.load({
