@@ -82,7 +82,7 @@ void main() {
       ])
         hex(color),
     };
-    final used = RegExp(r'#[0-9A-Fa-f]{6}\b')
+    final used = RegExp(r'#[0-9A-Fa-f]{3,8}\b')
         .allMatches(sheet)
         .map((m) => m[0]!.toUpperCase())
         .toSet();
