@@ -18,8 +18,8 @@ typedef StreamInfoField = ({String label, String value});
 /// What the server reports about the stream that is playing, as the dialog
 /// lists it. Empty when nothing is loaded.
 ///
-/// A debug read-out, so values are shown as the server sends them and a field
-/// it says nothing about is left out rather than shown blank. The two the
+/// A debug read-out, with a readable format label. A field the server says
+/// nothing about is left out rather than shown blank. The two the
 /// state cannot answer are passed in: [positionMs], which is extrapolated
 /// because the state carries only the last sample, and [bitPerfect], which
 /// also needs the volume.
@@ -58,7 +58,8 @@ List<StreamInfoField> streamInfoFields(
         label: 'Duration',
         value: formatClock(Duration(milliseconds: durationMs)),
       ),
-    if (state.mimeType != null) (label: 'Format', value: state.mimeType!),
+    if (state.mimeType != null)
+      (label: 'Format', value: mimeTypeLabel(state.mimeType)),
     if (decoded.isNotEmpty) (label: 'Decoded', value: decoded),
     if (output != null)
       (

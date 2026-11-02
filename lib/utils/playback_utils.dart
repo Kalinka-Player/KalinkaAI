@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' show IconData, Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/data_model.dart';
 import '../data_model/kalinka_ws_api.dart';
 import '../providers/kalinka_ws_api_provider.dart';
@@ -72,6 +73,7 @@ String formatClock(Duration position) {
 /// Short codec name for a stream's MIME type — `FLAC`, `MP3` — or empty.
 String mimeTypeLabel(String? mimeType) {
   if (mimeType == null) return '';
+  if (mimeType == 'application/vnd.kalinka.pcm') return 'PCM';
   if (mimeType.contains('flac')) return 'FLAC';
   if (mimeType.contains('wav')) return 'WAV';
   if (mimeType.contains('mp3') || mimeType.contains('mpeg')) return 'MP3';

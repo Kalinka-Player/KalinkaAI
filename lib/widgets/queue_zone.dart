@@ -8,6 +8,7 @@ import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_ws_api_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
+import '../utils/playback_utils.dart';
 import 'empty_queue_state.dart';
 import 'exclusive_queue_card.dart';
 import 'player_sheet.dart';
@@ -671,24 +672,8 @@ String? _buildFormatSuffix({
   required int bitsPerSample,
   required int sampleRate,
 }) {
-  String? mime;
-  if (mimeType != null) {
-    if (mimeType.contains('flac')) {
-      mime = 'FLAC';
-    } else if (mimeType.contains('wav')) {
-      mime = 'WAV';
-    } else if (mimeType.contains('mp3') || mimeType.contains('mpeg')) {
-      mime = 'MP3';
-    } else if (mimeType.contains('aac')) {
-      mime = 'AAC';
-    } else if (mimeType.contains('opus')) {
-      mime = 'OPUS';
-    } else if (mimeType.contains('ogg')) {
-      mime = 'OGG';
-    } else if (mimeType.isNotEmpty) {
-      mime = mimeType.split('/').last.toUpperCase();
-    }
-  }
+  final label = mimeTypeLabel(mimeType);
+  final mime = label.isEmpty ? null : label;
 
   final parts = <String>[];
   if (mime != null) {
