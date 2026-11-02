@@ -74,8 +74,8 @@ h1 {
   width: 16px;
   height: 16px;
   border: 2px solid transparent;
-  border-top-color: #D8556A;
-  border-left-color: #D8556A;
+  border-top-color: #C2394B;
+  border-left-color: #C2394B;
   border-radius: 50%;
   animation: spin 0.9s linear infinite;
 }
