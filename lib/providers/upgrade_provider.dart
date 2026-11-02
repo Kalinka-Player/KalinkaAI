@@ -6,6 +6,9 @@ import 'server_update_provider.dart';
 
 final _logger = Logger();
 
+const _pollInterval = Duration(seconds: 3);
+const _deadline = Duration(minutes: 15);
+
 enum UpgradeStep { installing, reconnecting }
 
 class UpgradeState {
@@ -13,16 +16,24 @@ class UpgradeState {
   final UpgradeStep? currentStep;
   final Set<UpgradeStep> completedSteps;
   final String? error;
+
+  /// The server refused the request, so nothing is installing yet.
+  final bool canRetry;
   final bool isDone;
   final String? targetVersion;
+
+  /// Set when the server's update moved on from the one the user confirmed.
+  final String? note;
 
   const UpgradeState({
     this.isUpgrading = false,
     this.currentStep,
     this.completedSteps = const {},
     this.error,
+    this.canRetry = false,
     this.isDone = false,
     this.targetVersion,
+    this.note,
   });
 
   UpgradeState copyWith({
@@ -30,6 +41,7 @@ class UpgradeState {
     UpgradeStep? currentStep,
     Set<UpgradeStep>? completedSteps,
     String? error,
+    bool canRetry = false,
     bool? isDone,
   }) {
     return UpgradeState(
@@ -37,8 +49,10 @@ class UpgradeState {
       currentStep: currentStep ?? this.currentStep,
       completedSteps: completedSteps ?? this.completedSteps,
       error: error,
+      canRetry: canRetry,
       isDone: isDone ?? this.isDone,
       targetVersion: targetVersion,
+      note: note,
     );
   }
 }
@@ -48,37 +62,105 @@ final upgradeProvider = NotifierProvider<UpgradeNotifier, UpgradeState>(
 );
 
 class UpgradeNotifier extends Notifier<UpgradeState> {
+  UpgradeNotifier({DateTime Function()? now}) : _now = now ?? DateTime.now;
+
+  final DateTime Function() _now;
+  ServerUpdateInfo? _confirmed;
+
   @override
   UpgradeState build() => const UpgradeState();
 
   /// Execute the upgrade sequence:
-  /// 1. Request the upgrade (server validates the version)
-  /// 2. "Installing" — wait for the server to go down and come back
-  ///    (download + apt can take minutes; the server keeps answering
-  ///    until the new package restarts it)
-  /// 3. "Reconnecting" lights up once the server answers again; verify
-  ///    it actually runs the new version
-  Future<void> executeUpgrade(String version) async {
+  /// 1. Re-read the server's update and request that version: the server
+  ///    refuses any other, and its own check may have moved on since
+  ///    [confirmed] was read
+  /// 2. "Installing" until the server goes down (the server keeps answering
+  ///    until the new package restarts it), then "Reconnecting" until it
+  ///    answers on the new version
+  Future<void> executeUpgrade(ServerUpdateInfo confirmed) async {
+    _confirmed = confirmed;
     final api = ref.read(kalinkaProxyProvider);
-    final completed = <UpgradeStep>{};
-    state = UpgradeState(
-      isUpgrading: true,
-      currentStep: UpgradeStep.installing,
-      targetVersion: version,
-    );
+    _begin(confirmed, confirmed);
+
+    var update = await _currentOffer() ?? confirmed;
+    _begin(update, confirmed);
 
     try {
-      await api.upgradeServer(version);
-    } on ServerUpgradeException catch (e) {
-      _logger.e('Upgrade request rejected', error: e);
-      state = state.copyWith(error: e.message);
-      return;
+      try {
+        await api.upgradeServer(update.latestVersion!);
+      } on ServerUpgradeException catch (e) {
+        if (e.statusCode != 409) rethrow;
+        final current = await _currentOffer();
+        if (current == null || current.latestVersion == update.latestVersion) {
+          rethrow;
+        }
+        update = current;
+        _begin(update, confirmed);
+        await api.upgradeServer(update.latestVersion!);
+      }
     } catch (e) {
       _logger.e('Upgrade request rejected', error: e);
-      state = state.copyWith(error: 'The server rejected the upgrade request.');
+      state = state.copyWith(
+        error: e is ServerUpgradeException
+            ? e.message
+            : 'The server rejected the upgrade request.',
+        canRetry: true,
+      );
       return;
     }
 
+    final error = await _awaitVersion(api, update.latestVersion!);
+    if (error != null) {
+      state = state.copyWith(error: error);
+      return;
+    }
+
+    state = UpgradeState(
+      isUpgrading: true,
+      isDone: true,
+      completedSteps: const {UpgradeStep.installing, UpgradeStep.reconnecting},
+      targetVersion: update.latestVersion,
+      note: state.note,
+    );
+    // The new server re-checks for updates itself; refetch so the banner
+    // disappears instead of advertising the version we just installed.
+    ref.invalidate(serverUpdateProvider);
+  }
+
+  Future<void> retry() async {
+    final confirmed = _confirmed;
+    if (!state.canRetry || confirmed == null) return;
+    await executeUpgrade(confirmed);
+  }
+
+  void dismiss() {
+    state = const UpgradeState();
+  }
+
+  void _begin(ServerUpdateInfo update, ServerUpdateInfo confirmed) {
+    state = UpgradeState(
+      isUpgrading: true,
+      currentStep: UpgradeStep.installing,
+      targetVersion: update.latestVersion,
+      note: update.latestVersion == confirmed.latestVersion
+          ? null
+          : 'Version ${update.latestVersion} came out after the update '
+                'was listed.',
+    );
+  }
+
+  /// Read through the banner's provider, so the banner shows the same answer.
+  Future<ServerUpdateInfo?> _readUpdate() async {
+    ref.invalidate(serverUpdateProvider);
+    return ref.read(serverUpdateProvider.future);
+  }
+
+  Future<ServerUpdateInfo?> _currentOffer() async {
+    final update = await _readUpdate();
+    return update != null && update.canUpgrade ? update : null;
+  }
+
+  Future<String?> _awaitVersion(KalinkaPlayerProxy api, String version) async {
     // Poll until the server answers with the target version. The old
     // version answering just means apt hasn't restarted it yet, so it is
     // never treated as failure before the deadline — only the deadline
@@ -86,56 +168,28 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
     // "came back on the old version"). One generous deadline covers the
     // whole install: download + apt time dominates and varies wildly
     // between a Pi and a PC.
-    final deadline = DateTime.now().add(const Duration(minutes: 15));
+    final deadline = _now().add(_deadline);
     var wentDown = false;
-    var success = false;
     String? lastSeen;
-    while (DateTime.now().isBefore(deadline)) {
-      await Future.delayed(const Duration(seconds: 3));
+    while (_now().isBefore(deadline)) {
+      await Future.delayed(_pollInterval);
       try {
         final v = await api.getServerVersion();
         lastSeen = v['server_version'] as String?;
-        if (lastSeen == version) {
-          success = true;
-          break;
-        }
+        if (lastSeen == version) return null;
       } catch (_) {
         if (!wentDown) {
           wentDown = true;
-          completed.add(UpgradeStep.installing);
           state = state.copyWith(
             currentStep: UpgradeStep.reconnecting,
-            completedSteps: Set.from(completed),
+            completedSteps: const {UpgradeStep.installing},
           );
         }
       }
     }
-
-    if (!success) {
-      state = state.copyWith(
-        completedSteps: Set.from(completed),
-        error: wentDown
-            ? 'Server did not come back on the new version — '
-                  'check it manually.'
-            : 'Server is still on version ${lastSeen ?? 'unknown'} — '
-                  'the upgrade did not start.',
-      );
-      return;
-    }
-
-    completed.add(UpgradeStep.reconnecting);
-    state = UpgradeState(
-      isUpgrading: true,
-      isDone: true,
-      completedSteps: Set.from(completed),
-      targetVersion: version,
-    );
-    // The new server re-checks for updates itself; refetch so the banner
-    // disappears instead of advertising the version we just installed.
-    ref.invalidate(serverUpdateProvider);
-  }
-
-  void dismiss() {
-    state = const UpgradeState();
+    return wentDown
+        ? 'Server did not come back on the new version — check it manually.'
+        : 'Server is still on version ${lastSeen ?? 'unknown'} — '
+              'the upgrade did not start.';
   }
 }

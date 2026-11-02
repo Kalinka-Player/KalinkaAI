@@ -8,6 +8,11 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## Unreleased
+
+### Fixed
+- Updating the streamer's software asks for the release the server offers at that moment, not the one listed when Settings opened, so a release that came out in between no longer stops the update with "Requested version … is not the available update …". The upgrade screen says when a newer release is being installed, and the confirmation lists it if the server's answer arrives while it is open. A request the server turns down shows the server's reason with Retry.
+
 ## 0.25.0
 
 The server's drives to browse and play, a track's own cover, and artists and albums one tap from Now Playing. Drives, the folder picker and a track's own cover need server 5.17.0; against an older server there is no Drives or folder picker and every track shows its album's cover, as before.

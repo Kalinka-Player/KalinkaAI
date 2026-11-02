@@ -102,11 +102,11 @@ class ServerUpdateBanner extends ConsumerWidget {
     WidgetRef ref,
     ServerUpdateInfo update,
   ) async {
-    final confirmed = await showKalinkaDialog<bool>(
+    final confirmed = await showKalinkaDialog<ServerUpdateInfo>(
       context: context,
       builder: (_) => UpgradeConfirmDialog(update: update),
     );
-    if (confirmed != true) return;
-    ref.read(upgradeProvider.notifier).executeUpgrade(update.latestVersion!);
+    if (confirmed == null) return;
+    ref.read(upgradeProvider.notifier).executeUpgrade(confirmed);
   }
 }

@@ -372,7 +372,10 @@ class RendererSwitchException implements Exception {
 /// The server would not upgrade itself. [message] is already fit to show.
 class ServerUpgradeException implements Exception {
   final String message;
-  const ServerUpgradeException(this.message);
+
+  /// 409 when the requested version is no longer the server's update.
+  final int? statusCode;
+  const ServerUpgradeException(this.message, {this.statusCode});
 
   @override
   String toString() => message;
@@ -1086,6 +1089,7 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
         detail?.isNotEmpty == true
             ? detail!
             : 'The server rejected the upgrade request',
+        statusCode: e.response?.statusCode,
       );
     }
   }
