@@ -11,7 +11,7 @@ paragraph, however long; blank lines separate paragraphs.
 ## Unreleased
 
 ### Fixed
-- Updating the streamer's software asks for the release the server offers at that moment, not the one listed when Settings opened, so a release that came out in between no longer stops the update with "Requested version … is not the available update …". The upgrade screen says when a newer release is being installed, and the confirmation lists it if the server's answer arrives while it is open. A request the server turns down shows the server's reason with Retry.
+- Updating the streamer's software asks for the release the server offers at that moment, not the one listed when Settings opened, so a release that came out in between no longer stops the update with "Requested version … is not the available update …". The upgrade screen says when a newer release is being installed, and the confirmation lists it if the server's answer arrives while it is open. When there is nothing left to install, as after another device ran the update first, it says the server is already up to date rather than failing. A request the server turns down shows the server's reason with Retry.
 - An update that brings only a new web player, renderer or supervisor, while the server stays on its version or runs a build newer than the latest release, stays on Updating packages until the server reports every part current, instead of saying it is done after a few seconds and then offering the same update again. It needs no newer server; a server older than 5.14.0 does not report the web player, so there the wait covers the renderer and supervisor.
 
 ## 0.25.0

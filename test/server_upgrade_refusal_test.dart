@@ -255,6 +255,93 @@ void main() {
     );
   });
 
+  test('an update already installed elsewhere ends as up to date, with no '
+      'request sent', () {
+    fakeAsync((async) {
+      final server = UpgradeServer(
+        updateInfo(current: '5.14.1', latest: '5.14.1'),
+        version: '5.14.1',
+      );
+      final container = upgradeContainer(server, async);
+
+      container.read(upgradeProvider.notifier).executeUpgrade(_listed);
+      async.elapse(Duration.zero);
+
+      expect(server.requested, isEmpty);
+      final state = container.read(upgradeProvider);
+      expect(state.isDone, isTrue);
+      expect(state.upToDate, isTrue);
+      expect(state.error, isNull);
+      expect(state.targetVersion, '5.14.1');
+    });
+  });
+
+  test('a refusal sent while the check could not be read ends as up to '
+      'date on Retry', () {
+    fakeAsync((async) {
+      final server =
+          UpgradeServer(
+              updateInfo(current: '5.14.1', latest: '5.14.1'),
+              version: '5.14.1',
+            )
+            ..down = true
+            ..refusals.add(
+              const ServerUpgradeException(
+                'No update available',
+                statusCode: 409,
+              ),
+            );
+      final container = upgradeContainer(server, async);
+
+      container.read(upgradeProvider.notifier).executeUpgrade(_listed);
+      async.elapse(Duration.zero);
+
+      expect(server.requested, ['5.14.0']);
+      var state = container.read(upgradeProvider);
+      expect(state.error, 'No update available');
+      expect(state.canRetry, isTrue);
+
+      server.down = false;
+      container.read(upgradeProvider.notifier).retry();
+      async.elapse(Duration.zero);
+
+      expect(server.requested, ['5.14.0']);
+      state = container.read(upgradeProvider);
+      expect(state.upToDate, isTrue);
+      expect(state.error, isNull);
+    });
+  });
+
+  testWidgets('the overlay says the server is already up to date', (
+    tester,
+  ) async {
+    final server = UpgradeServer(
+      updateInfo(current: '5.14.0', latest: '5.14.1'),
+    );
+    await pumpUpgradeBanner(tester, server);
+    server
+      ..update = updateInfo(current: '5.14.1', latest: '5.14.1')
+      ..version = '5.14.1';
+
+    await confirmUpgrade(tester);
+
+    expect(server.requested, isEmpty);
+    expect(find.text('Already up to date'), findsOneWidget);
+    expect(
+      find.text(
+        'The server runs version 5.14.1, with nothing left to install.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Installing new version'), findsNothing);
+    expect(find.text('Close'), findsNothing);
+
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(UpgradeOverlay), findsNothing);
+    expect(find.text('Your player is up to date'), findsOneWidget);
+  });
+
   testWidgets('Upgrade on a stale banner installs the newer release and says '
       'so', (tester) async {
     final server = UpgradeServer(
