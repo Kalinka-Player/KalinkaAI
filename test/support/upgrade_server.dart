@@ -7,6 +7,7 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/server_update_provider.dart';
 import 'package:kalinka/providers/upgrade_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/utils/version_order.dart';
 import 'package:kalinka/widgets/server_update_banner.dart';
 import 'package:kalinka/widgets/upgrade_overlay.dart';
 
@@ -64,7 +65,7 @@ Map<String, dynamic> updateInfo({
 }) => {
   'current_version': current,
   'latest_version': latest,
-  'update_available': current != latest || web,
+  'update_available': isNewerVersion(latest, current) || web,
   'upgrade_supported': true,
   'web_current_version': web ? '0.21.1' : '0.21.2',
   'web_latest_version': '0.21.2',
