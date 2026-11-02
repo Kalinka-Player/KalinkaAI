@@ -4,6 +4,7 @@
 // move on between reading the banner and pressing Upgrade.
 
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -30,12 +31,13 @@ const _listed = ServerUpdateInfo(
   webUpdateAvailable: true,
 );
 
-const _waitForRenderers =
-    'Upgrading the renderers first; try again in a moment';
+const _waitForRenderers = 'Renderers upgrade first: Kitchen did not answer';
 
 class _Adapter implements HttpClientAdapter {
   final requests = <RequestOptions>[];
-  final Map<String, (int, Map<String, dynamic>)> answers;
+
+  /// A route answered with null does not answer at all.
+  final Map<String, (int, Map<String, dynamic>)?> answers;
   _Adapter(this.answers);
 
   @override
@@ -45,7 +47,9 @@ class _Adapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     requests.add(options);
-    final (code, body) = answers['${options.method} ${options.path}']!;
+    final answer = answers['${options.method} ${options.path}'];
+    if (answer == null) throw const SocketException('Connection refused');
+    final (code, body) = answer;
     return ResponseBody.fromString(
       jsonEncode(body),
       code,
@@ -60,16 +64,17 @@ class _Adapter implements HttpClientAdapter {
 }
 
 KalinkaPlayerProxy _proxy(_Adapter adapter) => KalinkaPlayerProxyImpl(
-  client: Dio(BaseOptions(baseUrl: 'http://server.test'))
-    ..httpClientAdapter = adapter,
+  client: kalinkaHttpClient('http://server.test')..httpClientAdapter = adapter,
 );
 
 void main() {
   test('the server\'s reason for refusing is what the user reads', () {
     fakeAsync((async) {
-      final server = UpgradeServer(
-        updateInfo(current: '5.14.0', latest: '5.14.1'),
-      )..refusals.add(const ServerUpgradeException(_waitForRenderers));
+      final server =
+          UpgradeServer(updateInfo(current: '5.14.0', latest: '5.14.1'))
+            ..refusals.add(
+              const ServerUpgradeException(_waitForRenderers, statusCode: 409),
+            );
       final container = upgradeContainer(server, async);
 
       container.read(upgradeProvider.notifier).executeUpgrade(_listed);
@@ -80,6 +85,82 @@ void main() {
       expect(state.canRetry, isTrue);
       expect(server.requested, ['5.14.1']);
     });
+  });
+
+  for (final (status, retry) in [
+    (403, false),
+    (501, false),
+    (400, false),
+    (409, true),
+    (500, true),
+    (503, true),
+    (null, true),
+  ]) {
+    test('a refusal with status $status ${retry ? 'offers' : 'has no'} '
+        'Retry', () {
+      fakeAsync((async) {
+        final server = UpgradeServer(
+          updateInfo(current: '5.14.0', latest: '5.14.1'),
+        )..refusals.add(ServerUpgradeException('Refused', statusCode: status));
+        final container = upgradeContainer(server, async);
+
+        container.read(upgradeProvider.notifier).executeUpgrade(_listed);
+        async.elapse(Duration.zero);
+
+        final state = container.read(upgradeProvider);
+        expect(state.error, 'Refused');
+        expect(state.canRetry, retry);
+        expect(state.isDone, isFalse);
+      });
+    });
+  }
+
+  test('a demo server\'s refusal reads in its words and is final', () async {
+    final api = _proxy(
+      _Adapter({
+        'PUT /server/upgrade': (
+          403,
+          {
+            'detail': {
+              'code': 'demo_read_only',
+              'message': 'This is a read-only demo server.',
+            },
+          },
+        ),
+      }),
+    );
+
+    await expectLater(
+      api.upgradeServer('5.14.1'),
+      throwsA(
+        isA<ServerUpgradeException>()
+            .having(
+              (e) => e.message,
+              'message',
+              'This is a read-only demo server.',
+            )
+            .having((e) => e.statusCode, 'statusCode', 403)
+            .having((e) => e.transient, 'transient', isFalse),
+      ),
+    );
+  });
+
+  test('a server that does not answer can be asked again', () async {
+    final api = _proxy(_Adapter({'PUT /server/upgrade': null}));
+
+    await expectLater(
+      api.upgradeServer('5.14.1'),
+      throwsA(
+        isA<ServerUpgradeException>()
+            .having(
+              (e) => e.message,
+              'message',
+              'The server did not answer the upgrade request',
+            )
+            .having((e) => e.statusCode, 'statusCode', isNull)
+            .having((e) => e.transient, 'transient', isTrue),
+      ),
+    );
   });
 
   test('Upgrade asks for the server\'s current update, not the listed one', () {
