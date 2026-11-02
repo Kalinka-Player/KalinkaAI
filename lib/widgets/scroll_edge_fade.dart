@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show SchedulerPhase;
 
 /// Fades the ends of the scrollable [child] along [axis], each as far as
 /// there is more to scroll that way: a hint that the content goes on, gone
@@ -26,6 +27,7 @@ class _ScrollEdgeFadeState extends State<ScrollEdgeFade> {
   /// up to [ScrollEdgeFade.extent].
   double _before = 0;
   double _after = 0;
+  bool _rebuildQueued = false;
 
   bool _onMetrics(ScrollMetrics metrics, int depth) {
     // Only the scrollable it wraps, not one nested in it.
@@ -39,10 +41,20 @@ class _ScrollEdgeFadeState extends State<ScrollEdgeFade> {
       0.0,
       1.0,
     );
-    if (before != _before || after != _after) {
-      setState(() {
-        _before = before;
-        _after = after;
+    if (before == _before && after == _after) return false;
+    _before = before;
+    _after = after;
+    // An offset past the end, such as a restored one, scrolls back from
+    // inside layout, where a rebuild cannot be asked for; the fade catches
+    // up after the frame.
+    final binding = WidgetsBinding.instance;
+    if (binding.schedulerPhase != SchedulerPhase.persistentCallbacks) {
+      setState(() {});
+    } else if (!_rebuildQueued) {
+      _rebuildQueued = true;
+      binding.addPostFrameCallback((_) {
+        _rebuildQueued = false;
+        if (mounted) setState(() {});
       });
     }
     return false;
