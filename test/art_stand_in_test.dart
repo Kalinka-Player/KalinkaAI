@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/theme/kalinka_icons.dart';
 import 'package:kalinka/widgets/procedural_album_art.dart';
 import 'package:kalinka/widgets/search_cards/track_row_support.dart';
 
@@ -28,7 +29,7 @@ void main() {
     );
 
     expect(find.byIcon(Icons.music_note_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.usb_rounded), findsOneWidget);
+    expect(find.byIcon(KalinkaIcons.usbFlashDrive), findsOneWidget);
     // Nothing named, or a name this app does not draw: art made up.
     expect(find.byType(ProceduralAlbumArt), findsNWidgets(2));
   });

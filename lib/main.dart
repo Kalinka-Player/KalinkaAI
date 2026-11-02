@@ -45,6 +45,10 @@ void main() async {
     yield LicenseEntryWithLineBreaks([
       'Playfair Display',
     ], await rootBundle.loadString('assets/fonts/OFL-PlayfairDisplay.txt'));
+    yield LicenseEntryWithLineBreaks([
+      'Material Design Icons',
+      'Material Symbols',
+    ], await rootBundle.loadString('assets/fonts/LICENSE-KalinkaIcons.txt'));
   });
 
   final prefs = await SharedPreferences.getInstance();

@@ -24,6 +24,7 @@ import 'package:kalinka/providers/server_info_provider.dart';
 import 'package:kalinka/providers/server_update_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/screens/plugin_catalog_screen.dart';
+import 'package:kalinka/theme/kalinka_icons.dart';
 import 'package:kalinka/widgets/home/home_source_list.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
@@ -745,7 +746,7 @@ void main() {
     final drives = ModuleInfo(
       name: 'drives',
       title: 'Drives',
-      icon: 'storage_outlined',
+      icon: 'hard_drive_outlined',
       enabled: true,
       state: ModuleState.ready,
       capabilities: const [ModuleCapability.catalogs],
@@ -767,7 +768,10 @@ void main() {
 
     final rail = _nav('source-drives');
     expect(
-      find.descendant(of: rail, matching: find.byIcon(Icons.storage_outlined)),
+      find.descendant(
+        of: rail,
+        matching: find.byIcon(KalinkaIcons.hardDriveOutlined),
+      ),
       findsOneWidget,
     );
     expect(

@@ -9,6 +9,7 @@ import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/kalinka_icons.dart';
 import '../../utils/haptics.dart';
 import '../../utils/play_next.dart';
 import '../now_playing_bars.dart';
@@ -24,7 +25,7 @@ import '../procedural_album_art.dart';
 IconData? itemIcon(String? name) => switch (name) {
   'track' => Icons.music_note_rounded,
   'folder' => Icons.folder_rounded,
-  'usb_drive' => Icons.usb_rounded,
+  'usb_drive' => KalinkaIcons.usbFlashDrive,
   'network_share' => Icons.lan_outlined,
   'disk' => Icons.storage_outlined,
   'internal_storage' => Icons.dns_outlined,
