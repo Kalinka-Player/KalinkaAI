@@ -89,7 +89,8 @@ class CollectionsSection extends ConsumerWidget {
 
 /// What stands where the collections will be: the tile a collection gets
 /// before it has a cover, a line on what one is, and the action that makes
-/// one.
+/// one. At most [kKalinkaContentMaxWidth] wide, so it stays a card on a wide
+/// pane.
 class CollectionsEmptyCard extends ConsumerWidget {
   const CollectionsEmptyCard({super.key});
 
@@ -109,7 +110,7 @@ class CollectionsEmptyCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: KalinkaColors.surfaceRaised,
@@ -180,6 +181,10 @@ class CollectionsEmptyCard extends ConsumerWidget {
           );
         },
       ),
+    );
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: kKalinkaContentMaxWidth),
+      child: card,
     );
   }
 }
