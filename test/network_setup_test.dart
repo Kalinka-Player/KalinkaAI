@@ -13,6 +13,8 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/onboarding/hotspot_setup_guide.dart';
 import 'package:kalinka/widgets/onboarding/step_network.dart';
 
+import 'support/field_text.dart';
+
 class FakeSetupApi extends NetworkSetupApi {
   final Map<String, dynamic> response;
   final List<String> commands = [];
@@ -606,12 +608,6 @@ void main() {
         )
         .text
         .style!;
-    Color? inputColor(WidgetTester tester, Finder field) => tester
-        .widget<EditableText>(
-          find.descendant(of: field, matching: find.byType(EditableText)),
-        )
-        .style
-        .color;
 
     testWidgets('connection, network rows and the Wi-Fi region', (
       tester,
@@ -650,7 +646,7 @@ void main() {
         ).color,
         KalinkaColors.textSecondary,
       );
-      expect(inputColor(tester, countryField), KalinkaColors.textPrimary);
+      expect(fieldTextColor(tester, countryField), KalinkaColors.textPrimary);
 
       final input = find.descendant(
         of: countryField,
@@ -687,7 +683,7 @@ void main() {
         KalinkaColors.textSecondary,
       );
       await tester.enterText(passwordField, 'test-password');
-      expect(inputColor(tester, passwordField), KalinkaColors.textPrimary);
+      expect(fieldTextColor(tester, passwordField), KalinkaColors.textPrimary);
       await join(tester);
       expect(
         styleOf(
@@ -712,6 +708,16 @@ void main() {
         ).color,
         KalinkaColors.textPrimary,
       );
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a network name typed by hand', (tester) async {
+      final api = FakeSetupApi(status());
+      await mountPanel(tester, api);
+      await finishScan(tester);
+      await manualCredentials(tester);
+      expect(fieldTextColor(tester, ssidField), KalinkaColors.textPrimary);
+      expect(fieldTextColor(tester, passwordField), KalinkaColors.textPrimary);
       await tester.pumpWidget(const SizedBox());
     });
   });

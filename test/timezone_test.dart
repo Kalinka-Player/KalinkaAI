@@ -7,8 +7,10 @@ import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/timezone_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/box_section.dart';
 
+import 'support/field_text.dart';
 import 'support/soundcard_fakes.dart';
 
 final _setsTimezone = supervisorInfo(
@@ -112,6 +114,18 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('No time zone matches “atlantis”.'), findsOne);
+  });
+
+  testWidgets('the search field draws what is typed in primary text', (
+    tester,
+  ) async {
+    await _pump(tester, FakeBox(answers: [_setsTimezone]));
+    await tester.tap(find.text('Time zone'));
+    await tester.pumpAndSettle();
+    expect(
+      fieldTextColor(tester, find.byKey(const ValueKey('timezone-search'))),
+      KalinkaColors.textPrimary,
+    );
   });
 
   testWidgets('reads this device’s zone again each time the picker opens', (

@@ -271,7 +271,7 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
               ),
               child: TextField(
                 controller: _search,
-                style: KalinkaTextStyles.cardTitle,
+                style: kalinkaFieldText(KalinkaTextStyles.cardTitle),
                 textInputAction: TextInputAction.search,
                 decoration: kalinkaFieldDecoration(
                   hint: 'Find a collection',

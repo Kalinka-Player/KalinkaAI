@@ -36,11 +36,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
 
   // Primary for what the user reads or acts on; secondary only for hints.
   static final _label = KalinkaTextStyles.trayRowLabel;
-  static final _option = KalinkaTextStyles.trayRowLabel.copyWith(
-    fontSize: KalinkaTypography.baseSize + 3,
-    fontWeight: FontWeight.w400,
-  );
-  static final _body = _option.copyWith(height: 1.55);
+  static final _body = kalinkaFieldTextStyle.copyWith(height: 1.55);
   static final _hint = KalinkaTextStyles.trayRowSublabel.copyWith(
     fontSize: KalinkaTypography.baseSize + 3,
     height: 1.55,
@@ -287,14 +283,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
       key: ValueKey(fieldKey),
       controller: controller,
       enabled: !_sending && _setup['state'] != 1,
-      // Material's input colour is its own baseline, not the app's primary.
-      style: WidgetStateTextStyle.resolveWith(
-        (states) => states.contains(WidgetState.disabled)
-            ? _option.copyWith(
-                color: KalinkaColors.textPrimary.withValues(alpha: 0.38),
-              )
-            : _option,
-      ),
+      style: kalinkaFieldText(),
       decoration: kalinkaFieldDecoration(hint: label).copyWith(
         labelText: label,
         suffixIcon: password
@@ -335,7 +324,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
         menuHeight: 280,
         enableFilter: true,
         requestFocusOnTap: true,
-        textStyle: _option,
+        textStyle: kalinkaFieldTextStyle,
         decorationBuilder: (context, controller) =>
             kalinkaFieldDecoration(hint: 'Search countries')
                 .copyWith(labelText: 'Country'),
@@ -346,7 +335,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
               label: '${country.value} (${country.key})',
               labelWidget: Text(
                 '${country.value} (${country.key})',
-                style: _option,
+                style: kalinkaFieldTextStyle,
               ),
             ),
         ],
@@ -522,7 +511,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (currentSsid != null && currentSsid.isNotEmpty)
-                          Text(currentSsid, style: _option),
+                          Text(currentSsid, style: kalinkaFieldTextStyle),
                         Text('${_network['address']}'),
                       ],
                     )

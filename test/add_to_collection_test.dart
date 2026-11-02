@@ -12,9 +12,12 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/providers/wire_event_provider.dart'
     show playQueueEventBusProvider;
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/queue_management_tray.dart';
 import 'package:kalinka/widgets/search/add_to_collection_sheet.dart';
+
+import 'support/field_text.dart';
 
 const _c1 = 'kalinka:collections:playlist:c1';
 const _c2 = 'kalinka:collections:playlist:c2';
@@ -242,6 +245,25 @@ void main() {
     expect(api.added.single.$2, ['t1', 't2']);
     expect(find.text('APPEND'), findsNothing);
     await letToastsGo(tester);
+  });
+
+  testWidgets('the search and name fields draw what is typed in primary text', (
+    tester,
+  ) async {
+    await openSheet(tester, _AddApi(), choices: twoCollections);
+    expect(
+      fieldTextColor(
+        tester,
+        find.widgetWithText(TextField, 'Find a collection'),
+      ),
+      KalinkaColors.textPrimary,
+    );
+    await tester.tap(find.text('Create new collection'));
+    await tester.pumpAndSettle();
+    expect(
+      fieldTextColor(tester, find.widgetWithText(TextField, 'Name it')),
+      KalinkaColors.textPrimary,
+    );
   });
 
   testWidgets('what the collection already held is said, not added twice', (
