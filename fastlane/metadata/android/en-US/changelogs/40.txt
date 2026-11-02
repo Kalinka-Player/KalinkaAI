@@ -1,0 +1,5 @@
+- Browse and play the server's drives and shares (server 5.17.0)
+- Add a drive's folder to My Library, or eject the drive
+- A track's own cover in the queue and Now Playing
+- Open the artist and album from Now Playing
+- Back climbs the folder path

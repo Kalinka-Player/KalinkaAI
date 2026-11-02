@@ -8,6 +8,29 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.25.0
+
+The server's drives to browse and play, a track's own cover, and artists and albums one tap from Now Playing. Drives, the folder picker and a track's own cover need server 5.17.0; against an older server there is no Drives or folder picker and every track shows its album's cover, as before.
+
+### Added
+- Drives appears in the rail and on Home while the server has a USB drive, a network share or a disk mounted, with a badge counting them and one row per drive drawn as a flash drive, a share or a hard drive. Its folders browse and play like any other, read from the files, and a page reads the drive again each time it is shown, after Back or when the app comes back to the front, so files copied to a drive appear.
+- A drive's folder offers Add to library beside Play all, which adds it to My Library; once it is there the pill reads ✓ In library and offers to take it out, asking first. The top of a removable drive offers Eject. Where the row has no room, as on a phone, both fold into one ⋯ pill.
+- A drive plugged in is announced with Open, and pulling one out closes the pages that were on it. Drive pages keep their place in a long folder as other drives come and go.
+- A music folder's path in Settings opens a picker that walks the server's folders and drives, a page at a time.
+- The queue, Up Next, Now Playing, the mini player, the kiosk and track rows in search results and collections show a track's own cover where it differs from its album's, such as a compilation of singles or a disc with its own sleeve, with the album's cover filling any size the track's own lacks. Album grids and headers keep the album's cover.
+- Now Playing's artist and album names open their pages in browsing, without changing playback, where the source names them. On a phone this closes the player sheet.
+- Tracks already played can be swiped right in the queue to play next.
+
+### Changed
+- Back, Up and the crumbs on a folder page climb the folder path: Back and Up go to the enclosing folder, a crumb goes back to the folder it names, and only Back from the top folder leaves the page. Until now a crumb or Up opened the folder as a new visit, so Back returned to the deep folder. This holds for My Library, Drives and every source with folders.
+- Tracks already played can be swiped left in the queue to remove them, as upcoming ones can.
+- Notifications line up on the right, within one width, whichever pane they are in. The "server is unavailable" card sits with them at the same width rather than spanning the pane, and wraps a long server name instead of cutting it off.
+- The mini player's controls are spaced evenly at every width, measured between what they draw rather than between their touch areas.
+- The Create collection card stays card-sized on a wide pane.
+
+### Fixed
+- The Now Playing header shows the sample rate again. The format beside "Now playing" was cut to a third of the row however much room the label left.
+
 ## 0.24.0
 
 Music sources shown by their own logos, the album's year on its page, and a rail that folds behind More instead of scrolling. Logos and years need server 5.16.0; against an older server each source keeps its icon and no year is shown, as before.
