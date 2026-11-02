@@ -134,9 +134,10 @@ Future<ProviderContainer> _pump(
   Key? captureKey,
   _Api? api,
   List<Override> extra = const [],
+  SettableQueue? queue,
 }) => pumpHomeShell(
   tester,
-  queue: SettableQueue(queueOf(3)),
+  queue: queue ?? SettableQueue(queueOf(3)),
   api: api ?? _Api(),
   size: size,
   sources: _modules,
@@ -391,6 +392,47 @@ void main() {
       container.read(searchSessionProvider).catalogPage.id,
       'kalinka:localfiles:catalog:root',
     );
+  });
+
+  testWidgets('player metadata navigation honours Cancel and Discard', (
+    tester,
+  ) async {
+    final queue = queueOf(1);
+    queue.trackList.single.performer = Artist(
+      id: 'kalinka:localfiles:artist:someone',
+      name: 'Someone',
+    );
+    final container = await _pump(tester, queue: SettableQueue(queue));
+    final artist = find.descendant(
+      of: find.byType(NowPlayingContent),
+      matching: find.text('Someone'),
+    );
+    await tester.tap(_nav('configuration'));
+    await tester.pumpAndSettle();
+    (container.read(settingsProvider.notifier) as _Settings).stage();
+    await tester.pumpAndSettle();
+
+    await tester.tap(artist);
+    await tester.pumpAndSettle();
+    expect(find.text('Apply your changes?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PluginCatalogScreen), findsOneWidget);
+    expect(container.read(settingsProvider).hasPendingChanges, isTrue);
+    expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
+
+    await tester.tap(artist);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('configuration-discard')));
+    await tester.pumpAndSettle();
+    expect(find.byType(PluginCatalogScreen), findsNothing);
+    expect(container.read(settingsProvider).hasPendingChanges, isFalse);
+    expect(
+      container.read(searchSessionProvider).catalogPage.id,
+      'kalinka:localfiles:artist:someone',
+    );
+    expect(container.read(playQueueStateStoreProvider), same(queue));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

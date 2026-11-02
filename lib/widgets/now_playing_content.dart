@@ -7,14 +7,17 @@ import '../data_model/data_model.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/now_playing_provider.dart';
+import '../providers/search_session_provider.dart';
 import '../providers/shell_nav_provider.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
+import '../utils/browse_links.dart';
 import '../utils/click_cursor.dart';
 import '../utils/playback_utils.dart';
 import '../providers/source_modules_provider.dart';
 import 'away.dart';
 import 'bit_perfect_badge.dart';
+import 'browse_metadata_link.dart';
 import 'kalinka_dialog.dart';
 import 'kiosk/kiosk_enter_button.dart';
 import 'kalinka_toast_overlay.dart' show kalinkaMiniPlayerHeight;
@@ -51,6 +54,9 @@ class NowPlayingContent extends ConsumerStatefulWidget {
   /// Offered by the queue view while the queue is empty.
   final VoidCallback? onFindMusic;
 
+  /// Opens metadata in the shell's browsing pane, leaving any covered panel.
+  final ValueChanged<BrowseItem>? onOpenItem;
+
   const NowPlayingContent({
     super.key,
     this.isTablet = false,
@@ -58,6 +64,7 @@ class NowPlayingContent extends ConsumerStatefulWidget {
     this.onClose,
     this.outputSwitcherKey,
     this.onFindMusic,
+    this.onOpenItem,
   });
 
   @override
@@ -394,16 +401,31 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
       TextStyle style,
       int maxLines, {
       bool grows = true,
+      bool linked = false,
     }) {
-      final painter = TextPainter(
-        text: TextSpan(text: text, style: grows ? _grown(style, grow) : style),
-        textDirection: Directionality.of(context),
-        textScaler: MediaQuery.textScalerOf(context),
-        maxLines: maxLines,
-      )..layout(maxWidth: width);
+      final painter =
+          TextPainter(
+            text: TextSpan(
+              text: text,
+              style: grows ? _grown(style, grow) : style,
+            ),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+            maxLines: maxLines,
+          )..layout(
+            maxWidth: math.max(
+              0,
+              width - (linked ? BrowseMetadataLink.chevronWidth : 0),
+            ),
+          );
       final height = painter.height;
       painter.dispose();
-      return height;
+      return linked
+          ? math.max(
+              BrowseMetadataLink.minHeight,
+              height + 2 * BrowseMetadataLink.verticalPadding,
+            )
+          : height;
     }
 
     var height =
@@ -413,11 +435,17 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           track?.performer?.name ?? '\u2014',
           KalinkaTextStyles.expandedArtist,
           2,
+          linked: artistBrowseLink(track?.performer) != null,
         );
     if (track?.album case final album?) {
       height +=
           4 * grow +
-          line(_albumLine(album), KalinkaTextStyles.expandedAlbum, 1);
+          line(
+            _albumLine(album),
+            KalinkaTextStyles.expandedAlbum,
+            1,
+            linked: albumBrowseLink(album) != null,
+          );
     }
     if (track != null) {
       // The stream's line keeps its size.
@@ -468,6 +496,15 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
   static String _albumLine(Album album) =>
       album.year != null ? '${album.title} · ${album.year}' : album.title;
 
+  void _openItem(BrowseItem item) {
+    if (widget.onOpenItem case final open?) {
+      open(item);
+    } else {
+      if (widget.showOverlayHeader) widget.onClose?.call();
+      ref.read(searchSessionProvider.notifier).openBrowseItem(item);
+    }
+  }
+
   Widget _buildTrackMetadataSection({
     required Track? currentTrack,
     required SourceDisplayInfo? sourceInfo,
@@ -492,21 +529,23 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           overflow: TextOverflow.ellipsis,
         ),
         SizedBox(height: 6 * grow),
-        Text(
-          currentTrack?.performer?.name ?? '\u2014',
+        BrowseMetadataLink(
+          label: currentTrack?.performer?.name ?? '\u2014',
+          item: artistBrowseLink(currentTrack?.performer),
+          onOpen: _openItem,
           style: _grown(KalinkaTextStyles.expandedArtist, grow),
           textAlign: textAlign,
           maxLines: 2,
-          overflow: TextOverflow.ellipsis,
         ),
         if (currentTrack?.album case final album?) ...[
           SizedBox(height: 4 * grow),
-          Text(
-            _albumLine(album),
+          BrowseMetadataLink(
+            label: _albumLine(album),
+            item: albumBrowseLink(album),
+            onOpen: _openItem,
             style: _grown(KalinkaTextStyles.expandedAlbum, grow),
             textAlign: textAlign,
             maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ],
         if (currentTrack != null) ...[
