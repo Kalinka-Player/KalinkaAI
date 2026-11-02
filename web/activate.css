@@ -1,26 +1,6 @@
-/* activate.html in the app's palette (PALETTE.md) and type. The fonts are the
-   app's own, from the same bundle; swap keeps the text up while they load. */
-
-@font-face {
-  font-family: "IBM Plex Sans";
-  font-weight: 400;
-  font-display: swap;
-  src: url("assets/assets/fonts/IBMPlexSans-Regular.ttf") format("truetype");
-}
-
-@font-face {
-  font-family: "IBM Plex Sans";
-  font-weight: 500;
-  font-display: swap;
-  src: url("assets/assets/fonts/IBMPlexSans-Medium.ttf") format("truetype");
-}
-
-@font-face {
-  font-family: "Playfair Display";
-  font-weight: 400;
-  font-display: swap;
-  src: url("assets/assets/fonts/PlayfairDisplay-Regular.ttf") format("truetype");
-}
+/* activate.html in the app's palette (PALETTE.md). No bundled fonts: the
+   supervisor serves them no-store and the refresh waits for them, so every
+   captive-portal open would download them again over the hotspot. */
 
 html {
   background: #080808;
