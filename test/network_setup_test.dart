@@ -621,14 +621,11 @@ void main() {
         styleOf(tester, find.text('Connected by Wi-Fi')).color,
         KalinkaColors.textPrimary,
       );
-      expect(
-        styleOf(tester, find.text('Current Wi-Fi')).color,
-        KalinkaColors.textPrimary,
-      );
-      expect(
-        styleOf(tester, find.text('192.168.1.20')).color,
-        KalinkaColors.textSecondary,
-      );
+      final ssid = styleOf(tester, find.text('Current Wi-Fi'));
+      final address = styleOf(tester, find.text('192.168.1.20'));
+      expect(ssid.color, KalinkaColors.textPrimary);
+      expect(address.color, KalinkaColors.textSecondary);
+      expect(address.fontWeight, ssid.fontWeight);
       expect(
         styleOf(tester, find.text('Home')).color,
         KalinkaColors.textPrimary,
@@ -662,8 +659,6 @@ void main() {
       expect(entryStyle.fontFamily, KalinkaFonts.sansFamily);
       expect(entryStyle.fontSize, KalinkaTypography.baseSize + 3);
       expect(entryStyle.fontWeight, FontWeight.w400);
-      await tester.tap(entry);
-      await tester.pump();
       await tester.pumpWidget(const SizedBox());
     });
 

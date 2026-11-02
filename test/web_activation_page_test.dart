@@ -19,8 +19,11 @@ void main() {
   bool bundled(String path) {
     if (!path.startsWith('assets/')) return File('web/$path').existsSync();
     final asset = path.substring('assets/'.length);
+    // A directory entry bundles the files directly inside it.
+    final dir = asset.substring(0, asset.lastIndexOf('/') + 1);
+    final entries = [asset, if (dir.isNotEmpty) dir].map(RegExp.escape);
     final declared = RegExp(
-      '^\\s*-\\s*(asset:\\s*)?${RegExp.escape(asset)}\\s*\$',
+      '^\\s*-\\s*(asset:\\s*)?(${entries.join('|')})\\s*\$',
       multiLine: true,
     );
     return File(asset).existsSync() && declared.hasMatch(pubspec);
