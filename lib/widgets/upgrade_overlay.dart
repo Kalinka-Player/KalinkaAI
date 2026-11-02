@@ -81,7 +81,6 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
       });
     }
 
-    final target = upgradeState.targetVersion;
     return FadeTransition(
       opacity: _fadeController,
       child: ProgressScrim(
@@ -123,21 +122,16 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
             ),
             const SizedBox(height: 24),
             Text(
-              upgradeState.isDone ? 'Upgrade complete' : 'Upgrading server',
+              upgradeState.upToDate
+                  ? 'Already up to date'
+                  : upgradeState.isDone
+                  ? 'Upgrade complete'
+                  : 'Upgrading server',
               style: KalinkaTextStyles.dialogTitle,
             ),
             const SizedBox(height: 6),
             Text(
-              switch ((upgradeState.isDone, upgradeState.packagesOnly)) {
-                (true, false) => 'Now running version $target.',
-                (true, true) => 'All packages are up to date.',
-                (false, false) =>
-                  'Installing version $target… this can '
-                      'take several minutes.',
-                (false, true) =>
-                  'Installing the new packages… this can '
-                      'take several minutes.',
-              },
+              _subtitle(upgradeState),
               textAlign: TextAlign.center,
               style: KalinkaTextStyles.trayRowSublabel.copyWith(
                 fontSize: KalinkaTypography.baseSize + 1,
@@ -154,10 +148,12 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
                 ),
               ),
             ],
-            const SizedBox(height: 28),
-            _buildProgressBar(upgradeState),
-            const SizedBox(height: 24),
-            ..._buildSteps(upgradeState),
+            if (!upgradeState.upToDate) ...[
+              const SizedBox(height: 28),
+              _buildProgressBar(upgradeState),
+              const SizedBox(height: 24),
+              ..._buildSteps(upgradeState),
+            ],
             if (upgradeState.error != null) ...[
               const SizedBox(height: 16),
               Text(
@@ -182,6 +178,21 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
         ),
       ),
     );
+  }
+
+  String _subtitle(UpgradeState upgradeState) {
+    final target = upgradeState.targetVersion;
+    if (upgradeState.upToDate) {
+      return 'The server runs version $target, with nothing left to install.';
+    }
+    return switch ((upgradeState.isDone, upgradeState.packagesOnly)) {
+      (true, false) => 'Now running version $target.',
+      (true, true) => 'All packages are up to date.',
+      (false, false) =>
+        'Installing version $target… this can take several minutes.',
+      (false, true) =>
+        'Installing the new packages… this can take several minutes.',
+    };
   }
 
   Widget _link(String label, VoidCallback onTap) => GestureDetector(

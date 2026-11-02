@@ -20,6 +20,10 @@ class UpgradeState {
   /// The server refused the request, so nothing is installing yet.
   final bool canRetry;
   final bool isDone;
+
+  /// Done without installing: the server had nothing left to install, so
+  /// [targetVersion] is the version it already runs.
+  final bool upToDate;
   final String? targetVersion;
 
   /// See [ServerUpdateInfo.packagesOnly].
@@ -35,6 +39,7 @@ class UpgradeState {
     this.error,
     this.canRetry = false,
     this.isDone = false,
+    this.upToDate = false,
     this.targetVersion,
     this.packagesOnly = false,
     this.note,
@@ -55,6 +60,7 @@ class UpgradeState {
       error: error,
       canRetry: canRetry,
       isDone: isDone ?? this.isDone,
+      upToDate: upToDate,
       targetVersion: targetVersion,
       packagesOnly: packagesOnly,
       note: note,
@@ -89,7 +95,10 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
     final api = ref.read(kalinkaProxyProvider);
     _begin(confirmed, confirmed);
 
-    var update = await _currentOffer() ?? confirmed;
+    // Null when the check failed, which leaves the update the user confirmed.
+    final current = await _readUpdate();
+    if (_upToDate(current)) return;
+    var update = current != null && current.canUpgrade ? current : confirmed;
     _begin(update, confirmed);
 
     try {
@@ -97,11 +106,14 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
         await api.upgradeServer(update.latestVersion!);
       } on ServerUpgradeException catch (e) {
         if (e.statusCode != 409) rethrow;
-        final current = await _currentOffer();
-        if (current == null || current.latestVersion == update.latestVersion) {
+        final moved = await _readUpdate();
+        if (_upToDate(moved)) return;
+        if (moved == null ||
+            !moved.canUpgrade ||
+            moved.latestVersion == update.latestVersion) {
           rethrow;
         }
-        update = current;
+        update = moved;
         _begin(update, confirmed);
         await api.upgradeServer(update.latestVersion!);
       }
@@ -171,9 +183,17 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
     return ref.read(serverUpdateProvider.future);
   }
 
-  Future<ServerUpdateInfo?> _currentOffer() async {
-    final update = await _readUpdate();
-    return update != null && update.canUpgrade ? update : null;
+  /// Ends the run when [update] shows nothing left to install, as after
+  /// another device ran the upgrade first.
+  bool _upToDate(ServerUpdateInfo? update) {
+    if (update == null || update.updateAvailable) return false;
+    state = UpgradeState(
+      isUpgrading: true,
+      isDone: true,
+      upToDate: true,
+      targetVersion: update.currentVersion,
+    );
+    return true;
   }
 
   Future<String?> _awaitVersion(KalinkaPlayerProxy api, String version) async {
