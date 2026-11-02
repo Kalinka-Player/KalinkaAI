@@ -216,7 +216,7 @@ class _TimezonePickerState extends State<TimezonePicker> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
               child: TextField(
                 key: const ValueKey('timezone-search'),
-                style: KalinkaTextStyles.textFieldInput,
+                style: kalinkaFieldText(KalinkaTextStyles.textFieldInput),
                 decoration: kalinkaFieldDecoration(hint: 'Search time zones'),
                 onChanged: (value) => setState(() => _query = value),
               ),

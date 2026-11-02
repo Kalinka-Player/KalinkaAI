@@ -573,6 +573,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
             controller: _ssid,
             autocorrect: false,
             textInputAction: TextInputAction.next,
+            style: kalinkaFieldText(),
             decoration: kalinkaFieldDecoration(hint: 'Exact network name')
                 .copyWith(labelText: 'Network name (SSID)'),
             validator: (value) =>
@@ -642,6 +643,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
           enableSuggestions: false,
           textInputAction: TextInputAction.done,
           onFieldSubmitted: (_) => _submit(),
+          style: kalinkaFieldText(),
           decoration: kalinkaFieldDecoration(hint: 'Wi-Fi password').copyWith(
             labelText: 'Password',
             suffixIcon: IconButton(
@@ -699,6 +701,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
                 maxLength: 2,
                 autocorrect: false,
                 textCapitalization: TextCapitalization.characters,
+                style: kalinkaFieldText(),
                 decoration: kalinkaFieldDecoration(hint: 'GB').copyWith(
                   labelText: 'Country code',
                   helperText:

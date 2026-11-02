@@ -10,8 +10,10 @@ import 'package:kalinka/providers/provisioning_controller.dart';
 import 'package:kalinka/providers/provisioning_protocol.dart';
 import 'package:kalinka/providers/provisioning_transport.dart';
 import 'package:kalinka/screens/provisioning_screen.dart';
+import 'package:kalinka/theme/app_theme.dart';
 
 import 'support/discovery_fakes.dart';
+import 'support/field_text.dart';
 
 class FakeTransport implements ProvisioningTransport {
   final stream = StreamController<NearbyBox>.broadcast();
@@ -806,6 +808,55 @@ void main() {
       await tester.pump();
     },
   );
+
+  testWidgets('the Wi-Fi fields draw what is typed in primary text', (
+    tester,
+  ) async {
+    final transport = FakeTransport()..canScan = true;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: ProvisioningScreen(transport: transport),
+        ),
+      ),
+    );
+    await tester.pump();
+    transport.stream.add(const NearbyBox('radio', 'Box'));
+    await tester.pump();
+    await tester.tap(find.text('Box'));
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Home'), 100);
+    await tester.tap(find.text('Home'));
+    await tester.pumpAndSettle();
+    expect(
+      fieldTextColor(tester, find.byKey(const ValueKey('wifi-password'))),
+      KalinkaColors.textPrimary,
+    );
+    await tester.ensureVisible(find.text('Advanced'));
+    await tester.tap(find.text('Advanced'));
+    await tester.pumpAndSettle();
+    expect(
+      fieldTextColor(
+        tester,
+        find.widgetWithText(TextFormField, 'Country code'),
+      ),
+      KalinkaColors.textPrimary,
+    );
+    await tester.ensureVisible(find.text('Change'));
+    await tester.tap(find.text('Change'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Enter custom SSID'));
+    await tester.tap(find.text('Enter custom SSID'));
+    await tester.pumpAndSettle();
+    expect(
+      fieldTextColor(tester, find.byKey(const ValueKey('custom-ssid'))),
+      KalinkaColors.textPrimary,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
 
   test(
     'leaving during pairing disconnects a connection that completes late',

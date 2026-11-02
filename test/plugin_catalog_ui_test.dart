@@ -71,6 +71,7 @@ import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
 import 'package:kalinka/data_model/storage.dart';
 import 'package:kalinka/screens/drives_and_shares_screen.dart';
 
+import 'support/field_text.dart';
 import 'support/server_answer.dart';
 import 'support/soundcard_fakes.dart' show FakeBox;
 
@@ -1493,6 +1494,29 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('configuration-discard')));
     await tester.pumpAndSettle();
     expect(container.read(settingsProvider).hasPendingChanges, false);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the server name field draws what is typed in primary text', (
+    tester,
+  ) async {
+    final api = _CatalogApi(_catalog())
+      ..failure = const PluginCatalogException('Catalog unavailable');
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true}),
+      api,
+      settings: _serverSettings(),
+    );
+    await _screen(tester, container);
+    await _tapTab(tester, PluginTab.server);
+    await tester.tap(find.byTooltip('Edit server name'));
+    await tester.pumpAndSettle();
+    expect(
+      fieldTextColor(tester, find.byKey(const ValueKey('server-name-input'))),
+      KalinkaColors.textPrimary,
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 

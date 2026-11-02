@@ -451,7 +451,7 @@ class _ServerNameSheetState extends State<_ServerNameSheet> {
               textCapitalization: TextCapitalization.sentences,
               maxLength: widget.field.constraints?.maxLength,
               onSubmitted: (_) => _submit(),
-              style: KalinkaTextStyles.textFieldInput,
+              style: kalinkaFieldText(KalinkaTextStyles.textFieldInput),
               decoration: kalinkaFieldDecoration(hint: widget.field.label)
                   .copyWith(labelText: widget.field.label),
             ),
