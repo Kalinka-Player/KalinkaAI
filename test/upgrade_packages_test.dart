@@ -63,6 +63,62 @@ void main() {
     });
   });
 
+  test('a packages-only upgrade waits while a package that was behind is '
+      'still unpacking', () {
+    fakeAsync((async) {
+      final server = UpgradeServer(
+        updateInfo(current: '5.14.0', latest: '5.14.0', web: true),
+      );
+      final container = upgradeContainer(server, async);
+
+      container.read(upgradeProvider.notifier).executeUpgrade(_listed);
+      async.elapse(Duration.zero);
+
+      server.update = {
+        ...updateInfo(current: '5.14.0', latest: '5.14.0'),
+        'web_current_version': null,
+      };
+      async.elapse(const Duration(seconds: 3));
+      var state = container.read(upgradeProvider);
+      expect(state.isDone, isFalse);
+      expect(state.currentStep, UpgradeStep.updatingPackages);
+
+      server.update = updateInfo(current: '5.14.0', latest: '5.14.0');
+      async.elapse(const Duration(seconds: 3));
+      state = container.read(upgradeProvider);
+      expect(state.isDone, isTrue);
+      expect(state.error, isNull);
+    });
+  });
+
+  test('a packages-only upgrade waits while a restarted server has not read '
+      'the releases yet', () {
+    fakeAsync((async) {
+      final server = UpgradeServer(
+        updateInfo(current: '5.14.0', latest: '5.14.0', web: true),
+      );
+      final container = upgradeContainer(server, async);
+
+      container.read(upgradeProvider.notifier).executeUpgrade(_listed);
+      async.elapse(Duration.zero);
+
+      server.update = {
+        ...updateInfo(current: '5.14.0', latest: '5.14.0'),
+        'latest_version': null,
+      };
+      async.elapse(const Duration(seconds: 3));
+      var state = container.read(upgradeProvider);
+      expect(state.isDone, isFalse);
+      expect(state.currentStep, UpgradeStep.updatingPackages);
+
+      server.update = updateInfo(current: '5.14.0', latest: '5.14.0');
+      async.elapse(const Duration(seconds: 3));
+      state = container.read(upgradeProvider);
+      expect(state.isDone, isTrue);
+      expect(state.error, isNull);
+    });
+  });
+
   test('a build newer than the latest release updates only its packages', () {
     fakeAsync((async) {
       const listed = ServerUpdateInfo(

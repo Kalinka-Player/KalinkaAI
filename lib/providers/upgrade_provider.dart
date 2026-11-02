@@ -130,7 +130,7 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
     }
 
     final error = update.packagesOnly
-        ? await _awaitPackages()
+        ? await _awaitPackages(update)
         : await _awaitVersion(api, update.latestVersion!);
     if (error != null) {
       state = state.copyWith(error: error);
@@ -187,7 +187,12 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
   /// Ends the run when [update] shows nothing left to install, as after
   /// another device ran the upgrade first.
   bool _upToDate(ServerUpdateInfo? update) {
-    if (update == null || update.updateAvailable) return false;
+    // No latest version means the server has not read the releases yet.
+    if (update == null ||
+        update.updateAvailable ||
+        update.latestVersion == null) {
+      return false;
+    }
     state = UpgradeState(
       isUpgrading: true,
       isDone: true,
@@ -232,7 +237,7 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
 
   /// The server's version never changes here, so only its update check can
   /// tell when the installer has finished.
-  Future<String?> _awaitPackages() async {
+  Future<String?> _awaitPackages(ServerUpdateInfo started) async {
     final deadline = _now().add(_deadline);
     while (_now().isBefore(deadline)) {
       await Future.delayed(_pollInterval);
@@ -240,11 +245,22 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
       // update_available covers the whole install, including a package the
       // server sends no flag for, as before 5.14.0 for the web player.
       if (update != null &&
+          update.latestVersion != null &&
           !update.packagesBehind &&
-          !(update.packagesOnly && update.updateAvailable)) {
+          !(update.packagesOnly && update.updateAvailable) &&
+          _installed(started, update)) {
         return null;
       }
     }
     return 'The packages did not finish updating — check the server manually.';
   }
+
+  // dpkg reports a package it is still unpacking as not installed, and so
+  // not behind either.
+  static bool _installed(ServerUpdateInfo started, ServerUpdateInfo now) =>
+      (!started.rendererUpdateAvailable ||
+          now.rendererCurrentVersion != null) &&
+      (!started.supervisorUpdateAvailable ||
+          now.supervisorCurrentVersion != null) &&
+      (!started.webUpdateAvailable || now.webCurrentVersion != null);
 }
