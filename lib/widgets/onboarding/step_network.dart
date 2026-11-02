@@ -36,11 +36,14 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
 
   // Primary for what the user reads or acts on; secondary only for hints.
   static final _label = KalinkaTextStyles.trayRowLabel;
-  static final _body = kalinkaFieldTextStyle.copyWith(height: 1.55);
-  static final _hint = KalinkaTextStyles.trayRowSublabel.copyWith(
+  static final _body = KalinkaFonts.sans(
     fontSize: KalinkaTypography.baseSize + 3,
+    fontWeight: FontWeight.w400,
+    letterSpacing: -0.1,
     height: 1.55,
+    color: KalinkaColors.textPrimary,
   );
+  static final _hint = _body.copyWith(color: KalinkaColors.textSecondary);
 
   late final NetworkSetupApi _api =
       widget.api ?? NetworkSetupApi(widget.endpoint);
@@ -511,7 +514,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (currentSsid != null && currentSsid.isNotEmpty)
-                          Text(currentSsid, style: kalinkaFieldTextStyle),
+                          Text(currentSsid, style: _body),
                         Text('${_network['address']}'),
                       ],
                     )
