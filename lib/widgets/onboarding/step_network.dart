@@ -34,6 +34,18 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
   static const _unreachable =
       'Cannot reach network setup. Check the streamer connection and try again.';
 
+  // Primary for what the user reads or acts on; secondary only for hints.
+  static final _label = KalinkaTextStyles.trayRowLabel;
+  static final _option = KalinkaTextStyles.trayRowLabel.copyWith(
+    fontSize: KalinkaTypography.baseSize + 3,
+    fontWeight: FontWeight.w400,
+  );
+  static final _body = _option.copyWith(height: 1.55);
+  static final _hint = KalinkaTextStyles.trayRowSublabel.copyWith(
+    fontSize: KalinkaTypography.baseSize + 3,
+    height: 1.55,
+  );
+
   late final NetworkSetupApi _api =
       widget.api ?? NetworkSetupApi(widget.endpoint);
   final _form = GlobalKey<FormState>();
@@ -275,6 +287,14 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
       key: ValueKey(fieldKey),
       controller: controller,
       enabled: !_sending && _setup['state'] != 1,
+      // Material's input colour is its own baseline, not the app's primary.
+      style: WidgetStateTextStyle.resolveWith(
+        (states) => states.contains(WidgetState.disabled)
+            ? _option.copyWith(
+                color: KalinkaColors.textPrimary.withValues(alpha: 0.38),
+              )
+            : _option,
+      ),
       decoration: kalinkaFieldDecoration(hint: label).copyWith(
         labelText: label,
         suffixIcon: password
@@ -304,7 +324,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
     initiallyExpanded: !_validCountry,
     title: Text(
       'Wi-Fi region${_validCountry ? ' · $_country' : ''}',
-      style: KalinkaTextStyles.trayRowSublabel,
+      style: _label,
     ),
     children: [
       DropdownMenu<String>(
@@ -315,7 +335,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
         menuHeight: 280,
         enableFilter: true,
         requestFocusOnTap: true,
-        textStyle: KalinkaTextStyles.trayRowSublabel,
+        textStyle: _option,
         decorationBuilder: (context, controller) =>
             kalinkaFieldDecoration(hint: 'Search countries')
                 .copyWith(labelText: 'Country'),
@@ -324,7 +344,10 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
             DropdownMenuEntry(
               value: country.key,
               label: '${country.value} (${country.key})',
-              labelWidget: Text('${country.value} (${country.key})'),
+              labelWidget: Text(
+                '${country.value} (${country.key})',
+                style: _option,
+              ),
             ),
         ],
         onSelected: (country) {
@@ -338,7 +361,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
         padding: const EdgeInsets.only(top: 12),
         child: Text(
           'Choose the country where the streamer is used. This sets the available Wi-Fi channels.',
-          style: KalinkaTextStyles.trayRowSublabel,
+          style: _hint,
         ),
       ),
     ],
@@ -363,15 +386,18 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
         )
       else ...[
         if (_data?['networks_cached'] == true && _scanState == 2)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
               'Networks found before the hotspot started. You can also enter a name manually.',
+              style: _hint,
             ),
           ),
         for (final network in networks)
           ListTile(
             contentPadding: EdgeInsets.zero,
+            titleTextStyle: _label,
+            subtitleTextStyle: _hint,
             leading: const Icon(Icons.wifi),
             title: Text(network['ssid'] as String? ?? ''),
             subtitle: network['security'] == 'wpa2'
@@ -382,15 +408,20 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
             onTap: () => _chooseNetwork(network['ssid'] as String),
           ),
         if (_scanState == 2 && networks.isEmpty)
-          const Text(
+          Text(
             'No networks found. Scan again or enter your network name manually.',
+            style: _body,
           ),
         if (_scanState == 3)
-          const Text(
+          Text(
             'Could not find networks. Try again or enter your network name manually.',
+            style: _body,
           ),
         if (!_validCountry)
-          const Text('Choose your country below to find nearby networks.'),
+          Text(
+            'Choose your country below to find nearby networks.',
+            style: _hint,
+          ),
       ],
       const SizedBox(height: 12),
       TextButton(
@@ -423,6 +454,8 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
         else
           ListTile(
             contentPadding: EdgeInsets.zero,
+            titleTextStyle: _label,
+            subtitleTextStyle: _hint,
             leading: const Icon(Icons.wifi),
             title: Text(_ssid.text),
             subtitle: const Text('Enter the password for this network.'),
@@ -468,6 +501,8 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
           if (_data != null)
             ListTile(
               contentPadding: EdgeInsets.zero,
+              titleTextStyle: _label,
+              subtitleTextStyle: _hint,
               leading: Icon(
                 connected
                     ? (_network['kind'] == 'wired'
@@ -487,7 +522,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (currentSsid != null && currentSsid.isNotEmpty)
-                          Text(currentSsid),
+                          Text(currentSsid, style: _option),
                         Text('${_network['address']}'),
                       ],
                     )
@@ -500,10 +535,7 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
               liveRegion: true,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  _message!,
-                  style: KalinkaTextStyles.trayRowSublabel,
-                ),
+                child: Text(_message!, style: _body),
               ),
             ),
           if (_submitted && !connected && widget.onReconnect != null)
@@ -525,8 +557,9 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
             ),
           ],
           if (_data?['available'] == false)
-            const Text(
+            Text(
               'This streamer does not offer Wi-Fi setup. You can keep the current connection or use Ethernet.',
+              style: _body,
             ),
           if (_succeeded) ...[
             const SizedBox(height: 16),
