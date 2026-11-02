@@ -541,4 +541,27 @@ void main() {
     expect(find.text('Upgrade complete'), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));
   });
+
+  testWidgets('Retry does nothing once Close has started fading the overlay '
+      'out', (tester) async {
+    final server =
+        UpgradeServer(updateInfo(current: '5.14.0', latest: '5.14.1'))
+          ..refusals.add(
+            const ServerUpgradeException(_waitForRenderers, statusCode: 409),
+          );
+    final container = await pumpUpgradeBanner(tester, server);
+
+    await confirmUpgrade(tester);
+    expect(find.text(_waitForRenderers), findsOneWidget);
+
+    await tester.tap(find.text('Close'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Retry'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+
+    expect(server.requested, ['5.14.1']);
+    expect(container.read(upgradeProvider).isUpgrading, isFalse);
+    expect(find.byType(UpgradeOverlay), findsNothing);
+  });
 }

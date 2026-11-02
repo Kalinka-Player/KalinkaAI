@@ -28,6 +28,7 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
   late AnimationController _fadeController;
   late AnimationController _spinController;
   Timer? _autoDismissTimer;
+  bool _closing = false;
 
   @override
   void initState() {
@@ -51,6 +52,7 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
   }
 
   void _close() {
+    _closing = true;
     _autoDismissTimer?.cancel();
     // Fade out first: resetting the provider unmounts this overlay (the
     // settings screen shows it while isUpgrading), so it must come last.
@@ -59,6 +61,11 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
       widget.onDismiss();
       ref.read(upgradeProvider.notifier).dismiss();
     });
+  }
+
+  // A run started during the fade-out would be wiped by dismiss() mid-flight.
+  void _retry() {
+    if (!_closing) ref.read(upgradeProvider.notifier).retry();
   }
 
   void _scheduleAutoDismiss() {
@@ -168,8 +175,7 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
                 mainAxisSize: MainAxisSize.min,
                 spacing: 24,
                 children: [
-                  if (upgradeState.canRetry)
-                    _link('Retry', ref.read(upgradeProvider.notifier).retry),
+                  if (upgradeState.canRetry) _link('Retry', _retry),
                   _link('Close', _close),
                 ],
               ),
