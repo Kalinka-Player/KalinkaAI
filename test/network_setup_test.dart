@@ -599,6 +599,123 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  group('text the user reads is primary, hints secondary', () {
+    TextStyle styleOf(WidgetTester tester, Finder text) => tester
+        .widget<RichText>(
+          find.descendant(of: text, matching: find.byType(RichText)).first,
+        )
+        .text
+        .style!;
+    Color? inputColor(WidgetTester tester, Finder field) => tester
+        .widget<EditableText>(
+          find.descendant(of: field, matching: find.byType(EditableText)),
+        )
+        .style
+        .color;
+
+    testWidgets('connection, network rows and the Wi-Fi region', (
+      tester,
+    ) async {
+      final api = FakeSetupApi(
+        status(kind: 'wifi', state: 4, ssid: 'Current Wi-Fi'),
+      );
+      await mountPanel(tester, api);
+      await finishScan(tester);
+      expect(
+        styleOf(tester, find.text('Connected by Wi-Fi')).color,
+        KalinkaColors.textPrimary,
+      );
+      expect(
+        styleOf(tester, find.text('Current Wi-Fi')).color,
+        KalinkaColors.textPrimary,
+      );
+      expect(
+        styleOf(tester, find.text('192.168.1.20')).color,
+        KalinkaColors.textSecondary,
+      );
+      expect(
+        styleOf(tester, find.text('Home')).color,
+        KalinkaColors.textPrimary,
+      );
+
+      final region = find.text('Wi-Fi region · GB');
+      expect(styleOf(tester, region).color, KalinkaColors.textPrimary);
+      await tester.ensureVisible(region);
+      await tester.tap(region);
+      await tester.pumpAndSettle();
+      expect(
+        styleOf(
+          tester,
+          find.textContaining('This sets the available Wi-Fi channels.'),
+        ).color,
+        KalinkaColors.textSecondary,
+      );
+      expect(inputColor(tester, countryField), KalinkaColors.textPrimary);
+
+      final input = find.descendant(
+        of: countryField,
+        matching: find.byType(TextField),
+      );
+      await tester.ensureVisible(countryField);
+      await tester.tap(input);
+      await tester.enterText(input, 'Germany');
+      await tester.pumpAndSettle();
+      final entry = find.widgetWithText(MenuItemButton, 'Germany (DE)').last;
+      final entryStyle = styleOf(tester, entry);
+      expect(entryStyle.color, KalinkaColors.textPrimary);
+      expect(entryStyle.fontFamily, KalinkaFonts.sansFamily);
+      expect(entryStyle.fontSize, KalinkaTypography.baseSize + 3);
+      expect(entryStyle.fontWeight, FontWeight.w400);
+      await tester.tap(entry);
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('the password field, join progress and its result', (
+      tester,
+    ) async {
+      final api = FakeSetupApi(status());
+      await mountPanel(tester, api);
+      await finishScan(tester);
+      await tester.tap(find.text('Home'));
+      await tester.pump();
+      expect(
+        styleOf(
+          tester,
+          find.text('Enter the password for this network.'),
+        ).color,
+        KalinkaColors.textSecondary,
+      );
+      await tester.enterText(passwordField, 'test-password');
+      expect(inputColor(tester, passwordField), KalinkaColors.textPrimary);
+      await join(tester);
+      expect(
+        styleOf(
+          tester,
+          find.text(
+            'Connecting your streamer… This page will reconnect when it is ready.',
+          ),
+        ).color,
+        KalinkaColors.textPrimary,
+      );
+      api.response['setup'] = {
+        'state': 3,
+        'reason': 2,
+        'scan_state': 'ready',
+        'networks': [],
+      };
+      await finishScan(tester);
+      expect(
+        styleOf(
+          tester,
+          find.text('The Wi-Fi password was not accepted. Try again.'),
+        ).color,
+        KalinkaColors.textPrimary,
+      );
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
+
   group('in-flight network requests', () {
     late FakeSetupApi api;
     final busy = <bool>[];
