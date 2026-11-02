@@ -7,16 +7,28 @@ import '../providers/connection_state_provider.dart';
 import '../theme/app_theme.dart';
 import 'box_actions.dart';
 import 'kalinka_button.dart';
+import 'kalinka_toast_overlay.dart';
 
 /// Card that appears above the mini-player after 30s of failed reconnection.
 ///
 /// Offers "Scan for servers" — or "Restart server" when the server's box still
-/// answers — and "Retry", plus a dismiss link.
-/// Once dismissed, it won't reappear until the app restarts.
+/// answers — and "Retry". Like the toasts that stack above it, it sits at the
+/// right of its pane, capped at [kToastMaxWidth].
 class EscalationCard extends ConsumerStatefulWidget {
   final VoidCallback onScanForServers;
 
-  const EscalationCard({super.key, required this.onScanForServers});
+  /// Keeps the tablet toasts' wider right gutter, so their edges line up.
+  final bool isTablet;
+
+  const EscalationCard({
+    super.key,
+    required this.onScanForServers,
+    this.isTablet = false,
+  });
+
+  /// Marks the card itself, so placement tests can measure where it landed.
+  @visibleForTesting
+  static const cardKey = Key('escalation_card');
 
   @override
   ConsumerState<EscalationCard> createState() => _EscalationCardState();
@@ -71,100 +83,118 @@ class _EscalationCardState extends ConsumerState<EscalationCard>
         );
       },
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: KalinkaColors.surfaceRaised,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: KalinkaColors.statusOffline.withValues(alpha: 0.25),
-            ),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          0,
+          widget.isTablet ? kToastTabletGutter : 16,
+          18,
+        ),
+        child: Align(
+          alignment: Alignment.centerRight,
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kToastMaxWidth),
+            child: _buildCard(name, boxAnswers),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCard(String name, bool boxAnswers) {
+    // Web has no mDNS to scan with, so there it is Retry alone.
+    final primary = boxAnswers
+        ? KalinkaButton(
+            label: 'Restart server',
+            variant: KalinkaButtonVariant.accent,
+            size: KalinkaButtonSize.compact,
+            onTap: () => restartServerThroughBox(context, ref),
+          )
+        : kIsWeb
+        ? null
+        : KalinkaButton(
+            label: 'Scan for servers',
+            variant: KalinkaButtonVariant.accent,
+            size: KalinkaButtonSize.compact,
+            onTap: widget.onScanForServers,
+          );
+    final retry = KalinkaButton(
+      label: 'Retry',
+      variant: primary == null
+          ? KalinkaButtonVariant.accent
+          : KalinkaButtonVariant.neutral,
+      size: KalinkaButtonSize.compact,
+      onTap: () => ref.read(connectionStateProvider.notifier).retryNow(),
+    );
+    return Container(
+      key: EscalationCard.cardKey,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: KalinkaColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: KalinkaColors.statusOffline.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  // Red info icon tile
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: KalinkaColors.statusOffline.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.info_outline,
-                      size: 16,
-                      color: KalinkaColors.statusOffline,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '$name is unavailable',
-                      style: KalinkaTextStyles.trayRowLabel.copyWith(
-                        fontSize: KalinkaTypography.baseSize + 3,
-                      ),
-                      maxLines: 2,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                boxAnswers
-                    ? 'The server hasn\'t responded for over 30 seconds, but '
-                          'its streamer is still on the network. Restarting the '
-                          'server may bring it back.'
-                    : 'The server hasn\'t responded for over 30 seconds. '
-                          'It may be offline or unreachable on the network.',
-                style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                  fontSize: KalinkaTypography.baseSize + 0,
-                  height: 1.5,
+              // Red info icon tile
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: KalinkaColors.statusOffline.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: KalinkaColors.statusOffline,
                 ),
               ),
-              const SizedBox(height: 14),
-              // Web has no mDNS to scan with, so there it is Retry alone.
-              Row(
-                children: [
-                  if (boxAnswers) ...[
-                    KalinkaButton(
-                      label: 'Restart server',
-                      variant: KalinkaButtonVariant.accent,
-                      size: KalinkaButtonSize.compact,
-                      onTap: () => restartServerThroughBox(context, ref),
-                    ),
-                    const Spacer(),
-                  ] else if (!kIsWeb) ...[
-                    // Scan for servers
-                    KalinkaButton(
-                      label: 'Scan for servers',
-                      variant: KalinkaButtonVariant.accent,
-                      size: KalinkaButtonSize.compact,
-                      onTap: widget.onScanForServers,
-                    ),
-                    const Spacer(),
-                  ],
-                  // Retry
-                  KalinkaButton(
-                    label: 'Retry',
-                    variant: kIsWeb && !boxAnswers
-                        ? KalinkaButtonVariant.accent
-                        : KalinkaButtonVariant.neutral,
-                    size: KalinkaButtonSize.compact,
-                    onTap: () =>
-                        ref.read(connectionStateProvider.notifier).retryNow(),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '$name is unavailable',
+                  style: KalinkaTextStyles.trayRowLabel.copyWith(
+                    fontSize: KalinkaTypography.baseSize + 3,
                   ),
-                ],
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 10),
+          Text(
+            boxAnswers
+                ? 'The server hasn\'t responded for over 30 seconds, but '
+                      'its streamer is still on the network. Restarting the '
+                      'server may bring it back.'
+                : 'The server hasn\'t responded for over 30 seconds. '
+                      'It may be offline or unreachable on the network.',
+            style: KalinkaTextStyles.trayRowSublabel.copyWith(
+              fontSize: KalinkaTypography.baseSize + 0,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Retry keeps the trailing edge, and drops below the primary
+          // when enlarged text leaves no room beside it.
+          OverflowBar(
+            alignment: primary == null
+                ? MainAxisAlignment.end
+                : MainAxisAlignment.spaceBetween,
+            overflowAlignment: OverflowBarAlignment.end,
+            spacing: 10,
+            overflowSpacing: 8,
+            children: [?primary, retry],
+          ),
+        ],
       ),
     );
   }

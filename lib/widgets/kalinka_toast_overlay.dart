@@ -9,8 +9,12 @@ import 'tap_highlight.dart';
 /// Height of the MiniPlayer (not including SafeArea bottom inset).
 const double kMiniPlayerHeight = 72.0;
 
-/// Shared width cap for notifications in either pane or a single-pane window.
-const double _maxToastWidth = 300;
+/// Shared width cap for notifications in either pane or a single-pane window,
+/// and for the escalation card under them.
+const double kToastMaxWidth = 300;
+
+/// Room between a tablet pane's right edge and its notifications.
+const double kToastTabletGutter = 20;
 
 /// Keep both metadata lines readable at the system text size. The shell and
 /// queue reserve the same measured height as the bar, excluding safe insets.
@@ -53,7 +57,7 @@ enum ToastScope {
 /// player + search pill on the main screen, or the composer on the search
 /// screen). On tablet (isTablet: true): toasts appear at bottom-right of
 /// whichever half [scope] assigns them to.
-/// Cards are right-aligned and capped at [_maxToastWidth], shrinking only
+/// Cards are right-aligned and capped at [kToastMaxWidth], shrinking only
 /// when the pane cannot fit that width plus its horizontal padding.
 ///
 /// Taps go through to whatever is under a toast, except on a toast with an
@@ -116,7 +120,7 @@ class KalinkaToastOverlay extends ConsumerWidget {
                     4,
                   ),
                   child: SizedBox(
-                    width: _maxToastWidth,
+                    width: kToastMaxWidth,
                     // Queue activity keeps its content-sized pill within the cap.
                     child: toast.compact
                         ? Align(
@@ -187,11 +191,14 @@ class KalinkaToastHost extends ConsumerWidget {
               Positioned(
                 top: padding.top + 8,
                 right:
-                    padding.right + kalinkaPlayerPaneWidth(shellWidth) + 1 + 20,
+                    padding.right +
+                    kalinkaPlayerPaneWidth(shellWidth) +
+                    1 +
+                    kToastTabletGutter,
                 bottom: inset,
                 child: _layer(
                   const SizedBox(
-                    width: _maxToastWidth,
+                    width: kToastMaxWidth,
                     child: KalinkaToastOverlay(
                       isTablet: true,
                       scope: ToastScope.window,

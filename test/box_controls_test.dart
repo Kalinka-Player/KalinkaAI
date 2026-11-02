@@ -772,6 +772,26 @@ void main() {
       expect(find.text('Restart server'), findsNothing);
     });
 
+    testWidgets('sits right-aligned at the notifications\' width cap', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      await pump(tester);
+
+      // Below the cap plus gutters, yet wide enough for the test font's
+      // square glyphs to fit 'Scan for servers'.
+      for (final width in [1200.0, 332.0, 326.0]) {
+        tester.view.physicalSize = Size(width, 800);
+        await tester.pumpAndSettle();
+        final card = tester.getRect(find.byKey(EscalationCard.cardKey));
+        expect(card.width, width < 332 ? width - 32 : 300, reason: '$width');
+        expect(card.right, width - 16, reason: '$width');
+        expect(tester.takeException(), isNull);
+      }
+    });
+
     testWidgets('restarts the server through its box', (tester) async {
       final (box, connection) = await pump(tester, answer: _info());
 

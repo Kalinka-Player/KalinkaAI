@@ -1301,7 +1301,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         child: SafeArea(
           top: false,
           bottom: isTablet,
-          child: EscalationCard(onScanForServers: _openDiscovery),
+          child: EscalationCard(
+            onScanForServers: _openDiscovery,
+            isTablet: isTablet,
+          ),
         ),
       ),
     );
@@ -1562,8 +1565,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           // Sheets opened here are anchored to this panel,
                           // so their answers belong over it too.
                           Positioned(
-                            left: 20,
-                            right: 20,
+                            left: kToastTabletGutter,
+                            right: kToastTabletGutter,
                             top: MediaQuery.paddingOf(context).top + 8,
                             bottom: 24,
                             child: const KalinkaToastOverlay(
