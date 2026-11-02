@@ -56,6 +56,15 @@ import '../widgets/kalinka_toast_overlay.dart';
 import '../widgets/sheet_anchor.dart';
 import '../widgets/shell_navigation.dart';
 
+/// Shared by navigation controls and their handlers so an operation cannot
+/// lose its progress panel through a different entry point.
+final _serverBusyProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(upgradeProvider).isUpgrading ||
+      ref.watch(restartProvider.select((s) => s.isRestarting && !s.isDone)) ||
+      ref.watch(restartingBoxesProvider).isNotEmpty,
+);
+
 class MusicPlayerScreen extends ConsumerStatefulWidget {
   const MusicPlayerScreen({super.key});
 
@@ -354,12 +363,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
   /// While the server restarts, a box restarts for its sound card, or a
   /// plugin updates, there is nothing to go to or control.
-  bool get _serverBusy =>
-      ref.watch(upgradeProvider).isUpgrading ||
-      ref.watch(
-        restartProvider.select((state) => state.isRestarting && !state.isDone),
-      ) ||
-      ref.watch(restartingBoxesProvider).isNotEmpty;
+  bool get _serverBusy => ref.watch(_serverBusyProvider);
 
   Widget _navigation({required bool extended}) => ShellNavigation(
     extended: extended,
@@ -398,17 +402,42 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     }
   }
 
-  Future<void> _navigate(
-    ShellDestination destination,
-    CatalogSource? source,
-  ) async {
-    if (_navigating) return;
+  Future<void> _navigate(ShellDestination destination, CatalogSource? source) =>
+      _navigateBrowsing(() {
+        // Each destination comes back as it was left.
+        final browsing = ref.read(searchSessionProvider.notifier);
+        switch (destination) {
+          case ShellDestination.home:
+            browsing.showHome();
+          case ShellDestination.results:
+            browsing.showResults();
+          case ShellDestination.source:
+            if (source != null) browsing.openSource(source);
+          case ShellDestination.collections:
+            final plan = ref.read(collectionsShelfProvider).value?.plan;
+            if (plan != null) browsing.openCollections(plan);
+          case ShellDestination.configuration:
+            _openPlugins(slide: false);
+        }
+      }, openingConfiguration: destination == ShellDestination.configuration);
+
+  void _openPlayerItem(BrowseItem item) => _navigateBrowsing(
+    () => ref.read(searchSessionProvider.notifier).openBrowseItem(item),
+  );
+
+  /// Reveal browsing for rail destinations and the player's metadata links,
+  /// using the same pending-change guards for any panel being left.
+  Future<void> _navigateBrowsing(
+    VoidCallback open, {
+    bool openingConfiguration = false,
+  }) async {
+    if (_navigating || ref.read(_serverBusyProvider)) return;
     // The phone's player sits beside the rail; where the rail goes shows.
     _closeExpandedPlayer();
     // Any other destination leaves the server picker as its Cancel does,
     // back to what it covered, then goes on there.
     if (_discoveryOpen) _closeDiscovery();
-    if (destination == ShellDestination.configuration && _pluginsOpen) return;
+    if (openingConfiguration && _pluginsOpen) return;
     setState(() => _navigating = true);
     try {
       if (_pluginsOpen &&
@@ -419,7 +448,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       if (!mounted) return;
       final home = _homeKey.currentState;
       if (home != null && !await home.prepareToNavigate()) return;
-      if (!mounted) return;
+      if (!mounted || ref.read(_serverBusyProvider)) return;
       ref.read(homeCustomisationProvider.notifier).close();
       ref.read(rendererSettingsRouteProvider.notifier).close();
       setState(() {
@@ -428,22 +457,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         _settingsCovering = false;
         _pluginsOpen = false;
       });
-      // Each destination comes back as it was left; the one shown stays
-      // as it is.
-      final browsing = ref.read(searchSessionProvider.notifier);
-      switch (destination) {
-        case ShellDestination.home:
-          browsing.showHome();
-        case ShellDestination.results:
-          browsing.showResults();
-        case ShellDestination.source:
-          if (source != null) browsing.openSource(source);
-        case ShellDestination.collections:
-          final plan = ref.read(collectionsShelfProvider).value?.plan;
-          if (plan != null) browsing.openCollections(plan);
-        case ShellDestination.configuration:
-          _openPlugins(slide: false);
-      }
+      open();
     } finally {
       if (mounted) setState(() => _navigating = false);
     }
@@ -455,6 +469,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     final sheet = PlayerSheetRoute(
       themes: InheritedTheme.capture(from: context, to: navigator.context),
       builder: (sheetContext) => _ExpandedPlayerSheet(
+        onOpenItem: _openPlayerItem,
         // The empty queue's way out: back to Home with search up.
         onFindMusic: () {
           Navigator.of(sheetContext).pop();
@@ -1540,6 +1555,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                                       isTablet: true,
                                       outputSwitcherKey: _outputSwitcherKey,
                                       onFindMusic: _requestHomeSearch,
+                                      onOpenItem: _openPlayerItem,
                                     ),
                             ),
                           ),
@@ -1548,6 +1564,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           Positioned(
                             left: 20,
                             right: 20,
+                            top: MediaQuery.paddingOf(context).top + 8,
                             bottom: 24,
                             child: const KalinkaToastOverlay(
                               isTablet: true,
@@ -1574,8 +1591,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 /// would float on top of the tablet layout.
 class _ExpandedPlayerSheet extends StatefulWidget {
   final VoidCallback onFindMusic;
+  final ValueChanged<BrowseItem> onOpenItem;
 
-  const _ExpandedPlayerSheet({required this.onFindMusic});
+  const _ExpandedPlayerSheet({
+    required this.onFindMusic,
+    required this.onOpenItem,
+  });
 
   @override
   State<_ExpandedPlayerSheet> createState() => _ExpandedPlayerSheetState();
@@ -1607,6 +1628,7 @@ class _ExpandedPlayerSheetState extends State<_ExpandedPlayerSheet> {
         showOverlayHeader: true,
         onClose: () => Navigator.of(context).pop(),
         onFindMusic: widget.onFindMusic,
+        onOpenItem: widget.onOpenItem,
       ),
     );
   }

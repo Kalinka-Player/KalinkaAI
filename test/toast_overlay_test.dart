@@ -316,6 +316,62 @@ void main() {
     await _retireToast(tester);
   });
 
+  for (final scale in [2.0, 2.5]) {
+    testWidgets(
+      'Settings toast stays above the landscape mini-player at ${scale}x',
+      (tester) async {
+        const size = Size(812, 375);
+        const message =
+            "this output's sound card has no volume control of its own";
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = size;
+        addTearDown(tester.view.reset);
+        final container = await _pumpApp(
+          tester,
+          textScaler: TextScaler.linear(scale),
+        );
+        final inset = kalinkaMiniPlayerHeight(
+          tester.element(find.byType(KalinkaToastHost)),
+        );
+        container.read(toastBottomInsetProvider.notifier).set(inset);
+        var actions = 0;
+        container
+            .read(toastProvider.notifier)
+            .show(
+              message,
+              isError: true,
+              action: ToastAction('Settings', () => actions++),
+            );
+        await tester.pumpAndSettle();
+
+        final card = tester.getRect(_card(message));
+        final action = tester.getRect(find.text('Settings'));
+        expect(card.width, 300);
+        expect(card.top, greaterThanOrEqualTo(8));
+        expect(card.bottom, lessThanOrEqualTo(size.height - inset - 8));
+        expect(card.contains(action.topLeft), isTrue);
+        expect(card.contains(action.bottomRight), isTrue);
+        expect(find.text('Settings').hitTestable(), findsOneWidget);
+
+        // A long explanation can scroll inside its card without moving the
+        // recovery action off-screen.
+        final scroll = find.descendant(
+          of: _card(message),
+          matching: find.byType(SingleChildScrollView),
+        );
+        await tester.drag(scroll, const Offset(0, -200));
+        await tester.pumpAndSettle();
+        expect(tester.getRect(find.text('Settings')), action);
+        await tester.tap(find.text('Settings'));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(actions, 1);
+        expect(find.text(message), findsNothing);
+        expect(tester.takeException(), isNull);
+        await _retireToast(tester);
+      },
+    );
+  }
+
   testWidgets('a success toast keeps the quiet surface and its dot', (
     tester,
   ) async {

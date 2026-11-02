@@ -8,6 +8,8 @@ import '../../data_model/data_model.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/browse_links.dart';
+import '../browse_metadata_link.dart';
 import '../fitted_title.dart';
 import '../measure_size.dart';
 import '../procedural_album_art.dart';
@@ -26,22 +28,8 @@ const double _sideTop = 8;
 
 /// The artist an album page can open: only one its listing named by a full
 /// id, so the link keeps the album's source and never looks a name up.
-BrowseItem? albumArtistLink(CatalogPage page) {
-  final artist = page.item?.album?.artist;
-  if (artist == null) return null;
-  try {
-    if (EntityId.fromString(artist.id).type != EntityType.artist) return null;
-  } catch (_) {
-    return null;
-  }
-  return BrowseItem(
-    id: artist.id,
-    name: artist.name,
-    canBrowse: true,
-    canAdd: false,
-    artist: artist,
-  );
-}
+BrowseItem? albumArtistLink(CatalogPage page) =>
+    artistBrowseLink(page.item?.album?.artist);
 
 /// The album's artist, opening the artist's page where the album says which
 /// one it is; plain text otherwise.
@@ -58,40 +46,11 @@ class _ArtistLine extends ConsumerWidget {
       height: 1.4,
       color: KalinkaColors.textPrimary,
     );
-    final link = albumArtistLink(page);
-    if (link == null) return Text(name, style: style);
-    return Semantics(
-      link: true,
-      label: 'Open $name',
-      excludeSemantics: true,
-      child: InkWell(
-        mouseCursor: WidgetStateMouseCursor.clickable,
-        onTap: () =>
-            ref.read(searchSessionProvider.notifier).openBrowseItem(link),
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  name,
-                  style: style.copyWith(
-                    decoration: TextDecoration.underline,
-                    decorationColor: KalinkaColors.textMuted,
-                  ),
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right,
-                size: 18,
-                color: KalinkaColors.textSecondary,
-              ),
-            ],
-          ),
-        ),
-      ),
+    return BrowseMetadataLink(
+      label: name,
+      style: style,
+      item: albumArtistLink(page),
+      onOpen: ref.read(searchSessionProvider.notifier).openBrowseItem,
     );
   }
 }

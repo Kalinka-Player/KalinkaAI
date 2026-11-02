@@ -90,28 +90,48 @@ class KalinkaToastOverlay extends ConsumerWidget {
       ),
     );
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        for (final toast in toasts.reversed)
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              isTablet ? 0 : 16,
-              0,
-              isTablet ? 0 : 16,
-              4,
-            ),
-            child: SizedBox(
-              width: _maxToastWidth,
-              // Queue activity keeps its content-sized pill within the cap.
-              child: toast.compact
-                  ? Align(alignment: Alignment.centerRight, child: card(toast))
-                  : card(toast),
-            ),
-          ),
-        SizedBox(height: bottomPadding),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) => ConstrainedBox(
+        constraints: BoxConstraints(
+          // Hosts supply the space above their bottom dock. Standalone
+          // overlays also stay within the screen's safe height.
+          maxHeight: constraints.hasBoundedHeight
+              ? constraints.maxHeight
+              : MediaQuery.sizeOf(context).height -
+                    MediaQuery.paddingOf(context).top -
+                    8,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            for (final toast in toasts.reversed)
+              Flexible(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    isTablet ? 0 : 16,
+                    0,
+                    isTablet ? 0 : 16,
+                    4,
+                  ),
+                  child: SizedBox(
+                    width: _maxToastWidth,
+                    // Queue activity keeps its content-sized pill within the cap.
+                    child: toast.compact
+                        ? Align(
+                            alignment: Alignment.centerRight,
+                            heightFactor: 1,
+                            child: card(toast),
+                          )
+                        : card(toast),
+                  ),
+                ),
+              ),
+            SizedBox(height: bottomPadding),
+          ],
+        ),
+      ),
     );
   }
 
@@ -165,6 +185,7 @@ class KalinkaToastHost extends ConsumerWidget {
               // Bottom-right of browsing, which ends where the player's pane
               // begins.
               Positioned(
+                top: padding.top + 8,
                 right:
                     padding.right + kalinkaPlayerPaneWidth(shellWidth) + 1 + 20,
                 bottom: inset,
@@ -180,6 +201,7 @@ class KalinkaToastHost extends ConsumerWidget {
               )
             else
               Positioned(
+                top: padding.top + 8,
                 left: rail > 0 ? padding.left + rail : 0.0,
                 right: 0,
                 bottom: 0,
@@ -278,56 +300,82 @@ class _ToastCardState extends State<_ToastCard>
             ],
           ),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.entry.isLoading)
-                const SizedBox(
-                  width: 13,
-                  height: 13,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.8,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      KalinkaColors.accentTint,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // The action must not squeeze enlarged messages into a narrow
+              // column. Keep it below the message when they need more room.
+              final stackAction =
+                  action != null &&
+                  constraints.maxWidth <
+                      MediaQuery.textScalerOf(context).scale(240);
+              final button = action == null
+                  ? null
+                  : _ToastActionButton(
+                      label: action.label,
+                      onPressed: () {
+                        action.onPressed();
+                        widget.onDismiss();
+                      },
+                    );
+              final message = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.entry.isLoading)
+                    const SizedBox(
+                      width: 13,
+                      height: 13,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.8,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          KalinkaColors.accentTint,
+                        ),
+                      ),
+                    )
+                  else if (isError)
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      size: 16,
+                      color: KalinkaColors.actionDeleteLight,
+                    )
+                  else
+                    Container(
+                      width: 5,
+                      height: 5,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: KalinkaColors.statusOnline,
+                      ),
+                    ),
+                  const SizedBox(width: 10),
+                  // Message
+                  Flexible(
+                    child: SingleChildScrollView(
+                      primary: false,
+                      child: Text(
+                        // Keep the explanation readable even when the available
+                        // height requires scrolling; the action stays outside it.
+                        widget.entry.message,
+                        style: KalinkaTextStyles.toastText,
+                      ),
                     ),
                   ),
-                )
-              else if (isError)
-                const Icon(
-                  Icons.error_outline_rounded,
-                  size: 16,
-                  color: KalinkaColors.actionDeleteLight,
-                )
-              else
-                Container(
-                  width: 5,
-                  height: 5,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: KalinkaColors.statusOnline,
-                  ),
-                ),
-              const SizedBox(width: 10),
-              // Message
-              Flexible(
-                child: Text(
-                  // Wrapped, not clipped: an ellipsis lands on the half
-                  // that says why.
-                  widget.entry.message,
-                  style: KalinkaTextStyles.toastText,
-                ),
-              ),
-              if (action != null) ...[
-                const SizedBox(width: 6),
-                _ToastActionButton(
-                  label: action.label,
-                  onPressed: () {
-                    action.onPressed();
-                    widget.onDismiss();
-                  },
-                ),
-              ],
-            ],
+                  if (button != null && !stackAction) ...[
+                    const SizedBox(width: 6),
+                    button,
+                  ],
+                ],
+              );
+              if (!stackAction) return message;
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Flexible(child: message),
+                  const SizedBox(height: 6),
+                  button!,
+                ],
+              );
+            },
           ),
         ),
       ),

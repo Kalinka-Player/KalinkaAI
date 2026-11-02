@@ -74,12 +74,16 @@ PlayQueueState _queue({
             : 'Evening track $i',
         duration: 200,
         performer: Artist(
-          id: 'artist',
+          id: 'kalinka:demo:artist:artist',
           name: longNames
               ? 'A favourite artist with the late night orchestra'
               : 'A favourite artist',
         ),
-        album: Album(id: 'album', title: 'Evening sessions', year: 2026),
+        album: Album(
+          id: 'kalinka:demo:album:album',
+          title: 'Evening sessions',
+          year: 2026,
+        ),
       ),
   ],
   playbackState: PlaybackState(index: index, state: PlayerStateType.playing),

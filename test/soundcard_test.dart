@@ -7,7 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kalinka/data_model/data_model.dart' show RendererInfo;
+import 'package:kalinka/data_model/data_model.dart'
+    show Album, Artist, BrowseItemsList, RendererInfo;
 import 'package:kalinka/data_model/renderer_config.dart';
 import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
@@ -15,12 +16,14 @@ import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/renderer_settings_provider.dart';
 import 'package:kalinka/providers/renderer_settings_route_provider.dart';
+import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/soundcard_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/toast_provider.dart';
 import 'package:kalinka/screens/renderer_settings_screen.dart';
 import 'package:kalinka/widgets/box_section.dart';
 import 'package:kalinka/widgets/mini_player.dart';
+import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/settings_controls/option_picker.dart';
 import 'package:kalinka/widgets/soundcard_row.dart';
 
@@ -165,6 +168,14 @@ class _Dropping extends ConnectionStateNotifier {
 
 /// A server whose local output has settings, behind the main screen.
 class _ShellApi extends HomeApi {
+  @override
+  Future<BrowseItemsList> browse(
+    String id, {
+    int offset = 0,
+    int limit = 10,
+    String? filter,
+  }) async => BrowseItemsList(offset, limit, 0, const []);
+
   @override
   Future<List<RendererInfo>> listRenderers() async => [rendererRow('r-local')];
 
@@ -1469,11 +1480,22 @@ void main() {
     /// The main screen with the local output's settings open.
     Future<ProviderContainer> openInShell(
       WidgetTester tester,
-      FakeBox box,
-    ) async {
+      FakeBox box, {
+      Size size = const Size(400, 800),
+    }) async {
+      final queue = queueOf(2);
+      queue.trackList.first.performer = Artist(
+        id: 'kalinka:localfiles:artist:current',
+        name: 'Current artist',
+      );
+      queue.trackList.first.album = Album(
+        id: 'kalinka:localfiles:album:current',
+        title: 'Current album',
+      );
       final container = await pumpHomeShell(
         tester,
-        queue: SettableQueue(queueOf(2)),
+        queue: SettableQueue(queue),
+        size: size,
         api: _ShellApi(),
         overrides: [
           supervisorApiProvider.overrideWithValue(box),
@@ -1488,6 +1510,66 @@ void main() {
       await tester.pumpAndSettle();
       return container;
     }
+
+    testWidgets(
+      'player links keep renderer restart and recovery controls open',
+      (tester) async {
+        final box = FakeBox(restarts: true)..answersAfterApply = [null];
+        final container = await openInShell(
+          tester,
+          box,
+          size: const Size(1440, 900),
+        );
+        final down = box.holdInfo = Completer<void>();
+        await chooseJustBoom(tester);
+
+        Future<void> tryLinks() async {
+          for (final label in ['Current artist', 'Current album']) {
+            await tester.tap(
+              find.descendant(
+                of: find.byType(NowPlayingContent),
+                matching: find.text(label),
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(
+              container.read(rendererSettingsRouteProvider)?.rendererId,
+              'r-local',
+            );
+            expect(find.byType(RendererSettingsScreen), findsOneWidget);
+            expect(
+              container.read(searchSessionProvider).catalogPage.isRoot,
+              isTrue,
+            );
+          }
+        }
+
+        await tryLinks();
+        expect(find.text('Restarting the streamer'), findsWidgets);
+        down.complete();
+        await tester.pumpAndSettle();
+        await tryLinks();
+        expect(find.text('Keep waiting'), findsOneWidget);
+        expect(find.text('Continue'), findsOneWidget);
+
+        await tester.tap(find.text('Continue'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(NowPlayingContent),
+            matching: find.text('Current artist'),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(RendererSettingsScreen), findsNothing);
+        expect(
+          container.read(searchSessionProvider).catalogPage.id,
+          'kalinka:localfiles:artist:current',
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pump(const Duration(seconds: 10));
+      },
+    );
 
     testWidgets('Back keeps the output’s settings while the box is down, and '
         'closes them once it answers', (tester) async {
