@@ -27,7 +27,7 @@ IconData? itemIcon(String? name) => switch (name) {
   'folder' => Icons.folder_rounded,
   'usb_drive' => KalinkaIcons.usbFlashDrive,
   'network_share' => Icons.lan_outlined,
-  'disk' => Icons.storage_outlined,
+  'disk' => KalinkaIcons.hardDriveOutlined,
   'internal_storage' => Icons.dns_outlined,
   _ => null,
 };

@@ -29,7 +29,15 @@ OUT = ROOT / "assets" / "fonts" / "KalinkaIcons.ttf"
 
 def glyph(name: str):
     svg = (SOURCES / f"{name}.svg").read_text()
-    min_x, min_y, width, _ = map(float, re.search(r'viewBox="([^"]+)"', svg).group(1).split())
+    # Only what is read here is drawn: anything else would go missing quietly.
+    if re.search(r"<(?!/?(svg|path)\b)[a-zA-Z]|\btransform=", svg):
+        raise SystemExit(f"{name}.svg: only <path> elements without transforms are supported")
+    box = re.search(r'viewBox="([^"]+)"', svg)
+    if box is None:
+        raise SystemExit(f"{name}.svg: no viewBox")
+    min_x, min_y, width, height = map(float, box.group(1).split())
+    if width != height:
+        raise SystemExit(f"{name}.svg: the viewBox must be square")
     scale = UPM / width
     # SVG runs down from the top of the box; a font runs up from the baseline.
     em = Transform(scale, 0, 0, -scale, -min_x * scale, UPM + min_y * scale)
