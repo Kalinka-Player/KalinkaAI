@@ -63,6 +63,42 @@ void main() {
     });
   });
 
+  test('a build newer than the latest release updates only its packages', () {
+    fakeAsync((async) {
+      const listed = ServerUpdateInfo(
+        currentVersion: '5.17.0rc1',
+        latestVersion: '5.16.0',
+        updateAvailable: true,
+        upgradeSupported: true,
+        webCurrentVersion: '0.21.1',
+        webLatestVersion: '0.21.2',
+        webUpdateAvailable: true,
+      );
+      expect(listed.changes, ['Web player: 0.21.1 → 0.21.2']);
+      final server = UpgradeServer(
+        updateInfo(current: '5.17.0rc1', latest: '5.16.0', web: true),
+        version: '5.17.0rc1',
+      );
+      final container = upgradeContainer(server, async);
+
+      container.read(upgradeProvider.notifier).executeUpgrade(listed);
+      async.elapse(Duration.zero);
+
+      expect(server.requested, ['5.16.0']);
+      var state = container.read(upgradeProvider);
+      expect(state.packagesOnly, isTrue);
+      expect(state.currentStep, UpgradeStep.updatingPackages);
+
+      server.update = updateInfo(current: '5.17.0rc1', latest: '5.16.0');
+      async.elapse(const Duration(seconds: 3));
+
+      state = container.read(upgradeProvider);
+      expect(state.isDone, isTrue);
+      expect(state.error, isNull);
+      expect(server.versionReads, 0);
+    });
+  });
+
   test(
     'a packages-only upgrade that never finishes says so at the deadline',
     () {

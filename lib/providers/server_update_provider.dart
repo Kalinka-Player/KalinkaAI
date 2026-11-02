@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart' show Logger;
 
+import '../utils/version_order.dart';
 import 'kalinka_player_api_provider.dart';
 
 final _logger = Logger();
@@ -44,9 +45,12 @@ class ServerUpdateInfo {
       latestVersion != null &&
       latestVersion!.trim().isNotEmpty;
 
-  /// The server already runs [latestVersion], so only the renderer,
-  /// supervisor or web player packages move and its version never changes.
-  bool get packagesOnly => latestVersion == currentVersion;
+  /// [latestVersion] is not newer than what the server runs, by the order the
+  /// server itself uses, so only the renderer, supervisor or web player
+  /// packages move and the server's version never changes. A build newer than
+  /// the latest release, such as 5.17.0rc1 against 5.16.0, is one.
+  bool get packagesOnly =>
+      latestVersion == null || !isNewerVersion(latestVersion!, currentVersion);
 
   bool get packagesBehind =>
       rendererUpdateAvailable ||
@@ -58,10 +62,7 @@ class ServerUpdateInfo {
   List<String> get changes => !updateAvailable
       ? const []
       : [
-          if (latestVersion != null &&
-              latestVersion!.isNotEmpty &&
-              latestVersion != currentVersion)
-            _change('Server', currentVersion, latestVersion),
+          if (!packagesOnly) _change('Server', currentVersion, latestVersion),
           if (rendererUpdateAvailable)
             _change('Renderer', rendererCurrentVersion, rendererLatestVersion),
           if (supervisorUpdateAvailable)
