@@ -414,6 +414,36 @@ void main() {
     });
   });
 
+  test('a server that has not read the releases yet is not taken as up to '
+      'date', () {
+    fakeAsync((async) {
+      final server =
+          UpgradeServer({
+              'current_version': '5.14.0',
+              'latest_version': null,
+              'update_available': false,
+              'upgrade_supported': true,
+            })
+            ..refusals.add(
+              const ServerUpgradeException(
+                'No update available',
+                statusCode: 409,
+              ),
+            );
+      final container = upgradeContainer(server, async);
+
+      container.read(upgradeProvider.notifier).executeUpgrade(_listed);
+      async.elapse(Duration.zero);
+
+      expect(server.requested, ['5.14.0']);
+      final state = container.read(upgradeProvider);
+      expect(state.upToDate, isFalse);
+      expect(state.isDone, isFalse);
+      expect(state.error, 'No update available');
+      expect(state.canRetry, isTrue);
+    });
+  });
+
   testWidgets('the overlay says the server is already up to date', (
     tester,
   ) async {
