@@ -105,6 +105,7 @@ void main() {
       var state = container.read(upgradeProvider);
       expect(state.error, isNull);
       expect(state.targetVersion, '5.14.1');
+      expect(state.packagesOnly, isFalse);
       expect(
         state.note,
         'Version 5.14.1 came out after the update was listed.',
@@ -274,6 +275,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Installing new version'), findsOneWidget);
+    expect(find.text('Updating packages'), findsNothing);
     expect(find.text('Server: 5.14.0 → 5.14.1'), findsOneWidget);
 
     server.version = '5.14.1';

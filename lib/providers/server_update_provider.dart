@@ -44,6 +44,15 @@ class ServerUpdateInfo {
       latestVersion != null &&
       latestVersion!.trim().isNotEmpty;
 
+  /// The server already runs [latestVersion], so only the renderer,
+  /// supervisor or web player packages move and its version never changes.
+  bool get packagesOnly => latestVersion == currentVersion;
+
+  bool get packagesBehind =>
+      rendererUpdateAvailable ||
+      supervisorUpdateAvailable ||
+      webUpdateAvailable;
+
   /// Describe the versions the installer will change. Availability remains
   /// the backend's decision; the bundle target is also the upgrade API token.
   List<String> get changes => !updateAvailable

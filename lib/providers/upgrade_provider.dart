@@ -9,7 +9,7 @@ final _logger = Logger();
 const _pollInterval = Duration(seconds: 3);
 const _deadline = Duration(minutes: 15);
 
-enum UpgradeStep { installing, reconnecting }
+enum UpgradeStep { installing, reconnecting, updatingPackages }
 
 class UpgradeState {
   final bool isUpgrading;
@@ -22,6 +22,9 @@ class UpgradeState {
   final bool isDone;
   final String? targetVersion;
 
+  /// See [ServerUpdateInfo.packagesOnly].
+  final bool packagesOnly;
+
   /// Set when the server's update moved on from the one the user confirmed.
   final String? note;
 
@@ -33,6 +36,7 @@ class UpgradeState {
     this.canRetry = false,
     this.isDone = false,
     this.targetVersion,
+    this.packagesOnly = false,
     this.note,
   });
 
@@ -52,6 +56,7 @@ class UpgradeState {
       canRetry: canRetry,
       isDone: isDone ?? this.isDone,
       targetVersion: targetVersion,
+      packagesOnly: packagesOnly,
       note: note,
     );
   }
@@ -74,9 +79,11 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
   /// 1. Re-read the server's update and request that version: the server
   ///    refuses any other, and its own check may have moved on since
   ///    [confirmed] was read
-  /// 2. "Installing" until the server goes down (the server keeps answering
-  ///    until the new package restarts it), then "Reconnecting" until it
-  ///    answers on the new version
+  /// 2. A server upgrade is "Installing" until the server goes down (the
+  ///    server keeps answering until the new package restarts it), then
+  ///    "Reconnecting" until it answers on the new version
+  /// 3. A packages-only upgrade is "Updating packages" until the server
+  ///    reports none of them behind
   Future<void> executeUpgrade(ServerUpdateInfo confirmed) async {
     _confirmed = confirmed;
     final api = ref.read(kalinkaProxyProvider);
@@ -109,7 +116,9 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
       return;
     }
 
-    final error = await _awaitVersion(api, update.latestVersion!);
+    final error = update.packagesOnly
+        ? await _awaitPackages()
+        : await _awaitVersion(api, update.latestVersion!);
     if (error != null) {
       state = state.copyWith(error: error);
       return;
@@ -118,13 +127,17 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
     state = UpgradeState(
       isUpgrading: true,
       isDone: true,
-      completedSteps: const {UpgradeStep.installing, UpgradeStep.reconnecting},
+      completedSteps: update.packagesOnly
+          ? const {UpgradeStep.updatingPackages}
+          : const {UpgradeStep.installing, UpgradeStep.reconnecting},
       targetVersion: update.latestVersion,
+      packagesOnly: update.packagesOnly,
       note: state.note,
     );
     // The new server re-checks for updates itself; refetch so the banner
-    // disappears instead of advertising the version we just installed.
-    ref.invalidate(serverUpdateProvider);
+    // disappears instead of advertising the version we just installed. The
+    // packages wait already left the last answer in place.
+    if (!update.packagesOnly) ref.invalidate(serverUpdateProvider);
   }
 
   Future<void> retry() async {
@@ -140,8 +153,11 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
   void _begin(ServerUpdateInfo update, ServerUpdateInfo confirmed) {
     state = UpgradeState(
       isUpgrading: true,
-      currentStep: UpgradeStep.installing,
+      currentStep: update.packagesOnly
+          ? UpgradeStep.updatingPackages
+          : UpgradeStep.installing,
       targetVersion: update.latestVersion,
+      packagesOnly: update.packagesOnly,
       note: update.latestVersion == confirmed.latestVersion
           ? null
           : 'Version ${update.latestVersion} came out after the update '
@@ -191,5 +207,17 @@ class UpgradeNotifier extends Notifier<UpgradeState> {
         ? 'Server did not come back on the new version — check it manually.'
         : 'Server is still on version ${lastSeen ?? 'unknown'} — '
               'the upgrade did not start.';
+  }
+
+  /// The server's version never changes here, so only its update check can
+  /// tell when the installer has finished.
+  Future<String?> _awaitPackages() async {
+    final deadline = _now().add(_deadline);
+    while (_now().isBefore(deadline)) {
+      await Future.delayed(_pollInterval);
+      final update = await _readUpdate();
+      if (update != null && !update.packagesBehind) return null;
+    }
+    return 'The packages did not finish updating — check the server manually.';
   }
 }

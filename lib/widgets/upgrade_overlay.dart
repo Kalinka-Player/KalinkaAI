@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/upgrade_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
+import 'progress_timeline.dart';
 
-/// Full-screen overlay showing upgrade progress with a 2-step timeline.
+/// Full-screen overlay showing upgrade progress on a timeline: installing
+/// and reconnecting, or updating packages when the server keeps its version.
 ///
 /// Unlike [RestartOverlay] there is no dismiss affordance — the upgrade
 /// can't be left half-watched, since the server is being replaced under
@@ -140,10 +142,19 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      upgradeState.isDone
-                          ? 'Now running version $target.'
-                          : 'Installing version $target… this can '
-                                'take several minutes.',
+                      switch ((
+                        upgradeState.isDone,
+                        upgradeState.packagesOnly,
+                      )) {
+                        (true, false) => 'Now running version $target.',
+                        (true, true) => 'All packages are up to date.',
+                        (false, false) =>
+                          'Installing version $target… this can '
+                              'take several minutes.',
+                        (false, true) =>
+                          'Installing the new packages… this can '
+                              'take several minutes.',
+                      },
                       textAlign: TextAlign.center,
                       style: KalinkaTextStyles.trayRowSublabel.copyWith(
                         fontSize: KalinkaTypography.baseSize + 1,
@@ -209,8 +220,27 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
     ),
   );
 
+  List<(UpgradeStep, String, String)> _steps(UpgradeState upgradeState) =>
+      upgradeState.packagesOnly
+      ? const [
+          (
+            UpgradeStep.updatingPackages,
+            'Updating packages',
+            'Waiting for the installer to finish',
+          ),
+        ]
+      : const [
+          (
+            UpgradeStep.installing,
+            'Installing new version',
+            'Downloading and installing packages',
+          ),
+          (UpgradeStep.reconnecting, 'Reconnecting', 'Waiting for server'),
+        ];
+
   Widget _buildProgressBar(UpgradeState upgradeState) {
-    final progress = upgradeState.completedSteps.length / 2.0;
+    final progress =
+        upgradeState.completedSteps.length / _steps(upgradeState).length;
     return LayoutBuilder(
       builder: (context, constraints) {
         return Container(
@@ -238,105 +268,16 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
   }
 
   List<Widget> _buildSteps(UpgradeState upgradeState) {
-    const steps = [
-      (
-        UpgradeStep.installing,
-        'Installing new version',
-        'Downloading and installing packages',
-      ),
-      (UpgradeStep.reconnecting, 'Reconnecting', 'Waiting for server'),
-    ];
-
-    final widgets = <Widget>[];
-    for (var i = 0; i < steps.length; i++) {
-      final (stepEnum, label, sublabel) = steps[i];
-      final isDone = upgradeState.completedSteps.contains(stepEnum);
-      final isActive = upgradeState.currentStep == stepEnum;
-      final isLast = i == steps.length - 1;
-
-      Color dotColor;
-      if (isDone) {
-        dotColor = KalinkaColors.statusOnline;
-      } else if (isActive) {
-        dotColor = KalinkaColors.textSecondary;
-      } else {
-        dotColor = KalinkaColors.textMuted;
-      }
-
-      widgets.add(
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 22,
-              child: Column(
-                children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: dotColor, width: 1.5),
-                      color: isDone
-                          ? dotColor.withValues(alpha: 0.15)
-                          : Colors.transparent,
-                    ),
-                    child: isDone
-                        ? Icon(Icons.check, size: 12, color: dotColor)
-                        : isActive
-                        ? Center(
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: dotColor,
-                              ),
-                            ),
-                          )
-                        : null,
-                  ),
-                  if (!isLast)
-                    Container(
-                      width: 1,
-                      height: 14,
-                      margin: const EdgeInsets.symmetric(vertical: 2),
-                      color: KalinkaColors.borderSubtle,
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: KalinkaTextStyles.trayRowLabel.copyWith(
-                        fontSize: KalinkaTypography.baseSize + 2,
-                        color: isDone || isActive
-                            ? KalinkaColors.textPrimary
-                            : KalinkaColors.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      sublabel,
-                      style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                        fontSize: KalinkaTypography.baseSize + 0,
-                        color: KalinkaColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+    final steps = _steps(upgradeState);
+    return [
+      for (final (i, (step, label, sublabel)) in steps.indexed)
+        TimelineStep(
+          label: label,
+          sublabel: sublabel,
+          done: upgradeState.completedSteps.contains(step),
+          active: upgradeState.currentStep == step,
+          last: i == steps.length - 1,
         ),
-      );
-    }
-    return widgets;
+    ];
   }
 }
