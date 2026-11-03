@@ -14,6 +14,7 @@ import '../module_artwork.dart';
 import '../receiver_panel.dart';
 import '../search/search_zero_state.dart' show kHomeSideInset;
 import '../tap_highlight.dart' show kalinkaIconButtonStyle;
+import 'source_button_style.dart';
 
 /// Home's music sources as icons and names, ending with the gear that
 /// configures them: centred while it fits, else scrolled and faded at its
@@ -90,32 +91,9 @@ class _SourceName extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    bool lit(Set<WidgetState> states) =>
-        states.contains(WidgetState.hovered) ||
-        states.contains(WidgetState.focused) ||
-        states.contains(WidgetState.pressed);
     return TextButton.icon(
       onPressed: onTap,
-      style: ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 18),
-        ),
-        shape: const WidgetStatePropertyAll(StadiumBorder()),
-        textStyle: WidgetStatePropertyAll(
-          KalinkaFonts.sans(fontSize: 16, fontWeight: FontWeight.w500),
-        ),
-        foregroundColor: WidgetStateProperty.resolveWith(
-          (states) => lit(states)
-              ? KalinkaColors.textPrimary
-              : KalinkaColors.textSecondary,
-        ),
-        backgroundColor: WidgetStateProperty.resolveWith(
-          (states) =>
-              lit(states) ? KalinkaColors.surfaceOverlay : Colors.transparent,
-        ),
-        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-      ),
+      style: homeSourceButtonStyle,
       icon: ModuleArtwork(
         icons: module.icons,
         small: true,
