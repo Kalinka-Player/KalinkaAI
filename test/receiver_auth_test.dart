@@ -275,7 +275,9 @@ void main() {
     expect(find.text('Paired'), findsOneWidget);
     expect(
       tester.getTopLeft(find.text('Paired devices')).dy -
-          tester.getBottomLeft(find.byType(OutlinedButton)).dy,
+          tester
+              .getBottomLeft(find.byKey(const ValueKey('receiver-pair-new')))
+              .dy,
       lessThanOrEqualTo(12),
     );
     inventory.replace(
