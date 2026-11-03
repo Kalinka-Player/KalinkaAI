@@ -220,6 +220,7 @@ class Constraints {
 class FieldSpec {
   /// A one-shot action consumed on save, without restarting the server.
   final bool applyImmediately;
+  final bool appliesLive;
   final String path;
   final String label;
   final WidgetKind widget;
@@ -246,6 +247,7 @@ class FieldSpec {
 
   const FieldSpec({
     this.applyImmediately = false,
+    this.appliesLive = false,
     required this.path,
     required this.label,
     required this.widget,
@@ -264,6 +266,7 @@ class FieldSpec {
 
   factory FieldSpec.fromJson(Map<String, dynamic> j) => FieldSpec(
     applyImmediately: j['apply_immediately'] == true,
+    appliesLive: j['applies_live'] == true,
     path: j['path'] as String,
     label: j['label'] as String,
     widget: WidgetKind.fromName(j['widget'] as String?),

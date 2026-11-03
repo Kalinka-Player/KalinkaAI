@@ -142,7 +142,7 @@ Off, keep this order directly on the tab:
 | MANAGEMENT | Restart Kalinka, Network, dashboard, restart streamer, power off streamer, when supported |
 | SUPPORT | Download server logs |
 
-The name is a prominent value, not a duplicate page heading. Its 48dp pencil opens a bottom sheet; Done stages the name, Cancel/Back discards the sheet edit. Apply/restart follows the existing settings flow. Settings reads refresh the connected server's saved label without changing its address or reconnecting.
+The name is a prominent value, not a duplicate page heading. Its 48dp pencil opens a bottom sheet; Done stages the name, Cancel/Back discards the sheet edit. Apply follows the existing settings flow. Fields marked `applies_live` save without restarting Core; mixed changes still use the restart flow. Renaming the streamer can interrupt AirPlay receivers that inherit its name, as the server-provided help explains. Settings reads refresh the connected server's saved label without changing its address or reconnecting.
 
 The address has 16dp side padding, a 4dp label/value gap and 20dp bottom padding. The metadata area has 16dp padding, 8dp between details and 16dp between label/value columns. At less than `280 × textScaler.scale(1)` available width, each detail stacks its label above its value with a 4dp gap. Do not truncate an address or status.
 
@@ -168,3 +168,20 @@ Reuse `SettingsTopBar`, `SettingsToolbar` and `SettingsPageIntro`; do not create
 For changes to this system, check 375dp phone, narrow 320dp, landscape and tablet-panel layouts; normal, 2× and large system text; reduced motion; long plugin/device names; connected and disconnected states; keyboard Back and About; and pending edits on return. Verify the logs options/prepare/save flow and renderer Expert mode still work. Review actual rendered screens with bundled fonts in addition to widget assertions. These checks validate the changed settings surfaces; they are not a claim of an app-wide accessibility audit.
 
 Reference: [UI/UX Pro Max skill](../../../.codex/skills/ui-ux-pro-max/SKILL.md), especially its `references/pro-rules.md` and accessibility, interaction and typography priorities. The repository tokens and shared widgets are the implementation source of truth; update this document with them when the design changes.
+
+
+## Receiver controls
+
+**Connect a device** is an independent Home entry and a row in both server
+menus. It appears for installed receivers, including disabled or unhealthy
+ones, without depending on catalog availability or source-row visibility.
+A failed refresh retains the last known entry with a retry state.
+
+The shared, scrollable sheet identifies the receiving streamer and shows the
+existing output picker separately. Receiver cards offer only supported actions:
+Bluetooth pairing, audio grants/revocation and session disconnect; AirPlay has
+persistent enable/disable and session status. Disabling is confirmed and applies
+live. Toggling from this panel saves only that receiver's enabled field and
+preserves unrelated staged settings. Pairing uses a monotonic countdown; stale
+or offline state never claims discovery is still active. Failed commands refresh
+state and are not automatically replayed.

@@ -1,3 +1,5 @@
+import 'support/receivers.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -163,6 +165,7 @@ void main() {
 
     final container = ProviderContainer(
       overrides: [
+        noReceivers,
         sharedPrefsProvider.overrideWithValue(prefs),
         kalinkaProxyProvider.overrideWithValue(api),
         sourceModulesProvider.overrideWith((ref) => _modules),

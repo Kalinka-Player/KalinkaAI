@@ -135,10 +135,10 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     try {
       final ready = await ref.read(settingsProvider.notifier).readyToApply();
       if (!mounted || !ready) return false;
-      if (ref.read(settingsProvider).onlyImmediateChanges) {
+      if (ref.read(settingsProvider).onlyLiveChanges) {
         await ref
             .read(settingsProvider.notifier)
-            .applyChanges(onlyImmediate: true);
+            .applyChanges();
         if (!mounted) return false;
         await ref
             .read(settingsProvider.notifier)
@@ -172,8 +172,8 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         side: KalinkaDialogSide.browsing,
         icon: Icons.tune,
         title: 'Apply your changes?',
-        message: ref.read(settingsProvider).onlyImmediateChanges
-            ? 'You have actions waiting to be applied.'
+        message: ref.read(settingsProvider).onlyLiveChanges
+            ? 'These changes apply without restarting Kalinka.'
             : 'You have changes that have not been applied. Applying them restarts Kalinka and briefly stops the music.',
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -544,7 +544,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
               PendingChangesBanner(
                 key: const ValueKey('configuration-changes'),
                 pendingCount: settings.pendingCount,
-                consequence: settings.onlyImmediateChanges
+                consequence: settings.onlyLiveChanges
                     ? null
                     : 'restart required',
                 busy: _applying || _restartOverlayOpen || upgrading,

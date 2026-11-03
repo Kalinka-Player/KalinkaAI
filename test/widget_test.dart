@@ -1,3 +1,5 @@
+import 'support/receivers.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -58,6 +60,7 @@ void main() {
     var hostBuilds = 0;
     final container = ProviderContainer(
       overrides: [
+        noReceivers,
         sharedPrefsProvider.overrideWithValue(prefs),
         indexerStatusProvider.overrideWith(_FakeIndexerStatusNotifier.new),
         kalinkaProxyProvider.overrideWithValue(_NoServer()),

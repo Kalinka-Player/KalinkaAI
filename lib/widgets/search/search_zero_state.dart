@@ -20,6 +20,7 @@ import '../home/pinned_catalogs_section.dart';
 import '../measure_size.dart';
 import '../modifier_click.dart';
 import '../pull_to_refresh.dart';
+import '../receiver_panel.dart';
 import 'collections_section.dart';
 
 /// The Catalogs root body: the search invitation (passed in via [leading]),
@@ -128,6 +129,7 @@ class SearchZeroState extends ConsumerWidget {
                     const SizedBox(height: 16),
                   ] else
                     const SizedBox(height: 12),
+                  const ConnectDeviceEntry(),
                   ?activity,
                   if (empty)
                     _PinHint(

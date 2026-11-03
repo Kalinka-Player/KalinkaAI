@@ -1,3 +1,5 @@
+import 'support/receivers.dart';
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -205,6 +207,7 @@ void main() {
     }
     final container = ProviderContainer(
       overrides: [
+        noReceivers,
         sharedPrefsProvider.overrideWithValue(prefs),
         kalinkaProxyProvider.overrideWithValue(
           _FakeApi(withHomeContent: withHomeContent, suggestions: suggestions),

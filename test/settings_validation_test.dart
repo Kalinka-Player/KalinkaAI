@@ -25,6 +25,12 @@ class _FakeApi implements KalinkaPlayerProxy {
   final List<Map<String, dynamic>> validated = [];
   int settingsReads = 0;
   int saves = 0;
+  final savedChanges = <Map<String, dynamic>>[];
+  PresentationSchema schema = const PresentationSchema(
+    schemaVersion: 'v1',
+    pages: [],
+    expertFields: [],
+  );
 
   @override
   Future<List<ConfigIssue>> validateSettings({
@@ -42,6 +48,7 @@ class _FakeApi implements KalinkaPlayerProxy {
     required Map<String, dynamic> changes,
   }) async {
     saves++;
+    savedChanges.add({...changes});
     if (saveError != null) throw saveError!;
     return null;
   }
@@ -53,12 +60,7 @@ class _FakeApi implements KalinkaPlayerProxy {
   }
 
   @override
-  Future<PresentationSchema> getSettingsSchema() async =>
-      const PresentationSchema(
-        schemaVersion: 'v1',
-        pages: [],
-        expertFields: [],
-      );
+  Future<PresentationSchema> getSettingsSchema() async => schema;
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
@@ -89,6 +91,54 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     _prefs = await SharedPreferences.getInstance();
   });
+
+  test(
+    'a live receiver toggle saves one field and retains unrelated drafts',
+    () async {
+      const enabled = 'input_modules.bluetooth.enabled';
+      final api = _FakeApi();
+      api.schema = PresentationSchema.fromJson({
+        'schema_version': 'v1',
+        'pages': [],
+        'expert_fields': [
+          {
+            'path': enabled,
+            'label': 'Bluetooth',
+            'type': 'boolean',
+            'widget': 'switch',
+            'applies_live': true,
+          },
+          {
+            'path': 'base_config.server.port',
+            'label': 'Port',
+            'type': 'integer',
+            'widget': 'number',
+          },
+        ],
+      });
+      final container = _container(api);
+      final notifier = await _loaded(container);
+      notifier.stageChange('base_config.server.port', 9999);
+      await notifier.applyLiveSetting(enabled, true);
+      expect(api.savedChanges, [
+        {enabled: true},
+      ]);
+      expect(container.read(settingsProvider).stagedChanges, {
+        'base_config.server.port': 9999,
+      });
+      expect(container.read(settingsProvider).values[enabled], true);
+      expect(container.read(settingsProvider).onlyLiveChanges, false);
+      notifier.discardAll();
+      notifier.stageChange(enabled, false);
+      expect(container.read(settingsProvider).onlyLiveChanges, true);
+      expect(container.read(settingsProvider).onlyImmediateChanges, false);
+      await expectLater(
+        notifier.applyLiveSetting('base_config.server.port', 9000),
+        throwsStateError,
+      );
+      expect(api.savedChanges, hasLength(1));
+    },
+  );
 
   group('asking while the user types', () {
     test('a keystroke does not put a request on the wire', () async {
