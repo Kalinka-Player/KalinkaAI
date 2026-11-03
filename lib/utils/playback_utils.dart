@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' show IconData, Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/data_model.dart';
 import '../data_model/kalinka_ws_api.dart';
 import '../providers/kalinka_ws_api_provider.dart';
@@ -81,8 +82,15 @@ String mimeTypeLabel(String? mimeType) {
   return mimeType.split('/').last.toUpperCase();
 }
 
+/// The line both players name a stream by, source first:
+/// `Qobuz · FLAC 24-bit • 96 kHz`. Empty when nothing is known.
+String streamAttribution(String? source, String mime, String quality) {
+  final format = [mime, quality].where((p) => p.isNotEmpty).join(' ');
+  return [source ?? '', format].where((p) => p.isNotEmpty).join(' · ');
+}
+
 /// Resolution of a stream — `24-bit • 96 kHz` — or empty when unknown.
-String audioQualityLabel(AudioInfo? audioInfo, {String separator = ' • '}) {
+String audioQualityLabel(AudioInfo? audioInfo) {
   if (audioInfo == null) return '';
   final parts = <String>[];
   if (audioInfo.bitsPerSample > 0) {
@@ -95,5 +103,5 @@ String audioQualityLabel(AudioInfo? audioInfo, {String separator = ' • '}) {
       '${sampleRate % 1000 == 0 ? khz.toStringAsFixed(0) : khz.toStringAsFixed(1)} kHz',
     );
   }
-  return parts.join(separator);
+  return parts.join(' • ');
 }

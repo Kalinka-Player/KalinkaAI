@@ -420,11 +420,10 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           );
       final height = painter.height;
       painter.dispose();
+      // A link's row is as tall as its chevron at least.
       return linked
-          ? math.max(
-              BrowseMetadataLink.minHeight,
-              height + 2 * BrowseMetadataLink.verticalPadding,
-            )
+          ? math.max(height, BrowseMetadataLink.chevronWidth) +
+                2 * BrowseMetadataLink.verticalPadding
           : height;
     }
 
@@ -571,15 +570,11 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     required String qualityLabel,
     required bool leftAligned,
   }) {
-    final List<String> parts = [if (sourceInfo != null) sourceInfo.title];
-    final List<String> fmtParts = [
-      if (mimeLabel.isNotEmpty) mimeLabel,
-      if (qualityLabel.isNotEmpty) qualityLabel,
-    ];
-    if (fmtParts.isNotEmpty) {
-      parts.add(fmtParts.join(' '));
-    }
-    final attributionText = parts.join(' · ');
+    final attributionText = streamAttribution(
+      sourceInfo?.title,
+      mimeLabel,
+      qualityLabel,
+    );
     final showBadge = sourceBadgeVisible(ref, currentTrack.id);
 
     // The line that names the stream is also the way into its details.
