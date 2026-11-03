@@ -12,6 +12,7 @@ import 'package:kalinka/data_model/receiver_control.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/receiver_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/receiver_approval.dart';
 import 'package:kalinka/widgets/receiver_panel.dart';
 
@@ -175,15 +176,20 @@ void main() {
       await tester.tap(find.text('Forget'));
       await tester.pumpAndSettle();
       expect(find.text('Forget Pixel 9 Pro?'), findsOneWidget);
-      expect(find.textContaining('Wi-Fi settings stay saved'), findsOneWidget);
-      await tester.tap(find.text('Cancel'));
+      expect(
+        find.text('Removes the Bluetooth pairing. Pair again to reconnect.'),
+        findsOneWidget,
+      );
+      await capture(tester, 'bluetooth-forget');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
+      expect(find.byType(KalinkaDialog), findsNothing);
       expect(inventory.commands.length, 1);
       await tester.tap(find.text('Forget'));
       await tester.pumpAndSettle();
       await tester.tap(
         find.descendant(
-          of: find.byType(AlertDialog),
+          of: find.byType(KalinkaDialog),
           matching: find.text('Forget'),
         ),
       );

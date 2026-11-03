@@ -25,6 +25,7 @@ class KalinkaButton extends StatelessWidget {
   final KalinkaButtonSize size;
   final bool fullWidth;
   final bool enabled;
+  final bool autofocus;
   final Widget? leading;
 
   const KalinkaButton({
@@ -35,6 +36,7 @@ class KalinkaButton extends StatelessWidget {
     this.size = KalinkaButtonSize.normal,
     this.fullWidth = false,
     this.enabled = true,
+    this.autofocus = false,
     this.leading,
   });
 
@@ -82,6 +84,7 @@ class KalinkaButton extends StatelessWidget {
           shape: StadiumBorder(side: BorderSide(color: borderColor)),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
+            autofocus: autofocus,
             mouseCursor: clickCursor(interactive: interactive),
             onTap: enabled ? onTap : null,
             overlayColor: WidgetStateProperty.resolveWith((states) {
