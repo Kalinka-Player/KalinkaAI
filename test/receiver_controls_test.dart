@@ -60,6 +60,7 @@ class Inventory extends ReceiversNotifier {
   Inventory(this.initial);
   final ReceiverInventory initial;
   final commands = <Map<String, dynamic>>[];
+  Completer<void>? pendingCommand;
   @override
   ReceiverInventory build() => initial;
   @override
@@ -68,7 +69,11 @@ class Inventory extends ReceiversNotifier {
   Future<void> command(
     ReceiverSnapshot receiver,
     Map<String, dynamic> command,
-  ) async => commands.add(command);
+  ) async {
+    commands.add(command);
+    await pendingCommand?.future;
+  }
+
   void replace(ReceiverInventory value) {
     state = value;
   }

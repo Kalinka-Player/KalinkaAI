@@ -212,3 +212,8 @@ Password application uses the existing secret setting; its help warns that
 applying it restarts AirPlay and ends its session. Revealed text is discarded
 on closing, backgrounding, lost availability or removal of the password. These
 surfaces reuse the existing theme, text styles and responsive spacing.
+
+Receiver operations use a spinner in the existing control bounds. AirPlay replaces
+its password chevron while fetching. Bluetooth replaces the affected device's
+ellipsis during Disconnect or Forget. Pairing uses the Pair new or Stop pairing
+control's space. Loading indicators must not add a row or change the panel size.

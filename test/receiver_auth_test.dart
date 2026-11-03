@@ -141,7 +141,14 @@ void main() {
       expect(find.text('Saved devices'), findsNothing);
       expect(find.text('Allow audio'), findsNothing);
       expect(find.text('Remove audio access'), findsNothing);
+      final beforePairing = tester.getRect(find.byType(ReceiverPanel));
+      inventory.pendingCommand = Completer<void>();
       await tester.tap(find.text('Pair new'));
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(tester.getRect(find.byType(ReceiverPanel)), beforePairing);
+      inventory.pendingCommand!.complete();
       await tester.pumpAndSettle();
       expect(inventory.commands.single, {'command': 'open_pairing'});
       expect(find.byType(ReceiverApproval), findsNothing);
@@ -209,6 +216,69 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  for (final action in ['Disconnect', 'Forget']) {
+    testWidgets('$action keeps the device row stable while pending', (
+      tester,
+    ) async {
+      final inventory = f.Inventory(
+        ReceiverInventory(
+          receivers: [
+            ReceiverSnapshot.fromJson({
+              ...f.row(),
+              'peers': [
+                ...(f.row()['peers'] as List),
+                {'peer_id': 'laptop-1', 'name': 'Laptop', 'paired': true},
+              ],
+              'sessions': [
+                {
+                  'session_id': 'session-1',
+                  'peer_id': 'phone-1',
+                  'name': 'Pixel 9 Pro',
+                },
+              ],
+            }),
+          ],
+        ),
+      );
+      await pump(tester, inventory);
+      await tester.tap(find.text('Connect'));
+      await tester.pumpAndSettle();
+      final before = tester.getRect(find.byType(ReceiverPanel));
+      final menu = find.byTooltip('Device options for Pixel 9 Pro');
+      final icon = find.descendant(
+        of: menu,
+        matching: find.byIcon(Icons.more_vert),
+      );
+      final iconRect = tester.getRect(icon);
+      await tester.tap(menu);
+      await tester.pumpAndSettle();
+      inventory.pendingCommand = Completer<void>();
+      await tester.tap(find.text(action));
+      if (action == 'Forget') {
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.descendant(
+            of: find.byType(KalinkaDialog),
+            matching: find.text('Forget'),
+          ),
+        );
+      }
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.byIcon(Icons.more_vert), findsOneWidget);
+      expect(tester.getRect(find.byType(ReceiverPanel)), before);
+      expect(tester.getRect(find.byType(CircularProgressIndicator)), iconRect);
+      await capture(tester, 'bluetooth-${action.toLowerCase()}-loading');
+      inventory.pendingCommand!.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byIcon(Icons.more_vert), findsNWidgets(2));
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   testWidgets('mobile Connect stays in source strip and opens a compact list', (
     tester,
@@ -363,8 +433,14 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('room-secret'), findsNothing);
         inventory.pendingPassword = Completer<String>();
+        final beforeReveal = tester.getRect(find.byType(ReceiverPanel));
+        final chevron = tester.getRect(find.byIcon(Icons.expand_more));
         await tester.tap(find.text('AirPlay'));
         await tester.pump();
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+        expect(tester.getRect(find.byType(ReceiverPanel)), beforeReveal);
+        expect(tester.getRect(find.byType(CircularProgressIndicator)), chevron);
+        await capture(tester, 'airplay-password-loading-${size.width}-$scale');
         tester.binding.handleAppLifecycleStateChanged(
           AppLifecycleState.inactive,
         );
