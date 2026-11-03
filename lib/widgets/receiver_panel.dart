@@ -490,21 +490,12 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
       ],
     );
     final pairControl = pairing == null
-        ? OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: KalinkaColors.textPrimary,
-              side: const BorderSide(color: KalinkaColors.textSecondary),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              minimumSize: const Size(48, 36),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              textStyle: KalinkaTextStyles.trayRowLabel,
-            ),
-            onPressed: widget.available && !_busy && _canPair(r)
-                ? () => _command('open_pairing')
-                : null,
-            child: const Text('Pair new'),
+        ? KalinkaButton(
+            key: const ValueKey('receiver-pair-new'),
+            label: 'Pair new',
+            size: KalinkaButtonSize.compact,
+            enabled: widget.available && !_busy && _canPair(r),
+            onTap: () => _command('open_pairing'),
           )
         : Wrap(
             alignment: WrapAlignment.end,

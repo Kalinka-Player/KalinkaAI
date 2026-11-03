@@ -181,7 +181,8 @@ plugin Configuration.
 
 The compact sheet shows actual receiver names and sessions. Bluetooth renders
 **Bluetooth · Pair new**, with a Paired devices label directly below it; no expansion or
-separate audio-permission switch. Pair opens the backend's two-minute Just Works
+separate audio-permission switch. Pair new uses the shared compact primary
+`KalinkaButton`, with its berry fill and pill shape. Pair opens the backend's two-minute Just Works
 window. The sender may show its normal pairing prompt, but Kalinka needs no
 comparison code or second approval. The backend countdown appears beside Bluetooth while pairing is open. A compact
 Stop pairing action sits beside it. Closing the sheet leaves it running.
