@@ -135,11 +135,13 @@ void main() {
       expect(find.text('Bluetooth'), findsOneWidget);
       expect(find.text('Pixel 9 Pro'), findsOneWidget);
       expect(find.text('Paired'), findsOneWidget);
-      expect(find.text('Forget'), findsOneWidget);
+      expect(find.byTooltip('Device options for Pixel 9 Pro'), findsOneWidget);
+      expect(find.text('Forget'), findsNothing);
+      expect(find.text('Paired devices'), findsOneWidget);
       expect(find.text('Saved devices'), findsNothing);
       expect(find.text('Allow audio'), findsNothing);
       expect(find.text('Remove audio access'), findsNothing);
-      await tester.tap(find.text('Pair'));
+      await tester.tap(find.text('Pair new'));
       await tester.pumpAndSettle();
       expect(inventory.commands.single, {'command': 'open_pairing'});
       expect(find.byType(ReceiverApproval), findsNothing);
@@ -166,13 +168,17 @@ void main() {
       await pump(tester, inventory);
       await tester.tap(find.text('Connect'));
       await tester.pumpAndSettle();
-      expect(find.text('Connected · Playing'), findsOneWidget);
+      expect(find.text('Connected'), findsOneWidget);
+      await tester.tap(find.byTooltip('Device options for Pixel 9 Pro'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Disconnect'));
       await tester.pumpAndSettle();
       expect(inventory.commands.single, {
         'command': 'disconnect_audio',
         'session_id': 'session-1',
       });
+      await tester.tap(find.byTooltip('Device options for Pixel 9 Pro'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Forget'));
       await tester.pumpAndSettle();
       expect(find.text('Forget Pixel 9 Pro?'), findsOneWidget);
@@ -185,6 +191,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(KalinkaDialog), findsNothing);
       expect(inventory.commands.length, 1);
+      await tester.tap(find.byTooltip('Device options for Pixel 9 Pro'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Forget'));
       await tester.pumpAndSettle();
       await tester.tap(
@@ -205,10 +213,33 @@ void main() {
   testWidgets('mobile Connect stays in source strip and opens a compact list', (
     tester,
   ) async {
+    final bluetooth = {
+      ...f.row(),
+      'effective_name': 'Test',
+      'peers': [
+        {
+          ...(f.row()['peers'] as List).first as Map<String, dynamic>,
+          'connected': true,
+        },
+        {
+          'peer_id': 'laptop-1',
+          'name': 'Laptop',
+          'paired': true,
+          'connected': false,
+        },
+      ],
+      'sessions': [
+        {
+          'session_id': 'session-1',
+          'peer_id': 'phone-1',
+          'name': 'Pixel 9 Pro',
+        },
+      ],
+    };
     final inventory = f.Inventory(
       ReceiverInventory(
         receivers: [
-          ReceiverSnapshot.fromJson({...f.row(), 'peers': []}),
+          ReceiverSnapshot.fromJson(bluetooth),
           ReceiverSnapshot.fromJson({
             ...f.row(),
             'receiver_id': 'airplay',
@@ -216,7 +247,7 @@ void main() {
             'title': 'AirPlay',
             'actions': [],
             'peers': [],
-            'password_required': true,
+            'password_required': false,
             'password_reveal_available': true,
             'instructions': "Choose this speaker in your device's AirPlay menu on the same network.",
           }),
@@ -240,6 +271,46 @@ void main() {
     expect(find.text('AirPlay'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await capture(tester, 'mobile-connect');
+    expect(find.text('Connected'), findsOneWidget);
+    expect(find.text('Paired'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Paired devices')).dy -
+          tester.getBottomLeft(find.byType(OutlinedButton)).dy,
+      lessThanOrEqualTo(12),
+    );
+    inventory.replace(
+      ReceiverInventory(
+        receivers: [
+          ReceiverSnapshot.fromJson({
+            ...bluetooth,
+            'pairing': {'window_id': 'window-2', 'remaining_seconds': 103},
+          }),
+          ...inventory.initial.receivers.skip(1),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Pairing · 1:43'), findsOneWidget);
+    expect(find.text('Pair new'), findsNothing);
+    expect(
+      tester.getTopLeft(find.text('Paired devices')).dy -
+          tester.getBottomLeft(find.byTooltip('Stop pairing')).dy,
+      lessThanOrEqualTo(12),
+    );
+    await capture(tester, 'mobile-connect-pairing');
+    await tester.tap(find.byTooltip('Device options for Laptop'));
+    await tester.pumpAndSettle();
+    expect(find.text('Forget'), findsOneWidget);
+    expect(find.text('Disconnect'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Device options for Pixel 9 Pro'));
+    await tester.pumpAndSettle();
+    expect(find.text('Forget'), findsOneWidget);
+    expect(find.text('Disconnect'), findsOneWidget);
+    await capture(tester, 'mobile-device-menu');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());
@@ -270,6 +341,8 @@ void main() {
       expect(find.text('Password required'), findsOneWidget);
       expect(find.text('room-secret'), findsNothing);
       expect(inventory.reveals, 0);
+      await tester.tap(find.text('AirPlay'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Show password'));
       await tester.pumpAndSettle();
       expect(find.text('room-secret'), findsOneWidget);
@@ -389,11 +462,11 @@ void main() {
     await pump(tester, inventory);
     await tester.tap(find.text('Connect'));
     await tester.pumpAndSettle();
-    expect(find.text('Stop pairing'), findsOneWidget);
+    expect(find.byTooltip('Stop pairing'), findsOneWidget);
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
     expect(inventory.commands, isEmpty);
-    expect(find.text('Stop pairing'), findsNothing);
+    expect(find.byTooltip('Stop pairing'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -449,8 +522,13 @@ void main() {
       );
       await tester.tap(entry);
       await tester.pumpAndSettle();
-      expect(find.text('Pair'), findsOneWidget);
+      expect(find.text('Pair new'), findsOneWidget);
       await capture(tester, 'wide-popover');
+      await tester.tap(find.byTooltip('Device options for Pixel 9 Pro'));
+      await tester.pumpAndSettle();
+      expect(find.text('Forget'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
       expect(
         tester.getSize(find.byType(ReceiverPanel)).width,
         lessThanOrEqualTo(380),
