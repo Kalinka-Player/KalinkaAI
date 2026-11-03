@@ -180,16 +180,17 @@ Home connection row, or duplicated renderer picker. Enable/disable stays in
 plugin Configuration.
 
 The compact sheet shows actual receiver names and sessions. Bluetooth renders
-**Bluetooth · Pair**, with paired devices directly below it; no expansion or
+**Bluetooth · Pair new**, with a Paired devices label directly below it; no expansion or
 separate audio-permission switch. Pair opens the backend's two-minute Just Works
 window. The sender may show its normal pairing prompt, but Kalinka needs no
-comparison code or second approval. Stop pairing and the backend countdown
-replace Pair while the window is open. Closing the sheet leaves it running.
-Successful pairing grants audio access automatically. Device rows show actual
-Paired/Connected/Playing state, **Disconnect** for an audio session and
-**Forget** for the bond. Forget requires confirmation: it removes shared setup
-pairing too, keeps Wi-Fi configuration and requires re-pairing. At large text or
-narrow widths, actions wrap below the device name without clipping.
+comparison code or second approval. The backend countdown appears beside Bluetooth while pairing is open. A compact
+Stop pairing action sits beside it. Closing the sheet leaves it running.
+Successful pairing grants audio access automatically. Device rows show an icon, name and Paired/Connected status, with a green dot
+for connected audio. Each row has an ellipsis menu with **Disconnect** for an
+audio session and **Forget** for the bond. Use a generic device icon until the
+server supplies a device type. Forget requires confirmation: it removes shared setup
+pairing too, keeps Wi-Fi configuration and requires re-pairing. Keep 4dp between the Bluetooth controls and the paired-device label, without
+reserved space while pairing. Device names wrap at large text sizes.
 Use the centered `KalinkaDialog` and shared buttons. Cancel is neutral and gets
 initial keyboard focus. Forget uses the berry action style. Keep the message
 short: "Removes the Bluetooth pairing. Pair again to reconnect."
@@ -200,7 +201,8 @@ explicit decisions and backend cancellation/expiry, including when the panel
 is closed. The current Just Works controller publishes no such requests.
 Commands are never automatically replayed after a timeout.
 
-AirPlay shows password-required status and explicit Show / Hide password.
+AirPlay starts as a compact icon, title, password-status and chevron row. Opening
+it shows the receiver instructions and explicit Show / Hide password.
 Password application uses the existing secret setting; its help warns that
 applying it restarts AirPlay and ends its session. Revealed text is discarded
 on closing, backgrounding or lost availability. These surfaces reuse the

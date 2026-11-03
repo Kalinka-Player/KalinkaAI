@@ -163,13 +163,22 @@ class ReceiverPanel extends ConsumerWidget {
                         'No enabled receivers. Manage plugins in Configuration.',
                       ),
                     ),
-                  for (final receiver in receivers)
+                  for (var i = 0; i < receivers.length; i++) ...[
+                    if (i > 0)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Divider(
+                          height: 1,
+                          color: KalinkaColors.borderDefault,
+                        ),
+                      ),
                     _ReceiverDetails(
-                      key: ValueKey('${connection.address}:${receiver.id}'),
-                      receiver: receiver,
+                      key: ValueKey('${connection.address}:${receivers[i].id}'),
+                      receiver: receivers[i],
                       available: inventory.error == null,
                       showTitle: receiverId == null,
                     ),
+                  ],
                 ],
               ),
             ),
@@ -306,103 +315,37 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
         : r.kind == 'airplay'
         ? (r.passwordRequired ? 'Password required' : 'No password required')
         : 'Not connected';
-    final VoidCallback? action;
-    final String? label;
-    if (r.offers('open_pairing')) {
-      label = session == null ? 'Pair a device' : 'Disconnect';
-      action = session == null
-          ? (_canPair(r)
-                ? () {
-                    setState(() => _expanded = true);
-                    _command('open_pairing');
-                  }
-                : null)
-          : (r.can('disconnect_audio')
-                ? () => _command('disconnect_audio', {'session_id': session.id})
-                : null);
-    } else if (r.passwordRequired) {
-      label = 'Show password';
-      action = r.passwordRevealAvailable
-          ? () {
-              setState(() => _expanded = true);
-              _reveal();
-            }
-          : null;
-    } else {
-      label = null;
-      action = null;
-    }
-    final details = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Icon(receiverIcon(r.kind), size: 24),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(r.title, style: KalinkaTextStyles.trayRowLabel),
-              Text(status, style: KalinkaTextStyles.trayRowSublabel),
-              Text(
-                r.effectiveName ?? r.title,
-                style: KalinkaTextStyles.trayRowSublabel,
-              ),
-            ],
+        InkWell(
+          onTap: () => setState(() => _expanded = true),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Icon(receiverIcon(r.kind), size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(r.title, style: KalinkaTextStyles.trayRowLabel),
+                      Text(status, style: KalinkaTextStyles.trayRowSublabel),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Icon(Icons.chevron_right, size: 24),
+              ],
+            ),
           ),
         ),
+        if (_error != null)
+          Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
+        if (_busy) const LinearProgressIndicator(),
       ],
-    );
-    final button = label == null
-        ? const Icon(Icons.chevron_right)
-        : TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: KalinkaColors.textPrimary,
-              minimumSize: const Size(48, 48),
-            ),
-            onPressed: widget.available && !_busy ? action : null,
-            child: Text(label),
-          );
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        children: [
-          InkWell(
-            onTap: () => setState(() => _expanded = true),
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final roomy =
-                      constraints.maxWidth >=
-                      320 * MediaQuery.textScalerOf(context).scale(1);
-                  return roomy
-                      ? Row(
-                          children: [
-                            Expanded(child: details),
-                            button,
-                          ],
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            details,
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: button,
-                            ),
-                          ],
-                        );
-                },
-              ),
-            ),
-          ),
-          if (_error != null)
-            Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
-          if (_busy) const LinearProgressIndicator(),
-          const Divider(color: KalinkaColors.borderSubtle),
-        ],
-      ),
     );
   }
 
@@ -439,6 +382,8 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
     final pairing = r.pairing;
     final remaining = pairing?.remainingSeconds ?? 0;
     final peers = r.peers.where((p) => p.paired).toList();
+    final serverName = ref.watch(connectionSettingsProvider).name;
+    final name = r.effectiveName ?? r.title;
     final title = Row(
       children: [
         if (widget.showTitle) ...[
@@ -447,28 +392,54 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
         ],
         Expanded(
           child: Text(
-            widget.showTitle ? r.title : (r.effectiveName ?? r.title),
+            widget.showTitle ? r.title : name,
             style: KalinkaTextStyles.trayRowLabel,
           ),
         ),
       ],
     );
-    final pairButton = TextButton(
-      style: TextButton.styleFrom(
-        foregroundColor: KalinkaColors.textPrimary,
-        minimumSize: const Size(48, 48),
-      ),
-      onPressed: !widget.available || _busy
-          ? null
-          : pairing != null
-          ? (r.can('close_pairing')
-                ? () => _command('close_pairing', {'window_id': pairing.id})
-                : null)
-          : (_canPair(r) ? () => _command('open_pairing') : null),
-      child: Text(pairing == null ? 'Pair' : 'Stop pairing'),
-    );
+    final pairControl = pairing == null
+        ? OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: KalinkaColors.textPrimary,
+              side: const BorderSide(color: KalinkaColors.textSecondary),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              minimumSize: const Size(48, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              textStyle: KalinkaTextStyles.trayRowLabel,
+            ),
+            onPressed: widget.available && !_busy && _canPair(r)
+                ? () => _command('open_pairing')
+                : null,
+            child: const Text('Pair new'),
+          )
+        : Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                widget.available
+                    ? remaining > 0
+                          ? 'Pairing · ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}'
+                          : 'Pairing ending…'
+                    : 'Pairing status unavailable',
+                style: KalinkaTextStyles.trayRowSublabel,
+              ),
+              IconButton(
+                tooltip: 'Stop pairing',
+                onPressed: widget.available && !_busy && r.can('close_pairing')
+                    ? () => _command('close_pairing', {'window_id': pairing.id})
+                    : null,
+                icon: const Icon(Icons.close, size: 18),
+                color: KalinkaColors.textSecondary,
+              ),
+            ],
+          );
+    // MenuAnchor measures intrinsic sizes, so use the known panel width.
     final width = (MediaQuery.sizeOf(context).width - 40).clamp(0.0, 340.0);
-    final roomy = width >= 280 * MediaQuery.textScalerOf(context).scale(1);
+    final roomy = width >= 320 * MediaQuery.textScalerOf(context).scale(1);
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Column(
@@ -478,18 +449,15 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
             Row(
               children: [
                 Expanded(child: title),
-                pairButton,
+                pairControl,
               ],
             )
           else ...[
             title,
-            Align(alignment: Alignment.centerRight, child: pairButton),
+            Align(alignment: Alignment.centerRight, child: pairControl),
           ],
-          if (widget.showTitle)
-            Text(
-              r.effectiveName ?? r.title,
-              style: KalinkaTextStyles.trayRowSublabel,
-            ),
+          if (widget.showTitle && name != serverName)
+            Text(name, style: KalinkaTextStyles.trayRowSublabel),
           if (r.message != null)
             Text(r.message!, style: KalinkaTextStyles.trayRowSublabel),
           if (r.state != 'ready')
@@ -499,34 +467,22 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
                   : 'Receiver unavailable',
               style: KalinkaTextStyles.trayRowSublabel,
             ),
-          if (pairing != null && widget.available) ...[
-            const SizedBox(height: 8),
+          if (pairing != null && widget.available && peers.isEmpty)
             Text(
-              remaining > 0
-                  ? 'Visible for ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}'
-                  : 'Pairing window is closing…',
+              'Choose $name in Bluetooth settings.',
               style: KalinkaTextStyles.trayRowSublabel,
             ),
-            Text(
-              'Select ${r.effectiveName ?? r.title} in your device’s Bluetooth settings.'
-              '${r.pairingMode == 'just_works' ? ' Complete any pairing prompt on your device.' : ''}',
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 4),
+            child: Text(
+              peers.isEmpty ? 'No paired devices' : 'Paired devices',
               style: KalinkaTextStyles.trayRowSublabel,
             ),
-          ],
-          if (peers.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                'No paired devices',
-                style: KalinkaTextStyles.trayRowSublabel,
-              ),
-            ),
+          ),
           for (final peer in peers) _pairedDevice(r, peer),
           if (_error != null)
             Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
           if (_busy) const LinearProgressIndicator(),
-          if (widget.showTitle)
-            const Divider(color: KalinkaColors.borderSubtle),
         ],
       ),
     );
@@ -536,66 +492,93 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
     final session = receiver.sessions
         .where((s) => s.peerId == peer.id)
         .firstOrNull;
-    final details = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(peer.name, style: KalinkaTextStyles.trayRowLabel),
-        Text(
-          session?.playing == true
-              ? 'Connected · Playing'
-              : peer.connected
-              ? 'Connected'
-              : 'Paired',
-          style: KalinkaTextStyles.trayRowSublabel,
-        ),
-      ],
-    );
-    final actions = Wrap(
-      spacing: 4,
-      children: [
-        if (session != null)
-          TextButton(
-            onPressed:
-                widget.available && !_busy && receiver.can('disconnect_audio')
-                ? () => _command('disconnect_audio', {'session_id': session.id})
-                : null,
-            style: TextButton.styleFrom(
-              foregroundColor: KalinkaColors.textPrimary,
-              minimumSize: const Size(48, 48),
-            ),
-            child: const Text('Disconnect'),
-          ),
-        if (receiver.offers('forget_device'))
-          TextButton(
-            onPressed:
-                widget.available && !_busy && receiver.can('forget_device')
-                ? () => _forget(peer)
-                : null,
-            style: TextButton.styleFrom(
-              foregroundColor: KalinkaColors.textPrimary,
-              minimumSize: const Size(48, 48),
-            ),
-            child: const Text('Forget'),
-          ),
-      ],
-    );
-    // MenuAnchor measures intrinsic sizes; avoid LayoutBuilder in its contents.
-    final width = (MediaQuery.sizeOf(context).width - 40).clamp(0.0, 340.0);
-    final roomy = width >= 320 * MediaQuery.textScalerOf(context).scale(1);
+    final connected = peer.connected || session != null;
+    final enabled = widget.available && !_busy;
     return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 4),
-      child: roomy
-          ? Row(
-              children: [
-                Expanded(child: details),
-                const SizedBox(width: 8),
-                actions,
-              ],
-            )
-          : Column(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.devices_outlined,
+            size: 24,
+            color: KalinkaColors.textPrimary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [details, actions],
+              children: [
+                Text(peer.name, style: KalinkaTextStyles.trayRowLabel),
+                Row(
+                  children: [
+                    if (connected) ...[
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: KalinkaColors.statusOnline,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Flexible(
+                      child: Text(
+                        connected ? 'Connected' : 'Paired',
+                        style: KalinkaTextStyles.trayRowSublabel,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
+          ),
+          if (receiver.offers('forget_device') || session != null)
+            PopupMenuButton<String>(
+              tooltip: 'Device options for ${peer.name}',
+              enabled: enabled,
+              icon: const Icon(
+                Icons.more_horiz,
+                size: 24,
+                color: KalinkaColors.textSecondary,
+              ),
+              constraints: const BoxConstraints(minWidth: 168, maxWidth: 280),
+              color: KalinkaColors.surfaceRaised,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: KalinkaColors.borderDefault),
+              ),
+              onSelected: (action) {
+                if (action == 'forget') {
+                  _forget(peer);
+                } else if (action == 'disconnect' && session != null) {
+                  _command('disconnect_audio', {'session_id': session.id});
+                }
+              },
+              itemBuilder: (_) => [
+                if (session != null && receiver.offers('disconnect_audio'))
+                  PopupMenuItem(
+                    value: 'disconnect',
+                    enabled: receiver.can('disconnect_audio'),
+                    child: Text(
+                      'Disconnect',
+                      style: KalinkaTextStyles.trayRowLabel,
+                    ),
+                  ),
+                if (receiver.offers('forget_device'))
+                  PopupMenuItem(
+                    value: 'forget',
+                    enabled: receiver.can('forget_device'),
+                    child: Text(
+                      'Forget',
+                      style: KalinkaTextStyles.trayRowLabel,
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
     );
   }
 
@@ -727,8 +710,6 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
           if (_error != null)
             Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
           if (_busy) const LinearProgressIndicator(),
-          if (widget.showTitle)
-            const Divider(color: KalinkaColors.borderSubtle),
         ],
       ),
     );

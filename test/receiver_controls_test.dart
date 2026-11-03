@@ -290,7 +290,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('Play from a device'), findsOneWidget);
-      expect(find.textContaining('Visible for '), findsOneWidget);
+      expect(find.textContaining('Pairing · '), findsOneWidget);
       final dir = Platform.environment['KALINKA_REVIEW_DIR'];
       if (dir != null) {
         await tester.runAsync(() async {
@@ -304,8 +304,8 @@ void main() {
           image.dispose();
         });
       }
-      await tester.ensureVisible(find.text('Stop pairing'));
-      await tester.tap(find.text('Stop pairing'));
+      await tester.ensureVisible(find.byTooltip('Stop pairing'));
+      await tester.tap(find.byTooltip('Stop pairing'));
       await tester.pump();
       expect(inventory.commands.single, {
         'command': 'close_pairing',
