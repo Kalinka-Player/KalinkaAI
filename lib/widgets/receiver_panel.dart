@@ -223,6 +223,7 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
     super.didUpdateWidget(oldWidget);
     if (!widget.available ||
         !widget.receiver.passwordRevealAvailable ||
+        !widget.receiver.passwordRequired ||
         widget.receiver.state != 'ready') {
       _password = null;
       _secretEpoch++;
@@ -300,10 +301,100 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
       if (mounted &&
           epoch == _secretEpoch &&
           widget.available &&
-          widget.receiver.passwordRevealAvailable) {
+          widget.receiver.passwordRevealAvailable &&
+          widget.receiver.passwordRequired &&
+          widget.receiver.state == 'ready') {
         setState(() => _password = password);
       }
     });
+  }
+
+  Widget _airplay(ReceiverSnapshot receiver) {
+    final shown = _password != null;
+    final canReveal =
+        widget.available &&
+        receiver.state == 'ready' &&
+        receiver.passwordRequired &&
+        receiver.passwordRevealAvailable;
+    final status = !receiver.passwordRequired
+        ? 'No password required'
+        : canReveal
+        ? 'Password required - click to ${shown ? 'hide' : 'reveal'}'
+        : 'Password required';
+    final name = receiver.effectiveName ?? receiver.title;
+    final serverName = ref.watch(connectionSettingsProvider).name;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          expanded: receiver.passwordRequired ? shown : null,
+          child: InkWell(
+            onTap: canReveal && !_busy ? _reveal : null,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  Icon(receiverIcon(receiver.kind), size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.showTitle ? receiver.title : name,
+                          style: KalinkaTextStyles.trayRowLabel,
+                        ),
+                        if (widget.showTitle && name != serverName)
+                          Text(name, style: KalinkaTextStyles.trayRowSublabel),
+                        Text(status, style: KalinkaTextStyles.trayRowSublabel),
+                      ],
+                    ),
+                  ),
+                  if (receiver.passwordRequired) ...[
+                    const SizedBox(width: 12),
+                    Icon(
+                      shown ? Icons.expand_less : Icons.expand_more,
+                      size: 24,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (shown)
+          Padding(
+            padding: const EdgeInsets.only(left: 36, top: 8, bottom: 12),
+            child: SelectableText(
+              _password!,
+              style: KalinkaFonts.mono(
+                fontSize: 28,
+                fontWeight: FontWeight.w500,
+                color: KalinkaColors.textPrimary,
+                height: 1.4,
+              ),
+            ),
+          ),
+        if (receiver.message != null)
+          Text(receiver.message!, style: KalinkaTextStyles.trayRowSublabel),
+        if (receiver.state != 'ready')
+          Text(
+            receiver.state == 'starting'
+                ? 'Starting receiver…'
+                : 'Receiver unavailable',
+            style: KalinkaTextStyles.trayRowSublabel,
+          ),
+        for (final session in receiver.sessions)
+          Text(
+            '${session.name} · Connected',
+            style: KalinkaTextStyles.trayRowSublabel,
+          ),
+        if (_error != null)
+          Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
+        if (_busy) const LinearProgressIndicator(),
+      ],
+    );
   }
 
   Widget _compact(ReceiverSnapshot r) {
@@ -312,8 +403,8 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
         ? (r.message ?? 'Receiver ${r.state}')
         : session != null
         ? '${session.name} · Connected'
-        : r.kind == 'airplay'
-        ? (r.passwordRequired ? 'Password required' : 'No password required')
+        : r.passwordRequired
+        ? 'Password required'
         : 'Not connected';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -538,7 +629,7 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
               tooltip: 'Device options for ${peer.name}',
               enabled: enabled,
               icon: const Icon(
-                Icons.more_horiz,
+                Icons.more_vert,
                 size: 24,
                 color: KalinkaColors.textSecondary,
               ),
@@ -586,6 +677,7 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
   Widget build(BuildContext context) {
     final r = widget.receiver;
     if (r.kind == 'bluetooth') return _bluetooth(r);
+    if (r.kind == 'airplay') return _airplay(r);
     final pairing = r.pairing;
     if (widget.showTitle && !_expanded && pairing == null) return _compact(r);
     final remaining = pairing?.remainingSeconds ?? 0;
@@ -651,7 +743,7 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
             ],
           ] else if (r.instructions.isNotEmpty)
             Text(r.instructions, style: KalinkaTextStyles.trayRowSublabel),
-          if (r.kind == 'airplay' || r.passwordRequired) ...[
+          if (r.passwordRequired) ...[
             const SizedBox(height: 8),
             Text(
               r.passwordRequired ? 'Password required' : 'No password required',
