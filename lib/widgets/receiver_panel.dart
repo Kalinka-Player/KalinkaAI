@@ -271,9 +271,7 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
     ),
     child: Text(label),
   );
-  bool _canPair(ReceiverSnapshot receiver) =>
-      receiver.can('open_pairing') &&
-      (receiver.kind != 'bluetooth' || receiver.offers('answer_pairing'));
+  bool _canPair(ReceiverSnapshot receiver) => receiver.can('open_pairing');
 
   Future<void> _reveal() async {
     if (_password != null) {
@@ -406,13 +404,14 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
     );
   }
 
-  Future<void> _remove(ReceiverPeer peer) async {
+  Future<void> _forget(ReceiverPeer peer) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Remove audio access for ${peer.name}?'),
+        scrollable: true,
+        title: Text('Forget ${peer.name}?'),
         content: const Text(
-          'Disconnects Bluetooth audio and removes permission to play here. The saved pairing and provisioning access remain.',
+          'Disconnects this device and removes its Bluetooth pairing, including any pairing used for setup. Wi-Fi settings stay saved. To reconnect, pair again; you may also need to forget this streamer in your phone’s Bluetooth settings.',
         ),
         actions: [
           TextButton(
@@ -421,19 +420,184 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove audio access'),
+            child: const Text('Forget'),
           ),
         ],
       ),
     );
     if (confirmed == true && mounted) {
-      await _command('revoke_audio', {'peer_id': peer.id});
+      await _command('forget_device', {'peer_id': peer.id});
     }
+  }
+
+  Widget _bluetooth(ReceiverSnapshot r) {
+    final pairing = r.pairing;
+    final remaining = pairing?.remainingSeconds ?? 0;
+    final peers = r.peers.where((p) => p.paired).toList();
+    final title = Row(
+      children: [
+        if (widget.showTitle) ...[
+          Icon(receiverIcon(r.kind), size: 24),
+          const SizedBox(width: 12),
+        ],
+        Expanded(
+          child: Text(
+            widget.showTitle ? r.title : (r.effectiveName ?? r.title),
+            style: KalinkaTextStyles.trayRowLabel,
+          ),
+        ),
+      ],
+    );
+    final pairButton = TextButton(
+      style: TextButton.styleFrom(
+        foregroundColor: KalinkaColors.textPrimary,
+        minimumSize: const Size(48, 48),
+      ),
+      onPressed: !widget.available || _busy
+          ? null
+          : pairing != null
+          ? (r.can('close_pairing')
+                ? () => _command('close_pairing', {'window_id': pairing.id})
+                : null)
+          : (_canPair(r) ? () => _command('open_pairing') : null),
+      child: Text(pairing == null ? 'Pair' : 'Stop pairing'),
+    );
+    final width = (MediaQuery.sizeOf(context).width - 40).clamp(0.0, 340.0);
+    final roomy = width >= 280 * MediaQuery.textScalerOf(context).scale(1);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (roomy)
+            Row(
+              children: [
+                Expanded(child: title),
+                pairButton,
+              ],
+            )
+          else ...[
+            title,
+            Align(alignment: Alignment.centerRight, child: pairButton),
+          ],
+          if (widget.showTitle)
+            Text(
+              r.effectiveName ?? r.title,
+              style: KalinkaTextStyles.trayRowSublabel,
+            ),
+          if (r.message != null)
+            Text(r.message!, style: KalinkaTextStyles.trayRowSublabel),
+          if (r.state != 'ready')
+            Text(
+              r.state == 'starting'
+                  ? 'Starting receiver…'
+                  : 'Receiver unavailable',
+              style: KalinkaTextStyles.trayRowSublabel,
+            ),
+          if (pairing != null && widget.available) ...[
+            const SizedBox(height: 8),
+            Text(
+              remaining > 0
+                  ? 'Visible for ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}'
+                  : 'Pairing window is closing…',
+              style: KalinkaTextStyles.trayRowSublabel,
+            ),
+            Text(
+              'Select ${r.effectiveName ?? r.title} in your device’s Bluetooth settings.'
+              '${r.pairingMode == 'just_works' ? ' Complete any pairing prompt on your device.' : ''}',
+              style: KalinkaTextStyles.trayRowSublabel,
+            ),
+          ],
+          if (peers.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'No paired devices',
+                style: KalinkaTextStyles.trayRowSublabel,
+              ),
+            ),
+          for (final peer in peers) _pairedDevice(r, peer),
+          if (_error != null)
+            Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
+          if (_busy) const LinearProgressIndicator(),
+          if (widget.showTitle)
+            const Divider(color: KalinkaColors.borderSubtle),
+        ],
+      ),
+    );
+  }
+
+  Widget _pairedDevice(ReceiverSnapshot receiver, ReceiverPeer peer) {
+    final session = receiver.sessions
+        .where((s) => s.peerId == peer.id)
+        .firstOrNull;
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(peer.name, style: KalinkaTextStyles.trayRowLabel),
+        Text(
+          session?.playing == true
+              ? 'Connected · Playing'
+              : peer.connected
+              ? 'Connected'
+              : 'Paired',
+          style: KalinkaTextStyles.trayRowSublabel,
+        ),
+      ],
+    );
+    final actions = Wrap(
+      spacing: 4,
+      children: [
+        if (session != null)
+          TextButton(
+            onPressed:
+                widget.available && !_busy && receiver.can('disconnect_audio')
+                ? () => _command('disconnect_audio', {'session_id': session.id})
+                : null,
+            style: TextButton.styleFrom(
+              foregroundColor: KalinkaColors.textPrimary,
+              minimumSize: const Size(48, 48),
+            ),
+            child: const Text('Disconnect'),
+          ),
+        if (receiver.offers('forget_device'))
+          TextButton(
+            onPressed:
+                widget.available && !_busy && receiver.can('forget_device')
+                ? () => _forget(peer)
+                : null,
+            style: TextButton.styleFrom(
+              foregroundColor: KalinkaColors.textPrimary,
+              minimumSize: const Size(48, 48),
+            ),
+            child: const Text('Forget'),
+          ),
+      ],
+    );
+    // MenuAnchor measures intrinsic sizes; avoid LayoutBuilder in its contents.
+    final width = (MediaQuery.sizeOf(context).width - 40).clamp(0.0, 340.0);
+    final roomy = width >= 320 * MediaQuery.textScalerOf(context).scale(1);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 4),
+      child: roomy
+          ? Row(
+              children: [
+                Expanded(child: details),
+                const SizedBox(width: 8),
+                actions,
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [details, actions],
+            ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final r = widget.receiver;
+    if (r.kind == 'bluetooth') return _bluetooth(r);
     final pairing = r.pairing;
     if (widget.showTitle && !_expanded && pairing == null) return _compact(r);
     final remaining = pairing?.remainingSeconds ?? 0;
@@ -496,11 +660,6 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
                 'Visible for 2 minutes',
                 style: KalinkaTextStyles.trayRowSublabel,
               ),
-              if (r.kind == 'bluetooth' && !r.offers('answer_pairing'))
-                Text(
-                  'Update the server to pair with device approval.',
-                  style: KalinkaTextStyles.trayRowSublabel,
-                ),
             ],
           ] else if (r.instructions.isNotEmpty)
             Text(r.instructions, style: KalinkaTextStyles.trayRowSublabel),
@@ -559,48 +718,6 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
                     ),
                 ],
               ),
-            ),
-          if (r.peers.isNotEmpty)
-            ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              title: Text(
-                'Saved devices',
-                style: KalinkaTextStyles.trayRowSublabel,
-              ),
-              children: [
-                for (final peer in r.peers)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(peer.name, style: KalinkaTextStyles.trayRowLabel),
-                        Text(
-                          '${peer.paired ? 'Paired' : 'Not paired'} · ${peer.audioAllowed ? 'Audio allowed' : 'No audio permission'}',
-                          style: KalinkaTextStyles.trayRowSublabel,
-                        ),
-                        if (peer.audioAllowed && r.can('revoke_audio'))
-                          TextButton(
-                            onPressed: widget.available && !_busy
-                                ? () => _remove(peer)
-                                : null,
-                            child: const Text('Remove audio access'),
-                          ),
-                        if (peer.paired &&
-                            !peer.audioAllowed &&
-                            r.can('grant_audio'))
-                          TextButton(
-                            onPressed: widget.available && !_busy
-                                ? () => _command('grant_audio', {
-                                    'peer_id': peer.id,
-                                  })
-                                : null,
-                            child: const Text('Allow audio'),
-                          ),
-                      ],
-                    ),
-                  ),
-              ],
             ),
           if (_error != null)
             Text(_error!, style: KalinkaTextStyles.trayRowSublabel),

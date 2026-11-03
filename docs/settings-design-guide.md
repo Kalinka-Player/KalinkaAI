@@ -179,15 +179,23 @@ catalog availability. There is no dedicated Bluetooth header action, large
 Home connection row, or duplicated renderer picker. Enable/disable stays in
 plugin Configuration.
 
-The compact sheet shows actual receiver names and sessions. Bluetooth offers
-Pair a device, the backend's two-minute countdown, Stop pairing and Disconnect.
-Closing the sheet leaves pairing running. Saved devices are secondary and show
-pairing separately from audio permission. A real pending BlueZ request appears
-in an app-wide approval prompt even when the panel is closed. Comparison uses
-the supplied zero-prefixed code and **Check this code matches your device**
-with **Reject / Codes match**. Other callbacks get their actual input/display
-flow, never an invented code. Backend expiry/cancellation and offline state
-remove or disable stale prompts; commands are never automatically replayed.
+The compact sheet shows actual receiver names and sessions. Bluetooth renders
+**Bluetooth · Pair**, with paired devices directly below it; no expansion or
+separate audio-permission switch. Pair opens the backend's two-minute Just Works
+window. The sender may show its normal pairing prompt, but Kalinka needs no
+comparison code or second approval. Stop pairing and the backend countdown
+replace Pair while the window is open. Closing the sheet leaves it running.
+Successful pairing grants audio access automatically. Device rows show actual
+Paired/Connected/Playing state, **Disconnect** for an audio session and
+**Forget** for the bond. Forget requires confirmation: it removes shared setup
+pairing too, keeps Wi-Fi configuration and requires re-pairing. At large text or
+narrow widths, actions wrap below the device name without clipping.
+
+The generic app-wide approval host remains available for controllers which
+actually publish a pending request. It preserves supplied comparison codes,
+explicit decisions and backend cancellation/expiry, including when the panel
+is closed. The current Just Works controller publishes no such requests.
+Commands are never automatically replayed after a timeout.
 
 AirPlay shows password-required status and explicit Show / Hide password.
 Password application uses the existing secret setting; its help warns that
