@@ -438,8 +438,8 @@ void main() {
     expect(find.text('Artist 1'), findsOneWidget);
     expect(find.textContaining('Living Room'), findsOneWidget);
     expect(find.text('NOW PLAYING'), findsOneWidget);
-    expect(find.text('FLAC 24-bit 96 kHz'), findsOneWidget);
-    expect(find.text('Qobuz'), findsOneWidget);
+    // The player's stream line: source first, then the format.
+    expect(find.text('Qobuz · FLAC 24-bit • 96 kHz'), findsOneWidget);
     expect(find.byType(KioskProgressBar), findsOneWidget);
     // Elapsed and the whole length, not what is left.
     expect(find.text('1:00'), findsOneWidget);
@@ -694,7 +694,11 @@ void main() {
   testWidgets('marks bit-perfect playback 1:1', (tester) async {
     await _pump(tester, _queue(PlayerStateType.playing), bitPerfect: true);
 
-    expect(find.text('1:1'), findsOneWidget);
+    // After the stream line, as in the player.
+    expect(
+      tester.getRect(find.text('1:1')).left,
+      greaterThan(tester.getRect(find.textContaining('FLAC')).right),
+    );
   });
 
   testWidgets('a plugin with only a large cover still colours the backdrop', (
@@ -978,7 +982,7 @@ void main() {
       // Everything the wide screen shows is here too.
       expect(find.byType(KioskLogo), findsOneWidget);
       expect(find.byType(KioskOutputPill), findsOneWidget);
-      expect(find.text('Qobuz'), findsOneWidget);
+      expect(find.textContaining('Qobuz'), findsOneWidget);
       expect(find.text('Artist 1'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
