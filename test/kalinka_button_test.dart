@@ -94,4 +94,54 @@ void main() {
     await tester.tap(find.text('Off'), warnIfMissed: false);
     expect(taps, 0);
   });
+
+  testWidgets('progress fills the pill from the left, as far as it has got', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: KalinkaButton(
+              label: 'Installing\u2026',
+              variant: KalinkaButtonVariant.neutral,
+              progress: 0.4,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final fill = find.byKey(const ValueKey('button-progress'));
+    expect(fill, findsOneWidget);
+    final button = tester.getRect(find.byType(KalinkaButton));
+    final bar = tester.getRect(
+      find.descendant(of: fill, matching: find.byType(ColoredBox)),
+    );
+    expect(bar.left, button.left);
+    expect(bar.width, closeTo(button.width * 0.4, 1));
+    expect(bar.height, closeTo(button.height, 1));
+  });
+
+  testWidgets('the label takes the colour it is given', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: KalinkaButton(
+              label: 'Failed\u2026',
+              labelColor: Colors.amber,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.widget<Text>(find.text('Failed\u2026')).style!.color,
+      Colors.amber,
+    );
+    expect(find.byKey(const ValueKey('button-progress')), findsNothing);
+  });
 }

@@ -106,7 +106,7 @@ void main() {
             'label': 'Bluetooth',
             'type': 'boolean',
             'widget': 'switch',
-            'applies_live': true,
+            'apply': 'instant',
           },
           {
             'path': 'base_config.server.port',

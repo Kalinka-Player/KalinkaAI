@@ -57,11 +57,12 @@ class SettingsState {
   bool isImmediateAction(String path) =>
       schema?.field(path)?.applyImmediately == true;
 
+  /// Whether applying what is staged leaves the server running: every
+  /// staged field is one the server takes in as it is saved.
   bool get onlyLiveChanges =>
       hasPendingChanges &&
       stagedChanges.keys.every(
-        (path) =>
-            isImmediateAction(path) || schema?.field(path)?.appliesLive == true,
+        (path) => schema?.field(path)?.needsRestart == false,
       );
 
   bool get onlyImmediateChanges =>
@@ -441,7 +442,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final server = _server();
     if (state.schema == null) await loadConfig(preserveStagedChanges: true);
     if (_stale(server)) throw StateError('The connected streamer changed');
-    if (state.schema?.field(path)?.appliesLive != true) {
+    if (state.schema?.field(path)?.needsRestart != false) {
       throw StateError('This setting requires Configuration on this server');
     }
     await ref

@@ -217,10 +217,24 @@ class Constraints {
   );
 }
 
+/// What saving the field costs, as the server says it: taken in as it is
+/// saved, or read once at startup, so a save needs the server restarted.
+enum Apply {
+  instant,
+  restartRequired;
+
+  /// Null for a name this app does not know, and for a server that does
+  /// not say.
+  static Apply? fromName(String? name) => switch (name) {
+    'instant' => Apply.instant,
+    'restart_required' => Apply.restartRequired,
+    _ => null,
+  };
+}
+
 class FieldSpec {
   /// A one-shot action consumed on save, without restarting the server.
   final bool applyImmediately;
-  final bool appliesLive;
   final String path;
   final String label;
   final WidgetKind widget;
@@ -238,6 +252,8 @@ class FieldSpec {
   final bool dynamicOptions;
   final Importance importance;
   final Setup setup;
+  /// What the server says a save costs; null from one that does not say.
+  final Apply? apply;
   final List<String>? enumValues;
   final Constraints? constraints;
 
@@ -247,7 +263,6 @@ class FieldSpec {
 
   const FieldSpec({
     this.applyImmediately = false,
-    this.appliesLive = false,
     required this.path,
     required this.label,
     required this.widget,
@@ -259,14 +274,18 @@ class FieldSpec {
     this.dynamicOptions = false,
     this.importance = Importance.simple,
     this.setup = Setup.hidden,
+    this.apply,
     this.enumValues,
     this.constraints,
     this.heading,
   });
 
+  /// Whether saving this field restarts the server: what `apply` says, or
+  /// a restart from a server that does not say.
+  bool get needsRestart => apply != Apply.instant;
+
   factory FieldSpec.fromJson(Map<String, dynamic> j) => FieldSpec(
     applyImmediately: j['apply_immediately'] == true,
-    appliesLive: j['applies_live'] == true,
     path: j['path'] as String,
     label: j['label'] as String,
     widget: WidgetKind.fromName(j['widget'] as String?),
@@ -278,6 +297,7 @@ class FieldSpec {
     dynamicOptions: j['dynamic_options'] as bool? ?? false,
     importance: Importance.fromName(j['importance'] as String?),
     setup: Setup.fromName(j['setup'] as String?),
+    apply: Apply.fromName(j['apply'] as String?),
     enumValues: (j['enum_values'] as List?)?.map((e) => e.toString()).toList(),
     constraints: j['constraints'] is Map
         ? Constraints.fromJson(
@@ -544,6 +564,13 @@ class ModuleSpec {
       fields.where((f) => f.path.endsWith('.enabled')).firstOrNull;
 }
 
+Iterable<FieldSpec> _fieldsWithin(List<SectionSpec> sections) sync* {
+  for (final section in sections) {
+    yield* section.fields;
+    yield* _fieldsWithin(section.sections);
+  }
+}
+
 Iterable<CollectionSpec> _collectionsWithin(List<SectionSpec> sections) sync* {
   for (final section in sections) {
     yield* section.collections;
@@ -594,12 +621,21 @@ class PresentationSchema {
     this.expertFields = const [],
   });
 
-  /// The settable field at [path], or null when this schema has none.
+  /// The settable field at [path], or null when this schema has none:
+  /// from the flat list where the server sent one, else from the pages.
   FieldSpec? field(String path) {
-    for (final f in expertFields) {
-      if (f.path == path) return f;
+    Iterable<FieldSpec> all() sync* {
+      yield* expertFields;
+      for (final page in pages) {
+        yield* _fieldsWithin(page.sections);
+        for (final module in page.modules) {
+          yield* module.fields;
+          yield* _fieldsWithin(module.sections);
+        }
+      }
     }
-    return null;
+
+    return all().where((f) => f.path == path).firstOrNull;
   }
 
   /// The collection at [path], or null when this schema has none.
