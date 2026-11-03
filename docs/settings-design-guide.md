@@ -186,7 +186,7 @@ window. The sender may show its normal pairing prompt, but Kalinka needs no
 comparison code or second approval. The backend countdown appears beside Bluetooth while pairing is open. A compact
 Stop pairing action sits beside it. Closing the sheet leaves it running.
 Successful pairing grants audio access automatically. Device rows show an icon, name and Paired/Connected status, with a green dot
-for connected audio. Each row has an ellipsis menu with **Disconnect** for an
+for connected audio. Each row has a vertical ellipsis menu with **Disconnect** for an
 audio session and **Forget** for the bond. Use a generic device icon until the
 server supplies a device type. Forget requires confirmation: it removes shared setup
 pairing too, keeps Wi-Fi configuration and requires re-pairing. Keep 4dp between the Bluetooth controls and the paired-device label, without
@@ -201,9 +201,13 @@ explicit decisions and backend cancellation/expiry, including when the panel
 is closed. The current Just Works controller publishes no such requests.
 Commands are never automatically replayed after a timeout.
 
-AirPlay starts as a compact icon, title, password-status and chevron row. Opening
-it shows the receiver instructions and explicit Show / Hide password.
+AirPlay is one row with its icon, title and password status. Without a password,
+show **No password required**. When reveal is allowed, show **Password required -
+click to reveal** with a downward chevron. Tapping the row reveals the password
+in large monospace text directly below it. Tapping again hides it. Do not add
+instructions or a separate Show password button. Keep custom receiver names
+visible. Unavailable receivers must not offer a reveal action.
 Password application uses the existing secret setting; its help warns that
 applying it restarts AirPlay and ends its session. Revealed text is discarded
-on closing, backgrounding or lost availability. These surfaces reuse the
-existing theme, text styles, accessible controls and responsive spacing.
+on closing, backgrounding, lost availability or removal of the password. These
+surfaces reuse the existing theme, text styles and responsive spacing.

@@ -316,52 +316,99 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets(
-    'AirPlay password is explicitly revealed, hidden and cleared on background',
-    (tester) async {
-      final inventory = PasswordInventory(
-        ReceiverInventory(
-          receivers: [
-            ReceiverSnapshot.fromJson({
-              ...f.row(),
-              'receiver_id': 'airplay',
-              'title': 'AirPlay',
-              'kind': 'airplay',
-              'password_required': true,
-              'password_reveal_available': true,
-              'actions': [],
-              'peers': [],
-            }),
-          ],
-        ),
-      );
-      await pump(tester, inventory);
-      await tester.tap(find.text('Connect'));
-      await tester.pumpAndSettle();
-      expect(find.text('Password required'), findsOneWidget);
-      expect(find.text('room-secret'), findsNothing);
-      expect(inventory.reveals, 0);
-      await tester.tap(find.text('AirPlay'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Show password'));
-      await tester.pumpAndSettle();
-      expect(find.text('room-secret'), findsOneWidget);
-      await tester.tap(find.text('Hide password'));
-      await tester.pumpAndSettle();
-      expect(find.text('room-secret'), findsNothing);
-      inventory.pendingPassword = Completer<String>();
-      await tester.tap(find.text('Show password'));
-      await tester.pump();
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-      inventory.pendingPassword!.complete('room-secret');
-      await tester.pumpAndSettle();
-      expect(find.text('room-secret'), findsNothing);
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.tap(find.byTooltip('Close'));
-      await tester.pumpAndSettle();
-      await tester.pumpWidget(const SizedBox());
-    },
-  );
+  for (final (size, scale) in [
+    (const Size(375, 812), 1.0),
+    (const Size(320, 700), 2.0),
+    (const Size(812, 375), 1.0),
+    (const Size(640, 900), 3.0),
+  ]) {
+    testWidgets(
+      'AirPlay password toggles and clears at $size with $scale text',
+      (tester) async {
+        final inventory = PasswordInventory(
+          ReceiverInventory(
+            receivers: [
+              ReceiverSnapshot.fromJson({
+                ...f.row(),
+                'receiver_id': 'airplay',
+                'title': 'AirPlay',
+                'kind': 'airplay',
+                'password_required': true,
+                'password_reveal_available': true,
+                'actions': [],
+                'peers': [],
+              }),
+            ],
+          ),
+        );
+        await pump(tester, inventory, size: size, scale: scale);
+        await tester.tap(find.text('Connect'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Password required - click to reveal'),
+          findsOneWidget,
+        );
+        expect(find.text('room-secret'), findsNothing);
+        expect(inventory.reveals, 0);
+        await capture(tester, 'airplay-password-hidden-${size.width}-$scale');
+        await tester.tap(find.text('AirPlay'));
+        await tester.pumpAndSettle();
+        expect(find.text('room-secret'), findsOneWidget);
+        expect(find.byIcon(Icons.expand_less), findsOneWidget);
+        expect(find.text('Show password'), findsNothing);
+        await capture(tester, 'airplay-password-revealed-${size.width}-$scale');
+        await tester.tap(find.text('AirPlay'));
+        await tester.pumpAndSettle();
+        expect(find.text('room-secret'), findsNothing);
+        inventory.pendingPassword = Completer<String>();
+        await tester.tap(find.text('AirPlay'));
+        await tester.pump();
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        inventory.pendingPassword!.complete('room-secret');
+        await tester.pumpAndSettle();
+        expect(find.text('room-secret'), findsNothing);
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        inventory.pendingPassword = null;
+        await tester.tap(find.text('AirPlay'));
+        await tester.pumpAndSettle();
+        expect(find.text('room-secret'), findsOneWidget);
+        final revealCount = inventory.reveals;
+        for (final (required, available) in [(false, true), (true, false)]) {
+          inventory.replace(
+            ReceiverInventory(
+              receivers: [
+                ReceiverSnapshot.fromJson({
+                  ...f.row(),
+                  'receiver_id': 'airplay',
+                  'title': 'AirPlay',
+                  'kind': 'airplay',
+                  'password_required': required,
+                  'password_reveal_available': available,
+                }),
+              ],
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('room-secret'), findsNothing);
+          expect(
+            find.text(required ? 'Password required' : 'No password required'),
+            findsOneWidget,
+          );
+          await tester.tap(find.text('AirPlay'));
+          await tester.pumpAndSettle();
+          expect(inventory.reveals, revealCount);
+        }
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byTooltip('Close'));
+        await tester.pumpAndSettle();
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
 
   for (final accept in [true, false]) {
     testWidgets(
@@ -492,7 +539,7 @@ void main() {
   testWidgets(
     'wide sidebar lists enabled receivers and anchors their popover',
     (tester) async {
-      final inventory = f.Inventory(
+      final inventory = PasswordInventory(
         ReceiverInventory(
           receivers: [
             ReceiverSnapshot.fromJson(f.row()),
@@ -537,6 +584,33 @@ void main() {
       await tester.tap(find.byTooltip('Close'));
       await tester.pumpAndSettle();
       expect(find.byType(ReceiverPanel), findsNothing);
+      inventory.replace(
+        ReceiverInventory(
+          receivers: [
+            ReceiverSnapshot.fromJson({
+              ...f.row(),
+              'receiver_id': 'airplay',
+              'title': 'AirPlay',
+              'kind': 'airplay',
+              'password_required': true,
+              'password_reveal_available': true,
+            }),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('navigation-receiver-airplay')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.expand_more));
+      await tester.pumpAndSettle();
+      expect(find.text('room-secret'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await capture(tester, 'wide-airplay-password');
+      await tester.tap(find.byIcon(Icons.expand_less));
+      await tester.pumpAndSettle();
+      expect(find.text('room-secret'), findsNothing);
       await tester.pumpWidget(const SizedBox());
     },
   );
