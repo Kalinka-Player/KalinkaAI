@@ -185,7 +185,10 @@ separate audio-permission switch. Pair new uses the shared compact primary
 `KalinkaButton`, with its berry fill and pill shape. Pair opens the backend's two-minute Just Works
 window. The sender may show its normal pairing prompt, but Kalinka needs no
 comparison code or second approval. The backend countdown appears beside Bluetooth while pairing is open. A compact
-Stop pairing action sits beside it. Closing the sheet leaves it running.
+Stop pairing action sits beside it. The countdown uses a monotonic deadline per
+window and ticks at each second boundary between backend updates. Delayed
+snapshots do not extend the window or restart the tick phase. Closing the sheet
+leaves pairing running.
 Successful pairing grants audio access automatically. Device rows show an icon, name and Paired/Connected status, with a green dot
 for connected audio. Each row has a vertical ellipsis menu with **Disconnect** for an
 audio session and **Forget** for the bond. Use a generic device icon until the
