@@ -170,18 +170,27 @@ For changes to this system, check 375dp phone, narrow 320dp, landscape and table
 Reference: [UI/UX Pro Max skill](../../../.codex/skills/ui-ux-pro-max/SKILL.md), especially its `references/pro-rules.md` and accessibility, interaction and typography priorities. The repository tokens and shared widgets are the implementation source of truth; update this document with them when the design changes.
 
 
-## Receiver controls
+## Receiver connections
 
-**Connect a device** is an independent Home entry and a row in both server
-menus. It appears for installed receivers, including disabled or unhealthy
-ones, without depending on catalog availability or source-row visibility.
-A failed refresh retains the last known entry with a retry state.
+Mobile **Connect** belongs in the existing music-source strip. Wide layouts
+list individual receivers under **Connect** in the sidebar, using compact
+anchored popovers. Show installed, enabled receivers only, independently of
+catalog availability. There is no dedicated Bluetooth header action, large
+Home connection row, or duplicated renderer picker. Enable/disable stays in
+plugin Configuration.
 
-The shared, scrollable sheet identifies the receiving streamer and shows the
-existing output picker separately. Receiver cards offer only supported actions:
-Bluetooth pairing, audio grants/revocation and session disconnect; AirPlay has
-persistent enable/disable and session status. Disabling is confirmed and applies
-live. Toggling from this panel saves only that receiver's enabled field and
-preserves unrelated staged settings. Pairing uses a monotonic countdown; stale
-or offline state never claims discovery is still active. Failed commands refresh
-state and are not automatically replayed.
+The compact sheet shows actual receiver names and sessions. Bluetooth offers
+Pair a device, the backend's two-minute countdown, Stop pairing and Disconnect.
+Closing the sheet leaves pairing running. Saved devices are secondary and show
+pairing separately from audio permission. A real pending BlueZ request appears
+in an app-wide approval prompt even when the panel is closed. Comparison uses
+the supplied zero-prefixed code and **Check this code matches your device**
+with **Reject / Codes match**. Other callbacks get their actual input/display
+flow, never an invented code. Backend expiry/cancellation and offline state
+remove or disable stale prompts; commands are never automatically replayed.
+
+AirPlay shows password-required status and explicit Show / Hide password.
+Password application uses the existing secret setting; its help warns that
+applying it restarts AirPlay and ends its session. Revealed text is discarded
+on closing, backgrounding or lost availability. These surfaces reuse the
+existing theme, text styles, accessible controls and responsive spacing.

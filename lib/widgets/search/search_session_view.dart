@@ -1596,7 +1596,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       // sources stay on Home while it holds nothing else, the way in.
       showCollections: !widget.navigationVisible,
       showSources: !widget.navigationVisible,
-      sources: HomeSourceList(onOpen: _openSourceFromHome),
+      sources: HomeSourceList(
+        onOpen: _openSourceFromHome,
+        showConnect: !widget.navigationVisible,
+      ),
       activity: const LibraryActivityLine(),
       onCentringShift: (shift) => _discoverCentring.value = shift,
       roomLent: widget.roomLent,

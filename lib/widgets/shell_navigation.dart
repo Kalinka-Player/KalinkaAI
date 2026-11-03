@@ -9,6 +9,7 @@ import '../data_model/module_icons.dart';
 import '../providers/catalog_sources_provider.dart';
 import '../providers/collections_provider.dart';
 import '../providers/connection_state_provider.dart';
+import '../providers/receiver_provider.dart';
 import '../providers/search_session_provider.dart';
 import '../providers/server_info_provider.dart';
 import '../providers/source_modules_provider.dart' show colorForSourceName;
@@ -17,6 +18,7 @@ import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
 import 'measure_size.dart';
 import 'module_artwork.dart';
+import 'receiver_panel.dart';
 
 enum ShellDestination { home, results, source, collections, configuration }
 
@@ -102,6 +104,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
         ? null
         : session.destination;
     final sources = ref.watch(catalogSourcesProvider);
+    final receivers = ref.watch(enabledReceiversProvider);
     // Only where the server keeps collections.
     final collections = ref.watch(collectionsShelfProvider).value?.plan;
     final box = ref.watch(boxControlProvider).value;
@@ -275,6 +278,39 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
                     ref.invalidate(catalogSourcesProvider);
                   }
                 : null,
+          ),
+        ),
+      for (final receiver in receivers)
+        item(
+          'receiver-${receiver.id}',
+          above: receiver == receivers.first
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    divider,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        'CONNECT',
+                        style: KalinkaTextStyles.sectionHeaderMuted,
+                      ),
+                    ),
+                  ],
+                )
+              : null,
+          ({extended = false, then}) => ReceiverPopover(
+            receiverId: receiver.id,
+            builder: (open) => _NavigationButton(
+              key: ValueKey('navigation-receiver-${receiver.id}'),
+              label: receiver.title,
+              icon: receiverIcon(receiver.kind),
+              selected: false,
+              extended: extended,
+              onPressed: enabled && connected ? open : null,
+            ),
           ),
         ),
       // Apart from the sources: it holds tracks from any of them.
