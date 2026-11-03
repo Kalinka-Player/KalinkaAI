@@ -16,6 +16,16 @@ import 'support/home_shell.dart';
 const _artistId = 'kalinka:localfiles:artist:performer';
 const _albumId = 'kalinka:localfiles:album:record';
 
+final _sources = [
+  ModuleInfo(
+    name: 'localfiles',
+    title: 'My Library',
+    enabled: true,
+    state: ModuleState.ready,
+    capabilities: const [ModuleCapability.catalogs],
+  ),
+];
+
 class _Api extends HomeApi {
   final browsed = <String>[];
 
@@ -72,6 +82,7 @@ void main() {
           tester,
           queue: SettableQueue(queue),
           api: api,
+          sources: _sources,
           size: size,
           themed: true,
         );
@@ -132,6 +143,7 @@ void main() {
       tester,
       queue: SettableQueue(_queue()),
       api: _Api(),
+      sources: _sources,
       size: const Size(375, 812),
     );
     await tester.tap(find.byType(MiniPlayer));
@@ -165,6 +177,7 @@ void main() {
         tester,
         queue: SettableQueue(_queue(artistId: id, albumId: id)),
         api: _Api(),
+        sources: _sources,
       );
       await tester.tap(find.byType(MiniPlayer));
       await tester.pumpAndSettle();
