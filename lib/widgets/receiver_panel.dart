@@ -8,6 +8,8 @@ import '../providers/connection_settings_provider.dart';
 import '../providers/receiver_provider.dart';
 import '../theme/app_theme.dart';
 import 'kalinka_bottom_sheet.dart';
+import 'kalinka_button.dart';
+import 'kalinka_dialog.dart';
 
 IconData receiverIcon(String kind) => switch (kind) {
   'bluetooth' => Icons.bluetooth,
@@ -405,22 +407,25 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
   }
 
   Future<void> _forget(ReceiverPeer peer) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showKalinkaDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        scrollable: true,
-        title: Text('Forget ${peer.name}?'),
-        content: const Text(
-          'Disconnects this device and removes its Bluetooth pairing, including any pairing used for setup. Wi-Fi settings stay saved. To reconnect, pair again; you may also need to forget this streamer in your phone’s Bluetooth settings.',
-        ),
+      builder: (context) => KalinkaDialog(
+        side: KalinkaDialogSide.browsing,
+        centered: true,
+        title: 'Forget ${peer.name}?',
+        message: 'Removes the Bluetooth pairing. Pair again to reconnect.',
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          KalinkaButton(
+            label: 'Cancel',
+            variant: KalinkaButtonVariant.neutral,
+            fullWidth: true,
+            autofocus: true,
+            onTap: () => Navigator.pop(context, false),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Forget'),
+          KalinkaButton(
+            label: 'Forget',
+            fullWidth: true,
+            onTap: () => Navigator.pop(context, true),
           ),
         ],
       ),

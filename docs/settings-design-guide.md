@@ -190,6 +190,9 @@ Paired/Connected/Playing state, **Disconnect** for an audio session and
 **Forget** for the bond. Forget requires confirmation: it removes shared setup
 pairing too, keeps Wi-Fi configuration and requires re-pairing. At large text or
 narrow widths, actions wrap below the device name without clipping.
+Use the centered `KalinkaDialog` and shared buttons. Cancel is neutral and gets
+initial keyboard focus. Forget uses the berry action style. Keep the message
+short: "Removes the Bluetooth pairing. Pair again to reconnect."
 
 The generic app-wide approval host remains available for controllers which
 actually publish a pending request. It preserves supplied comparison codes,
