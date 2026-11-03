@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/receiver_control.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/receiver_provider.dart';
+import 'package:kalinka/providers/monotonic_clock_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/receiver_approval.dart';
@@ -59,6 +60,7 @@ Future<void> pump(
   f.Inventory inventory, {
   Size size = const Size(375, 812),
   double scale = 1,
+  Stopwatch? clock,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -68,6 +70,7 @@ Future<void> pump(
       overrides: [
         sharedPrefsProvider.overrideWithValue(await f.prefs()),
         receiversProvider.overrideWith(() => inventory),
+        if (clock != null) monotonicClockProvider.overrideWithValue(clock),
       ],
       child: RepaintBoundary(
         key: captureKey,
@@ -572,6 +575,107 @@ void main() {
       expect(inventory.commands, isEmpty);
       inventory.replace(const ReceiverInventory());
       await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('pairing ticks every second between delayed server snapshots', (
+    tester,
+  ) async {
+    ReceiverSnapshot snapshot(double seconds, {String id = 'window-1'}) =>
+        ReceiverSnapshot.fromJson({
+          ...f.row(),
+          'pairing': {'window_id': id, 'remaining_seconds': seconds},
+        });
+    final inventory = f.Inventory(
+      ReceiverInventory(receivers: [snapshot(12.9)]),
+    );
+    final clock = tester.binding.clock.stopwatch()..start();
+    await pump(tester, inventory, clock: clock);
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pairing · 0:13'), findsOneWidget);
+    for (var second = 1; second <= 6; second++) {
+      await tester.pump(const Duration(seconds: 1));
+      final expected =
+          'Pairing · 0:${(13 - second).toString().padLeft(2, '0')}';
+      expect(find.text(expected), findsOneWidget);
+      if (second.isEven) {
+        // Delayed reports must not reset the tick phase or extend this window.
+        inventory.replace(
+          ReceiverInventory(receivers: [snapshot(13.1 - second)]),
+        );
+        await tester.pump();
+        expect(find.text(expected), findsOneWidget);
+      }
+    }
+    // Earlier server expiry applies immediately, but zero doesn't close it locally.
+    inventory.replace(ReceiverInventory(receivers: [snapshot(1.5)]));
+    await tester.pump();
+    expect(find.text('Pairing · 0:02'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Pairing · 0:01'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Pairing ending…'), findsOneWidget);
+    expect(inventory.commands, isEmpty);
+    inventory.replace(
+      ReceiverInventory(
+        receivers: [f.row()].map(ReceiverSnapshot.fromJson).toList(),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Pair new'), findsOneWidget);
+    inventory.replace(
+      ReceiverInventory(receivers: [snapshot(90, id: 'window-2')]),
+    );
+    await tester.pump();
+    expect(find.text('Pairing · 1:30'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'pairing catches up on resume and hides the timer while offline',
+    (tester) async {
+      final row = {
+        ...f.row(),
+        'pairing': {'window_id': 'window-1', 'remaining_seconds': 60},
+      };
+      final inventory = f.Inventory(
+        ReceiverInventory(receivers: [ReceiverSnapshot.fromJson(row)]),
+      );
+      final clock = tester.binding.clock.stopwatch()..start();
+      await pump(tester, inventory, clock: clock);
+      await tester.tap(find.text('Connect'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pairing · 1:00'), findsOneWidget);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump(const Duration(seconds: 5));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(find.text('Pairing · 0:55'), findsOneWidget);
+      inventory.replace(
+        ReceiverInventory(
+          receivers: inventory.initial.receivers,
+          error: 'Offline',
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Pairing status unavailable'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 3));
+      inventory.replace(
+        ReceiverInventory(
+          receivers: [
+            ReceiverSnapshot.fromJson({
+              ...row,
+              'pairing': {'window_id': 'window-1', 'remaining_seconds': 51.5},
+            }),
+          ],
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Pairing · 0:52'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Pairing · 0:51'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     },
   );

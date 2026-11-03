@@ -69,8 +69,12 @@ class ReceiverPairing {
   ReceiverPairing.fromJson(Map<String, dynamic> json)
     : id = json['window_id'] as String,
       seconds = (json['remaining_seconds'] as num).toDouble();
+  int get remainingMicroseconds =>
+      (seconds * Duration.microsecondsPerSecond - _elapsed.elapsedMicroseconds)
+          .ceil()
+          .clamp(0, 120 * Duration.microsecondsPerSecond);
   int get remainingSeconds =>
-      (seconds - _elapsed.elapsedMilliseconds / 1000).ceil().clamp(0, 120);
+      (remainingMicroseconds / Duration.microsecondsPerSecond).ceil();
 }
 
 class ReceiverPeer {

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/receiver_control.dart';
 import '../providers/connection_settings_provider.dart';
+import '../providers/monotonic_clock_provider.dart';
 import '../providers/receiver_provider.dart';
 import '../theme/app_theme.dart';
 import 'kalinka_bottom_sheet.dart';
@@ -205,6 +206,10 @@ class _ReceiverDetails extends ConsumerStatefulWidget {
 class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
     with WidgetsBindingObserver {
   Timer? _timer;
+  String? _pairingWindowId;
+  int? _pairingDeadlineUs;
+  int _pairingSeconds = 0;
+  bool _foreground = true;
   bool _busy = false;
   bool _expanded = false;
   String? _error, _password;
@@ -214,14 +219,53 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && widget.receiver.pairing != null) setState(() {});
+    _syncPairingCountdown();
+  }
+
+  void _syncPairingCountdown() {
+    final pairing = widget.receiver.pairing;
+    if (pairing == null) {
+      _pairingWindowId = null;
+      _pairingDeadlineUs = null;
+    } else {
+      final observedDeadline =
+          ref.read(monotonicClockProvider).elapsedMicroseconds +
+          pairing.remainingMicroseconds;
+      // A window cannot be extended. Keep its local deadline through periodic
+      // snapshots, while accepting an earlier expiry or a replacement window.
+      if (_pairingWindowId != pairing.id ||
+          _pairingDeadlineUs == null ||
+          observedDeadline < _pairingDeadlineUs!) {
+        _pairingDeadlineUs = observedDeadline;
+      }
+      _pairingWindowId = pairing.id;
+    }
+    _schedulePairingTick();
+  }
+
+  void _schedulePairingTick() {
+    _timer?.cancel();
+    _timer = null;
+    final remaining = _pairingDeadlineUs == null
+        ? 0
+        : (_pairingDeadlineUs! -
+                  ref.read(monotonicClockProvider).elapsedMicroseconds)
+              .clamp(0, 120 * Duration.microsecondsPerSecond);
+    _pairingSeconds = (remaining / Duration.microsecondsPerSecond).ceil();
+    if (!widget.available || !_foreground || _pairingSeconds == 0) return;
+    final untilNextSecond =
+        remaining - (_pairingSeconds - 1) * Duration.microsecondsPerSecond;
+    // Wake just after the boundary so timer rounding cannot repeat a number
+    // and then skip the following one. Recalculate after every tick.
+    _timer = Timer(Duration(microseconds: untilNextSecond + 1000), () {
+      if (mounted) setState(_schedulePairingTick);
     });
   }
 
   @override
   void didUpdateWidget(covariant _ReceiverDetails oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _syncPairingCountdown();
     if (!widget.available ||
         !widget.receiver.passwordRevealAvailable ||
         !widget.receiver.passwordRequired ||
@@ -233,10 +277,14 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed && mounted) {
+    if (mounted) {
       setState(() {
-        _password = null;
-        _secretEpoch++;
+        _foreground = state == AppLifecycleState.resumed;
+        if (!_foreground) {
+          _password = null;
+          _secretEpoch++;
+        }
+        _schedulePairingTick();
       });
     }
   }
@@ -495,7 +543,7 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
 
   Widget _bluetooth(ReceiverSnapshot r) {
     final pairing = r.pairing;
-    final remaining = pairing?.remainingSeconds ?? 0;
+    final remaining = _pairingSeconds;
     final peers = r.peers.where((p) => p.paired).toList();
     final serverName = ref.watch(connectionSettingsProvider).name;
     final name = r.effectiveName ?? r.title;
@@ -707,7 +755,7 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
     if (r.kind == 'airplay') return _airplay(r);
     final pairing = r.pairing;
     if (widget.showTitle && !_expanded && pairing == null) return _compact(r);
-    final remaining = pairing?.remainingSeconds ?? 0;
+    final remaining = _pairingSeconds;
     final pairingOpen = widget.available && pairing != null && remaining > 0;
     return Padding(
       padding: const EdgeInsets.only(top: 16),
