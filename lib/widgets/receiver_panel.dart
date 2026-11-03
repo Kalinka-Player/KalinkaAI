@@ -8,6 +8,7 @@ import '../providers/connection_settings_provider.dart';
 import '../providers/monotonic_clock_provider.dart';
 import '../providers/receiver_provider.dart';
 import '../theme/app_theme.dart';
+import 'home/source_button_style.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'kalinka_button.dart';
 import 'kalinka_dialog.dart';
@@ -35,14 +36,13 @@ class ConnectSourceButton extends ConsumerWidget {
     }
     return TextButton.icon(
       key: const ValueKey('connect-source-button'),
-      style: TextButton.styleFrom(
-        minimumSize: const Size(48, 48),
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        foregroundColor: KalinkaColors.textPrimary,
-        textStyle: KalinkaFonts.sans(fontSize: 16, fontWeight: FontWeight.w500),
-      ),
+      style: homeSourceButtonStyle,
       onPressed: () => showReceiverPanel(context),
-      icon: const Icon(Icons.phonelink_ring_outlined, size: 20),
+      icon: const Icon(
+        Icons.phonelink_ring_outlined,
+        size: 20,
+        applyTextScaling: true,
+      ),
       label: const Text('Connect'),
     );
   }
