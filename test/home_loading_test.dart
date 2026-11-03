@@ -1,3 +1,5 @@
+import 'support/receivers.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -102,6 +104,7 @@ Future<ProviderContainer> _mount(
   final prefs = await SharedPreferences.getInstance();
   final container = ProviderContainer(
     overrides: [
+      noReceivers,
       sharedPrefsProvider.overrideWithValue(prefs),
       kalinkaProxyProvider.overrideWithValue(api),
       if (servers == null) ...[

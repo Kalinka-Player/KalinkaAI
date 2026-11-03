@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/connection_state_provider.dart';
 import '../providers/restart_provider.dart';
+import '../providers/modules_state_provider.dart';
+import '../providers/toast_provider.dart';
 import '../providers/server_update_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/upgrade_provider.dart';
@@ -80,8 +82,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     try {
       final ready = await ref.read(settingsProvider.notifier).readyToApply();
       if (!mounted || !ready) return;
-      setState(() => _restartOverlayOpen = true);
-      ref.read(restartProvider.notifier).executeRestart();
+      if (ref.read(settingsProvider).onlyLiveChanges) {
+        await ref.read(settingsProvider.notifier).applyChanges();
+        await ref
+            .read(settingsProvider.notifier)
+            .loadConfig(preserveStagedChanges: true);
+        ref.invalidate(modulesStateProvider);
+      } else {
+        setState(() => _restartOverlayOpen = true);
+        await ref.read(restartProvider.notifier).executeRestart();
+      }
+    } catch (error) {
+      showSafeToast('Could not apply settings: $error');
     } finally {
       if (mounted) setState(() => _applying = false);
     }
@@ -251,7 +263,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   // the server.
                   PendingChangesBanner(
                     pendingCount: settingsState.pendingCount,
-                    consequence: 'restart required',
+                    consequence: settingsState.onlyLiveChanges
+                        ? null
+                        : 'restart required',
                     blocked: settingsState.hasBlockingIssues,
                     busy: _applying,
                     onDiscard: () =>

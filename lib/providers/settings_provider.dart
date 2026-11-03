@@ -57,6 +57,13 @@ class SettingsState {
   bool isImmediateAction(String path) =>
       schema?.field(path)?.applyImmediately == true;
 
+  bool get onlyLiveChanges =>
+      hasPendingChanges &&
+      stagedChanges.keys.every(
+        (path) =>
+            isImmediateAction(path) || schema?.field(path)?.appliesLive == true,
+      );
+
   bool get onlyImmediateChanges =>
       hasPendingChanges && stagedChanges.keys.every(isImmediateAction);
 
@@ -427,6 +434,30 @@ class SettingsNotifier extends Notifier<SettingsState> {
       }
     }
     return entry;
+  }
+
+  /// Save only this live field, preserving all unrelated settings drafts.
+  Future<void> applyLiveSetting(String path, dynamic value) async {
+    final server = _server();
+    if (state.schema == null) await loadConfig(preserveStagedChanges: true);
+    if (_stale(server)) throw StateError('The connected streamer changed');
+    if (state.schema?.field(path)?.appliesLive != true) {
+      throw StateError('This setting requires Configuration on this server');
+    }
+    await ref
+        .read(kalinkaProxyProvider)
+        .saveSettings(
+          schemaVersion: state.schemaVersion!,
+          changes: {path: value},
+        );
+    if (_stale(server)) return;
+    final staged = {...state.stagedChanges};
+    if (jsonEquals(staged[path], value)) staged.remove(path);
+    state = state.copyWith(
+      values: {...state.values, path: value},
+      stagedChanges: staged,
+    );
+    _scheduleValidation();
   }
 
   Future<void> applyChanges({

@@ -1,3 +1,4 @@
+import '../widgets/receiver_panel.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -305,6 +306,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         _openDiscovery();
       case ServerSheetAction.openPlugins:
         _openPlugins();
+      case ServerSheetAction.openReceivers:
+        await showReceiverPanel(context);
       case ServerSheetAction.powerOff:
         await _powerOffServer();
       case null:
@@ -1434,6 +1437,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                               onOpenSettings: _openSettings,
                               onOpenPlugins: _openPlugins,
                               onPowerOff: _powerOffServer,
+                              onOpenReceivers: () => showReceiverPanel(context),
                             ),
                           ),
                         // Management overlays share browsing's bounds,

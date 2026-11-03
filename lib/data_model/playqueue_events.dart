@@ -2,6 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../data_model/data_model.dart';
 import 'storage.dart';
+import 'receiver_control.dart';
 
 part 'playqueue_events.freezed.dart';
 part 'playqueue_events.g.dart';
@@ -50,6 +51,8 @@ class PlayQueueState {
   /// API 0.19, where `GET /server/modules` is the only source.
   @JsonKey(includeToJson: false)
   final ModulesAndDevices? modules;
+  @JsonKey(includeToJson: false)
+  final ReceiversSnapshot? receivers;
 
   const PlayQueueState({
     required this.playbackState,
@@ -61,6 +64,7 @@ class PlayQueueState {
     this.selectedRendererId,
     this.playbackControl = const PlaybackControl.queue(),
     this.modules,
+    this.receivers,
   });
 
   static final PlayQueueState empty = PlayQueueState(
@@ -75,6 +79,7 @@ class PlayQueueState {
     List<Track>? trackList,
     PlaybackMode? playbackMode,
     ModulesAndDevices? modules,
+    ReceiversSnapshot? receivers,
     required int seq,
   }) => PlayQueueState(
     playbackState: playbackState ?? this.playbackState,
@@ -86,6 +91,7 @@ class PlayQueueState {
     selectedRendererId: selectedRendererId,
     playbackControl: playbackControl,
     modules: modules ?? this.modules,
+    receivers: receivers ?? this.receivers,
   );
 
   /// Apply an event to produce a new state (immutable pattern).
@@ -185,6 +191,7 @@ class PlayQueueState {
           selectedRendererId: selectedRendererId,
           playbackControl: playbackControl,
           modules: modules,
+          receivers: receivers,
         );
       case CurrentRendererChangedEvent(
         :final rendererId,
@@ -202,6 +209,7 @@ class PlayQueueState {
           selectedRendererId: selectedRendererId,
           playbackControl: playbackControl,
           modules: modules,
+          receivers: receivers,
         );
       case PlaybackControlChangedEvent(:final control, :final seq):
         // Back to the queue, the plugin's track goes with it; the queue's own
@@ -218,9 +226,13 @@ class PlayQueueState {
           selectedRendererId: selectedRendererId,
           playbackControl: control,
           modules: modules,
+          receivers: receivers,
         );
       case ModulesChangedEvent(:final modules, :final seq):
         return copyWith(modules: modules, seq: seq);
+      case ReceiversChangedEvent(:final seq):
+        // The receiver provider owns live snapshots and command reconciliation.
+        return copyWith(seq: seq);
       case VolumesChangedEvent(:final seq):
         // Kept by the volumes provider, which fetches them on every connect.
         return copyWith(seq: seq);
@@ -242,6 +254,7 @@ class PlayQueueState {
           selectedRendererId: state.selectedRendererId,
           playbackControl: state.playbackControl,
           modules: state.modules,
+          receivers: state.receivers,
         );
     }
   }
@@ -348,7 +361,8 @@ enum PlayQueueEventType {
   currentRendererChanged,
   playbackControlChanged,
   modulesChanged,
-  volumesChanged;
+  volumesChanged,
+  receiversChanged;
 
   String toJson() => _$PlayQueueEventTypeEnumMap[this]!;
 
@@ -443,6 +457,11 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
     required List<StorageVolume> volumes,
     required int seq,
   }) = VolumesChangedEvent;
+
+  const factory PlayQueueEvent.receiversChanged({
+    required List<ReceiverSnapshot> receivers,
+    required int seq,
+  }) = ReceiversChangedEvent;
 
   factory PlayQueueEvent.fromJson(Map<String, dynamic> json) {
     final eventTypeStr = json['event_type'] as String;
@@ -544,6 +563,11 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
       case 'modules_changed':
         return PlayQueueEvent.modulesChanged(
           modules: ModulesAndDevices.fromJson(json),
+          seq: seq,
+        );
+      case 'receivers_changed':
+        return PlayQueueEvent.receiversChanged(
+          receivers: ReceiverSnapshot.listFromJson(json['receivers']),
           seq: seq,
         );
       case 'volumes_changed':

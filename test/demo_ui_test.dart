@@ -1,3 +1,4 @@
+import 'support/receivers.dart';
 // What a visitor to the demo server sees: a way in from discovery, a mark on
 // the server it is connected to, and a prompt instead of a saved setting.
 
@@ -98,6 +99,7 @@ Future<WidgetRef> _connectedTo(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        noReceivers,
         sharedPrefsProvider.overrideWithValue(await _prefs(stored)),
         kalinkaProxyProvider.overrideWithValue(api),
       ],
@@ -125,6 +127,7 @@ Future<void> _pumpDiscovery(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        noReceivers,
         sharedPrefsProvider.overrideWithValue(prefs),
         kalinkaProxyProvider.overrideWithValue(api),
         connectionStateProvider.overrideWith(_Connection.new),
@@ -151,6 +154,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            noReceivers,
             sharedPrefsProvider.overrideWithValue(prefs),
             kalinkaProxyProvider.overrideWithValue(_FakeApi()),
             connectionStateProvider.overrideWith(_Connection.new),

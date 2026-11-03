@@ -152,6 +152,9 @@ class PluginState {
     final live = this.live;
     if (operation != null || live == null) return null;
     if (staged) {
+      if (module?.enabledField?.appliesLive == true) {
+        return enabled ? 'Turns on when applied' : 'Turns off when applied';
+      }
       return enabled ? 'Turns on after restart' : 'Turns off after restart';
     }
     if (hasPendingChanges) return 'Changes pending';
