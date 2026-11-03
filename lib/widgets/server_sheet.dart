@@ -11,14 +11,12 @@ import '../providers/server_info_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../theme/app_theme.dart';
 import 'kalinka_bottom_sheet.dart';
-import 'receiver_panel.dart';
 
 /// Actions that can be returned from the server sheet.
 enum ServerSheetAction {
   openSettings,
   openDiscovery,
   openPlugins,
-  openReceivers,
   powerOff,
 }
 
@@ -52,10 +50,6 @@ class ServerSheetContent extends ConsumerWidget {
           const SizedBox(height: 4),
           // Separator
           const SheetDivider(),
-          ConnectDeviceEntry(
-            onTap: () =>
-                Navigator.pop(context, ServerSheetAction.openReceivers),
-          ),
           // Configuration replaces Server settings once the server opts in.
           if (ref.watch(pluginCatalogEnabledProvider))
             _PluginsRow(
@@ -317,7 +311,6 @@ class ServerSheet extends ConsumerStatefulWidget {
   final VoidCallback onOpenSettings;
   final VoidCallback onOpenPlugins;
   final VoidCallback onPowerOff;
-  final VoidCallback? onOpenReceivers;
 
   const ServerSheet({
     super.key,
@@ -326,7 +319,6 @@ class ServerSheet extends ConsumerStatefulWidget {
     required this.onOpenSettings,
     required this.onOpenPlugins,
     required this.onPowerOff,
-    this.onOpenReceivers,
   });
 
   @override
@@ -432,10 +424,6 @@ class _ServerSheetState extends ConsumerState<ServerSheet>
                                   child: SingleChildScrollView(
                                     child: _TabletServerSheetContent(
                                       onClose: _animateClose,
-                                      onOpenReceivers: () async {
-                                        await _animateClose();
-                                        widget.onOpenReceivers?.call();
-                                      },
                                       onOpenPlugins: () async {
                                         await _animateClose();
                                         widget.onOpenPlugins();
@@ -481,7 +469,6 @@ class _TabletServerSheetContent extends ConsumerWidget {
   final VoidCallback onOpenDiscovery;
   final VoidCallback onOpenPlugins;
   final VoidCallback onPowerOff;
-  final VoidCallback? onOpenReceivers;
 
   const _TabletServerSheetContent({
     required this.onClose,
@@ -489,7 +476,6 @@ class _TabletServerSheetContent extends ConsumerWidget {
     required this.onOpenDiscovery,
     required this.onOpenPlugins,
     required this.onPowerOff,
-    this.onOpenReceivers,
   });
 
   @override
@@ -515,7 +501,6 @@ class _TabletServerSheetContent extends ConsumerWidget {
         ),
         const SizedBox(height: 4),
         const SheetDivider(),
-        ConnectDeviceEntry(onTap: onOpenReceivers),
         // Configuration replaces Server settings once the server opts in.
         if (ref.watch(pluginCatalogEnabledProvider))
           _PluginsRow(onTap: onOpenPlugins)

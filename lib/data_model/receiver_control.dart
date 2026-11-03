@@ -4,6 +4,8 @@ class ReceiverSnapshot {
   final bool enabled, nameInherited;
   final String? message, effectiveName, recentPeerId;
   final ReceiverPairing? pairing;
+  final ReceiverPairingRequest? pairingRequest;
+  final bool passwordRequired, passwordRevealAvailable;
   final List<ReceiverPeer> peers;
   final List<ReceiverSession> sessions;
   final Map<String, bool> actions;
@@ -24,6 +26,13 @@ class ReceiverSnapshot {
           : ReceiverPairing.fromJson(
               Map<String, dynamic>.from(json['pairing'] as Map),
             ),
+      pairingRequest = json['pairing_request'] == null
+          ? null
+          : ReceiverPairingRequest.fromJson(
+              Map<String, dynamic>.from(json['pairing_request'] as Map),
+            ),
+      passwordRequired = json['password_required'] == true,
+      passwordRevealAvailable = json['password_reveal_available'] == true,
       peers = [
         for (final p in json['peers'] as List? ?? [])
           ReceiverPeer.fromJson(Map<String, dynamic>.from(p as Map)),
@@ -83,4 +92,24 @@ class ReceiverSession {
       name = json['name'] as String,
       peerId = json['peer_id'] as String?,
       playing = json['playing'] == true;
+}
+
+class ReceiverPairingRequest {
+  final String id, deviceName, method;
+  final String? code;
+  final int? entered;
+  final double seconds;
+  final Stopwatch _elapsed = Stopwatch()..start();
+  ReceiverPairingRequest.fromJson(Map<String, dynamic> json)
+    : id = json['request_id'] as String,
+      deviceName = json['device_name'] as String,
+      method = json['method'] as String,
+      code = json['code'] as String?,
+      entered = json['entered'] as int?,
+      seconds = (json['remaining_seconds'] as num).toDouble();
+  int get remainingSeconds =>
+      (seconds - _elapsed.elapsedMilliseconds / 1000).ceil().clamp(0, 120);
+  bool get displayOnly =>
+      method == 'display_pin' || method == 'display_passkey';
+  bool get needsInput => method == 'pin' || method == 'passkey';
 }

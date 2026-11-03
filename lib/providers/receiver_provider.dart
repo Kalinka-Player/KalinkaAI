@@ -79,7 +79,11 @@ class ReceiversNotifier extends Notifier<ReceiverInventory> {
   Future<void> refresh() async {
     final server = _server();
     final revision = ++_revision;
-    state = ReceiverInventory(receivers: state.receivers, loading: true);
+    state = ReceiverInventory(
+      receivers: state.receivers,
+      loading: true,
+      error: state.error,
+    );
     try {
       final response = await ref.read(httpClientProvider).get('/receivers');
       if (_stale(server) || revision != _revision) return;
@@ -125,6 +129,18 @@ class ReceiversNotifier extends Notifier<ReceiverInventory> {
     }
   }
 
+  Future<String> revealPassword(ReceiverSnapshot receiver) async {
+    final server = _server();
+    final revision = _revision;
+    final response = await ref
+        .read(httpClientProvider)
+        .post('/receivers/${Uri.encodeComponent(receiver.id)}/password');
+    if (_stale(server) || revision != _revision) {
+      throw StateError('Receiver changed');
+    }
+    return (response.data as Map)['password'] as String;
+  }
+
   Future<void> setEnabled(ReceiverSnapshot receiver, bool enabled) async {
     final server = _server();
     try {
@@ -141,3 +157,11 @@ final receiversProvider =
     NotifierProvider<ReceiversNotifier, ReceiverInventory>(
       ReceiversNotifier.new,
     );
+
+final enabledReceiversProvider = Provider<List<ReceiverSnapshot>>(
+  (ref) => ref
+      .watch(receiversProvider)
+      .receivers
+      .where((receiver) => receiver.enabled)
+      .toList(),
+);

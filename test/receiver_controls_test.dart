@@ -38,6 +38,7 @@ Map<String, dynamic> row({bool enabled = true, bool paired = false}) => {
     for (final command in [
       'open_pairing',
       'close_pairing',
+      'answer_pairing',
       'grant_audio',
       'revoke_audio',
       'disconnect_audio',
@@ -289,8 +290,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(find.text('CONNECT A DEVICE'), findsOneWidget);
-      expect(find.text('Visible for 120 seconds'), findsOneWidget);
+      expect(find.text('Play from a device'), findsOneWidget);
+      expect(find.textContaining('Visible as Kitchen Kalinka'), findsOneWidget);
       final dir = Platform.environment['KALINKA_REVIEW_DIR'];
       if (dir != null) {
         await tester.runAsync(() async {
@@ -315,7 +316,7 @@ void main() {
     });
   }
 
-  testWidgets('Home exposes disabled receivers without any catalog sources', (
+  testWidgets('Home hides disabled receivers without any catalog sources', (
     tester,
   ) async {
     final inventory = Inventory(
@@ -328,12 +329,8 @@ void main() {
       queue: SettableQueue(queueOf(0)),
       receivers: () => inventory,
     );
-    expect(find.text('Connect a device'), findsOneWidget);
-    await tester.ensureVisible(find.text('Connect a device'));
-    await tester.tap(find.text('Connect a device'));
-    await tester.pumpAndSettle();
-    expect(find.text('CONNECT A DEVICE'), findsOneWidget);
-    expect(find.text('Enable Bluetooth'), findsOneWidget);
+    expect(find.text('Connect'), findsNothing);
+    expect(find.text('Connect'), findsNothing);
   });
 
   testWidgets(
@@ -345,20 +342,19 @@ void main() {
           overrides: [receiversProvider.overrideWith(() => inventory)],
           child: MaterialApp(
             theme: AppTheme.dark(),
-            home: const Scaffold(body: ConnectDeviceEntry()),
+            home: const Scaffold(body: ConnectSourceButton()),
           ),
         ),
       );
-      expect(find.text('Connect a device'), findsNothing);
+      expect(find.text('Connect'), findsNothing);
       inventory.replace(
         ReceiverInventory(
-          receivers: [ReceiverSnapshot.fromJson(row(enabled: false))],
+          receivers: [ReceiverSnapshot.fromJson(row())],
           error: 'Offline',
         ),
       );
       await tester.pump();
-      expect(find.text('Connect a device'), findsOneWidget);
-      expect(find.text('Receivers unavailable · retry'), findsOneWidget);
+      expect(find.text('Connect'), findsOneWidget);
     },
   );
 }
