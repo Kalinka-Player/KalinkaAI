@@ -31,6 +31,7 @@ Map<String, dynamic> row({bool enabled = true, bool paired = false}) => {
   'state': enabled ? 'ready' : 'disabled',
   'effective_name': 'Kitchen Kalinka',
   'instructions': 'Select this name in your device’s Bluetooth settings.',
+  'pairing_mode': 'just_works',
   'pairing': paired
       ? {'window_id': 'window-1', 'remaining_seconds': 120}
       : null,
@@ -38,9 +39,7 @@ Map<String, dynamic> row({bool enabled = true, bool paired = false}) => {
     for (final command in [
       'open_pairing',
       'close_pairing',
-      'answer_pairing',
-      'grant_audio',
-      'revoke_audio',
+      'forget_device',
       'disconnect_audio',
     ])
       {'command': command, 'available': enabled},
@@ -51,7 +50,7 @@ Map<String, dynamic> row({bool enabled = true, bool paired = false}) => {
       'name': 'Pixel 9 Pro',
       'paired': true,
       'audio_allowed': true,
-      'connected': true,
+      'connected': false,
     },
   ],
   'sessions': [],
@@ -291,7 +290,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('Play from a device'), findsOneWidget);
-      expect(find.textContaining('Visible as Kitchen Kalinka'), findsOneWidget);
+      expect(find.textContaining('Visible for '), findsOneWidget);
       final dir = Platform.environment['KALINKA_REVIEW_DIR'];
       if (dir != null) {
         await tester.runAsync(() async {

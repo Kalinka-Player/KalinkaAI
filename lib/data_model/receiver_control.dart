@@ -2,7 +2,7 @@
 class ReceiverSnapshot {
   final String id, title, kind, state, instructions;
   final bool enabled, nameInherited;
-  final String? message, effectiveName, recentPeerId;
+  final String? message, effectiveName, recentPeerId, pairingMode;
   final ReceiverPairing? pairing;
   final ReceiverPairingRequest? pairingRequest;
   final bool passwordRequired, passwordRevealAvailable;
@@ -21,6 +21,7 @@ class ReceiverSnapshot {
       effectiveName = json['effective_name'] as String?,
       nameInherited = json['name_inherited'] != false,
       recentPeerId = json['recent_peer_id'] as String?,
+      pairingMode = json['pairing_mode'] as String?,
       pairing = json['pairing'] == null
           ? null
           : ReceiverPairing.fromJson(

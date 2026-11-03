@@ -23,6 +23,11 @@ Map<String, dynamic> pending({
   double seconds = 60,
 }) => {
   ...f.row(paired: true),
+  'pairing_mode': 'confirm',
+  'actions': [
+    ...f.row()['actions'] as List,
+    {'command': 'answer_pairing', 'available': true},
+  ],
   'pairing_request': {
     'request_id': 'approval-1',
     'device_name': 'Pixel 9 Pro',
@@ -117,42 +122,79 @@ void main() {
     }
   });
 
-  testWidgets('older Bluetooth receivers cannot bypass explicit approval', (
-    tester,
-  ) async {
-    final row = f.row();
-    row['actions'] = (row['actions'] as List)
-        .where((a) => a['command'] != 'answer_pairing')
-        .toList();
-    final inventory = f.Inventory(
-      ReceiverInventory(receivers: [ReceiverSnapshot.fromJson(row)]),
-    );
-    await pump(tester, inventory);
-    await tester.tap(find.text('Connect'));
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Pair a device'))
-          .onPressed,
-      isNull,
-    );
-    await tester.tap(find.text('Bluetooth'));
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<OutlinedButton>(
-            find.widgetWithText(OutlinedButton, 'Pair a device'),
-          )
-          .onPressed,
-      isNull,
-    );
-    expect(
-      find.text('Update the server to pair with device approval.'),
-      findsOneWidget,
-    );
-    expect(inventory.commands, isEmpty);
-    await tester.pumpWidget(const SizedBox());
-  });
+  testWidgets(
+    'Bluetooth lists paired devices directly and pairing needs no app approval',
+    (tester) async {
+      final inventory = f.Inventory(
+        ReceiverInventory(receivers: [ReceiverSnapshot.fromJson(f.row())]),
+      );
+      await pump(tester, inventory);
+      await tester.tap(find.text('Connect'));
+      await tester.pumpAndSettle();
+      expect(find.text('Bluetooth'), findsOneWidget);
+      expect(find.text('Pixel 9 Pro'), findsOneWidget);
+      expect(find.text('Paired'), findsOneWidget);
+      expect(find.text('Forget'), findsOneWidget);
+      expect(find.text('Saved devices'), findsNothing);
+      expect(find.text('Allow audio'), findsNothing);
+      expect(find.text('Remove audio access'), findsNothing);
+      await tester.tap(find.text('Pair'));
+      await tester.pumpAndSettle();
+      expect(inventory.commands.single, {'command': 'open_pairing'});
+      expect(find.byType(ReceiverApproval), findsNothing);
+      await capture(tester, 'bluetooth-devices');
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'Disconnect retains pairing while Forget requires explicit confirmation',
+    (tester) async {
+      final row = f.row();
+      row['sessions'] = [
+        {
+          'session_id': 'session-1',
+          'peer_id': 'phone-1',
+          'name': 'Pixel 9 Pro',
+          'playing': true,
+        },
+      ];
+      final inventory = f.Inventory(
+        ReceiverInventory(receivers: [ReceiverSnapshot.fromJson(row)]),
+      );
+      await pump(tester, inventory);
+      await tester.tap(find.text('Connect'));
+      await tester.pumpAndSettle();
+      expect(find.text('Connected · Playing'), findsOneWidget);
+      await tester.tap(find.text('Disconnect'));
+      await tester.pumpAndSettle();
+      expect(inventory.commands.single, {
+        'command': 'disconnect_audio',
+        'session_id': 'session-1',
+      });
+      await tester.tap(find.text('Forget'));
+      await tester.pumpAndSettle();
+      expect(find.text('Forget Pixel 9 Pro?'), findsOneWidget);
+      expect(find.textContaining('Wi-Fi settings stay saved'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(inventory.commands.length, 1);
+      await tester.tap(find.text('Forget'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Forget'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(inventory.commands.last, {
+        'command': 'forget_device',
+        'peer_id': 'phone-1',
+      });
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('mobile Connect stays in source strip and opens a compact list', (
     tester,
@@ -401,7 +443,7 @@ void main() {
       );
       await tester.tap(entry);
       await tester.pumpAndSettle();
-      expect(find.text('Pair a device'), findsOneWidget);
+      expect(find.text('Pair'), findsOneWidget);
       await capture(tester, 'wide-popover');
       expect(
         tester.getSize(find.byType(ReceiverPanel)).width,
