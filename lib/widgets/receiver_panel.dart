@@ -208,6 +208,7 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
   bool _busy = false;
   bool _expanded = false;
   String? _error, _password;
+  String? _busyPeerId;
   int _secretEpoch = 0;
   @override
   void initState() {
@@ -248,9 +249,11 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
     super.dispose();
   }
 
-  Future<void> _run(Future<void> Function() operation) async {
+  Future<void> _run(Future<void> Function() operation, {String? peerId}) async {
+    if (_busy) return;
     setState(() {
       _busy = true;
+      _busyPeerId = peerId;
       _error = null;
     });
     try {
@@ -262,7 +265,12 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
         );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _busyPeerId = null;
+        });
+      }
     }
   }
 
@@ -274,6 +282,20 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
       'command': command,
       ...target,
     }),
+    peerId:
+        target['peer_id'] as String? ??
+        widget.receiver.sessions
+            .where((session) => session.id == target['session_id'])
+            .firstOrNull
+            ?.peerId,
+  );
+  Widget _spinner(String label) => SizedBox.square(
+    dimension: 24,
+    child: CircularProgressIndicator(
+      strokeWidth: 2,
+      color: KalinkaColors.textSecondary,
+      semanticsLabel: label,
+    ),
   );
   Widget _button(String label, VoidCallback? action) => OutlinedButton(
     onPressed: widget.available && !_busy ? action : null,
@@ -353,10 +375,13 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
                   ),
                   if (receiver.passwordRequired) ...[
                     const SizedBox(width: 12),
-                    Icon(
-                      shown ? Icons.expand_less : Icons.expand_more,
-                      size: 24,
-                    ),
+                    if (_busy)
+                      _spinner('Revealing password')
+                    else
+                      Icon(
+                        shown ? Icons.expand_less : Icons.expand_more,
+                        size: 24,
+                      ),
                   ],
                 ],
               ),
@@ -392,7 +417,6 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
           ),
         if (_error != null)
           Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
-        if (_busy) const LinearProgressIndicator(),
       ],
     );
   }
@@ -490,12 +514,21 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
       ],
     );
     final pairControl = pairing == null
-        ? KalinkaButton(
-            key: const ValueKey('receiver-pair-new'),
-            label: 'Pair new',
-            size: KalinkaButtonSize.compact,
-            enabled: widget.available && !_busy && _canPair(r),
-            onTap: () => _command('open_pairing'),
+        ? Stack(
+            alignment: Alignment.center,
+            children: [
+              Opacity(
+                opacity: _busy && _busyPeerId == null ? 0 : 1,
+                child: KalinkaButton(
+                  key: const ValueKey('receiver-pair-new'),
+                  label: 'Pair new',
+                  size: KalinkaButtonSize.compact,
+                  enabled: widget.available && !_busy && _canPair(r),
+                  onTap: () => _command('open_pairing'),
+                ),
+              ),
+              if (_busy && _busyPeerId == null) _spinner('Starting pairing'),
+            ],
           )
         : Wrap(
             alignment: WrapAlignment.end,
@@ -514,7 +547,9 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
                 onPressed: widget.available && !_busy && r.can('close_pairing')
                     ? () => _command('close_pairing', {'window_id': pairing.id})
                     : null,
-                icon: const Icon(Icons.close, size: 18),
+                icon: _busy && _busyPeerId == null
+                    ? _spinner('Stopping pairing')
+                    : const Icon(Icons.close, size: 18),
                 color: KalinkaColors.textSecondary,
               ),
             ],
@@ -564,7 +599,6 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
           for (final peer in peers) _pairedDevice(r, peer),
           if (_error != null)
             Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
-          if (_busy) const LinearProgressIndicator(),
         ],
       ),
     );
@@ -619,11 +653,13 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
             PopupMenuButton<String>(
               tooltip: 'Device options for ${peer.name}',
               enabled: enabled,
-              icon: const Icon(
-                Icons.more_vert,
-                size: 24,
-                color: KalinkaColors.textSecondary,
-              ),
+              icon: _busy && _busyPeerId == peer.id
+                  ? _spinner('Updating ${peer.name}')
+                  : const Icon(
+                      Icons.more_vert,
+                      size: 24,
+                      color: KalinkaColors.textSecondary,
+                    ),
               constraints: const BoxConstraints(minWidth: 168, maxWidth: 280),
               color: KalinkaColors.surfaceRaised,
               surfaceTintColor: Colors.transparent,
