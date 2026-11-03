@@ -28,6 +28,7 @@ import 'package:kalinka/providers/server_update_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/providers/restart_provider.dart';
 import 'package:kalinka/providers/plugin_state.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/screens/server_configuration_screen.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
@@ -41,7 +42,6 @@ import 'package:kalinka/screens/plugin_catalog_screen.dart';
 import 'package:kalinka/screens/plugin_settings_screen.dart';
 import 'package:kalinka/screens/settings_screen.dart';
 import 'package:kalinka/screens/renderer_settings_screen.dart';
-import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/server_sheet.dart';
 import 'package:kalinka/widgets/breadcrumb_crumb.dart';
 import 'package:kalinka/widgets/kalinka_bottom_sheet.dart';
@@ -224,21 +224,36 @@ class _CatalogApi implements PluginCatalogApi {
   Completer<void>? running;
   String? refusal;
 
-  /// Whether the server restarts to carry an accepted operation out, and
-  /// what its helper then has to say about it.
+  /// Whether the server restarts to carry an accepted operation out, or
+  /// carries it out as it runs, and what its record then says: one entry
+  /// per read while the operation runs, the last one standing after.
   bool restarts = false;
+  bool applies = false;
   PluginOperationRecord? record;
   int recordReads = 0;
+  final progress = <PluginOperationRecord?>[];
+  int operationReads = 0;
 
   @override
   Future<List<PluginUpdate>> updates() async => available;
 
   @override
-  Future<bool> run(String pluginId, PluginOperation operation) async {
+  Future<PluginAccepted> run(String pluginId, PluginOperation operation) async {
     runs.add((pluginId, operation));
     await running?.future;
     if (refusal case final refusal?) throw PluginCatalogException(refusal);
-    return restarts;
+    return restarts
+        ? PluginAccepted.restarting
+        : applies
+        ? PluginAccepted.applying
+        : PluginAccepted.done;
+  }
+
+  @override
+  Future<PluginOperationRecord?> operation() async {
+    operationReads++;
+    if (progress.isEmpty) return record;
+    return progress.length > 1 ? progress.removeAt(0) : progress.first;
   }
 
   @override
@@ -283,12 +298,14 @@ Map<String, dynamic> _moduleSpec(String id, {bool device = false}) {
         'widget': 'toggle',
         'type': 'bool',
         'default': true,
+        'apply': 'instant',
       },
       {
         'path': '$prefix.$id.region',
         'label': 'Store region',
         'widget': 'text_input',
         'type': 'str',
+        'apply': 'instant',
       },
     ],
   };
@@ -343,6 +360,7 @@ SettingsState _serverSettings({bool details = false}) {
                   help: 'How this server appears in the app when found on your network',
                   widget: WidgetKind.text,
                   type: 'str',
+                  apply: Apply.restartRequired,
                 ),
                 if (details) ...const [
                   FieldSpec(
@@ -1230,6 +1248,7 @@ void main() {
             'label': 'Pair phone',
             'widget': 'toggle',
             'type': 'boolean',
+            'apply': 'instant',
             'apply_immediately': true,
           }),
         ],
@@ -1843,7 +1862,7 @@ void main() {
     // Its own button, within the row's.
     expect(
       tester.getSemantics(install),
-      isSemantics(isButton: true, label: 'Add'),
+      isSemantics(isButton: true, label: 'Install'),
     );
     await tester.pump(const Duration(seconds: 10));
     expect(tester.takeException(), isNull);
@@ -2722,7 +2741,7 @@ void main() {
           final install = tester.widget<KalinkaButton>(
             find.byKey(ValueKey(key), skipOffstage: false),
           );
-          expect(install.label, 'Add');
+          expect(install.label, 'Install');
           expect(install.enabled, isFalse);
         }
         expect(
@@ -3267,7 +3286,7 @@ void main() {
   });
 
   testWidgets(
-    'the switch on its page stages a plugin on or off for the restart',
+    'the switch on its page stages a plugin on or off to be applied',
     (tester) async {
       final container = await _container(
         _Proxy({'enabled': true, 'catalog_browsing': true}),
@@ -3298,7 +3317,7 @@ void main() {
         'input_modules.jamendo.enabled': true,
       });
       expect(
-        _onPage<PluginSettingsScreen>(find.text('Turns on after restart')),
+        _onPage<PluginSettingsScreen>(find.text('Turns on when applied')),
         findsOneWidget,
       );
       final banner = tester.widget<PendingChangesBanner>(_changesBar);
@@ -3307,9 +3326,9 @@ void main() {
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      // Off as it runs now, on once restarted.
+      // Off as it runs now, on once applied.
       expect(_badgeOf(tester, 'jamendo')!.label, 'DISABLED');
-      expect(_statusOf(tester, 'jamendo'), 'Turns on after restart');
+      expect(_statusOf(tester, 'jamendo'), 'Turns on when applied');
       expect(_opacitiesOf(tester, 'jamendo'), isEmpty);
       expect(pending(), 1);
 
@@ -3555,7 +3574,7 @@ void main() {
       expect(top.top, greaterThan(title.bottom));
       expect(top.bottom, lessThan(tester.getRect(find.text('Created by')).top));
       // No second Install at the foot.
-      expect(find.text('Add'), findsNWidgets(2));
+      expect(find.text('Install'), findsNWidgets(2));
       await tester.tap(find.byKey(const ValueKey('settings-back')).last);
       await tester.pumpAndSettle();
 
@@ -3564,9 +3583,14 @@ void main() {
       await tester.pump();
       expect(api.runs, [('qobuz', PluginOperation.install)]);
       // Busy, not dimmed, and deaf to a second tap.
-      expect(tester.widget<KalinkaButton>(install).label, 'Adding…');
+      expect(tester.widget<KalinkaButton>(install).label, 'Installing…');
       expect(tester.widget<KalinkaButton>(install).onTap, isNull);
-      expect(tester.widget<KalinkaButton>(install).leading, isNotNull);
+      expect(tester.widget<KalinkaButton>(install).enabled, isTrue);
+      expect(
+        tester.widget<KalinkaButton>(install).variant,
+        KalinkaButtonVariant.neutral,
+      );
+      expect(tester.widget<KalinkaButton>(install).progress, 0);
       expect(_badgeOf(tester, 'qobuz')!.label, 'INSTALLING');
       live.value = ModulesAndDevices(
         inputModules: [..._liveInputs(live), _module('qobuz')],
@@ -3575,7 +3599,7 @@ void main() {
       api.running!.complete();
       api.running = null;
       await tester.pumpAndSettle();
-      expect(toasts(), contains('Qobuz installed'));
+      expect(toasts(), isEmpty);
       // Moved up among the installed, opening its configuration.
       expect(install, findsNothing);
       expect(
@@ -3666,7 +3690,7 @@ void main() {
       );
       await confirmUninstall();
       expect(find.byType(PluginSettingsScreen), findsNothing);
-      expect(toasts(), contains('Spotify Connect uninstalled'));
+      expect(toasts(), isEmpty);
       expect(
         find.byKey(const ValueKey('plugin-install-spotify')),
         findsOneWidget,
@@ -3886,7 +3910,14 @@ void main() {
       await tester.pump();
       expect(api.runs, [('spotify', PluginOperation.update)]);
       expect(tester.widget<KalinkaButton>(update).label, 'Updating…');
-      expect(tester.widget<KalinkaButton>(update).enabled, isFalse);
+      // Greyed out with its bar, deaf to a tap, rather than dimmed away.
+      expect(tester.widget<KalinkaButton>(update).enabled, isTrue);
+      expect(
+        tester.widget<KalinkaButton>(update).variant,
+        KalinkaButtonVariant.neutral,
+      );
+      expect(tester.widget<KalinkaButton>(update).onTap, isNull);
+      expect(tester.widget<KalinkaButton>(update).progress, 0);
       api.available = const [];
       api.running!.complete();
       await tester.pumpAndSettle();
@@ -4114,11 +4145,11 @@ void main() {
       api.running = null;
       await tester.pump();
       await tester.pump();
-      expect(restart.followed, ['Adding Qobuz\u2026']);
+      expect(restart.followed, ['Installing Qobuz\u2026']);
       expect(find.byType(RestartOverlay), findsOneWidget);
-      expect(find.text('Adding Qobuz\u2026'), findsOneWidget);
+      expect(find.text('Installing Qobuz\u2026'), findsOneWidget);
       await tester.pumpAndSettle();
-      expect(toasts(), contains('Qobuz installed'));
+      expect(toasts(), isEmpty);
       // The overlay puts itself away a moment after the server is back.
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
@@ -4140,7 +4171,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(
-          find.textContaining('The server restarts without it'),
+          find.textContaining('Anything playing from it stops'),
           findsOneWidget,
         );
         await tester.tap(
@@ -4196,6 +4227,191 @@ void main() {
         contains('did not come back'),
       );
       expect(api.recordReads, 2);
+    },
+  );
+
+  PluginOperationRecord running(String step, int index, {int count = 5}) =>
+      PluginOperationRecord(
+        pluginId: 'qobuz',
+        operation: PluginOperation.install,
+        status: 'running',
+        step: step,
+        stepIndex: index,
+        stepCount: count,
+      );
+  const done = PluginOperationRecord(
+    pluginId: 'qobuz',
+    operation: PluginOperation.install,
+    status: 'ok',
+    step: 'loading',
+    stepIndex: 5,
+    stepCount: 5,
+  );
+
+  testWidgets(
+    'a server that carries an operation out as it runs shows how far it has got',
+    (tester) async {
+      final api = _CatalogApi(_catalog())..applies = true;
+      final live = _Live(
+        ModulesAndDevices(
+          inputModules: [_module('localfiles'), _module('spotify')],
+          devices: [],
+        ),
+      );
+      final container = await _container(
+        _Proxy({
+          'enabled': true,
+          'catalog_browsing': true,
+          'installation': true,
+        }),
+        api,
+        live: live,
+      );
+      await _screen(tester, container);
+      List<String> toasts() =>
+          container.read(toastProvider).map((t) => t.message).toList();
+      api.progress.addAll([
+        running('downloading', 1),
+        running('checking', 2),
+        running('installing_package', 3),
+        done,
+      ]);
+
+      final install = find.byKey(const ValueKey('plugin-install-qobuz'));
+      await tester.scrollUntilVisible(install, 150, scrollable: _scrollable);
+      await tester.pumpAndSettle();
+      await tester.tap(install);
+      await tester.pump();
+      KalinkaButton button() => tester.widget<KalinkaButton>(install);
+      // Greyed out, filling from the left as the server reports its steps.
+      expect(button().label, 'Installing\u2026');
+      expect(button().variant, KalinkaButtonVariant.neutral);
+      expect(button().onTap, isNull);
+      expect(button().progress, 0);
+      expect(find.byType(RestartOverlay), findsNothing);
+
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(button().progress, closeTo(0.2, 1e-9));
+      expect(_statusOf(tester, 'qobuz'), 'Downloading\u2026');
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(button().progress, closeTo(0.4, 1e-9));
+      expect(_statusOf(tester, 'qobuz'), 'Checking\u2026');
+
+      live.value = ModulesAndDevices(
+        inputModules: [..._liveInputs(live), _module('qobuz')],
+        devices: [],
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      // Done: nothing said, the row just moved up among the installed.
+      expect(toasts(), isEmpty);
+      expect(install, findsNothing);
+      expect(_badgeOf(tester, 'qobuz')!.label, 'READY');
+      expect(api.operationReads, 5);
+    },
+  );
+
+  testWidgets(
+    'an operation the server could not finish fails in place, until put away',
+    (tester) async {
+      final api = _CatalogApi(_catalog())..applies = true;
+      final container = await _container(
+        _Proxy({
+          'enabled': true,
+          'catalog_browsing': true,
+          'installation': true,
+        }),
+        api,
+        live: _Live(
+          ModulesAndDevices(inputModules: [_module('localfiles')], devices: []),
+        ),
+      );
+      await _screen(tester, container);
+      api.progress.add(
+        const PluginOperationRecord(
+          pluginId: 'qobuz',
+          operation: PluginOperation.install,
+          status: 'failed',
+          step: 'installing_package',
+          stepIndex: 3,
+          stepCount: 5,
+          error: 'apt-get did not complete; see the helper\'s log.',
+        ),
+      );
+
+      final install = find.byKey(const ValueKey('plugin-install-qobuz'));
+      await tester.scrollUntilVisible(install, 150, scrollable: _scrollable);
+      await tester.pumpAndSettle();
+      await tester.tap(install);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      KalinkaButton button() => tester.widget<KalinkaButton>(install);
+      expect(button().label, 'Failed\u2026');
+      expect(button().labelColor, KalinkaColors.statusPending);
+      expect(button().variant, KalinkaButtonVariant.neutral);
+      expect(button().progress, isNull);
+      expect(button().enabled, isTrue);
+      expect(find.byType(RestartOverlay), findsNothing);
+      expect(
+        container.read(pluginFailuresProvider)['qobuz']!.message,
+        contains('apt-get did not complete'),
+      );
+
+      // Tapped, it tries again, and the failure goes with the new attempt.
+      api.progress.clear();
+      api.applies = false;
+      api.running = Completer<void>();
+      await tester.tap(install);
+      await tester.pump();
+      expect(api.runs.length, 2);
+      expect(button().label, 'Installing\u2026');
+      expect(container.read(pluginFailuresProvider), isEmpty);
+      api.running!.complete();
+      api.running = null;
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'an operation still under way on the server is picked up when the page opens',
+    (tester) async {
+      final api = _CatalogApi(_catalog());
+      api.progress.addAll([running('installing_environment', 4), done]);
+      final live = _Live(
+        ModulesAndDevices(inputModules: [_module('localfiles')], devices: []),
+      );
+      final container = await _container(
+        _Proxy({
+          'enabled': true,
+          'catalog_browsing': true,
+          'installation': true,
+        }),
+        api,
+        live: live,
+      );
+      await _screen(tester, container);
+      await tester.pump();
+
+      final install = find.byKey(const ValueKey('plugin-install-qobuz'));
+      await tester.scrollUntilVisible(install, 150, scrollable: _scrollable);
+      await tester.pumpAndSettle();
+      KalinkaButton button() => tester.widget<KalinkaButton>(install);
+      expect(button().label, 'Installing\u2026');
+      expect(button().progress, closeTo(0.8, 1e-9));
+      expect(api.runs, isEmpty);
+
+      live.value = ModulesAndDevices(
+        inputModules: [..._liveInputs(live), _module('qobuz')],
+        devices: [],
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(install, findsNothing);
+      expect(_badgeOf(tester, 'qobuz')!.label, 'READY');
     },
   );
 }

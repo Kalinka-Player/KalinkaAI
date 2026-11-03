@@ -403,7 +403,7 @@ void main() {
   for (final operation in PluginOperation.values) {
     test('${operation.name} is a POST to the plugin\'s own route', () async {
       final (api, adapter) = _api(_json(200, {}));
-      expect(await api.run('qobuz', operation), isFalse);
+      expect(await api.run('qobuz', operation), PluginAccepted.done);
       final request = adapter.requests.single;
       expect(request.method, 'POST');
       expect(
@@ -424,9 +424,59 @@ void main() {
           'version': '5.0.1',
         }),
       );
-      expect(await api.run('qobuz', PluginOperation.install), isTrue);
+      expect(
+        await api.run('qobuz', PluginOperation.install),
+        PluginAccepted.restarting,
+      );
+      final (live, _) = _api(
+        _json(202, {
+          'status': 'applying',
+          'operation': 'install',
+          'plugin_id': 'qobuz',
+          'version': '5.0.1',
+        }),
+      );
+      expect(
+        await live.run('qobuz', PluginOperation.install),
+        PluginAccepted.applying,
+      );
     },
   );
+
+  test('the operation under way comes step by step', () async {
+    final (api, adapter) = _api(
+      _json(200, {
+        'schema_version': 2,
+        'id': '2026-11-03T10:12:00+00:00',
+        'action': 'update',
+        'plugin_id': 'qobuz',
+        'status': 'running',
+        'step': 'installing_package',
+        'step_index': 4,
+        'step_count': 6,
+        'error': null,
+      }),
+    );
+    final record = (await api.operation())!;
+    expect(adapter.requests.single.method, 'GET');
+    expect(
+      adapter.requests.single.uri.toString(),
+      'http://kalinka.local:8000/server/plugins/operation',
+    );
+    expect(record.id, '2026-11-03T10:12:00+00:00');
+    expect(record.operation, PluginOperation.update);
+    expect(record.running, isTrue);
+    expect(record.step, 'installing_package');
+    expect(record.progress, closeTo(4 / 6, 1e-9));
+
+    final (idle, _) = _api(_json(200, {'status': 'idle'}));
+    expect(await idle.operation(), isNull);
+    // A server before 0.22 has no such route; its operations restart it.
+    final (older, _) = _api(_json(404, {}));
+    expect(await older.operation(), isNull);
+    final (unreachable, _) = _api(null);
+    await expectLater(unreachable.operation(), throwsA(isA<DioException>()));
+  });
 
   test(
     'the last operation comes from the inventory, in the helper\'s words',

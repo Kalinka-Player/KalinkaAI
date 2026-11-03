@@ -75,7 +75,9 @@ class PluginState {
   final bool hasPendingChanges;
 
   final PluginUpdate? update;
-  final PluginOperation? operation;
+
+  /// The install, removal or update under way on it, as far as it has got.
+  final PluginProgress? inFlight;
 
   /// The last install, removal or update that failed, until put away.
   final PluginFailure? failure;
@@ -88,16 +90,21 @@ class PluginState {
     this.enabled = false,
     this.hasPendingChanges = false,
     this.update,
-    this.operation,
+    this.inFlight,
     this.failure,
   });
+
+  PluginOperation? get operation => inFlight?.operation;
+
+  /// How far the operation under way has got, 0 to 1; null while none is.
+  double? get progress => inFlight?.progress;
 
   factory PluginState.of(
     CatalogPlugin plugin, {
     required ModulesAndDevices? modules,
     required SettingsState settings,
     PluginUpdate? update,
-    PluginOperation? operation,
+    PluginProgress? inFlight,
     PluginFailure? failure,
   }) {
     final live = modules == null
@@ -126,14 +133,14 @@ class PluginState {
         (path) => path.startsWith(root) || paths?.contains(path) == true,
       ),
       update: live == null || !plugin.listed ? null : update,
-      operation: operation,
+      inFlight: inFlight,
       failure: failure,
     );
   }
 
   bool get installed => live != null;
 
-  /// An on/off edit waits for the restart that applies it.
+  /// An on/off edit waits to be applied.
   bool get staged => installed && enabled != savedEnabled;
 
   /// Something to show on its settings page besides the on/off switch.
@@ -146,13 +153,15 @@ class PluginState {
         module.banners.isNotEmpty;
   }
 
-  /// What there is to say beside its status badge: the module's own
-  /// summary, a restart it waits on, a newer release.
+  /// What there is to say beside its status badge: the step an operation
+  /// has reached, the module's own summary, a switch waiting to be applied,
+  /// a newer release.
   String? get detail {
     final live = this.live;
-    if (operation != null || live == null) return null;
+    if (inFlight case final inFlight?) return stepLabel(inFlight.step);
+    if (live == null) return null;
     if (staged) {
-      if (module?.enabledField?.appliesLive == true) {
+      if (module?.enabledField?.needsRestart == false) {
         return enabled ? 'Turns on when applied' : 'Turns off when applied';
       }
       return enabled ? 'Turns on after restart' : 'Turns off after restart';
@@ -166,6 +175,18 @@ class PluginState {
   }
 }
 
+/// The step of an operation as the server names it, said for the row.
+String? stepLabel(String? step) => switch (step) {
+  'downloading' => 'Downloading…',
+  'checking' => 'Checking…',
+  'preparing' => 'Preparing…',
+  'installing_package' => 'Installing…',
+  'installing_environment' => 'Setting up…',
+  'removing_package' => 'Removing…',
+  'loading' => 'Starting…',
+  _ => null,
+};
+
 /// How one plugin stands, for a page about it alone.
 final pluginStateProvider = Provider.autoDispose
     .family<PluginState, CatalogPlugin>(
@@ -174,7 +195,7 @@ final pluginStateProvider = Provider.autoDispose
         modules: ref.watch(modulesStateProvider).value,
         settings: ref.watch(settingsProvider),
         update: ref.watch(pluginUpdatesProvider).value?[plugin.id],
-        operation: ref.watch(pluginOperationsProvider)[plugin.id],
+        inFlight: ref.watch(pluginOperationsProvider)[plugin.id],
         failure: ref.watch(pluginFailuresProvider)[plugin.id],
       ),
     );

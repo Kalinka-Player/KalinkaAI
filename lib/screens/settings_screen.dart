@@ -80,13 +80,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (_applying || await refusedAsDemo(context, ref) || !mounted) return;
     setState(() => _applying = true);
     try {
-      final ready = await ref.read(settingsProvider.notifier).readyToApply();
+      final notifier = ref.read(settingsProvider.notifier);
+      final ready = await notifier.readyToApply();
       if (!mounted || !ready) return;
       if (ref.read(settingsProvider).onlyLiveChanges) {
-        await ref.read(settingsProvider.notifier).applyChanges();
-        await ref
-            .read(settingsProvider.notifier)
-            .loadConfig(preserveStagedChanges: true);
+        await notifier.applyChanges();
+        await notifier.loadConfig(preserveStagedChanges: true);
         ref.invalidate(modulesStateProvider);
       } else {
         setState(() => _restartOverlayOpen = true);
@@ -259,8 +258,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   else
                     const Expanded(child: SizedBox.shrink()),
                   // Pending changes, at the foot under the page — only
-                  // actionable while connected, since applying restarts
-                  // the server.
+                  // actionable while connected.
                   PendingChangesBanner(
                     pendingCount: settingsState.pendingCount,
                     consequence: settingsState.onlyLiveChanges

@@ -91,8 +91,10 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       if (!mounted) return;
       ref.invalidate(modulesStateProvider);
       ref.invalidate(serverUpdateProvider);
-      // What went wrong on an earlier visit is old news.
+      // What went wrong on an earlier visit is old news; what is still
+      // under way on the server is followed again from where it has got.
       ref.read(pluginFailuresProvider.notifier).clear();
+      ref.read(pluginOperationsProvider.notifier).reattach();
       // Normally read on connect. Never reread over staged edits.
       final settings = ref.read(settingsProvider);
       if (settings.schema == null && !settings.isLoading) {
@@ -133,16 +135,13 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     }
     setState(() => _applying = true);
     try {
-      final ready = await ref.read(settingsProvider.notifier).readyToApply();
+      final notifier = ref.read(settingsProvider.notifier);
+      final ready = await notifier.readyToApply();
       if (!mounted || !ready) return false;
       if (ref.read(settingsProvider).onlyLiveChanges) {
-        await ref
-            .read(settingsProvider.notifier)
-            .applyChanges();
+        await notifier.applyChanges();
         if (!mounted) return false;
-        await ref
-            .read(settingsProvider.notifier)
-            .loadConfig(preserveStagedChanges: true);
+        await notifier.loadConfig(preserveStagedChanges: true);
         ref.invalidate(modulesStateProvider);
         return mounted && !ref.read(settingsProvider).hasPendingChanges;
       }
@@ -166,15 +165,16 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       return false;
     }
     if (!ref.read(settingsProvider).hasPendingChanges) return true;
+    final restarts = !ref.read(settingsProvider).onlyLiveChanges;
     final choice = await showKalinkaDialog<String>(
       context: context,
       builder: (context) => KalinkaDialog(
         side: KalinkaDialogSide.browsing,
         icon: Icons.tune,
         title: 'Apply your changes?',
-        message: ref.read(settingsProvider).onlyLiveChanges
-            ? 'These changes apply without restarting Kalinka.'
-            : 'You have changes that have not been applied. Applying them restarts Kalinka and briefly stops the music.',
+        message: restarts
+            ? 'You have changes that have not been applied. Applying them restarts Kalinka and briefly stops the music.'
+            : 'These changes apply without restarting Kalinka.',
         content: Column(
           mainAxisSize: MainAxisSize.min,
           spacing: 10,
@@ -194,7 +194,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
             ),
             KalinkaButton(
               key: const ValueKey('configuration-apply'),
-              label: 'Apply & restart',
+              label: restarts ? 'Apply & restart' : 'Apply',
               fullWidth: true,
               onTap: () => Navigator.pop(context, 'apply'),
             ),
@@ -233,8 +233,8 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
           iconColor: KalinkaColors.actionDelete,
           title: 'Uninstall ${plugin.name}?',
           message:
-              'The server restarts without it, which stops playback for a '
-              'moment. You can add it again from Configuration.',
+              'Anything playing from it stops; the rest plays on. You can '
+              'install it again from Configuration.',
           actions: [
             KalinkaButton(
               label: 'Cancel',
@@ -257,7 +257,8 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     final outcome = await ref
         .read(pluginOperationsProvider.notifier)
         .run(plugin.id, operation, name: plugin.name);
-    // A failure stays with the plugin, where it was asked for.
+    // A failure stays with the plugin, where it was asked for; the row
+    // says the rest by where it now sits.
     if (outcome != PluginOutcome.done || !mounted) return;
     // Its pages went with it.
     if (operation == PluginOperation.uninstall) {
@@ -266,11 +267,6 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         _aboutFor = null;
       });
     }
-    showSafeToast(switch (operation) {
-      PluginOperation.install => '${plugin.name} installed',
-      PluginOperation.uninstall => '${plugin.name} uninstalled',
-      PluginOperation.update => '${plugin.name} updated',
-    });
   }
 
   @override
@@ -618,7 +614,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
           modules: modules,
           settings: settings,
           update: updates[plugin.id],
-          operation: operations[plugin.id],
+          inFlight: operations[plugin.id],
           failure: failures[plugin.id],
         ),
     };
