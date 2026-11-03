@@ -26,21 +26,20 @@ class KioskTrackLines {
   final String artist;
   final String? album;
 
-  /// The stream's format and resolution — `FLAC 24-bit 96 kHz`.
-  final String? format;
+  /// Where the stream comes from and what it is, as the player says it:
+  /// `Qobuz · FLAC 24-bit • 96 kHz`.
+  final String? stream;
 
-  /// The source the track comes from, and the name it goes by.
+  /// The source whose tile leads [stream], where the player shows its badge.
   final String? source;
-  final String? sourceTitle;
 
   const KioskTrackLines({
     required this.trackId,
     required this.title,
     required this.artist,
     this.album,
-    this.format,
+    this.stream,
     this.source,
-    this.sourceTitle,
   });
 
   @override
@@ -50,13 +49,12 @@ class KioskTrackLines {
       other.title == title &&
       other.artist == artist &&
       other.album == album &&
-      other.format == format &&
-      other.source == source &&
-      other.sourceTitle == sourceTitle;
+      other.stream == stream &&
+      other.source == source;
 
   @override
   int get hashCode =>
-      Object.hash(trackId, title, artist, album, format, source, sourceTitle);
+      Object.hash(trackId, title, artist, album, stream, source);
 }
 
 /// The display's eyebrow over the track: `NOW PLAYING`, spaced out in the
@@ -186,7 +184,7 @@ class _KioskTrackTextState extends State<KioskTrackText>
         padding: EdgeInsets.only(top: compact ? 0 : s(6)),
         child: Text(
           lines.artist,
-          style: KalinkaFonts.display(
+          style: KalinkaFonts.sans(
             fontSize: s(compact ? 19 : 30),
             fontWeight: FontWeight.w500,
             color: _artist,
@@ -212,15 +210,14 @@ class _KioskTrackTextState extends State<KioskTrackText>
             overflow: TextOverflow.ellipsis,
           ),
         ),
-      if (lines.format != null || lines.sourceTitle != null)
+      if (lines.stream != null)
         Padding(
-          padding: EdgeInsets.only(top: s(compact ? 8 : 20)),
+          padding: EdgeInsets.only(top: s(compact ? 8 : 10)),
           child: _StreamRow(
             lines: lines,
             // Kept legible however small the title gets.
             scale: compact ? math.max(widget.scale * 0.46, 0.72) : widget.scale,
-            centred: widget.centred,
-            sourceFirst: compact,
+            shadows: shadows,
             showBitPerfect: !leaving,
           ),
         ),
@@ -280,17 +277,12 @@ class _Staged extends StatelessWidget {
   }
 }
 
-/// The stream's format in an outlined tag, and where it comes from: the
-/// source's tile and name. Short of width, the second moves to a line of its
-/// own.
+/// The player's stream line: the source's tile, `Qobuz · FLAC 24-bit • 96
+/// kHz`, and the bit-perfect badge after it.
 class _StreamRow extends StatelessWidget {
   final KioskTrackLines lines;
   final double scale;
-  final bool centred;
-
-  /// The source first, its tile and name in one tag of their own, as over a
-  /// cover that fills the screen.
-  final bool sourceFirst;
+  final List<Shadow>? shadows;
 
   /// Off for the lines on their way out: the badge watches live state, which
   /// already describes the newcomer.
@@ -299,93 +291,36 @@ class _StreamRow extends StatelessWidget {
   const _StreamRow({
     required this.lines,
     required this.scale,
-    required this.centred,
-    required this.sourceFirst,
+    required this.shadows,
     required this.showBitPerfect,
   });
 
   @override
   Widget build(BuildContext context) {
     double s(double v) => v * scale;
-    final style = KalinkaFonts.mono(
-      fontSize: s(14),
-      letterSpacing: s(0.3),
-      color: _stream,
-      height: 1.2,
-    );
-    final tag = BoxDecoration(
-      color: Colors.black.withValues(alpha: 0.18),
-      border: Border.all(
-        color: KalinkaColors.textPrimary.withValues(alpha: 0.32),
-      ),
-      borderRadius: BorderRadius.circular(s(6)),
-    );
-    final format = lines.format;
     final source = lines.source;
-    final sourceTitle = lines.sourceTitle;
-    final formatTag = format == null
-        ? null
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: s(9),
-                    vertical: s(5),
-                  ),
-                  decoration: tag,
-                  child: Text(
-                    format,
-                    style: style,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              if (showBitPerfect) BitPerfectBadge(scale: scale * 1.265),
-            ],
-          );
-    final name = sourceTitle == null
-        ? null
-        : Text(
-            sourceTitle,
-            style: style,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (source != null) ...[
+          SourceTile(source: source, size: s(20)),
+          SizedBox(width: s(6)),
+        ],
+        Flexible(
+          child: Text(
+            lines.stream!,
+            style: KalinkaFonts.mono(
+              fontSize: s(14),
+              letterSpacing: s(0.3),
+              color: _stream,
+              height: 1.2,
+            ).copyWith(shadows: shadows),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-          );
-    final Widget? where = source == null || name == null
-        ? null
-        : sourceFirst
-        ? Container(
-            decoration: tag,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SourceTile(source: source, size: s(28)),
-                Flexible(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: s(10)),
-                    child: name,
-                  ),
-                ),
-              ],
-            ),
-          )
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SourceTile(source: source, size: s(28)),
-              SizedBox(width: s(10)),
-              Flexible(child: name),
-            ],
-          );
-    return Wrap(
-      alignment: centred ? WrapAlignment.center : WrapAlignment.start,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: s(sourceFirst ? 10 : 16),
-      runSpacing: s(8),
-      children: sourceFirst ? [?where, ?formatTag] : [?formatTag, ?where],
+          ),
+        ),
+        if (showBitPerfect) BitPerfectBadge(scale: scale),
+      ],
     );
   }
 }

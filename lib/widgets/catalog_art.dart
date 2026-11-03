@@ -428,8 +428,10 @@ class CatalogCard extends StatelessWidget {
   /// dark.
   static const captionShare = 0.6;
 
-  // The caption's sizes on a 400dp card, in the styles album cards use.
-  static const _titleSize = KalinkaTypography.baseSize + 10;
+  // The caption's sizes on a 400dp card, in the styles album cards use. The
+  // title stays well under a page title's, so a card never outweighs the
+  // heading over it.
+  static const _titleSize = KalinkaTypography.baseSize + 6;
   static const _subtitleSize = KalinkaTypography.baseSize + 2;
 
   // Lifts the caption off bright spots of a source's own art: a tight edge

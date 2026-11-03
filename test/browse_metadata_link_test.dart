@@ -16,7 +16,7 @@ void main() {
     ('artist', 'U2', KalinkaTextStyles.expandedArtist),
     ('album', 'A', KalinkaTextStyles.expandedAlbum),
   ]) {
-    testWidgets('short $type names keep a 48dp tappable target', (
+    testWidgets('$type link keeps its line height and opens from the chevron', (
       tester,
     ) async {
       final item = BrowseItem(
@@ -41,10 +41,15 @@ void main() {
           ),
         ),
       );
-      final target = tester.getRect(find.byType(InkWell));
-      expect(target.width, greaterThanOrEqualTo(48));
-      expect(target.height, greaterThanOrEqualTo(48));
-      await tester.tapAt(target.bottomRight - const Offset(1, 1));
+      final text = find.text(label);
+      expect(tester.widget<Text>(text).style?.decoration, isNull);
+      expect(
+        tester.getRect(find.byType(BrowseMetadataLink)).height,
+        moreOrLessEquals(
+          tester.getRect(text).height + 2 * BrowseMetadataLink.verticalPadding,
+        ),
+      );
+      await tester.tap(find.byIcon(Icons.chevron_right));
       expect(opened, same(item));
     });
   }
