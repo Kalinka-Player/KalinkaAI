@@ -8,7 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart'
-    show Album, Artist, BrowseItemsList, RendererInfo;
+    show
+        Album,
+        Artist,
+        BrowseItemsList,
+        ModuleCapability,
+        ModuleInfo,
+        ModuleState,
+        RendererInfo;
 import 'package:kalinka/data_model/renderer_config.dart';
 import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
@@ -1497,6 +1504,15 @@ void main() {
         queue: SettableQueue(queue),
         size: size,
         api: _ShellApi(),
+        sources: [
+          ModuleInfo(
+            name: 'localfiles',
+            title: 'My Library',
+            enabled: true,
+            state: ModuleState.ready,
+            capabilities: const [ModuleCapability.catalogs],
+          ),
+        ],
         overrides: [
           supervisorApiProvider.overrideWithValue(box),
           serverIdentityProvider.overrideWith((ref) async => 'box-1'),
