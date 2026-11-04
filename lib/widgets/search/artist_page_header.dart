@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data_model/browse_filters.dart';
 import '../../providers/artist_relations_provider.dart';
 import '../../providers/listing_presentation_provider.dart';
 import '../../providers/search_session_provider.dart';
+import '../../providers/source_modules_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../browse_filters/presentation_toggle.dart';
+import '../home/catalog_pin_button.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
 
@@ -19,7 +22,15 @@ class ArtistPageHeader extends ConsumerWidget {
   /// foot; one switching button where the pane is narrow.
   final ListingLayout? presentation;
 
-  const ArtistPageHeader({super.key, required this.page, this.presentation});
+  /// On the Pin, so the page can tell when it has scrolled under the bar.
+  final Key? pinKey;
+
+  const ArtistPageHeader({
+    super.key,
+    required this.page,
+    this.presentation,
+    this.pinKey,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -31,6 +42,9 @@ class ArtistPageHeader extends ConsumerWidget {
         ref.watch(artistPortraitProvider(page.id!)).value;
     final url = path == null ? null : ref.read(urlResolverProvider).abs(path);
     final provider = page.provider?.trim() ?? '';
+    final pin = !ref
+        .watch(builtinSourcesProvider)
+        .contains(sourceOfId(page.id!));
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -71,18 +85,34 @@ class ArtistPageHeader extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Semantics(
-                      header: true,
-                      child: Text(
-                        name,
-                        style: KalinkaFonts.display(
-                          fontSize: 30,
-                          height: 1.15,
-                          letterSpacing: -0.5,
-                          fontWeight: FontWeight.w500,
-                          color: KalinkaColors.frost,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Semantics(
+                            header: true,
+                            child: Text(
+                              name,
+                              style: KalinkaFonts.display(
+                                fontSize: 30,
+                                height: 1.15,
+                                letterSpacing: -0.5,
+                                fontWeight: FontWeight.w500,
+                                color: KalinkaColors.frost,
+                              ),
+                              // Pin follows the longest line.
+                              textWidthBasis: TextWidthBasis.longestLine,
+                            ),
+                          ),
                         ),
-                      ),
+                        if (pin) ...[
+                          const SizedBox(width: 8),
+                          CatalogPinButton(
+                            key: pinKey,
+                            page: page,
+                            filter: const BrowseFilterQuery(),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Row(

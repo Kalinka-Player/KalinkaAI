@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart';
+import '../../providers/artist_relations_provider.dart';
 import '../../providers/catalog_section_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/indexer_status_provider.dart';
@@ -67,7 +68,8 @@ class PinnedCatalogPreview extends ConsumerWidget {
           (module) =>
               module.enabled &&
               module.name == source &&
-              module.can(ModuleCapability.catalogs),
+              // An artist opens by id, without the source's catalogs.
+              (pin.page.isArtist || module.can(ModuleCapability.catalogs)),
         ) ??
         false;
     final notifier = ref.read(searchSessionProvider.notifier);
@@ -80,7 +82,8 @@ class PinnedCatalogPreview extends ConsumerWidget {
       return (
         id: pin.page.id!,
         filter: pin.filter.encoded(pin.page.filterCapabilities),
-        limit: limit,
+        // An artist's preview is read off one probe, whatever it shows.
+        limit: pin.page.isArtist ? artistProbe : limit,
         revision: ref.watch(collectionsRevisionProvider) + libraryRevision,
       );
     }
@@ -90,16 +93,22 @@ class PinnedCatalogPreview extends ConsumerWidget {
         return const CatalogTileShimmer(hasSubtitle: true);
       }
       // A sectioned catalog's own total counts its shelves, not its items.
-      final total = available && pin.page.sections.isEmpty
-          ? ref.watch(pinnedPreviewProvider(requestOf(1))).value?.total
+      final list = available && pin.page.sections.isEmpty
+          ? ref.watch(pinnedPreviewProvider(requestOf(1))).value
           : null;
+      final total = list?.total;
+      final first = list?.items.firstOrNull;
+      final kind = !pin.page.isArtist
+          ? pin.page.preview?.contentType
+          : first != null && !isArtistRelease(first)
+          ? PreviewContentType.track
+          : PreviewContentType.album;
       return CatalogTile(
         title: pin.page.title ?? 'Catalog',
         subtitle: [
           sourceTitle,
           if (pin.filterDescription.isNotEmpty) pin.filterDescription,
-          if (total != null && total >= 0)
-            _countLabel(total, pin.page.preview?.contentType),
+          if (total != null && total >= 0) _countLabel(total, kind),
           if (!available) 'Unavailable',
         ].join(' · '),
         icon: info?.icon ?? Icons.library_music_outlined,
@@ -146,12 +155,13 @@ class PinnedCatalogPreview extends ConsumerWidget {
         child: heading,
       );
     }
-    final request = requestOf(pin.preview == HomePreviewType.cards ? 8 : 5);
+    final limit = pin.preview == HomePreviewType.cards ? 8 : 5;
+    final request = requestOf(limit);
     final preview = Preview(
       type: pin.preview == HomePreviewType.cards
           ? PreviewType.imageText
           : PreviewType.tile,
-      itemsCount: request.limit,
+      itemsCount: limit,
       // The shape and size of card its catalog asks for.
       aspectRatio: pin.page.preview?.aspectRatio,
       cardSize: pin.page.preview?.cardSize,
@@ -187,7 +197,7 @@ class PinnedCatalogPreview extends ConsumerWidget {
                           : BrowseNavigationScope(
                               onOpen: notifier.openBrowseItem,
                               child: PreviewShelf(
-                                items: list.items.take(request.limit).toList(),
+                                items: list.items.take(limit).toList(),
                                 preview: preview,
                                 storageId: pin.key,
                                 onOpenItem: notifier.openBrowseItem,

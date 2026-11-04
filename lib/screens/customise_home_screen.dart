@@ -299,7 +299,7 @@ Future<void> _confirmUnpin(
       centered: true,
       icon: CupertinoIcons.pin_slash,
       iconGlyphColor: KalinkaColors.accentTint,
-      title: 'Unpin catalog?',
+      title: pin.page.isArtist ? 'Unpin artist?' : 'Unpin catalog?',
       message: 'Remove “${pin.page.title ?? 'Catalog'}” from Home?',
       actions: [
         KalinkaButton(
