@@ -14,6 +14,7 @@ import 'package:kalinka/providers/indexer_status_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
+import 'package:kalinka/providers/receiver_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
@@ -23,6 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'server_answer.dart';
+import 'receivers.dart';
 
 /// The queue, set from the test.
 class SettableQueue extends PlayQueueStateStore {
@@ -120,6 +122,7 @@ Future<ProviderContainer> pumpHomeShell(
   bool coachMarksShown = true,
   List<ModuleInfo> sources = const [],
   List<Override> overrides = const [],
+  ReceiversNotifier Function()? receivers,
   CollectionsShelf? collections,
   TextScaler? textScaler,
   bool? reducedMotion,
@@ -140,6 +143,10 @@ Future<ProviderContainer> pumpHomeShell(
 
   final container = ProviderContainer(
     overrides: [
+      if (receivers == null)
+        noReceivers
+      else
+        receiversProvider.overrideWith(receivers),
       sharedPrefsProvider.overrideWithValue(prefs),
       kalinkaProxyProvider.overrideWithValue(api ?? HomeApi()),
       playQueueStateStoreProvider.overrideWith(() => queue),

@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
+import '../utils/browse_links.dart';
 import '../utils/playback_utils.dart';
 import 'app_state_provider.dart';
+import 'source_modules_provider.dart';
 
 /// The track the output is on: the queue's current entry, or the plugin's own
 /// while one plays exclusively (its track is not in the queue). Null once the
@@ -17,6 +19,25 @@ final nowPlayingTrackProvider = Provider<Track?>((ref) {
   }
   return queue.trackList.isNotEmpty ? current : null;
 });
+
+/// Receiver metadata may carry entity ids without offering a catalogue.
+/// Resolve each link against its own source's declared capabilities.
+final nowPlayingMetadataLinksProvider =
+    Provider<({BrowseItem? artist, BrowseItem? album})>((ref) {
+      final track = ref.watch(nowPlayingTrackProvider);
+      final modules = ref.watch(sourceModulesProvider.select((m) => m.value));
+      final catalogs = {
+        for (final module in modules ?? const <ModuleInfo>[])
+          if (module.enabled && module.can(ModuleCapability.catalogs))
+            module.name,
+      };
+      BrowseItem? available(BrowseItem? item) =>
+          item != null && catalogs.contains(sourceOfId(item.id)) ? item : null;
+      return (
+        artist: available(artistBrowseLink(track?.performer)),
+        album: available(albumBrowseLink(track?.album)),
+      );
+    });
 
 /// Length of what is playing. A plugin's stream reports its own, which the
 /// track it describes may not carry.

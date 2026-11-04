@@ -18,6 +18,10 @@ enum KalinkaButtonSize { normal, compact }
 /// Use [fullWidth] for buttons that should stretch to fill their parent.
 /// Use [enabled] to dim and disable the button (e.g. nothing selected yet).
 /// Use [leading] to add an icon before the label.
+/// Use [progress], 0 to 1, to fill the pill from the left behind the label
+/// while the action it names is under way.
+/// Use [labelColor] where the label carries a state of its own, as a
+/// failure does in amber.
 class KalinkaButton extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
@@ -25,7 +29,10 @@ class KalinkaButton extends StatelessWidget {
   final KalinkaButtonSize size;
   final bool fullWidth;
   final bool enabled;
+  final bool autofocus;
   final Widget? leading;
+  final double? progress;
+  final Color? labelColor;
 
   const KalinkaButton({
     super.key,
@@ -35,7 +42,10 @@ class KalinkaButton extends StatelessWidget {
     this.size = KalinkaButtonSize.normal,
     this.fullWidth = false,
     this.enabled = true,
+    this.autofocus = false,
     this.leading,
+    this.progress,
+    this.labelColor,
   });
 
   @override
@@ -64,7 +74,7 @@ class KalinkaButton extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: KalinkaTextStyles.trayRowLabel.copyWith(
-        color: textColor,
+        color: labelColor ?? textColor,
         fontSize: size == KalinkaButtonSize.normal
             ? KalinkaTypography.baseSize + 3
             : KalinkaTypography.baseSize + 2,
@@ -82,6 +92,7 @@ class KalinkaButton extends StatelessWidget {
           shape: StadiumBorder(side: BorderSide(color: borderColor)),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
+            autofocus: autofocus,
             mouseCursor: clickCursor(interactive: interactive),
             onTap: enabled ? onTap : null,
             overlayColor: WidgetStateProperty.resolveWith((states) {
@@ -91,21 +102,50 @@ class KalinkaButton extends StatelessWidget {
               }
               return null;
             }),
-            child: Container(
-              width: fullWidth ? double.infinity : null,
-              constraints: BoxConstraints(minHeight: minHeight),
-              padding: EdgeInsets.symmetric(vertical: 8, horizontal: hPad),
-              child: Row(
-                mainAxisSize: fullWidth ? MainAxisSize.max : MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (leading != null) ...[leading!, const SizedBox(width: 8)],
-                  // Flexible lets long labels truncate, but only when the
-                  // width is bounded — intrinsic buttons can sit in unbounded
-                  // Rows, where it would assert.
-                  if (fullWidth) Flexible(child: labelText) else labelText,
-                ],
-              ),
+            child: Stack(
+              children: [
+                if (progress case final progress?)
+                  Positioned.fill(
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: AnimatedFractionallySizedBox(
+                        key: const ValueKey('button-progress'),
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeOut,
+                        widthFactor: progress.clamp(0.0, 1.0),
+                        heightFactor: 1,
+                        child: ColoredBox(
+                          color: variant == KalinkaButtonVariant.neutral
+                              ? KalinkaColors.accent.withValues(alpha: 0.45)
+                              : KalinkaColors.textPrimary.withValues(
+                                  alpha: 0.2,
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                Container(
+                  width: fullWidth ? double.infinity : null,
+                  constraints: BoxConstraints(minHeight: minHeight),
+                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: hPad),
+                  child: Row(
+                    mainAxisSize: fullWidth
+                        ? MainAxisSize.max
+                        : MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (leading != null) ...[
+                        leading!,
+                        const SizedBox(width: 8),
+                      ],
+                      // Flexible lets long labels truncate, but only when the
+                      // width is bounded — intrinsic buttons can sit in
+                      // unbounded Rows, where it would assert.
+                      if (fullWidth) Flexible(child: labelText) else labelText,
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),

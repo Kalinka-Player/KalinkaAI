@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/browse_filters.dart';
@@ -27,6 +29,7 @@ import '../browse_filters/browse_filter_form.dart' show filterTypeLabel;
 import '../browse_filters/filters_match_nothing.dart';
 import '../browse_filters/presentation_toggle.dart';
 import '../browse_rows_shimmer.dart';
+import '../home/catalog_pin_button.dart';
 import '../infinite_list_view.dart';
 import '../loading_shimmer.dart';
 import '../measure_size.dart';
@@ -882,9 +885,62 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     };
   }
 
+  /// The artist header's Pin, which the bar takes over once it has
+  /// scrolled under it.
+  final _artistPin = GlobalKey();
+
+  /// How far down the artist's list the Pin's icon ends, kept for once the
+  /// header has scrolled far enough to be dropped.
+  double? _artistPinEnd;
+  bool? _artistPinGone;
+
+  bool _onArtistScroll(Notification notification) {
+    final (depth, metrics) = switch (notification) {
+      ScrollNotification n => (n.depth, n.metrics),
+      ScrollMetricsNotification n => (n.depth, n.metrics),
+      _ => (-1, null),
+    };
+    if (depth != 0 || metrics == null || metrics.axis != Axis.vertical) {
+      return false;
+    }
+    // Where it sits in the list, not on screen: a scroll is told before
+    // the list is laid out again.
+    final pin = _artistPin.currentContext?.findRenderObject();
+    if (pin is RenderBox && pin.hasSize) {
+      if (RenderAbstractViewport.maybeOf(pin) case final viewport?) {
+        _artistPinEnd =
+            viewport.getOffsetToReveal(pin, 0).offset +
+            (pin.size.height + CatalogPinButton.iconSize) / 2;
+      }
+    }
+    final end = _artistPinEnd;
+    final gone = end != null && metrics.pixels >= end;
+    if (gone != _artistPinGone) {
+      _artistPinGone = gone;
+      // The bar takes it in the frame the page lets it go, unless that frame
+      // is being built.
+      if (SchedulerBinding.instance.schedulerPhase ==
+          SchedulerPhase.persistentCallbacks) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) widget.onHeaderCollapsed?.call(gone);
+        });
+      } else {
+        widget.onHeaderCollapsed?.call(gone);
+      }
+    }
+    return false;
+  }
+
   /// An artist's page: who they are, then their releases or their tracks,
   /// a tab apiece only where they have both.
   Widget _buildArtist(CatalogPage page, SearchSessionState visit) {
+    return NotificationListener<Notification>(
+      onNotification: _onArtistScroll,
+      child: _buildArtistListing(page, visit),
+    );
+  }
+
+  Widget _buildArtistListing(CatalogPage page, SearchSessionState visit) {
     final relations = ref.watch(artistRelationsProvider(page.id!));
     final notifier = ref.read(searchSessionProvider.notifier);
     final available =
@@ -910,6 +966,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         ArtistPageHeader(
           page: page,
           presentation: releases && relations.hasValue ? layout : null,
+          pinKey: _artistPin,
         ),
         if (available.length > 1)
           ArtistRelationTabs(

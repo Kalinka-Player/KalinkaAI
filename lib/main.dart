@@ -18,6 +18,7 @@ import 'providers/network_setup_api.dart';
 import 'providers/pinned_server.dart';
 import 'widgets/kalinka_toast_overlay.dart';
 import 'widgets/foreground_volume_overlay.dart';
+import 'widgets/receiver_approval.dart';
 
 bool get networkActivation =>
     kIsWeb && Uri.base.queryParameters['setup'] == 'network';
@@ -110,7 +111,7 @@ class KalinkaApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       builder: (_, child) =>
           ForegroundVolumeOverlay(child: KalinkaToastHost(child: child!)),
-      home: const _Home(),
+      home: const ReceiverApprovalHost(child: _Home()),
     );
   }
 }

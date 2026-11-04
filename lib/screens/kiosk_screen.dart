@@ -31,6 +31,7 @@ import '../widgets/kiosk/kiosk_track_text.dart';
 import '../widgets/kiosk/kiosk_transport.dart';
 import '../widgets/kiosk/kiosk_volume_control.dart';
 import '../widgets/measure_size.dart';
+import '../widgets/source_badge.dart' show sourceBadgeVisible;
 import '../widgets/transport_button.dart';
 
 /// Full-screen now-playing display, for a screen that shows what plays
@@ -845,13 +846,9 @@ class _PlayingView extends ConsumerWidget {
           : (track.year != null
                 ? '${track.album} · ${track.year}'
                 : track.album),
-      format: _format(ref),
-      source: sourceId,
-      sourceTitle: sourceId == null
-          ? null
-          : ref.watch(
-              sourceDisplayInfoProvider.select((m) => m[sourceId]?.title),
-            ),
+      stream: _stream(ref, sourceId),
+      // The tile shows where the player's badge would.
+      source: sourceBadgeVisible(ref, track.id) ? sourceId : null,
     );
     final durationMs = ref.watch(nowPlayingDurationMsProvider);
     final fill = layout == _Layout.fill;
@@ -1009,21 +1006,23 @@ class _PlayingView extends ConsumerWidget {
     }
   }
 
-  /// `FLAC 24-bit 96 kHz`, or null before anything is known.
-  String? _format(WidgetRef ref) {
+  /// `Qobuz · FLAC 24-bit • 96 kHz`, or null before anything is known.
+  String? _stream(WidgetRef ref, String? sourceId) {
     final stream = ref.watch(
       playerStateProvider.select(
         (s) => (
           mime: mimeTypeLabel(s.mimeType),
-          quality: audioQualityLabel(s.audioInfo, separator: ' '),
+          quality: audioQualityLabel(s.audioInfo),
         ),
       ),
     );
-    final parts = [
-      if (stream.mime.isNotEmpty) stream.mime,
-      if (stream.quality.isNotEmpty) stream.quality,
-    ];
-    return parts.isEmpty ? null : parts.join(' ');
+    final sourceTitle = sourceId == null
+        ? null
+        : ref.watch(
+            sourceDisplayInfoProvider.select((m) => m[sourceId]?.title),
+          );
+    final line = streamAttribution(sourceTitle, stream.mime, stream.quality);
+    return line.isEmpty ? null : line;
   }
 }
 

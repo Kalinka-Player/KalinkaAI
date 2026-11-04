@@ -40,6 +40,9 @@ class PluginCatalog {
 }
 
 class CatalogPlugin {
+  /// False for installed modules discovered only on the connected server.
+  /// They have settings, but no catalog publisher or package metadata.
+  final bool listed;
   final String id, name, description, type, tier, maturity, delivery;
   final String creator, license, distribution;
 
@@ -56,6 +59,7 @@ class CatalogPlugin {
   final PluginCompatibility? compatibility;
 
   const CatalogPlugin({
+    this.listed = true,
     required this.id,
     required this.name,
     required this.description,
@@ -113,7 +117,7 @@ class CatalogPlugin {
 
   /// Part of the server install rather than a package of its own.
   bool get bundled => delivery == 'bundle';
-  bool get unofficial => tier != 'official';
+  bool get unofficial => listed && tier != 'official';
 
   /// Official and stable first, then unofficial, experimental, deprecated.
   int get rank => switch (maturity) {

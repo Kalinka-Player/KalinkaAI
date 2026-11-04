@@ -73,6 +73,7 @@ IconData pluginIcon(CatalogPlugin plugin, PluginState state) =>
     iconNamed(state.live?.icon) ??
     switch (plugin.id) {
       'localfiles' => Icons.folder_outlined,
+      'bluetooth' => Icons.bluetooth,
       'qobuz' => Icons.headphones_outlined,
       'spotify' => Icons.speaker_phone_outlined,
       'upnp' => Icons.cast,
@@ -267,37 +268,19 @@ class PluginRow extends StatelessWidget {
                             button: true,
                             child: SizedBox(
                               height: 40,
-                              child: KalinkaButton(
-                                key: ValueKey(
+                              child: _actionButton(
+                                ValueKey(
                                   primary.operation == PluginOperation.update
                                       ? 'plugin-row-update-${plugin.id}'
                                       : 'plugin-install-${plugin.id}',
                                 ),
-                                label: primary.label,
-                                size: KalinkaButtonSize.compact,
+                                primary,
+                                state,
+                                actions,
                                 // Under the text it takes the width there,
                                 // and cuts a long label short rather than
                                 // overflow.
                                 fullWidth: !beside,
-                                leading: state.operation == primary.operation
-                                    ? const SizedBox.square(
-                                        dimension: 12,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 1.6,
-                                          color: KalinkaColors.textPrimary,
-                                        ),
-                                      )
-                                    : null,
-                                // Busy rather than dimmed while it runs;
-                                // dimmed while another operation does.
-                                enabled:
-                                    primary.reason == null &&
-                                    (state.operation == null ||
-                                        state.operation == primary.operation),
-                                onTap: state.operation == null
-                                    ? () =>
-                                          actions.onOperation(primary.operation)
-                                    : null,
                               ),
                             ),
                           );
@@ -355,8 +338,9 @@ class PluginRow extends StatelessWidget {
   }
 }
 
-/// Whether Add or Update, at its widest, leaves the text beside it room to
-/// read. Measured at its widest so it stays put once the operation starts.
+/// Whether Install or Update, at its widest, leaves the text beside it room
+/// to read. Measured at its widest so it stays put once the operation starts,
+/// or fails.
 bool _buttonFitsBeside(
   BuildContext context,
   double width,
@@ -381,9 +365,9 @@ bool _buttonFitsBeside(
 
   final (idle, busy) = operation == PluginOperation.update
       ? ('Update', 'Updating…')
-      : ('Add', 'Adding…');
-  // Padding and border, and the spinner beside the busy label.
-  final button = math.max(widthOf(idle), widthOf(busy) + 20) + 30;
+      : ('Install', 'Installing…');
+  // Padding and border.
+  final button = [idle, busy, 'Failed…'].map(widthOf).reduce(math.max) + 30;
   // The gap before it, the chevron after it, the icon tile before the text.
   return width - 12 - button - 30 - 52 >= scaler.scale(100);
 }
@@ -535,39 +519,98 @@ class PluginNote extends StatelessWidget {
   );
 }
 
+/// An action on a plugin as its button says it: under way, with how far it
+/// has got, failed until the failure is put away, or ready.
+typedef _Action = ({
+  PluginOperation operation,
+  String label,
+  String? reason,
+  bool busy,
+  bool failed,
+});
+
 /// Install for a plugin the server does not have, Update where it has an
 /// older one, with why it is out of reach; null where neither applies.
 /// [brief] leaves the version to the row's status line.
-({PluginOperation operation, String label, String? reason})? _primaryFor(
+_Action? _primaryFor(
   CatalogPlugin plugin,
   PluginState state,
   bool canManage, {
   bool brief = false,
 }) {
+  if (!plugin.listed) return null;
   final PluginOperation operation;
-  final String label;
+  final String idle;
   String? reason;
   if (!state.installed) {
     // Comes with the server, never as a package of its own.
     if (plugin.bundled) return null;
     operation = PluginOperation.install;
-    label = state.operation == operation ? 'Adding…' : 'Add';
+    idle = 'Install';
     if (plugin.compatibility?.status == 'blocked') {
       reason = 'No release meets this server\'s requirements.';
     }
   } else if (state.update case final update?) {
     operation = PluginOperation.update;
-    label = state.operation == operation
-        ? 'Updating…'
-        : brief
-        ? 'Update'
-        : 'Update to ${update.version}';
+    idle = brief ? 'Update' : 'Update to ${update.version}';
   } else {
     return null;
   }
   if (!canManage) reason = 'This server cannot install or update plugins yet.';
-  return (operation: operation, label: label, reason: reason);
+  return _action(operation, idle, state, reason: reason);
 }
+
+_Action _action(
+  PluginOperation operation,
+  String idle,
+  PluginState state, {
+  String? reason,
+}) {
+  final busy = state.operation == operation;
+  final failed = !busy && state.failure?.operation == operation;
+  return (
+    operation: operation,
+    label: busy
+        ? switch (operation) {
+            PluginOperation.install => 'Installing…',
+            PluginOperation.update => 'Updating…',
+            PluginOperation.uninstall => 'Uninstalling…',
+          }
+        : failed
+        ? 'Failed…'
+        : idle,
+    reason: reason,
+    busy: busy,
+    failed: failed,
+  );
+}
+
+/// The button for an action: greyed out with its progress filling it from
+/// the left while it runs, "Failed…" in amber once it has — a tap tries
+/// again — and otherwise the action itself, dimmed while another one runs.
+KalinkaButton _actionButton(
+  Key key,
+  _Action action,
+  PluginState state,
+  PluginEntryActions actions, {
+  KalinkaButtonVariant variant = KalinkaButtonVariant.accent,
+  KalinkaButtonSize size = KalinkaButtonSize.compact,
+  bool fullWidth = false,
+}) => KalinkaButton(
+  key: key,
+  label: action.label,
+  size: size,
+  fullWidth: fullWidth,
+  variant: action.busy || action.failed
+      ? KalinkaButtonVariant.neutral
+      : variant,
+  progress: action.busy ? state.progress : null,
+  labelColor: action.failed ? KalinkaColors.statusPending : null,
+  enabled: action.reason == null && (state.operation == null || action.busy),
+  onTap: action.busy || state.operation != null
+      ? null
+      : () => actions.onOperation(action.operation),
+);
 
 /// What acts on an installed plugin, at the top of its configuration page:
 /// its switch, and away from it Update where the server has a newer release
@@ -639,18 +682,17 @@ class PluginControls extends StatelessWidget {
           runSpacing: 8,
           children: [
             toggle,
-            if (update != null || !plugin.bundled)
+            if (plugin.listed && (update != null || !plugin.bundled))
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
                   if (update != null)
-                    KalinkaButton(
-                      key: ValueKey('plugin-update-${plugin.id}'),
-                      label: update.label,
-                      size: KalinkaButtonSize.compact,
-                      enabled: update.reason == null && state.operation == null,
-                      onTap: () => actions.onOperation(PluginOperation.update),
+                    _actionButton(
+                      ValueKey('plugin-update-${plugin.id}'),
+                      update,
+                      state,
+                      actions,
                     ),
                   // Part of the server install, so it goes with the server.
                   if (!plugin.bundled)
@@ -658,23 +700,21 @@ class PluginControls extends StatelessWidget {
                       message: actions.canManage
                           ? 'Remove ${plugin.name} from the server'
                           : 'This server cannot remove plugins yet',
-                      child: KalinkaButton(
-                        key: ValueKey('plugin-uninstall-${plugin.id}'),
-                        label: state.operation == PluginOperation.uninstall
-                            ? 'Uninstalling…'
-                            : 'Uninstall',
+                      child: _actionButton(
+                        ValueKey('plugin-uninstall-${plugin.id}'),
+                        _uninstall(state, actions),
+                        state,
+                        actions,
                         variant: KalinkaButtonVariant.neutral,
-                        size: KalinkaButtonSize.compact,
-                        enabled: actions.canManage && state.operation == null,
-                        onTap: () =>
-                            actions.onOperation(PluginOperation.uninstall),
                       ),
                     ),
                 ],
               ),
           ],
         ),
-        if (!actions.canManage && (update != null || !plugin.bundled))
+        if (plugin.listed &&
+            !actions.canManage &&
+            (update != null || !plugin.bundled))
           const Padding(
             padding: EdgeInsets.only(top: 10),
             child: PluginNote(
@@ -702,33 +742,35 @@ Widget? pluginAboutAction(
   PluginState state,
   PluginEntryActions actions,
 ) {
-  if (plugin.bundled) return null;
+  if (!plugin.listed || plugin.bundled) return null;
   if (state.installed) {
     return Tooltip(
       message: actions.canManage
           ? 'Remove ${plugin.name} from the server'
           : 'This server cannot remove plugins yet',
-      child: KalinkaButton(
-        key: ValueKey('about-uninstall-${plugin.id}'),
-        label: state.operation == PluginOperation.uninstall
-            ? 'Uninstalling…'
-            : 'Uninstall',
+      child: _actionButton(
+        ValueKey('about-uninstall-${plugin.id}'),
+        _uninstall(state, actions),
+        state,
+        actions,
         variant: KalinkaButtonVariant.neutral,
-        size: KalinkaButtonSize.compact,
-        enabled: actions.canManage && state.operation == null,
-        onTap: () => actions.onOperation(PluginOperation.uninstall),
       ),
     );
   }
-  final primary = _primaryFor(plugin, state, actions.canManage)!;
-  return KalinkaButton(
-    key: ValueKey('about-install-${plugin.id}'),
-    label: primary.label,
-    size: KalinkaButtonSize.compact,
-    enabled: primary.reason == null && state.operation == null,
-    onTap: () => actions.onOperation(PluginOperation.install),
+  return _actionButton(
+    ValueKey('about-install-${plugin.id}'),
+    _primaryFor(plugin, state, actions.canManage)!,
+    state,
+    actions,
   );
 }
+
+_Action _uninstall(PluginState state, PluginEntryActions actions) => _action(
+  PluginOperation.uninstall,
+  'Uninstall',
+  state,
+  reason: actions.canManage ? null : 'This server cannot remove plugins yet.',
+);
 
 /// The foot of the About page: Update, where the server has a newer release.
 class _UpdateAction extends StatelessWidget {
@@ -749,12 +791,13 @@ class _UpdateAction extends StatelessWidget {
     }
     return Padding(
       padding: const EdgeInsets.only(top: 16),
-      child: KalinkaButton(
-        key: ValueKey('about-update-${plugin.id}'),
-        label: primary!.label,
+      child: _actionButton(
+        ValueKey('about-update-${plugin.id}'),
+        primary!,
+        state,
+        actions,
+        size: KalinkaButtonSize.normal,
         fullWidth: true,
-        enabled: primary.reason == null && state.operation == null,
-        onTap: () => actions.onOperation(PluginOperation.update),
       ),
     );
   }

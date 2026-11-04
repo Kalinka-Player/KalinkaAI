@@ -1,0 +1,884 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../data_model/receiver_control.dart';
+import '../providers/connection_settings_provider.dart';
+import '../providers/monotonic_clock_provider.dart';
+import '../providers/receiver_provider.dart';
+import '../theme/app_theme.dart';
+import 'home/source_button_style.dart';
+import 'kalinka_bottom_sheet.dart';
+import 'kalinka_button.dart';
+import 'kalinka_dialog.dart';
+
+IconData receiverIcon(String kind) => switch (kind) {
+  'bluetooth' => Icons.bluetooth,
+  'airplay' => Icons.airplay,
+  _ => Icons.speaker_outlined,
+};
+
+Future<void> showReceiverPanel(BuildContext context) =>
+    showKalinkaBottomSheet<void>(
+      context: context,
+      mayFillScreen: true,
+      contentBuilder: (_) => const ReceiverPanel(),
+    );
+
+/// Uses the existing source strip's neutral, 48dp interaction target.
+class ConnectSourceButton extends ConsumerWidget {
+  const ConnectSourceButton({super.key});
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(enabledReceiversProvider).isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return TextButton.icon(
+      key: const ValueKey('connect-source-button'),
+      style: homeSourceButtonStyle,
+      onPressed: () => showReceiverPanel(context),
+      icon: const Icon(
+        Icons.phonelink_ring_outlined,
+        size: 20,
+        applyTextScaling: true,
+      ),
+      label: const Text('Connect'),
+    );
+  }
+}
+
+/// Native menu anchoring keeps the compact panel beside its sidebar entry.
+class ReceiverPopover extends StatelessWidget {
+  final String receiverId;
+  final Widget Function(VoidCallback open) builder;
+  const ReceiverPopover({
+    super.key,
+    required this.receiverId,
+    required this.builder,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final viewport = MediaQuery.sizeOf(context);
+    final width = (viewport.width - 32).clamp(0.0, 380.0);
+    return MenuAnchor(
+      consumeOutsideTap: true,
+      style: MenuStyle(
+        alignment: AlignmentDirectional.topEnd,
+        backgroundColor: const WidgetStatePropertyAll(
+          KalinkaColors.surfaceRaised,
+        ),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: KalinkaColors.borderDefault),
+          ),
+        ),
+      ),
+      builder: (context, controller, _) => builder(
+        () => controller.isOpen ? controller.close() : controller.open(),
+      ),
+      menuChildren: [
+        Builder(
+          builder: (context) => SizedBox(
+            width: width,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: viewport.height - 48),
+              child: ReceiverPanel(
+                receiverId: receiverId,
+                onClose: () => MenuController.maybeOf(context)?.close(),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class ReceiverPanel extends ConsumerWidget {
+  final String? receiverId;
+  final VoidCallback? onClose;
+  const ReceiverPanel({super.key, this.receiverId, this.onClose});
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final inventory = ref.watch(receiversProvider);
+    final connection = ref.watch(connectionSettingsProvider);
+    final receivers = ref
+        .watch(enabledReceiversProvider)
+        .where((r) => receiverId == null || r.id == receiverId)
+        .toList();
+    return Material(
+      type: MaterialType.transparency,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 8, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    receiverId != null && receivers.isNotEmpty
+                        ? receivers.first.title
+                        : 'Play from a device',
+                    style: KalinkaTextStyles.settingsPageTitle,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: onClose ?? () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              primary: false,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Receive audio on ${connection.name}',
+                    style: KalinkaTextStyles.trayRowSublabel,
+                  ),
+                  if (inventory.error != null) ...[
+                    Text(
+                      inventory.error!,
+                      style: KalinkaTextStyles.trayRowSublabel,
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          ref.read(receiversProvider.notifier).refresh(),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                  if (receivers.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Text(
+                        'No enabled receivers. Manage plugins in Configuration.',
+                      ),
+                    ),
+                  for (var i = 0; i < receivers.length; i++) ...[
+                    if (i > 0)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Divider(
+                          height: 1,
+                          color: KalinkaColors.borderDefault,
+                        ),
+                      ),
+                    _ReceiverDetails(
+                      key: ValueKey('${connection.address}:${receivers[i].id}'),
+                      receiver: receivers[i],
+                      available: inventory.error == null,
+                      showTitle: receiverId == null,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReceiverDetails extends ConsumerStatefulWidget {
+  final ReceiverSnapshot receiver;
+  final bool available, showTitle;
+  const _ReceiverDetails({
+    super.key,
+    required this.receiver,
+    required this.available,
+    required this.showTitle,
+  });
+  @override
+  ConsumerState<_ReceiverDetails> createState() => _ReceiverDetailsState();
+}
+
+class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
+    with WidgetsBindingObserver {
+  Timer? _timer;
+  String? _pairingWindowId;
+  int? _pairingDeadlineUs;
+  int _pairingSeconds = 0;
+  bool _foreground = true;
+  bool _busy = false;
+  bool _expanded = false;
+  String? _error, _password;
+  String? _busyPeerId;
+  int _secretEpoch = 0;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _syncPairingCountdown();
+  }
+
+  void _syncPairingCountdown() {
+    final pairing = widget.receiver.pairing;
+    if (pairing == null) {
+      _pairingWindowId = null;
+      _pairingDeadlineUs = null;
+    } else {
+      final observedDeadline =
+          ref.read(monotonicClockProvider).elapsedMicroseconds +
+          pairing.remainingMicroseconds;
+      // A window cannot be extended. Keep its local deadline through periodic
+      // snapshots, while accepting an earlier expiry or a replacement window.
+      if (_pairingWindowId != pairing.id ||
+          _pairingDeadlineUs == null ||
+          observedDeadline < _pairingDeadlineUs!) {
+        _pairingDeadlineUs = observedDeadline;
+      }
+      _pairingWindowId = pairing.id;
+    }
+    _schedulePairingTick();
+  }
+
+  void _schedulePairingTick() {
+    _timer?.cancel();
+    _timer = null;
+    final remaining = _pairingDeadlineUs == null
+        ? 0
+        : (_pairingDeadlineUs! -
+                  ref.read(monotonicClockProvider).elapsedMicroseconds)
+              .clamp(0, 120 * Duration.microsecondsPerSecond);
+    _pairingSeconds = (remaining / Duration.microsecondsPerSecond).ceil();
+    if (!widget.available || !_foreground || _pairingSeconds == 0) return;
+    final untilNextSecond =
+        remaining - (_pairingSeconds - 1) * Duration.microsecondsPerSecond;
+    // Wake just after the boundary so timer rounding cannot repeat a number
+    // and then skip the following one. Recalculate after every tick.
+    _timer = Timer(Duration(microseconds: untilNextSecond + 1000), () {
+      if (mounted) setState(_schedulePairingTick);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _ReceiverDetails oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncPairingCountdown();
+    if (!widget.available ||
+        !widget.receiver.passwordRevealAvailable ||
+        !widget.receiver.passwordRequired ||
+        widget.receiver.state != 'ready') {
+      _password = null;
+      _secretEpoch++;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (mounted) {
+      setState(() {
+        _foreground = state == AppLifecycleState.resumed;
+        if (!_foreground) {
+          _password = null;
+          _secretEpoch++;
+        }
+        _schedulePairingTick();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    _password = null;
+    super.dispose();
+  }
+
+  Future<void> _run(Future<void> Function() operation, {String? peerId}) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _busyPeerId = peerId;
+      _error = null;
+    });
+    try {
+      await operation();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Could not complete the action. Check the refreshed state and try again.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _busyPeerId = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _command(
+    String command, [
+    Map<String, dynamic> target = const {},
+  ]) => _run(
+    () => ref.read(receiversProvider.notifier).command(widget.receiver, {
+      'command': command,
+      ...target,
+    }),
+    peerId:
+        target['peer_id'] as String? ??
+        widget.receiver.sessions
+            .where((session) => session.id == target['session_id'])
+            .firstOrNull
+            ?.peerId,
+  );
+  Widget _spinner(String label) => SizedBox.square(
+    dimension: 24,
+    child: CircularProgressIndicator(
+      strokeWidth: 2,
+      color: KalinkaColors.textSecondary,
+      semanticsLabel: label,
+    ),
+  );
+  Widget _button(String label, VoidCallback? action) => OutlinedButton(
+    onPressed: widget.available && !_busy ? action : null,
+    style: OutlinedButton.styleFrom(
+      minimumSize: const Size(48, 48),
+      foregroundColor: KalinkaColors.textPrimary,
+    ),
+    child: Text(label),
+  );
+  bool _canPair(ReceiverSnapshot receiver) => receiver.can('open_pairing');
+
+  Future<void> _reveal() async {
+    if (_password != null) {
+      setState(() {
+        _password = null;
+        _secretEpoch++;
+      });
+      return;
+    }
+    final epoch = _secretEpoch;
+    await _run(() async {
+      final password = await ref
+          .read(receiversProvider.notifier)
+          .revealPassword(widget.receiver);
+      if (mounted &&
+          epoch == _secretEpoch &&
+          widget.available &&
+          widget.receiver.passwordRevealAvailable &&
+          widget.receiver.passwordRequired &&
+          widget.receiver.state == 'ready') {
+        setState(() => _password = password);
+      }
+    });
+  }
+
+  Widget _airplay(ReceiverSnapshot receiver) {
+    final shown = _password != null;
+    final canReveal =
+        widget.available &&
+        receiver.state == 'ready' &&
+        receiver.passwordRequired &&
+        receiver.passwordRevealAvailable;
+    final status = !receiver.passwordRequired
+        ? 'No password required'
+        : canReveal
+        ? 'Password required - click to ${shown ? 'hide' : 'reveal'}'
+        : 'Password required';
+    final name = receiver.effectiveName ?? receiver.title;
+    final serverName = ref.watch(connectionSettingsProvider).name;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          expanded: receiver.passwordRequired ? shown : null,
+          child: InkWell(
+            onTap: canReveal && !_busy ? _reveal : null,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  Icon(receiverIcon(receiver.kind), size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.showTitle ? receiver.title : name,
+                          style: KalinkaTextStyles.trayRowLabel,
+                        ),
+                        if (widget.showTitle && name != serverName)
+                          Text(name, style: KalinkaTextStyles.trayRowSublabel),
+                        Text(status, style: KalinkaTextStyles.trayRowSublabel),
+                      ],
+                    ),
+                  ),
+                  if (receiver.passwordRequired) ...[
+                    const SizedBox(width: 12),
+                    if (_busy)
+                      _spinner('Revealing password')
+                    else
+                      Icon(
+                        shown ? Icons.expand_less : Icons.expand_more,
+                        size: 24,
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (shown)
+          Padding(
+            padding: const EdgeInsets.only(left: 36, top: 8, bottom: 12),
+            child: SelectableText(
+              _password!,
+              style: KalinkaFonts.mono(
+                fontSize: 28,
+                fontWeight: FontWeight.w500,
+                color: KalinkaColors.textPrimary,
+                height: 1.4,
+              ),
+            ),
+          ),
+        if (receiver.message != null)
+          Text(receiver.message!, style: KalinkaTextStyles.trayRowSublabel),
+        if (receiver.state != 'ready')
+          Text(
+            receiver.state == 'starting'
+                ? 'Starting receiver…'
+                : 'Receiver unavailable',
+            style: KalinkaTextStyles.trayRowSublabel,
+          ),
+        for (final session in receiver.sessions)
+          Text(
+            '${session.name} · Connected',
+            style: KalinkaTextStyles.trayRowSublabel,
+          ),
+        if (_error != null)
+          Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
+      ],
+    );
+  }
+
+  Widget _compact(ReceiverSnapshot r) {
+    final session = r.sessions.firstOrNull;
+    final status = r.state != 'ready'
+        ? (r.message ?? 'Receiver ${r.state}')
+        : session != null
+        ? '${session.name} · Connected'
+        : r.passwordRequired
+        ? 'Password required'
+        : 'Not connected';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = true),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Icon(receiverIcon(r.kind), size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(r.title, style: KalinkaTextStyles.trayRowLabel),
+                      Text(status, style: KalinkaTextStyles.trayRowSublabel),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Icon(Icons.chevron_right, size: 24),
+              ],
+            ),
+          ),
+        ),
+        if (_error != null)
+          Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
+        if (_busy) const LinearProgressIndicator(),
+      ],
+    );
+  }
+
+  Future<void> _forget(ReceiverPeer peer) async {
+    final confirmed = await showKalinkaDialog<bool>(
+      context: context,
+      builder: (context) => KalinkaDialog(
+        side: KalinkaDialogSide.browsing,
+        centered: true,
+        title: 'Forget ${peer.name}?',
+        message: 'Removes the Bluetooth pairing. Pair again to reconnect.',
+        actions: [
+          KalinkaButton(
+            label: 'Cancel',
+            variant: KalinkaButtonVariant.neutral,
+            fullWidth: true,
+            autofocus: true,
+            onTap: () => Navigator.pop(context, false),
+          ),
+          KalinkaButton(
+            label: 'Forget',
+            fullWidth: true,
+            onTap: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await _command('forget_device', {'peer_id': peer.id});
+    }
+  }
+
+  Widget _bluetooth(ReceiverSnapshot r) {
+    final pairing = r.pairing;
+    final remaining = _pairingSeconds;
+    final peers = r.peers.where((p) => p.paired).toList();
+    final serverName = ref.watch(connectionSettingsProvider).name;
+    final name = r.effectiveName ?? r.title;
+    final title = Row(
+      children: [
+        if (widget.showTitle) ...[
+          Icon(receiverIcon(r.kind), size: 24),
+          const SizedBox(width: 12),
+        ],
+        Expanded(
+          child: Text(
+            widget.showTitle ? r.title : name,
+            style: KalinkaTextStyles.trayRowLabel,
+          ),
+        ),
+      ],
+    );
+    final pairControl = pairing == null
+        ? Stack(
+            alignment: Alignment.center,
+            children: [
+              Opacity(
+                opacity: _busy && _busyPeerId == null ? 0 : 1,
+                child: KalinkaButton(
+                  key: const ValueKey('receiver-pair-new'),
+                  label: 'Pair new',
+                  size: KalinkaButtonSize.compact,
+                  enabled: widget.available && !_busy && _canPair(r),
+                  onTap: () => _command('open_pairing'),
+                ),
+              ),
+              if (_busy && _busyPeerId == null) _spinner('Starting pairing'),
+            ],
+          )
+        : Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                widget.available
+                    ? remaining > 0
+                          ? 'Pairing · ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}'
+                          : 'Pairing ending…'
+                    : 'Pairing status unavailable',
+                style: KalinkaTextStyles.trayRowSublabel,
+              ),
+              IconButton(
+                tooltip: 'Stop pairing',
+                onPressed: widget.available && !_busy && r.can('close_pairing')
+                    ? () => _command('close_pairing', {'window_id': pairing.id})
+                    : null,
+                icon: _busy && _busyPeerId == null
+                    ? _spinner('Stopping pairing')
+                    : const Icon(Icons.close, size: 18),
+                color: KalinkaColors.textSecondary,
+              ),
+            ],
+          );
+    // MenuAnchor measures intrinsic sizes, so use the known panel width.
+    final width = (MediaQuery.sizeOf(context).width - 40).clamp(0.0, 340.0);
+    final roomy = width >= 320 * MediaQuery.textScalerOf(context).scale(1);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (roomy)
+            Row(
+              children: [
+                Expanded(child: title),
+                pairControl,
+              ],
+            )
+          else ...[
+            title,
+            Align(alignment: Alignment.centerRight, child: pairControl),
+          ],
+          if (widget.showTitle && name != serverName)
+            Text(name, style: KalinkaTextStyles.trayRowSublabel),
+          if (r.message != null)
+            Text(r.message!, style: KalinkaTextStyles.trayRowSublabel),
+          if (r.state != 'ready')
+            Text(
+              r.state == 'starting'
+                  ? 'Starting receiver…'
+                  : 'Receiver unavailable',
+              style: KalinkaTextStyles.trayRowSublabel,
+            ),
+          if (pairing != null && widget.available && peers.isEmpty)
+            Text(
+              'Choose $name in Bluetooth settings.',
+              style: KalinkaTextStyles.trayRowSublabel,
+            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 4),
+            child: Text(
+              peers.isEmpty ? 'No paired devices' : 'Paired devices',
+              style: KalinkaTextStyles.trayRowSublabel,
+            ),
+          ),
+          for (final peer in peers) _pairedDevice(r, peer),
+          if (_error != null)
+            Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
+        ],
+      ),
+    );
+  }
+
+  Widget _pairedDevice(ReceiverSnapshot receiver, ReceiverPeer peer) {
+    final session = receiver.sessions
+        .where((s) => s.peerId == peer.id)
+        .firstOrNull;
+    final connected = peer.connected || session != null;
+    final enabled = widget.available && !_busy;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.devices_outlined,
+            size: 24,
+            color: KalinkaColors.textPrimary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(peer.name, style: KalinkaTextStyles.trayRowLabel),
+                Row(
+                  children: [
+                    if (connected) ...[
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: KalinkaColors.statusOnline,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Flexible(
+                      child: Text(
+                        connected ? 'Connected' : 'Paired',
+                        style: KalinkaTextStyles.trayRowSublabel,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (receiver.offers('forget_device') || session != null)
+            PopupMenuButton<String>(
+              tooltip: 'Device options for ${peer.name}',
+              enabled: enabled,
+              icon: _busy && _busyPeerId == peer.id
+                  ? _spinner('Updating ${peer.name}')
+                  : const Icon(
+                      Icons.more_vert,
+                      size: 24,
+                      color: KalinkaColors.textSecondary,
+                    ),
+              constraints: const BoxConstraints(minWidth: 168, maxWidth: 280),
+              color: KalinkaColors.surfaceRaised,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: KalinkaColors.borderDefault),
+              ),
+              onSelected: (action) {
+                if (action == 'forget') {
+                  _forget(peer);
+                } else if (action == 'disconnect' && session != null) {
+                  _command('disconnect_audio', {'session_id': session.id});
+                }
+              },
+              itemBuilder: (_) => [
+                if (session != null && receiver.offers('disconnect_audio'))
+                  PopupMenuItem(
+                    value: 'disconnect',
+                    enabled: receiver.can('disconnect_audio'),
+                    child: Text(
+                      'Disconnect',
+                      style: KalinkaTextStyles.trayRowLabel,
+                    ),
+                  ),
+                if (receiver.offers('forget_device'))
+                  PopupMenuItem(
+                    value: 'forget',
+                    enabled: receiver.can('forget_device'),
+                    child: Text(
+                      'Forget',
+                      style: KalinkaTextStyles.trayRowLabel,
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.receiver;
+    if (r.kind == 'bluetooth') return _bluetooth(r);
+    if (r.kind == 'airplay') return _airplay(r);
+    final pairing = r.pairing;
+    if (widget.showTitle && !_expanded && pairing == null) return _compact(r);
+    final remaining = _pairingSeconds;
+    final pairingOpen = widget.available && pairing != null && remaining > 0;
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.showTitle)
+            Row(
+              children: [
+                Icon(receiverIcon(r.kind), size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(r.title, style: KalinkaTextStyles.trayRowLabel),
+                ),
+              ],
+            ),
+          const SizedBox(height: 8),
+          Text(
+            r.effectiveName ?? r.title,
+            style: KalinkaTextStyles.trayRowLabel,
+          ),
+          if (r.message != null)
+            Text(r.message!, style: KalinkaTextStyles.trayRowSublabel),
+          if (r.state != 'ready')
+            Text(switch (r.state) {
+              'starting' => 'Starting receiver…',
+              'stopping' => 'Stopping receiver…',
+              _ => 'Receiver unavailable',
+            }, style: KalinkaTextStyles.trayRowSublabel),
+          if (r.offers('open_pairing')) ...[
+            if (pairingOpen) ...[
+              Text(
+                'Visible as ${r.effectiveName ?? r.title} · ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}',
+                style: KalinkaTextStyles.trayRowSublabel,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Open Bluetooth settings on your device and select ${r.effectiveName ?? r.title}.',
+                style: KalinkaTextStyles.trayRowSublabel,
+              ),
+              const SizedBox(height: 12),
+              _button(
+                'Stop pairing',
+                r.can('close_pairing')
+                    ? () => _command('close_pairing', {'window_id': pairing.id})
+                    : null,
+              ),
+            ] else ...[
+              if (r.sessions.isEmpty)
+                Text('Not connected', style: KalinkaTextStyles.trayRowSublabel),
+              const SizedBox(height: 8),
+              _button(
+                r.sessions.isEmpty ? 'Pair a device' : 'Pair another device',
+                _canPair(r) ? () => _command('open_pairing') : null,
+              ),
+              Text(
+                'Visible for 2 minutes',
+                style: KalinkaTextStyles.trayRowSublabel,
+              ),
+            ],
+          ] else if (r.instructions.isNotEmpty)
+            Text(r.instructions, style: KalinkaTextStyles.trayRowSublabel),
+          if (r.passwordRequired) ...[
+            const SizedBox(height: 8),
+            Text(
+              r.passwordRequired ? 'Password required' : 'No password required',
+              style: KalinkaTextStyles.trayRowSublabel,
+            ),
+            if (_password != null)
+              SelectableText(
+                _password!,
+                style: KalinkaFonts.mono(fontSize: 16),
+              ),
+            if (r.passwordRequired)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed:
+                      !widget.available || _busy || !r.passwordRevealAvailable
+                      ? null
+                      : () {
+                          _reveal();
+                        },
+                  style: TextButton.styleFrom(
+                    foregroundColor: KalinkaColors.textPrimary,
+                  ),
+                  child: Text(
+                    _password == null ? 'Show password' : 'Hide password',
+                  ),
+                ),
+              ),
+          ],
+          for (final session in r.sessions)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(session.name, style: KalinkaTextStyles.trayRowLabel),
+                  Text(
+                    session.playing ? 'Connected · Playing' : 'Connected',
+                    style: KalinkaTextStyles.trayRowSublabel,
+                  ),
+                  if (r.offers('disconnect_audio'))
+                    TextButton(
+                      onPressed:
+                          widget.available &&
+                              !_busy &&
+                              r.can('disconnect_audio')
+                          ? () => _command('disconnect_audio', {
+                              'session_id': session.id,
+                            })
+                          : null,
+                      child: const Text('Disconnect'),
+                    ),
+                ],
+              ),
+            ),
+          if (_error != null)
+            Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
+          if (_busy) const LinearProgressIndicator(),
+        ],
+      ),
+    );
+  }
+}

@@ -145,8 +145,14 @@ class TapHighlight extends StatefulWidget {
 
   /// How far in from its own edges the mark stops. A full-bleed row keeps its
   /// whole width tappable but marks only as wide as the rule between rows, so
-  /// the two line up; a control already inset by its sheet takes none.
+  /// the two line up; a control already inset by its sheet takes none. A
+  /// negative one reaches out past the edges instead, round a line of text.
   final double inset;
+
+  /// Whether the control takes keyboard focus, lit while it has it and
+  /// tapped by Enter or Space. Off for rows, whose own controls take the
+  /// focus; on for a link standing in text.
+  final bool focusable;
 
   const TapHighlight({
     super.key,
@@ -154,6 +160,7 @@ class TapHighlight extends StatefulWidget {
     required this.onTap,
     this.borderRadius,
     this.inset = 0,
+    this.focusable = false,
   });
 
   @override
@@ -162,10 +169,15 @@ class TapHighlight extends StatefulWidget {
 
 class _TapHighlightState extends State<TapHighlight> {
   bool _hovering = false;
+  bool _focused = false;
   bool _pressed = false;
 
   void _hover(bool value) {
     if (value != _hovering) setState(() => _hovering = value);
+  }
+
+  void _focus(bool value) {
+    if (value != _focused) setState(() => _focused = value);
   }
 
   void _press(bool value) {
@@ -179,11 +191,11 @@ class _TapHighlightState extends State<TapHighlight> {
         ? null
         : _pressed
         ? _kPressed
-        : _hovering
+        : _hovering || _focused
         ? _kHovered
         : null;
 
-    return MouseRegion(
+    final control = MouseRegion(
       cursor: clickCursor(interactive: live),
       onEnter: (_) => _hover(true),
       onExit: (_) => _hover(false),
@@ -194,6 +206,7 @@ class _TapHighlightState extends State<TapHighlight> {
         onTapCancel: live ? () => _press(false) : null,
         behavior: HitTestBehavior.opaque,
         child: Stack(
+          clipBehavior: widget.inset < 0 ? Clip.none : Clip.hardEdge,
           children: [
             widget.child,
             Positioned(
@@ -214,6 +227,23 @@ class _TapHighlightState extends State<TapHighlight> {
           ],
         ),
       ),
+    );
+    if (!widget.focusable) return control;
+    Object? activate(Intent _) {
+      widget.onTap?.call();
+      return null;
+    }
+
+    return FocusableActionDetector(
+      enabled: live,
+      onShowFocusHighlight: _focus,
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: activate),
+        ButtonActivateIntent: CallbackAction<ButtonActivateIntent>(
+          onInvoke: activate,
+        ),
+      },
+      child: control,
     );
   }
 }

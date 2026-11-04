@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/connection_state_provider.dart';
 import '../providers/restart_provider.dart';
+import '../providers/modules_state_provider.dart';
+import '../providers/toast_provider.dart';
 import '../providers/server_update_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/upgrade_provider.dart';
@@ -78,10 +80,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (_applying || await refusedAsDemo(context, ref) || !mounted) return;
     setState(() => _applying = true);
     try {
-      final ready = await ref.read(settingsProvider.notifier).readyToApply();
+      final notifier = ref.read(settingsProvider.notifier);
+      final ready = await notifier.readyToApply();
       if (!mounted || !ready) return;
-      setState(() => _restartOverlayOpen = true);
-      ref.read(restartProvider.notifier).executeRestart();
+      if (ref.read(settingsProvider).onlyLiveChanges) {
+        await notifier.applyChanges();
+        await notifier.loadConfig(preserveStagedChanges: true);
+        ref.invalidate(modulesStateProvider);
+      } else {
+        setState(() => _restartOverlayOpen = true);
+        await ref.read(restartProvider.notifier).executeRestart();
+      }
+    } catch (error) {
+      showSafeToast('Could not apply settings: $error');
     } finally {
       if (mounted) setState(() => _applying = false);
     }
@@ -247,11 +258,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   else
                     const Expanded(child: SizedBox.shrink()),
                   // Pending changes, at the foot under the page — only
-                  // actionable while connected, since applying restarts
-                  // the server.
+                  // actionable while connected.
                   PendingChangesBanner(
                     pendingCount: settingsState.pendingCount,
-                    consequence: 'restart required',
+                    consequence: settingsState.onlyLiveChanges
+                        ? null
+                        : 'restart required',
                     blocked: settingsState.hasBlockingIssues,
                     busy: _applying,
                     onDiscard: () =>

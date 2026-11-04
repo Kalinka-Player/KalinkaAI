@@ -142,7 +142,7 @@ Off, keep this order directly on the tab:
 | MANAGEMENT | Restart Kalinka, Network, dashboard, restart streamer, power off streamer, when supported |
 | SUPPORT | Download server logs |
 
-The name is a prominent value, not a duplicate page heading. Its 48dp pencil opens a bottom sheet; Done stages the name, Cancel/Back discards the sheet edit. Apply/restart follows the existing settings flow. Settings reads refresh the connected server's saved label without changing its address or reconnecting.
+The name is a prominent value, not a duplicate page heading. Its 48dp pencil opens a bottom sheet; Done stages the name, Cancel/Back discards the sheet edit. Apply follows the existing settings flow. Fields marked `applies_live` save without restarting Core; mixed changes still use the restart flow. Renaming the streamer can interrupt AirPlay receivers that inherit its name, as the server-provided help explains. Settings reads refresh the connected server's saved label without changing its address or reconnecting.
 
 The address has 16dp side padding, a 4dp label/value gap and 20dp bottom padding. The metadata area has 16dp padding, 8dp between details and 16dp between label/value columns. At less than `280 × textScaler.scale(1)` available width, each detail stacks its label above its value with a 4dp gap. Do not truncate an address or status.
 
@@ -168,3 +168,55 @@ Reuse `SettingsTopBar`, `SettingsToolbar` and `SettingsPageIntro`; do not create
 For changes to this system, check 375dp phone, narrow 320dp, landscape and tablet-panel layouts; normal, 2× and large system text; reduced motion; long plugin/device names; connected and disconnected states; keyboard Back and About; and pending edits on return. Verify the logs options/prepare/save flow and renderer Expert mode still work. Review actual rendered screens with bundled fonts in addition to widget assertions. These checks validate the changed settings surfaces; they are not a claim of an app-wide accessibility audit.
 
 Reference: [UI/UX Pro Max skill](../../../.codex/skills/ui-ux-pro-max/SKILL.md), especially its `references/pro-rules.md` and accessibility, interaction and typography priorities. The repository tokens and shared widgets are the implementation source of truth; update this document with them when the design changes.
+
+
+## Receiver connections
+
+Mobile **Connect** belongs in the existing music-source strip. Wide layouts
+list individual receivers under **Connect** in the sidebar, using compact
+anchored popovers. Show installed, enabled receivers only, independently of
+catalog availability. There is no dedicated Bluetooth header action, large
+Home connection row, or duplicated renderer picker. Enable/disable stays in
+plugin Configuration.
+
+The compact sheet shows actual receiver names and sessions. Bluetooth renders
+**Bluetooth · Pair new**, with a Paired devices label directly below it; no expansion or
+separate audio-permission switch. Pair new uses the shared compact primary
+`KalinkaButton`, with its berry fill and pill shape. Pair opens the backend's two-minute Just Works
+window. The sender may show its normal pairing prompt, but Kalinka needs no
+comparison code or second approval. The backend countdown appears beside Bluetooth while pairing is open. A compact
+Stop pairing action sits beside it. The countdown uses a monotonic deadline per
+window and ticks at each second boundary between backend updates. Delayed
+snapshots do not extend the window or restart the tick phase. Closing the sheet
+leaves pairing running.
+Successful pairing grants audio access automatically. Device rows show an icon, name and Paired/Connected status, with a green dot
+for connected audio. Each row has a vertical ellipsis menu with **Disconnect** for an
+audio session and **Forget** for the bond. Use a generic device icon until the
+server supplies a device type. Forget requires confirmation: it removes shared setup
+pairing too, keeps Wi-Fi configuration and requires re-pairing. Keep 4dp between the Bluetooth controls and the paired-device label, without
+reserved space while pairing. Device names wrap at large text sizes.
+Use the centered `KalinkaDialog` and shared buttons. Cancel is neutral and gets
+initial keyboard focus. Forget uses the berry action style. Keep the message
+short: "Removes the Bluetooth pairing. Pair again to reconnect."
+
+The generic app-wide approval host remains available for controllers which
+actually publish a pending request. It preserves supplied comparison codes,
+explicit decisions and backend cancellation/expiry, including when the panel
+is closed. The current Just Works controller publishes no such requests.
+Commands are never automatically replayed after a timeout.
+
+AirPlay is one row with its icon, title and password status. Without a password,
+show **No password required**. When reveal is allowed, show **Password required -
+click to reveal** with a downward chevron. Tapping the row reveals the password
+in large monospace text directly below it. Tapping again hides it. Do not add
+instructions or a separate Show password button. Keep custom receiver names
+visible. Unavailable receivers must not offer a reveal action.
+Password application uses the existing secret setting; its help warns that
+applying it restarts AirPlay and ends its session. Revealed text is discarded
+on closing, backgrounding, lost availability or removal of the password. These
+surfaces reuse the existing theme, text styles and responsive spacing.
+
+Receiver operations use a spinner in the existing control bounds. AirPlay replaces
+its password chevron while fetching. Bluetooth replaces the affected device's
+ellipsis during Disconnect or Forget. Pairing uses the Pair new or Stop pairing
+control's space. Loading indicators must not add a row or change the panel size.

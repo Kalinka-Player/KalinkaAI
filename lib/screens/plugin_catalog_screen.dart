@@ -91,8 +91,10 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       if (!mounted) return;
       ref.invalidate(modulesStateProvider);
       ref.invalidate(serverUpdateProvider);
-      // What went wrong on an earlier visit is old news.
+      // What went wrong on an earlier visit is old news; what is still
+      // under way on the server is followed again from where it has got.
       ref.read(pluginFailuresProvider.notifier).clear();
+      ref.read(pluginOperationsProvider.notifier).reattach();
       // Normally read on connect. Never reread over staged edits.
       final settings = ref.read(settingsProvider);
       if (settings.schema == null && !settings.isLoading) {
@@ -133,13 +135,24 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     }
     setState(() => _applying = true);
     try {
-      final ready = await ref.read(settingsProvider.notifier).readyToApply();
+      final notifier = ref.read(settingsProvider.notifier);
+      final ready = await notifier.readyToApply();
       if (!mounted || !ready) return false;
+      if (ref.read(settingsProvider).onlyLiveChanges) {
+        await notifier.applyChanges();
+        if (!mounted) return false;
+        await notifier.loadConfig(preserveStagedChanges: true);
+        ref.invalidate(modulesStateProvider);
+        return mounted && !ref.read(settingsProvider).hasPendingChanges;
+      }
       setState(() => _restartOverlayOpen = true);
       await ref.read(restartProvider.notifier).executeRestart();
       return mounted &&
           ref.read(restartProvider).isDone &&
           !ref.read(settingsProvider).hasPendingChanges;
+    } catch (error) {
+      showSafeToast('Could not apply settings: $error');
+      return false;
     } finally {
       if (mounted) setState(() => _applying = false);
     }
@@ -152,13 +165,16 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       return false;
     }
     if (!ref.read(settingsProvider).hasPendingChanges) return true;
+    final restarts = !ref.read(settingsProvider).onlyLiveChanges;
     final choice = await showKalinkaDialog<String>(
       context: context,
       builder: (context) => KalinkaDialog(
         side: KalinkaDialogSide.browsing,
         icon: Icons.tune,
         title: 'Apply your changes?',
-        message: 'You have changes that have not been applied. Applying them restarts Kalinka and briefly stops the music.',
+        message: restarts
+            ? 'You have changes that have not been applied. Applying them restarts Kalinka and briefly stops the music.'
+            : 'These changes apply without restarting Kalinka.',
         content: Column(
           mainAxisSize: MainAxisSize.min,
           spacing: 10,
@@ -178,7 +194,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
             ),
             KalinkaButton(
               key: const ValueKey('configuration-apply'),
-              label: 'Apply & restart',
+              label: restarts ? 'Apply & restart' : 'Apply',
               fullWidth: true,
               onTap: () => Navigator.pop(context, 'apply'),
             ),
@@ -217,8 +233,8 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
           iconColor: KalinkaColors.actionDelete,
           title: 'Uninstall ${plugin.name}?',
           message:
-              'The server restarts without it, which stops playback for a '
-              'moment. You can add it again from Configuration.',
+              'Anything playing from it stops; the rest plays on. You can '
+              'install it again from Configuration.',
           actions: [
             KalinkaButton(
               label: 'Cancel',
@@ -241,7 +257,8 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     final outcome = await ref
         .read(pluginOperationsProvider.notifier)
         .run(plugin.id, operation, name: plugin.name);
-    // A failure stays with the plugin, where it was asked for.
+    // A failure stays with the plugin, where it was asked for; the row
+    // says the rest by where it now sits.
     if (outcome != PluginOutcome.done || !mounted) return;
     // Its pages went with it.
     if (operation == PluginOperation.uninstall) {
@@ -250,11 +267,6 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         _aboutFor = null;
       });
     }
-    showSafeToast(switch (operation) {
-      PluginOperation.install => '${plugin.name} installed',
-      PluginOperation.uninstall => '${plugin.name} uninstalled',
-      PluginOperation.update => '${plugin.name} updated',
-    });
   }
 
   @override
@@ -479,9 +491,10 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                                       ),
                                     )
                                   else if (!enabled)
-                                    const SliverFillRemaining(
-                                      hasScrollBody: false,
-                                      child: _Notice(
+                                    ..._catalogSlivers(
+                                      const PluginCatalog(status: 'disabled'),
+                                      gutter,
+                                      notice: const _Notice(
                                         'Plugin catalog preview is off or unavailable on this server. Enable it on the Streamer tab, with Expert settings on.',
                                       ),
                                     )
@@ -490,25 +503,27 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                                       skipLoadingOnRefresh: false,
                                       data: (data) =>
                                           _catalogSlivers(data, gutter),
-                                      loading: () => const [
-                                        SliverFillRemaining(
-                                          hasScrollBody: false,
-                                          child: Center(
-                                            child: CircularProgressIndicator(),
-                                          ),
+                                      loading: () => _catalogSlivers(
+                                        const PluginCatalog(
+                                          status: 'unavailable',
                                         ),
-                                      ],
-                                      error: (error, _) => [
-                                        SliverFillRemaining(
-                                          hasScrollBody: false,
-                                          child: _Notice(
-                                            error is PluginCatalogException
-                                                ? error.message
-                                                : 'Could not read the plugin catalog. Try again.',
-                                            onRetry: _reload,
-                                          ),
+                                        gutter,
+                                        notice: const Center(
+                                          child: CircularProgressIndicator(),
                                         ),
-                                      ],
+                                      ),
+                                      error: (error, _) => _catalogSlivers(
+                                        const PluginCatalog(
+                                          status: 'unavailable',
+                                        ),
+                                        gutter,
+                                        notice: _Notice(
+                                          error is PluginCatalogException
+                                              ? error.message
+                                              : 'Could not read the plugin catalog. Try again.',
+                                          onRetry: _reload,
+                                        ),
+                                      ),
                                     ),
                                 ],
                               ),
@@ -525,7 +540,9 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
               PendingChangesBanner(
                 key: const ValueKey('configuration-changes'),
                 pendingCount: settings.pendingCount,
-                consequence: 'restart required',
+                consequence: settings.onlyLiveChanges
+                    ? null
+                    : 'restart required',
                 busy: _applying || _restartOverlayOpen || upgrading,
                 blocked: issueLabel != null,
                 blockedReason: issueLabel == null ? null : 'check $issueLabel',
@@ -553,32 +570,33 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     onOperation: (operation) => _run(plugin, operation),
     onDismissFailure: () =>
         ref.read(pluginFailuresProvider.notifier).dismiss(plugin.id),
-    canManage: ref.watch(pluginInstallationProvider),
+    canManage: plugin.listed && ref.watch(pluginInstallationProvider),
   );
 
-  List<Widget> _catalogSlivers(PluginCatalog catalog, double gutter) {
+  List<Widget> _catalogSlivers(
+    PluginCatalog catalog,
+    double gutter, {
+    Widget? notice,
+  }) {
     if (catalog.status == 'disabled') {
-      return const [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: _Notice('Public catalog fetching is disabled on this server.'),
-        ),
-      ];
+      notice ??= const _Notice(
+        'Public catalog fetching is disabled on this server.',
+      );
     }
     if (catalog.status == 'unavailable') {
-      return [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: _Notice(
-            'The public catalog is not available yet. '
-            'The server may be fetching it or unable to reach the feed. Try again shortly.',
-            onRetry: _reload,
-          ),
-        ),
-      ];
+      notice ??= _Notice(
+        'The public catalog is not available yet. '
+        'The server may be fetching it or unable to reach the feed. Try again shortly.',
+        onRetry: _reload,
+      );
     }
     final modules = ref.watch(modulesStateProvider).value;
     final settings = ref.watch(settingsProvider);
+    final plugins = pluginsWithInstalledModules(
+      catalog.plugins,
+      modules,
+      settings.schema,
+    );
     final updates = ref.watch(pluginUpdatesProvider).value ?? const {};
     final operations = ref.watch(pluginOperationsProvider);
     final failures = ref.watch(pluginFailuresProvider);
@@ -590,13 +608,13 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         ? 'your player'
         : playerName;
     final states = {
-      for (final plugin in catalog.plugins)
+      for (final plugin in plugins)
         plugin.id: PluginState.of(
           plugin,
           modules: modules,
           settings: settings,
           update: updates[plugin.id],
-          operation: operations[plugin.id],
+          inFlight: operations[plugin.id],
           failure: failures[plugin.id],
         ),
     };
@@ -605,11 +623,9 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       PluginTab.server => false,
       PluginTab.devices => plugin.isDevice,
     };
-    final order = {
-      for (final (i, plugin) in catalog.plugins.indexed) plugin.id: i,
-    };
+    final order = {for (final (i, plugin) in plugins.indexed) plugin.id: i};
     // Official and stable first, else as the catalog lists them.
-    final listed = catalog.plugins.where(inTab).toList()
+    final listed = plugins.where(inTab).toList()
       ..sort(
         (a, b) => a.rank != b.rank
             ? a.rank.compareTo(b.rank)
@@ -661,7 +677,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
             ),
           ),
         ),
-      if (listed.isEmpty)
+      if (listed.isEmpty && notice == null)
         note(
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -690,6 +706,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         ),
         for (final plugin in installed) row(plugin),
       ],
+      if (notice != null) SliverToBoxAdapter(child: notice),
       if (available.isNotEmpty) ...[
         _heading(
           _tab == PluginTab.devices ? 'More controls' : 'More sources',

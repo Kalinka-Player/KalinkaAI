@@ -13,7 +13,12 @@ import '../theme/app_theme.dart';
 import 'kalinka_bottom_sheet.dart';
 
 /// Actions that can be returned from the server sheet.
-enum ServerSheetAction { openSettings, openDiscovery, openPlugins, powerOff }
+enum ServerSheetAction {
+  openSettings,
+  openDiscovery,
+  openPlugins,
+  powerOff,
+}
 
 /// Content body for the server sheet — used directly by [showKalinkaBottomSheet]
 /// on phone, and wrapped by [ServerSheet] (with animation/scrim) on tablet.

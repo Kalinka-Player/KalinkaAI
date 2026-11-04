@@ -11,7 +11,6 @@ import '../providers/search_session_provider.dart';
 import '../providers/shell_nav_provider.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
-import '../utils/browse_links.dart';
 import '../utils/click_cursor.dart';
 import '../utils/playback_utils.dart';
 import '../providers/source_modules_provider.dart';
@@ -101,6 +100,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
       ),
     );
     ref.watch(playbackControlProvider.select((c) => c.isExclusive));
+    ref.watch(nowPlayingMetadataLinksProvider);
     final away = ref.watch(
       connectionStateProvider.select((s) => s.isInterrupted),
     );
@@ -420,11 +420,10 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           );
       final height = painter.height;
       painter.dispose();
+      // A link's row is as tall as its chevron at least.
       return linked
-          ? math.max(
-              BrowseMetadataLink.minHeight,
-              height + 2 * BrowseMetadataLink.verticalPadding,
-            )
+          ? math.max(height, BrowseMetadataLink.chevronWidth) +
+                2 * BrowseMetadataLink.verticalPadding
           : height;
     }
 
@@ -435,7 +434,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           track?.performer?.name ?? '\u2014',
           KalinkaTextStyles.expandedArtist,
           2,
-          linked: artistBrowseLink(track?.performer) != null,
+          linked: ref.read(nowPlayingMetadataLinksProvider).artist != null,
         );
     if (track?.album case final album?) {
       height +=
@@ -444,7 +443,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
             _albumLine(album),
             KalinkaTextStyles.expandedAlbum,
             1,
-            linked: albumBrowseLink(album) != null,
+            linked: ref.read(nowPlayingMetadataLinksProvider).album != null,
           );
     }
     if (track != null) {
@@ -531,7 +530,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         SizedBox(height: 6 * grow),
         BrowseMetadataLink(
           label: currentTrack?.performer?.name ?? '\u2014',
-          item: artistBrowseLink(currentTrack?.performer),
+          item: ref.read(nowPlayingMetadataLinksProvider).artist,
           onOpen: _openItem,
           style: _grown(KalinkaTextStyles.expandedArtist, grow),
           textAlign: textAlign,
@@ -541,7 +540,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           SizedBox(height: 4 * grow),
           BrowseMetadataLink(
             label: _albumLine(album),
-            item: albumBrowseLink(album),
+            item: ref.read(nowPlayingMetadataLinksProvider).album,
             onOpen: _openItem,
             style: _grown(KalinkaTextStyles.expandedAlbum, grow),
             textAlign: textAlign,
@@ -571,15 +570,11 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     required String qualityLabel,
     required bool leftAligned,
   }) {
-    final List<String> parts = [if (sourceInfo != null) sourceInfo.title];
-    final List<String> fmtParts = [
-      if (mimeLabel.isNotEmpty) mimeLabel,
-      if (qualityLabel.isNotEmpty) qualityLabel,
-    ];
-    if (fmtParts.isNotEmpty) {
-      parts.add(fmtParts.join(' '));
-    }
-    final attributionText = parts.join(' · ');
+    final attributionText = streamAttribution(
+      sourceInfo?.title,
+      mimeLabel,
+      qualityLabel,
+    );
     final showBadge = sourceBadgeVisible(ref, currentTrack.id);
 
     // The line that names the stream is also the way into its details.

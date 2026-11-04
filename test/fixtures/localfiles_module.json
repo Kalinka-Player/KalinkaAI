@@ -64,7 +64,7 @@
     },
     {
       "path": "input_modules.localfiles.rebuild_library",
-      "label": "Rebuild library on next restart",
+      "label": "Rebuild library",
       "widget": "toggle",
       "type": "bool",
       "help": "Purge the index and artwork cache and rescan everything on the next restart. Finished AI analysis is kept. Resets itself once done.",
