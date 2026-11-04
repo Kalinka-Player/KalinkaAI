@@ -18,8 +18,12 @@ enum HomePreviewType {
   const HomePreviewType(this.label, this.description);
 }
 
-/// A catalog and an exact filter selection. Different selections can be pinned
-/// independently; preview layout is a local presentation preference.
+/// What Home can pin: a catalog, or an artist for their releases.
+bool pinnableToHome(CatalogPage page) => page.isCatalog || page.isArtist;
+
+/// A catalog and an exact filter selection, or an artist. Different
+/// selections can be pinned independently; preview layout is a local
+/// presentation preference.
 class PinnedCatalog {
   final CatalogPage page;
   final BrowseFilterQuery filter;
@@ -111,7 +115,9 @@ class PinnedCatalogsNotifier extends Notifier<List<PinnedCatalog>?> {
           final pin = PinnedCatalog.fromJson(
             Map<String, dynamic>.from(json as Map),
           );
-          if (pin.page.isCatalog && seen.add(pin.key)) pins.add(pin);
+          if (pinnableToHome(pin.page) && seen.add(pin.key)) {
+            pins.add(pin);
+          }
         } catch (_) {
           // One stale entry must not discard the user's remaining pins.
         }
@@ -134,8 +140,8 @@ class PinnedCatalogsNotifier extends Notifier<List<PinnedCatalog>?> {
       Future.error(StateError('The server has not said who it is'));
 
   Future<void> pin(PinnedCatalog pin) {
-    if (!pin.page.isCatalog) {
-      throw ArgumentError('Only catalogs can be pinned');
+    if (!pinnableToHome(pin.page)) {
+      throw ArgumentError('Only catalogs and artists can be pinned');
     }
     final pins = _editable;
     if (pins == null) return _serverNotKnown();

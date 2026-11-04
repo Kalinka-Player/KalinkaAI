@@ -30,6 +30,9 @@ import 'package:kalinka/widgets/home/home_preview_choices.dart';
 import 'package:kalinka/widgets/home/home_preview_illustration.dart';
 import 'package:kalinka/widgets/kalinka_bottom_sheet.dart' show kSheetMaxWidth;
 import 'package:kalinka/widgets/kalinka_dialog.dart';
+import 'package:kalinka/widgets/home/catalog_pin_button.dart';
+import 'package:kalinka/widgets/search/artist_page_header.dart';
+import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search/search_zero_state.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 import 'package:kalinka/widgets/search_cards/search_album_row.dart';
@@ -70,6 +73,25 @@ final album = BrowseItem(
   canAdd: false,
   album: Album(id: 'kalinka:alpha:album:1', title: 'An album'),
 );
+// Without a portrait, as from an album's artist line.
+final artist = BrowseItem(
+  id: 'kalinka:alpha:artist:1',
+  name: 'An artist',
+  canBrowse: true,
+  canAdd: false,
+  artist: Artist(id: 'kalinka:alpha:artist:1', name: 'An artist'),
+);
+final looseTrack = BrowseItem(
+  id: 'kalinka:alpha:track:1',
+  name: 'A loose track',
+  canBrowse: false,
+  canAdd: true,
+  track: Track(
+    id: 'kalinka:alpha:track:1',
+    title: 'A loose track',
+    duration: 100,
+  ),
+);
 
 ModuleInfo module(String name, {bool catalogs = true}) => ModuleInfo(
   name: name,
@@ -82,8 +104,13 @@ ModuleInfo module(String name, {bool catalogs = true}) => ModuleInfo(
 
 class CatalogHomeApi extends HomeApi {
   final List<BrowseItem>? editorialItems;
+  final List<BrowseItem>? artistItems;
   final String? sourceDescription;
-  CatalogHomeApi({this.editorialItems, this.sourceDescription});
+  CatalogHomeApi({
+    this.editorialItems,
+    this.artistItems,
+    this.sourceDescription,
+  });
 
   final calls = <({String id, String? filter, int limit})>[];
   @override
@@ -104,6 +131,8 @@ class CatalogHomeApi extends HomeApi {
         ),
       ],
       'kalinka:alpha:catalog:editorial' => editorialItems ?? [album],
+      // Its track first: Home previews the releases after it.
+      'kalinka:alpha:artist:1' => artistItems ?? [looseTrack, album],
       _ => <BrowseItem>[],
     };
     return BrowseItemsList(
@@ -113,6 +142,19 @@ class CatalogHomeApi extends HomeApi {
       items.skip(offset).take(limit).toList(),
     );
   }
+
+  @override
+  Future<BrowseItem> getMetadata(String id) async => BrowseItem(
+    id: id,
+    name: 'An artist',
+    canBrowse: true,
+    canAdd: false,
+    artist: Artist(
+      id: id,
+      name: 'An artist',
+      image: AlbumImage(large: '/art/artist.jpg'),
+    ),
+  );
 
   @override
   Future<FilterValueList> getFilterValues(
@@ -485,6 +527,90 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('an artist pins to Home with their albums', (tester) async {
+    final container = await pump(tester);
+    container.read(searchSessionProvider.notifier).openBrowseItem(artist);
+    await tester.pumpAndSettle();
+    expect(container.read(searchSessionProvider).catalogPage.isArtist, isTrue);
+    await tester.tap(find.byTooltip('Pin artist to Home'));
+    await tester.pumpAndSettle();
+    expect(find.text('Home shows their albums.'), findsOneWidget);
+    await tester.tap(find.text('Cards'));
+    await tester.pumpAndSettle();
+    final saved = container.read(pinnedCatalogsProvider)!.single;
+    expect(saved.page.id, artist.id);
+    expect(saved.page.artPath, '/art/artist.jpg');
+    expect(find.byTooltip('Unpin artist'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back').first);
+    await tester.pumpAndSettle();
+    final preview = find.byType(PinnedCatalogPreview);
+    expect(preview, findsOneWidget);
+    expect(
+      find.descendant(of: preview, matching: find.text('An album')),
+      findsOneWidget,
+    );
+    expect(find.text('A loose track'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an artist\'s Pin joins the bar once scrolled away', (
+    tester,
+  ) async {
+    final container = await pump(
+      tester,
+      api: CatalogHomeApi(
+        artistItems: [
+          for (var i = 0; i < 40; i++)
+            BrowseItem(
+              id: 'kalinka:alpha:album:$i',
+              name: 'Album $i',
+              canBrowse: true,
+              canAdd: false,
+              album: Album(id: 'kalinka:alpha:album:$i', title: 'Album $i'),
+            ),
+        ],
+      ),
+    );
+    container.read(searchSessionProvider.notifier).openBrowseItem(artist);
+    await tester.pumpAndSettle();
+    final pin = find.byTooltip('Pin artist to Home').hitTestable();
+    final inHeader = find.descendant(
+      of: find.byType(ArtistPageHeader),
+      matching: find.byType(CatalogPinButton),
+    );
+    expect(pin, findsOneWidget);
+    expect(tester.getRect(pin), tester.getRect(inHeader));
+    final list = find.descendant(
+      of: find.byType(CatalogPageView),
+      matching: find.byType(Scrollable),
+    );
+    final position = tester.state<ScrollableState>(list.first).position;
+    final target = tester.getRect(inHeader);
+    final iconEnd =
+        target.top -
+        tester.getRect(list.first).top +
+        (target.height + CatalogPinButton.iconSize) / 2;
+    final back = tester.getRect(find.byTooltip('Back').first).center.dy;
+    // Its icon in sight: still the page's.
+    position.jumpTo(iconEnd - 1);
+    await tester.pump();
+    expect(find.byType(CatalogPinButton), findsOneWidget);
+    // Its icon gone, though not all of its target: the bar's, in that frame.
+    position.jumpTo(iconEnd);
+    await tester.pump();
+    expect(pin, findsOneWidget);
+    expect(tester.getRect(pin).center.dy, back);
+    position.jumpTo(600);
+    await tester.pumpAndSettle();
+    expect(pin, findsOneWidget);
+    expect(tester.getRect(pin).center.dy, back);
+    tester.state<ScrollableState>(list.first).position.jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(pin, findsOneWidget);
+    expect(tester.getRect(pin), tester.getRect(inHeader));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'customise changes layout, orders pins, and unpins without previews',

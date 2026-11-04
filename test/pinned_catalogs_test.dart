@@ -140,10 +140,28 @@ void main() {
     },
   );
 
-  test('albums, artists, playlists and malformed IDs cannot be pinned', () {
+  test('an artist is pinned and kept across a restart', () async {
+    await known(container);
+    await container
+        .read(pinnedCatalogsProvider.notifier)
+        .pin(
+          const PinnedCatalog(
+            page: CatalogPage.category(
+              id: 'kalinka:one:artist:a',
+              title: 'An artist',
+            ),
+            filter: BrowseFilterQuery(),
+            preview: HomePreviewType.cards,
+          ),
+        );
+    final saved = await known(open());
+    expect(saved.single.page.isArtist, isTrue);
+    expect(saved.single.preview, HomePreviewType.cards);
+  });
+
+  test('albums, playlists and malformed IDs cannot be pinned', () {
     for (final id in [
       'kalinka:one:album:a',
-      'kalinka:one:artist:a',
       'kalinka:one:playlist:a',
       'unknown',
     ]) {

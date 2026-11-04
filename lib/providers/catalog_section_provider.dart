@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/data_model.dart';
+import 'artist_relations_provider.dart';
 import 'kalinka_player_api_provider.dart';
 
 /// Equal catalog requests share a cached preview. The collections revision
@@ -35,12 +36,22 @@ final catalogSectionProvider = FutureProvider.autoDispose
 final pinnedPreviewProvider = FutureProvider.autoDispose
     .family<BrowseItemsList, CatalogSectionRequest>((ref, request) async {
       final api = ref.watch(kalinkaProxyProvider);
+      final artist = _isArtist(request.id);
       final list = await api.browse(
         request.id,
-        limit: request.limit,
+        // An artist's releases may come after their tracks.
+        limit: artist ? artistProbe : request.limit,
         filter: request.filter,
       );
       // Only a success is kept; a failure is retried on the next visit.
       ref.keepAlive();
-      return list;
+      return artist ? artistPreviewOf(list) : list;
     });
+
+bool _isArtist(String id) {
+  try {
+    return EntityId.fromString(id).type == EntityType.artist;
+  } catch (_) {
+    return false;
+  }
+}
