@@ -1247,13 +1247,17 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                 Expanded(child: _buildTitle(session, overAlbum: overAlbum)),
                 // What joins the bar on scroll comes in before what is always
                 // there, so Search and Grid/List never move under a finger.
-                if (catalogChrome &&
+                if ((catalogChrome ||
+                        (!onResults && session.catalogPage.isArtist)) &&
                     _catalogHeadersCollapsed[session.visitId] == true)
                   CatalogPinButton(
                     page: session.shownListing,
-                    filter: session.catalogFilter.copyWith(
-                      type: session.expandedShelf,
-                    ),
+                    // As the artist header's Pin saves it.
+                    filter: session.catalogPage.isArtist
+                        ? const BrowseFilterQuery()
+                        : session.catalogFilter.copyWith(
+                            type: session.expandedShelf,
+                          ),
                   ),
                 ?_barSearch(session, width: constraints.maxWidth + 12),
                 // A new search, made as Home makes one rather than narrowed
