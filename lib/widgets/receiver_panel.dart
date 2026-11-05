@@ -161,7 +161,7 @@ class ReceiverPanel extends ConsumerWidget {
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 16),
                       child: Text(
-                        'No enabled receivers. Manage plugins in Configuration.',
+                        'No enabled receivers. Manage plugins in Settings.',
                       ),
                     ),
                   for (var i = 0; i < receivers.length; i++) ...[

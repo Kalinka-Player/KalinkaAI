@@ -6,6 +6,7 @@ import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/player_header.dart';
 import 'package:kalinka/widgets/player_queue_view.dart';
+import 'package:kalinka/widgets/player_sheet.dart';
 import 'package:kalinka/widgets/player_view_switch.dart';
 
 import 'support/home_shell.dart';
@@ -27,10 +28,12 @@ final _handle = find.descendant(
   ),
 );
 
-final _statusBar = find.byWidgetPredicate(
-  (widget) =>
-      widget is AnnotatedRegion<SystemUiOverlayStyle> &&
-      widget.value.systemStatusBarContrastEnforced == false,
+// Home also styles the system status area beneath the popup. Only the
+// player's own background should appear and disappear as its sheet moves.
+final _statusBar = find.byElementPredicate(
+  (element) =>
+      element.widget is AnnotatedRegion<SystemUiOverlayStyle> &&
+      ModalRoute.of(element) is PlayerSheetRoute,
 );
 
 Future<void> _pumpPhone(

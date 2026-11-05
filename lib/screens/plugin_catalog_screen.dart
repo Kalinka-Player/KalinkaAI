@@ -75,6 +75,8 @@ class PluginCatalogScreen extends ConsumerStatefulWidget {
 class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   final _scroll = ScrollController();
   PluginTab _tab = PluginTab.sources;
+  final _tabKeys = {for (final tab in PluginTab.values) tab: GlobalKey()};
+  (PluginTab, double, double)? _tabLayout;
   CatalogPlugin? _settingsFor;
   CatalogPlugin? _aboutFor;
   bool _logsOpen = false;
@@ -236,7 +238,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
           title: 'Uninstall ${plugin.name}?',
           message:
               'Anything playing from it stops; the rest plays on. You can '
-              'install it again from Configuration.',
+              'install it again from Settings.',
           actions: [
             KalinkaButton(
               label: 'Cancel',
@@ -464,7 +466,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                           // left, the tabs start at the top.
                           if (widget.showBack)
                             SettingsTopBar(
-                              title: 'Configuration',
+                              title: 'Settings',
                               // With its bar, the Expert switch moves up into
                               // it.
                               action: _tab == PluginTab.server
@@ -741,41 +743,65 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     child: ColoredBox(
       key: const ValueKey('catalog-tabs'),
       color: KalinkaColors.background,
-      // Each tab as wide as its label, an even gap apart, from the content's
-      // inset, with no rule under them. Short of room, all three truncate
-      // alike: the labels are monospace, so their shares follow their
-      // lengths. Without the top bar, the Streamer tab ends the row with the
-      // Expert switch.
+      // Full labels scroll horizontally, while the active tab stays in view
+      // on selection and resize. The whole strip stays pinned above content.
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: gutter),
         child: Row(
           children: [
             Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 24,
-                  children: [
-                    for (final (option, label) in [
-                      (PluginTab.sources, 'Music sources'),
-                      (PluginTab.devices, 'HiFi control'),
-                      (PluginTab.server, 'Streamer'),
-                    ])
-                      Flexible(
-                        flex: label.length,
-                        child: _PluginTabButton(
-                          key: ValueKey('catalog-tab-${option.name}'),
-                          label: label,
-                          selected: tab == option,
-                          onTap: () {
-                            setState(() => _tab = option);
-                            _scroll.jumpTo(0);
-                          },
-                        ),
-                      ),
-                  ],
-                ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final layout = (
+                    tab,
+                    constraints.maxWidth,
+                    MediaQuery.textScalerOf(context).scale(14),
+                  );
+                  if (_tabLayout != layout) {
+                    _tabLayout = layout;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      final target = _tabKeys[_tab]?.currentContext;
+                      if (target == null) return;
+                      // Only move the horizontal strip, preserving the page's
+                      // vertical position when the window changes size.
+                      Scrollable.of(
+                        target,
+                        axis: Axis.horizontal,
+                      ).position.ensureVisible(
+                        target.findRenderObject()!,
+                        alignment: 0.5,
+                      );
+                    });
+                  }
+                  return SingleChildScrollView(
+                    key: const PageStorageKey('catalog-tab-scroll'),
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 24,
+                      children: [
+                        for (final (option, label) in [
+                          (PluginTab.sources, 'Music sources'),
+                          (PluginTab.devices, 'HiFi control'),
+                          (PluginTab.server, 'Streamer'),
+                        ])
+                          KeyedSubtree(
+                            key: _tabKeys[option],
+                            child: _PluginTabButton(
+                              key: ValueKey('catalog-tab-${option.name}'),
+                              label: label,
+                              selected: tab == option,
+                              onTap: () {
+                                setState(() => _tab = option);
+                                _scroll.jumpTo(0);
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
             if (tab == PluginTab.server && !widget.showBack) ...[
@@ -889,7 +915,7 @@ class _PluginTabButton extends StatelessWidget {
             onTap: onTap,
             behavior: HitTestBehavior.opaque,
             child: Container(
-              constraints: const BoxConstraints(minHeight: 44),
+              constraints: const BoxConstraints(minHeight: 48),
               padding: const EdgeInsets.symmetric(vertical: 8),
               decoration: BoxDecoration(
                 border: Border(
@@ -900,25 +926,19 @@ class _PluginTabButton extends StatelessWidget {
                 ),
               ),
               // As wide as the label, so the underline is too.
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      label.toUpperCase(),
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                      style: _label.copyWith(
-                        fontSize: KalinkaTypography.baseSize + 1,
-                        letterSpacing: 1,
-                        color: selected
-                            ? KalinkaColors.textPrimary
-                            : KalinkaColors.textSecondary,
-                      ),
-                    ),
+              child: Center(
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  softWrap: false,
+                  style: _label.copyWith(
+                    fontSize: KalinkaTypography.baseSize + 1,
+                    letterSpacing: 1,
+                    color: selected
+                        ? KalinkaColors.textPrimary
+                        : KalinkaColors.textSecondary,
                   ),
-                ],
+                ),
               ),
             ),
           ),

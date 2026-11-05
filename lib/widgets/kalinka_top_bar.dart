@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/app_theme.dart';
+import 'home/home_layout.dart';
 import 'server_chip.dart';
 import 'tap_highlight.dart';
 
@@ -13,6 +14,14 @@ import 'tap_highlight.dart';
 class KalinkaTopBar extends StatelessWidget {
   final VoidCallback? onServerChipTap;
   final VoidCallback? onResultsTap;
+
+  /// Home's search entry once it has scrolled away. It shares the bar only
+  /// when there is room beside the wordmark and server chip.
+  final Widget? searchEntry;
+
+  /// Compact search action when [searchEntry] cannot fit. Omitted when a
+  /// saved search already supplies a way back to results.
+  final Widget? searchFallback;
 
   /// Anchor for the first-run coach-mark spotlight on the connection chip.
   final GlobalKey? connectionKey;
@@ -25,6 +34,8 @@ class KalinkaTopBar extends StatelessWidget {
     super.key,
     this.onServerChipTap,
     this.onResultsTap,
+    this.searchEntry,
+    this.searchFallback,
     this.connectionKey,
     this.transparent = false,
   });
@@ -83,16 +94,57 @@ class KalinkaTopBar extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.only(left: 4),
         child: LayoutBuilder(
-          builder: (context, constraints) => Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Flexible(child: KalinkaWordmark()),
-              if (!kReleaseMode && constraints.maxWidth > 160) ...[
-                const SizedBox(width: 10),
-                Flexible(child: _buildDebugBadge()),
+          builder: (context, constraints) {
+            final search = searchEntry;
+            final fallback = search != null && onResultsTap == null
+                ? searchFallback
+                : null;
+            if (search != null &&
+                onResultsTap == null &&
+                constraints.maxWidth >=
+                    KalinkaWordmark.width +
+                        24 +
+                        MediaQuery.textScalerOf(context).scale(200)) {
+              return Row(
+                children: [
+                  const KalinkaWordmark(),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: kHomeSearchMaxWidth,
+                        ),
+                        child: search,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+              );
+            }
+            final wordmark = Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Flexible(child: KalinkaWordmark()),
+                if (!kReleaseMode &&
+                    constraints.maxWidth - (fallback == null ? 0 : 48) >
+                        160) ...[
+                  const SizedBox(width: 10),
+                  Flexible(child: _buildDebugBadge()),
+                ],
               ],
-            ],
-          ),
+            );
+            return fallback == null
+                ? wordmark
+                : Row(
+                    children: [
+                      Expanded(child: wordmark),
+                      fallback,
+                    ],
+                  );
+          },
         ),
       ),
     );

@@ -232,6 +232,7 @@ void main() {
     double topInset = 0,
     List<SearchSuggestion> suggestions = const [],
     GlobalKey? captureKey,
+    bool navigationVisible = false,
   }) async {
     final container = makeContainer(
       modules: modules,
@@ -255,7 +256,9 @@ void main() {
           ),
           home: RepaintBoundary(
             key: captureKey,
-            child: const Scaffold(body: SearchSessionView()),
+            child: Scaffold(
+              body: SearchSessionView(navigationVisible: navigationVisible),
+            ),
           ),
         ),
       ),
@@ -452,69 +455,206 @@ void main() {
       )
       .position;
 
-  for (final (size, scale, reduceMotion) in [
-    (const Size(375, 812), 1.0, false),
-    (const Size(768, 1024), 1.0, false),
-    (const Size(812, 375), 1.0, false),
-    (const Size(1200, 800), 1.0, false),
-    (const Size(375, 812), 2.0, true),
+  for (final (size, scale, reduceMotion, topInset) in [
+    (const Size(375, 812), 1.0, false, 0.0),
+    (const Size(375, 812), 1.0, false, 24.0),
+    (const Size(768, 1024), 1.0, false, 24.0),
+    (const Size(812, 375), 1.0, false, 24.0),
+    (const Size(1200, 800), 1.0, false, 24.0),
+    (const Size(375, 812), 2.0, true, 24.0),
   ]) {
-    testWidgets('Home backdrop follows content at $size, ${scale}x text', (
-      tester,
-    ) async {
-      tester.view.physicalSize = size;
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final captureKey = GlobalKey();
-      await pumpSurface(
-        tester,
-        withHomeContent: true,
-        textScale: scale,
-        reduceMotion: reduceMotion,
-        topInset: 24,
-        captureKey: captureKey,
-      );
-      await tester.pumpAndSettle();
+    testWidgets(
+      'Home backdrop follows content at $size, ${scale}x text, inset $topInset',
+      (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final captureKey = GlobalKey();
+        await pumpSurface(
+          tester,
+          withHomeContent: true,
+          textScale: scale,
+          reduceMotion: reduceMotion,
+          topInset: topInset,
+          captureKey: captureKey,
+        );
+        await tester.pumpAndSettle();
 
-      final headerRect = tester.getRect(find.byType(KalinkaTopBar));
-      final backdropRect = tester.getRect(backdrop);
-      final titleRect = tester.getRect(find.text('What shall we play?'));
-      expect(backdropRect.left, 0);
-      expect(backdropRect.width, size.width);
-      // From a little above the top, so the bloom never meets an edge.
-      expect(backdropRect.top, lessThan(0));
-      expect(headerRect.height, kKalinkaTopBarHeight + 24);
-      expect(headerColors(tester).first.a, 0);
-      await _captureHome(tester, captureKey, 'home-${size.width}-$scale');
+        final headerRect = tester.getRect(find.byType(KalinkaTopBar));
+        final backdropRect = tester.getRect(backdrop);
+        final entry = find.descendant(
+          of: find
+              .descendant(of: rootList, matching: find.byType(SliverList))
+              .first,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics && widget.properties.label == 'Search',
+          ),
+        );
+        expect(find.text('What shall we play?'), findsNothing);
+        final entryRect = tester.getRect(entry);
+        final bloom = find.descendant(
+          of: backdrop,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is DecoratedBox &&
+                widget.decoration is BoxDecoration &&
+                (widget.decoration as BoxDecoration).gradient is RadialGradient,
+          ),
+        );
+        final gradient =
+            (tester.widget<DecoratedBox>(bloom).decoration as BoxDecoration)
+                    .gradient!
+                as RadialGradient;
+        final bloomBounds = Offset.zero & tester.getSize(bloom);
+        final bloomCentre =
+            tester.getTopLeft(bloom) +
+            MatrixUtils.transformPoint(
+              gradient.transform!.transform(bloomBounds)!,
+              bloomBounds.center,
+            );
+        expect(bloomCentre.dy, closeTo(entryRect.center.dy, 0.1));
+        expect(backdropRect.left, 0);
+        expect(backdropRect.width, size.width);
+        // From a little above the top, so the bloom never meets an edge.
+        expect(backdropRect.top, lessThan(0));
+        expect(headerRect.height, kKalinkaTopBarHeight + topInset);
+        expect(tester.getRect(headerSurface), headerRect);
+        // The viewport reaches the screen edge, with the header reserving its
+        // initial space in the scroll; content can pass behind the gradient.
+        expect(tester.getRect(rootList).top, headerRect.top);
+        expect(entryRect.top, headerRect.bottom + 8);
+        expect(headerColors(tester).first.a, 0);
+        await _captureHome(
+          tester,
+          captureKey,
+          'home-${size.width}-$scale-$topInset',
+        );
 
-      // One frame is enough: decoration moves with the list without easing.
-      rootPosition(tester).jumpTo(80);
-      await tester.pump();
-      expect(
-        tester.getRect(backdrop),
-        backdropRect.shift(const Offset(0, -80)),
-      );
-      expect(
-        tester.getRect(find.text('What shall we play?')),
-        titleRect.shift(const Offset(0, -80)),
-      );
-      expect(tester.getRect(find.byType(KalinkaTopBar)), headerRect);
-      expect(headerColors(tester), scrolledHeader);
+        // One frame is enough: decoration moves with the list without easing.
+        rootPosition(tester).jumpTo(80);
+        await tester.pump();
+        expect(
+          tester.getRect(backdrop),
+          backdropRect.shift(const Offset(0, -80)),
+        );
+        expect(tester.getRect(entry), entryRect.shift(const Offset(0, -80)));
+        expect(tester.getRect(find.byType(KalinkaTopBar)), headerRect);
+        expect(headerColors(tester), scrolledHeader);
+        expect(tester.getRect(headerSurface).top, 0);
+        expect(headerRect.overlaps(tester.getRect(entry)), isTrue);
+        rootPosition(tester).jumpTo(180);
+        await tester.pump();
+        await _captureHome(
+          tester,
+          captureKey,
+          'home-scrolled-${size.width}-$scale-$topInset',
+        );
 
-      expect(
-        rootPosition(tester).maxScrollExtent,
-        greaterThanOrEqualTo(backdropRect.bottom),
-      );
-      rootPosition(tester).jumpTo(backdropRect.bottom);
-      await tester.pump();
-      expect(tester.getRect(backdrop).bottom, lessThanOrEqualTo(0));
-      expect(tester.takeException(), isNull);
+        expect(
+          rootPosition(tester).maxScrollExtent,
+          greaterThanOrEqualTo(backdropRect.bottom),
+        );
+        rootPosition(tester).jumpTo(backdropRect.bottom);
+        await tester.pump();
+        expect(tester.getRect(backdrop).bottom, lessThanOrEqualTo(0));
+        expect(tester.takeException(), isNull);
 
-      rootPosition(tester).jumpTo(0);
-      await tester.pump();
-      expect(tester.getRect(backdrop), backdropRect);
-      expect(headerColors(tester).first.a, 0);
-    });
+        rootPosition(tester).jumpTo(0);
+        await tester.pump();
+        expect(tester.getRect(backdrop), backdropRect);
+        expect(headerColors(tester).first.a, 0);
+      },
+    );
+  }
+
+  for (final (size, scale, fits) in [
+    (const Size(375, 812), 1.0, false),
+    (const Size(430, 932), 1.0, true),
+    (const Size(812, 375), 1.0, true),
+    (const Size(1200, 800), 1.0, true),
+    (const Size(375, 812), 2.0, false),
+  ]) {
+    testWidgets(
+      'pinned Home moves search into available header space at $size, $scale',
+      (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await pumpSurface(tester, withHomeContent: true, textScale: scale);
+        await tester.pumpAndSettle();
+        final search = find.byKey(const ValueKey('home-header-search'));
+        final searchButton = find.byKey(
+          const ValueKey('home-header-search-button'),
+        );
+        expect(find.text('What shall we play?'), findsNothing);
+        expect(search, findsNothing);
+        expect(searchButton, findsNothing);
+        rootPosition(tester).jumpTo(61);
+        await tester.pumpAndSettle();
+        expect(search, findsNothing);
+        expect(searchButton, findsNothing);
+        rootPosition(tester).jumpTo(80);
+        await tester.pumpAndSettle();
+        expect(search, fits ? findsOneWidget : findsNothing);
+        expect(searchButton, fits ? findsNothing : findsOneWidget);
+        final entry = fits ? search : searchButton;
+        final bounds = tester.getRect(entry);
+        final header = tester.getRect(find.byType(KalinkaTopBar));
+        expect(header.contains(bounds.topLeft), isTrue);
+        expect(header.contains(bounds.bottomRight), isTrue);
+        expect(bounds.size.shortestSide, greaterThanOrEqualTo(48));
+        await tester.tap(entry);
+        await tester.pumpAndSettle();
+        expect(find.byType(SearchComposer), findsOneWidget);
+        await tester.tap(find.bySemanticsLabel('Close search'));
+        await tester.pumpAndSettle();
+        rootPosition(tester).jumpTo(0);
+        await tester.pumpAndSettle();
+        expect(search, findsNothing);
+        expect(searchButton, findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final (width, navigationVisible) in [
+    (375.0, false),
+    (900.0, false),
+    (900.0, true),
+  ]) {
+    testWidgets(
+      'saved results suppress header search only without the rail: $width, $navigationVisible',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final container = await pumpSurface(
+          tester,
+          withHomeContent: true,
+          navigationVisible: navigationVisible,
+        );
+        await tester.pumpAndSettle();
+        container.read(searchSessionProvider.notifier).submit('Evening music');
+        container.read(searchSessionProvider.notifier).backToCatalogsRoot();
+        await tester.pumpAndSettle();
+        rootPosition(tester).jumpTo(80);
+        await tester.pumpAndSettle();
+        expect(
+          find.byTooltip('Back to search results'),
+          navigationVisible ? findsNothing : findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('home-header-search')),
+          navigationVisible ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('home-header-search-button')),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets('with reduced motion the backdrop rises with the first pin', (
@@ -523,6 +663,7 @@ void main() {
     final container = await pumpSurface(tester, reduceMotion: true);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('home-pin-hint')), findsOneWidget);
+    expect(find.text('What shall we play?'), findsOneWidget);
     final centred = tester.getRect(backdrop);
 
     await container

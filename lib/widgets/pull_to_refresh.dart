@@ -12,11 +12,13 @@ import '../theme/app_theme.dart';
 class PullToRefresh extends ConsumerStatefulWidget {
   final Future<void> Function() onRefresh;
   final Widget child;
+  final double edgeOffset;
 
   const PullToRefresh({
     super.key,
     required this.onRefresh,
     required this.child,
+    this.edgeOffset = 0,
   });
 
   @override
@@ -48,6 +50,7 @@ class _PullToRefreshState extends ConsumerState<PullToRefresh> {
             return false;
           },
           child: RefreshIndicator(
+            edgeOffset: widget.edgeOffset,
             onRefresh: _refresh,
             color: KalinkaColors.accent,
             backgroundColor: KalinkaColors.surfaceRaised,

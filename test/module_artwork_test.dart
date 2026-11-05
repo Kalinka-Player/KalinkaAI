@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -9,14 +11,20 @@ import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/module_icons.dart';
 import 'package:kalinka/data_model/plugin_catalog.dart';
 import 'package:kalinka/data_model/presentation_schema.dart';
+import 'package:kalinka/providers/catalog_sources_provider.dart';
+import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/module_icon_cache.dart';
 import 'package:kalinka/providers/plugin_state.dart';
+import 'package:kalinka/providers/server_info_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/home/home_source_list.dart';
 import 'package:kalinka/widgets/module_artwork.dart';
 import 'package:kalinka/widgets/plugin_catalog_entry.dart';
 import 'package:kalinka/widgets/source_badge.dart';
+
+import 'support/receivers.dart';
 
 const _icons = ModuleIcons(
   small: ModuleIconImage(
@@ -345,6 +353,91 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  }
+
+  for (final name in ['Qobuz', 'Tidal', 'Jamendo']) {
+    testWidgets('$name artwork follows Home source hover, focus and press', (
+      tester,
+    ) async {
+      final cache = ModuleIconCache(
+        client: MockClient((_) async => http.Response.bytes(_png, 200)),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            noReceivers,
+            connectionStateProvider.overrideWithBuild(
+              (ref, notifier) => ConnectionStatus.connected,
+            ),
+            pluginCatalogEnabledProvider.overrideWithValue(false),
+            catalogSourcesProvider.overrideWith(
+              (ref) async => [
+                (
+                  module: ModuleInfo(
+                    name: name,
+                    title: name,
+                    icons: _icons,
+                    enabled: true,
+                    state: ModuleState.ready,
+                  ),
+                  root: BrowseItem(
+                    id: 'kalinka:$name:root',
+                    canBrowse: true,
+                    canAdd: false,
+                  ),
+                ),
+              ],
+            ),
+            urlResolverProvider.overrideWithValue(UrlResolver('http://server')),
+            moduleIconCacheProvider.overrideWithValue(cache),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: Scaffold(body: HomeSourceList(onOpen: (_) {})),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        final bytes = await cache.load(
+          'http://server/small',
+          _icons.small,
+          small: true,
+        );
+        await precacheImage(
+          MemoryImage(bytes),
+          tester.element(find.byType(ModuleArtwork)),
+        );
+      });
+      await tester.pumpAndSettle();
+      final button = find.byKey(ValueKey('home-source-$name'));
+      Color? color() => tester
+          .widget<Image>(
+            find.descendant(of: button, matching: find.byType(Image)),
+          )
+          .color;
+      expect(color(), KalinkaColors.textSecondary);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(tester.getCenter(button));
+      await tester.pumpAndSettle();
+      expect(color(), KalinkaColors.textPrimary);
+      await mouse.removePointer();
+      await tester.pumpAndSettle();
+      expect(color(), KalinkaColors.textSecondary);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      expect(color(), KalinkaColors.textPrimary);
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      final touch = await tester.startGesture(tester.getCenter(button));
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+      expect(color(), KalinkaColors.textPrimary);
+      await touch.up();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
   }
 
   testWidgets('unavailable artwork keeps the material fallback', (
