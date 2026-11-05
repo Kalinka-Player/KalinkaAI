@@ -54,3 +54,4 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter test
+      - run: python3 test/kiosk_launcher_test.py

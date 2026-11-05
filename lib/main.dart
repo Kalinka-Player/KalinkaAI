@@ -19,6 +19,7 @@ import 'providers/pinned_server.dart';
 import 'widgets/kalinka_toast_overlay.dart';
 import 'widgets/foreground_volume_overlay.dart';
 import 'widgets/receiver_approval.dart';
+import 'widgets/kiosk/local_kiosk_host.dart';
 
 bool get networkActivation =>
     kIsWeb && Uri.base.queryParameters['setup'] == 'network';
@@ -105,12 +106,17 @@ class KalinkaApp extends ConsumerWidget {
     ref.watch(rendererHostProvider);
     ref.watch(mediaNotificationProvider);
     ref.watch(rememberServerIdentityProvider);
+    final localDisplay = ref.watch(localDisplayKioskProvider);
     return MaterialApp(
       title: 'Kalinka',
       theme: AppTheme.dark(),
       debugShowCheckedModeBanner: false,
-      builder: (_, child) =>
-          ForegroundVolumeOverlay(child: KalinkaToastHost(child: child!)),
+      builder: (_, child) {
+        final app = ForegroundVolumeOverlay(
+          child: KalinkaToastHost(child: child!),
+        );
+        return localDisplay ? LocalKioskHost(child: app) : app;
+      },
       home: const ReceiverApprovalHost(child: _Home()),
     );
   }
@@ -124,6 +130,7 @@ class _Home extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final kiosk =
+        !ref.watch(localDisplayKioskProvider) &&
         ref.watch(kioskActiveProvider) &&
         ref.watch(onboardingStatusProvider.select((s) => s.oobeComplete)) &&
         ref.watch(connectionSettingsProvider.select((s) => s.isSet));

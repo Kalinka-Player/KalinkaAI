@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/configuration_sections.dart';
 import '../data_model/presentation_schema.dart';
 import '../providers/connection_settings_provider.dart';
+import '../providers/kiosk_provider.dart';
 import '../providers/server_info_provider.dart';
 import '../providers/server_update_provider.dart';
 import '../providers/settings_provider.dart';
@@ -12,6 +13,7 @@ import '../theme/field_decoration.dart';
 import '../theme/kalinka_icons.dart';
 import '../widgets/box_section.dart';
 import '../widgets/configuration_appearance.dart';
+import '../widgets/display_settings_section.dart';
 import '../widgets/kalinka_button.dart';
 import '../widgets/kalinka_bottom_sheet.dart';
 import '../widgets/server_update_banner.dart';
@@ -112,6 +114,9 @@ class ServerSettingsBody extends ConsumerWidget {
                 ],
               ),
           ],
+          if (settings.values['base_config.display.enabled'] == true ||
+              ref.watch(kioskLaunchProvider))
+            const DisplaySettingsSection(),
           if (sections.updates.isNotEmpty || showUpdate) ...[
             Padding(
               padding: ConfigurationAppearance.sectionPadding(context),

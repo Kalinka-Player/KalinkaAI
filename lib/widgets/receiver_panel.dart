@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/receiver_control.dart';
@@ -8,10 +10,13 @@ import '../providers/connection_settings_provider.dart';
 import '../providers/monotonic_clock_provider.dart';
 import '../providers/receiver_provider.dart';
 import '../theme/app_theme.dart';
+import 'failure_note.dart';
 import 'home/source_button_style.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'kalinka_button.dart';
 import 'kalinka_dialog.dart';
+
+const kConnectIcon = Icons.phonelink_ring_outlined;
 
 IconData receiverIcon(String kind) => switch (kind) {
   'bluetooth' => Icons.bluetooth,
@@ -38,70 +43,343 @@ class ConnectSourceButton extends ConsumerWidget {
       key: const ValueKey('connect-source-button'),
       style: homeSourceButtonStyle,
       onPressed: () => showReceiverPanel(context),
-      icon: const Icon(
-        Icons.phonelink_ring_outlined,
-        size: 20,
-        applyTextScaling: true,
-      ),
+      icon: const Icon(kConnectIcon, size: 20, applyTextScaling: true),
       label: const Text('Connect'),
     );
   }
 }
 
-/// Native menu anchoring keeps the compact panel beside its sidebar entry.
-class ReceiverPopover extends StatelessWidget {
-  final String receiverId;
-  final Widget Function(VoidCallback open) builder;
-  const ReceiverPopover({
-    super.key,
-    required this.receiverId,
-    required this.builder,
-  });
+/// A pointed, animated panel anchored to the sidebar's Connect button.
+class ReceiverPopover extends StatefulWidget {
+  final String? receiverId;
+  final Widget Function(
+    VoidCallback open,
+    FocusNode focusNode,
+    bool isOpen,
+  ) builder;
+  const ReceiverPopover({super.key, this.receiverId, required this.builder});
   @override
-  Widget build(BuildContext context) {
-    final viewport = MediaQuery.sizeOf(context);
-    final width = (viewport.width - 32).clamp(0.0, 380.0);
-    return MenuAnchor(
-      consumeOutsideTap: true,
-      style: MenuStyle(
-        alignment: AlignmentDirectional.topEnd,
-        backgroundColor: const WidgetStatePropertyAll(
-          KalinkaColors.surfaceRaised,
-        ),
-        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: KalinkaColors.borderDefault),
-          ),
-        ),
+  State<ReceiverPopover> createState() => _ReceiverPopoverState();
+}
+
+class _ReceiverPopoverState extends State<ReceiverPopover>
+    with SingleTickerProviderStateMixin {
+  final _menu = MenuController();
+  final _buttonFocus = FocusNode();
+  final _panelFocus = FocusScopeNode();
+  final _secretReset = ValueNotifier<int>(0);
+  late final _unfold = AnimationController(vsync: this);
+  late final _curve = CurvedAnimation(
+    parent: _unfold,
+    curve: Curves.easeOutCubic,
+  );
+  bool _open = false;
+  bool _restoreButtonFocus = false;
+  VoidCallback? _hideOverlay;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    _unfold.duration = reducedMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 180);
+    _unfold.reverseDuration = reducedMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 120);
+    if (reducedMotion && _unfold.isAnimating) {
+      _unfold.value = _open ? 1 : 0;
+      if (!_open) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && !_open) _hideOverlay?.call();
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _curve.dispose();
+    _unfold.dispose();
+    _buttonFocus.dispose();
+    _panelFocus.dispose();
+    _secretReset.dispose();
+    super.dispose();
+  }
+
+  void _show(Offset? position, VoidCallback showOverlay) {
+    _hideOverlay = null;
+    showOverlay();
+    setState(() => _open = true);
+    _unfold.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _open) _panelFocus.requestFocus();
+    });
+  }
+
+  void _close(VoidCallback hideOverlay) {
+    // The panel remains mounted during the exit animation and may reopen.
+    // Clear secrets and invalidate pending reveals before starting that exit.
+    _secretReset.value++;
+    // Pointer dismissal leaves the trigger idle. Keyboard dismissal returns
+    // focus so navigation can continue from the button that opened the panel.
+    _restoreButtonFocus = HardwareKeyboard.instance.logicalKeysPressed.isNotEmpty;
+    _hideOverlay = hideOverlay;
+    setState(() => _open = false);
+    unawaited(
+      _unfold.reverse().then((_) {
+        if (mounted && !_open) hideOverlay();
+      }),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => RawMenuAnchor(
+    controller: _menu,
+    childFocusNode: _buttonFocus,
+    consumeOutsideTaps: true,
+    onOpenRequested: _show,
+    onCloseRequested: _close,
+    onClose: () {
+      _open = false;
+      // Wait for the panel's focus scope to detach, including instant closes
+      // with reduced motion, before settling focus on the trigger.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _menu.isOpen) return;
+        if (_restoreButtonFocus) {
+          _buttonFocus.requestFocus();
+        } else {
+          _buttonFocus.unfocus();
+        }
+      });
+    },
+    builder: (context, controller, _) => Semantics(
+      expanded: _open,
+      child: widget.builder(
+        () => _open ? controller.close() : controller.open(),
+        _buttonFocus,
+        controller.isOpen,
       ),
-      builder: (context, controller, _) => builder(
-        () => controller.isOpen ? controller.close() : controller.open(),
-      ),
-      menuChildren: [
-        Builder(
-          builder: (context) => SizedBox(
-            width: width,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: viewport.height - 48),
-              child: ReceiverPanel(
-                receiverId: receiverId,
-                onClose: () => MenuController.maybeOf(context)?.close(),
+    ),
+    overlayBuilder: (context, info) {
+      final padding = MediaQuery.paddingOf(context);
+      final layout = _ReceiverPopoverLayout(
+        info.anchorRect,
+        Rect.fromLTRB(
+          padding.left + 8,
+          padding.top + 8,
+          info.overlaySize.width - padding.right - 8,
+          info.overlaySize.height - padding.bottom - 8,
+        ),
+      );
+      return Positioned.fill(
+        child: CustomSingleChildLayout(
+          delegate: layout,
+          child: TapRegion(
+            groupId: info.tapRegionGroupId,
+            onTapOutside: (_) => _menu.close(),
+            child: ExcludeSemantics(
+              excluding: !_open,
+              child: IgnorePointer(
+                ignoring: !_open,
+                child: ExcludeFocus(
+                  excluding: !_open,
+                  child: FocusScope(
+                    node: _panelFocus,
+                    child: Shortcuts(
+                      shortcuts: const {
+                        SingleActivator(LogicalKeyboardKey.escape):
+                            DismissIntent(),
+                      },
+                      child: FadeTransition(
+                        opacity: _curve,
+                        child: ClipRect(
+                          key: const ValueKey('receiver-popover-reveal'),
+                          clipper: _ReceiverPopoverReveal(
+                            _curve,
+                            layout.onRight,
+                          ),
+                          child: Material(
+                            key: const ValueKey('receiver-popover-surface'),
+                            color: KalinkaColors.surfaceRaised,
+                            elevation: 8,
+                            shadowColor: Colors.black,
+                            shape: _ReceiverPopoverBorder(layout),
+                            animationDuration: Duration.zero,
+                            clipBehavior: Clip.antiAlias,
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                left: layout.onRight
+                                    ? _receiverPointerWidth
+                                    : 0,
+                                right: layout.onRight
+                                    ? 0
+                                    : _receiverPointerWidth,
+                              ),
+                              child: ReceiverPanel(
+                                receiverId: widget.receiverId,
+                                onClose: _menu.close,
+                                secretReset: _secretReset,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
         ),
-      ],
+      );
+    },
+  );
+}
+
+const _receiverPointerWidth = 8.0;
+const _receiverPointerHalfHeight = 7.0;
+const _receiverPopoverRadius = 16.0;
+
+class _ReceiverPopoverLayout extends SingleChildLayoutDelegate {
+  final Rect anchor;
+  final Rect bounds;
+
+  _ReceiverPopoverLayout(this.anchor, this.bounds);
+
+  bool get onRight =>
+      bounds.right - anchor.right >= 392 ||
+      bounds.right - anchor.right >= anchor.left - bounds.left;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    final room = onRight
+        ? bounds.right - anchor.right - 4
+        : anchor.left - bounds.left - 4;
+    final width = math.min(380 + _receiverPointerWidth, math.max(0.0, room));
+    return BoxConstraints(
+      minWidth: width,
+      maxWidth: width,
+      maxHeight: math.max(0.0, bounds.height),
     );
   }
+
+  Offset position(Size size) => Offset(
+    onRight ? anchor.right + 4 : anchor.left - size.width - 4,
+    (anchor.center.dy - 28).clamp(
+      bounds.top,
+      math.max(bounds.top, bounds.bottom - size.height),
+    ),
+  );
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) => position(childSize);
+
+  @override
+  bool shouldRelayout(_ReceiverPopoverLayout oldDelegate) =>
+      anchor != oldDelegate.anchor || bounds != oldDelegate.bounds;
+}
+
+/// One continuous border around the rounded panel and its small pointer.
+class _ReceiverPopoverBorder extends OutlinedBorder {
+  final _ReceiverPopoverLayout layout;
+
+  const _ReceiverPopoverBorder(
+    this.layout, {
+    super.side = const BorderSide(color: KalinkaColors.borderDefault),
+  });
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
+    final body = Rect.fromLTRB(
+      rect.left + (layout.onRight ? _receiverPointerWidth : 0),
+      rect.top,
+      rect.right - (layout.onRight ? 0 : _receiverPointerWidth),
+      rect.bottom,
+    );
+    const clearance = _receiverPopoverRadius + _receiverPointerHalfHeight;
+    final y =
+        rect.top +
+        (layout.anchor.center.dy - layout.position(rect.size).dy).clamp(
+          clearance,
+          math.max(clearance, rect.height - clearance),
+        );
+    final edge = layout.onRight ? body.left : body.right;
+    final pointer = Path()
+      ..moveTo(edge, y - _receiverPointerHalfHeight)
+      ..lineTo(layout.onRight ? rect.left : rect.right, y)
+      ..lineTo(edge, y + _receiverPointerHalfHeight)
+      ..close();
+    return Path.combine(
+      PathOperation.union,
+      Path()..addRRect(
+        RRect.fromRectAndRadius(
+          body,
+          const Radius.circular(_receiverPopoverRadius),
+        ),
+      ),
+      pointer,
+    );
+  }
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
+      getOuterPath(rect.deflate(side.width), textDirection: textDirection);
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) =>
+      canvas.drawPath(
+        getOuterPath(
+          rect.deflate(side.width / 2),
+          textDirection: textDirection,
+        ),
+        side.toPaint(),
+      );
+
+  @override
+  _ReceiverPopoverBorder copyWith({BorderSide? side}) =>
+      _ReceiverPopoverBorder(layout, side: side ?? this.side);
+
+  @override
+  ShapeBorder scale(double t) => copyWith(side: side.scale(t));
+}
+
+/// Reveal the already laid-out panel, without squeezing or reflowing its text.
+class _ReceiverPopoverReveal extends CustomClipper<Rect> {
+  final Animation<double> animation;
+  final bool onRight;
+
+  _ReceiverPopoverReveal(this.animation, this.onRight)
+    : super(reclip: animation);
+
+  @override
+  Rect getClip(Size size) {
+    const shadow = 12.0;
+    final width = (size.width + 2 * shadow) * animation.value;
+    return Rect.fromLTWH(
+      onRight ? -shadow : size.width + shadow - width,
+      -shadow,
+      width,
+      size.height + 2 * shadow,
+    );
+  }
+
+  @override
+  bool shouldReclip(_ReceiverPopoverReveal oldClipper) =>
+      animation != oldClipper.animation || onRight != oldClipper.onRight;
 }
 
 class ReceiverPanel extends ConsumerWidget {
   final String? receiverId;
   final VoidCallback? onClose;
-  const ReceiverPanel({super.key, this.receiverId, this.onClose});
+  /// Discards secrets immediately while the panel stays mounted for dismissal.
+  final Listenable? secretReset;
+  const ReceiverPanel({
+    super.key,
+    this.receiverId,
+    this.onClose,
+    this.secretReset,
+  });
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final inventory = ref.watch(receiversProvider);
@@ -138,7 +416,7 @@ class ReceiverPanel extends ConsumerWidget {
           Flexible(
             child: SingleChildScrollView(
               primary: false,
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -146,18 +424,17 @@ class ReceiverPanel extends ConsumerWidget {
                     'Receive audio on ${connection.name}',
                     style: KalinkaTextStyles.trayRowSublabel,
                   ),
-                  if (inventory.error != null) ...[
-                    Text(
-                      inventory.error!,
-                      style: KalinkaTextStyles.trayRowSublabel,
+                  if (inventory.error != null)
+                    _ReceiverError(
+                      message: inventory.error!,
+                      footer: TextButton(
+                        onPressed: () =>
+                            ref.read(receiversProvider.notifier).refresh(),
+                        child: const Text('Retry'),
+                      ),
                     ),
-                    TextButton(
-                      onPressed: () =>
-                          ref.read(receiversProvider.notifier).refresh(),
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                  if (receivers.isEmpty)
+                  const SizedBox(height: 20),
+                  if (receivers.isEmpty && inventory.error == null)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 16),
                       child: Text(
@@ -167,7 +444,7 @@ class ReceiverPanel extends ConsumerWidget {
                   for (var i = 0; i < receivers.length; i++) ...[
                     if (i > 0)
                       const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
+                        padding: EdgeInsets.symmetric(vertical: 20),
                         child: Divider(
                           height: 1,
                           color: KalinkaColors.borderDefault,
@@ -178,6 +455,7 @@ class ReceiverPanel extends ConsumerWidget {
                       receiver: receivers[i],
                       available: inventory.error == null,
                       showTitle: receiverId == null,
+                      secretReset: secretReset,
                     ),
                   ],
                 ],
@@ -190,14 +468,69 @@ class ReceiverPanel extends ConsumerWidget {
   }
 }
 
+/// Errors have their own surface and announcement, separate from device rows.
+class _ReceiverError extends StatelessWidget {
+  final String message;
+  final Widget? footer;
+
+  const _ReceiverError({required this.message, this.footer});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 12),
+    child: Semantics(
+      liveRegion: true,
+      child: FailureNote(
+        message: message,
+        textStyle: KalinkaTextStyles.settingsDescription.copyWith(
+          color: KalinkaColors.textPrimary,
+        ),
+        footer: footer,
+      ),
+    ),
+  );
+}
+
+class _ReceiverStatus extends StatelessWidget {
+  final ReceiverSnapshot receiver;
+
+  const _ReceiverStatus(this.receiver);
+
+  @override
+  Widget build(BuildContext context) {
+    final message = receiver.message?.trim();
+    final hasMessage = message != null && message.isNotEmpty;
+    if (receiver.state == 'error') {
+      return _ReceiverError(
+        message: hasMessage ? message : '${receiver.title} is unavailable.',
+      );
+    }
+    final status = hasMessage
+        ? message
+        : switch (receiver.state) {
+            'starting' => 'Starting receiver…',
+            'stopping' => 'Stopping receiver…',
+            'disabled' => 'Receiver disabled',
+            _ => null,
+          };
+    if (status == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Text(status, style: KalinkaTextStyles.trayRowSublabel),
+    );
+  }
+}
+
 class _ReceiverDetails extends ConsumerStatefulWidget {
   final ReceiverSnapshot receiver;
   final bool available, showTitle;
+  final Listenable? secretReset;
   const _ReceiverDetails({
     super.key,
     required this.receiver,
     required this.available,
     required this.showTitle,
+    this.secretReset,
   });
   @override
   ConsumerState<_ReceiverDetails> createState() => _ReceiverDetailsState();
@@ -219,8 +552,16 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.secretReset?.addListener(_onSecretReset);
     _syncPairingCountdown();
   }
+
+  void _discardPassword() {
+    _password = null;
+    _secretEpoch++;
+  }
+
+  void _onSecretReset() => setState(_discardPassword);
 
   void _syncPairingCountdown() {
     final pairing = widget.receiver.pairing;
@@ -265,13 +606,17 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
   @override
   void didUpdateWidget(covariant _ReceiverDetails oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.secretReset != widget.secretReset) {
+      oldWidget.secretReset?.removeListener(_onSecretReset);
+      widget.secretReset?.addListener(_onSecretReset);
+      _discardPassword();
+    }
     _syncPairingCountdown();
     if (!widget.available ||
         !widget.receiver.passwordRevealAvailable ||
         !widget.receiver.passwordRequired ||
         widget.receiver.state != 'ready') {
-      _password = null;
-      _secretEpoch++;
+      _discardPassword();
     }
   }
 
@@ -281,8 +626,7 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
       setState(() {
         _foreground = state == AppLifecycleState.resumed;
         if (!_foreground) {
-          _password = null;
-          _secretEpoch++;
+          _discardPassword();
         }
         _schedulePairingTick();
       });
@@ -291,6 +635,7 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
 
   @override
   void dispose() {
+    widget.secretReset?.removeListener(_onSecretReset);
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _password = null;
@@ -357,10 +702,7 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
 
   Future<void> _reveal() async {
     if (_password != null) {
-      setState(() {
-        _password = null;
-        _secretEpoch++;
-      });
+      setState(_discardPassword);
       return;
     }
     final epoch = _secretEpoch;
@@ -415,13 +757,18 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
                           widget.showTitle ? receiver.title : name,
                           style: KalinkaTextStyles.trayRowLabel,
                         ),
-                        if (widget.showTitle && name != serverName)
+                        if (widget.showTitle && name != serverName) ...[
+                          const SizedBox(height: 4),
                           Text(name, style: KalinkaTextStyles.trayRowSublabel),
-                        Text(status, style: KalinkaTextStyles.trayRowSublabel),
+                        ],
+                        if (widget.available && receiver.state == 'ready') ...[
+                          const SizedBox(height: 4),
+                          Text(status, style: KalinkaTextStyles.trayRowSublabel),
+                        ],
                       ],
                     ),
                   ),
-                  if (receiver.passwordRequired) ...[
+                  if (canReveal || shown || _busy) ...[
                     const SizedBox(width: 12),
                     if (_busy)
                       _spinner('Revealing password')
@@ -436,6 +783,8 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
             ),
           ),
         ),
+        _ReceiverStatus(receiver),
+        if (_error != null) _ReceiverError(message: _error!),
         if (shown)
           Padding(
             padding: const EdgeInsets.only(left: 36, top: 8, bottom: 12),
@@ -449,31 +798,21 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
               ),
             ),
           ),
-        if (receiver.message != null)
-          Text(receiver.message!, style: KalinkaTextStyles.trayRowSublabel),
-        if (receiver.state != 'ready')
-          Text(
-            receiver.state == 'starting'
-                ? 'Starting receiver…'
-                : 'Receiver unavailable',
-            style: KalinkaTextStyles.trayRowSublabel,
-          ),
         for (final session in receiver.sessions)
-          Text(
-            '${session.name} · Connected',
-            style: KalinkaTextStyles.trayRowSublabel,
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              '${session.name} · Connected',
+              style: KalinkaTextStyles.trayRowSublabel,
+            ),
           ),
-        if (_error != null)
-          Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
       ],
     );
   }
 
   Widget _compact(ReceiverSnapshot r) {
     final session = r.sessions.firstOrNull;
-    final status = r.state != 'ready'
-        ? (r.message ?? 'Receiver ${r.state}')
-        : session != null
+    final status = session != null
         ? '${session.name} · Connected'
         : r.passwordRequired
         ? 'Password required'
@@ -495,7 +834,8 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(r.title, style: KalinkaTextStyles.trayRowLabel),
-                      Text(status, style: KalinkaTextStyles.trayRowSublabel),
+                      if (r.state == 'ready')
+                        Text(status, style: KalinkaTextStyles.trayRowSublabel),
                     ],
                   ),
                 ),
@@ -505,8 +845,8 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
             ),
           ),
         ),
-        if (_error != null)
-          Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
+        _ReceiverStatus(r),
+        if (_error != null) _ReceiverError(message: _error!),
         if (_busy) const LinearProgressIndicator(),
       ],
     );
@@ -554,9 +894,18 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
           const SizedBox(width: 12),
         ],
         Expanded(
-          child: Text(
-            widget.showTitle ? r.title : name,
-            style: KalinkaTextStyles.trayRowLabel,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.showTitle ? r.title : name,
+                style: KalinkaTextStyles.trayRowLabel,
+              ),
+              if (widget.showTitle && name != serverName) ...[
+                const SizedBox(height: 4),
+                Text(name, style: KalinkaTextStyles.trayRowSublabel),
+              ],
+            ],
           ),
         ),
       ],
@@ -605,50 +954,44 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
     // MenuAnchor measures intrinsic sizes, so use the known panel width.
     final width = (MediaQuery.sizeOf(context).width - 40).clamp(0.0, 340.0);
     final roomy = width >= 320 * MediaQuery.textScalerOf(context).scale(1);
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (roomy)
-            Row(
-              children: [
-                Expanded(child: title),
-                pairControl,
-              ],
-            )
-          else ...[
-            title,
-            Align(alignment: Alignment.centerRight, child: pairControl),
-          ],
-          if (widget.showTitle && name != serverName)
-            Text(name, style: KalinkaTextStyles.trayRowSublabel),
-          if (r.message != null)
-            Text(r.message!, style: KalinkaTextStyles.trayRowSublabel),
-          if (r.state != 'ready')
-            Text(
-              r.state == 'starting'
-                  ? 'Starting receiver…'
-                  : 'Receiver unavailable',
-              style: KalinkaTextStyles.trayRowSublabel,
-            ),
-          if (pairing != null && widget.available && peers.isEmpty)
-            Text(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (roomy)
+          Row(
+            children: [Expanded(child: title), pairControl],
+          )
+        else ...[
+          title,
+          const SizedBox(height: 8),
+          Align(alignment: Alignment.centerRight, child: pairControl),
+        ],
+        _ReceiverStatus(r),
+        if (_error != null) _ReceiverError(message: _error!),
+        if (pairing != null && widget.available && peers.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
               'Choose $name in Bluetooth settings.',
               style: KalinkaTextStyles.trayRowSublabel,
             ),
+          ),
+        // An unavailable backend can return no peers without losing its bonds.
+        // Keep reported peers, but only claim an empty list when it is ready.
+        if (peers.isNotEmpty || (widget.available && r.state == 'ready'))
           Padding(
-            padding: const EdgeInsets.only(top: 4, bottom: 4),
+            padding: const EdgeInsets.only(top: 16, bottom: 8),
             child: Text(
               peers.isEmpty ? 'No paired devices' : 'Paired devices',
-              style: KalinkaTextStyles.trayRowSublabel,
+              style: KalinkaTextStyles.trayRowSublabel.copyWith(
+                color: peers.isEmpty
+                    ? KalinkaColors.textMuted
+                    : KalinkaColors.textSecondary,
+              ),
             ),
           ),
-          for (final peer in peers) _pairedDevice(r, peer),
-          if (_error != null)
-            Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
-        ],
-      ),
+        for (final peer in peers) _pairedDevice(r, peer),
+      ],
     );
   }
 
@@ -659,7 +1002,7 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
     final connected = peer.connected || session != null;
     final enabled = widget.available && !_busy;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
           const Icon(
@@ -777,14 +1120,8 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
             r.effectiveName ?? r.title,
             style: KalinkaTextStyles.trayRowLabel,
           ),
-          if (r.message != null)
-            Text(r.message!, style: KalinkaTextStyles.trayRowSublabel),
-          if (r.state != 'ready')
-            Text(switch (r.state) {
-              'starting' => 'Starting receiver…',
-              'stopping' => 'Stopping receiver…',
-              _ => 'Receiver unavailable',
-            }, style: KalinkaTextStyles.trayRowSublabel),
+          _ReceiverStatus(r),
+          if (_error != null) _ReceiverError(message: _error!),
           if (r.offers('open_pairing')) ...[
             if (pairingOpen) ...[
               Text(
@@ -874,8 +1211,6 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
                 ],
               ),
             ),
-          if (_error != null)
-            Text(_error!, style: KalinkaTextStyles.trayRowSublabel),
           if (_busy) const LinearProgressIndicator(),
         ],
       ),

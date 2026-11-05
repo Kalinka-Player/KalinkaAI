@@ -241,6 +241,7 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
           artPath: path,
           aspectRatio: item.image?.aspectRatio,
           title: catalogTitle,
+          entityId: item.id,
           description: item.description,
           subtitle: item.description,
           leading: showSource

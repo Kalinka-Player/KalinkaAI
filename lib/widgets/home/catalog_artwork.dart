@@ -51,6 +51,7 @@ class CatalogArtwork extends StatelessWidget {
                       artPath: page.artPath,
                       aspectRatio: page.artAspectRatio,
                       title: title,
+                      entityId: page.id ?? '',
                       description: page.description,
                       subtitle: description,
                       leading: (scale) => Icon(

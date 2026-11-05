@@ -8,11 +8,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/receiver_control.dart';
+import 'package:kalinka/providers/catalog_cards_provider.dart';
+import 'package:kalinka/providers/catalog_sources_provider.dart';
+import 'package:kalinka/providers/collections_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/receiver_provider.dart';
 import 'package:kalinka/providers/monotonic_clock_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/failure_note.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/receiver_approval.dart';
 import 'package:kalinka/widgets/receiver_panel.dart';
@@ -351,7 +356,7 @@ void main() {
           tester
               .getBottomLeft(find.byKey(const ValueKey('receiver-pair-new')))
               .dy,
-      lessThanOrEqualTo(12),
+      inInclusiveRange(16, 24),
     );
     inventory.replace(
       ReceiverInventory(
@@ -370,7 +375,7 @@ void main() {
     expect(
       tester.getTopLeft(find.text('Paired devices')).dy -
           tester.getBottomLeft(find.byTooltip('Stop pairing')).dy,
-      lessThanOrEqualTo(12),
+      inInclusiveRange(16, 24),
     );
     await capture(tester, 'mobile-connect-pairing');
     await tester.tap(find.byTooltip('Device options for Laptop'));
@@ -390,6 +395,125 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());
   });
+
+  for (final (size, scale) in [
+    (const Size(375, 812), 1.0),
+    (const Size(320, 700), 2.0),
+    (const Size(812, 375), 1.0),
+    (const Size(1440, 900), 1.0),
+  ]) {
+    testWidgets('Connect distinguishes unavailable and empty devices at $size', (
+      tester,
+    ) async {
+      const message =
+          'Bluetooth receiver unavailable: no Bluetooth adapter '
+          'was found. Check that the adapter is connected and powered on.';
+      final unavailable = {
+        ...f.row(),
+        'state': 'error',
+        'message': message,
+        'peers': [],
+        'actions': [],
+      };
+      final inventory = f.Inventory(
+        ReceiverInventory(receivers: [ReceiverSnapshot.fromJson(unavailable)]),
+      );
+      if (size.width >= 1280) {
+        await pumpHomeShell(
+          tester,
+          queue: SettableQueue(queueOf(0)),
+          receivers: () => inventory,
+          size: size,
+          themed: true,
+          captureKey: captureKey,
+        );
+      } else {
+        await pump(tester, inventory, size: size, scale: scale);
+      }
+      await tester.tap(find.text('Connect'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(message, findRichText: true), findsOneWidget);
+      expect(find.text('No paired devices'), findsNothing);
+      expect(find.text('Paired devices'), findsNothing);
+      expect(
+        find.ancestor(
+          of: find.byType(FailureNote),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics && widget.properties.liveRegion == true,
+          ),
+        ),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.byType(FailureNote));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await capture(tester, 'connect-error-${size.width}-$scale');
+
+      // An error need not prevent the backend from reporting and managing bonds.
+      inventory.replace(
+        ReceiverInventory(
+          receivers: [
+            ReceiverSnapshot.fromJson({
+              ...f.row(),
+              'state': 'error',
+              'message': message,
+            }),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Paired devices'), findsOneWidget);
+      expect(find.text('Pixel 9 Pro'), findsOneWidget);
+      expect(find.text('No paired devices'), findsNothing);
+      final options = find.byTooltip('Device options for Pixel 9 Pro');
+      await tester.ensureVisible(options);
+      await tester.tap(options);
+      await tester.pumpAndSettle();
+      expect(find.text('Forget'), findsOneWidget);
+      expect(
+        tester
+            .widget<PopupMenuItem<String>>(
+              find.ancestor(
+                of: find.text('Forget'),
+                matching: find.byType(PopupMenuItem<String>),
+              ),
+            )
+            .enabled,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      // Only a successful, ready snapshot can establish that there are no bonds.
+      inventory.replace(
+        ReceiverInventory(
+          receivers: [ReceiverSnapshot.fromJson({...f.row(), 'peers': []})],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(FailureNote), findsNothing);
+      final empty = find.text('No paired devices');
+      expect(empty, findsOneWidget);
+      expect(tester.widget<Text>(empty).style?.color, KalinkaColors.textMuted);
+      await tester.ensureVisible(empty);
+      await tester.pumpAndSettle();
+      await capture(tester, 'connect-empty-${size.width}-$scale');
+
+      inventory.replace(
+        ReceiverInventory(
+          receivers: [ReceiverSnapshot.fromJson({...f.row(), 'peers': []})],
+          error: 'Could not load receivers. Retry to check their state.',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(empty, findsNothing);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.byType(FailureNote), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   for (final (size, scale) in [
     (const Size(375, 812), 1.0),
@@ -718,8 +842,68 @@ void main() {
     });
   }
 
+  for (final pending in [false, true]) {
+    testWidgets(
+      'closing Connect clears passwords across interrupted dismissal (pending: $pending)',
+      (tester) async {
+        final inventory = PasswordInventory(
+          ReceiverInventory(
+            receivers: [
+              ReceiverSnapshot.fromJson({
+                ...f.row(),
+                'receiver_id': 'airplay',
+                'title': 'AirPlay',
+                'kind': 'airplay',
+                'password_required': true,
+                'password_reveal_available': true,
+              }),
+            ],
+          ),
+        );
+        await pumpHomeShell(
+          tester,
+          queue: SettableQueue(queueOf(0)),
+          receivers: () => inventory,
+          size: const Size(1440, 900),
+          themed: true,
+        );
+        final entry = find.byKey(const ValueKey('navigation-connect'));
+        await tester.tap(entry);
+        await tester.pumpAndSettle();
+        if (pending) inventory.pendingPassword = Completer<String>();
+        await tester.tap(find.text('AirPlay'));
+        await tester.pump();
+        expect(find.text('room-secret'), pending ? findsNothing : findsOneWidget);
+
+        await tester.tap(find.byTooltip('Close'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 30));
+        // The panel is still mounted for its exit animation, but its secret
+        // must already be gone before that animation can be interrupted.
+        expect(find.byType(ReceiverPanel), findsOneWidget);
+        expect(find.text('room-secret'), findsNothing);
+        await tester.tap(entry);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        inventory.pendingPassword?.complete('room-secret');
+        await tester.pumpAndSettle();
+        expect(find.byType(ReceiverPanel), findsOneWidget);
+        expect(find.text('room-secret'), findsNothing);
+        expect(inventory.reveals, 1);
+
+        // A fresh explicit reveal is required after reopening.
+        inventory.pendingPassword = null;
+        await tester.tap(find.text('AirPlay'));
+        await tester.pumpAndSettle();
+        expect(find.text('room-secret'), findsOneWidget);
+        expect(inventory.reveals, 2);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+
   testWidgets(
-    'wide sidebar lists enabled receivers and anchors their popover',
+    'sidebar Connect follows collections and opens all enabled receivers',
     (tester) async {
       final inventory = PasswordInventory(
         ReceiverInventory(
@@ -741,21 +925,111 @@ void main() {
         size: const Size(1440, 900),
         themed: true,
         captureKey: captureKey,
+        collections: const CollectionsShelf(
+          plan: CatalogCardPlan(
+            id: 'kalinka:collections:catalog:root',
+            title: 'Your collections',
+            sourceName: 'collections',
+          ),
+          items: [],
+          total: 0,
+        ),
+        overrides: [
+          catalogSourcesProvider.overrideWith(
+            (ref) async => [
+              for (final name in ['Library', 'Radio'])
+                (
+                  module: ModuleInfo(
+                    name: name,
+                    title: name,
+                    enabled: true,
+                    state: ModuleState.ready,
+                  ),
+                  root: BrowseItem(
+                    id: 'kalinka:$name:catalog:root',
+                    canBrowse: true,
+                    canAdd: false,
+                  ),
+                ),
+            ],
+          ),
+        ],
       );
       expect(find.byKey(const ValueKey('connect-source-button')), findsNothing);
-      final entry = find.byKey(const ValueKey('navigation-receiver-bluetooth'));
+      final entry = find.byKey(const ValueKey('navigation-connect'));
+      final surface = find.byKey(const ValueKey('receiver-popover-surface'));
+      final reveal = find.byKey(const ValueKey('receiver-popover-reveal'));
+      FocusNode buttonFocus() => tester.widget<TextButton>(
+        find.descendant(of: entry, matching: find.byType(TextButton)),
+      ).focusNode!;
+      void expectConnectHighlight(bool visible) {
+        final highlight = tester.widget<AnimatedContainer>(
+          find.descendant(of: entry, matching: find.byType(AnimatedContainer)),
+        );
+        final decoration = highlight.decoration! as BoxDecoration;
+        expect(decoration.color!.a, visible ? 1 : 0);
+      }
+      Rect revealedRect() => tester.widget<ClipRect>(reveal).clipper!
+          .getClip(tester.getSize(reveal));
+      void expectPointerAtButton() {
+        final popup = tester.getRect(surface);
+        final button = tester.getRect(entry);
+        final shape = tester.widget<Material>(surface).shape!;
+        final path = shape.getOuterPath(Offset.zero & popup.size);
+        final pointer = Offset(1, button.center.dy - popup.top);
+        expect(popup.left, greaterThan(button.right));
+        expect(popup.left - button.right, lessThanOrEqualTo(8));
+        expect(path.contains(pointer), isTrue);
+        expect(path.contains(pointer.translate(0, 12)), isFalse);
+      }
       expect(entry, findsOneWidget);
+      expect(find.text('CONNECT'), findsNothing);
+      expect(find.text('Bluetooth'), findsNothing);
+      expect(find.text('AirPlay'), findsNothing);
       expect(
-        find.byKey(const ValueKey('navigation-receiver-airplay')),
-        findsNothing,
+        find.descendant(of: entry, matching: find.byIcon(kConnectIcon)),
+        findsOneWidget,
       );
+      final collections = find.byKey(const ValueKey('navigation-collections'));
+      final lastSource = find.byKey(const ValueKey('navigation-source-Radio'));
+      expect(
+        tester.getBottomLeft(lastSource).dy,
+        lessThan(tester.getTopLeft(collections).dy),
+      );
+      expect(
+        tester.getBottomLeft(collections).dy,
+        lessThan(tester.getTopLeft(entry).dy),
+      );
+      await capture(tester, 'wide-connect-sidebar');
+      expectConnectHighlight(false);
       await tester.tap(entry);
+      await tester.pump();
+      final panelBounds = tester.getRect(find.byType(ReceiverPanel));
+      expect(revealedRect().width, lessThan(tester.getSize(reveal).width));
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(revealedRect().width, greaterThan(0));
+      expect(revealedRect().width, lessThan(tester.getSize(reveal).width));
+      expect(tester.getRect(find.byType(ReceiverPanel)), panelBounds);
+      await capture(tester, 'wide-connect-opening');
       await tester.pumpAndSettle();
+      expectPointerAtButton();
+      expectConnectHighlight(true);
+      expect(find.text('Play from a device'), findsOneWidget);
+      expect(find.text('Bluetooth'), findsOneWidget);
+      expect(find.text('AirPlay'), findsNothing);
       expect(find.text('Pair new'), findsOneWidget);
       await capture(tester, 'wide-popover');
       await tester.tap(find.byTooltip('Device options for Pixel 9 Pro'));
       await tester.pumpAndSettle();
       expect(find.text('Forget'), findsOneWidget);
+      await tester.tap(find.text('Forget'));
+      await tester.pumpAndSettle();
+      expect(find.text('Forget Pixel 9 Pro?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ReceiverPanel), findsOneWidget);
+      await tester.tap(find.byTooltip('Device options for Pixel 9 Pro'));
+      await tester.pumpAndSettle();
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(
@@ -766,9 +1040,41 @@ void main() {
       await tester.tap(find.byTooltip('Close'));
       await tester.pumpAndSettle();
       expect(find.byType(ReceiverPanel), findsNothing);
+      expectConnectHighlight(false);
+      expect(buttonFocus().hasFocus, isFalse);
+      // Keyboard activation and Escape work, and reopening during dismissal
+      // does not let a stale animation completion hide the new popup.
+      for (var i = 0; i < 30 && !buttonFocus().hasFocus; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+      }
+      expect(buttonFocus().hasFocus, isTrue);
+      expectConnectHighlight(false);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expectConnectHighlight(true);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(buttonFocus().hasFocus, isTrue);
+      expectConnectHighlight(false);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(find.byType(ReceiverPanel), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump(const Duration(milliseconds: 30));
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      expect(find.byType(ReceiverPanel), findsOneWidget);
+      await tester.tapAt(const Offset(900, 800));
+      await tester.pumpAndSettle();
+      expect(find.byType(ReceiverPanel), findsNothing);
+      expectConnectHighlight(false);
+      expect(buttonFocus().hasFocus, isFalse);
       inventory.replace(
         ReceiverInventory(
           receivers: [
+            ReceiverSnapshot.fromJson(f.row()),
             ReceiverSnapshot.fromJson({
               ...f.row(),
               'receiver_id': 'airplay',
@@ -781,10 +1087,12 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('navigation-receiver-airplay')),
-      );
+      await tester.tap(entry);
       await tester.pumpAndSettle();
+      expectPointerAtButton();
+      expect(find.text('Bluetooth'), findsOneWidget);
+      expect(find.text('AirPlay'), findsOneWidget);
+      expect(find.text('Pair new'), findsOneWidget);
       await tester.tap(find.byIcon(Icons.expand_more));
       await tester.pumpAndSettle();
       expect(find.text('room-secret'), findsOneWidget);
@@ -793,6 +1101,55 @@ void main() {
       await tester.tap(find.byIcon(Icons.expand_less));
       await tester.pumpAndSettle();
       expect(find.text('room-secret'), findsNothing);
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+
+      // The same popup remains usable beside the compact rail with large text.
+      tester.view.physicalSize = const Size(1024, 768);
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+      await tester.pumpAndSettle();
+      await tester.tap(entry);
+      await tester.pump();
+      // Reduced motion reveals the whole panel in the first frame.
+      expect(
+        revealedRect().width,
+        greaterThanOrEqualTo(tester.getSize(reveal).width),
+      );
+      await tester.pumpAndSettle();
+      expectPointerAtButton();
+      expect(find.text('Bluetooth'), findsOneWidget);
+      expect(find.text('AirPlay'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await capture(tester, 'compact-connect-popup');
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+      // Pointer dismissal and hovering the closed button leave it unselected.
+      final mouse = await tester.createGesture(kind: ui.PointerDeviceKind.mouse);
+      await mouse.addPointer(location: const Offset(900, 100));
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(entry));
+      await tester.pumpAndSettle();
+      Tooltip.dismissAllToolTips();
+      await tester.pumpAndSettle();
+      expectConnectHighlight(false);
+      expect(buttonFocus().hasFocus, isFalse);
+      await capture(tester, 'compact-connect-closed-hover');
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      expectConnectHighlight(true);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      expect(find.byType(ReceiverPanel), findsNothing);
+      expectConnectHighlight(false);
+      expect(buttonFocus().hasFocus, isFalse);
+
+      inventory.replace(const ReceiverInventory());
+      await tester.pumpAndSettle();
+      expect(entry, findsNothing);
       await tester.pumpWidget(const SizedBox());
     },
   );
