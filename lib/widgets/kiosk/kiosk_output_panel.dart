@@ -22,16 +22,12 @@ class KioskOutputPanel extends ConsumerStatefulWidget {
   /// Over the whole screen, for one too small to float a panel on.
   final bool fullScreen;
 
-  /// False on a locked display: the output is shown, not changed from here.
-  final bool canPick;
-
   final VoidCallback onClose;
 
   const KioskOutputPanel({
     super.key,
     required this.scale,
     required this.fullScreen,
-    required this.canPick,
     required this.onClose,
   });
 
@@ -82,8 +78,7 @@ class _KioskOutputPanelState extends ConsumerState<KioskOutputPanel> {
         if (!r.active) r,
     ];
     // Nothing else to go to, nothing to show.
-    final showOthers =
-        widget.canPick && list.switcherVisible && others.isNotEmpty;
+    final showOthers = list.switcherVisible && others.isNotEmpty;
 
     final content = Column(
       mainAxisSize: MainAxisSize.min,

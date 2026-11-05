@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show immutable;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, immutable, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../utils/local_platform.dart';
@@ -26,6 +27,16 @@ final kioskLaunchProvider = Provider<bool>(
   ),
 );
 
+/// Set only by the server's flutter-pi launcher, which runs while the server's
+/// display setting is enabled. Browser and desktop launch flags stay separate.
+final localDisplayKioskProvider = Provider<bool>(
+  (ref) =>
+      !kIsWeb &&
+      defaultTargetPlatform == TargetPlatform.linux &&
+      environmentValue('KALINKA_LOCAL_DISPLAY') == 'true' &&
+      ref.watch(kioskLaunchProvider),
+);
+
 /// Why the display is up, which decides the way out of it.
 enum KioskLock {
   /// Opened from the player: the exit button leaves.
@@ -33,6 +44,9 @@ enum KioskLock {
 
   /// This device's setting: five taps on the logo leave, and turn it off.
   device,
+
+  /// Server display: Home leaves temporarily; inactivity brings it back.
+  server,
 
   /// Started by the launch flag: no way out. Outranks the setting.
   launch,
@@ -64,7 +78,11 @@ class KioskNotifier extends Notifier<KioskState> {
   @override
   KioskState build() {
     final KioskState initial;
-    if (ref.watch(kioskLaunchProvider)) {
+    // Launch options are fixed for this process. Read them once so a provider
+    // refresh cannot overwrite the user's temporary return to Home.
+    if (ref.read(localDisplayKioskProvider)) {
+      initial = const KioskState(active: true, lock: KioskLock.server);
+    } else if (ref.read(kioskLaunchProvider)) {
       initial = const KioskState(active: true, lock: KioskLock.launch);
     } else if (ref.read(sharedPrefsProvider).getBool(sharedPrefLocked) ??
         false) {
@@ -83,13 +101,16 @@ class KioskNotifier extends Notifier<KioskState> {
   /// Opens the display from the player.
   void enter() {
     if (!state.active) {
-      state = const KioskState(active: true, lock: KioskLock.none);
+      state = KioskState(active: true, lock: state.lock);
     }
   }
 
-  /// The exit button: leaves only a display the player opened.
+  /// Home temporarily leaves a server display without disabling its setting.
+  /// Other displays retain their existing exit rules.
   void exit() {
-    if (state.lock == KioskLock.none) state = KioskState.inactive;
+    if (state.lock == KioskLock.none || state.lock == KioskLock.server) {
+      state = KioskState(active: false, lock: state.lock);
+    }
   }
 
   /// Turns this device's setting on: the display comes up now and on every
