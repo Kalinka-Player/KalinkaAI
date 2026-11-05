@@ -30,7 +30,8 @@ enum KalinkaDialogSide {
 ///
 /// The content shape is fixed — optional icon tile, title, optional message,
 /// optional [content] slot, and a row of [actions] — so every dialog in the
-/// app reads the same. Show it with [showKalinkaDialog].
+/// app reads the same; [iconBeside] only turns the tile, title and message
+/// into one row. Show it with [showKalinkaDialog].
 class KalinkaDialog extends StatelessWidget {
   /// Panel the dialog belongs to once the layout splits.
   final KalinkaDialogSide side;
@@ -56,6 +57,11 @@ class KalinkaDialog extends StatelessWidget {
   /// Explanatory line under the title.
   final String? message;
 
+  /// Sets the icon tile at the start of the title and message, which read
+  /// in a column beside it: for a dialog about one thing, named and
+  /// described, rather than a question.
+  final bool iconBeside;
+
   /// Body content under the message, for dialogs that show more than text
   /// (e.g. the speaker test's channel indicators).
   final Widget? content;
@@ -73,6 +79,7 @@ class KalinkaDialog extends StatelessWidget {
     this.iconColor = KalinkaColors.accent,
     this.iconGlyphColor,
     this.message,
+    this.iconBeside = false,
     this.content,
     this.actions = const [],
   });
@@ -173,19 +180,23 @@ class KalinkaDialog extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[_buildIconTile(), const SizedBox(height: 14)],
-          Text(
-            title,
-            style: KalinkaTextStyles.dialogTitle,
-            textAlign: TextAlign.center,
-          ),
-          if (message != null) ...[
-            const SizedBox(height: 8),
+          if (iconBeside)
+            _buildHeadingBeside()
+          else ...[
+            if (icon != null) ...[_buildIconTile(), const SizedBox(height: 14)],
             Text(
-              message!,
-              style: KalinkaTextStyles.dialogBody,
+              title,
+              style: KalinkaTextStyles.dialogTitle,
               textAlign: TextAlign.center,
             ),
+            if (message != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                message!,
+                style: KalinkaTextStyles.dialogBody,
+                textAlign: TextAlign.center,
+              ),
+            ],
           ],
           if (content != null) ...[const SizedBox(height: 16), content!],
           if (actions.isNotEmpty) ...[
@@ -229,6 +240,24 @@ class KalinkaDialog extends StatelessWidget {
       ],
     );
   }
+
+  Widget _buildHeadingBeside() => Row(
+    children: [
+      if (icon != null) ...[_buildIconTile(), const SizedBox(width: 16)],
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: KalinkaTextStyles.dialogTitle),
+            if (message != null) ...[
+              const SizedBox(height: 4),
+              Text(message!, style: KalinkaTextStyles.dialogBody),
+            ],
+          ],
+        ),
+      ),
+    ],
+  );
 
   Widget _buildIconTile() {
     return Container(

@@ -30,11 +30,16 @@ class ModuleStatusBadge extends StatelessWidget {
   /// Quiet text and an icon for a plugin identity, rather than a boxed tag.
   final bool inline;
 
+  /// The glyph before an [inline] label, where the one its word names would
+  /// not do.
+  final IconData? icon;
+
   const ModuleStatusBadge({
     super.key,
     required this.label,
     required this.color,
     this.inline = false,
+    this.icon,
   });
 
   /// The word and colour for [status].
@@ -65,14 +70,16 @@ class ModuleStatusBadge extends StatelessWidget {
         KalinkaColors.textMuted => KalinkaColors.textSecondary,
         _ => color,
       };
-      final icon = switch (label) {
-        'READY' => Icons.check_circle_outline,
-        'ERROR' => Icons.error_outline,
-        'WARNING' => Icons.warning_amber_rounded,
-        'DISABLED' => Icons.pause_circle_outline,
-        'INSTALLING' || 'UPDATING' || 'UNINSTALLING' => Icons.sync,
-        _ => Icons.radio_button_unchecked,
-      };
+      final icon =
+          this.icon ??
+          switch (label) {
+            'READY' => Icons.check_circle_outline,
+            'ERROR' => Icons.error_outline,
+            'WARNING' => Icons.warning_amber_rounded,
+            'DISABLED' => Icons.pause_circle_outline,
+            'INSTALLING' || 'UPDATING' || 'UNINSTALLING' => Icons.sync,
+            _ => Icons.radio_button_unchecked,
+          };
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [

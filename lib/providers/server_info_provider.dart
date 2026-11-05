@@ -20,6 +20,9 @@ class ServerInfo {
   /// The server lists its volumes and the folders on them (API 0.21).
   final bool storage;
 
+  /// The server lists the drives and shares it could mount (API 0.22).
+  final bool storageDevices;
+
   const ServerInfo({
     required this.version,
     required this.latencyMs,
@@ -27,6 +30,7 @@ class ServerInfo {
     this.pluginInstallation = false,
     this.pluginUpdateChecks = false,
     this.storage = false,
+    this.storageDevices = false,
   });
 }
 
@@ -45,13 +49,15 @@ final serverInfoProvider = FutureProvider.autoDispose<ServerInfo>((ref) async {
   bool can(String capability) =>
       capabilities is Map && capabilities[capability] == true;
   final browsing = can('enabled') && can('catalog_browsing');
+  final storage = info['storage'];
   return ServerInfo(
     version: version,
     latencyMs: stopwatch.elapsedMilliseconds,
     pluginCatalogEnabled: browsing,
     pluginInstallation: browsing && can('installation'),
     pluginUpdateChecks: browsing && can('update_checks'),
-    storage: info['storage'] is Map && info['storage']['folders'] == true,
+    storage: storage is Map && storage['folders'] == true,
+    storageDevices: storage is Map && storage['devices'] == true,
   );
 });
 
@@ -61,6 +67,14 @@ final serverInfoProvider = FutureProvider.autoDispose<ServerInfo>((ref) async {
 final storageSupportedProvider = Provider<bool>((ref) {
   final info = ref.watch(serverInfoProvider);
   return !info.isLoading && !info.hasError && info.value?.storage == true;
+});
+
+/// Whether Drives & shares can be offered on this server.
+final storageDevicesSupportedProvider = Provider<bool>((ref) {
+  final info = ref.watch(serverInfoProvider);
+  return !info.isLoading &&
+      !info.hasError &&
+      info.value?.storageDevices == true;
 });
 
 /// Fail closed during connection changes, errors and on older servers.

@@ -11,6 +11,7 @@ import '../providers/plugin_state.dart';
 import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
 import 'configuration_appearance.dart';
+import 'failure_note.dart';
 import 'module_artwork.dart';
 import 'settings_controls/module_header_row.dart';
 import 'kalinka_button.dart';
@@ -811,55 +812,12 @@ class PluginFailureNote extends StatelessWidget {
   const PluginFailureNote({super.key, required this.failure, this.onDismiss});
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: EdgeInsets.fromLTRB(10, 9, onDismiss == null ? 12 : 2, 9),
-    decoration: BoxDecoration(
-      color: KalinkaColors.statusOfflineSurface,
-      border: Border.all(
-        color: KalinkaColors.actionDelete.withValues(alpha: .25),
-      ),
-      borderRadius: BorderRadius.circular(9),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Icon(
-          Icons.error_outline,
-          size: 17,
-          color: KalinkaColors.actionDelete,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: '${failure.title}. ',
-                  style: const TextStyle(color: KalinkaColors.textPrimary),
-                ),
-                TextSpan(text: failure.message),
-              ],
-            ),
-            key: const ValueKey('plugin-failure'),
-            style: KalinkaTextStyles.trayRowSublabel,
-          ),
-        ),
-        if (onDismiss != null)
-          IconButton(
-            key: const ValueKey('plugin-failure-dismiss'),
-            tooltip: 'Dismiss',
-            onPressed: onDismiss,
-            padding: EdgeInsets.zero,
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-            style: IconButton.styleFrom(
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            color: KalinkaColors.textSecondary,
-            icon: const Icon(Icons.close_rounded, size: 18),
-          ),
-      ],
-    ),
+  Widget build(BuildContext context) => FailureNote(
+    title: failure.title,
+    message: failure.message,
+    messageKey: const ValueKey('plugin-failure'),
+    onDismiss: onDismiss,
+    dismissKey: const ValueKey('plugin-failure-dismiss'),
   );
 }
 
