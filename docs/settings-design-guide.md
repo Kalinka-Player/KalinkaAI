@@ -138,6 +138,7 @@ Off, keep this order directly on the tab:
 | Group | Contents |
 | --- | --- |
 | SERVER | Identity card: name and pencil, selectable address, server version, raw backend supervisor status |
+| DISPLAY | Shown when the saved `base_config.display.enabled` is true or the app is launched with kiosk enabled: local display inactivity timeouts |
 | SOFTWARE UPDATES | Bundle/component update state and automatic updates in one card |
 | MANAGEMENT | Restart Kalinka, Network, dashboard, restart streamer, power off streamer, when supported |
 | SUPPORT | Download server logs |
@@ -147,6 +148,8 @@ The name is a prominent value, not a duplicate page heading. Its 48dp pencil ope
 The address has 16dp side padding, a 4dp label/value gap and 20dp bottom padding. The metadata area has 16dp padding, 8dp between details and 16dp between label/value columns. At less than `280 × textScaler.scale(1)` available width, each detail stacks its label above its value with a 4dp gap. Do not truncate an address or status.
 
 **Network** appears only for a box with a supervisor. It opens a **Network** page that hosts the same network panel as setup: the current wired or Wi-Fi connection, and the Wi-Fi networks the box can join.
+
+**Display** contains **Return to now playing** (15 s, 30 s, 1 min, 2 min; default 30 s) and **Blank screen after** (Off, 5 min, 10 min, 15 min, 30 min; default 5 min). Place each dropdown to the right of its label and help, reserving room by wrapping the text on the left. Use an anchored popup with the Bluetooth device menu's neutral surface and border, not a bottom sheet. Show whole-minute durations in minutes. Keep help brief: **After inactivity.** and **When idle and paused or stopped.**, plus a short backlight capability note. Save immediately in the local display's SharedPreferences, using seconds internally and 0 for Off. Remote clients show a note directing the user to the streamer's screen instead of editing unrelated local preferences. An explicit kiosk launch (`KALINKA_KIOSK`) also shows editable controls for testing, even when the server display setting is off. Blanking runs only while paused or stopped; touch, keyboard input or resumed playback wakes it, and the waking input does not activate a control. These changes do not stage server settings or require a restart.
 
 Display the supervisor status exactly as the backend returns it; do not parse a version or infer health from “Installed”. Package updates show the components the backend identifies as changed. Sound-card controls belong in Output settings. Device automation belongs in the expert list.
 

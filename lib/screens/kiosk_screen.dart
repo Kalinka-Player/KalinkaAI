@@ -35,8 +35,8 @@ import '../widgets/source_badge.dart' show sourceBadgeVisible;
 import '../widgets/transport_button.dart';
 
 /// Full-screen now-playing display, for a screen that shows what plays
-/// rather than one used to choose it. Stands in for the whole app: queue,
-/// search and settings are never built.
+/// rather than one used to choose it. On the server's own screen the main
+/// interface stays mounted underneath, ready for the Home button.
 ///
 /// Laid out for a 1024×600 panel and scaled from there; a portrait screen
 /// stacks the same parts on its centre line, and a small or square one lets
@@ -215,6 +215,9 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
 
   void _armDim() {
     _dimTimer?.cancel();
+    // The local display's configurable blanking timer owns its idle state.
+    // Avoid a second dim layer that would consume another tap after wake.
+    if (ref.read(kioskProvider).lock == KioskLock.server) return;
     _dimTimer = Timer(_dimAfter, () {
       if (!mounted || _playing) return;
       _closeOutputs();
@@ -263,9 +266,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     // Servers with the renderer events keep the list fresh over the queue
     // socket; this re-read is the fallback for ones that predate them. Here,
     // on the tap, not as the panel builds: the read changes the list at once.
-    if (ref.read(kioskProvider).lock == KioskLock.none) {
-      ref.read(rendererListProvider.notifier).refresh();
-    }
+    ref.read(rendererListProvider.notifier).refresh();
     _volumeTimer?.cancel();
     setState(() {
       _outputsOpen = true;
@@ -377,21 +378,18 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     final imagePath = standby ? null : (track.largeImage ?? track.smallImage);
     // Opened from the player, the way out is in plain sight. Held by this
     // device's setting, it is five taps on the logo; started by the launch
-    // flag, there is none.
+    // flag, there is none except on the server's local display, where Home
+    // temporarily returns to the main interface.
     final lock = ref.watch(kioskProvider.select((s) => s.lock));
+    final showHome = lock == KioskLock.server;
     final canExit = lock == KioskLock.none;
-    // Locked, the display shows the output; choosing one is for the full
-    // app.
-    final canPickOutput = lock == KioskLock.none;
     final volume = ref.watch(volumeAvailableProvider);
     // Somewhere else the music could go, for the panel to offer.
-    final outputs =
-        canPickOutput &&
-        ref.watch(
-          rendererListProvider.select(
-            (s) => s.switcherVisible && s.renderers.any((r) => !r.active),
-          ),
-        );
+    final outputs = ref.watch(
+      rendererListProvider.select(
+        (s) => s.switcherVisible && s.renderers.any((r) => !r.active),
+      ),
+    );
     final splash = ref.watch(kioskSplashPendingProvider);
     // Dimmed and without its controls while the server is away, as the
     // app's mini-player is.
@@ -404,7 +402,11 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // Back closes the output panel before it leaves the display.
-        _outputsOpen ? _closeOutputs() : _exit();
+        if (_outputsOpen) {
+          _closeOutputs();
+        } else if (canExit) {
+          _exit();
+        }
       },
       child: Focus(
         autofocus: true,
@@ -492,7 +494,8 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                               : urls.abs(track!.largeImage!),
                           layout: layout,
                           scale: scale,
-                          showExit: canExit,
+                          showExit: canExit || showHome,
+                          showHome: showHome,
                           controlsUp: controlsUp,
                           away: away,
                           onLogoTap: lock == KioskLock.device
@@ -540,7 +543,6 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                             child: KioskOutputPanel(
                               scale: panelScale,
                               fullScreen: true,
-                              canPick: canPickOutput,
                               onClose: _closeOutputs,
                             ),
                           ),
@@ -584,7 +586,6 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                                 child: KioskOutputPanel(
                                   scale: panelScale,
                                   fullScreen: false,
-                                  canPick: canPickOutput,
                                   onClose: _closeOutputs,
                                 ),
                               ),
@@ -622,6 +623,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     required _Layout layout,
     required double scale,
     required bool showExit,
+    required bool showHome,
     required bool controlsUp,
     required bool away,
     required VoidCallback? onLogoTap,
@@ -645,6 +647,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                 ? header * 1.2
                 : _pillScale(layout, scale),
             onTap: _exit,
+            home: showHome,
           )
         : null;
     // Over a cover that fills a large enough screen, the line under the
@@ -757,30 +760,32 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                     ),
                   ),
                   SizedBox(width: header * 16),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: row.maxWidth * 0.85),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: row.maxWidth * 0.55,
+                  Flexible(
+                    flex: 4,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: row.maxWidth * 0.85,
+                      ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: row.maxWidth * 0.55,
+                              ),
+                              child: output,
                             ),
-                            child: output,
-                          ),
-                          SizedBox(width: header * 28),
-                          ?clock,
-                          if (exit != null) ...[
-                            SizedBox(width: header * 16),
-                            exit,
+                            SizedBox(width: header * 28),
+                            ?clock,
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
+                  if (exit != null) ...[SizedBox(width: header * 16), exit],
                 ],
               ),
             ),
@@ -1364,8 +1369,13 @@ class _ResumeButton extends ConsumerWidget {
 class _ExitButton extends StatelessWidget {
   final double scale;
   final VoidCallback onTap;
+  final bool home;
 
-  const _ExitButton({required this.scale, required this.onTap});
+  const _ExitButton({
+    required this.scale,
+    required this.onTap,
+    required this.home,
+  });
 
   /// The smallest a touch target should be, in logical pixels.
   static const _minTarget = 44.0;
@@ -1373,10 +1383,12 @@ class _ExitButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textGrowth = MediaQuery.textScalerOf(context).scale(16) / 16;
-    final diameter = math.max(48 * scale, _minTarget) * textGrowth;
+    final diameter = math.max(48 * scale, home ? 48 : _minTarget) * textGrowth;
     return Semantics(
-      label: 'Leave the now-playing display',
+      container: true,
+      label: home ? 'Home' : 'Leave the now-playing display',
       button: true,
+      onTap: onTap,
       excludeSemantics: true,
       child: DecoratedBox(
         position: DecorationPosition.foreground,
@@ -1391,7 +1403,7 @@ class _ExitButton extends StatelessWidget {
           background: Colors.black.withValues(alpha: 0.36),
           onTap: onTap,
           child: Icon(
-            Icons.fullscreen_exit_rounded,
+            home ? Icons.home_outlined : Icons.fullscreen_exit_rounded,
             size: diameter * 0.58,
             color: KalinkaColors.textPrimary,
           ),
