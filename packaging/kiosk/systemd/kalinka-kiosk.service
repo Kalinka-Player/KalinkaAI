@@ -8,6 +8,7 @@ StartLimitIntervalSec=0
 # failure, is never restarted.
 ExecCondition=+/usr/lib/kalinka-kiosk/kalinka-kiosk-ctl prepare
 ExecStart=/usr/lib/kalinka-kiosk/kalinka-kiosk-ctl run
+ExecStopPost=+/usr/lib/kalinka-kiosk/kalinka-kiosk-ctl restore-display
 Restart=always
 RestartSec=5
 DynamicUser=yes

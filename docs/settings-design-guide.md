@@ -138,6 +138,7 @@ Off, keep this order directly on the tab:
 | Group | Contents |
 | --- | --- |
 | SERVER | Identity card: name and pencil, selectable address, server version, raw backend supervisor status |
+| DISPLAY | Shown when the saved `base_config.display.enabled` is true or the app is launched with kiosk enabled: local display inactivity timeouts |
 | SOFTWARE UPDATES | Bundle/component update state and automatic updates in one card |
 | MANAGEMENT | Restart Kalinka, Network, dashboard, restart streamer, power off streamer, when supported |
 | SUPPORT | Download server logs |
@@ -147,6 +148,8 @@ The name is a prominent value, not a duplicate page heading. Its 48dp pencil ope
 The address has 16dp side padding, a 4dp label/value gap and 20dp bottom padding. The metadata area has 16dp padding, 8dp between details and 16dp between label/value columns. At less than `280 × textScaler.scale(1)` available width, each detail stacks its label above its value with a 4dp gap. Do not truncate an address or status.
 
 **Network** appears only for a box with a supervisor. It opens a **Network** page that hosts the same network panel as setup: the current wired or Wi-Fi connection, and the Wi-Fi networks the box can join.
+
+**Display** contains **Return to now playing** (15 s, 30 s, 1 min, 2 min; default 30 s) and **Blank screen after** (Off, 5 min, 10 min, 15 min, 30 min; default 5 min). Place each dropdown to the right of its label and help, reserving room by wrapping the text on the left. Use an anchored popup with the Bluetooth device menu's neutral surface and border, not a bottom sheet. Show whole-minute durations in minutes. Keep help brief: **After inactivity.** and **When idle and paused or stopped.**, plus a short backlight capability note. Save immediately in the local display's SharedPreferences, using seconds internally and 0 for Off. Remote clients show a note directing the user to the streamer's screen instead of editing unrelated local preferences. An explicit kiosk launch (`KALINKA_KIOSK`) also shows editable controls for testing, even when the server display setting is off. Blanking runs only while paused or stopped; touch, keyboard input or resumed playback wakes it, and the waking input does not activate a control. These changes do not stage server settings or require a restart.
 
 Display the supervisor status exactly as the backend returns it; do not parse a version or infer health from “Installed”. Package updates show the components the backend identifies as changed. Sound-card controls belong in Output settings. Device automation belongs in the expert list.
 
@@ -174,14 +177,29 @@ Reference: [UI/UX Pro Max skill](../../../.codex/skills/ui-ux-pro-max/SKILL.md),
 ## Receiver connections
 
 Mobile **Connect** belongs in the existing music-source strip. Wide layouts
-list individual receivers under **Connect** in the sidebar, using compact
-anchored popovers. Show installed, enabled receivers only, independently of
+show one **Connect** button with the same icon in the sidebar, opening a compact
+anchored popup with the same content as Home's Connect. Collections follows the
+last music source, then a subtle divider and Connect, without a CONNECT section
+heading. Keep the Connect button even with only one enabled receiver.
+Show installed, enabled receivers only, independently of
 catalog availability. There is no dedicated Bluetooth header action, large
 Home connection row, or duplicated renderer picker. Enable/disable stays in
 plugin Settings.
 
+The sidebar popup has a small pointer toward the centre of its Connect button,
+drawn as part of the same neutral surface and border. Keep the popup within the
+screen and move the pointer along its edge when height requires shifting it.
+Reveal it from the button outward over 180ms with an ease-out curve and subtle
+fade, matching More's shelf; clip the reveal so the content never compresses or
+reflows. Closing takes 120ms and can be interrupted by reopening. Reduced motion
+shows and hides it immediately. Preserve outside-tap and Escape dismissal and
+return keyboard focus to Connect after keyboard dismissal. Pointer dismissal
+clears its focus. Connect's grey highlight follows the popup's open state only;
+hover and restored keyboard focus do not fill it, and keyboard focus uses a
+separate outline.
+
 The compact sheet shows actual receiver names and sessions. Bluetooth renders
-**Bluetooth · Pair new**, with a Paired devices label directly below it; no expansion or
+**Bluetooth · Pair new**, followed by a separate Paired devices group; no expansion or
 separate audio-permission switch. Pair new uses the shared compact primary
 `KalinkaButton`, with its berry fill and pill shape. Pair opens the backend's two-minute Just Works
 window. The sender may show its normal pairing prompt, but Kalinka needs no
@@ -194,11 +212,25 @@ Successful pairing grants audio access automatically. Device rows show an icon, 
 for connected audio. Each row has a vertical ellipsis menu with **Disconnect** for an
 audio session and **Forget** for the bond. Use a generic device icon until the
 server supplies a device type. Forget requires confirmation: it removes shared setup
-pairing too, keeps Wi-Fi configuration and requires re-pairing. Keep 4dp between the Bluetooth controls and the paired-device label, without
-reserved space while pairing. Device names wrap at large text sizes.
+pairing too, keeps Wi-Fi configuration and requires re-pairing. Leave 16dp before
+the paired-device label and 8dp before its rows. Align a custom receiver name
+under the receiver title, keeping it separate from the devices. Device names
+wrap at large text sizes.
 Use the centered `KalinkaDialog` and shared buttons. Cancel is neutral and gets
 initial keyboard focus. Forget uses the berry action style. Keep the message
 short: "Removes the Bluetooth pairing. Pair again to reconnect."
+
+Separate the panel introduction from the first receiver by 20dp, and put 20dp
+on either side of the divider between receivers. Receiver failures, failed
+actions and inventory errors use the shared `FailureNote`, with an error icon,
+readable wrapped text and live-region semantics, 12dp below the related controls.
+Show the backend error once instead of repeating a generic unavailable line.
+Keep any reported paired devices visible and respect the backend's action
+availability even when the module reports an error. An unavailable backend can
+return an empty peer list without deleting its bonds: show **No paired devices**
+in `textMuted` only when the receiver is ready and inventory is available.
+Hide that empty-state message during errors, startup and shutdown. AirPlay's
+password status is shown only while its receiver state is available and ready.
 
 The generic app-wide approval host remains available for controllers which
 actually publish a pending request. It preserves supplied comparison codes,
@@ -214,7 +246,9 @@ instructions or a separate Show password button. Keep custom receiver names
 visible. Unavailable receivers must not offer a reveal action.
 Password application uses the existing secret setting; its help warns that
 applying it restarts AirPlay and ends its session. Revealed text is discarded
-on closing, backgrounding, lost availability or removal of the password. These
+and pending reveals are invalidated as soon as closing starts, including when
+the exit animation is interrupted by reopening. Also discard it on
+backgrounding, lost availability or removal of the password. These
 surfaces reuse the existing theme, text styles and responsive spacing.
 
 Receiver operations use a spinner in the existing control bounds. AirPlay replaces

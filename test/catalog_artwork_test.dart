@@ -48,22 +48,12 @@ void main() {
     expect(page.artAspectRatio, 1.375);
   });
 
-  test(
-    'a title keeps its colour whatever describes it; both set the rings',
-    () {
-      final jazz = CatalogArtSeed.of('Jazz', null);
-      final described = CatalogArtSeed.of('  JAZZ ', 'From bebop on');
-      expect(described.key, jazz.key);
-      expect(described.geometry, isNot(jazz.geometry));
-      expect(CatalogArtSeed.of('jazz', ''), jazz);
-      expect(CatalogArtSeed.keys, contains(jazz.key));
-    },
-  );
-
-  test('the seed hash is FNV-1a, the same on every platform', () {
-    expect(fnv1a(''), 0x811c9dc5);
-    expect(fnv1a('a'), 0xe40c292c);
-    expect(fnv1a('foobar'), 0xbf9cf968);
+  test('a title keeps its background whatever describes it', () {
+    final jazz = CatalogArtSeed.of('Jazz', null);
+    final described = CatalogArtSeed.of('  JAZZ ', 'From bebop on');
+    expect(described.key, jazz.key);
+    expect(described, jazz);
+    expect(CatalogArtSeed.of('jazz', ''), jazz);
   });
 
   testWidgets('a row leads with the catalog\'s thumbnail, square', (
@@ -216,15 +206,61 @@ void main() {
       tester,
     ) async {
       await mount(tester, path: '/square.jpg', ratio: ratio);
+      expect(
+        (tester.widget<CustomPaint>(_drawn).painter! as CatalogArtPainter)
+            .questionMark,
+        isTrue,
+      );
+      // The network placeholder fills the card. Supply a decoded frame before
+      // checking the inset cover's bounds, using the requested cache key.
+      final provider = tester.widget<Image>(find.byType(Image)).image;
+      final key = await provider.obtainKey(ImageConfiguration.empty);
+      final frame = (await tester.runAsync(
+        () => createTestImage(width: 110, height: 80),
+      ))!;
+      addTearDown(frame.dispose);
+      addTearDown(() {
+        imageCache.clear();
+        imageCache.clearLiveImages();
+      });
+      await tester.pumpWidget(const SizedBox.shrink());
+      imageCache.evict(key);
+      imageCache.putIfAbsent(
+        key,
+        () => OneFrameImageStreamCompleter(
+          Future.value(ImageInfo(image: frame.clone())),
+        ),
+      );
+      await mount(tester, path: '/square.jpg', ratio: ratio);
+      await tester.pumpAndSettle();
       final cardRect = card(tester);
-      final art = tester.getRect(find.byType(Image));
+      final art = tester.getRect(find.byType(RawImage));
       expect(cardRect.width / cardRect.height, closeTo(3, 0.001));
       expect(art.width / art.height, closeTo(ratio ?? 1, 0.001));
       expect(art.right, lessThan(cardRect.right));
       expect(art.left, greaterThan(tester.getRect(find.text('Art')).right));
       expect(cardRect.contains(art.topLeft), isTrue);
       expect(_drawn, findsOneWidget);
+      expect(
+        (tester.widget<CustomPaint>(_drawn).painter! as CatalogArtPainter)
+            .questionMark,
+        isFalse,
+      );
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('failed inset artwork keeps the full card question mark', (
+    tester,
+  ) async {
+    await mount(tester, path: '/missing.jpg', ratio: 1);
+    await tester.pumpAndSettle();
+    expect(tester.getRect(_drawn), card(tester));
+    expect(
+      (tester.widget<CustomPaint>(_drawn).painter! as CatalogArtPainter)
+          .questionMark,
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -92,7 +92,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a catalog card keeps its shape whatever its art', (
+  testWidgets('a catalog card keeps its shape when any art fails', (
     tester,
   ) async {
     for (final ratio in [null, 3.0, 1.0]) {
@@ -100,8 +100,12 @@ void main() {
       await tester.pumpAndSettle();
       final card = tester.getRect(find.byType(CatalogCard));
       expect(card.size, const Size(300, 100));
-      final art = tester.getRect(find.byType(Image));
-      expect(art.width / art.height, closeTo(ratio ?? 1, 0.001));
+      expect(tester.getRect(_drawn), card);
+      expect(
+        (tester.widget<CustomPaint>(_drawn).painter! as CatalogArtPainter)
+            .questionMark,
+        isTrue,
+      );
       expect(tester.takeException(), isNull);
     }
   });

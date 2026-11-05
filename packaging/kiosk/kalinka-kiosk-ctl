@@ -10,9 +10,12 @@ The server's expert settings `base_config.display.*` decide whether it runs:
 """
 
 import fcntl
+import grp
 import json
 import os
+from pathlib import Path
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -21,6 +24,76 @@ CONFIG = os.environ.get("KALINKA_CONFIG", "/etc/kalinka/kalinka_conf.cfg")
 RUN_DIR = os.environ.get("RUNTIME_DIRECTORY", "/run/kalinka-kiosk")
 BUNDLE = "/usr/lib/kalinka-kiosk/bundle"
 UNIT = "kalinka-kiosk.service"
+BACKLIGHT_DIR = Path("/sys/class/backlight")
+
+
+def _backlight_file():
+    return Path(RUN_DIR) / "backlight.json"
+
+
+def _backlight_controls():
+    return {p.parent.name: p for p in BACKLIGHT_DIR.glob("*/bl_power")}
+
+
+def _prepare_backlight():
+    """Give the display service access to one panel's power control, if any.
+
+    Kernel guidance prefers firmware, then platform, then raw backlights.
+    No DRM/DPMS subprocess: flutter-pi owns the active DRM device.
+    """
+    _backlight_file().unlink(missing_ok=True)
+    priority = {"firmware": 0, "platform": 1, "raw": 2}
+
+    def rank(item):
+        try:
+            kind = (item[1].parent / "type").read_text().strip()
+        except OSError:
+            kind = "raw"
+        return (priority.get(kind, 3), item[0])
+
+    for device, control in sorted(_backlight_controls().items(), key=rank):
+        try:
+            original = int(control.read_text().strip())
+            if original not in range(5):
+                continue
+            os.chown(control, -1, grp.getgrnam("video").gr_gid)
+            os.chmod(control, stat.S_IMODE(control.stat().st_mode) | stat.S_IWGRP)
+            _backlight_file().write_text(json.dumps({"device": device, "power": original}))
+            control.write_text("0")
+            return
+        except (OSError, ValueError, KeyError) as error:
+            print(f"Backlight power unavailable: {error}", file=sys.stderr)
+            _backlight_file().unlink(missing_ok=True)
+
+
+def _backlight_state():
+    try:
+        state = json.loads(_backlight_file().read_text())
+        if not isinstance(state, dict):
+            return None
+        # The runtime directory belongs to the app. Never trust a path from
+        # its manifest in the privileged stop hook: choose from sysfs only.
+        device = state.get("device")
+        if not isinstance(device, str):
+            return None
+        control = _backlight_controls().get(device)
+        power = state.get("power")
+        if control is not None and type(power) is int and power in range(5):
+            return control, power
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def restore_display():
+    """Restore panel power on stop, including after a crash while blanked."""
+    saved = _backlight_state()
+    if saved is not None:
+        control, power = saved
+        try:
+            control.write_text(str(power))
+        except OSError as error:
+            print(f"Could not restore display power: {error}", file=sys.stderr)
 
 
 def _overrides():
@@ -85,6 +158,7 @@ def prepare():
             os.makedirs(RUN_DIR, exist_ok=True)
             with open(_launch_file(), "w") as f:
                 json.dump(want, f)
+            _prepare_backlight()
     except (OSError, ValueError) as e:
         # Not 1, which would read as "switched off" and never be retried.
         print(e, file=sys.stderr)
@@ -96,14 +170,24 @@ def prepare():
 def run():
     with open(_launch_file()) as f:
         launch = json.load(f)
-    env = dict(os.environ, KALINKA_KIOSK="true", KALINKA_SERVER=launch["server"])
+    env = dict(
+        os.environ,
+        KALINKA_KIOSK="true",
+        KALINKA_LOCAL_DISPLAY="true",
+        KALINKA_SERVER=launch["server"],
+    )
+    env.pop("KALINKA_DISPLAY_BACKLIGHT", None)
+    backlight = _backlight_state()
+    if backlight is not None:
+        env["KALINKA_DISPLAY_BACKLIGHT"] = str(backlight[0])
     flutter_pi = os.path.join(BUNDLE, "flutter-pi")
     args = [flutter_pi, "--release", "--rotation", launch["rotation"], BUNDLE]
     os.execve(flutter_pi, args, env)
 
 
 if __name__ == "__main__":
-    commands = {"sync": sync, "prepare": prepare, "run": run}
+    commands = {"sync": sync, "prepare": prepare, "run": run,
+                "restore-display": restore_display}
     if len(sys.argv) != 2 or sys.argv[1] not in commands:
         sys.exit(f"usage: {sys.argv[0]} {'|'.join(commands)}")
     commands[sys.argv[1]]()

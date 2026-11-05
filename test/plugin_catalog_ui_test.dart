@@ -17,6 +17,8 @@ import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/data_model/configuration_sections.dart';
 import 'package:kalinka/widgets/settings_controls/settings_toggle.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
+import 'package:kalinka/providers/display_settings_provider.dart';
+import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
@@ -476,6 +478,8 @@ Future<ProviderContainer> _container(
   _Proxy proxy,
   _CatalogApi api, {
   bool player = false,
+  bool localDisplay = false,
+  bool kioskLaunch = false,
   _Proxy? otherServer,
   _Live? live,
   SettingsState settings = const SettingsState(),
@@ -501,6 +505,8 @@ Future<ProviderContainer> _container(
   final container = ProviderContainer(
     overrides: [
       sharedPrefsProvider.overrideWithValue(prefs),
+      localDisplayKioskProvider.overrideWithValue(localDisplay),
+      kioskLaunchProvider.overrideWithValue(kioskLaunch),
       if (box != null) ...[
         supervisorApiProvider.overrideWithValue(box),
         serverIdentityProvider.overrideWith((ref) async => 'box-1'),
@@ -703,6 +709,167 @@ Finder _onPage<T>(Finder matching) =>
 final _changesBar = find.byKey(const ValueKey('configuration-changes'));
 
 void main() {
+  group('Display settings', () {
+    for (final enabled in [false, true]) {
+      testWidgets('section follows the saved display setting: $enabled', (
+        tester,
+      ) async {
+        final container = await _container(
+          _Proxy({'enabled': true, 'catalog_browsing': true}),
+          _CatalogApi(_catalog()),
+          localDisplay: true,
+          settings: _serverSettings().copyWith(
+            values: {'base_config.display.enabled': enabled},
+            stagedChanges: {'base_config.display.enabled': !enabled},
+          ),
+        );
+        await _screen(tester, container);
+        await _tapTab(tester, PluginTab.server);
+        expect(find.text('DISPLAY'), enabled ? findsOneWidget : findsNothing);
+      });
+    }
+
+    for (final (size, scale, kioskLaunch) in const [
+      (Size(400, 850), 1.0, false),
+      (Size(320, 800), 2.0, false),
+      (Size(900, 600), 1.0, true),
+    ]) {
+      testWidgets(
+        'display timeouts save without server changes at $size / $scale '
+        '(launch flag: $kioskLaunch)',
+        (tester) async {
+          final container = await _container(
+            _Proxy({'enabled': true, 'catalog_browsing': true}),
+            _CatalogApi(_catalog()),
+            localDisplay: !kioskLaunch,
+            kioskLaunch: kioskLaunch,
+            settings: _serverSettings().copyWith(
+              values: {'base_config.display.enabled': !kioskLaunch},
+            ),
+          );
+          await _screen(
+            tester,
+            container,
+            size: size,
+            scale: scale,
+            disableAnimations: true,
+          );
+          await _tapTab(tester, PluginTab.server);
+          final kiosk = find.byKey(const ValueKey('display-kiosk-seconds'));
+          final blank = find.byKey(const ValueKey('display-blank-seconds'));
+          expect(
+            find.descendant(of: kiosk, matching: find.text('30 s')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: blank, matching: find.text('5 min')),
+            findsOneWidget,
+          );
+          expect(
+            tester.getRect(kiosk).left,
+            greaterThan(
+              tester.getRect(find.text('Return to now playing')).right,
+            ),
+          );
+          expect(
+            tester.getRect(blank).left,
+            greaterThan(tester.getRect(find.text('Blank screen after')).right),
+          );
+          await tester.ensureVisible(kiosk);
+          await tester.pumpAndSettle();
+          await tester.tap(kiosk);
+          await tester.pumpAndSettle();
+          expect(find.byType(BottomSheet), findsNothing);
+          final items = find.byType(PopupMenuItem<int>);
+          expect(
+            tester
+                .widgetList<PopupMenuItem<int>>(items)
+                .map((item) => item.value),
+            [15, 30, 60, 120],
+          );
+          for (final label in ['15 s', '30 s', '1 min', '2 min']) {
+            expect(
+              find.descendant(of: items, matching: find.text(label)),
+              findsOneWidget,
+            );
+          }
+          await tester.tap(
+            find.descendant(of: items, matching: find.text('1 min')),
+          );
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(blank);
+          await tester.pumpAndSettle();
+          await tester.tap(blank);
+          await tester.pumpAndSettle();
+          expect(find.byType(BottomSheet), findsNothing);
+          expect(
+            tester
+                .widgetList<PopupMenuItem<int>>(items)
+                .map((item) => item.value),
+            [0, 300, 600, 900, 1800],
+          );
+          for (final label in ['Off', '5 min', '10 min', '15 min', '30 min']) {
+            expect(
+              find.descendant(of: items, matching: find.text(label)),
+              findsOneWidget,
+            );
+          }
+          await tester.tap(
+            find.descendant(of: items, matching: find.text('30 min')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.descendant(of: blank, matching: find.text('30 min')),
+            findsOneWidget,
+          );
+          await tester.ensureVisible(blank);
+          await tester.pumpAndSettle();
+          await tester.tap(blank);
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.descendant(of: items, matching: find.text('Off')),
+          );
+          await tester.pumpAndSettle();
+          final prefs = container.read(sharedPrefsProvider);
+          expect(prefs.getInt(DisplaySettingsNotifier.kioskKey), 60);
+          expect(prefs.getInt(DisplaySettingsNotifier.blankKey), 0);
+          expect(
+            find.descendant(of: kiosk, matching: find.text('1 min')),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: blank, matching: find.text('Off')),
+            findsOneWidget,
+          );
+          expect(container.read(settingsProvider).hasPendingChanges, isFalse);
+          expect(find.text('Return to now playing'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
+    testWidgets('remote clients direct edits to the local display', (
+      tester,
+    ) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        settings: _serverSettings().copyWith(
+          values: {'base_config.display.enabled': true},
+        ),
+      );
+      await _screen(tester, container);
+      await _tapTab(tester, PluginTab.server);
+      expect(find.text('DISPLAY'), findsOneWidget);
+      expect(
+        find.textContaining('Set the display timeouts on the streamer'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('display-kiosk-seconds')), findsNothing);
+      expect(find.byKey(const ValueKey('display-blank-seconds')), findsNothing);
+    });
+  });
+
   for (final feed in ['available', 'unavailable', 'error', 'disabled']) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(

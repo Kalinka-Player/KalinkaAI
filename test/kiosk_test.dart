@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -14,6 +15,8 @@ import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/bit_perfect_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
+import 'package:kalinka/providers/display_power_provider.dart';
+import 'package:kalinka/providers/display_settings_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
@@ -24,6 +27,7 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/screens/kiosk_screen.dart';
+import 'package:kalinka/utils/display_power.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_backdrop.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_cover_flow.dart';
@@ -32,6 +36,7 @@ import 'package:kalinka/widgets/kiosk/kiosk_output_panel.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_progress_bar.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_splash.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_volume_control.dart';
+import 'package:kalinka/widgets/kiosk/local_kiosk_host.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/procedural_album_art.dart';
 import 'package:kalinka/widgets/transport_button.dart';
@@ -213,11 +218,25 @@ final _emptyQueue = PlayQueueState(
 
 typedef _Harness = ({ProviderContainer container, _Api api, _Queue queue});
 
+class _DisplayPower implements DisplayPower {
+  final calls = <bool>[];
+  @override
+  Future<bool> get available async => true;
+  @override
+  Future<bool> setBlanked(bool blanked) async {
+    calls.add(blanked);
+    return true;
+  }
+}
+
 Future<_Harness> _pump(
   WidgetTester tester,
   PlayQueueState state, {
   Size size = const Size(1024, 600),
   bool launched = false,
+  bool localDisplay = false,
+  bool idleHost = false,
+  bool reducedMotion = false,
   bool deviceLocked = false,
   String rendererHost = '',
   bool aloneOutput = false,
@@ -225,6 +244,8 @@ Future<_Harness> _pump(
   ConnectionStatus connection = ConnectionStatus.connected,
   bool bitPerfect = false,
   DeviceVolume? volume,
+  Map<String, Object> preferences = const {},
+  DisplayPower? displayPower,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -234,6 +255,7 @@ Future<_Harness> _pump(
     ConnectionSettingsNotifier.sharedPrefHost: '10.0.0.2',
     ConnectionSettingsNotifier.sharedPrefPort: 8000,
     if (deviceLocked) KioskNotifier.sharedPrefLocked: true,
+    ...preferences,
   });
   final prefs = await SharedPreferences.getInstance();
   final queue = _Queue(state);
@@ -241,6 +263,9 @@ Future<_Harness> _pump(
     overrides: [
       sharedPrefsProvider.overrideWithValue(prefs),
       kioskLaunchProvider.overrideWithValue(launched),
+      localDisplayKioskProvider.overrideWithValue(localDisplay),
+      if (displayPower != null)
+        displayPowerProvider.overrideWithValue(displayPower),
       playQueueStateStoreProvider.overrideWith(() => queue),
       extDeviceStateStoreProvider.overrideWith(
         () => _Device(volume ?? DeviceVolume.empty),
@@ -273,7 +298,14 @@ Future<_Harness> _pump(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: MaterialApp(home: home),
+      child: MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(disableAnimations: reducedMotion),
+          child: idleHost ? LocalKioskHost(child: child!) : child!,
+        ),
+        home: home,
+      ),
     ),
   );
   await tester.pump();
@@ -412,6 +444,399 @@ void main() {
     expect(kioskDate(DateTime(2026, 9, 29)), 'Tuesday, 29 September');
   });
 
+  group('server display idle mode', () {
+    const mainInterface = Scaffold(body: Center(child: Text('Main interface')));
+
+    Future<_Harness> pumpLocal(
+      WidgetTester tester, {
+      Widget home = mainInterface,
+      bool reducedMotion = false,
+      bool localDisplay = true,
+      bool openHome = true,
+      Map<String, Object> preferences = const {},
+      DisplayPower? displayPower,
+    }) async {
+      final h = await _pump(
+        tester,
+        _queue(PlayerStateType.paused),
+        launched: true,
+        localDisplay: localDisplay,
+        idleHost: true,
+        reducedMotion: reducedMotion,
+        home: home,
+        preferences: preferences,
+        displayPower: displayPower,
+      );
+      if (localDisplay && openHome) {
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.home_outlined));
+        await tester.pump();
+      }
+      return h;
+    }
+
+    testWidgets('starts in kiosk; Home opens the interface until 30s idle', (
+      tester,
+    ) async {
+      final h = await pumpLocal(tester, openHome: false);
+      expect(find.text('Main interface'), findsNothing);
+      expect(find.byType(KioskScreen), findsOneWidget);
+      expect(h.container.read(kioskActiveProvider), isTrue);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      expect(h.container.read(kioskActiveProvider), isTrue);
+
+      for (var cycle = 0; cycle < 2; cycle++) {
+        await tester.tap(find.byIcon(Icons.home_outlined));
+        await tester.pump();
+        expect(
+          h.container.read(kioskProvider),
+          const KioskState(active: false, lock: KioskLock.server),
+        );
+        expect(find.text('Main interface'), findsOneWidget);
+        expect(find.byType(KioskScreen), findsNothing);
+        await tester.pump(const Duration(seconds: 29));
+        expect(h.container.read(kioskActiveProvider), isFalse);
+        await tester.pump(const Duration(seconds: 1));
+        expect(h.container.read(kioskActiveProvider), isTrue);
+        expect(find.text('Main interface'), findsNothing);
+        expect(find.byIcon(Icons.home_outlined), findsOneWidget);
+        expect(find.byIcon(Icons.fullscreen_exit_rounded), findsNothing);
+        expect(find.byType(KioskSplash), findsNothing);
+      }
+    });
+
+    testWidgets('touch, mouse, scroll and handled keys restart the deadline', (
+      tester,
+    ) async {
+      final h = await pumpLocal(
+        tester,
+        home: Focus(
+          autofocus: true,
+          onKeyEvent: (_, _) => KeyEventResult.handled,
+          child: mainInterface,
+        ),
+      );
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: const Offset(10, 10));
+      addTearDown(mouse.removePointer);
+      final activities = <Future<void> Function()>[
+        () => tester.tap(find.text('Main interface')),
+        () => mouse.moveTo(const Offset(20, 20)),
+        () => tester.sendEventToBinding(
+          const PointerScrollEvent(
+            position: Offset(20, 20),
+            scrollDelta: Offset(0, 100),
+          ),
+        ),
+        () => tester.sendKeyEvent(LogicalKeyboardKey.keyA),
+      ];
+      for (final activity in activities) {
+        await tester.pump(const Duration(seconds: 28));
+        await activity();
+        await tester.pump(const Duration(seconds: 1));
+        expect(h.container.read(kioskActiveProvider), isFalse);
+      }
+      await tester.pump(const Duration(seconds: 29));
+      expect(h.container.read(kioskActiveProvider), isTrue);
+    });
+
+    testWidgets('holding a touch is not idle; releasing starts 30 seconds', (
+      tester,
+    ) async {
+      final h = await pumpLocal(tester);
+      final touch = await tester.startGesture(const Offset(20, 20));
+      await tester.pump(const Duration(seconds: 60));
+      expect(h.container.read(kioskActiveProvider), isFalse);
+      await touch.up();
+      await tester.pump(const Duration(seconds: 29));
+      expect(h.container.read(kioskActiveProvider), isFalse);
+      await tester.pump(const Duration(seconds: 1));
+      expect(h.container.read(kioskActiveProvider), isTrue);
+    });
+
+    testWidgets('covers dialogs and preserves unfinished input on Home', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      final h = await pumpLocal(
+        tester,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('Pending edit'),
+                  content: TextField(controller: controller),
+                ),
+              ),
+              child: const Text('Edit'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Keep this draft');
+      await tester.pump(const Duration(seconds: 29));
+      await tester.tap(find.text('Pending edit'));
+      await tester.pump(const Duration(seconds: 1));
+      expect(h.container.read(kioskActiveProvider), isFalse);
+      await tester.pump(const Duration(seconds: 29));
+      await tester.pumpAndSettle();
+      expect(find.text('Pending edit'), findsNothing);
+      expect(find.byIcon(Icons.home_outlined), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.home_outlined));
+      await tester.pumpAndSettle();
+      expect(find.text('Pending edit'), findsOneWidget);
+      expect(find.text('Keep this draft'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('reduced motion switches immediately in both directions', (
+      tester,
+    ) async {
+      await pumpLocal(tester, reducedMotion: true);
+      await tester.pump(const Duration(seconds: 30));
+      await tester.pump();
+      expect(find.text('Main interface'), findsNothing);
+      await tester.tap(find.byIcon(Icons.home_outlined));
+      await tester.pump();
+      expect(find.text('Main interface'), findsOneWidget);
+      expect(find.byType(KioskScreen), findsNothing);
+    });
+
+    testWidgets('a remote launch flag never enables the local Home behavior', (
+      tester,
+    ) async {
+      final h = await pumpLocal(tester, localDisplay: false);
+      expect(h.container.read(kioskProvider).lock, KioskLock.launch);
+      expect(find.byIcon(Icons.home_outlined), findsNothing);
+      h.container.read(kioskProvider.notifier).exit();
+      expect(h.container.read(kioskActiveProvider), isTrue);
+    });
+
+    testWidgets('disposal cancels the idle deadline', (tester) async {
+      final h = await pumpLocal(tester);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 31));
+      expect(h.container.read(kioskActiveProvider), isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('track changes neither enter kiosk nor postpone idle return', (
+      tester,
+    ) async {
+      final h = await pumpLocal(tester);
+      await tester.pump(const Duration(seconds: 5));
+      h.queue.set(_queue(PlayerStateType.playing, index: 1, seq: 2));
+      await tester.pump();
+      expect(h.container.read(kioskActiveProvider), isFalse);
+      expect(find.text('Main interface'), findsOneWidget);
+      expect(find.byType(KioskScreen), findsNothing);
+      await tester.pump(const Duration(seconds: 24));
+      h.queue.set(_queue(PlayerStateType.playing, index: 2, seq: 3));
+      await tester.pump();
+      expect(h.container.read(kioskActiveProvider), isFalse);
+      expect(find.text('Main interface'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      expect(h.container.read(kioskActiveProvider), isTrue);
+      expect(find.byType(KioskScreen), findsOneWidget);
+    });
+
+    testWidgets('waits for a configured server before starting the deadline', (
+      tester,
+    ) async {
+      final h = await pumpLocal(tester);
+      final connection = h.container.read(connectionSettingsProvider.notifier);
+      await connection.clearDevice();
+      await tester.pump(const Duration(seconds: 60));
+      expect(h.container.read(kioskActiveProvider), isFalse);
+      await connection.setDevice('Den server', '10.0.0.2', 8000);
+      await tester.pump(const Duration(seconds: 29));
+      expect(h.container.read(kioskActiveProvider), isFalse);
+      await tester.pump(const Duration(seconds: 1));
+      expect(h.container.read(kioskActiveProvider), isTrue);
+    });
+
+    testWidgets('uses the saved kiosk timeout', (tester) async {
+      final h = await pumpLocal(
+        tester,
+        preferences: {DisplaySettingsNotifier.kioskKey: 12},
+      );
+      await tester.pump(const Duration(seconds: 11));
+      expect(h.container.read(kioskActiveProvider), isFalse);
+      await tester.pump(const Duration(seconds: 1));
+      expect(h.container.read(kioskActiveProvider), isTrue);
+    });
+
+    testWidgets('blanks at five minutes total and consumes the waking touch', (
+      tester,
+    ) async {
+      final power = _DisplayPower();
+      final h = await pumpLocal(tester, displayPower: power);
+      await tester.pump(const Duration(seconds: 30));
+      expect(h.container.read(kioskActiveProvider), isTrue);
+      final homePoint = tester.getCenter(find.byIcon(Icons.home_outlined));
+      await tester.pump(const Duration(seconds: 269));
+      expect(find.byKey(const ValueKey('display-blanked')), findsNothing);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(const ValueKey('display-blanked')), findsOneWidget);
+      expect(power.calls, [true]);
+
+      final wakeTouch = await tester.startGesture(homePoint);
+      await tester.pump();
+      expect(find.byKey(const ValueKey('display-blanked')), findsNothing);
+      await wakeTouch.up();
+      await tester.pump();
+      expect(power.calls, [true, false]);
+      expect(h.container.read(kioskActiveProvider), isTrue);
+      // No second dim layer or wake gesture remains over the Home button.
+      await tester.tap(find.byIcon(Icons.home_outlined));
+      await tester.pump();
+      expect(h.container.read(kioskActiveProvider), isFalse);
+    });
+
+    testWidgets('playing and buffering prevent blanking; playback wakes it', (
+      tester,
+    ) async {
+      final power = _DisplayPower();
+      final h = await pumpLocal(tester, displayPower: power);
+      for (final state in [
+        PlayerStateType.playing,
+        PlayerStateType.buffering,
+        PlayerStateType.error,
+      ]) {
+        h.queue.set(_queue(state));
+        await tester.pump();
+        await tester.pump(const Duration(minutes: 6));
+        expect(find.byKey(const ValueKey('display-blanked')), findsNothing);
+      }
+      h.queue.set(_queue(PlayerStateType.paused));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 299));
+      expect(find.byKey(const ValueKey('display-blanked')), findsNothing);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(const ValueKey('display-blanked')), findsOneWidget);
+      h.queue.set(_queue(PlayerStateType.playing, index: 1));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('display-blanked')), findsNothing);
+      expect(h.container.read(kioskActiveProvider), isTrue);
+      expect(power.calls, [true, false]);
+    });
+
+    testWidgets(
+      'zero disables blanking and changing it to zero wakes the screen',
+      (tester) async {
+        final h = await pumpLocal(
+          tester,
+          preferences: {DisplaySettingsNotifier.blankKey: 0},
+        );
+        await tester.pump(const Duration(minutes: 6));
+        expect(find.byKey(const ValueKey('display-blanked')), findsNothing);
+        final prefs = h.container.read(displaySettingsProvider.notifier);
+        await prefs.setBlankSeconds(2);
+        await tester.pump(const Duration(seconds: 2));
+        expect(find.byKey(const ValueKey('display-blanked')), findsOneWidget);
+        await prefs.setBlankSeconds(0);
+        await tester.pump();
+        expect(find.byKey(const ValueKey('display-blanked')), findsNothing);
+      },
+    );
+
+    testWidgets('the waking key cannot activate a control', (tester) async {
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      var keys = 0;
+      final h = await pumpLocal(
+        tester,
+        home: Focus(
+          focusNode: focus,
+          onKeyEvent: (_, event) {
+            if (event is KeyDownEvent) keys++;
+            return KeyEventResult.handled;
+          },
+          child: mainInterface,
+        ),
+      );
+      await h.container
+          .read(displaySettingsProvider.notifier)
+          .setBlankSeconds(2);
+      focus.requestFocus();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.byKey(const ValueKey('display-blanked')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(find.byKey(const ValueKey('display-blanked')), findsNothing);
+      expect(keys, 0);
+      focus.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(keys, 1);
+    });
+
+    testWidgets('unmounting a blanked display restores hardware power', (
+      tester,
+    ) async {
+      final power = _DisplayPower();
+      await pumpLocal(
+        tester,
+        preferences: {DisplaySettingsNotifier.blankKey: 2},
+        displayPower: power,
+        openHome: false,
+      );
+      await tester.pump(const Duration(seconds: 2));
+      expect(power.calls, [true]);
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(power.calls, [true, false]);
+    });
+
+    for (final (size, textScale) in const [
+      (Size(1024, 600), 1.0),
+      (Size(375, 812), 1.0),
+      (Size(300, 300), 1.0),
+      (Size(1024, 600), 1.5),
+    ]) {
+      testWidgets('Home stays reachable at $size with ${textScale}x text', (
+        tester,
+      ) async {
+        final semantics = tester.ensureSemantics();
+        try {
+          tester.platformDispatcher.textScaleFactorTestValue = textScale;
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          final h = await _pump(
+            tester,
+            _queue(PlayerStateType.playing),
+            launched: true,
+            localDisplay: true,
+            size: size,
+          );
+          h.container.read(kioskProvider.notifier).enter();
+          await tester.pumpAndSettle();
+          final home = find.byIcon(Icons.home_outlined);
+          final target = tester.getRect(
+            find
+                .ancestor(of: home, matching: find.byType(TransportButton))
+                .first,
+          );
+          expect(target.width, greaterThanOrEqualTo(48));
+          expect(target.right, lessThanOrEqualTo(size.width));
+          expect(target.top, greaterThanOrEqualTo(0));
+          expect(find.bySemanticsLabel('Home'), findsOneWidget);
+          await tester.tap(home);
+          expect(h.container.read(kioskActiveProvider), isFalse);
+          expect(tester.takeException(), isNull);
+        } finally {
+          semantics.dispose();
+        }
+      });
+    }
+  });
+
   test('under the header\'s clock, the date is short', () {
     expect(kioskShortDate(DateTime(2026, 10, 2)), 'Fri 2 Oct 2026');
   });
@@ -485,31 +910,47 @@ void main() {
     expect(find.textContaining('Living Room'), findsNothing);
   });
 
-  for (final (label, launched, deviceLocked) in const [
-    ('the setting', false, true),
-    ('the launch flag', true, false),
+  for (final (label, launched, deviceLocked, localDisplay) in const [
+    ('the setting', false, true, false),
+    ('the launch flag', true, false, false),
+    ('the server display', true, false, true),
   ]) {
-    testWidgets('locked by $label, the output cannot be changed here', (
-      tester,
-    ) async {
-      await _pump(
-        tester,
-        _queue(PlayerStateType.paused),
-        launched: launched,
-        deviceLocked: deviceLocked,
-        rendererHost: Platform.localHostname,
-      );
-      await tester.pumpAndSettle();
+    testWidgets(
+      'locked by $label, the renderer picker opens and switches output',
+      (tester) async {
+        final h = await _pump(
+          tester,
+          _queue(PlayerStateType.paused),
+          launched: launched,
+          deviceLocked: deviceLocked,
+          localDisplay: localDisplay,
+          idleHost: localDisplay,
+          home: localDisplay
+              ? const Scaffold(body: Text('Main interface'))
+              : const KioskScreen(),
+          rendererHost: Platform.localHostname,
+        );
+        await tester.pumpAndSettle();
 
-      // A fixed volume and no outputs to choose: nothing to open.
-      expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsNothing);
-      await tester.tap(find.text('THIS DEVICE'));
-      await tester.pumpAndSettle();
-      expect(find.byType(KioskOutputPanel), findsNothing);
-    });
+        // Fixed volume must not disable the picker when other outputs exist.
+        expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsOneWidget);
+        await tester.tap(find.text('THIS DEVICE'));
+        await tester.pumpAndSettle();
+        expect(find.byType(KioskOutputPanel), findsOneWidget);
+        expect(find.text('OTHER OUTPUTS'), findsOneWidget);
+        await tester.tap(find.text('Den'));
+        await tester.pumpAndSettle();
+        final renderers =
+            h.container.read(rendererListProvider.notifier) as _Renderers;
+        expect(renderers.selected, ['r2']);
+        expect(find.byType(KioskOutputPanel), findsNothing);
+        expect(find.textContaining('Den'), findsOneWidget);
+        expect(h.container.read(kioskActiveProvider), isTrue);
+      },
+    );
   }
 
-  testWidgets('locked, the output panel holds the volume and no other '
+  testWidgets('locked, the output panel holds the volume and other '
       'outputs', (tester) async {
     await _pump(
       tester,
@@ -522,8 +963,8 @@ void main() {
     await tester.tap(find.byType(KioskOutputPill));
     await tester.pumpAndSettle();
     expect(panelSlider(), findsOneWidget);
-    expect(find.text('OTHER OUTPUTS'), findsNothing);
-    expect(find.text('Den'), findsNothing);
+    expect(find.text('OTHER OUTPUTS'), findsOneWidget);
+    expect(find.text('Den'), findsOneWidget);
   });
 
   testWidgets('the output pill opens its volume over the other outputs; '
