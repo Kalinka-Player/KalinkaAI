@@ -45,8 +45,8 @@ class ExpertModeToggle extends ConsumerWidget {
     fixedSize: const WidgetStatePropertyAll(Size.square(kKalinkaPillHeight)),
     minimumSize: const WidgetStatePropertyAll(Size.square(kKalinkaPillHeight)),
     padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-    // A 48dp target around the 40dp circle, on desktop too.
-    tapTargetSize: MaterialTapTargetSize.padded,
+    // Keep the header action's footprint at the circle's 40dp size.
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
     visualDensity: VisualDensity.standard,
     shape: const WidgetStatePropertyAll(CircleBorder()),
     backgroundColor: WidgetStatePropertyAll(
