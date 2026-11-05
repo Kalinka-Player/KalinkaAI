@@ -280,42 +280,6 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
                 : null,
           ),
         ),
-      for (final receiver in receivers)
-        item(
-          'receiver-${receiver.id}',
-          above: receiver == receivers.first
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    divider,
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
-                      child: Text(
-                        'CONNECT',
-                        style: KalinkaTextStyles.sectionHeaderMuted.copyWith(
-                          fontSize: 10,
-                          color: KalinkaColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              : null,
-          ({extended = false, then}) => ReceiverPopover(
-            receiverId: receiver.id,
-            builder: (open) => _NavigationButton(
-              key: ValueKey('navigation-receiver-${receiver.id}'),
-              label: receiver.title,
-              icon: receiverIcon(receiver.kind),
-              selected: false,
-              extended: extended,
-              onPressed: enabled && connected ? open : null,
-            ),
-          ),
-        ),
       // Apart from the sources: it holds tracks from any of them.
       if (collections != null)
         destination(
@@ -326,6 +290,23 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
           selected: shown == BrowseDestination.collections,
           available: connected,
           above: const SizedBox(height: 8),
+        ),
+      if (receivers.isNotEmpty)
+        item(
+          'connect',
+          above: divider,
+          ({extended = false, then}) => ReceiverPopover(
+            builder: (open, focusNode, isOpen) => _NavigationButton(
+              key: const ValueKey('navigation-connect'),
+              label: 'Connect',
+              icon: kConnectIcon,
+              focusNode: focusNode,
+              selected: false,
+              popupOpen: isOpen,
+              extended: extended,
+              onPressed: enabled && connected ? open : null,
+            ),
+          ),
         ),
     ];
     // At the rail's foot.
@@ -647,6 +628,9 @@ class _NavigationButton extends StatelessWidget {
   final bool selected;
   final bool extended;
   final VoidCallback? onPressed;
+  final FocusNode? focusNode;
+  // Popup actions highlight only while open, independently of destinations.
+  final bool? popupOpen;
 
   const _NavigationButton({
     super.key,
@@ -660,6 +644,8 @@ class _NavigationButton extends StatelessWidget {
     required this.selected,
     required this.extended,
     required this.onPressed,
+    this.focusNode,
+    this.popupOpen,
   });
 
   @override
@@ -714,6 +700,7 @@ class _NavigationButton extends StatelessWidget {
         selected: selected,
         child: TextButton(
           onPressed: onPressed,
+          focusNode: focusNode,
           style: ButtonStyle(
             minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
             // Desktop's compact density would take 8dp off top and bottom.
@@ -739,16 +726,21 @@ class _NavigationButton extends StatelessWidget {
                   : KalinkaColors.textSecondary,
             ),
             side: WidgetStateProperty.resolveWith(
-              (states) => states.contains(WidgetState.focused)
+              (states) =>
+                  popupOpen != true && states.contains(WidgetState.focused)
                   ? const BorderSide(color: KalinkaColors.textPrimary, width: 2)
                   : BorderSide.none,
             ),
             // As the player's PLAYING / QUEUE tabs respond. The current
             // destination is no action, so it takes no hover.
-            overlayColor: WidgetStateProperty.resolveWith(
-              (states) =>
-                  states.contains(WidgetState.focused) ||
-                      states.contains(WidgetState.pressed)
+            // Paint opaque state fills on the same surface as the border.
+            // An ink overlay covers the focus ring and leaves ragged edges.
+            overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+            backgroundColor: WidgetStateProperty.resolveWith(
+              (states) => popupOpen != null
+                  ? Colors.transparent
+                  : states.contains(WidgetState.focused) ||
+                        states.contains(WidgetState.pressed)
                   ? KalinkaColors.surfaceOverlay
                   : states.contains(WidgetState.hovered) && !selected
                   ? KalinkaColors.surfaceInput
@@ -776,7 +768,7 @@ class _NavigationButton extends StatelessWidget {
         ),
       ),
     );
-    final duration = MediaQuery.disableAnimationsOf(context)
+    final duration = popupOpen != null || MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 180);
     return Padding(
@@ -796,7 +788,7 @@ class _NavigationButton extends StatelessWidget {
               curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
                 color: KalinkaColors.surfaceOverlay.withValues(
-                  alpha: selected ? 1 : 0,
+                  alpha: selected || popupOpen == true ? 1 : 0,
                 ),
                 borderRadius: BorderRadius.circular(_itemRadius),
               ),

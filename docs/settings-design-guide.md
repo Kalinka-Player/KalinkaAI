@@ -176,14 +176,29 @@ Reference: [UI/UX Pro Max skill](../../../.codex/skills/ui-ux-pro-max/SKILL.md),
 ## Receiver connections
 
 Mobile **Connect** belongs in the existing music-source strip. Wide layouts
-list individual receivers under **Connect** in the sidebar, using compact
-anchored popovers. Show installed, enabled receivers only, independently of
+show one **Connect** button with the same icon in the sidebar, opening a compact
+anchored popup with the same content as Home's Connect. Collections follows the
+last music source, then a subtle divider and Connect, without a CONNECT section
+heading. Keep the Connect button even with only one enabled receiver.
+Show installed, enabled receivers only, independently of
 catalog availability. There is no dedicated Bluetooth header action, large
 Home connection row, or duplicated renderer picker. Enable/disable stays in
 plugin Settings.
 
+The sidebar popup has a small pointer toward the centre of its Connect button,
+drawn as part of the same neutral surface and border. Keep the popup within the
+screen and move the pointer along its edge when height requires shifting it.
+Reveal it from the button outward over 180ms with an ease-out curve and subtle
+fade, matching More's shelf; clip the reveal so the content never compresses or
+reflows. Closing takes 120ms and can be interrupted by reopening. Reduced motion
+shows and hides it immediately. Preserve outside-tap and Escape dismissal and
+return keyboard focus to Connect after keyboard dismissal. Pointer dismissal
+clears its focus. Connect's grey highlight follows the popup's open state only;
+hover and restored keyboard focus do not fill it, and keyboard focus uses a
+separate outline.
+
 The compact sheet shows actual receiver names and sessions. Bluetooth renders
-**Bluetooth · Pair new**, with a Paired devices label directly below it; no expansion or
+**Bluetooth · Pair new**, followed by a separate Paired devices group; no expansion or
 separate audio-permission switch. Pair new uses the shared compact primary
 `KalinkaButton`, with its berry fill and pill shape. Pair opens the backend's two-minute Just Works
 window. The sender may show its normal pairing prompt, but Kalinka needs no
@@ -196,11 +211,25 @@ Successful pairing grants audio access automatically. Device rows show an icon, 
 for connected audio. Each row has a vertical ellipsis menu with **Disconnect** for an
 audio session and **Forget** for the bond. Use a generic device icon until the
 server supplies a device type. Forget requires confirmation: it removes shared setup
-pairing too, keeps Wi-Fi configuration and requires re-pairing. Keep 4dp between the Bluetooth controls and the paired-device label, without
-reserved space while pairing. Device names wrap at large text sizes.
+pairing too, keeps Wi-Fi configuration and requires re-pairing. Leave 16dp before
+the paired-device label and 8dp before its rows. Align a custom receiver name
+under the receiver title, keeping it separate from the devices. Device names
+wrap at large text sizes.
 Use the centered `KalinkaDialog` and shared buttons. Cancel is neutral and gets
 initial keyboard focus. Forget uses the berry action style. Keep the message
 short: "Removes the Bluetooth pairing. Pair again to reconnect."
+
+Separate the panel introduction from the first receiver by 20dp, and put 20dp
+on either side of the divider between receivers. Receiver failures, failed
+actions and inventory errors use the shared `FailureNote`, with an error icon,
+readable wrapped text and live-region semantics, 12dp below the related controls.
+Show the backend error once instead of repeating a generic unavailable line.
+Keep any reported paired devices visible and respect the backend's action
+availability even when the module reports an error. An unavailable backend can
+return an empty peer list without deleting its bonds: show **No paired devices**
+in `textMuted` only when the receiver is ready and inventory is available.
+Hide that empty-state message during errors, startup and shutdown. AirPlay's
+password status is shown only while its receiver state is available and ready.
 
 The generic app-wide approval host remains available for controllers which
 actually publish a pending request. It preserves supplied comparison codes,
@@ -216,7 +245,9 @@ instructions or a separate Show password button. Keep custom receiver names
 visible. Unavailable receivers must not offer a reveal action.
 Password application uses the existing secret setting; its help warns that
 applying it restarts AirPlay and ends its session. Revealed text is discarded
-on closing, backgrounding, lost availability or removal of the password. These
+and pending reveals are invalidated as soon as closing starts, including when
+the exit animation is interrupted by reopening. Also discard it on
+backgrounding, lost availability or removal of the password. These
 surfaces reuse the existing theme, text styles and responsive spacing.
 
 Receiver operations use a spinner in the existing control bounds. AirPlay replaces

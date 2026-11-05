@@ -108,7 +108,7 @@ class KalinkaTopBar extends StatelessWidget {
               return Row(
                 children: [
                   const KalinkaWordmark(),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 24),
                   Expanded(
                     child: Align(
                       alignment: Alignment.center,
@@ -120,7 +120,7 @@ class KalinkaTopBar extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 24),
                 ],
               );
             }

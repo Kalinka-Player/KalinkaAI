@@ -9,6 +9,7 @@ class FailureNote extends StatelessWidget {
   /// Said first, in the brighter text, where the failure has a name.
   final String? title;
   final String message;
+  final TextStyle? textStyle;
   final Key? messageKey;
   final VoidCallback? onDismiss;
   final Key? dismissKey;
@@ -18,6 +19,7 @@ class FailureNote extends StatelessWidget {
     super.key,
     this.title,
     required this.message,
+    this.textStyle,
     this.messageKey,
     this.onDismiss,
     this.dismissKey,
@@ -61,7 +63,7 @@ class FailureNote extends StatelessWidget {
                   ],
                 ),
                 key: messageKey,
-                style: KalinkaTextStyles.trayRowSublabel,
+                style: textStyle ?? KalinkaTextStyles.trayRowSublabel,
               ),
               ?footer,
             ],
