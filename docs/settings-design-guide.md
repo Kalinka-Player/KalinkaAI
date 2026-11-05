@@ -129,7 +129,7 @@ A folder on the server is picked, not typed, where the server can be browsed (AP
 
 ## Streamer content
 
-On the Streamer tab, the Expert settings switch ends the Settings top bar, as on a renderer's page; where the top bar is hidden beside the navigation rail, it ends the tab row instead. It is the same round `{}` button and the same setting: one switch for the whole app, kept on the device so it survives switching tabs, leaving and restarting. On, the tab's body is the expert list in place of the groups below; there is no separate Advanced settings page.
+On the Streamer tab, the Expert settings switch ends the Settings top bar, as on a renderer's page; where the top bar is hidden beside the navigation rail, it ends the tab row instead, or, where the tabs would not fit beside it at their full width or text is larger than 1.3×, takes the line under them, right-aligned to the gutter. It is the same round `{}` button and the same setting: one switch for the whole app, kept on the device so it survives switching tabs, leaving and restarting. On, the tab's body is the expert list in place of the groups below; there is no separate Advanced settings page.
 
 The expert list is drawn as the simple page draws settings: a search field alone at the top (no introduction above it), pinned under the tabs on the page's own background, then every field as a standard setting row in one card (`surfaceRaised`, 14dp radius, 1dp `borderSubtle` border and dividers; rows 16dp × 12dp, `trayRowLabel` name, the dotted path in `textMuted` mono under it, `trayRowSublabel` help, the control 10dp below; staged rows tinted and ruled in amber as elsewhere). A renderer's expert list is the same.
 
@@ -153,6 +153,7 @@ Display the supervisor status exactly as the backend returns it; do not parse a 
 ## Responsive layout and interaction
 
 - Page titles wrap naturally with no ellipsis, fixed line limit, auto-shrink or capped text scaler. When the 18dp title scales above 27dp (1.5×), place it on a full-width second row **inside the same fixed header**, inset to the page gutter, with 10dp bottom padding plus the header’s 2dp outer padding. Back, the optional action and status stay on the first row. This avoids a narrow column of oversized text between icons.
+- Settings tabs stand 24dp apart. Short of room, the gaps narrow to as little as 12dp before the strip scrolls, so at default text all three fit a 360dp phone.
 - `SettingsPageIntro` stacks status and action below 320dp of **content width**, or when 14dp text scales above 18.2dp (1.3×). Otherwise status expands beside the action. Descriptions always use the full intro width.
 - A device name in the top bar stays on one line beside the title: each keeps its own width while both fit, else the shorter keeps its width or each takes half, and the name ends in an ellipsis with its full text in a tooltip. When the title takes its own row at large text, the name keeps the first row's room before the switch.
 - Use native `IconButton`/`TextButton` for header/toolbar actions, with a visible keyboard focus outline. Keep visual bounds stable on focus, hover and press. Button tooltips name the action; decorative icons are excluded from semantics.
