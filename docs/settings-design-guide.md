@@ -1,10 +1,10 @@
 # Kalinka settings design guide
 
-Settings use one fixed page title, a restrained dark header and directly accessible controls. This specification covers Configuration, plugin settings and About, the expert settings list, change review, Download server logs, Output settings and the older Server settings screen. All dimensions are Flutter logical pixels (dp); text sizes are before the system text scaler.
+Settings use one fixed page title, a restrained dark header and directly accessible controls. This specification covers Settings, plugin settings and About, the expert settings list, change review, Download server logs, Output settings and the older Server settings screen. All dimensions are Flutter logical pixels (dp); text sizes are before the system text scaler.
 
 ## Direction and rationale
 
-The previous logs screen had the clearer information hierarchy: a title followed by the task. Plugin and advanced pages repeated that title in a large Playfair banner. Configuration also used a transparent bar, while logs and output settings used a raised bar with a stronger divider and shadow.
+The previous logs screen had the clearer information hierarchy: a title followed by the task. Plugin and advanced pages repeated that title in a large Playfair banner. Settings also used a transparent bar, while logs and output settings used a raised bar with a stronger divider and shadow.
 
 Keep the logs screen's single-title structure, using a common implementation throughout settings. A subtle filled header identifies fixed navigation; one quiet rule separates it from scrolling content. Descriptions, state and actions remain visible without a second heading consuming vertical space.
 
@@ -18,15 +18,15 @@ This is the settings specification. The branded player/search bars and editorial
 2. Optional secondary toolbar for page-specific controls, then the connection notice.
 3. Optional pinned tabs on an overview. Other pages start with an introduction or their first controls.
 4. Independently scrolling content, ending with 32dp breathing room. The host reserves space for the mini-player; content must not render underneath it.
-5. While changes are staged, `PendingChangesBanner` at the foot: the amber bar (count, consequence, Discard, APPLY) that a renderer, Server settings and Configuration share. It is laid out under the content, never over it, so the page shrinks to make room and its last controls scroll up into view above the bar. Configuration's sits under every page it opens; when an issue blocks applying, the bar names it and APPLY becomes REVIEW. Its actions are 48dp targets, and each first leaves the field being typed in, so its text is staged and the keyboard closes. In a field, the keyboard's Done keeps the value and closes the keyboard, and a number is staged as soon as it is one inside its bounds.
+5. While changes are staged, `PendingChangesBanner` at the foot: the amber bar (count, consequence, Discard, APPLY) that a renderer, Server settings and Settings share. It is laid out under the content, never over it, so the page shrinks to make room and its last controls scroll up into view above the bar. The Settings banner sits under every page it opens; when an issue blocks applying, the bar names it and APPLY becomes REVIEW. Its actions are 48dp targets, and each first leaves the field being typed in, so its text is staged and the keyboard closes. In a field, the keyboard's Done keeps the value and closes the keyboard, and a number is staged as soon as it is one inside its bounds.
 
 Use sentence case: **Download server logs**, **Check your changes**. A renderer's page is titled with the renderer's name alone. Plugin titles include their subject: **Qobuz settings**, **About Qobuz**. Do not add breadcrumbs, a second large title, a logo in place of the title, or a decorative heading icon.
 
 Back closes the current panel through `SlideInPanel.closeOf(context)`. System Back does the same. Returning preserves the parent tab, scroll position and staged edits. Only the uppermost panel owns Back. The header remains outside the content scroll.
 
-The shell's labelled navigation rail remains available beside settings on wider windows. Settings occupy the browsing pane, leaving the player available, and use the shared adaptive split calculation. On phones, Configuration remains in the existing server menu; settings retain their Back button with no additional navigation menu. Beside the rail, which names Configuration and is how it is left, Configuration has no top bar: its tabs start at the top of the pane, taking the top safe inset themselves. Choosing another destination runs the existing pending-change guard and cannot dismiss an active operation. Resizing preserves the current settings page and staged changes. The mini-player grows with system text size, and settings reserve that height.
+The shell's labelled navigation rail remains available beside settings on wider windows. Settings occupy the browsing pane, leaving the player available, and use the shared adaptive split calculation. On phones, Settings remains in the existing server menu; settings retain their Back button with no additional navigation menu. Beside the rail, which names Settings and is how it is left, Settings has no top bar: its tabs start at the top of the pane, taking the top safe inset themselves. Choosing another destination runs the existing pending-change guard and cannot dismiss an active operation. Resizing preserves the current settings page and staged changes. The mini-player grows with system text size, and settings reserve that height.
 
-About is a labelled icon button in a plugin's title bar. Install/Uninstall belongs beside its status in the scrolling introduction. A renderer's page is titled with the renderer's name, in the top bar's title face, and ends its top bar with the Expert settings switch: a round 40dp `{}` icon button in a 48dp target, grey (`surfaceElevated`, `borderDefault`, `textSecondary` icon) while off and outlined in berry (`accentSubtle`, `accentBorder`, `accentTint` icon) while on, since expert is a mode the page stays in. Do not add further controls to the title row.
+About is a labelled icon button in a plugin's title bar. Install/Uninstall belongs beside its status in the scrolling introduction. A renderer's page is titled with the renderer's name, in the top bar's title face, and ends its top bar with the Expert settings switch: a round 40dp `{}` icon button with a matching compact tap target, grey (`surfaceElevated`, `borderDefault`, `textSecondary` icon) while off and outlined in berry (`accentSubtle`, `accentBorder`, `accentTint` icon) while on, since expert is a mode the page stays in. Do not add further controls to the title row.
 
 ## Colours and surfaces
 
@@ -54,7 +54,7 @@ Read these values from `KalinkaColors`, never duplicate hex literals in a screen
 | Online badge text on tinted fill | `statusOnlineLight` | `#5FB07E` |
 | Pending badge text on tinted fill | `statusPendingLight` | `#E8B86A` |
 
-The header always has the same opaque fill, a 1dp bottom rule and no shadow or elevation. There is no transparent variant. Card borders and internal row dividers are also 1dp. These rules group content; they are not the only cue identifying a control. Configuration's tabs have no rule under them: only the selected tab's 2dp berry indicator, then the content.
+The header always has the same opaque fill, a 1dp bottom rule and no shadow or elevation. There is no transparent variant. Card borders and internal row dividers are also 1dp. These rules group content; they are not the only cue identifying a control. Settings tabs have no rule under them: only the selected tab's 2dp berry indicator, then the content. Tab labels stay on one line at their full width in a horizontally scrollable strip, with 48dp minimum targets. Keep the active tab visible when selecting a tab or resizing the pane, and keep the strip pinned above the vertically scrolling content.
 
 Measured sRGB contrast: primary/secondary text on the header is **17.82:1 / 7.65:1**; on cards it is **16.88:1 / 7.25:1**. Muted text on a card is **4.95:1**. Keep normal text at least 4.5:1 and meaningful icons at least 3:1. Do not use the base green as small text on cards (4.33:1); use the brighter status text token on its intended tinted surface. Recheck the composed colour when introducing any tint or opacity.
 
@@ -70,7 +70,7 @@ Use the bundled IBM Plex families. System text scaling is respected, not clamped
 | Help, caption and metadata | IBM Plex Sans | 13 / 500 | Natural; no added tracking |
 | Inline plugin status | IBM Plex Sans | 13 / 500 | 18.2dp; sentence case; no added tracking |
 | Section label | IBM Plex Mono | 13 / 600 | Natural; 1.8dp tracking; uppercase |
-| Configuration tab | IBM Plex Mono | 14 / 600 | Natural; 1.4dp tracking; uppercase |
+| Settings tab | IBM Plex Mono | 14 / 600 | Natural; 1.4dp tracking; uppercase |
 | Server name in identity card | Playfair Display | 24 / 500 | Natural; no added tracking |
 | Server address | IBM Plex Sans | 16 / 400 | Natural; inherited −0.1dp tracking |
 
@@ -78,7 +78,7 @@ Use the bundled IBM Plex families. System text scaling is respected, not clamped
 
 ## Geometry and spacing
 
-**Customise Home** follows the same fixed header, typography and page gutters. With no pins, it shows brief pinning instructions and source tiles; choosing a source opens its catalog and closes the panel. If no sources are enabled, explain that a source must be enabled in Configuration. With pins, its scrolling introduction contains only **Drag catalogs to reorder.** and **Search, collections and sources stay in place.**, using `settingsDescription` and 20dp vertical padding. A full-width 1dp `borderSubtle` separator follows the explanation. The content below is a draggable list of catalog names and metadata, with subtle row separators. It occupies the browsing pane on wider layouts, ending above the queue's mini-player while that spans the window, and the space above the mini-player on phones. The preview and Unpin row actions use Kalinka’s round 48dp icon buttons with the shared hover/press highlight. The preview trigger has no menu-open or focus-only fill and remains keyboard-operable; it does not use the header’s outlined focus style. The preview icon opens an anchored picker with geometric illustrations and labels for all four layouts, using a crimson outline and checkmark for the current choice; it closes after three seconds of inactivity. The crossed-out Unpin icon opens a centered confirmation dialog with Cancel and Unpin actions. Center it within the browsing pane on wider layouts and within the screen on phones; use a fade-in, not a bottom-sheet slide. Dismissing the dialog leaves the catalog pinned. See [Customise Home](../PALETTE.md#customise-home) for the interaction rules.
+**Customise Home** follows the same fixed header, typography and page gutters. With no pins, it shows brief pinning instructions and source tiles; choosing a source opens its catalog and closes the panel. If no sources are enabled, explain that a source must be enabled in Settings. With pins, its scrolling introduction contains only **Drag catalogs to reorder.** and **Search, collections and sources stay in place.**, using `settingsDescription` and 20dp vertical padding. A full-width 1dp `borderSubtle` separator follows the explanation. The content below is a draggable list of catalog names and metadata, with subtle row separators. It occupies the browsing pane on wider layouts, ending above the queue's mini-player while that spans the window, and the space above the mini-player on phones. The preview and Unpin row actions use Kalinka’s round 48dp icon buttons with the shared hover/press highlight. The preview trigger has no menu-open or focus-only fill and remains keyboard-operable; it does not use the header’s outlined focus style. The preview icon opens an anchored picker with geometric illustrations and labels for all four layouts, using a crimson outline and checkmark for the current choice; it closes after three seconds of inactivity. The crossed-out Unpin icon opens a centered confirmation dialog with Cancel and Unpin actions. Center it within the browsing pane on wider layouts and within the screen on phones; use a fade-in, not a bottom-sheet slide. Dismissing the dialog leaves the catalog pinned. See [Customise Home](../PALETTE.md#customise-home) for the interaction rules.
 
 | Element | Specification |
 | --- | --- |
@@ -129,7 +129,7 @@ A folder on the server is picked, not typed, where the server can be browsed (AP
 
 ## Streamer content
 
-On the Streamer tab, the Expert settings switch ends Configuration's top bar, as on a renderer's page; where the top bar is hidden beside the navigation rail, it ends the tab row instead. It is the same round `{}` button and the same setting: one switch for the whole app, kept on the device so it survives switching tabs, leaving and restarting. On, the tab's body is the expert list in place of the groups below; there is no separate Advanced settings page.
+On the Streamer tab, the Expert settings switch ends the Settings top bar, as on a renderer's page; where the top bar is hidden beside the navigation rail, it ends the tab row instead. It is the same round `{}` button and the same setting: one switch for the whole app, kept on the device so it survives switching tabs, leaving and restarting. On, the tab's body is the expert list in place of the groups below; there is no separate Advanced settings page.
 
 The expert list is drawn as the simple page draws settings: a search field alone at the top (no introduction above it), pinned under the tabs on the page's own background, then every field as a standard setting row in one card (`surfaceRaised`, 14dp radius, 1dp `borderSubtle` border and dividers; rows 16dp × 12dp, `trayRowLabel` name, the dotted path in `textMuted` mono under it, `trayRowSublabel` help, the control 10dp below; staged rows tinted and ruled in amber as elsewhere). A renderer's expert list is the same.
 
@@ -159,7 +159,7 @@ Display the supervisor status exactly as the backend returns it; do not parse a 
 - Mark the page title as a semantic header. Give the connection dot a readable status tooltip and an accessible label containing the current server name and status. Colour alone is insufficient. The dot is not a button.
 - Keep destructive confirmation and pending-change behaviour intact. Layout changes must not initiate a restart, update, download or power-off.
 - Respect safe areas and the host's mini-player allocation. Lists scroll within the remaining height. Avoid placing fixed elements over the list.
-- Panel motion uses `kSlideInPanelDuration` (320ms, cubic 0.4/0/0.2/1); skip the slide when the system disables animations, and where Configuration is switched to as a destination (from the rail or Customise Home). Header interactions add no movement or layout shifts.
+- Panel motion uses `kSlideInPanelDuration` (320ms, cubic 0.4/0/0.2/1); skip the slide when the system disables animations, and where Settings is switched to as a destination (from the rail or Customise Home). Header interactions add no movement or layout shifts.
 
 ## Implementation and verification
 
@@ -177,7 +177,7 @@ list individual receivers under **Connect** in the sidebar, using compact
 anchored popovers. Show installed, enabled receivers only, independently of
 catalog availability. There is no dedicated Bluetooth header action, large
 Home connection row, or duplicated renderer picker. Enable/disable stays in
-plugin Configuration.
+plugin Settings.
 
 The compact sheet shows actual receiver names and sessions. Bluetooth renders
 **Bluetooth · Pair new**, with a Paired devices label directly below it; no expansion or

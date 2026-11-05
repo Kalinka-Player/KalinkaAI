@@ -109,7 +109,7 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                                     const SizedBox(height: 8),
                                     Text(
                                       noSources
-                                          ? 'Enable a music source in Configuration to start pinning catalogs.'
+                                          ? 'Enable a music source in Settings to start pinning catalogs.'
                                           : 'Choose a source below, browse to a catalog and use '
                                                 '“Pin catalog to Home” to choose its preview.',
                                       style:

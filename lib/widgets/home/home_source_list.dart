@@ -7,13 +7,11 @@ import '../../providers/connection_state_provider.dart';
 import '../../providers/receiver_provider.dart';
 import '../../providers/server_info_provider.dart';
 import '../../providers/shell_nav_provider.dart';
-import '../../theme/app_theme.dart';
 import '../../utils/schema_icons.dart';
 import '../edge_fading_rail.dart';
 import '../module_artwork.dart';
 import '../receiver_panel.dart';
 import '../search/search_zero_state.dart' show kHomeSideInset;
-import '../tap_highlight.dart' show kalinkaIconButtonStyle;
 import 'source_button_style.dart';
 
 /// Home's music sources as icons and names, ending with the gear that
@@ -68,14 +66,16 @@ class HomeSourceList extends ConsumerWidget {
             label: const Text('Could not load sources. Retry'),
           ),
         if (configurable)
-          IconButton(
-            key: const ValueKey('music-sources-settings-button'),
-            tooltip: 'Configure music sources',
-            style: kalinkaIconButtonStyle,
-            color: KalinkaColors.textSecondary,
-            icon: const Icon(Icons.settings_outlined, size: 20),
-            onPressed: () =>
-                ref.read(musicSourcesSettingsRequestProvider.notifier).open(),
+          Tooltip(
+            message: 'Music source settings',
+            child: TextButton.icon(
+              key: const ValueKey('music-sources-settings-button'),
+              style: homeSourceButtonStyle,
+              icon: const Icon(Icons.settings_outlined, size: 20),
+              label: const Text('Settings'),
+              onPressed: () =>
+                  ref.read(musicSourcesSettingsRequestProvider.notifier).open(),
+            ),
           ),
       ],
     );
@@ -96,6 +96,7 @@ class _SourceName extends StatelessWidget {
       style: homeSourceButtonStyle,
       icon: ModuleArtwork(
         icons: module.icons,
+        inheritIconColor: true,
         small: true,
         size: MediaQuery.textScalerOf(context).scale(20),
         fallback: Icon(

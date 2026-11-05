@@ -584,7 +584,7 @@ class _PluginsRow extends StatelessWidget {
     icon: Icons.settings_outlined,
     iconBackground: KalinkaColors.surfaceOverlay,
     iconColor: KalinkaColors.textSecondary,
-    label: 'Configuration',
+    label: 'Settings',
     sublabel: 'Music sources, your player and hi-fi controls',
     trailing: const SheetChevron(),
     onTap: onTap,

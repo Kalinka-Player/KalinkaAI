@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1092,6 +1093,8 @@ void main() {
         await _screen(tester, container);
         // A loading spinner never settles, so only advance frames for this case.
         final tab = find.byKey(const ValueKey('catalog-tab-server'));
+        await tester.ensureVisible(tab);
+        await tester.pump();
         await tester.tap(tab);
         await tester.pump();
         await container.read(boxControlProvider.future);
@@ -1735,6 +1738,30 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'active settings tab stays visible when resizing to phone width',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+      );
+      await _screen(tester, container, size: const Size(900, 850));
+      await _tapTab(tester, PluginTab.server);
+      await tester.binding.setSurfaceSize(const Size(375, 812));
+      await tester.pumpAndSettle();
+      _expectTab(tester, PluginTab.server);
+      final strip = tester.getRect(
+        find.byKey(const PageStorageKey('catalog-tab-scroll')),
+      );
+      final tab = tester.getRect(
+        find.byKey(const ValueKey('catalog-tab-server')),
+      );
+      expect(tab.left, greaterThanOrEqualTo(strip.left));
+      expect(tab.right, lessThanOrEqualTo(strip.right));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('tabs underline only the selected section in berry', (
     tester,
   ) async {
@@ -1749,7 +1776,7 @@ void main() {
     expect(find.byType(ChoiceChip), findsNothing);
     // The berry line sits on the grey rule that runs the whole width.
     final tabs = tester.getRect(find.byKey(const ValueKey('catalog-tabs')));
-    expect(tabs.height, 44);
+    expect(tabs.height, 48);
     final hifi = tester.getRect(
       find.byKey(const ValueKey('catalog-tab-devices')),
     );
@@ -1762,7 +1789,9 @@ void main() {
     );
     expect(sources.left, closeTo(tabs.left + 20, 0.1));
     expect(server.left - hifi.right, closeTo(hifi.left - sources.right, 0.1));
-    expect(server.right, lessThanOrEqualTo(tabs.right - 20 + 0.1));
+    final strip = find.byKey(const PageStorageKey('catalog-tab-scroll'));
+    expect(tester.getRect(strip).right, closeTo(tabs.right - 20, 0.1));
+    expect(server.right, greaterThan(tester.getRect(strip).right));
     expect(hifi.width / 12, closeTo(sources.width / 13, 0.1));
     expect(
       tester.getRect(find.byKey(const ValueKey('catalog-tab-sources'))).bottom,
@@ -1791,7 +1820,7 @@ void main() {
       }
       expect(find.byType(PageBanner), findsNothing);
       expect(find.text('HIFI CONTROL'), findsOneWidget);
-      expect(find.text('Configuration'), findsOneWidget);
+      expect(find.text('Settings'), findsOneWidget);
     }
     expect(tester.takeException(), isNull);
   });
@@ -2041,7 +2070,7 @@ void main() {
       // A quiet sans-serif title above the uppercase tab navigation.
       final bar = find.byType(SettingsTopBar);
       final title = tester.widget<Text>(
-        find.descendant(of: bar, matching: find.text('Configuration')),
+        find.descendant(of: bar, matching: find.text('Settings')),
       );
       expect(title.style!.fontFamily, KalinkaFonts.sansFamily);
       expect(title.style!.fontSize, greaterThan(13));
@@ -2059,7 +2088,7 @@ void main() {
       expect(find.byKey(const ValueKey('catalog-description')), findsNothing);
       expect(find.byType(PageBanner), findsNothing);
       expect(find.text('Music sources'), findsNothing);
-      expect(find.text('Configuration'), findsOneWidget);
+      expect(find.text('Settings'), findsOneWidget);
       expect(
         tester.getRect(find.byKey(const ValueKey('catalog-tabs'))).top,
         tester.getRect(bar).bottom,
@@ -2196,7 +2225,7 @@ void main() {
           of: tabs,
           matching: find.byType(SingleChildScrollView),
         );
-        expect(tabScroll, findsNothing);
+        expect(tabScroll, findsOneWidget);
         final hifi = tester.getRect(
           find.byKey(const ValueKey('catalog-tab-devices')),
         );
@@ -2208,8 +2237,10 @@ void main() {
         );
         // The content's inset: wider from the tablet breakpoint.
         final inset = appWidth < 900 ? 20.0 : 25.0;
-        expect(sources.left, closeTo(resting.left + inset, 0.1));
-        expect(streamer.right, lessThanOrEqualTo(resting.right - inset + 0.1));
+        expect(
+          tester.getRect(tabScroll).left,
+          closeTo(resting.left + inset, 0.1),
+        );
         expect(sources.right, lessThan(hifi.left));
         expect(hifi.right, lessThan(streamer.left));
         expect(hifi.width / 12, closeTo(streamer.width / 8, 0.1));
@@ -2220,9 +2251,14 @@ void main() {
           (PluginTab.server, 'Streamer'),
         ]) {
           final button = find.byKey(ValueKey('catalog-tab-${tab.name}'));
+          await tester.ensureVisible(button);
+          await tester.pumpAndSettle();
           final bounds = tester.getRect(button);
-          expect(bounds.left, greaterThanOrEqualTo(resting.left));
-          expect(bounds.right, lessThanOrEqualTo(resting.right));
+          expect(resting.contains(bounds.center), isTrue);
+          if (bounds.width <= tester.getSize(tabScroll).width) {
+            expect(bounds.left, greaterThanOrEqualTo(resting.left));
+            expect(bounds.right, lessThanOrEqualTo(resting.right));
+          }
           expect(button.hitTestable(), findsOneWidget);
           expect(find.byTooltip(name), findsOneWidget);
           final label = tester.widget<Text>(
@@ -2232,22 +2268,25 @@ void main() {
             ),
           );
           expect(label.maxLines, 1);
-          expect(label.overflow, TextOverflow.ellipsis);
+          expect(label.overflow, isNot(TextOverflow.ellipsis));
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.descendant(of: button, matching: find.byType(RichText)),
+          );
+          expect(paragraph.didExceedMaxLines, isFalse);
           expect(tester.getSemantics(button), isSemantics(label: name));
           await tester.tap(button);
           await tester.pumpAndSettle();
           expect(tester.getSemantics(button), isSemantics(isSelected: true));
           expect(tester.takeException(), isNull);
         }
-        await tester.tap(find.byKey(const ValueKey('catalog-tab-devices')));
-        await tester.pumpAndSettle();
+        await _tapTab(tester, PluginTab.devices);
         for (var pass = 0; pass < 2; pass++) {
           scroll.jumpTo(tester.getSize(description).height + 200);
           await tester.pumpAndSettle();
           expect(description.hitTestable(), findsNothing);
           expect(tester.getRect(tabs).top, viewport.top);
           expect(tester.getRect(find.byType(SettingsTopBar)), bar);
-          for (final key in ['settings-back', 'catalog-tab-sources']) {
+          for (final key in ['settings-back', 'catalog-tab-devices']) {
             expect(find.byKey(ValueKey(key)).hitTestable(), findsOneWidget);
           }
           expect(find.byTooltip('Server online').hitTestable(), findsOneWidget);
@@ -2351,7 +2390,7 @@ void main() {
       await _screen(tester, container);
       expect(find.byIcon(Icons.keyboard_arrow_down), findsNothing);
       expect(find.text('Manage folders'), findsNothing);
-      expect(find.text('Configuration'), findsWidgets);
+      expect(find.text('Settings'), findsWidgets);
       expect(find.text('Browse other plugins'), findsNothing);
       await _open(tester, 'localfiles');
       expect(find.byType(PluginSettingsScreen), findsOneWidget);
@@ -2464,7 +2503,7 @@ void main() {
 
         await tester.tap(find.byType(ServerChip));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Configuration'));
+        await tester.tap(find.text('Settings').hitTestable());
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 160));
         expectAbovePlayer(find.byType(PluginCatalogScreen));
@@ -2563,7 +2602,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byType(ServerChip));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Configuration').hitTestable());
+      await tester.tap(find.text('Settings').hitTestable());
       await tester.pumpAndSettle();
       await _open(tester, 'jamendo');
       final panel = tester.state(find.byType(PluginCatalogScreen));
@@ -2601,7 +2640,7 @@ void main() {
       // The Settings-style arrow must dismiss the same panel as system Back.
       await tester.tap(find.byType(ServerChip));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Configuration').hitTestable());
+      await tester.tap(find.text('Settings').hitTestable());
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('settings-back')));
       await tester.pumpAndSettle();
@@ -2928,7 +2967,7 @@ void main() {
       ]) {
         expect(find.byKey(ValueKey(key)), findsNothing);
       }
-      expect(find.text('Configuration'), findsWidgets);
+      expect(find.text('Settings'), findsWidgets);
 
       await _open(tester, 'jamendo');
       final page = find.byType(PluginSettingsScreen);
@@ -2989,7 +3028,7 @@ void main() {
   // Each is offered only on its side of the server's catalog opt-in.
   for (final (label, panelType, catalog) in [
     ('Server settings', SettingsScreen, false),
-    ('Configuration', PluginCatalogScreen, true),
+    ('Settings', PluginCatalogScreen, true),
   ]) {
     testWidgets(
       '$label covers only the tablet content pane and preserves state across resize',
@@ -3181,24 +3220,24 @@ void main() {
       );
       await tester.tap(find.text('Open menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Configuration'), findsNothing);
+      expect(find.text('Settings'), findsNothing);
       expect(find.text('Server settings'), findsOneWidget);
       expect(find.text('Now-playing display'), findsNothing);
       expect(find.text('THIS APP'), findsNothing);
       settings.stageChange(pluginCatalogSettingPath, true);
       await tester.pumpAndSettle();
-      expect(find.text('Configuration'), findsNothing);
+      expect(find.text('Settings'), findsNothing);
       expect(find.text('Server settings'), findsOneWidget);
       proxy.capabilities['enabled'] = true;
       await settings.applyChanges();
       await tester.pumpAndSettle();
-      expect(find.text('Configuration'), findsWidgets);
+      expect(find.text('Settings'), findsWidgets);
       expect(find.text('Server settings'), findsNothing);
       expect(find.text('Now-playing display'), findsNothing);
       expect(find.text('THIS APP'), findsNothing);
-      await tester.ensureVisible(find.text('Configuration'));
+      await tester.ensureVisible(find.text('Settings'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Configuration'));
+      await tester.tap(find.text('Settings').hitTestable());
       await tester.pumpAndSettle();
       expect(action, ServerSheetAction.openPlugins);
 
@@ -3206,7 +3245,7 @@ void main() {
       settings.saved(false);
       await tester.tap(find.text('Open menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Configuration'), findsNothing);
+      expect(find.text('Settings'), findsNothing);
       expect(find.text('Server settings'), findsOneWidget);
       await tester.tap(find.text('Server settings'));
       await tester.pumpAndSettle();
@@ -3249,9 +3288,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Server settings'), findsNothing);
-    await tester.ensureVisible(find.text('Configuration'));
+    await tester.ensureVisible(find.text('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Configuration'));
+    await tester.tap(find.text('Settings').hitTestable());
     await tester.pumpAndSettle();
     expect(actions, ['close', 'plugins']);
     expect(tester.takeException(), isNull);

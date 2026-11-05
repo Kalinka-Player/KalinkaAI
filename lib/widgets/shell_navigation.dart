@@ -285,17 +285,20 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
           'receiver-${receiver.id}',
           above: receiver == receivers.first
               ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     divider,
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
-                        vertical: 8,
+                        vertical: 4,
                       ),
                       child: Text(
                         'CONNECT',
-                        style: KalinkaTextStyles.sectionHeaderMuted,
+                        style: KalinkaTextStyles.sectionHeaderMuted.copyWith(
+                          fontSize: 10,
+                          color: KalinkaColors.textPrimary,
+                        ),
                       ),
                     ),
                   ],
@@ -330,10 +333,9 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
       if (configuration)
         destination(
           'configuration',
-          'Configuration',
+          'Settings',
           Icons.settings_outlined,
           ShellDestination.configuration,
-          compactLabel: 'Config',
           selected: widget.configurationOpen && !widget.changeServerOpen,
           below: controls.isEmpty ? null : divider,
         ),
@@ -664,6 +666,7 @@ class _NavigationButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final artwork = ModuleArtwork(
       icons: icons,
+      inheritIconColor: true,
       size: 24,
       fallback: Icon(
         icon,
@@ -694,6 +697,11 @@ class _NavigationButton extends StatelessWidget {
         style: KalinkaFonts.sans(
           fontSize: extended ? 16 : 12,
           fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+          color: selected
+              ? KalinkaColors.textPrimary
+              : onPressed == null
+              ? KalinkaColors.textMuted
+              : KalinkaColors.textSecondary,
         ),
       ),
     );

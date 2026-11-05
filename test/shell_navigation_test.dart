@@ -544,7 +544,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(ServerSheetContent),
-        matching: find.text('Configuration'),
+        matching: find.text('Settings'),
       ),
     );
     await tester.pumpAndSettle();
@@ -570,6 +570,8 @@ void main() {
     tester,
   ) async {
     final container = await _pump(tester, size: const Size(375, 812));
+    await tester.ensureVisible(find.byKey(const ValueKey('home-source-tidal')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('home-source-tidal')));
     await tester.pumpAndSettle();
     final visit = container.read(searchSessionProvider).visitId;
@@ -609,7 +611,7 @@ void main() {
       expect(find.byType(CollectionsSection), findsNothing);
       expect(_nav('collections'), rail ? findsOneWidget : findsNothing);
       expect(find.byType(CatalogCardsSection), findsNothing);
-      expect(find.byTooltip('Configure music sources'), findsOneWidget);
+      expect(find.byTooltip('Music source settings'), findsOneWidget);
       expect(tester.state(find.byType(SearchSessionView)), same(homeState));
       expect(find.byType(Drawer), findsNothing);
       expect(tester.takeException(), isNull);

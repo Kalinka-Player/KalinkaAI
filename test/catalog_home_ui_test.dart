@@ -226,7 +226,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         find.text(
-          'Enable a music source in Configuration to start pinning catalogs.',
+          'Enable a music source in Settings to start pinning catalogs.',
         ),
         findsOneWidget,
       );
@@ -385,7 +385,7 @@ void main() {
       // The gear ends Home's line of sources.
       expect(find.text('BROWSE SOURCES'), findsNothing);
       expect(find.text('LISTENING ON'), findsNothing);
-      final gear = find.byTooltip('Configure music sources');
+      final gear = find.byTooltip('Music source settings');
       await tester.ensureVisible(gear);
       await tester.pumpAndSettle();
       final homeRect = tester.getRect(find.byType(SearchZeroState));
@@ -397,7 +397,7 @@ void main() {
       final settings = find.byType(PluginCatalogScreen);
       expect(settings, findsOneWidget);
       expect(
-        find.descendant(of: settings, matching: find.text('Configuration')),
+        find.descendant(of: settings, matching: find.text('Settings')),
         findsOneWidget,
       );
       final sourceTab = find
@@ -426,7 +426,7 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    expect(find.byTooltip('Configure music sources'), findsNothing);
+    expect(find.byTooltip('Music source settings'), findsNothing);
     expect(find.byKey(const ValueKey('home-source-alpha')), findsOneWidget);
   });
 

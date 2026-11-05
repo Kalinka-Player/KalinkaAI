@@ -18,6 +18,7 @@ import '../../providers/catalog_sources_provider.dart';
 import '../../providers/collection_edit_provider.dart';
 import '../../providers/connection_state_provider.dart';
 import '../../providers/indexer_status_provider.dart';
+import '../../providers/pinned_catalogs_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../providers/selection_state_provider.dart';
@@ -29,10 +30,11 @@ import '../kalinka_top_bar.dart';
 import '../browse_filters/search_filter_button.dart';
 import '../browse_filters/search_filter_overlay.dart';
 import '../mini_player.dart';
+import '../measure_size.dart';
 import '../overlay_card.dart';
 import '../selection_overlay.dart';
 import '../server_chip.dart';
-import '../tap_highlight.dart' show kalinkaOverlay;
+import '../tap_highlight.dart' show kalinkaIconButtonStyle, kalinkaOverlay;
 import 'album_page_header.dart';
 import 'browse_visit_scope.dart';
 import 'catalog_page_view.dart';
@@ -50,6 +52,7 @@ import 'search_zero_state.dart';
 /// How far a backdrop fades out before browsing's right edge, where it meets
 /// the player's pane, so it does not end in a cut.
 const double _kPaneEdgeFade = 165;
+const double _kSearchEntryHeight = 54;
 
 /// How far the Discover backdrop reaches below the status inset. The bloom
 /// is drawn over all of it and [_kDiscoverFadeOut] dissolves it before the
@@ -60,8 +63,8 @@ const double _kDiscoverBackdropHeight = 400;
 /// never meets its top edge, even where an empty Home centres it mid-pane.
 const double _kDiscoverBackdropOverhang = 48;
 
-/// Where the bloom centres below the status inset: the search entry, with
-/// the question above it and the prompts under it all inside it. It reaches
+/// Where the bloom centres below the status inset with the question shown.
+/// Without the question it centres on the search entry directly. It reaches
 /// [_kBloomReach] up and down and across to past the pane's sides, never
 /// more than 1.3 times the entry's widest.
 const double _kBloomDepth = 170;
@@ -69,20 +72,27 @@ const double _kBloomReach = 200;
 
 /// The crimson bloom over the Discover root, around the search entry and
 /// its prompts.
-RadialGradient _discoverBloom(double topInset) => RadialGradient(
-  radius: 0.5,
-  transform: _AroundSearch(topInset),
-  colors: [
-    KalinkaColors.accent.withValues(alpha: 0.26),
-    KalinkaColors.accent.withValues(alpha: 0),
-  ],
-);
+RadialGradient _discoverBloom(double topInset, {required bool hasHeading}) =>
+    RadialGradient(
+      radius: 0.5,
+      transform: _AroundSearch(
+        topInset,
+        hasHeading
+            ? _kBloomDepth
+            : kKalinkaTopBarHeight + kHomeTopInset + _kSearchEntryHeight / 2,
+      ),
+      colors: [
+        KalinkaColors.accent.withValues(alpha: 0.26),
+        KalinkaColors.accent.withValues(alpha: 0),
+      ],
+    );
 
 /// Moves the bloom's circle behind the search and shapes it to its reach.
 class _AroundSearch extends GradientTransform {
   final double topInset;
+  final double depth;
 
-  const _AroundSearch(this.topInset);
+  const _AroundSearch(this.topInset, this.depth);
 
   @override
   Matrix4? transform(Rect bounds, {TextDirection? textDirection}) {
@@ -94,7 +104,7 @@ class _AroundSearch extends GradientTransform {
     final from = bounds.center;
     final to = Offset(
       from.dx,
-      bounds.top + _kDiscoverBackdropOverhang + topInset + _kBloomDepth,
+      bounds.top + _kDiscoverBackdropOverhang + topInset + depth,
     );
     return Matrix4.diagonal3Values(sx, sy, 1)
       ..setTranslationRaw(to.dx - sx * from.dx, to.dy - sy * from.dy, 0);
@@ -102,10 +112,12 @@ class _AroundSearch extends GradientTransform {
 
   @override
   bool operator ==(Object other) =>
-      other is _AroundSearch && other.topInset == topInset;
+      other is _AroundSearch &&
+      other.topInset == topInset &&
+      other.depth == depth;
 
   @override
-  int get hashCode => topInset.hashCode;
+  int get hashCode => Object.hash(topInset, depth);
 }
 
 /// What ends the bloom: the ground colour brought up over it just under the
@@ -180,6 +192,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// How far Home's search sits below its top while centred on an empty
   /// Home; the glow behind it follows.
   final _discoverCentring = ValueNotifier<double>(0);
+  final _homeBannerHeight = ValueNotifier<double>(0);
   late final ScrollController _discoverScroll;
   // The album backdrop follows the shown visit's scroll and header; each
   // retained visit keeps its own, so Back lands with them as they were.
@@ -339,6 +352,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     _discoverScroll.dispose();
     _discoverOffset.dispose();
     _discoverCentring.dispose();
+    _homeBannerHeight.dispose();
     _albumOffset.dispose();
     _catalogSurface.dispose();
     _albumHeaderHeight.dispose();
@@ -772,6 +786,11 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                                   decoration: BoxDecoration(
                                     gradient: _discoverBloom(
                                       MediaQuery.paddingOf(context).top,
+                                      hasHeading:
+                                          ref
+                                              .watch(pinnedCatalogsProvider)
+                                              ?.isNotEmpty !=
+                                          true,
                                     ),
                                   ),
                                 ),
@@ -835,8 +854,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                           child: _buildHeader(session, overAlbum: true),
                         ),
                       )
+                    else if (!session.atHome)
+                      _buildHeader(session)
                     else
-                      _buildHeader(session),
+                      const SizedBox.shrink(),
                     Expanded(
                       child: Stack(
                         fit: StackFit.expand,
@@ -1171,47 +1192,73 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     final catalogChrome =
         !onResults && CatalogSliverHeader.appliesTo(session.catalogPage);
     if (session.atHome) {
-      return ValueListenableBuilder<double>(
-        valueListenable: _discoverOffset,
-        // Directly tied to scroll, with no delayed animation or parallax:
-        // once the page passes under, the bar is opaque at the top of the
-        // status area and clear at its own foot, so the page shows through.
-        builder: (context, offset, child) => DecoratedBox(
-          key: const ValueKey('discover-header-surface'),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                KalinkaColors.background.withValues(
-                  alpha: (offset / kKalinkaTopBarHeight).clamp(0.0, 1.0),
+      final hasPins = ref.watch(pinnedCatalogsProvider)?.isNotEmpty ?? false;
+      final smart = ref.watch(smartSearchAvailableProvider) ?? true;
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ValueListenableBuilder<double>(
+            valueListenable: _discoverOffset,
+            // The gradient spans the top inset as well as the toolbar:
+            // opaque at the screen edge, clear at the toolbar's bottom.
+            builder: (context, offset, child) => DecoratedBox(
+              key: const ValueKey('discover-header-surface'),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    KalinkaColors.background.withValues(
+                      alpha: offset > 0 ? 1 : 0,
+                    ),
+                    KalinkaColors.background.withValues(alpha: 0),
+                  ],
                 ),
-                KalinkaColors.background.withValues(alpha: 0),
-              ],
+              ),
+              child: KalinkaTopBar(
+                transparent: true,
+                onServerChipTap: widget.onServerTap,
+                onResultsTap:
+                    session.resultsAvailable && !widget.navigationVisible
+                    ? () async {
+                        if (!await prepareToNavigate() || !mounted) return;
+                        ref
+                            .read(searchSessionProvider.notifier)
+                            .showResults(restore: false);
+                      }
+                    : null,
+                connectionKey: widget.connectionKey,
+                searchFallback: session.resultsAvailable
+                    ? null
+                    : Builder(
+                        builder: (context) => IconButton(
+                          key: const ValueKey('home-header-search-button'),
+                          tooltip: 'Search',
+                          style: kalinkaIconButtonStyle,
+                          onPressed: () => _openSearch(from: context),
+                          icon: const Icon(Icons.search_rounded, size: 24),
+                        ),
+                      ),
+                searchEntry:
+                    hasPins && offset >= kHomeTopInset + _kSearchEntryHeight
+                    ? Builder(
+                        builder: (context) => _SearchEntryButton(
+                          key: const ValueKey('home-header-search'),
+                          hint: _hintText(session, smart: smart),
+                          smart: smart,
+                          compact: true,
+                          onTap: () => _openSearch(from: context),
+                        ),
+                      )
+                    : null,
+              ),
             ),
           ),
-          child: child,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            KalinkaTopBar(
-              transparent: true,
-              onServerChipTap: widget.onServerTap,
-              onResultsTap:
-                  session.resultsAvailable && !widget.navigationVisible
-                  ? () async {
-                      if (!await prepareToNavigate() || !mounted) return;
-                      ref
-                          .read(searchSessionProvider.notifier)
-                          .showResults(restore: false);
-                    }
-                  : null,
-              connectionKey: widget.connectionKey,
-            ),
-            const ConnectionBanner(),
-          ],
-        ),
+          MeasureSize(
+            onChange: (size) => _homeBannerHeight.value = size.height,
+            child: const ConnectionBanner(),
+          ),
+        ],
       );
     }
 
@@ -1588,13 +1635,39 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         if (notification.depth == 0) _afterLayout(_syncDiscoverOffset);
         return false;
       },
-      child: _buildZeroState(session, smart),
+      child: ValueListenableBuilder<double>(
+        valueListenable: _homeBannerHeight,
+        builder: (context, bannerHeight, child) => _buildZeroState(
+          session,
+          smart,
+          headerExtent:
+              MediaQuery.paddingOf(context).top +
+              kKalinkaTopBarHeight +
+              bannerHeight,
+        ),
+      ),
     );
   }
 
-  Widget _buildZeroState(SearchSessionState session, bool smart) {
+  Widget _buildZeroState(
+    SearchSessionState session,
+    bool smart, {
+    required double headerExtent,
+  }) {
     return SearchZeroState(
       controller: _discoverScroll,
+      headerExtent: headerExtent,
+      header: session.atHome
+          ? AnnotatedRegion<SystemUiOverlayStyle>(
+              value: const SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                statusBarIconBrightness: Brightness.light,
+                statusBarBrightness: Brightness.dark,
+                systemStatusBarContrastEnforced: false,
+              ),
+              child: _buildHeader(session),
+            )
+          : SizedBox(height: headerExtent),
       onOpenCatalog: _openCatalog,
       // The rail carries sources and collections where it shows; the
       // sources stay on Home while it holds nothing else, the way in.
@@ -1628,6 +1701,8 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
               children: [
                 _DiscoverHero(
                   entryKey: _entryKey,
+                  showHeading:
+                      ref.watch(pinnedCatalogsProvider)?.isNotEmpty != true,
                   hint: _hintText(session, smart: smart),
                   smartSearch: smart,
                   smartSources: smart
@@ -1921,6 +1996,7 @@ class _PaneEdgeFade extends StatelessWidget {
 /// the surface level, not here.
 class _DiscoverHero extends StatelessWidget {
   final Key entryKey;
+  final bool showHeading;
   final String hint;
 
   /// Whether a source answers smart search; controls the search entry icon.
@@ -1936,6 +2012,7 @@ class _DiscoverHero extends StatelessWidget {
 
   const _DiscoverHero({
     required this.entryKey,
+    required this.showHeading,
     required this.hint,
     required this.smartSearch,
     required this.smartSources,
@@ -1950,16 +2027,18 @@ class _DiscoverHero extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4),
       child: Column(
         children: [
-          Text(
-            'What shall we play?',
-            textAlign: TextAlign.center,
-            style: KalinkaFonts.display(
-              fontSize: KalinkaTypography.baseSize + 17,
-              fontWeight: FontWeight.w600,
-              color: KalinkaColors.textPrimary,
+          if (showHeading) ...[
+            Text(
+              'What shall we play?',
+              textAlign: TextAlign.center,
+              style: KalinkaFonts.display(
+                fontSize: KalinkaTypography.baseSize + 17,
+                fontWeight: FontWeight.w600,
+                color: KalinkaColors.textPrimary,
+              ),
             ),
-          ),
-          const SizedBox(height: 18),
+            const SizedBox(height: 18),
+          ],
           // The overlay it lifts into keeps its width.
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: kHomeSearchMaxWidth),
@@ -2125,12 +2204,14 @@ class _SearchEntryButton extends StatelessWidget {
   /// Smart search gets the crimson invitation; a name search is a plain field.
   final bool smart;
   final VoidCallback onTap;
+  final bool compact;
 
   const _SearchEntryButton({
     super.key,
     required this.hint,
     required this.smart,
     required this.onTap,
+    this.compact = false,
   });
 
   @override
@@ -2168,7 +2249,7 @@ class _SearchEntryButton extends StatelessWidget {
             mouseCursor: WidgetStateMouseCursor.clickable,
             onTap: onTap,
             child: Container(
-              height: 54,
+              height: compact ? 48 : _kSearchEntryHeight,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(22),

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/module_icons.dart';
 import '../providers/module_icon_cache.dart';
 import '../providers/url_resolver.dart';
+import '../theme/app_theme.dart' show KalinkaColors;
 
 /// Plugin artwork painted as a shared bitmap, with its older icon as fallback.
 class ModuleArtwork extends ConsumerWidget {
@@ -14,12 +15,16 @@ class ModuleArtwork extends ConsumerWidget {
   final bool small;
   final Widget fallback;
 
+  /// Match a surrounding button's hover, focus and selected foreground.
+  final bool inheritIconColor;
+
   const ModuleArtwork({
     super.key,
     required this.icons,
     required this.size,
     required this.fallback,
     this.small = false,
+    this.inheritIconColor = false,
   });
 
   @override
@@ -51,9 +56,8 @@ class ModuleArtwork extends ConsumerWidget {
             fit: BoxFit.contain,
             excludeFromSemantics: true,
             color: artwork.monochrome
-                ? (Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white
-                      : Colors.black)
+                ? (inheritIconColor ? IconTheme.of(context).color : null) ??
+                      KalinkaColors.textSecondary
                 : null,
             colorBlendMode: BlendMode.srcIn,
             errorBuilder: (_, _, _) => Center(child: fallback),
