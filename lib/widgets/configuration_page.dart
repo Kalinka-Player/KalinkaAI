@@ -5,10 +5,14 @@ import 'settings_page_intro.dart';
 import 'settings_top_bar.dart';
 import 'slide_in_panel.dart';
 
-/// One fixed page title, with the introduction scrolling with its content.
+/// One fixed page title, with the introduction scrolling with its content;
+/// a page without a [description] has none.
 class ConfigurationPage extends StatelessWidget {
   final String title;
-  final String description;
+  final String? description;
+
+  /// A single icon action in the fixed title bar.
+  final Widget? action;
   final VoidCallback onClose;
   final bool handlesBack;
   final Widget Function(Widget heading) bodyBuilder;
@@ -17,7 +21,8 @@ class ConfigurationPage extends StatelessWidget {
   const ConfigurationPage({
     super.key,
     required this.title,
-    required this.description,
+    this.description,
+    this.action,
     required this.onClose,
     required this.bodyBuilder,
     this.handlesBack = true,
@@ -38,10 +43,12 @@ class ConfigurationPage extends StatelessWidget {
             builder: (context) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SettingsTopBar(title: title),
+                SettingsTopBar(title: title, action: action),
                 Expanded(
                   child: bodyBuilder(
-                    SettingsPageIntro(description: description),
+                    description == null
+                        ? const SizedBox.shrink()
+                        : SettingsPageIntro(description: description),
                   ),
                 ),
               ],

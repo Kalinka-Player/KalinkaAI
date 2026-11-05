@@ -68,6 +68,9 @@ import 'package:kalinka/widgets/settings_controls/module_header_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
 
+import 'package:kalinka/data_model/storage.dart';
+import 'package:kalinka/screens/drives_and_shares_screen.dart';
+
 import 'support/server_answer.dart';
 import 'support/soundcard_fakes.dart' show FakeBox;
 
@@ -178,6 +181,9 @@ class _Restart extends RestartNotifier {
 class _Proxy implements KalinkaPlayerProxy {
   Map<String, dynamic> capabilities;
   Map<String, dynamic>? updateInfo;
+
+  /// What `/server/version` says of storage; null for a server before it.
+  Map<String, dynamic>? storage;
   int reads = 0;
   _Live live = _Live();
   _Proxy(this.capabilities);
@@ -190,8 +196,27 @@ class _Proxy implements KalinkaPlayerProxy {
   @override
   Future<Map<String, dynamic>> getServerVersion() async {
     reads++;
-    return {'server_version': '5.5.0', 'plugin_management': capabilities};
+    return {
+      'server_version': '5.5.0',
+      'plugin_management': capabilities,
+      'storage': ?storage,
+    };
   }
+
+  @override
+  Future<StorageDeviceList> listStorageDevices() async =>
+      StorageDeviceList.fromJson({
+        'devices': [
+          {
+            'id': 'internal',
+            'medium': 'internal',
+            'label': 'Internal storage',
+            'summary': 'On this server · 212 GB free',
+            'state': 'mounted',
+          },
+        ],
+        'scan': {'running': false},
+      });
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
@@ -340,7 +365,7 @@ SettingsState _settingsWith(Map<String, bool> enabled) => SettingsState(
   },
 );
 
-SettingsState _serverSettings({bool details = false}) {
+SettingsState _serverSettings({bool details = false, bool storage = false}) {
   final plugins = _settingsWith({'localfiles': true});
   return plugins.copyWith(
     schema: PresentationSchema(
@@ -410,6 +435,20 @@ SettingsState _serverSettings({bool details = false}) {
                 ),
               ],
             ),
+            if (storage)
+              const SectionSpec(
+                id: 'base_config.storage',
+                title: 'Storage',
+                fields: [
+                  FieldSpec(
+                    path: 'base_config.storage.automount_usb',
+                    label: 'Mount USB drives automatically',
+                    widget: WidgetKind.toggle,
+                    type: 'bool',
+                    defaultValue: true,
+                  ),
+                ],
+              ),
             SectionSpec(
               id: 'base_config.new_feature',
               title: 'Future feature',
@@ -841,6 +880,57 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('Storage opens Drives & shares on a server that lists them', (
+    tester,
+  ) async {
+    final proxy = _Proxy({'enabled': true, 'catalog_browsing': true})
+      ..storage = {'folders': true, 'devices': true};
+    final container = await _container(
+      proxy,
+      _CatalogApi(_catalog()),
+      settings: _serverSettings(storage: true),
+    );
+    await _screen(tester, container);
+    await _tapTab(tester, PluginTab.server);
+
+    final row = find.byKey(const ValueKey('drives-and-shares'));
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    // Inside the Storage card, after its own settings.
+    expect(
+      tester.getRect(row).top,
+      greaterThan(
+        tester.getRect(find.text('Mount USB drives automatically')).top,
+      ),
+    );
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DrivesAndSharesScreen), findsOneWidget);
+    expect(find.text('Internal storage'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(DrivesAndSharesScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Storage offers no Drives & shares on an older server', (
+    tester,
+  ) async {
+    final proxy = _Proxy({'enabled': true, 'catalog_browsing': true})
+      ..storage = {'folders': true};
+    final container = await _container(
+      proxy,
+      _CatalogApi(_catalog()),
+      settings: _serverSettings(storage: true),
+    );
+    await _screen(tester, container);
+    await _tapTab(tester, PluginTab.server);
+
+    expect(find.text('Mount USB drives automatically'), findsOneWidget);
+    expect(find.byKey(const ValueKey('drives-and-shares')), findsNothing);
+  });
 
   testWidgets(
     'Streamer orders sections and edits the name from the server card',

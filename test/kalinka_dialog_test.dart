@@ -10,7 +10,7 @@ import 'package:kalinka/widgets/kalinka_dialog.dart';
 
 const _card = KalinkaDialog.cardKey;
 
-Widget _host(KalinkaDialogSide side) => MaterialApp(
+Widget _host(KalinkaDialogSide side, {bool iconBeside = false}) => MaterialApp(
   home: Scaffold(
     body: Builder(
       builder: (ctx) => Center(
@@ -22,6 +22,7 @@ Widget _host(KalinkaDialogSide side) => MaterialApp(
               icon: Icons.delete_outline,
               title: 'Dialog title',
               message: 'Dialog body',
+              iconBeside: iconBeside,
               actions: [
                 KalinkaButton(label: 'OK', fullWidth: true, onTap: () {}),
               ],
@@ -34,8 +35,12 @@ Widget _host(KalinkaDialogSide side) => MaterialApp(
   ),
 );
 
-Future<void> _open(WidgetTester tester, KalinkaDialogSide side) async {
-  await tester.pumpWidget(_host(side));
+Future<void> _open(
+  WidgetTester tester,
+  KalinkaDialogSide side, {
+  bool iconBeside = false,
+}) async {
+  await tester.pumpWidget(_host(side, iconBeside: iconBeside));
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
 }
@@ -140,5 +145,29 @@ void main() {
     await tester.tapAt(tester.getCenter(find.byKey(_card)));
     await tester.pumpAndSettle();
     expect(find.byKey(_card), findsOneWidget);
+  });
+
+  testWidgets('the icon tile stands above the title by default', (
+    tester,
+  ) async {
+    await _open(tester, KalinkaDialogSide.browsing);
+
+    expect(
+      tester.getRect(find.byIcon(Icons.delete_outline)).bottom,
+      lessThan(tester.getRect(find.text('Dialog title')).top),
+    );
+  });
+
+  testWidgets('beside, the icon leads the title and message, stacked', (
+    tester,
+  ) async {
+    await _open(tester, KalinkaDialogSide.browsing, iconBeside: true);
+
+    final tile = tester.getRect(find.byIcon(Icons.delete_outline));
+    final title = tester.getRect(find.text('Dialog title'));
+    final body = tester.getRect(find.text('Dialog body'));
+    expect(title.left, greaterThan(tile.right));
+    expect(body.left, title.left);
+    expect(body.top, greaterThanOrEqualTo(title.bottom));
   });
 }

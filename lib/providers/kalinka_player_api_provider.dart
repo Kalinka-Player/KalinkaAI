@@ -222,6 +222,57 @@ abstract class KalinkaPlayerProxy {
   /// Takes a Drives folder that is a library source out of that library.
   Future<AdoptResult> releaseStorage(String entityId);
 
+  /// Every drive and share the server could mount, mounted or not (API
+  /// 0.22). Asking keeps the server's search for shares running.
+  Future<StorageDeviceList> listStorageDevices();
+
+  /// Mounts a device now with the settings given, as
+  /// [updateStorageDevice] takes them, keeping a disk or share not kept yet;
+  /// answers once the server has mounted it, failed to, or stopped waiting.
+  Future<DeviceAnswer> mountStorageDevice(
+    String deviceId, {
+    bool? atStart,
+    String? label,
+    bool? readOnly,
+    String? version,
+  });
+
+  /// Unmounts a device now, leaving its Mount after restart switch and all
+  /// else saved of it as it was. Throws the reason it would not unmount.
+  Future<void> unmountStorageDevice(String deviceId);
+
+  /// Changes a device's Mount after restart switch, name, read-only setting
+  /// or NFS version, keeping the device if it was not kept; mounts nothing.
+  Future<void> updateStorageDevice(
+    String deviceId, {
+    bool? atStart,
+    String? label,
+    bool? readOnly,
+    String? version,
+  });
+
+  /// Unmounts a kept device and forgets it.
+  Future<void> forgetStorageDevice(String deviceId);
+
+  /// Puts away the failed mount of a device not kept.
+  Future<void> dismissStorageFailure(String deviceId);
+
+  /// Asks [host] for its NFS exports, which the device list then shows.
+  Future<ShareProbe> probeShareHost(String host);
+
+  /// Asks every host on the network for its shares again.
+  Future<void> rescanShares();
+
+  /// Keeps the share [export] on [host] as asked and mounts it, answering as
+  /// [mountStorageDevice] does.
+  Future<DeviceAnswer> addShare({
+    required String host,
+    required String export,
+    required String version,
+    required bool atStart,
+    required bool readOnly,
+  });
+
   /// PUT body: `{"schema_version": ..., "changes": {<flat dotted path>: value}}`.
   ///
   /// Returns the credential paths the server holds after the save
@@ -1129,6 +1180,151 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
       throw Exception(
         _detail(e) ?? 'Could not take this folder out of the library',
       );
+    }
+  }
+
+  @override
+  Future<StorageDeviceList> listStorageDevices() async {
+    final response = await client.get('/server/storage/devices');
+    return StorageDeviceList.fromJson(Map<String, dynamic>.from(response.data));
+  }
+
+  Future<T> _onDevice<T>(
+    Future<T> Function(String path) request,
+    String deviceId,
+    String failure,
+  ) async {
+    try {
+      return await request(
+        '/server/storage/devices/${Uri.encodeComponent(deviceId)}',
+      );
+    } on DioException catch (e) {
+      throw Exception(_detail(e) ?? failure);
+    }
+  }
+
+  /// The body of a device's settings change: only what is given.
+  static String _deviceChanges({
+    bool? atStart,
+    String? label,
+    bool? readOnly,
+    String? version,
+  }) => jsonEncode({
+    'at_start': ?atStart,
+    'label': ?label,
+    'read_only': ?readOnly,
+    'version': ?version,
+  });
+
+  @override
+  Future<DeviceAnswer> mountStorageDevice(
+    String deviceId, {
+    bool? atStart,
+    String? label,
+    bool? readOnly,
+    String? version,
+  }) => _onDevice(
+    (path) async => DeviceAnswer.fromJson(
+      Map<String, dynamic>.from(
+        (await client.post(
+              '$path/mount',
+              data: _deviceChanges(
+                atStart: atStart,
+                label: label,
+                readOnly: readOnly,
+                version: version,
+              ),
+            )).data
+            as Map,
+      ),
+    ),
+    deviceId,
+    'Could not mount it',
+  );
+
+  @override
+  Future<void> unmountStorageDevice(String deviceId) => _onDevice(
+    (path) => client.post('$path/unmount'),
+    deviceId,
+    'Could not unmount it',
+  );
+
+  @override
+  Future<void> updateStorageDevice(
+    String deviceId, {
+    bool? atStart,
+    String? label,
+    bool? readOnly,
+    String? version,
+  }) => _onDevice(
+    (path) => client.put(
+      path,
+      data: _deviceChanges(
+        atStart: atStart,
+        label: label,
+        readOnly: readOnly,
+        version: version,
+      ),
+    ),
+    deviceId,
+    'Could not save the change',
+  );
+
+  @override
+  Future<void> forgetStorageDevice(String deviceId) =>
+      _onDevice((path) => client.delete(path), deviceId, 'Could not forget it');
+
+  @override
+  Future<void> dismissStorageFailure(String deviceId) => _onDevice(
+    (path) => client.delete('$path/failure'),
+    deviceId,
+    'Could not put it away',
+  );
+
+  @override
+  Future<ShareProbe> probeShareHost(String host) async {
+    try {
+      final response = await client.post(
+        '/server/storage/shares/probe',
+        data: jsonEncode({'host': host}),
+      );
+      return ShareProbe.fromJson(Map<String, dynamic>.from(response.data));
+    } on DioException catch (e) {
+      throw Exception(_detail(e) ?? 'Could not ask $host');
+    }
+  }
+
+  @override
+  Future<void> rescanShares() async {
+    try {
+      await client.post('/server/storage/shares/scan');
+    } on DioException catch (e) {
+      throw Exception(_detail(e) ?? 'Could not look for shares again');
+    }
+  }
+
+  @override
+  Future<DeviceAnswer> addShare({
+    required String host,
+    required String export,
+    required String version,
+    required bool atStart,
+    required bool readOnly,
+  }) async {
+    try {
+      final response = await client.post(
+        '/server/storage/shares',
+        data: jsonEncode({
+          'host': host,
+          'export': export,
+          'version': version,
+          'at_start': atStart,
+          'read_only': readOnly,
+        }),
+      );
+      return DeviceAnswer.fromJson(Map<String, dynamic>.from(response.data));
+    } on DioException catch (e) {
+      throw Exception(_detail(e) ?? 'Could not mount the share');
     }
   }
 
