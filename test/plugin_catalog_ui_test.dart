@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -542,6 +544,7 @@ Future<void> _screen(
   double? appWidth,
   bool disableAnimations = false,
   VoidCallback? onClose,
+  bool showBack = true,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -556,7 +559,9 @@ Future<void> _screen(
             textScaler: TextScaler.linear(scale),
             disableAnimations: disableAnimations,
           ),
-          child: Scaffold(body: PluginCatalogScreen(onClose: onClose)),
+          child: Scaffold(
+            body: PluginCatalogScreen(onClose: onClose, showBack: showBack),
+          ),
         ),
       ),
     ),
@@ -606,6 +611,22 @@ Future<void> _tapTab(WidgetTester tester, PluginTab tab) async {
   await tester.pumpAndSettle();
   await tester.tap(button);
   await tester.pumpAndSettle();
+}
+
+/// Whether a tab's label is drawn whole and inside the tab strip, unscrolled.
+bool _shownWhole(WidgetTester tester, PluginTab tab) {
+  final label = find.descendant(
+    of: find.byKey(ValueKey('catalog-tab-${tab.name}')),
+    matching: find.byType(RichText),
+  );
+  final paragraph = tester.renderObject<RenderParagraph>(label);
+  expect(paragraph.didExceedMaxLines, isFalse);
+  expect(paragraph.size.width, greaterThanOrEqualTo(paragraph.textSize.width));
+  final bounds = tester.getRect(label);
+  final strip = tester.getRect(
+    find.byKey(const PageStorageKey('catalog-tab-scroll')),
+  );
+  return bounds.left >= strip.left - 0.01 && bounds.right <= strip.right + 0.01;
 }
 
 void _expectTab(WidgetTester tester, PluginTab selected) {
@@ -1765,6 +1786,8 @@ void main() {
     );
     expect(sources.left, closeTo(tabs.left + 20, 0.1));
     expect(server.left - hifi.right, closeTo(hifi.left - sources.right, 0.1));
+    // Short of room, the gaps narrow before the strip scrolls.
+    expect(hifi.left - sources.right, closeTo(12, 0.1));
     final strip = find.byKey(const PageStorageKey('catalog-tab-scroll'));
     expect(tester.getRect(strip).right, closeTo(tabs.right - 20, 0.1));
     expect(server.right, greaterThan(tester.getRect(strip).right));
@@ -4543,6 +4566,195 @@ void main() {
       expect(_badgeOf(tester, 'qobuz')!.label, 'READY');
     },
   );
+
+  // Last in the file: a loaded font stays for every test after it.
+  group('tabs in the bundled mono face', () {
+    setUpAll(() async {
+      await (FontLoader(KalinkaFonts.monoFamily)
+            ..addFont(rootBundle.load('assets/fonts/IBMPlexMono-SemiBold.ttf')))
+          .load();
+    });
+
+    const tabs = [PluginTab.sources, PluginTab.devices, PluginTab.server];
+    final toggle = find.byKey(const ValueKey('expert-mode-toggle'));
+    final row = find.byKey(const ValueKey('catalog-tabs'));
+    Finder tabKey(PluginTab tab) =>
+        find.byKey(ValueKey('catalog-tab-${tab.name}'));
+
+    Future<ProviderContainer> pump(
+      WidgetTester tester,
+      Size size, {
+      double scale = 1,
+      double? appWidth,
+      bool showBack = true,
+    }) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        settings: _serverSettings(),
+      );
+      await _screen(
+        tester,
+        container,
+        size: size,
+        scale: scale,
+        appWidth: appWidth,
+        showBack: showBack,
+      );
+      return container;
+    }
+
+    for (final (width, scale, allShown) in [
+      (360.0, 1.0, true),
+      (412.0, 1.3, false),
+      (320.0, 1.3, false),
+      (320.0, 1.8, false),
+    ]) {
+      for (final showBack in [true, false]) {
+        testWidgets(
+          'the selected tab shows its whole name at ${width}dp, ${scale}x '
+          'text, ${showBack ? 'with' : 'without'} a top bar',
+          (tester) async {
+            final container = await pump(
+              tester,
+              Size(width, 800),
+              scale: scale,
+              showBack: showBack,
+            );
+            expect(tabs.every((tab) => _shownWhole(tester, tab)), allShown);
+            for (final tab in tabs) {
+              // Reached, scrolling the row if it must, and tapped.
+              await _tapTab(tester, tab);
+              expect(tester.takeException(), isNull);
+              _expectTab(tester, tab);
+              expect(_shownWhole(tester, tab), isTrue);
+              for (final other in tabs.where((other) => other != tab)) {
+                expect(
+                  find.byTooltip(switch (other) {
+                    PluginTab.sources => 'Music sources',
+                    PluginTab.devices => 'HiFi control',
+                    PluginTab.server => 'Streamer',
+                  }),
+                  findsOneWidget,
+                );
+              }
+              if (tab != PluginTab.server) {
+                expect(toggle, findsNothing);
+                continue;
+              }
+              expect(toggle.hitTestable(), findsOneWidget);
+              final bounds = tester.getRect(toggle);
+              if (showBack) {
+                expect(
+                  find.descendant(
+                    of: find.byType(SettingsTopBar),
+                    matching: toggle,
+                  ),
+                  findsOneWidget,
+                );
+              } else {
+                // On the line under the tabs, at the content's inset.
+                expect(
+                  find.descendant(of: row, matching: toggle),
+                  findsOneWidget,
+                );
+                expect(
+                  bounds.top,
+                  greaterThanOrEqualTo(
+                    tester.getRect(tabKey(PluginTab.server)).bottom,
+                  ),
+                );
+                expect(bounds.right, closeTo(width - 20, 0.1));
+              }
+              await tester.tap(toggle);
+              await tester.pumpAndSettle();
+              expect(container.read(expertModeProvider), isTrue);
+              expect(find.byType(ExpertSettingsScreen), findsOneWidget);
+              expect(_shownWhole(tester, PluginTab.server), isTrue);
+              expect(tester.getRect(toggle), bounds);
+              await tester.tap(toggle);
+              await tester.pumpAndSettle();
+              expect(container.read(expertModeProvider), isFalse);
+              expect(find.byType(ExpertSettingsScreen), findsNothing);
+            }
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+
+    for (final (width, scale, inRow) in [
+      (440.0, 1.0, false),
+      (483.0, 1.0, true),
+      (700.0, 1.0, true),
+      (700.0, 1.5, false),
+    ]) {
+      testWidgets(
+        'beside the rail at ${width}dp, ${scale}x text, the Expert switch '
+        '${inRow ? 'ends the tab row' : 'takes the line under it'}',
+        (tester) async {
+          await pump(
+            tester,
+            Size(width, 700),
+            scale: scale,
+            appWidth: 1024,
+            showBack: false,
+          );
+          await _tapTab(tester, PluginTab.server);
+          final bounds = tester.getRect(toggle);
+          final streamer = tester.getRect(tabKey(PluginTab.server));
+          final gutter = math.max(25.0, (width - kKalinkaContentMaxWidth) / 2);
+          expect(bounds.right, closeTo(width - gutter, 0.1));
+          if (inRow) {
+            expect(bounds.left, greaterThan(streamer.right));
+            expect(bounds.center.dy, closeTo(streamer.center.dy, 0.1));
+          } else {
+            expect(bounds.top, greaterThanOrEqualTo(streamer.bottom));
+          }
+          // Wherever the switch goes, the tabs keep room to show whole.
+          for (final tab in tabs) {
+            expect(_shownWhole(tester, tab), isTrue);
+          }
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
+    testWidgets('a tab tapped at the edge of a scrolling row comes into view', (
+      tester,
+    ) async {
+      final container = await pump(tester, const Size(320, 800), scale: 1.8);
+      final hifi = tabKey(PluginTab.devices);
+      final before = tester.getRect(hifi);
+      expect(before.left, lessThan(320));
+      expect(before.right, greaterThan(320));
+      await tester.tapAt(Offset((before.left + 320) / 2, before.center.dy));
+      await tester.pumpAndSettle();
+      _expectTab(tester, PluginTab.devices);
+      final shown = tester.getRect(hifi);
+      expect(shown.left, greaterThanOrEqualTo(20 - 0.1));
+      expect(shown.right, lessThanOrEqualTo(300 + 0.1));
+
+      // Scrolled away by hand, the row stays put when the page rebuilds.
+      await tester.drag(hifi, const Offset(-200, 0));
+      await tester.pumpAndSettle();
+      final dragged = tester.getRect(hifi);
+      expect(dragged.left, lessThan(shown.left));
+      container
+          .read(settingsProvider.notifier)
+          .stageChange('base_config.server.service_name', 'Listening room');
+      await tester.pumpAndSettle();
+      expect(tester.getRect(hifi), dragged);
+
+      // A narrower window brings the selected tab back.
+      await tester.binding.setSurfaceSize(const Size(310, 800));
+      await tester.pumpAndSettle();
+      final resized = tester.getRect(hifi);
+      expect(resized.left, greaterThanOrEqualTo(20 - 0.1));
+      expect(resized.right, lessThanOrEqualTo(290 + 0.1));
+      expect(tester.takeException(), isNull);
+    });
+  });
 }
 
 List<ModuleInfo> _liveInputs(_Live live) => live.value.inputModules;

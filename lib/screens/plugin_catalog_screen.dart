@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -75,8 +77,6 @@ class PluginCatalogScreen extends ConsumerStatefulWidget {
 class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   final _scroll = ScrollController();
   PluginTab _tab = PluginTab.sources;
-  final _tabKeys = {for (final tab in PluginTab.values) tab: GlobalKey()};
-  (PluginTab, double, double)? _tabLayout;
   CatalogPlugin? _settingsFor;
   CatalogPlugin? _aboutFor;
   bool _logsOpen = false;
@@ -743,73 +743,15 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     child: ColoredBox(
       key: const ValueKey('catalog-tabs'),
       color: KalinkaColors.background,
-      // Full labels scroll horizontally, while the active tab stays in view
-      // on selection and resize. The whole strip stays pinned above content.
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: gutter),
-        child: Row(
-          children: [
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final layout = (
-                    tab,
-                    constraints.maxWidth,
-                    MediaQuery.textScalerOf(context).scale(14),
-                  );
-                  if (_tabLayout != layout) {
-                    _tabLayout = layout;
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted) return;
-                      final target = _tabKeys[_tab]?.currentContext;
-                      if (target == null) return;
-                      // Only move the horizontal strip, preserving the page's
-                      // vertical position when the window changes size.
-                      Scrollable.of(
-                        target,
-                        axis: Axis.horizontal,
-                      ).position.ensureVisible(
-                        target.findRenderObject()!,
-                        alignment: 0.5,
-                      );
-                    });
-                  }
-                  return SingleChildScrollView(
-                    key: const PageStorageKey('catalog-tab-scroll'),
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: 24,
-                      children: [
-                        for (final (option, label) in [
-                          (PluginTab.sources, 'Music sources'),
-                          (PluginTab.devices, 'HiFi control'),
-                          (PluginTab.server, 'Streamer'),
-                        ])
-                          KeyedSubtree(
-                            key: _tabKeys[option],
-                            child: _PluginTabButton(
-                              key: ValueKey('catalog-tab-${option.name}'),
-                              label: label,
-                              selected: tab == option,
-                              onTap: () {
-                                setState(() => _tab = option);
-                                _scroll.jumpTo(0);
-                              },
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            if (tab == PluginTab.server && !widget.showBack) ...[
-              const SizedBox(width: 8),
-              const ExpertModeToggle(),
-            ],
-          ],
-        ),
+      child: _PluginTabs(
+        selected: tab,
+        gutter: gutter,
+        // Without the top bar, the Streamer tab carries the Expert switch.
+        expertSwitch: tab == PluginTab.server && !widget.showBack,
+        onSelected: (option) {
+          setState(() => _tab = option);
+          _scroll.jumpTo(0);
+        },
       ),
     ),
   );
@@ -886,6 +828,149 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   );
 }
 
+/// Each tab as wide as its whole label, an even gap apart, from the content's
+/// inset, with no rule under them. Short of room the gaps narrow, then the
+/// labels scroll sideways, keeping the selected tab in view on selection and
+/// resize.
+class _PluginTabs extends StatefulWidget {
+  final PluginTab selected;
+  final double gutter;
+
+  /// Ends the row where it fits beside the tabs at their full width, else
+  /// the line under them.
+  final bool expertSwitch;
+  final ValueChanged<PluginTab> onSelected;
+
+  const _PluginTabs({
+    required this.selected,
+    required this.gutter,
+    required this.expertSwitch,
+    required this.onSelected,
+  });
+
+  @override
+  State<_PluginTabs> createState() => _PluginTabsState();
+}
+
+class _PluginTabsState extends State<_PluginTabs> {
+  static const _options = [
+    (PluginTab.sources, 'Music sources'),
+    (PluginTab.devices, 'HiFi control'),
+    (PluginTab.server, 'Streamer'),
+  ];
+  static const _gap = 24.0;
+  static const _tightGap = 12.0;
+  static const _switchGap = 8.0;
+
+  final _keys = {for (final tab in PluginTab.values) tab: GlobalKey()};
+
+  /// The tab, width and text size the selected tab was last brought into
+  /// view at. Only a change moves the strip, not the user's own scrolling.
+  (PluginTab, double, double)? _layout;
+
+  /// The labels' full widths together, measured when the text style or size
+  /// changes.
+  late double _labels;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _labels = 0;
+    for (final (_, label) in _options) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: label.toUpperCase(),
+          style: DefaultTextStyle.of(context).style
+              .merge(_PluginTabButton.labelStyle(selected: false)),
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      _labels += painter.width;
+      painter.dispose();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final labelSize = _PluginTabButton.labelStyle(selected: false).fontSize!;
+    final scaledSize = MediaQuery.textScalerOf(context).scale(labelSize);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gutter = widget.gutter;
+        final room = math.max(0.0, constraints.maxWidth - 2 * gutter);
+        final gap = ((room - _labels) / 2).clamp(_tightGap, _gap);
+        final switchInRow =
+            scaledSize <= labelSize * 1.3 &&
+            _labels + 2 * _gap + _switchGap + kMinInteractiveDimension <= room;
+        final layout = (widget.selected, constraints.maxWidth, scaledSize);
+        if (_layout != layout) {
+          _layout = layout;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final target = _keys[widget.selected]?.currentContext;
+            if (target == null) return;
+            // Only move the horizontal strip, preserving the page's
+            // vertical position when the window changes size.
+            Scrollable.of(target, axis: Axis.horizontal).position.ensureVisible(
+              target.findRenderObject()!,
+              alignment: 0.5,
+            );
+          });
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: gutter),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      key: const PageStorageKey('catalog-tab-scroll'),
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        spacing: gap,
+                        children: [
+                          for (final (option, label) in _options)
+                            KeyedSubtree(
+                              key: _keys[option],
+                              child: _PluginTabButton(
+                                key: ValueKey('catalog-tab-${option.name}'),
+                                label: label,
+                                selected: widget.selected == option,
+                                onTap: () => widget.onSelected(option),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (widget.expertSwitch && switchInRow) ...[
+                    const SizedBox(width: _switchGap),
+                    const ExpertModeToggle(),
+                  ],
+                ],
+              ),
+            ),
+            if (widget.expertSwitch && !switchInRow)
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: gutter),
+                child: const Align(
+                  alignment: Alignment.centerRight,
+                  child: ExpertModeToggle(),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// A mono label over a berry underline while selected.
 class _PluginTabButton extends StatelessWidget {
   final String label;
@@ -898,6 +983,12 @@ class _PluginTabButton extends StatelessWidget {
     required this.selected,
     required this.onTap,
   });
+
+  static TextStyle labelStyle({required bool selected}) => _label.copyWith(
+    fontSize: KalinkaTypography.baseSize + 1,
+    letterSpacing: 1,
+    color: selected ? KalinkaColors.textPrimary : KalinkaColors.textSecondary,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -931,13 +1022,7 @@ class _PluginTabButton extends StatelessWidget {
                   label.toUpperCase(),
                   maxLines: 1,
                   softWrap: false,
-                  style: _label.copyWith(
-                    fontSize: KalinkaTypography.baseSize + 1,
-                    letterSpacing: 1,
-                    color: selected
-                        ? KalinkaColors.textPrimary
-                        : KalinkaColors.textSecondary,
-                  ),
+                  style: labelStyle(selected: selected),
                 ),
               ),
             ),
