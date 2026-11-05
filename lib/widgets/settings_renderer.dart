@@ -548,6 +548,10 @@ class SchemaSectionRenderer extends StatelessWidget {
   /// Paths a collection elsewhere in the module stands in for.
   final Set<String> replaced;
 
+  /// Rows the screen adds after the section's own, in its card: a way to
+  /// what the schema does not describe.
+  final List<Widget> trailing;
+
   const SchemaSectionRenderer({
     super.key,
     required this.section,
@@ -555,6 +559,7 @@ class SchemaSectionRenderer extends StatelessWidget {
     this.showServerUpdate = true,
     this.subtitle,
     this.replaced = const {},
+    this.trailing = const [],
   });
 
   @override
@@ -577,17 +582,20 @@ class SchemaSectionRenderer extends StatelessWidget {
         ? null
         : _firstFieldWithPathSuffix(section.fields, '.status_view');
 
-    final rows = _rowsOf(
-      _laidOut(
-        section.fields,
-        section.collections,
-        section.sections,
-        hidden: {?enabledField, ?statusField},
+    final rows = [
+      ..._rowsOf(
+        _laidOut(
+          section.fields,
+          section.collections,
+          section.sections,
+          hidden: {?enabledField, ?statusField},
+          replaced: replaced,
+        ),
         replaced: replaced,
+        showServerUpdate: showServerUpdate,
       ),
-      replaced: replaced,
-      showServerUpdate: showServerUpdate,
-    );
+      ...trailing,
+    ];
 
     // Toggleable sub-feature section: route through the dedicated header
     // widget with the body unchanged.

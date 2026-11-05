@@ -26,6 +26,7 @@ import '../widgets/configuration_page.dart';
 import '../widgets/expert_mode_toggle.dart';
 import '../widgets/expert_settings_screen.dart';
 import '../widgets/onboarding/step_network.dart';
+import 'drives_and_shares_screen.dart';
 import 'log_export_screen.dart';
 import 'configuration_review_screen.dart';
 import '../widgets/plugin_catalog_entry.dart';
@@ -78,6 +79,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   CatalogPlugin? _aboutFor;
   bool _logsOpen = false;
   bool _networkOpen = false;
+  bool _drivesOpen = false;
   bool _restartOverlayOpen = false;
   List<String>? _reviewPaths;
   // The check before the restart is a round trip, and the banner stays up
@@ -279,6 +281,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         _aboutFor = null;
         _logsOpen = false;
         _networkOpen = false;
+        _drivesOpen = false;
       });
       if (_scroll.hasClients) _scroll.jumpTo(0);
     });
@@ -299,6 +302,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         _tab = PluginTab.sources;
         _logsOpen = false;
         _networkOpen = false;
+        _drivesOpen = false;
         _reviewPaths = null;
       });
       ref.read(pluginFailuresProvider.notifier).clear();
@@ -338,6 +342,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                       _aboutFor == null &&
                       !_logsOpen &&
                       !_networkOpen &&
+                      !_drivesOpen &&
                       _reviewPaths == null &&
                       !_restartOverlayOpen &&
                       !upgrading,
@@ -399,6 +404,16 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                             ),
                           ],
                         ),
+                      ),
+                    if (_drivesOpen)
+                      DrivesAndSharesScreen(
+                        key: const ValueKey('server-drives-and-shares'),
+                        onClose: () => setState(() => _drivesOpen = false),
+                        handlesBack:
+                            widget.handlesBack &&
+                            _reviewPaths == null &&
+                            !_restartOverlayOpen &&
+                            !upgrading,
                       ),
                     if (_logsOpen)
                       LogExportScreen(
@@ -798,6 +813,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         onRestart: _onRestart,
         onDownloadLogs: () => setState(() => _logsOpen = true),
         onNetwork: () => setState(() => _networkOpen = true),
+        onDrivesAndShares: () => setState(() => _drivesOpen = true),
       ),
     ),
     const SliverToBoxAdapter(child: SizedBox(height: 32)),

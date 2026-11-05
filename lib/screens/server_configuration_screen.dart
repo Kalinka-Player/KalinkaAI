@@ -9,6 +9,7 @@ import '../providers/server_update_provider.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/field_decoration.dart';
+import '../theme/kalinka_icons.dart';
 import '../widgets/box_section.dart';
 import '../widgets/configuration_appearance.dart';
 import '../widgets/kalinka_button.dart';
@@ -23,15 +24,22 @@ import '../widgets/settings_renderer.dart';
 
 /// The Streamer tab keeps server information and management beside its settings.
 class ServerSettingsBody extends ConsumerWidget {
+  static const storageSectionId = 'base_config.storage';
+
   final VoidCallback onRestart;
   final VoidCallback onDownloadLogs;
   final VoidCallback? onNetwork;
+
+  /// Opens Drives & shares, offered in the Storage section on a server that
+  /// lists its drives and shares.
+  final VoidCallback? onDrivesAndShares;
 
   const ServerSettingsBody({
     super.key,
     required this.onRestart,
     required this.onDownloadLogs,
     this.onNetwork,
+    this.onDrivesAndShares,
   });
 
   @override
@@ -41,6 +49,9 @@ class ServerSettingsBody extends ConsumerWidget {
     final update = ref.watch(serverUpdateProvider).value;
     final showUpdate =
         update != null && (!update.updateAvailable || update.upgradeSupported);
+    final drivesAndShares = ref.watch(storageDevicesSupportedProvider)
+        ? onDrivesAndShares
+        : null;
     return SettingsScope(
       binding: ServerSettingsBinding(
         settings,
@@ -87,6 +98,18 @@ class ServerSettingsBody extends ConsumerWidget {
                 section: section,
                 isTopLevel: true,
                 showServerUpdate: false,
+                trailing: [
+                  if (section.id == storageSectionId && drivesAndShares != null)
+                    SettingsActionRow(
+                      key: const ValueKey('drives-and-shares'),
+                      label: 'Drives & shares',
+                      sublabel:
+                          'Mount disks and network shares, and choose which '
+                          'come back after a restart.',
+                      leading: KalinkaIcons.hardDriveOutlined,
+                      onTap: drivesAndShares,
+                    ),
+                ],
               ),
           ],
           if (sections.updates.isNotEmpty || showUpdate) ...[
