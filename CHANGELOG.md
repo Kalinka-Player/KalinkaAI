@@ -8,6 +8,24 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.26.0
+
+Receivers you can pair and control from Connect, a Drives & shares screen for mounting drives and network shares, and pinning an artist to Home. Receivers, Drives & shares and a plugin install followed live need server 5.18.0; against an older server Connect shows no receivers and Streamer → Storage keeps only Drives, as before.
+
+### Added
+- Connect, under Streamer in the rail, lists the streamer's Bluetooth and AirPlay receivers and the devices paired to them, each with Pair, Disconnect and Forget (Forget asks first, in Kalinka's own dialog styling) and a password reveal directly on an AirPlay receiver's row. Pairing a new Bluetooth device raises an approval sheet with a live countdown that keeps ticking as the server's own updates arrive, and a receiver's row holds its place while an action against it is pending. A receiver's settings and the audio device behind it are reachable from the same panel, compact enough to sit in a popover beside its sidebar entry, with its actions folded into menus and its metadata shown without a catalogue link where the server has none to offer.
+- Streamer → Storage gains a Drives & shares screen: one row per USB drive, disk or NFS share the streamer could read music from, mounted or not, each with Mount, Unmount or Eject, a Mount after restart switch, and Add network share to probe a host for what it exports.
+- An artist's page offers Pin beside their name, as a catalog's page already does; the pin previews their albums, or their tracks where they have none, and carries a portrait fetched for the page that opened without one.
+- An install, update or uninstall a plugin runs on the server is followed step by step rather than left to the plugin catalog's old all-or-nothing wait.
+- The queue, Now Playing, the mini player and the kiosk show "PCM" as a stream's format where it has none of its own, instead of leaving the label blank.
+
+### Changed
+- The kiosk's stream line matches the one on Now Playing, and drops its underline now that it is not a link.
+
+### Fixed
+- Updating the streamer's software asks for the release the server offers at that moment, not the one listed when Settings opened, so a release that came out in between no longer stops the update with "Requested version … is not the available update …". The upgrade screen says when a newer release is being installed, and the confirmation lists it if the server's answer arrives while it is open. When there is nothing left to install, as after another device ran the update first, it says the server is already up to date rather than failing. A request the server turns down shows the server's reason, with Retry when asking again can help, as while renderers upgrade first or when the server did not answer. A demo server, or a streamer that cannot update itself, shows its reason with Close alone.
+- An update that brings only a new web player, renderer or supervisor, while the server stays on its version or runs a build newer than the latest release, stays on Updating packages until the server reports every part current, instead of saying it is done after a few seconds and then offering the same update again. It needs no newer server; on one older than 5.14.0, which does not name the web player, the wait lasts until the server offers no update at all.
+
 ## Unreleased
 
 ### Fixed
