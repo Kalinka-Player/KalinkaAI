@@ -28,6 +28,7 @@ import 'collections_section.dart';
 /// search overlay ([SearchSuggestionsList]), not here.
 /// Home's side inset; what reaches the window edge bleeds past it by this.
 const kHomeSideInset = 16.0;
+const kHomeTopInset = 8.0;
 
 class SearchZeroState extends ConsumerWidget {
   /// Opens a catalog page directly (browse id + resolved provider label).
@@ -36,9 +37,13 @@ class SearchZeroState extends ConsumerWidget {
   /// Shares the root's scroll position with Home's backdrop and pinned bar.
   final ScrollController? controller;
 
-  /// Widgets pinned to the top of the scroll — the "What shall we play?"
-  /// heading and the search entry — so they scroll with the
-  /// content rather than sitting sticky above it.
+  /// The pinned Home bar shares the viewport with the content, which scrolls
+  /// behind its gradient. Its extent also keeps the empty state centred in
+  /// the unobscured space and the refresh indicator below the bar.
+  final Widget? header;
+  final double headerExtent;
+
+  /// The search introduction precedes the shelves and scrolls with them.
   final List<Widget> leading;
 
   /// Off where the navigation rail lists Collections instead.
@@ -67,6 +72,8 @@ class SearchZeroState extends ConsumerWidget {
     super.key,
     required this.onOpenCatalog,
     this.controller,
+    this.header,
+    this.headerExtent = 0,
     this.leading = const [],
     this.showCollections = true,
     this.sources,
@@ -91,64 +98,81 @@ class SearchZeroState extends ConsumerWidget {
         pins != null &&
         pins.isEmpty &&
         (collections == null || collections.isEmpty);
-    const top = 8.0;
+    const top = kHomeTopInset;
     return PullToRefresh(
+      edgeOffset: headerExtent,
       onRefresh: ref.read(searchSessionProvider.notifier).refreshAll,
       child: LayoutBuilder(
-        builder: (context, constraints) => ListView(
+        builder: (context, constraints) => CustomScrollView(
           // Coming back from a catalog returns to where the root was left, not
           // to its top — the shelf you came from is where you look next.
           key: const PageStorageKey('discoverRoot'),
           controller: controller,
           // Pullable even when Home is shorter than the screen.
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(
-            kHomeSideInset,
-            top,
-            kHomeSideInset,
-            kHomeSectionGap,
-          ),
-          children: [
-            ValueListenableBuilder<double>(
-              valueListenable: roomLent ?? const AlwaysStoppedAnimation(0.0),
-              builder: (context, lent, child) => _Centring(
-                centred: empty,
-                room: constraints.maxHeight - top - kHomeSectionGap - lent,
-                onShift: onCentringShift,
-                child: child!,
+          // Pinning in the viewport also teaches ensureVisible and keyboard
+          // focus how much of the list the header obscures.
+          slivers: [
+            if (header != null) PinnedHeaderSliver(child: header),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                kHomeSideInset,
+                top,
+                kHomeSideInset,
+                kHomeSectionGap,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+              sliver: SliverList.list(
                 children: [
-                  ...leading,
-                  // Close under the prompts and over what follows, as one
-                  // line of ways in; without it, the search's full gap.
-                  if (sources != null && (showSources || empty)) ...[
-                    sources!,
-                    const SizedBox(height: 16),
-                  ] else
-                    const SizedBox(height: 12),
-                  ?activity,
-                  if (empty)
-                    _PinHint(
+                  ValueListenableBuilder<double>(
+                    valueListenable:
+                        roomLent ?? const AlwaysStoppedAnimation(0.0),
+                    builder: (context, lent, child) => _Centring(
+                      centred: empty,
+                      room:
+                          constraints.maxHeight -
+                          headerExtent -
+                          top -
+                          kHomeSectionGap -
+                          lent,
+                      onShift: onCentringShift,
+                      child: child!,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ...leading,
+                        // Close under the prompts and over what follows, as one
+                        // line of ways in; without it, the search's full gap.
+                        if (sources != null && (showSources || empty)) ...[
+                          sources!,
+                          const SizedBox(height: 16),
+                        ] else
+                          const SizedBox(height: 12),
+                        ?activity,
+                        if (empty)
+                          _PinHint(
+                            onCustomise: () => ref
+                                .read(homeCustomisationProvider.notifier)
+                                .open(),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (!empty && showCollections)
+                    CollectionsSection(onOpenCatalog: onOpenCatalog),
+                  if (pins == null)
+                    const LoadingSpinner()
+                  else if (pins.isNotEmpty) ...[
+                    PinnedCatalogsSection(pins: pins),
+                    // After the pins, quietly: where to change them.
+                    _CustomiseLine(
                       onCustomise: () =>
                           ref.read(homeCustomisationProvider.notifier).open(),
                     ),
+                  ],
                 ],
               ),
             ),
-            if (!empty && showCollections)
-              CollectionsSection(onOpenCatalog: onOpenCatalog),
-            if (pins == null)
-              const LoadingSpinner()
-            else if (pins.isNotEmpty) ...[
-              PinnedCatalogsSection(pins: pins),
-              // After the pins, quietly: where to change them.
-              _CustomiseLine(
-                onCustomise: () =>
-                    ref.read(homeCustomisationProvider.notifier).open(),
-              ),
-            ],
           ],
         ),
       ),

@@ -333,10 +333,9 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
       if (configuration)
         destination(
           'configuration',
-          'Configuration',
+          'Settings',
           Icons.settings_outlined,
           ShellDestination.configuration,
-          compactLabel: 'Config',
           selected: widget.configurationOpen && !widget.changeServerOpen,
           below: controls.isEmpty ? null : divider,
         ),
@@ -667,6 +666,7 @@ class _NavigationButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final artwork = ModuleArtwork(
       icons: icons,
+      inheritIconColor: true,
       size: 24,
       fallback: Icon(
         icon,

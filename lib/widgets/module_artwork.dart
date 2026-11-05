@@ -15,12 +15,16 @@ class ModuleArtwork extends ConsumerWidget {
   final bool small;
   final Widget fallback;
 
+  /// Match a surrounding button's hover, focus and selected foreground.
+  final bool inheritIconColor;
+
   const ModuleArtwork({
     super.key,
     required this.icons,
     required this.size,
     required this.fallback,
     this.small = false,
+    this.inheritIconColor = false,
   });
 
   @override
@@ -51,7 +55,10 @@ class ModuleArtwork extends ConsumerWidget {
             height: height,
             fit: BoxFit.contain,
             excludeFromSemantics: true,
-            color: artwork.monochrome ? KalinkaColors.textSecondary : null,
+            color: artwork.monochrome
+                ? (inheritIconColor ? IconTheme.of(context).color : null) ??
+                      KalinkaColors.textSecondary
+                : null,
             colorBlendMode: BlendMode.srcIn,
             errorBuilder: (_, _, _) => Center(child: fallback),
             frameBuilder: (_, child, frame, _) =>
