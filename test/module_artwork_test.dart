@@ -13,6 +13,7 @@ import 'package:kalinka/providers/module_icon_cache.dart';
 import 'package:kalinka/providers/plugin_state.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/module_artwork.dart';
 import 'package:kalinka/widgets/plugin_catalog_entry.dart';
 import 'package:kalinka/widgets/source_badge.dart';
@@ -76,7 +77,7 @@ void main() {
     (Brightness.light, 3.0),
   ]) {
     testWidgets(
-      'wide attribution renders at 18/20 dp without padding, $brightness, text scale $scale',
+      'wide attribution renders at 14/20 dp without padding, $brightness, text scale $scale',
       (tester) async {
         final calls = <Uri>[];
         await tester.binding.setSurfaceSize(const Size(320, 850));
@@ -149,7 +150,7 @@ void main() {
         final marks = tester
             .widgetList<ModuleArtwork>(find.byType(ModuleArtwork))
             .toList();
-        expect(marks.map((mark) => mark.size), [20 * scale, 18 * scale]);
+        expect(marks.map((mark) => mark.size), [20 * scale, 14 * scale]);
         for (final element in find.byType(ModuleArtwork).evaluate()) {
           final mark = element.widget as ModuleArtwork;
           final size = tester.getSize(find.byWidget(mark));
@@ -160,11 +161,7 @@ void main() {
         final images = tester.widgetList<Image>(find.byType(Image));
         expect(images, hasLength(2));
         expect(
-          images.every(
-            (image) =>
-                image.color ==
-                (brightness == Brightness.dark ? Colors.white : Colors.black),
-          ),
+          images.every((image) => image.color == KalinkaColors.textSecondary),
           isTrue,
         );
         final rendered = tester.widgetList<RawImage>(find.byType(RawImage));

@@ -49,7 +49,7 @@ bool sourceBadgeVisible(WidgetRef ref, String entityId) {
 /// Automatically hides when only one source is configured — with nothing to
 /// tell apart, a badge is noise.
 ///
-/// Icons use 20dp in list rows and now-playing, 18dp in queues and tiles.
+/// Icons use 20dp in list rows and now-playing, 14dp in queues and tiles.
 /// Letter fallbacks retain their compact pill padding.
 class SourceBadge extends ConsumerWidget {
   final String entityId;
@@ -76,7 +76,7 @@ class SourceBadge extends ConsumerWidget {
     final hasIcon = info.icons != null || info.icon != null;
 
     final double fs = size == SourceBadgeSize.small ? 10.0 : 11.0;
-    final double iconSize = size == SourceBadgeSize.small ? 18.0 : 20.0;
+    final double iconSize = size == SourceBadgeSize.small ? 14.0 : 20.0;
     final double px = size == SourceBadgeSize.small ? 4.0 : 5.0;
     final double py = size == SourceBadgeSize.small ? 1.5 : 2.0;
     final BorderRadius radius =

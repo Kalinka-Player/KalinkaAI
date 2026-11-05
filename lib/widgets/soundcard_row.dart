@@ -5,6 +5,7 @@ import '../data_model/presentation_schema.dart' show OptionSpec;
 import '../providers/soundcard_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../theme/app_theme.dart';
+import 'configuration_appearance.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'kalinka_button.dart';
 import 'kalinka_dialog.dart';
@@ -275,7 +276,7 @@ class RendererSoundcardSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 28, 20, 10),
+          padding: ConfigurationAppearance.sectionPadding(context),
           child: Text(
             'SOUND CARD',
             style: KalinkaTextStyles.sectionHeaderMuted,

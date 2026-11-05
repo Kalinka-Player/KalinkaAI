@@ -71,6 +71,10 @@ class NowPlayingContent extends ConsumerStatefulWidget {
 }
 
 class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
+  // Cap viewport-driven growth of supporting text, before system text scaling.
+  static const _maxArtistFontSize = 20.0;
+  static const _maxAlbumFontSize = 18.0;
+
   @override
   Widget build(BuildContext context) {
     // Use only primitive-typed selectors so Riverpod's == comparison works by
@@ -400,15 +404,11 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
       String text,
       TextStyle style,
       int maxLines, {
-      bool grows = true,
       bool linked = false,
     }) {
       final painter =
           TextPainter(
-            text: TextSpan(
-              text: text,
-              style: grows ? _grown(style, grow) : style,
-            ),
+            text: TextSpan(text: text, style: style),
             textDirection: Directionality.of(context),
             textScaler: MediaQuery.textScalerOf(context),
             maxLines: maxLines,
@@ -428,11 +428,19 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     }
 
     var height =
-        line(track?.title ?? 'No track', KalinkaTextStyles.expandedTitle, 2) +
+        line(
+          track?.title ?? 'No track',
+          _grown(KalinkaTextStyles.expandedTitle, grow),
+          2,
+        ) +
         6 * grow +
         line(
           track?.performer?.name ?? '\u2014',
-          KalinkaTextStyles.expandedArtist,
+          _grown(
+            KalinkaTextStyles.expandedArtist,
+            grow,
+            maxFontSize: _maxArtistFontSize,
+          ),
           2,
           linked: ref.read(nowPlayingMetadataLinksProvider).artist != null,
         );
@@ -441,7 +449,11 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           4 * grow +
           line(
             _albumLine(album),
-            KalinkaTextStyles.expandedAlbum,
+            _grown(
+              KalinkaTextStyles.expandedAlbum,
+              grow,
+              maxFontSize: _maxAlbumFontSize,
+            ),
             1,
             linked: ref.read(nowPlayingMetadataLinksProvider).album != null,
           );
@@ -449,20 +461,13 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     if (track != null) {
       // The stream's line keeps its size.
       height +=
-          12 +
-          line(
-            'Stream info',
-            KalinkaTextStyles.expandedAttribution,
-            1,
-            grows: false,
-          );
+          12 + line('Stream info', KalinkaTextStyles.expandedAttribution, 1);
     }
     return height;
   }
 
-  /// How much larger than the stacked layout's the details beside the cover
-  /// may be: in step with the [width] they have, up to 1.6×, and no taller
-  /// than [height].
+  /// Grow the title beside the cover with [width], up to 1.6×, while keeping
+  /// artist and album sizes capped and the whole group within [height].
   double _metadataGrowth(
     Track? track, {
     required double width,
@@ -489,8 +494,18 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     return 20 + math.max(18.0, height);
   }
 
-  static TextStyle _grown(TextStyle style, double grow) =>
-      grow == 1 ? style : style.copyWith(fontSize: style.fontSize! * grow);
+  static TextStyle _grown(
+    TextStyle style,
+    double grow, {
+    double? maxFontSize,
+  }) => grow == 1
+      ? style
+      : style.copyWith(
+          fontSize: math.min(
+            style.fontSize! * grow,
+            maxFontSize ?? double.infinity,
+          ),
+        );
 
   static String _albumLine(Album album) =>
       album.year != null ? '${album.title} · ${album.year}' : album.title;
@@ -532,7 +547,11 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           label: currentTrack?.performer?.name ?? '\u2014',
           item: ref.read(nowPlayingMetadataLinksProvider).artist,
           onOpen: _openItem,
-          style: _grown(KalinkaTextStyles.expandedArtist, grow),
+          style: _grown(
+            KalinkaTextStyles.expandedArtist,
+            grow,
+            maxFontSize: _maxArtistFontSize,
+          ),
           textAlign: textAlign,
           maxLines: 2,
         ),
@@ -542,7 +561,11 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
             label: _albumLine(album),
             item: ref.read(nowPlayingMetadataLinksProvider).album,
             onOpen: _openItem,
-            style: _grown(KalinkaTextStyles.expandedAlbum, grow),
+            style: _grown(
+              KalinkaTextStyles.expandedAlbum,
+              grow,
+              maxFontSize: _maxAlbumFontSize,
+            ),
             textAlign: textAlign,
             maxLines: 1,
           ),
