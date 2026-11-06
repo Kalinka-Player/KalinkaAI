@@ -453,7 +453,10 @@ class _SourceGroup extends StatelessWidget {
         for (final source in capabilities.sources)
           FilterPill(
             label: source.title,
-            leading: SourceTile(source: source.name),
+            leading: SourceTile(
+              source: source.name,
+              foreground: KalinkaColors.textPrimary,
+            ),
             selected: selected.contains(source.name),
             onTap: () => onChanged(
               selected.contains(source.name)

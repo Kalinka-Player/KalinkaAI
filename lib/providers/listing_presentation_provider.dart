@@ -39,6 +39,27 @@ class ListingLayout {
     this.itemAspectRatio,
   });
 
+  /// Search keeps one view choice per type tab, independent of catalogs,
+  /// queries and filters. Mixed results and tracks always remain rows.
+  static ListingLayout? forSearch(SearchType? type) => switch (type) {
+    SearchType.album => const ListingLayout(
+      'search-results:albums',
+      contentType: PreviewContentType.album,
+      byDefault: ListingPresentation.grid,
+    ),
+    SearchType.artist => const ListingLayout(
+      'search-results:artists',
+      contentType: PreviewContentType.artist,
+      byDefault: ListingPresentation.grid,
+    ),
+    SearchType.playlist => const ListingLayout(
+      'search-results:playlists',
+      contentType: PreviewContentType.playlist,
+      byDefault: ListingPresentation.list,
+    ),
+    _ => null,
+  };
+
   /// From the preview its catalog declares: image cards and carousels open as
   /// a grid, anything else as rows. Null for a listing of tracks, which only
   /// rows show.

@@ -242,7 +242,9 @@ class SearchResults {
       );
     }
 
-    final groups = filter.kind == ResultKind.nameMatches
+    final groups =
+        filter.kind == ResultKind.nameMatches ||
+            (filter.type != null && filter.type != SearchType.track)
         ? const <InspiredGroup>[]
         : [
             for (final group in inspiredGroups)

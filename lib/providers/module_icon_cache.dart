@@ -10,15 +10,25 @@ import '../data_model/module_icons.dart';
 
 typedef IconRasterizer = Future<Uint8List> Function(Uint8List svg, int extent);
 
+class _CachedIcon {
+  late final Future<Uint8List> future;
+  Uint8List? bytes;
+}
+
 /// Keeps rasterized PNG data across rows and navigation, independently of the
 /// cover-art image cache. Concurrent requests share the same work.
 class ModuleIconCache {
   final http.Client client;
   final IconRasterizer rasterize;
-  final _images = <(String, String, int), Future<Uint8List>>{};
+  final _images = <(String, String, int), _CachedIcon>{};
 
   ModuleIconCache({required this.client, IconRasterizer? rasterize})
     : rasterize = rasterize ?? _rasterize;
+
+  /// A new badge can paint an already loaded bitmap on its first frame,
+  /// without a completed Future still introducing a waiting frame.
+  Uint8List? peek(String url, ModuleIconImage icon, {required bool small}) =>
+      _images[(url, icon.mimeType, small ? 96 : 256)]?.bytes;
 
   Future<Uint8List> load(
     String url,
@@ -30,18 +40,21 @@ class ModuleIconCache {
     final existing = _images.remove(key);
     if (existing != null) {
       _images[key] = existing;
-      return existing;
+      return existing.future;
     }
     if (_images.length >= 64) _images.remove(_images.keys.first);
-    late final Future<Uint8List> pending;
-    pending = _load(url, icon.mimeType, extent).catchError((
-      Object error,
-      StackTrace stack,
-    ) {
-      if (identical(_images[key], pending)) _images.remove(key);
-      Error.throwWithStackTrace(error, stack);
-    });
-    return _images[key] = pending;
+    final entry = _CachedIcon();
+    entry.future = _load(url, icon.mimeType, extent)
+        .then((bytes) {
+          entry.bytes = bytes;
+          return bytes;
+        })
+        .catchError((Object error, StackTrace stack) {
+          if (identical(_images[key], entry)) _images.remove(key);
+          Error.throwWithStackTrace(error, stack);
+        });
+    _images[key] = entry;
+    return entry.future;
   }
 
   Future<Uint8List> _load(String url, String mimeType, int extent) async {

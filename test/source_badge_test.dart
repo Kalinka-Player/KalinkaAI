@@ -124,6 +124,38 @@ void main() {
       expect(find.byIcon(Icons.folder_outlined), findsOneWidget);
     });
 
+    testWidgets(
+      'a compact source selector scales its badge frame and icon together',
+      (tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [sourceModulesProvider.overrideWith((ref) => withIcons)],
+            child: MaterialApp(
+              home: MediaQuery(
+                data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+                child: const Scaffold(
+                  body: Center(
+                    child: SourceTile(
+                      source: 'localfiles',
+                      small: true,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(tester.getSize(find.byType(SourceTile)), const Size(40, 40));
+        expect(
+          tester.getSize(find.byIcon(Icons.folder_outlined)),
+          const Size(40, 40),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets('one this app has no drawing of keeps its letter', (
       tester,
     ) async {

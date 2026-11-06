@@ -70,7 +70,8 @@ class SourceBadge extends ConsumerWidget {
     if (!sourceBadgeVisible(ref, entityId)) return const SizedBox.shrink();
 
     final source = EntityId.fromString(entityId).source;
-    final info = ref.watch(sourceDisplayInfoProvider)[source]!;
+    final info = ref.watch(sourceDisplayInfoProvider)[source];
+    if (info == null) return const SizedBox.shrink();
 
     final color = info.color;
     final hasIcon = info.icons != null || info.icon != null;
@@ -122,23 +123,37 @@ class SourceBadge extends ConsumerWidget {
 class SourceTile extends ConsumerWidget {
   final String source;
 
+  /// A control can give downloaded logos and fallback icons the same ink.
+  final Color? foreground;
+
+  /// Use the compact attribution artwork and scale its frame with the text.
+  final bool small;
+
   /// Side of the tile. Smaller where the letters sit on a row's second line
   /// rather than beside a heading.
   final double size;
 
-  const SourceTile({super.key, required this.source, this.size = 22});
+  const SourceTile({
+    super.key,
+    required this.source,
+    this.size = 22,
+    this.foreground,
+    this.small = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final info = ref.watch(sourceDisplayInfoProvider)[source];
     final color = info?.color ?? colorForSourceName(source);
     final hasIcon = info?.icons != null || info?.icon != null;
-    final icon = info?.icons?.standard;
-    final height = math.max(size, icon?.minHeight ?? 0);
-    final width = math.max(
-      size,
-      (icon?.minHeight ?? 0) * (icon?.aspectRatio ?? 1),
-    );
+    final icon = small ? info?.icons?.small : info?.icons?.standard;
+    final tileSize = small
+        ? MediaQuery.textScalerOf(context).scale(size)
+        : size;
+    final height = math.max(tileSize, icon?.minHeight ?? 0);
+    final width = small
+        ? height * (icon?.aspectRatio ?? 1)
+        : math.max(size, (icon?.minHeight ?? 0) * (icon?.aspectRatio ?? 1));
     final letter =
         info?.abbreviation ?? (source.isEmpty ? '?' : source[0].toUpperCase());
     return Semantics(
@@ -158,15 +173,22 @@ class SourceTile extends ConsumerWidget {
                 ),
                 borderRadius: BorderRadius.circular(5),
               ),
-        child: ModuleArtwork(
-          icons: info?.icons,
-          size: size,
-          fallback: _SourceMark(
-            icon: info?.icon,
-            letter: letter,
-            letterSize: size / 2,
-            iconSize: size,
-            color: hasIcon ? Theme.of(context).colorScheme.onSurface : color,
+        child: IconTheme.merge(
+          data: IconThemeData(color: foreground),
+          child: ModuleArtwork(
+            icons: info?.icons,
+            small: small,
+            size: tileSize,
+            inheritIconColor: foreground != null,
+            fallback: _SourceMark(
+              icon: info?.icon,
+              letter: letter,
+              letterSize: size / 2,
+              iconSize: size,
+              color:
+                  foreground ??
+                  (hasIcon ? Theme.of(context).colorScheme.onSurface : color),
+            ),
           ),
         ),
       ),

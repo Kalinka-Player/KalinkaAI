@@ -16,8 +16,13 @@ import '../search_cards/action_pill_button.dart';
 /// covers the set the heading names rather than the rows in view.
 class TrackGroupActions extends ConsumerWidget {
   final List<String> trackIds;
+  final String addLabel;
 
-  const TrackGroupActions({super.key, required this.trackIds});
+  const TrackGroupActions({
+    super.key,
+    required this.trackIds,
+    this.addLabel = 'Enqueue',
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -25,15 +30,15 @@ class TrackGroupActions extends ConsumerWidget {
     final selectionMode = ref.watch(
       selectionStateProvider.select((s) => s.isActive),
     );
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
         if (selectionMode) ...[
           SelectAllButton(trackIds: trackIds),
         ] else ...[
           PlayAllChip(trackIds: trackIds),
-          const SizedBox(width: 8),
-          AddAllChip(trackIds: trackIds),
+          AddAllChip(trackIds: trackIds, label: addLabel),
         ],
       ],
     );
@@ -115,6 +120,7 @@ class AddAllChip extends ConsumerStatefulWidget {
   /// a section of results is only "these tracks".
   final String? name;
   final bool enabled;
+  final String label;
 
   const AddAllChip({
     super.key,
@@ -122,6 +128,7 @@ class AddAllChip extends ConsumerStatefulWidget {
     this.trackCount,
     this.name,
     this.enabled = true,
+    this.label = 'Enqueue',
   });
 
   @override
@@ -173,7 +180,7 @@ class _AddAllChipState extends ConsumerState<AddAllChip> {
   Widget build(BuildContext context) {
     final added = _status == _AddStatus.added;
     return ActionPillButton(
-      label: added ? 'Added' : 'Enqueue',
+      label: added ? 'Added' : widget.label,
       icon: added ? Icons.check_rounded : Icons.playlist_add_rounded,
       // Enabled only when idle — no re-add while adding or confirming.
       enabled: widget.enabled && _status == _AddStatus.idle,

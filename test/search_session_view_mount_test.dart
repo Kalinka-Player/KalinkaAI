@@ -822,48 +822,86 @@ void main() {
     expect(container.read(searchSessionProvider).catalogFilter.isEmpty, isTrue);
   });
 
-  testWidgets('a search is changed in the smart search, not filtered', (
-    tester,
-  ) async {
-    final container = await pumpSurface(
-      tester,
-      modules: [
-        ModuleInfo(
-          name: 'qobuz',
-          title: 'Qobuz',
-          enabled: true,
-          state: ModuleState.ready,
-          capabilities: const [ModuleCapability.catalogs],
-        ),
-      ],
+  for (final width in [375.0, 1100.0]) {
+    testWidgets(
+      'results reuse Home search and clear opens an empty draft at $width',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 812);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final captureKey = GlobalKey();
+        final container = await pumpSurface(
+          tester,
+          captureKey: captureKey,
+          modules: [
+            ModuleInfo(
+              name: 'qobuz',
+              title: 'Qobuz',
+              enabled: true,
+              state: ModuleState.ready,
+              capabilities: const [ModuleCapability.catalogs],
+            ),
+          ],
+        );
+        container.read(searchSessionProvider.notifier).submit('the beatles');
+        // Past the minimum loading hold, so the legs have landed.
+        await tester.pump(const Duration(milliseconds: 700));
+
+        expect(find.text('the beatles'), findsOneWidget);
+        expect(find.byType(SearchFilterButton), findsNothing);
+        expect(find.byType(CatalogFiltersButton), findsOneWidget);
+        expect(find.byType(SearchComposer), findsNothing);
+        expect(find.byType(TextField), findsNothing);
+        expect(
+          tester.widget<Text>(find.text('the beatles')).style,
+          KalinkaTextStyles.searchPlaceholder,
+        );
+        await tester.tap(find.byKey(const ValueKey('results-search-entry')));
+        await tester.pumpAndSettle();
+        expect(find.byType(SearchComposer), findsOneWidget);
+        final composer = find.byType(TextField);
+        expect(
+          tester.widget<TextField>(composer).controller!.text,
+          'the beatles',
+        );
+
+        await _captureHome(tester, captureKey, 'search-edit-$width');
+
+        // Editing and dismissing uses the same draft rules as Home.
+        await tester.enterText(composer, 'discarded draft');
+        await tester.tap(find.byType(OverlayCloseButton));
+        await tester.pumpAndSettle();
+        expect(
+          container.read(searchSessionProvider).searchQuery,
+          'the beatles',
+        );
+        await tester.tap(find.byTooltip('Clear search'));
+        await tester.pumpAndSettle();
+        expect(tester.widget<TextField>(composer).controller!.text, isEmpty);
+        await _captureHome(tester, captureKey, 'search-empty-$width');
+        expect(
+          container.read(searchSessionProvider).searchQuery,
+          'the beatles',
+        );
+        await tester.tap(find.byType(OverlayCloseButton));
+        await tester.pumpAndSettle();
+        expect(find.text('the beatles'), findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('results-search-entry')));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<TextField>(composer).controller!.text,
+          'the beatles',
+        );
+        await tester.enterText(composer, 'abbey road');
+        await tester.testTextInput.receiveAction(TextInputAction.search);
+        await tester.pump();
+        expect(container.read(searchSessionProvider).searchQuery, 'abbey road');
+        await tester.pump(const Duration(milliseconds: 700));
+        expect(find.text('abbey road'), findsOneWidget);
+      },
     );
-    container.read(searchSessionProvider.notifier).submit('the beatles');
-    // Past the minimum loading hold, so the legs have landed.
-    await tester.pump(const Duration(milliseconds: 700));
-
-    // The query is the bar's title, a search button beside it, no field.
-    // Filters narrow by genre alone, and these results hold none.
-    expect(find.text('“THE BEATLES”'), findsOneWidget);
-    expect(find.byType(SearchFilterButton), findsNothing);
-    expect(find.byKey(const ValueKey('catalog-bar-field')), findsNothing);
-    expect(find.byType(CatalogFiltersButton), findsNothing);
-
-    // Search opens Home's smart search, holding the query to change.
-    await tester.tap(find.byKey(const ValueKey('results-bar-search')));
-    await tester.pumpAndSettle();
-    final composer = find.descendant(
-      of: find.byType(SearchComposer),
-      matching: find.byType(TextField),
-    );
-    expect(tester.widget<TextField>(composer).controller!.text, 'the beatles');
-
-    await tester.enterText(composer, 'abbey road');
-    await tester.testTextInput.receiveAction(TextInputAction.search);
-    await tester.pump();
-    expect(container.read(searchSessionProvider).searchQuery, 'abbey road');
-    await tester.pump(const Duration(milliseconds: 700));
-    expect(find.text('“ABBEY ROAD”'), findsOneWidget);
-  });
+  }
 
   Future<void> openSearch(WidgetTester tester) async {
     await tester.tap(

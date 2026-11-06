@@ -1,37 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../../data_model/browse_filters.dart';
+import '../../data_model/data_model.dart';
 import '../../data_model/search_results.dart';
 import '../../theme/app_theme.dart';
-import '../browse_rows_shimmer.dart';
-import '../search_cards/browse_item_rows.dart';
-import '../shelf_heading.dart';
+import '../loading_shimmer.dart';
+import '../search_cards/track_row_support.dart';
 import '../source_badge.dart';
 import 'source_unavailable_row.dart';
-import 'track_group_actions.dart';
 
-/// What the sources suggest for the query, kept apart by source: their
-/// rankings are not comparable, so each group keeps its own order, its own
-/// batch actions and its own way of opening in full. Each group stands on
-/// its own answer — one still loading shimmers, one that failed says so,
-/// while the others show. The heading holds them together as the one section
-/// they are, and the display face gives the block a voice of its own: these
-/// are answers offered, not a listing of what a source holds.
+/// Recommendations keep each backend's order and identity. Opening a card
+/// browses the source's answer; playback belongs to the track-list page.
 class InspiredBlock extends StatelessWidget {
   final SearchResults results;
   final NarrowedResults narrowed;
   final BrowseFilterQuery filter;
-
-  /// Opens one source's recommendations in full.
   final ValueChanged<String> onViewAll;
   final ValueChanged<String> onRetry;
-
-  /// How far the page edge lies left of the block: the heading's wash runs
-  /// out to it.
   final double gutter;
-
-  /// How many of a group's tracks lead before View All.
-  static const previewCount = 3;
 
   const InspiredBlock({
     super.key,
@@ -43,284 +29,446 @@ class InspiredBlock extends StatelessWidget {
     this.gutter = 0,
   });
 
-  /// Whether any group has anything to show under [filter].
   static bool visible(
     SearchResults results,
     NarrowedResults narrowed,
     BrowseFilterQuery filter,
-  ) {
-    if (filter.kind == ResultKind.nameMatches) return false;
-    return narrowed.groups.any(_groupVisible);
-  }
-
-  static bool _groupVisible(InspiredGroup group) =>
-      group.state is! LegReady || group.tracks.isNotEmpty;
-
-  /// The narrowest a group reads well at, and the room between two side by
-  /// side.
-  static const groupMinWidth = 400.0;
-  static const groupGutter = 28.0;
+  ) =>
+      filter.kind != ResultKind.nameMatches &&
+      (filter.type == null || filter.type == SearchType.track) &&
+      narrowed.groups.any((g) => g.state is! LegReady || g.tracks.isNotEmpty);
 
   @override
-  Widget build(BuildContext context) {
-    final groups = narrowed.groups.where(_groupVisible).toList();
-    final expanded = filter.kind == ResultKind.recommendations;
-    Widget groupOf(InspiredGroup group, {bool sliver = false}) => _SourceGroup(
-      group: group,
-      title: results.sources.titleOf(group.source),
-      expanded: expanded,
-      sliver: sliver,
-      onViewAll: () => onViewAll(group.source),
-      onRetry: () => onRetry(group.source),
-    );
-
-    // A sliver: a group opened in full lists its tracks lazily, one after
-    // another; previews keep their grid.
-    return SliverMainAxisGroup(
-      slivers: [
-        SliverToBoxAdapter(child: _InspiredHeading(gutter: gutter)),
-        if (expanded)
-          for (var i = 0; i < groups.length; i++) ...[
-            if (i > 0) const SliverToBoxAdapter(child: SizedBox(height: 14)),
-            groupOf(groups[i], sliver: true),
-          ]
-        else
-          SliverToBoxAdapter(child: _previews(groups, groupOf)),
-      ],
-    );
-  }
-
-  Widget _previews(
-    List<InspiredGroup> groups,
-    Widget Function(InspiredGroup) groupOf,
-  ) => LayoutBuilder(
-    builder: (context, constraints) {
-      // Two sources side by side where both fit; a third starts the
-      // next row at the same width, in source order. Each keeps its
-      // own list, so nothing is merged or reflowed between them.
-      final columns = constraints.maxWidth >= groupMinWidth * 2 + groupGutter
-          ? 2
-          : 1;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // A later source stands further off the rows above it than
-          // rows stand off each other, so it reads as a group, not the
-          // next row.
-          for (var i = 0; i < groups.length; i += columns) ...[
-            if (i > 0) const SizedBox(height: 14),
-            if (columns == 1)
-              groupOf(groups[i])
-            else
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: groupOf(groups[i])),
-                  const SizedBox(width: groupGutter),
-                  Expanded(
-                    child: i + 1 < groups.length
-                        ? groupOf(groups[i + 1])
-                        : const SizedBox.shrink(),
-                  ),
-                ],
-              ),
-          ],
-        ],
-      );
-    },
+  Widget build(BuildContext context) => SliverMainAxisGroup(
+    slivers: [
+      SliverToBoxAdapter(child: InspiredHeading(gutter: gutter)),
+      for (final group in narrowed.groups)
+        if (group.state is LegFailed)
+          SliverToBoxAdapter(
+            child: SourceUnavailableRow(
+              source: group.source,
+              title: results.sources.titleOf(group.source),
+              onRetry: () => onRetry(group.source),
+            ),
+          )
+        else if (group.state is LegLoading)
+          SliverToBoxAdapter(
+            child: InspiredSourceCardShimmer(
+              source: group.source,
+              title: results.sources.titleOf(group.source),
+            ),
+          )
+        else if (group.tracks.isNotEmpty)
+          SliverToBoxAdapter(
+            child: InspiredSourceCard(
+              group: group,
+              title: results.sources.titleOf(group.source),
+              onTap: () => onViewAll(group.source),
+            ),
+          ),
+    ],
   );
 }
 
-/// What the block is and then its name, in the shape a page title takes: an
-/// eyebrow over the display face, nothing ruled through either. The eyebrow
-/// is quieter than the shelf labels so the name leads; the sparkle is the
-/// Discover mark. No tally here: each source carries its own.
-class _InspiredHeading extends StatelessWidget {
+/// Kalinka's display heading and neutral wash, with its shared search mark.
+class InspiredHeading extends StatelessWidget {
   final double gutter;
-
-  const _InspiredHeading({required this.gutter});
-
-  /// A neutral lift of the ground behind the heading, edge to edge, peaking
-  /// just above the name and gone by the heading's foot. Not berry: a berry
-  /// wash beside the berry now-playing row read as the same signal twice.
-  static final _wash = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [
-      KalinkaColors.surfaceElevated.withValues(alpha: 0),
-      KalinkaColors.surfaceElevated,
-      KalinkaColors.surfaceElevated.withValues(alpha: 0),
-    ],
-    stops: const [0, 0.4, 1],
-  );
+  final bool caption;
+  const InspiredHeading({super.key, this.gutter = 0, this.caption = true});
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Positioned(
-          left: -gutter,
-          right: -gutter,
-          top: 0,
-          bottom: 0,
-          child: IgnorePointer(
-            child: DecoratedBox(decoration: BoxDecoration(gradient: _wash)),
+  Widget build(BuildContext context) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      Positioned(
+        left: -gutter,
+        right: -gutter,
+        top: 0,
+        bottom: 0,
+        child: IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  KalinkaColors.surfaceElevated.withValues(alpha: 0),
+                  KalinkaColors.surfaceElevated,
+                  KalinkaColors.surfaceElevated.withValues(alpha: 0),
+                ],
+                stops: const [0, 0.4, 1],
+              ),
+            ),
           ),
         ),
-        Padding(
-          // The wash rises through the air above the eyebrow.
-          padding: const EdgeInsets.only(top: 14, bottom: 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.auto_awesome,
-                    size: 14,
-                    color: KalinkaColors.accentTint,
-                  ),
-                  const SizedBox(width: 7),
-                  Text(
-                    'SMART RECOMMENDATIONS',
-                    style: KalinkaTextStyles.blockEyebrow,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Inspired by your request',
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 14, bottom: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              header: true,
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.middle,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Icon(
+                          Icons.auto_awesome,
+                          size: 18,
+                          color: KalinkaColors.accentTint,
+                        ),
+                      ),
+                    ),
+                    const TextSpan(text: 'Inspired by your request'),
+                  ],
+                ),
                 style: KalinkaTextStyles.blockTitle,
               ),
+            ),
+            if (caption) ...[
+              const SizedBox(height: 6),
+              Text('AI search', style: KalinkaTextStyles.trackRowSubtitle),
             ],
-          ),
+          ],
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }
 
-/// One source's answer: its name and tally, the actions over the whole of
-/// it, and a preview of its rows.
-class _SourceGroup extends StatelessWidget {
+/// Read the first three distinct names from the returned tracks, in backend
+/// order. No artist lookups or extra requests are needed for this preview.
+List<String> _performersOf(List<BrowseItem> tracks) {
+  final names = <String>[];
+  final seen = <String>{};
+  String? known(String? value) {
+    final name = value?.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (name == null ||
+        name.isEmpty ||
+        const {
+          'unknown',
+          'unknown artist',
+          'unknown performer',
+        }.contains(name.toLowerCase())) {
+      return null;
+    }
+    return name;
+  }
+
+  for (final item in tracks) {
+    final track = item.track;
+    final name =
+        known(track?.performer?.name) ?? known(track?.album?.artist?.name);
+    if (name != null && seen.add(name.toLowerCase())) names.add(name);
+    if (names.length == 3) break;
+  }
+  return names;
+}
+
+class InspiredSourceCard extends StatelessWidget {
   final InspiredGroup group;
   final String title;
-  final bool expanded;
-
-  /// Built as a sliver, its rows only as they come into view.
-  final bool sliver;
-  final VoidCallback onViewAll;
-  final VoidCallback onRetry;
-
-  const _SourceGroup({
+  final VoidCallback onTap;
+  const InspiredSourceCard({
+    super.key,
     required this.group,
     required this.title,
-    required this.expanded,
-    required this.onViewAll,
-    required this.onRetry,
-    this.sliver = false,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final state = group.state;
-    if (state is LegFailed) {
-      final row = SourceUnavailableRow(
-        source: group.source,
-        title: title,
-        onRetry: onRetry,
-      );
-      return sliver ? SliverToBoxAdapter(child: row) : row;
-    }
-    final tracks = group.tracks;
-    final trackIds = [for (final item in tracks) item.id];
-    final more = !expanded && tracks.length > InspiredBlock.previewCount;
-    // The tally MATCHES BY NAME carries too: it says a preview is a preview.
-    final count = state is LegLoading ? null : tracks.length;
-    final shown = expanded
-        ? tracks
-        : tracks.take(InspiredBlock.previewCount).toList();
-
-    final head = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            SourceTile(source: group.source),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      title.toUpperCase(),
-                      style: KalinkaTextStyles.sectionLabel.copyWith(
-                        color: KalinkaColors.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (count != null) ...[
-                    const SizedBox(width: 8),
-                    ShelfTally(count),
-                  ],
-                ],
-              ),
+    final performers = _performersOf(group.tracks);
+    return Semantics(
+      button: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          mouseCursor: WidgetStateMouseCursor.clickable,
+          borderRadius: BorderRadius.circular(14),
+          hoverColor: KalinkaColors.surfaceOverlay,
+          focusColor: KalinkaColors.surfaceOverlay,
+          child: _SourceCardLayout(
+            cover: (i, size) => TrackThumb(
+              item: group.tracks[i % group.tracks.length],
+              size: size,
+              radius: 0,
             ),
-            if (more) ...[
-              const SizedBox(width: 12),
-              ViewAllAction(label: 'View All', onTap: onViewAll),
-            ],
-          ],
-        ),
-        // Its own row under the name, like an unrolled album's actions.
-        if (tracks.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          TrackGroupActions(trackIds: trackIds),
-        ],
-        const SizedBox(height: 8),
-      ],
-    );
-    const shimmer = BrowseRowsShimmer(count: InspiredBlock.previewCount);
-    if (sliver) {
-      return SliverMainAxisGroup(
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.only(top: 16),
-            sliver: SliverToBoxAdapter(child: head),
+            details: (compact) => _SourceDetails(
+              source: group.source,
+              title: title,
+              compact: compact,
+              trackCount: group.tracks.length,
+              performers: performers,
+            ),
+            trailing: const Icon(
+              Icons.chevron_right,
+              color: KalinkaColors.textSecondary,
+            ),
           ),
-          if (state is LegLoading)
-            const SliverToBoxAdapter(child: shimmer)
-          else
-            SliverBrowseItemRows(
-              items: shown,
-              queueContextIds: trackIds,
-              labelled: false,
-            ),
-        ],
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          head,
-          if (state is LegLoading)
-            shimmer
-          else
-            // Tapping a track plays the group from it: the group is the
-            // queue, which gives it a coherent identity. The heading already
-            // names the source and the kind.
-            BrowseItemRows(
-              items: shown,
-              queueContextIds: trackIds,
-              labelled: false,
-            ),
-        ],
+        ),
       ),
     );
   }
+}
+
+/// The same responsive collage and source details while tracks are pending.
+class InspiredSourceCardShimmer extends StatelessWidget {
+  final String source;
+  final String title;
+  const InspiredSourceCardShimmer({
+    super.key,
+    required this.source,
+    required this.title,
+  });
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Loading recommendations from $title',
+    child: ExcludeSemantics(
+      child: ShimmerPulse(
+        child: _SourceCardLayout(
+          cover: (i, size) => SizedBox.square(
+            key: ValueKey('inspired-cover-placeholder-$i'),
+            dimension: size,
+            child: Padding(
+              padding: const EdgeInsets.all(1),
+              child: const ShimmerBlock(radius: 0),
+            ),
+          ),
+          details: (compact) =>
+              _SourceDetails(source: source, title: title, compact: compact),
+          trailing: const SizedBox.square(
+            dimension: 24,
+            child: Center(
+              child: ShimmerBlock(width: 12, height: 16, radius: 4),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Shared text layout for the loaded card and its shimmer. A missing count
+/// means the source's tracks have not arrived yet.
+class _SourceDetails extends StatelessWidget {
+  final String source;
+  final String title;
+  final bool compact;
+  final int? trackCount;
+  final List<String> performers;
+  const _SourceDetails({
+    required this.source,
+    required this.title,
+    required this.compact,
+    this.trackCount,
+    this.performers = const [],
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final loading = trackCount == null;
+    final performerStyle = KalinkaTextStyles.trackRowTitle.copyWith(
+      color: KalinkaColors.textSecondary,
+    );
+    final badge = ExcludeSemantics(
+      child: SourceTile(
+        source: source,
+        small: true,
+        size: 20,
+        foreground: KalinkaColors.textPrimary,
+      ),
+    );
+    final names = loading
+        ? const ['Performer name', 'Performer name', 'Performer name']
+        : performers;
+    final count = trackCount ?? 20;
+    Widget text(String value, TextStyle style, {bool singleLine = false}) =>
+        loading
+        ? _textPlaceholder(context, value, style, singleLine: singleLine)
+        : Text(
+            value,
+            style: style,
+            maxLines: singleLine ? 1 : null,
+            overflow: singleLine ? TextOverflow.ellipsis : null,
+          );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            if (loading)
+              Stack(
+                children: [
+                  Opacity(opacity: 0, child: badge),
+                  const Positioned.fill(child: ShimmerBlock(radius: 4)),
+                ],
+              )
+            else
+              badge,
+            const SizedBox(width: 8),
+            Expanded(child: text(title, KalinkaTextStyles.inspiredSourceTitle)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        text(
+          '$count track${count == 1 ? '' : 's'}',
+          KalinkaTextStyles.trackRowSubtitle,
+        ),
+        if (names.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          if (compact)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 2,
+                children: [
+                  for (final name in names)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ExcludeSemantics(
+                          child: Text('•', style: performerStyle),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: text(name, performerStyle, singleLine: true),
+                        ),
+                      ],
+                    ),
+                  // Keep the preview's three-line footprint when fewer
+                  // distinct names are available, including after loading.
+                  for (var i = names.length; i < 3; i++)
+                    ExcludeSemantics(child: Text(' ', style: performerStyle)),
+                ],
+              ),
+            )
+          else
+            text(names.join(' · '), performerStyle, singleLine: true),
+        ],
+      ],
+    );
+  }
+
+  Widget _textPlaceholder(
+    BuildContext context,
+    String text,
+    TextStyle style, {
+    bool singleLine = false,
+  }) => Stack(
+    children: [
+      // Match the loaded font's metrics and wrapping at the listener's scale.
+      Opacity(
+        opacity: 0,
+        child: Text(
+          text,
+          style: style,
+          maxLines: singleLine ? 1 : null,
+          overflow: singleLine ? TextOverflow.ellipsis : null,
+        ),
+      ),
+      Positioned.fill(
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: FractionallySizedBox(
+            widthFactor: .8,
+            child: ShimmerBlock(
+              height: MediaQuery.textScalerOf(context).scale(style.fontSize!),
+              radius: 4,
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+/// Shared loading/loaded geometry prevents a tall placeholder replacing a
+/// compact source card, or artwork moving when the request completes.
+class _SourceCardLayout extends StatelessWidget {
+  final Widget Function(int index, double size) cover;
+  final Widget Function(bool compact) details;
+  final Widget trailing;
+  const _SourceCardLayout({
+    required this.cover,
+    required this.details,
+    required this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final compact =
+          constraints.maxWidth <
+          600 * MediaQuery.textScalerOf(context).scale(1);
+      final columns = compact ? 2 : 4;
+      final sourceDetails = details(compact);
+      // A modest square on phones and beside name matches; four across when
+      // this pane itself has room. Artwork never grows to fill vertical space.
+      final width = compact
+          ? ((constraints.maxWidth - 8) * .42).clamp(0.0, 180.0)
+          : ((constraints.maxWidth - 8) * .6).clamp(0.0, 480.0);
+      final size = width / columns;
+      final stacked =
+          constraints.maxWidth <
+          280 * MediaQuery.textScalerOf(context).scale(1);
+      final art = ExcludeSemantics(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            width: width,
+            height: size * (4 ~/ columns),
+            child: Column(
+              children: [
+                for (var row = 0; row < 4 ~/ columns; row++)
+                  Row(
+                    children: [
+                      for (var col = 0; col < columns; col++)
+                        cover(row * columns + col, size),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: KalinkaColors.borderSubtle)),
+        ),
+        child: stacked
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  art,
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: sourceDetails),
+                      const SizedBox(width: 8),
+                      trailing,
+                    ],
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  art,
+                  const SizedBox(width: 16),
+                  Expanded(child: sourceDetails),
+                  const SizedBox(width: 8),
+                  trailing,
+                ],
+              ),
+      );
+    },
+  );
 }

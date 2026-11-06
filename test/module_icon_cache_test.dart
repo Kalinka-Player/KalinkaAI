@@ -42,8 +42,16 @@ void main() {
         for (var i = 0; i < 100; i++)
           cache.load('http://server/icon', _icon, small: true),
       ];
+      expect(cache.peek('http://server/icon', _icon, small: true), isNull);
       completed.complete(Uint8List.fromList([1, 2, 3]));
       final results = await Future.wait(rows);
+      expect(
+        identical(
+          cache.peek('http://server/icon', _icon, small: true),
+          results.first,
+        ),
+        isTrue,
+      );
       PaintingBinding.instance.imageCache.clear();
       final afterNavigation = await cache.load(
         'http://server/icon',

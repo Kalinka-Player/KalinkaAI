@@ -15,7 +15,6 @@ import '../providers/server_update_provider.dart';
 import '../providers/upgrade_provider.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
-import '../utils/click_cursor.dart';
 import '../widgets/connection_banner.dart';
 import '../widgets/demo_read_only_dialog.dart';
 import '../widgets/kalinka_button.dart';
@@ -31,6 +30,7 @@ import 'log_export_screen.dart';
 import 'configuration_review_screen.dart';
 import '../widgets/plugin_catalog_entry.dart';
 import '../widgets/settings_top_bar.dart';
+import '../widgets/section_tab_button.dart';
 import '../widgets/restart_overlay.dart';
 import '../widgets/restart_confirm_dialog.dart';
 import 'server_configuration_screen.dart';
@@ -40,12 +40,6 @@ import 'plugin_about_screen.dart';
 import 'plugin_settings_screen.dart';
 
 enum PluginTab { sources, server, devices }
-
-/// Mono capitals for the tabs and section headings.
-final _label = KalinkaTextStyles.sectionHeaderMuted.copyWith(
-  fontSize: KalinkaTypography.baseSize + 2,
-  letterSpacing: 1.4,
-);
 
 /// Configuration for music sources, the server and hi-fi controls.
 class PluginCatalogScreen extends ConsumerStatefulWidget {
@@ -746,7 +740,10 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       // Full labels scroll horizontally, while the active tab stays in view
       // on selection and resize. The whole strip stays pinned above content.
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: gutter),
+        padding: EdgeInsets.only(
+          left: gutter - SectionTabButton.horizontalPadding,
+          right: gutter,
+        ),
         child: Row(
           children: [
             Expanded(
@@ -779,7 +776,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
-                      spacing: 24,
+                      spacing: SectionTabButton.spacing,
                       children: [
                         for (final (option, label) in [
                           (PluginTab.sources, 'Music sources'),
@@ -788,9 +785,11 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                         ])
                           KeyedSubtree(
                             key: _tabKeys[option],
-                            child: _PluginTabButton(
+                            child: SectionTabButton(
                               key: ValueKey('catalog-tab-${option.name}'),
                               label: label,
+                              contentAlignment:
+                                  AlignmentDirectional.centerStart,
                               selected: tab == option,
                               onTap: () {
                                 setState(() => _tab = option);
@@ -884,68 +883,6 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       ),
     ),
   );
-}
-
-/// A mono label over a berry underline while selected.
-class _PluginTabButton extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _PluginTabButton({
-    super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: label,
-      excludeSemantics: true,
-      child: Tooltip(
-        message: label,
-        excludeFromSemantics: true,
-        child: MouseRegion(
-          cursor: clickCursor(interactive: true),
-          child: GestureDetector(
-            onTap: onTap,
-            behavior: HitTestBehavior.opaque,
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 48),
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: selected ? KalinkaColors.accent : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-              ),
-              // As wide as the label, so the underline is too.
-              child: Center(
-                child: Text(
-                  label.toUpperCase(),
-                  maxLines: 1,
-                  softWrap: false,
-                  style: _label.copyWith(
-                    fontSize: KalinkaTypography.baseSize + 1,
-                    letterSpacing: 1,
-                    color: selected
-                        ? KalinkaColors.textPrimary
-                        : KalinkaColors.textSecondary,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _Notice extends StatelessWidget {
