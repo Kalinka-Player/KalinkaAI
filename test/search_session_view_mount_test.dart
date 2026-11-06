@@ -859,6 +859,11 @@ void main() {
         expect(searchWidth, lessThanOrEqualTo(kHomeSearchMaxWidth));
         if (width > kHomeSearchMaxWidth + 200) {
           expect(searchWidth, kHomeSearchMaxWidth);
+          final entry = find.byKey(const ValueKey('results-search-entry'));
+          final area = find
+              .ancestor(of: entry, matching: find.byType(Align))
+              .first;
+          expect(tester.getCenter(entry).dx, tester.getCenter(area).dx);
         }
         expect(
           tester.widget<Text>(find.text('the beatles')).style,
