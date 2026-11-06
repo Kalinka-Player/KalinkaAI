@@ -10,8 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/browse_filters.dart';
 import '../../data_model/data_model.dart' show SearchSuggestion;
-import '../browse_filters/browse_filter_form.dart'
-    show FilterSearchField, resultKindLabel;
+import '../browse_filters/browse_filter_form.dart' show FilterSearchField;
 import '../browse_filters/presentation_toggle.dart';
 import '../../providers/catalog_cards_provider.dart';
 import '../../providers/catalog_sources_provider.dart';
@@ -449,13 +448,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     });
   }
 
-  /// The shown results' query in the smart search, to be changed into a new
-  /// one, risen from [from].
-  void _editQuery(BuildContext from) => _openSearch(
-    from: from,
-    prefill: ref.read(searchSessionProvider).searchQuery,
-  );
-
   /// Reverse the overlay away. [animate] false when a query is being submitted
   /// (the screen swaps to results, so there is nothing to animate back to).
   void _closeSearch({bool animate = true}) {
@@ -554,8 +546,19 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     final notifier = ref.read(searchSessionProvider.notifier);
     final session = ref.read(searchSessionProvider);
     if (session.activeView == FindMusicView.results) {
-      // The query is the smart search's, not the card's.
-      notifier.setResultsFilter(filter, shown: _filtersOpenedOn, reset: reset);
+      // This popup edits only Genre and Source. Reset keeps the submitted
+      // query and the type tab, as clearing the overview's chips does.
+      notifier.setResultsFilter(
+        session.resultsFilter.copyWith(
+          genreIds: filter.genreIds,
+          sources: filter.sources,
+        ),
+        shown: session.resultsFilter.copyWith(
+          genreIds: _filtersOpenedOn.genreIds,
+          sources: _filtersOpenedOn.sources,
+        ),
+        reset: reset,
+      );
     } else {
       // The inline field can finish its debounce after this card opens.
       // Applying facets must preserve that text unless Reset was explicit.
@@ -568,14 +571,27 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   }
 
   /// What the filter card narrows: the open catalog page, or the results.
-  BrowseFilterCapabilities _filterCapabilities(SearchSessionState session) =>
-      session.activeView == FindMusicView.results
-      ? session.resultsFilterCapabilities
-      : session.catalogPage.filterCapabilities;
+  BrowseFilterCapabilities _filterCapabilities(SearchSessionState session) {
+    if (session.activeView != FindMusicView.results) {
+      return session.catalogPage.filterCapabilities;
+    }
+    final capabilities = session.resultsFilterCapabilities;
+    return BrowseFilterCapabilities(
+      genre: capabilities.genre == FacetSupport.hidden
+          ? FacetSupport.unsupported
+          : capabilities.genre,
+      genreOptions: capabilities.genreOptions,
+      source: capabilities.source,
+      sources: capabilities.sources,
+    );
+  }
 
   BrowseFilterQuery _appliedFilter(SearchSessionState session) =>
       session.activeView == FindMusicView.results
-      ? session.resultsFilter.copyWith(text: session.searchQuery)
+      ? BrowseFilterQuery(
+          genreIds: session.resultsFilter.genreIds,
+          sources: session.resultsFilter.sources,
+        )
       : session.catalogFilter;
 
   /// Whether nothing is left to unwind: the system back may leave the app.
@@ -1124,8 +1140,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// Catalog filters stay in their sliver; title and Pin join Back on collapse.
   /// Results retain their search-and-filters control in this bar.
   double _barHeight(SearchSessionState session) =>
-      session.activeView == FindMusicView.catalogs &&
-          CatalogSliverHeader.appliesTo(session.catalogPage)
+      session.activeView == FindMusicView.results ||
+          (session.activeView == FindMusicView.catalogs &&
+              CatalogSliverHeader.appliesTo(session.catalogPage))
       ? math.max(
           kKalinkaTopBarHeight,
           MediaQuery.textScalerOf(context)
@@ -1307,18 +1324,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                           ),
                   ),
                 ?_barSearch(session, width: constraints.maxWidth + 12),
-                // A new search, made as Home makes one rather than narrowed
-                // like a listing.
-                if (onResults && session.resultsAvailable)
-                  Builder(
-                    builder: (context) => CatalogSearchButton(
-                      key: const ValueKey('results-bar-search'),
-                      active: false,
-                      open: _focused,
-                      rowHeight: _kBarMinHeight,
-                      onTap: () => _editQuery(context),
-                    ),
-                  ),
                 ?_barFilters(session),
                 if (catalogChrome)
                   if (_barPresentation(
@@ -1465,8 +1470,12 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   Widget? _barFilters(SearchSessionState session) {
     final BrowseFilterQuery filter;
     if (session.activeView == FindMusicView.results) {
-      if (_filterCapabilities(session).isEmpty) return null;
-      filter = session.resultsFilter;
+      if (session.results == null ||
+          session.expandedBlock != null ||
+          _filterCapabilities(session).isEmpty) {
+        return null;
+      }
+      filter = _appliedFilter(session);
     } else {
       final page = session.catalogPage;
       if (!CatalogSliverHeader.appliesTo(page) ||
@@ -1561,39 +1570,33 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         return const SizedBox.shrink();
       }
       title = session.shownListing.title ?? '';
-    } else if (session.activeView == FindMusicView.results &&
-        session.expandedBlock != null) {
-      // A block opened in full is a page of its own, named for it.
-      final (:kind, :source) = session.expandedBlock!;
-      final sources = session.results?.sources;
-      title = [
-        resultKindLabel(kind),
-        if (source != null && sources != null && sources.length > 1)
-          sources.titleOf(source),
-      ].join(' · ');
     } else if (session.activeView == FindMusicView.results) {
-      // What the page answers. Tapping it changes it in the smart search.
-      return Builder(
-        builder: (context) => Semantics(
+      if (session.expandedBlock != null) {
+        return Semantics(
           header: true,
-          button: true,
-          hint: 'Change the search',
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _editQuery(context),
-              child: Text(
-                '“${session.searchQuery.toUpperCase()}”',
-                key: const ValueKey('results-title'),
-                style: KalinkaTextStyles.trayTitle.copyWith(
-                  color: KalinkaColors.textPrimary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+          child: Tooltip(
+            message: session.searchQuery,
+            child: Text(
+              session.searchQuery,
+              key: const ValueKey('results-query-title'),
+              style: KalinkaTextStyles.trayTitle.copyWith(
+                color: KalinkaColors.textPrimary,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
+        );
+      }
+      return Builder(
+        builder: (entryContext) => _SearchEntryButton(
+          key: const ValueKey('results-search-entry'),
+          hint: session.searchQuery,
+          smart: ref.watch(smartSearchAvailableProvider) ?? true,
+          compact: true,
+          onTap: () =>
+              _openSearch(from: entryContext, prefill: session.searchQuery),
+          onClear: () => _openSearch(from: entryContext),
         ),
       );
     } else {
@@ -1753,70 +1756,81 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
 
     final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // On a large pane it stays a card under the pill, not a page.
-        final width = math.min(
-          constraints.maxWidth - 32,
-          _kFiltersMaxWidth * scale,
-        );
-        return AnimatedBuilder(
-          animation: _filtersCtrl,
-          builder: (context, _) {
-            final t = Curves.easeOutCubic.transform(_filtersCtrl.value);
-            return Stack(
-              children: [
-                Positioned.fill(
-                  child: GestureDetector(
-                    onTap: _closeFilters,
-                    behavior: HitTestBehavior.opaque,
-                    child: ColoredBox(
-                      color: Colors.black.withValues(alpha: 0.72 * t),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: targetTop,
-                  right: 16,
-                  width: width,
-                  child: Opacity(
-                    opacity: t,
-                    child: Transform.scale(
-                      scale: lerpDouble(0.92, 1, t)!,
-                      // Unfolds out of the pill it replaced, top-right.
-                      alignment: Alignment.topRight,
-                      child: SearchFilterOverlay(
-                        capabilities: _filterCapabilities(session),
-                        applied: _filtersOpenedOn,
-                        // Search is the bar's on results and catalogs.
-                        showSearch:
-                            !onResults && !CatalogSliverHeader.appliesTo(page),
-                        title: onResults || CatalogSliverHeader.appliesTo(page)
-                            ? 'FILTERS'
-                            : 'SEARCH & FILTERS',
-                        searchHint: page.title == null || page.title!.isEmpty
-                            ? 'Search'
-                            : 'Search ${page.title}',
-                        // Clamped: a window short enough to make this
-                        // negative would assert on the card's constraints.
-                        maxHeight: math.max(
-                          math.min(
-                            constraints.maxHeight - targetTop - 24,
-                            _kFiltersMaxHeight * scale,
-                          ),
-                          120.0,
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _closeFilters,
+      },
+      child: FocusScope(
+        autofocus: true,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // On a large pane it stays a card under the pill, not a page.
+            final width = math.min(
+              constraints.maxWidth - 32,
+              _kFiltersMaxWidth * scale,
+            );
+            return AnimatedBuilder(
+              animation: _filtersCtrl,
+              builder: (context, _) {
+                final t = Curves.easeOutCubic.transform(_filtersCtrl.value);
+                return Stack(
+                  children: [
+                    Positioned.fill(
+                      child: GestureDetector(
+                        onTap: _closeFilters,
+                        behavior: HitTestBehavior.opaque,
+                        child: ColoredBox(
+                          color: Colors.black.withValues(alpha: 0.72 * t),
                         ),
-                        onApply: _applyFilters,
-                        onCancel: _closeFilters,
                       ),
                     ),
-                  ),
-                ),
-              ],
+                    Positioned(
+                      top: targetTop,
+                      right: 16,
+                      width: width,
+                      child: Opacity(
+                        opacity: t,
+                        child: Transform.scale(
+                          scale: lerpDouble(0.92, 1, t)!,
+                          // Unfolds out of the pill it replaced, top-right.
+                          alignment: Alignment.topRight,
+                          child: SearchFilterOverlay(
+                            capabilities: _filterCapabilities(session),
+                            applied: _filtersOpenedOn,
+                            // Search is the bar's on results and catalogs.
+                            showSearch:
+                                !onResults &&
+                                !CatalogSliverHeader.appliesTo(page),
+                            title:
+                                onResults || CatalogSliverHeader.appliesTo(page)
+                                ? 'FILTERS'
+                                : 'SEARCH & FILTERS',
+                            searchHint:
+                                page.title == null || page.title!.isEmpty
+                                ? 'Search'
+                                : 'Search ${page.title}',
+                            // Clamped: a window short enough to make this
+                            // negative would assert on the card's constraints.
+                            maxHeight: math.max(
+                              math.min(
+                                constraints.maxHeight - targetTop - 24,
+                                _kFiltersMaxHeight * scale,
+                              ),
+                              120.0,
+                            ),
+                            onApply: _applyFilters,
+                            onCancel: _closeFilters,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             );
           },
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -2205,6 +2219,7 @@ class _SearchEntryButton extends StatelessWidget {
   final bool smart;
   final VoidCallback onTap;
   final bool compact;
+  final VoidCallback? onClear;
 
   const _SearchEntryButton({
     super.key,
@@ -2212,89 +2227,108 @@ class _SearchEntryButton extends StatelessWidget {
     required this.smart,
     required this.onTap,
     this.compact = false,
+    this.onClear,
   });
 
   @override
   Widget build(BuildContext context) {
-    // With smart search, the main feature of the surface — a crimson-tinted
-    // field with a soft glow so it reads as the invitation, not a gray card.
+    final inset = compact ? (kKalinkaPillTarget - kKalinkaPillHeight) / 2 : 0.0;
+    final radius = BorderRadius.circular(compact ? kKalinkaPillRadius : 22);
     return Semantics(
       label: 'Search',
       hint: smart
           ? 'Ask for music in plain language'
           : 'Search by artist, album or track',
       button: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: [
-            if (smart)
-              BoxShadow(
-                color: KalinkaColors.accent.withValues(alpha: 0.16),
-                blurRadius: 26,
-                spreadRadius: 1,
-              ),
-          ],
-        ),
-        child: Material(
-          color: smart
-              ? Color.alphaBlend(
-                  KalinkaColors.accentSubtle,
-                  KalinkaColors.surfaceInput,
-                )
-              : KalinkaColors.surfaceInput,
-          borderRadius: BorderRadius.circular(22),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            mouseCursor: WidgetStateMouseCursor.clickable,
-            onTap: onTap,
-            child: Container(
-              height: compact ? 48 : _kSearchEntryHeight,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: smart
-                      ? KalinkaColors.accentBorder
-                      : KalinkaColors.borderDefault,
-                  width: 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 26,
-                    child: smart
-                        ? const Icon(
-                            Icons.auto_awesome,
-                            size: 16,
-                            color: KalinkaColors.gold,
-                          )
-                        : const Icon(
-                            Icons.search_rounded,
-                            size: 18,
-                            color: KalinkaColors.textMuted,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          mouseCursor: WidgetStateMouseCursor.clickable,
+          borderRadius: radius,
+          onTap: onTap,
+          child: SizedBox(
+            height: compact ? kKalinkaPillTarget : _kSearchEntryHeight,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: inset,
+                  bottom: inset,
+                  child: Ink(
+                    key: const ValueKey('search-entry-surface'),
+                    decoration: BoxDecoration(
+                      color: smart
+                          ? Color.alphaBlend(
+                              KalinkaColors.accentSubtle,
+                              KalinkaColors.surfaceInput,
+                            )
+                          : KalinkaColors.surfaceInput,
+                      borderRadius: radius,
+                      border: Border.all(
+                        color: smart
+                            ? KalinkaColors.accentBorder
+                            : KalinkaColors.borderDefault,
+                      ),
+                      boxShadow: [
+                        if (smart)
+                          BoxShadow(
+                            color: KalinkaColors.accent.withValues(alpha: .16),
+                            blurRadius: 26,
+                            spreadRadius: 1,
                           ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      hint,
-                      style: KalinkaTextStyles.searchPlaceholder,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 18,
-                    color: smart
-                        ? KalinkaColors.accentTint
-                        : KalinkaColors.textMuted,
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 26,
+                        child: smart
+                            ? const Icon(
+                                Icons.auto_awesome,
+                                size: 16,
+                                color: KalinkaColors.gold,
+                              )
+                            : const Icon(
+                                Icons.search_rounded,
+                                size: 18,
+                                color: KalinkaColors.textMuted,
+                              ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          hint,
+                          style: KalinkaTextStyles.searchPlaceholder,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (onClear != null)
+                        IconButton(
+                          tooltip: 'Clear search',
+                          style: kalinkaIconButtonStyle,
+                          onPressed: onClear,
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                        )
+                      else
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 18,
+                          color: smart
+                              ? KalinkaColors.accentTint
+                              : KalinkaColors.textMuted,
+                        ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

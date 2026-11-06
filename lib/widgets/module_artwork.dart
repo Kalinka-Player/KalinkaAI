@@ -33,6 +33,7 @@ class ModuleArtwork extends ConsumerWidget {
     if (artwork == null) return fallback;
     final icon = small ? artwork.small : artwork.standard;
     final url = ref.watch(urlResolverProvider).abs(icon.url);
+    final cache = ref.watch(moduleIconCacheProvider);
     final height = math.max(size, icon.minHeight);
     final width = small
         ? height * icon.aspectRatio
@@ -41,13 +42,14 @@ class ModuleArtwork extends ConsumerWidget {
       width: width,
       height: height,
       child: FutureBuilder(
-        future: ref
-            .watch(moduleIconCacheProvider)
-            .load(url, icon, small: small),
+        key: ValueKey((cache, url, icon.mimeType, small)),
+        initialData: cache.peek(url, icon, small: small),
+        future: cache.load(url, icon, small: small),
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done ||
-              !snapshot.hasData) {
-            return Center(child: fallback);
+          if (!snapshot.hasData) {
+            return snapshot.hasError
+                ? Center(child: fallback)
+                : const SizedBox.shrink();
           }
           return Image.memory(
             snapshot.requireData,
@@ -61,8 +63,8 @@ class ModuleArtwork extends ConsumerWidget {
                 : null,
             colorBlendMode: BlendMode.srcIn,
             errorBuilder: (_, _, _) => Center(child: fallback),
-            frameBuilder: (_, child, frame, _) =>
-                frame == null ? Center(child: fallback) : child,
+            // Keep the declared logo while rebuilding; don't alternate it
+            // with a different fallback mark while the bitmap is decoding.
           );
         },
       ),

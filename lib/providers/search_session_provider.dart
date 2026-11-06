@@ -531,10 +531,8 @@ class SearchSessionState {
   List<SearchSuggestion> get suggestions =>
       aiSuggestions.isEmpty ? _fallbackSuggestions : aiSuggestions;
 
-  /// What the Filters card narrows the results by: what kind of music
-  /// (artist, album, playlist, track) and genre, each while the results hold
-  /// more than one. A source is picked on the name matches' own line, and a
-  /// block opened in full is a page of its own.
+  /// The overview's type tabs and global Genre/Source filters. A track-list
+  /// visit uses the same selection without offering further filter edits.
   BrowseFilterCapabilities get resultsFilterCapabilities {
     final held = _capabilitiesFor(
       results,
@@ -547,6 +545,8 @@ class SearchSessionState {
       presentTypes: held.presentTypes,
       genre: held.genre,
       genreOptions: held.genreOptions,
+      source: held.source,
+      sources: held.sources,
     );
   }
 
@@ -588,12 +588,10 @@ class SearchSessionState {
       kind: results.inspired.isEmpty
           ? FacetSupport.hidden
           : FacetSupport.supported,
-      type: types.length > 1 || holding?.type != null
-          ? FacetSupport.supported
-          : FacetSupport.hidden,
-      types: types,
+      type: FacetSupport.supported,
+      types: BrowseFilterCapabilities.allTypes,
       presentTypes: types.toSet(),
-      source: results.sources.length > 1
+      source: results.sources.isNotEmpty
           ? FacetSupport.supported
           : FacetSupport.hidden,
       sources: results.sources,
@@ -1521,13 +1519,33 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     List<SourceOption> sources;
     Set<String> suggesting;
     try {
-      // Only a source with catalogs has anything to find, and the server's
-      // own (collections), which answers by name without declaring any; the
-      // rest would be asked for nothing and offered as a filter that finds
-      // nothing.
+      final enabled = await ref.read(sourceModulesProvider.future);
+      // A folder root without text filtering is browse-only (for example,
+      // mounted drives). Catalog availability alone does not imply search.
+      // Use metadata already discovered by Home, never plugin names. Root
+      // discovery is independent: a slow or failed browse must not hold up
+      // either search leg. While roots are unknown, trust the declarations.
+      final browseOnly = <String>{};
+      for (final source
+          in ref.read(catalogSourcesProvider).value ??
+              const <CatalogSource>[]) {
+        if (source.root.opensAsFolder &&
+            !source.module.can(ModuleCapability.aiSearch) &&
+            !(source.root.catalog?.filters.any(
+                  (f) => f.kind == FilterKind.text,
+                ) ??
+                false)) {
+          browseOnly.add(source.module.name);
+        }
+      }
       final modules = [
-        for (final module in await ref.read(sourceModulesProvider.future))
-          if (module.builtin || module.can(ModuleCapability.catalogs)) module,
+        for (final module in enabled)
+          if (module.enabled &&
+              !browseOnly.contains(module.name) &&
+              (module.builtin ||
+                  module.can(ModuleCapability.catalogs) ||
+                  module.can(ModuleCapability.aiSearch)))
+            module,
       ];
       sources = _inDisplayOrder(modules);
       suggesting = {
@@ -1568,7 +1586,11 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
   /// The listener's own library first, then the rest by name.
   static List<SourceOption> _inDisplayOrder(List<ModuleInfo> modules) {
     final sources = [
-      for (final module in modules) (name: module.name, title: module.title),
+      for (final module in modules)
+        (
+          name: module.name,
+          title: isLocalSource(module.name) ? 'My Library' : module.title,
+        ),
     ];
     sources.sort((a, b) {
       final aLocal = isLocalSource(a.name);
@@ -1591,7 +1613,11 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     try {
       final list = await switch (leg) {
         ResultsLeg.matches => api.searchMatches(query, sources: [source]),
-        ResultsLeg.inspired => api.aiSearch(query, sources: [source]),
+        ResultsLeg.inspired => api.aiSearch(
+          query,
+          limit: 20,
+          sources: [source],
+        ),
       }.timeout(_searchTimeout);
       outcome = LegReady(list);
     } on TimeoutException {
@@ -1711,6 +1737,19 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       return;
     }
     state = state.copyWith(clearExpandedBlock: true);
+  }
+
+  /// A source tab changes this visit, never the history underneath it.
+  void selectInspiredSource(String source) {
+    if (state.expandedBlock?.kind != ResultKind.recommendations) return;
+    final groups = state.results?.narrow(state.resultsFilter).groups;
+    if (groups == null ||
+        !groups.any((g) => g.source == source && g.tracks.isNotEmpty)) {
+      return;
+    }
+    state = state.copyWith(
+      expandedBlock: (kind: ResultKind.recommendations, source: source),
+    );
   }
 
   /// Validates types and genres after all requests finish. [holding] keeps

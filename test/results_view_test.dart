@@ -1,4 +1,9 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,23 +13,41 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
+import 'package:kalinka/providers/catalog_sources_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/listing_presentation_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_rows_shimmer.dart';
-import 'package:kalinka/widgets/search_cards/action_pill_button.dart';
-import 'package:kalinka/widgets/search_cards/row_columns.dart';
 import 'package:kalinka/widgets/search/results_view.dart';
 import 'package:kalinka/widgets/search/inspired_block.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
-import 'package:kalinka/widgets/column_separator.dart';
+import 'package:kalinka/widgets/search_cards/search_album_row.dart';
+import 'package:kalinka/widgets/search_cards/search_artist_row.dart';
+import 'package:kalinka/widgets/search_cards/search_playlist_row.dart';
+import 'package:kalinka/widgets/search_cards/artwork_grid.dart';
+import 'package:kalinka/widgets/search_cards/artwork_grid_card.dart';
+import 'package:kalinka/widgets/browse_filters/presentation_toggle.dart';
 import 'package:kalinka/widgets/shelf_heading.dart';
 import 'package:kalinka/widgets/source_badge.dart';
+import 'package:kalinka/widgets/module_artwork.dart';
+import 'package:kalinka/widgets/section_tab_button.dart';
 
 import 'support/server_answer.dart';
+import 'support/receivers.dart';
+
+import 'package:kalinka/providers/indexer_status_provider.dart';
+import 'package:kalinka/widgets/search/search_session_view.dart';
+import 'package:kalinka/widgets/search/inspired_tracks_view.dart';
+import 'package:kalinka/widgets/search/results_tabs.dart';
+import 'package:kalinka/widgets/search/track_group_actions.dart';
+import 'package:kalinka/widgets/search/catalog_sliver_header.dart';
+import 'package:kalinka/widgets/search_cards/track_row_support.dart';
+import 'package:kalinka/widgets/browse_filters/search_filter_overlay.dart';
+import 'package:kalinka/widgets/browse_filters/active_filter_chips.dart';
 
 BrowseItem _artist(String source, String id, String name, MatchTier tier) =>
     BrowseItem(
@@ -42,6 +65,9 @@ BrowseItem _track(
   String title, {
   MatchTier? tier,
   String? mimeType,
+  String genre = 'Jazz',
+  String? performer = 'Someone',
+  String? albumArtist,
 }) => BrowseItem(
   id: 'kalinka:$source:track:$id',
   canBrowse: false,
@@ -50,8 +76,17 @@ BrowseItem _track(
     id: 'kalinka:$source:track:$id',
     title: title,
     duration: 200,
-    album: Album(id: 'kalinka:$source:album:al', title: 'An Album'),
-    performer: Artist(id: 'kalinka:$source:artist:ar', name: 'Someone'),
+    album: Album(
+      id: 'kalinka:$source:album:al',
+      title: 'An Album',
+      artist: albumArtist == null
+          ? null
+          : Artist(id: 'album-artist', name: albumArtist),
+      genres: [Genre(id: genre.toLowerCase(), name: genre)],
+    ),
+    performer: performer == null
+        ? null
+        : Artist(id: 'kalinka:$source:artist:ar', name: performer),
     mimeType: mimeType,
   ),
   match: tier == null
@@ -61,6 +96,22 @@ BrowseItem _track(
 
 BrowseItemsList _list(List<BrowseItem> items) =>
     BrowseItemsList(0, items.length, items.length, items);
+
+BrowseItem _album(String source, String id, MatchTier tier) => BrowseItem(
+  id: 'kalinka:$source:album:$id',
+  canBrowse: true,
+  canAdd: true,
+  album: Album(id: id, title: 'Album $id', year: 2020),
+  match: NameMatch(tier: tier, score: tier == MatchTier.exact ? 100 : 60),
+);
+
+BrowseItem _playlist(String source, String id) => BrowseItem(
+  id: 'kalinka:$source:playlist:$id',
+  canBrowse: true,
+  canAdd: true,
+  playlist: Playlist(id: id, name: 'Playlist $id', trackCount: 12),
+  match: NameMatch(tier: MatchTier.partial, score: 60),
+);
 
 BrowseItemsList _card(String source, List<BrowseItem> tracks) => _list([
   BrowseItem(
@@ -77,17 +128,65 @@ BrowseItemsList _card(String source, List<BrowseItem> tracks) => _list([
 /// on its name-match leg until [heal] is called; [gates] hold a source's
 /// name-match answer open until released.
 class _ScriptedApi implements KalinkaPlayerProxy {
+  final List<BrowseItem> roots;
   final Map<String, List<BrowseItem>> matches;
   final Map<String, List<BrowseItem>> inspired;
   final Set<String> failing;
   final Map<String, Completer<void>> gates;
+  final Map<String, Completer<void>> inspiredGates;
   final Map<String, int> matchCalls = {};
+  final Map<String, int> aiLimits = {};
+  final Map<String, int> aiCalls = {};
+  final List<List<String>> replacements = [];
+  final List<List<String>> additions = [];
+  final List<int> plays = [];
+
+  @override
+  Future<StatusMessage> replace(List<String> items) async {
+    replacements.add([...items]);
+    return StatusMessage(count: items.length);
+  }
+
+  @override
+  Future<StatusMessage> add(List<String> items, {int? index}) async {
+    additions.add([...items]);
+    return StatusMessage(count: items.length);
+  }
+
+  @override
+  Future<StatusMessage> play([int? index]) async {
+    plays.add(index ?? 0);
+    return StatusMessage();
+  }
+
+  @override
+  Future<SearchSuggestionList> searchSuggestions({
+    int count = 4,
+    int? tzOffsetMin,
+  }) async => SearchSuggestionList(suggestions: const []);
+  @override
+  Future<BrowseItemsList> getFavorite(
+    SearchType queryType, {
+    int offset = 0,
+    int limit = 10,
+    String filter = '',
+  }) async => _list([]);
+
+  @override
+  Future<BrowseItemsList> browse(
+    String id, {
+    int offset = 0,
+    int limit = 10,
+    String? filter,
+  }) async => _list(roots);
 
   _ScriptedApi({
+    this.roots = const [],
     this.matches = const {},
     this.inspired = const {},
     Set<String> failing = const {},
     this.gates = const {},
+    this.inspiredGates = const {},
   }) : failing = {...failing};
 
   void heal() => failing.clear();
@@ -112,6 +211,9 @@ class _ScriptedApi implements KalinkaPlayerProxy {
     List<String>? sources,
   }) async {
     final source = sources!.single;
+    aiLimits[source] = limit;
+    aiCalls[source] = (aiCalls[source] ?? 0) + 1;
+    await inspiredGates[source]?.future;
     final tracks = inspired[source];
     return tracks == null ? _list(const []) : _card(source, tracks);
   }
@@ -119,6 +221,15 @@ class _ScriptedApi implements KalinkaPlayerProxy {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName}');
+}
+
+class _IdleIndexer extends IndexerStatusNotifier {
+  @override
+  IndexerStatusState build() => const IndexerStatusState();
+  @override
+  void acquire() {}
+  @override
+  void release() {}
 }
 
 class _FixedConnection extends ConnectionStateNotifier {
@@ -129,15 +240,15 @@ class _FixedConnection extends ConnectionStateNotifier {
 // Both suggest: this file is about how their suggestions are laid out.
 final _modules = <ModuleInfo>[
   ModuleInfo(
-    name: 'qobuz',
-    title: 'Qobuz',
+    name: 'jamendo',
+    title: 'Jamendo',
     enabled: true,
     state: ModuleState.ready,
     capabilities: const [ModuleCapability.catalogs, ModuleCapability.aiSearch],
   ),
   ModuleInfo(
     name: 'localfiles',
-    title: 'Local Library',
+    title: 'My Library',
     enabled: true,
     state: ModuleState.ready,
     capabilities: const [ModuleCapability.catalogs, ModuleCapability.aiSearch],
@@ -145,11 +256,6 @@ final _modules = <ModuleInfo>[
 ];
 
 late SharedPreferences _prefs;
-
-/// The block's heading, as wide as the block: the block itself is a sliver.
-final _inspiredHeading = find.byWidgetPredicate(
-  (w) => w.runtimeType.toString() == '_InspiredHeading',
-);
 
 /// The legs hold their answer on screen for a moment even when it is
 /// instant, so a settled screen is one pump past that hold.
@@ -160,9 +266,15 @@ Future<ProviderContainer> _pump(
   _ScriptedApi api, {
   List<ModuleInfo>? modules,
   Duration? modulesAfter,
+  bool shell = false,
+  double scale = 1,
+  GlobalKey? captureKey,
+  bool preloadSources = false,
 }) async {
   final container = ProviderContainer(
     overrides: [
+      noReceivers,
+      indexerStatusProvider.overrideWith(_IdleIndexer.new),
       sharedPrefsProvider.overrideWithValue(_prefs),
       kalinkaProxyProvider.overrideWithValue(api),
       if (modulesAfter == null)
@@ -178,19 +290,77 @@ Future<ProviderContainer> _pump(
   );
   addTearDown(container.dispose);
   container.read(searchSessionProvider.notifier).refresh();
+  if (preloadSources) await container.read(catalogSourcesProvider.future);
   container.read(searchSessionProvider.notifier).submit('jazz');
 
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: Scaffold(body: ResultsView())),
+      child: MaterialApp(
+        theme: AppTheme.dark(),
+        builder: (context, child) => RepaintBoundary(
+          key: captureKey,
+          child: MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+        ),
+        home: RepaintBoundary(
+          child: Scaffold(
+            body: shell ? const SearchSessionView() : const ResultsView(),
+          ),
+        ),
+      ),
     ),
   );
   await tester.pump();
   return container;
 }
 
+void _size(WidgetTester tester, double width, [double height = 900]) {
+  tester.view.physicalSize = Size(width, height);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+}
+
+Future<void> _capture(WidgetTester tester, GlobalKey key, String name) async {
+  final dir = Platform.environment['KALINKA_REVIEW_DIR'];
+  if (dir == null) return;
+  await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+    final image = await boundary.toImage();
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    final file = File('$dir/$name.png');
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+  });
+}
+
 void main() {
+  setUpAll(() async {
+    final material = File(
+      '${Platform.environment['FLUTTER_ROOT']}/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+    );
+    if (material.existsSync()) {
+      await (FontLoader('MaterialIcons')..addFont(
+            Future.value(ByteData.sublistView(material.readAsBytesSync())),
+          ))
+          .load();
+    }
+
+    for (final (family, file) in [
+      (KalinkaFonts.sansFamily, 'IBMPlexSans-Regular.ttf'),
+      (KalinkaFonts.monoFamily, 'IBMPlexMono-Regular.ttf'),
+      (KalinkaFonts.displayFamily, 'PlayfairDisplay-Regular.ttf'),
+    ]) {
+      await (FontLoader(
+        family,
+      )..addFont(rootBundle.load('assets/fonts/$file'))).load();
+    }
+  });
   setUp(() async {
     SharedPreferences.setMockInitialValues({
       'Kalinka.host': 'localhost',
@@ -199,7 +369,6 @@ void main() {
     });
     _prefs = await SharedPreferences.getInstance();
   });
-
   testWidgets('the name block shimmers until every source has answered', (
     tester,
   ) async {
@@ -209,16 +378,16 @@ void main() {
         'localfiles': [
           _artist('localfiles', '1', 'Local Act', MatchTier.exact),
         ],
-        'qobuz': [_artist('qobuz', '1', 'Slow Act', MatchTier.exact)],
+        'jamendo': [_artist('jamendo', '1', 'Slow Act', MatchTier.exact)],
       },
-      gates: {'qobuz': gate},
+      gates: {'jamendo': gate},
     );
     await _pump(tester, api);
     await tester.pump(_settle);
 
     // The local source answered, but the list is a merge: nothing shows
     // until the slow one has too.
-    expect(find.text('MATCHES BY NAME'), findsOneWidget);
+    expect(find.text('NAME MATCHES'), findsOneWidget);
     expect(find.byType(BrowseRowsShimmer), findsWidgets);
     expect(find.text('Local Act'), findsNothing);
 
@@ -229,52 +398,14 @@ void main() {
     expect(find.text('Slow Act'), findsOneWidget);
   });
 
-  testWidgets('four lead, and VIEW ALL opens the rest until Back', (
-    tester,
-  ) async {
-    final api = _ScriptedApi(
-      matches: {
-        'qobuz': [
-          for (var i = 1; i <= 6; i++)
-            _artist('qobuz', '$i', 'Act $i', MatchTier.partial),
-        ],
-      },
-    );
-    final container = await _pump(tester, api);
-    await tester.pump(_settle);
-
-    expect(find.text('Act 4'), findsOneWidget);
-    expect(find.text('Act 5'), findsNothing);
-    expect(find.text('View All'), findsOneWidget);
-
-    await tester.tap(find.text('View All'));
-    await tester.pump();
-
-    // A page, not a filter: no chip names it.
-    expect(find.text('Name matches'), findsNothing);
-    // Rows are built as they come into view.
-    await tester.scrollUntilVisible(find.text('Act 6'), 200);
-    expect(find.text('Act 6'), findsOneWidget);
-    expect(find.text('View All'), findsNothing);
-    expect(container.read(searchSessionProvider).resultsFilter.isEmpty, isTrue);
-
-    container.read(searchSessionProvider.notifier).goBack();
-    await tester.pump();
-
-    // Alone here, the two visits share one scroll, still where the rest was
-    // read; the app keeps each visit's own.
-    expect(find.text('Act 5', skipOffstage: false), findsNothing);
-    expect(find.text('View All', skipOffstage: false), findsOneWidget);
-  });
-
   testWidgets('an exact hit wears its badge, a partial one does not', (
     tester,
   ) async {
     final api = _ScriptedApi(
       matches: {
-        'qobuz': [
-          _artist('qobuz', '1', 'Jazz', MatchTier.exact),
-          _artist('qobuz', '2', 'Jazz Club', MatchTier.partial),
+        'jamendo': [
+          _artist('jamendo', '1', 'Jazz', MatchTier.exact),
+          _artist('jamendo', '2', 'Jazz Club', MatchTier.partial),
         ],
       },
     );
@@ -292,563 +423,1233 @@ void main() {
         'localfiles': [
           _artist('localfiles', '1', 'Local Act', MatchTier.exact),
         ],
-        'qobuz': [_artist('qobuz', '1', 'Remote Act', MatchTier.exact)],
+        'jamendo': [_artist('jamendo', '1', 'Remote Act', MatchTier.exact)],
       },
-      failing: {'qobuz'},
+      failing: {'jamendo'},
     );
     await _pump(tester, api);
     await tester.pump(_settle);
 
     expect(find.text('Local Act'), findsOneWidget);
-    expect(find.text('Qobuz · Source unavailable'), findsOneWidget);
+    expect(find.text('Jamendo · Source unavailable'), findsOneWidget);
     expect(find.text('Remote Act'), findsNothing);
 
     api.heal();
     await tester.tap(find.text('RETRY'));
     await tester.pump(_settle);
 
-    expect(api.matchCalls['qobuz'], 2);
+    expect(api.matchCalls['jamendo'], 2);
     expect(api.matchCalls['localfiles'], 1);
-    expect(find.text('Qobuz · Source unavailable'), findsNothing);
+    expect(find.text('Jamendo · Source unavailable'), findsNothing);
     expect(find.text('Remote Act'), findsOneWidget);
   });
 
-  testWidgets('recommendations stay grouped by source, with their actions', (
-    tester,
-  ) async {
-    final api = _ScriptedApi(
-      inspired: {
-        'localfiles': [_track('localfiles', 'l1', 'Home Song')],
-        'qobuz': [
-          for (var i = 1; i <= 5; i++) _track('qobuz', '$i', 'Away Song $i'),
-        ],
-      },
-    );
-    await _pump(tester, api);
-    await tester.pump(_settle);
-
-    expect(find.text('Inspired by your request'), findsOneWidget);
-    expect(find.text('LOCAL LIBRARY'), findsOneWidget);
-    expect(find.text('QOBUZ'), findsOneWidget);
-    // Every source is named and lettered, the listener's own included.
-    expect(find.byType(SourceTile), findsNWidgets(2));
-    expect(find.text('Play all'), findsNWidgets(2));
-    // Each source's heading counts what it suggested, as MATCHES BY NAME does.
-    expect(find.text('· 5'), findsOneWidget);
-    expect(find.text('· 1'), findsOneWidget);
-    expect(find.text('Away Song 3'), findsOneWidget);
-    expect(find.text('Away Song 4'), findsNothing);
-    // Only the group holding more than its preview offers to open in full,
-    // and it sits on the block's right edge, like the block's own link.
-    expect(find.text('View All'), findsOneWidget);
-    expect(
-      tester.getTopRight(find.byType(ViewAllAction)).dx,
-      closeTo(tester.getTopRight(_inspiredHeading).dx, 0.5),
-    );
-    // The Discover mark on the heading; the query chip wears the same glyph
-    // outside the block.
-    expect(
-      find.descendant(
-        of: find.byType(InspiredBlock),
-        matching: find.byIcon(Icons.auto_awesome),
-      ),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.text('View All'));
-    await tester.pump();
-
-    await tester.scrollUntilVisible(find.text('Away Song 5'), 200);
-    expect(find.text('Away Song 5'), findsOneWidget);
-    expect(find.text('· 5'), findsOneWidget);
-    expect(find.text('LOCAL LIBRARY'), findsNothing);
-    expect(find.text('MATCHES BY NAME'), findsNothing);
-  });
-
-  testWidgets('the inspired heading is a name and a line, nothing drawn', (
-    tester,
-  ) async {
-    final api = _ScriptedApi(
-      inspired: {
-        'localfiles': [
-          for (var i = 1; i <= 5; i++) _track('localfiles', '$i', 'Song $i'),
-        ],
-      },
-    );
-    await _pump(tester, api);
-    await tester.pump(_settle);
-
-    expect(find.text('Inspired by your request'), findsOneWidget);
-    expect(find.text('SMART RECOMMENDATIONS'), findsOneWidget);
-    // Its own heading, not the labelled shelf the name matches take.
-    final headings = tester.widgetList<ShelfHeading>(find.byType(ShelfHeading));
-    expect(
-      headings.map((h) => h.title),
-      isNot(contains(startsWith('Inspired'))),
-    );
-    // Nothing is ruled through the heading; the only hairlines are the
-    // table's, under its column names, and between its rows (three shown of
-    // five, so two). The tally is the source's, not the block's.
-    final rules = find.descendant(
-      of: find.byType(InspiredBlock),
-      matching: find.byType(Divider),
-    );
-    expect(rules, findsNWidgets(3));
-    expect(
-      find.descendant(
-        of: find.byType(RowColumnsHeader),
-        matching: find.byType(Divider),
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('· 5'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find
-            .ancestor(of: find.text('· 5'), matching: find.byType(Row))
-            .first,
-        matching: find.text('LOCAL LIBRARY'),
-      ),
-      findsOneWidget,
-    );
-  });
-
-  /// The name leads in the display face over a quiet eyebrow, on a wash that
-  /// is grey: a berry one beside the berry now-playing row read as one signal.
-  testWidgets('the inspired heading leads with its name on a neutral wash', (
-    tester,
-  ) async {
-    final api = _ScriptedApi(
-      inspired: {
-        'localfiles': [
-          for (var i = 1; i <= 5; i++) _track('localfiles', '$i', 'Song $i'),
-        ],
-      },
-    );
-    await _pump(tester, api);
-    await tester.pump(_settle);
-
-    final title = tester.widget<Text>(find.text('Inspired by your request'));
-    final eyebrow = tester.widget<Text>(find.text('SMART RECOMMENDATIONS'));
-    final shelf = tester.widget<Text>(find.text('LOCAL LIBRARY'));
-    expect(title.style!.fontFamily, KalinkaFonts.displayFamily);
-    expect(title.style!.fontSize!, greaterThan(2 * eyebrow.style!.fontSize!));
-    // Quieter than the shelf labels under it.
-    expect(eyebrow.style!.fontSize!, lessThan(shelf.style!.fontSize!));
-    expect(
-      eyebrow.style!.fontWeight!.value,
-      lessThan(shelf.style!.fontWeight!.value),
-    );
-    expect(eyebrow.style!.color, KalinkaColors.textSecondary);
-
-    // One wash, and no colour in it leans red.
-    final washes = find.descendant(
-      of: find.byType(InspiredBlock),
-      matching: find.byWidgetPredicate(
-        (w) =>
-            w is DecoratedBox &&
-            w.decoration is BoxDecoration &&
-            (w.decoration as BoxDecoration).gradient != null,
-      ),
-    );
-    expect(washes, findsOneWidget);
-    final gradient =
-        (tester.widget<DecoratedBox>(washes).decoration as BoxDecoration)
-            .gradient!;
-    for (final c in gradient.colors) {
-      expect(c.r - c.g, lessThan(0.05));
-    }
-    // Edge to edge, and gone before the first group's name.
-    final wash = tester.getRect(washes);
-    final block = tester.getRect(_inspiredHeading);
-    expect(wash.left, lessThan(block.left));
-    expect(wash.right, greaterThan(block.right));
-    expect(wash.top, closeTo(block.top, 0.5));
-    expect(
-      wash.bottom,
-      lessThanOrEqualTo(tester.getTopLeft(find.text('LOCAL LIBRARY')).dy),
-    );
-  });
-
-  /// Under a heading that names the source, in a group that is all tracks,
-  /// "Track" and the source badge would only repeat it. The mixed name
-  /// matches keep both.
-  testWidgets('a wide row gives the album and artist columns of their own', (
-    tester,
-  ) async {
-    final api = _ScriptedApi(
-      matches: {
-        'qobuz': [_track('qobuz', 'm', 'Named Song', tier: MatchTier.exact)],
-      },
-      inspired: const {},
-    );
-    tester.view.physicalSize = const Size(1200, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    await _pump(tester, api);
-    await tester.pump(_settle);
-
-    // The line under the title no longer repeats what the columns say.
-    expect(find.textContaining('Track · Someone'), findsNothing);
-    expect(find.text('Someone'), findsOneWidget);
-    expect(find.text('An Album'), findsOneWidget);
-    final title = tester.getTopRight(find.text('Named Song')).dx;
-    final artist = tester.getTopLeft(find.text('Someone')).dx;
-    expect(artist, greaterThan(title));
-    expect(tester.getTopLeft(find.text('An Album')).dx, greaterThan(artist));
-    expect(find.byType(ColumnSeparator), findsNothing);
-    // A listing of tracks names its columns as such, over each one.
-    for (final (title, cell) in [
-      ('TITLE', 'Named Song'),
-      ('ARTIST', 'Someone'),
-      ('ALBUM', 'An Album'),
-    ]) {
+  testWidgets(
+    'wide overview gives name matches 55 percent and inspired results 45 percent',
+    (tester) async {
+      _size(tester, 1280);
+      final key = GlobalKey();
+      await _pump(
+        tester,
+        _ScriptedApi(
+          matches: {
+            'localfiles': [
+              _artist('localfiles', 'a', 'Midnight Trio', MatchTier.partial),
+            ],
+            'jamendo': [
+              _artist('jamendo', 'b', 'Midnight Jazz', MatchTier.exact),
+            ],
+          },
+          inspired: {
+            'localfiles': [_track('localfiles', '1', 'Blue Hour')],
+            'jamendo': [_track('jamendo', '1', 'Streetlights')],
+          },
+        ),
+        shell: true,
+        captureKey: key,
+      );
+      await tester.pumpAndSettle();
+      final names = tester.getRect(find.byType(ShelfHeading));
+      final inspired = tester.getRect(find.byType(InspiredHeading));
+      expect(names.left, lessThan(inspired.left));
+      expect(names.width / (names.width + inspired.width), closeTo(.55, .02));
       expect(
-        tester.getTopLeft(find.text(title)).dx,
-        closeTo(tester.getTopLeft(find.text(cell)).dx, 1),
+        tester.getTopLeft(find.text('Midnight Jazz')).dy,
+        lessThan(tester.getTopLeft(find.text('Midnight Trio')).dy),
       );
-    }
-    expect(find.text('TIME'), findsOneWidget);
-  });
+      expect(find.text('Jamendo'), findsOneWidget);
+      expect(find.text('Jamendo ·'), findsNothing);
+      expect(find.byType(SourceBadge), findsNWidgets(2));
+      expect(find.text('Artist'), findsWidgets);
+      expect(find.text('NAME MATCHES'), findsOneWidget);
+      expect(
+        find.textContaining('Inspired by your request', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.text('ALL'), findsOneWidget);
+      final tabStyle = DefaultTextStyle.of(tester.element(find.text('ALL')))
+          .style;
+      expect(
+        tabStyle,
+        KalinkaTextStyles.sectionLabel.copyWith(
+          color: KalinkaColors.textPrimary,
+        ),
+      );
+      expect(find.byType(SectionTabButton), findsNWidgets(5));
+      final labelLeft = tester.getTopLeft(find.text('ALL')).dx;
+      expect(labelLeft, tester.getRect(find.byType(ShelfHeading)).left);
+      expect(
+        tester.getRect(find.byType(SectionTabButton).first).left,
+        labelLeft - SectionTabButton.horizontalPadding,
+      );
+      final search = tester.getRect(
+        find.byKey(const ValueKey('results-search-entry')),
+      );
+      final filters = tester.getRect(find.byType(CatalogFiltersButton));
+      expect(filters.center.dy, closeTo(search.center.dy, 1));
+      expect(filters.left, greaterThanOrEqualTo(search.right));
+      final searchSurface = tester.getRect(
+        find.byKey(const ValueKey('search-entry-surface')),
+      );
+      final filterPill = tester.getRect(
+        find.descendant(
+          of: find.byType(CatalogFiltersButton),
+          matching: find.byType(OutlinedButton),
+        ),
+      );
+      expect(searchSurface.height, kKalinkaPillHeight);
+      expect(searchSurface.height, filterPill.height);
+      expect(searchSurface.center.dy, filterPill.center.dy);
+      expect(search.height, greaterThanOrEqualTo(kKalinkaPillTarget));
+      expect(find.text('Genre'), findsNothing);
+      expect(find.text('Source'), findsNothing);
 
-  testWidgets('the widest rows say the format after the source', (
+      final cardCovers = find.descendant(
+        of: find.byType(InspiredSourceCard).first,
+        matching: find.byType(TrackThumb),
+      );
+      expect(
+        tester.getTopLeft(cardCovers.at(0)).dy,
+        tester.getTopLeft(cardCovers.at(1)).dy,
+      );
+      expect(
+        tester.getTopLeft(cardCovers.at(2)).dx,
+        tester.getTopLeft(cardCovers.at(0)).dx,
+      );
+      expect(
+        tester.getTopLeft(cardCovers.at(2)).dy,
+        greaterThan(tester.getTopLeft(cardCovers.at(0)).dy),
+      );
+      await _capture(tester, key, 'search-tablet');
+      final mouse = await tester.createGesture(
+        kind: ui.PointerDeviceKind.mouse,
+      );
+      await mouse.addPointer(location: const Offset(0, 0));
+      await mouse.moveTo(tester.getCenter(find.text('ARTISTS')));
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'search-tabs-hover');
+      await mouse.removePointer();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('phone previews names then shows source cards in one scroll', (
     tester,
   ) async {
-    final api = _ScriptedApi(
-      matches: {
-        'qobuz': [
-          _track(
-            'qobuz',
-            'm',
-            'Named Song',
-            tier: MatchTier.exact,
-            mimeType: 'audio/flac',
-          ),
-          _track('qobuz', 'n', 'Other Song', tier: MatchTier.exact),
-        ],
-      },
-      inspired: const {},
-    );
-    tester.view.physicalSize = const Size(1300, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    await _pump(tester, api);
-    await tester.pump(_settle);
-
-    expect(find.textContaining('FLAC'), findsOneWidget);
-    expect(
-      tester.getTopLeft(find.textContaining('FLAC')).dx,
-      greaterThan(tester.getTopLeft(find.text('An Album').first).dx),
-    );
-  });
-
-  testWidgets('a source\'s rows say the artist and album, not the kind again', (
-    tester,
-  ) async {
-    final api = _ScriptedApi(
-      matches: {
-        'qobuz': [_track('qobuz', 'm', 'Named Song', tier: MatchTier.exact)],
-      },
-      inspired: {
-        'qobuz': [
-          for (var i = 1; i <= 5; i++) _track('qobuz', '$i', 'Away Song $i'),
-        ],
-      },
-    );
-    // A phone folds the album into the line under the title.
-    tester.view.physicalSize = const Size(375, 812);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    await _pump(tester, api);
-    await tester.pump(_settle);
-
-    final inspired = find.byType(InspiredBlock);
-    expect(
-      find.descendant(of: inspired, matching: find.text('Someone · An Album')),
-      findsNWidgets(3),
-    );
-    expect(
-      find.descendant(of: inspired, matching: find.textContaining('Track ·')),
-      findsNothing,
-    );
-    expect(
-      find.descendant(of: inspired, matching: find.byType(SourceBadge)),
-      findsNothing,
-    );
-    expect(find.textContaining('Track · Someone · An Album'), findsOneWidget);
-  });
-
-  /// A later source stands further off the rows above it than rows stand off
-  /// each other; the first hangs closer, off the block's heading.
-  testWidgets('a later source stands further off than the rows do', (
-    tester,
-  ) async {
-    final api = _ScriptedApi(
-      inspired: {
-        'localfiles': [
-          _track('localfiles', '1', 'Home Song 1'),
-          _track('localfiles', '2', 'Home Song 2'),
-        ],
-        'qobuz': [_track('qobuz', '1', 'Away Song 1')],
-      },
-    );
-    await _pump(tester, api);
-    await tester.pump(_settle);
-
-    // The heading row, found from its letter tile (the title is in a nested
-    // row).
-    Finder heading(String source) => find
-        .ancestor(
-          of: find.byWidgetPredicate(
-            (w) => w is SourceTile && w.source == source,
-          ),
-          matching: find.byType(Row),
-        )
-        .first;
-    Finder row(String title) => find.ancestor(
-      of: find.text(title),
-      matching: find.byType(SearchTrackRow),
-    );
-
-    final title = tester.getRect(find.text('Inspired by your request'));
-    final rowGap =
-        tester.getRect(row('Home Song 2')).top -
-        tester.getRect(row('Home Song 1')).bottom;
-    final afterTitle = tester.getRect(heading('localfiles')).top - title.bottom;
-    final betweenSources =
-        tester.getRect(heading('qobuz')).top -
-        tester.getRect(row('Home Song 2')).bottom;
-
-    expect(betweenSources, greaterThanOrEqualTo(2 * rowGap));
-    expect(betweenSources, greaterThan(afterTitle));
-  });
-
-  /// The block's own control: which of the sources that answered is being
-  /// read. It stands where the subtitle used to, and it is drawn from the
-  /// rows rather than from the module list.
-  group('the source pills', () {
-    /// The pill carrying [label], wherever it sits — the block draws other
-    /// action pills too, so an index would be aiming blind.
-    Finder pill(String label) => find.ancestor(
-      of: find.text(label),
-      matching: find.byType(ActionPillButton),
-    );
-
-    testWidgets('name only the sources the list actually holds', (
+    _size(tester, 375, 950);
+    final key = GlobalKey();
+    final container = await _pump(
       tester,
-    ) async {
-      final api = _ScriptedApi(
+      _ScriptedApi(
         matches: {
-          'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
-          'localfiles': [_artist('localfiles', '1', 'L Act', MatchTier.exact)],
+          'jamendo': [
+            for (var i = 0; i < 6; i++)
+              _artist('jamendo', '$i', 'Act $i', MatchTier.partial),
+          ],
+        },
+        inspired: {
+          'localfiles': [_track('localfiles', '1', 'Hidden track name')],
+          'jamendo': [_track('jamendo', '2', 'Another hidden name')],
+        },
+      ),
+      shell: true,
+      captureKey: key,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Act 3'), findsOneWidget);
+    expect(find.text('Act 4'), findsNothing);
+    expect(find.text('View All'), findsOneWidget);
+    expect(find.byType(InspiredSourceCard), findsNWidgets(2));
+    expect(find.text('Hidden track name'), findsNothing);
+    expect(find.text('Play all'), findsNothing);
+    expect(find.byType(CustomScrollView), findsOneWidget);
+    await _capture(tester, key, 'search-phone');
+    await tester.tap(find.text('View All'));
+    await tester.pumpAndSettle();
+    expect(find.byType(InspiredSourceCard), findsNothing);
+    expect(find.text('Act 5'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(container.read(searchSessionProvider).expandedBlock, isNull);
+    expect(find.text('View All'), findsOneWidget);
+  });
+
+  testWidgets(
+    'cards request twenty tracks and show actual counts and fallback art',
+    (tester) async {
+      final api = _ScriptedApi(
+        inspired: {
+          'localfiles': [_track('localfiles', '1', 'Song')],
+          'jamendo': [
+            for (var i = 0; i < 7; i++) _track('jamendo', '$i', 'Song $i'),
+          ],
         },
       );
       await _pump(tester, api);
-      await tester.pump(_settle);
+      await tester.pumpAndSettle();
+      expect(api.aiLimits, {'localfiles': 20, 'jamendo': 20});
+      expect(find.text('1 track'), findsOneWidget);
+      expect(find.text('7 tracks'), findsOneWidget);
+      expect(find.byType(ArtStandIn), findsNWidgets(8));
+      expect(find.byType(SearchTrackRow), findsNothing);
+      await tester.ensureVisible(find.text('Jamendo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Jamendo'));
+      await tester.pumpAndSettle();
+      expect(api.replacements, isEmpty);
+      expect(api.additions, isEmpty);
+      expect(api.plays, isEmpty);
+      expect(find.text('JAMENDO'), findsOneWidget);
+      expect(find.text('MY LIBRARY'), findsOneWidget);
+      expect(find.text('TRACKS'), findsOneWidget);
+      expect(find.text('· 7'), findsOneWidget);
+    },
+  );
 
-      expect(pill('All'), findsOneWidget);
-      expect(pill('Qobuz'), findsOneWidget);
-      expect(pill('Local Library'), findsOneWidget);
-    });
-
-    testWidgets('stay away when only one source found anything', (
-      tester,
-    ) async {
-      final api = _ScriptedApi(
-        matches: {
-          'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
-        },
-      );
-      await _pump(tester, api);
-      await tester.pump(_settle);
-
-      // Both sources answered; only one had something to say, so there is
-      // nothing to choose between.
-      expect(find.byType(ActionPillButton), findsNothing);
-      expect(find.text('Q Act'), findsOneWidget);
-    });
-
-    /// The layout as the block builds it. A pill that sizes itself from
-    /// anything but its content once came out as a column of full-width
-    /// slabs, so this is measured rather than assumed.
-    testWidgets('sit on one line, each as wide as what it holds', (
-      tester,
-    ) async {
-      final api = _ScriptedApi(
-        matches: {
-          'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
-          'localfiles': [_artist('localfiles', '1', 'L Act', MatchTier.exact)],
-        },
-      );
-      await _pump(tester, api);
-      await tester.pump(_settle);
-
-      final rects = [
-        for (final label in ['All', 'Qobuz', 'Local Library'])
-          tester.getRect(pill(label)),
+  testWidgets(
+    'source tabs keep backend order and actions use only the selected list',
+    (tester) async {
+      _size(tester, 1100);
+      final jamendo = [
+        _track('jamendo', 'z', 'Zulu'),
+        _track('jamendo', 'a', 'Alpha'),
       ];
-
-      expect(rects.map((r) => r.top).toSet(), hasLength(1));
-      expect(rects.map((r) => r.height).toSet(), hasLength(1));
-      // A name behind a letter tile is wider than the bare word All, and
-      // none of them has taken the line.
-      expect(rects[1].width, greaterThan(rects[0].width));
-      final line = tester.getSize(find.byType(ResultsView)).width;
-      for (final rect in rects) {
-        expect(rect.width, lessThan(line / 2));
-      }
-    });
-
-    /// The palette gives a screen at rest one crimson fill, and this row is
-    /// chrome that stays up for the session — so the one being read is lit
-    /// the way Play all is, a wash inside an edge, not a fill.
-    testWidgets('light the one being read like a Play all, not a fill', (
-      tester,
-    ) async {
+      final local = [_track('localfiles', 'b', 'Blue')];
       final api = _ScriptedApi(
-        matches: {
-          'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
-          'localfiles': [_artist('localfiles', '1', 'L Act', MatchTier.exact)],
-        },
-      );
-      await _pump(tester, api);
-      await tester.pump(_settle);
-
-      Color lit(String label) => tester
-          .widget<Material>(
-            find
-                .descendant(of: pill(label), matching: find.byType(Material))
-                .first,
-          )
-          .color!;
-
-      // All is on to start with.
-      expect(lit('All'), ActionPillButton.accentFill);
-      expect(lit('Qobuz'), KalinkaColors.surfaceElevated);
-
-      await tester.tap(pill('Qobuz'));
-      await tester.pump();
-
-      expect(lit('All'), KalinkaColors.surfaceElevated);
-      expect(lit('Qobuz'), ActionPillButton.accentFill);
-    });
-
-    testWidgets('picking one reads that source alone, ALL brings them back', (
-      tester,
-    ) async {
-      final api = _ScriptedApi(
-        matches: {
-          'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
-          'localfiles': [_artist('localfiles', '1', 'L Act', MatchTier.exact)],
-        },
-      );
-      await _pump(tester, api);
-      await tester.pump(_settle);
-      expect(find.text('L Act'), findsOneWidget);
-
-      await tester.tap(pill('Qobuz'));
-      await tester.pump();
-
-      expect(find.text('Q Act'), findsOneWidget);
-      expect(find.text('L Act'), findsNothing);
-      // The others stay offered — a pick that hid them could not be undone.
-      expect(pill('Local Library'), findsOneWidget);
-      expect(find.textContaining('· 1'), findsOneWidget);
-
-      await tester.tap(pill('All'));
-      await tester.pump();
-
-      expect(find.text('L Act'), findsOneWidget);
-      expect(find.text('Q Act'), findsOneWidget);
-    });
-
-    testWidgets('the next search starts on the one picked last', (
-      tester,
-    ) async {
-      final api = _ScriptedApi(
-        matches: {
-          'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
-          'localfiles': [_artist('localfiles', '1', 'L Act', MatchTier.exact)],
-        },
+        inspired: {'localfiles': local, 'jamendo': jamendo},
       );
       final container = await _pump(tester, api);
-      await tester.pump(_settle);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Jamendo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Jamendo'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widgetList<SourceTile>(find.byType(SourceTile))
+            .map((w) => w.source),
+        ['localfiles', 'jamendo'],
+      );
+      expect(
+        tester
+            .widgetList<ModuleArtwork>(
+              find.descendant(
+                of: find.byType(ResultsTabs),
+                matching: find.byType(ModuleArtwork),
+              ),
+            )
+            .every((w) => w.small),
+        isTrue,
+      );
+      final firstTab = tester.getRect(find.byType(SectionTabButton).first);
+      final badge = tester.getRect(find.byType(SourceTile).first);
+      expect(find.text('· 2'), findsOneWidget);
+      expect(badge.left, tester.getRect(find.byType(ShelfHeading)).left);
+      expect(badge.left, tester.getRect(find.byType(TrackGroupActions)).left);
+      expect(
+        badge.left,
+        tester.getRect(find.byType(SearchTrackRow).first).left,
+      );
+      expect(firstTab.left, badge.left - SectionTabButton.horizontalPadding);
+      final visit = container.read(searchSessionProvider).visitId;
+      final history = container
+          .read(searchSessionProvider)
+          .previousVisits
+          .length;
+      expect(
+        tester.getTopLeft(find.text('Zulu')).dy,
+        lessThan(tester.getTopLeft(find.text('Alpha')).dy),
+      );
+      await tester.tap(find.text('Play all'));
+      await tester.pumpAndSettle();
+      expect(api.replacements.single, jamendo.map((t) => t.id));
+      expect(api.plays, [0]);
+      await tester.tap(find.text('MY LIBRARY'));
+      await tester.pumpAndSettle();
+      expect(find.text('· 1'), findsOneWidget);
+      expect(find.text('· 2'), findsNothing);
+      await tester.tap(find.text('Add to queue'));
+      await tester.pumpAndSettle();
+      expect(api.additions.single, local.map((t) => t.id));
+      await tester.tap(find.text('JAMENDO'));
+      await tester.pumpAndSettle();
+      expect(find.text('· 2'), findsOneWidget);
+      expect(find.text('· 1'), findsNothing);
+      expect(container.read(searchSessionProvider).visitId, visit);
+      expect(
+        container.read(searchSessionProvider).previousVisits.length,
+        history,
+      );
+      // The normal row action queues its source list from the tapped track.
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      expect(api.replacements.last, jamendo.map((t) => t.id));
+      expect(api.plays.last, 1);
+      await tester.pump(const Duration(seconds: 4));
+    },
+  );
 
-      await tester.tap(pill('Qobuz'));
-      await tester.pump();
-      expect(container.read(searchSessionProvider).matchSource, 'qobuz');
+  testWidgets(
+    'one Back restores overview query facets type and scroll after source switches',
+    (tester) async {
+      _size(tester, 375, 700);
+      final key = GlobalKey();
+      final container = await _pump(
+        tester,
+        _ScriptedApi(
+          matches: {
+            'jamendo': [
+              for (var i = 0; i < 8; i++) _track('jamendo', 'n$i', 'Named $i'),
+            ],
+          },
+          inspired: {
+            'localfiles': [_track('localfiles', '1', 'Blue Hour')],
+            'jamendo': [_track('jamendo', '1', 'Streetlights')],
+          },
+        ),
+        shell: true,
+        captureKey: key,
+      );
+      await tester.pumpAndSettle();
+      final notifier = container.read(searchSessionProvider.notifier);
+      notifier.setResultsFilter(
+        const BrowseFilterQuery(
+          type: SearchType.track,
+          genreIds: ['jazz'],
+          sources: ['localfiles', 'jamendo'],
+        ),
+      );
+      await tester.pumpAndSettle();
+      final overview = find.byType(CustomScrollView);
+      await tester.drag(overview, const Offset(0, -350));
+      await tester.pumpAndSettle();
+      final position = tester
+          .state<ScrollableState>(
+            find
+                .descendant(of: overview, matching: find.byType(Scrollable))
+                .first,
+          )
+          .position;
+      final offset = position.pixels;
+      expect(offset, greaterThan(0));
+      final card = find.widgetWithText(InspiredSourceCard, 'Jamendo');
+      await tester.ensureVisible(card);
+      await tester.pumpAndSettle();
+      final savedOffset = position.pixels;
+      await tester.tap(card);
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      expect(find.byType(ActiveFilterChips), findsNothing);
+      expect(find.byKey(const ValueKey('results-query-title')), findsOneWidget);
+      expect(find.text('jazz'), findsOneWidget);
+      for (final title in ['MY LIBRARY', 'JAMENDO', 'MY LIBRARY']) {
+        await tester.tap(find.text(title));
+        await tester.pumpAndSettle();
+      }
+      await _capture(tester, key, 'search-phone-tracks');
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      final state = container.read(searchSessionProvider);
+      expect(state.searchQuery, 'jazz');
+      expect(state.resultsFilter.type, SearchType.track);
+      expect(state.resultsFilter.genreIds, ['jazz']);
+      expect(state.resultsFilter.sources, ['localfiles', 'jamendo']);
+      expect(state.expandedBlock, isNull);
+      expect(position.pixels, savedOffset);
+      expect(
+        find.byKey(const ValueKey('results-search-entry')),
+        findsOneWidget,
+      );
+      expect(find.byType(TextField), findsNothing);
+    },
+  );
 
-      container.read(searchSessionProvider.notifier).submit('blues');
-      await tester.pump(_settle);
+  testWidgets(
+    'all five tabs remain available and inspired cards appear only under All and Tracks',
+    (tester) async {
+      _size(tester, 1100);
+      await _pump(
+        tester,
+        _ScriptedApi(
+          inspired: {
+            'jamendo': [_track('jamendo', '1', 'Streetlights')],
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final label in ['ARTISTS', 'ALBUMS', 'PLAYLISTS']) {
+        await tester.tap(find.text(label));
+        await tester.pumpAndSettle();
+        expect(find.byType(InspiredBlock), findsNothing);
+        expect(find.text('Nothing matches these filters'), findsOneWidget);
+      }
+      for (final label in ['TRACKS', 'ALL']) {
+        await tester.tap(find.text(label));
+        await tester.pumpAndSettle();
+        expect(find.byType(InspiredSourceCard), findsOneWidget);
+      }
+    },
+  );
 
-      expect(container.read(searchSessionProvider).matchSource, 'qobuz');
-      expect(find.text('L Act'), findsNothing);
-
-      await tester.tap(pill('All'));
-      await tester.pump();
-      container.read(searchSessionProvider.notifier).submit('jazz');
-      await tester.pump(_settle);
-
-      expect(container.read(searchSessionProvider).matchSource, isNull);
-    });
-  });
-
-  testWidgets('nothing found says so', (tester) async {
-    await _pump(tester, _ScriptedApi());
-    await tester.pump(_settle);
-
-    expect(find.text('No matches'), findsOneWidget);
-    expect(find.text('Try rephrasing your request'), findsOneWidget);
-    expect(find.text('Reset filters'), findsNothing);
-  });
-
-  testWidgets('an order alone is not what left nothing', (tester) async {
-    final container = await _pump(tester, _ScriptedApi());
-    await tester.pump(_settle);
-    container
-        .read(searchSessionProvider.notifier)
-        .setResultsFilter(
-          const BrowseFilterQuery(order: NameMatchOrder.alphabetical),
-        );
-    await tester.pump();
-
-    expect(find.text('No matches'), findsOneWidget);
-    expect(find.text('Nothing matches these filters'), findsNothing);
-    expect(find.text('Reset filters'), findsNothing);
-  });
-
-  testWidgets('a filter that leaves nothing says so, and offers to drop it', (
+  testWidgets('name matches use full width when no inspired results remain', (
     tester,
   ) async {
+    _size(tester, 1100);
+    await _pump(
+      tester,
+      _ScriptedApi(
+        matches: {
+          'jamendo': [
+            for (var i = 0; i < 7; i++)
+              _artist('jamendo', '$i', 'Artist $i', MatchTier.partial),
+          ],
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(InspiredBlock), findsNothing);
+    expect(tester.getSize(find.byType(ShelfHeading)).width, closeTo(1068, 1));
+    expect(find.text('Artist 6'), findsOneWidget);
+    expect(find.text('View All'), findsNothing);
+  });
+
+  testWidgets('result tabs keep independent catalogue view preferences', (
+    tester,
+  ) async {
+    _size(tester, 1100);
+    final key = GlobalKey();
     final api = _ScriptedApi(
       matches: {
-        'qobuz': [_artist('qobuz', '1', 'Q Act', MatchTier.exact)],
-        'localfiles': [_artist('localfiles', '1', 'L Act', MatchTier.exact)],
+        'localfiles': [
+          _album('localfiles', 'partial', MatchTier.partial),
+          _artist('localfiles', 'artist', 'Local artist', MatchTier.partial),
+          _playlist('localfiles', 'local'),
+          _track('localfiles', 'track', 'A track'),
+        ],
+        'jamendo': [
+          _album('jamendo', 'exact', MatchTier.exact),
+          _artist('jamendo', 'artist', 'Other artist', MatchTier.exact),
+          _playlist('jamendo', 'other'),
+        ],
       },
     );
-    final container = await _pump(tester, api);
-    await tester.pump(_settle);
-    final notifier = container.read(searchSessionProvider.notifier);
-    notifier.setMatchSource('qobuz');
-    notifier.expandBlock((kind: ResultKind.recommendations, source: 'qobuz'));
-    notifier.setResultsFilter(
-      const BrowseFilterQuery(kind: ResultKind.recommendations),
+    final container = await _pump(tester, api, captureKey: key);
+    await tester.pumpAndSettle();
+    final visit = container.read(searchSessionProvider).visitId;
+    final history = container.read(searchSessionProvider).previousVisits.length;
+    expect(find.byType(PresentationToggle), findsNothing);
+    expect(find.byType(ArtworkGridCard), findsNothing);
+
+    await tester.tap(find.text('ALBUMS'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ArtworkGridCard), findsNWidgets(2));
+    expect(
+      tester
+          .widgetList<ArtworkGridCard>(find.byType(ArtworkGridCard))
+          .map((card) => card.item.id),
+      ['kalinka:jamendo:album:exact', 'kalinka:localfiles:album:partial'],
     );
-    await tester.pump();
+    expect(tester.getRect(find.byType(PresentationToggle)).right, 1084);
+    expect(
+      tester.getRect(find.byType(ArtStandIn).first).left,
+      tester.getRect(find.byType(ShelfHeading)).left,
+    );
+    expect(find.byType(SourceBadge), findsNWidgets(2));
+    await _capture(tester, key, 'search-albums-grid-wide');
+    await tester.tap(find.byTooltip('List view'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchAlbumRow), findsNWidgets(2));
+    expect(find.byType(ArtworkGridCard), findsNothing);
 
-    expect(find.text('Q Act'), findsNothing);
-    expect(find.text('Nothing matches these filters'), findsOneWidget);
-    expect(find.text('Try rephrasing your request'), findsNothing);
+    await tester.tap(find.text('ARTISTS'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ArtworkGridCard), findsNWidgets(2));
+    await tester.tap(find.text('PLAYLISTS'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchPlaylistRow), findsNWidgets(2));
+    await tester.tap(find.byTooltip('Grid view'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ArtworkGridCard), findsNWidgets(2));
 
-    await tester.tap(find.text('Reset filters'));
-    await tester.pump();
+    for (final label in ['ALL', 'TRACKS']) {
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+      expect(find.byType(PresentationToggle), findsNothing);
+      expect(find.byType(ArtworkGridCard), findsNothing);
+    }
+    await tester.tap(find.text('ALBUMS'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchAlbumRow), findsNWidgets(2));
+    await tester.tap(find.text('ARTISTS'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ArtworkGridCard), findsNWidgets(2));
+    await tester.tap(find.text('PLAYLISTS'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ArtworkGridCard), findsNWidgets(2));
+    expect(container.read(searchSessionProvider).visitId, visit);
+    expect(
+      container.read(searchSessionProvider).previousVisits.length,
+      history,
+    );
+    expect(api.matchCalls, {'localfiles': 1, 'jamendo': 1});
+    expect(api.replacements, isEmpty);
+    expect(api.plays, isEmpty);
 
-    final session = container.read(searchSessionProvider);
-    expect(session.resultsFilter.isEmpty, isTrue);
-    expect(session.matchSource, isNull);
-    expect(session.expandedBlock, isNull);
-    expect(find.text('Q Act'), findsOneWidget);
-    expect(find.text('L Act'), findsOneWidget);
-    expect(find.text('Reset filters'), findsNothing);
+    // A new visit and widget tree still use each tab's saved choice.
+    await _pump(tester, api);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ALBUMS'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchAlbumRow), findsNWidgets(2));
+    await tester.tap(find.text('PLAYLISTS'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ArtworkGridCard), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final offset in [2500.0, 6500.0]) {
+    testWidgets('grid resize preserves the visible item and offset at $offset', (
+      tester,
+    ) async {
+      _size(tester, 375);
+      final container = await _pump(
+        tester,
+        _ScriptedApi(
+          matches: {
+            'localfiles': [
+              for (var i = 0; i < 100; i++)
+                BrowseItem(
+                  id: 'kalinka:localfiles:album:$i',
+                  canBrowse: true,
+                  canAdd: true,
+                  album: Album(
+                    id: '$i',
+                    title: i % 3 == 0
+                        ? 'Album $i with a longer title that wraps across lines'
+                        : 'Album $i',
+                    year: i % 2 == 0 ? 2020 : null,
+                  ),
+                  match: const NameMatch(tier: MatchTier.partial, score: 60),
+                ),
+            ],
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ALBUMS'));
+      await tester.pumpAndSettle();
+      final scrollable = tester.state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byType(CustomScrollView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      scrollable.position.jumpTo(offset);
+      await tester.pumpAndSettle();
+      final viewport = tester.getRect(find.byType(CustomScrollView));
+      final cards = find.byType(ArtworkGridCard);
+      final visible = [
+        for (var i = 0; i < cards.evaluate().length; i++)
+          if (tester.getRect(cards.at(i)).bottom > viewport.top &&
+              tester.getRect(cards.at(i)).top < viewport.bottom)
+            cards.at(i),
+      ];
+      final id = tester.widget<ArtworkGridCard>(visible.first).item.id;
+      final top = tester.getRect(visible.first).top - viewport.top;
+      final anchor = find.byWidgetPredicate(
+        (widget) => widget is ArtworkGridCard && widget.item.id == id,
+      );
+      for (final width in [1100.0, 640.0, 375.0, 1200.0]) {
+        tester.view.physicalSize = Size(width, 900);
+        await tester.pumpAndSettle();
+        expect(anchor, findsOneWidget, reason: 'anchor lost at $width');
+        expect(
+          tester.getRect(anchor).top -
+              tester.getRect(find.byType(CustomScrollView)).top,
+          closeTo(top, 1),
+          reason: 'anchor moved at $width',
+        );
+        expect(tester.takeException(), isNull);
+      }
+      // Changing the result set must not restore an old, unrelated anchor.
+      container
+          .read(searchSessionProvider.notifier)
+          .setResultsFilter(const BrowseFilterQuery(type: SearchType.artist));
+      await tester.pumpAndSettle();
+      expect(find.text('Nothing matches these filters'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final (width, scale) in [(375.0, 1.0), (320.0, 2.0)]) {
+    testWidgets(
+      'result view switch and grid adapt at $width with $scale text',
+      (tester) async {
+        _size(tester, width);
+        final key = GlobalKey();
+        final container = await _pump(
+          tester,
+          _ScriptedApi(
+            matches: {
+              'localfiles': [
+                for (var i = 0; i < 5; i++)
+                  _artist(
+                    'localfiles',
+                    '$i',
+                    'A long artist name $i',
+                    MatchTier.partial,
+                  ),
+              ],
+            },
+          ),
+          scale: scale,
+          captureKey: key,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('ARTISTS'));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<PresentationToggle>(find.byType(PresentationToggle))
+              .compact,
+          isTrue,
+        );
+        expect(find.byTooltip('List view'), findsOneWidget);
+        expect(find.byTooltip('Grid view'), findsNothing);
+        expect(find.byType(ArtworkGridCard), findsWidgets);
+        await _capture(tester, key, 'search-artists-grid-${width.toInt()}');
+        await tester.tap(find.byTooltip('List view'));
+        await tester.pumpAndSettle();
+        expect(find.byType(SearchArtistRow), findsWidgets);
+        final before = container.read(listingPresentationProvider);
+        tester.view.physicalSize = const Size(1600, 1000);
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<PresentationToggle>(find.byType(PresentationToggle))
+              .compact,
+          isFalse,
+        );
+        expect(container.read(listingPresentationProvider), before);
+        expect(find.byType(SearchArtistRow), findsWidgets);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'typed results switch their shimmer and keep controls when empty',
+    (tester) async {
+      _size(tester, 375);
+      final gate = Completer<void>();
+      final api = _ScriptedApi(gates: {'jamendo': gate});
+      final key = GlobalKey();
+      await _pump(tester, api, captureKey: key);
+      await tester.pump(_settle);
+      await tester.tap(find.text('ARTISTS'));
+      await tester.pump(_settle);
+      expect(find.byType(ArtworkGridShimmer), findsOneWidget);
+      expect(
+        tester
+            .widget<ArtworkGridShimmer>(find.byType(ArtworkGridShimmer))
+            .round,
+        isTrue,
+      );
+      expect(find.byType(BrowseRowsShimmer), findsNothing);
+      await _capture(tester, key, 'search-artists-grid-shimmer');
+      await tester.tap(find.byTooltip('List view'));
+      await tester.pump(_settle);
+      expect(find.byType(ArtworkGridShimmer), findsNothing);
+      expect(find.byType(BrowseRowsShimmer), findsOneWidget);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(PresentationToggle), findsOneWidget);
+      expect(find.text('Nothing matches these filters'), findsOneWidget);
+      expect(find.text('· 0'), findsOneWidget);
+      expect(api.matchCalls, {'localfiles': 1, 'jamendo': 1});
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('wide name results show one source name beside its badge', (
+    tester,
+  ) async {
+    _size(tester, 1400);
+    await _pump(
+      tester,
+      _ScriptedApi(
+        matches: {
+          'tidal': [
+            _track('tidal', '1', 'Midnight Jazz', tier: MatchTier.exact),
+          ],
+        },
+      ),
+      modules: [
+        ..._modules,
+        ModuleInfo(
+          name: 'tidal',
+          title: 'TIDAL',
+          enabled: true,
+          state: ModuleState.ready,
+          capabilities: const [ModuleCapability.catalogs],
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('SOURCE'), findsOneWidget);
+    expect(find.text('TIDAL'), findsOneWidget);
+    expect(find.text('TIDAL ·'), findsNothing);
+    final badge = find.byType(SourceBadge);
+    expect(badge, findsOneWidget);
+    final art = tester.widget<ModuleArtwork>(
+      find.descendant(of: badge, matching: find.byType(ModuleArtwork)),
+    );
+    expect(art.small, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'cards cheaply preview three distinct performers in the collage layout',
+    (tester) async {
+      _size(tester, 375);
+      final key = GlobalKey();
+      final api = _ScriptedApi(
+        inspired: {
+          'localfiles': [
+            _track('localfiles', '0', 'Missing metadata', performer: null),
+            _track(
+              'localfiles',
+              '1',
+              'First track',
+              performer: '  Mara   Vale  ',
+            ),
+            _track('localfiles', '2', 'Another track', performer: 'mara vale'),
+            _track(
+              'localfiles',
+              '3',
+              'Album fallback',
+              performer: 'Unknown',
+              albumArtist: 'Ellis North',
+            ),
+            _track(
+              'localfiles',
+              '4',
+              'Same album artist',
+              performer: null,
+              albumArtist: 'Ellis North',
+            ),
+            _track(
+              'localfiles',
+              '5',
+              'Third performer',
+              performer: 'Lila Grey',
+            ),
+            _track(
+              'localfiles',
+              '6',
+              'Fourth performer',
+              performer: 'Fourth Name',
+            ),
+          ],
+        },
+      );
+      await _pump(tester, api, shell: true, captureKey: key);
+      await tester.pumpAndSettle();
+      expect(find.text('7 tracks'), findsOneWidget);
+      expect(find.text('•'), findsNWidgets(3));
+      final bullets = find.text('•');
+      for (final (i, name) in [
+        'Mara Vale',
+        'Ellis North',
+        'Lila Grey',
+      ].indexed) {
+        expect(find.text(name), findsOneWidget);
+        expect(
+          tester.getTopLeft(bullets.at(i)).dx,
+          closeTo(tester.getTopLeft(find.byType(SourceTile)).dx + 8, .01),
+        );
+        expect(
+          tester.getTopLeft(find.text(name)).dx,
+          greaterThan(tester.getTopLeft(bullets.at(i)).dx),
+        );
+        if (i > 0) {
+          expect(
+            tester.getTopLeft(bullets.at(i)).dy,
+            greaterThan(tester.getTopLeft(bullets.at(i - 1)).dy),
+          );
+        }
+      }
+      expect(find.text('Fourth Name'), findsNothing);
+      await _capture(tester, key, 'search-performers-phone');
+      tester.view.physicalSize = const Size(1100, 900);
+      await tester.pumpAndSettle();
+      expect(find.text('•'), findsNothing);
+      final inline = find.text('Mara Vale · Ellis North · Lila Grey');
+      expect(inline, findsOneWidget);
+      expect(tester.widget<Text>(inline).maxLines, 1);
+      expect(tester.widget<Text>(inline).overflow, TextOverflow.ellipsis);
+      expect(api.aiCalls, {'localfiles': 1, 'jamendo': 1});
+      expect(api.matchCalls, {'localfiles': 1, 'jamendo': 1});
+      await _capture(tester, key, 'search-performers-wide');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'cards omit unavailable performer names instead of inventing entries',
+    (tester) async {
+      _size(tester, 375);
+      await _pump(
+        tester,
+        _ScriptedApi(
+          inspired: {
+            'localfiles': [
+              _track('localfiles', '0', 'Missing metadata', performer: null),
+              _track(
+                'localfiles',
+                '1',
+                'Placeholder',
+                performer: 'Unknown artist',
+                albumArtist: ' unknown ',
+              ),
+            ],
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(InspiredSourceCard), findsOneWidget);
+      expect(find.text('•'), findsNothing);
+      expect(find.text('Unknown artist'), findsNothing);
+      expect(find.text('2 tracks'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('inspired covers adapt to their own pane width', (tester) async {
+    _size(tester, 375);
+    final key = GlobalKey();
+    await _pump(
+      tester,
+      _ScriptedApi(
+        inspired: {
+          'localfiles': [
+            for (var i = 0; i < 4; i++) _track('localfiles', '$i', 'Track $i'),
+          ],
+        },
+      ),
+      captureKey: key,
+    );
+    await tester.pumpAndSettle();
+    final covers = find.descendant(
+      of: find.byType(InspiredSourceCard),
+      matching: find.byType(TrackThumb),
+    );
+    expect(covers, findsNWidgets(4));
+    final phoneSize = tester.getSize(covers.first).width;
+    void expectCollage(int columns) {
+      final rects = [for (var i = 0; i < 4; i++) tester.getRect(covers.at(i))];
+      for (var i = 0; i < 4; i++) {
+        expect(
+          rects[i].top,
+          closeTo(rects.first.top + (i ~/ columns) * rects.first.height, .01),
+        );
+        expect(
+          rects[i].left,
+          closeTo(rects.first.left + (i % columns) * rects.first.width, .01),
+        );
+        expect(rects[i].height, lessThanOrEqualTo(120));
+      }
+    }
+
+    expectCollage(2);
+    tester.view.physicalSize = const Size(1100, 900);
+    await tester.pumpAndSettle();
+    final wideSize = tester.getSize(covers.first).width;
+    expect(wideSize, greaterThan(phoneSize));
+    expectCollage(4);
+    await _capture(tester, key, 'search-wide-collage');
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final width in [320.0, 640.0, 1100.0]) {
+    testWidgets('inspired shimmer matches the four-cover card at $width', (
+      tester,
+    ) async {
+      _size(tester, width);
+      final key = GlobalKey();
+      final gate = Completer<void>();
+      await _pump(
+        tester,
+        _ScriptedApi(
+          inspired: {
+            'localfiles': [
+              for (var i = 0; i < 4; i++)
+                _track('localfiles', '$i', 'Track $i'),
+            ],
+          },
+          inspiredGates: {'localfiles': gate},
+        ),
+        captureKey: key,
+      );
+      await tester.pump(_settle);
+      final shimmer = find.byType(InspiredSourceCardShimmer);
+      expect(shimmer, findsOneWidget);
+      final cardBounds = tester.getRect(shimmer);
+      final artBounds = [
+        for (var i = 0; i < 4; i++)
+          tester.getRect(find.byKey(ValueKey('inspired-cover-placeholder-$i'))),
+      ];
+      final columns = width < 600 ? 2 : 4;
+      for (var i = 0; i < 4; i++) {
+        expect(
+          artBounds[i].top,
+          closeTo(
+            artBounds.first.top + (i ~/ columns) * artBounds.first.height,
+            .01,
+          ),
+        );
+        expect(
+          artBounds[i].left,
+          closeTo(
+            artBounds.first.left + (i % columns) * artBounds.first.width,
+            .01,
+          ),
+        );
+        expect(artBounds[i].height, lessThanOrEqualTo(120));
+      }
+      await _capture(tester, key, 'search-shimmer-${width.toInt()}');
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(shimmer, findsNothing);
+      expect(tester.getRect(find.byType(InspiredSourceCard)), cardBounds);
+      final covers = find.descendant(
+        of: find.byType(InspiredSourceCard),
+        matching: find.byType(TrackThumb),
+      );
+      for (var i = 0; i < 4; i++) {
+        expect(tester.getRect(covers.at(i)), artBounds[i]);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final width in [375.0, 1100.0]) {
+    testWidgets('top-bar filter opens a combined staged popup at $width', (
+      tester,
+    ) async {
+      _size(tester, width);
+      final key = GlobalKey();
+      final container = await _pump(
+        tester,
+        _ScriptedApi(
+          inspired: {
+            'localfiles': [_track('localfiles', '1', 'Jazz song')],
+            'jamendo': [_track('jamendo', '1', 'Rock song', genre: 'Rock')],
+          },
+        ),
+        shell: true,
+        captureKey: key,
+      );
+      await tester.pumpAndSettle();
+      container
+          .read(searchSessionProvider.notifier)
+          .setResultsFilter(const BrowseFilterQuery(type: SearchType.track));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<CatalogFiltersButton>(find.byType(CatalogFiltersButton))
+            .count,
+        0,
+      );
+      final trigger = tester.getRect(find.byType(CatalogFiltersButton));
+      await tester.tap(find.byType(CatalogFiltersButton));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
+      final popup = find.byType(SearchFilterOverlay);
+      expect(tester.getRect(popup).top, greaterThan(trigger.bottom));
+      expect(tester.getRect(popup).width, lessThanOrEqualTo(480));
+      expect(
+        find.descendant(of: popup, matching: find.text('GENRE')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: popup, matching: find.text('SOURCE')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: popup, matching: find.text('TYPE')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: popup, matching: find.byType(TextField)),
+        findsNothing,
+      );
+      expect(find.text('Decade'), findsNothing);
+      await tester.tap(find.text('Jazz'));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(searchSessionProvider).resultsFilter.genreIds,
+        isEmpty,
+      );
+      await _capture(tester, key, 'search-filter-${width.toInt()}');
+      await tester.tap(find.text('Show results'));
+      await tester.pumpAndSettle();
+      expect(container.read(searchSessionProvider).resultsFilter.genreIds, [
+        'jazz',
+      ]);
+      expect(find.widgetWithText(InspiredSourceCard, 'Jamendo'), findsNothing);
+      await _capture(tester, key, 'search-active-filters-${width.toInt()}');
+      await tester.tap(find.widgetWithText(ActiveFilterChip, 'Jazz'));
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(InspiredSourceCard, 'Jamendo'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byType(CatalogFiltersButton));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(of: popup, matching: find.text('Jamendo')),
+      );
+      await tester.tap(find.text('Show results'));
+      await tester.pumpAndSettle();
+      expect(container.read(searchSessionProvider).resultsFilter.sources, [
+        'jamendo',
+      ]);
+      expect(
+        find.widgetWithText(InspiredSourceCard, 'My Library'),
+        findsNothing,
+      );
+      await tester.tap(find.widgetWithText(InspiredSourceCard, 'Jamendo'));
+      await tester.pumpAndSettle();
+      expect(find.text('JAMENDO'), findsOneWidget);
+      expect(find.byType(ResultsTabs), findsNothing);
+      expect(find.text('TRACKS'), findsOneWidget);
+      expect(find.text('· 1'), findsOneWidget);
+      expect(
+        tester.widget<SourceTile>(find.byType(SourceTile)).source,
+        'jamendo',
+      );
+      expect(find.byType(CatalogFiltersButton), findsNothing);
+      expect(find.text('Rock song'), findsOneWidget);
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(CatalogFiltersButton));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(of: popup, matching: find.text('My Library')),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(SearchFilterOverlay), findsNothing);
+      expect(container.read(searchSessionProvider).resultsFilter.sources, [
+        'jamendo',
+      ]);
+      // Reset clears both facets together without resetting the type or query.
+      await tester.tap(find.byType(CatalogFiltersButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Jazz'));
+      await tester.tap(find.text('RESET'));
+      await tester.pumpAndSettle();
+      expect(container.read(searchSessionProvider).resultsFilter.sources, [
+        'jamendo',
+      ]);
+      await tester.tap(find.text('Show results'));
+      await tester.pumpAndSettle();
+      final reset = container.read(searchSessionProvider);
+      expect(reset.resultsFilter.genreIds, isEmpty);
+      expect(reset.resultsFilter.sources, isEmpty);
+      expect(reset.resultsFilter.type, SearchType.track);
+      expect(reset.searchQuery, 'jazz');
+      expect(
+        tester
+            .widget<CatalogFiltersButton>(find.byType(CatalogFiltersButton))
+            .count,
+        0,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final size in [const Size(320, 740), const Size(740, 375)]) {
+    testWidgets('search and source list fit $size with large text', (
+      tester,
+    ) async {
+      _size(tester, size.width, size.height);
+      await _pump(
+        tester,
+        _ScriptedApi(
+          inspired: {
+            'localfiles': [
+              _track(
+                'localfiles',
+                '1',
+                'A long track title',
+                performer: 'A very long performer name that exceeds the available space',
+              ),
+            ],
+          },
+        ),
+        shell: true,
+        scale: 2,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(
+        find.widgetWithText(InspiredSourceCard, 'My Library'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('My Library'));
+      await tester.pumpAndSettle();
+      expect(find.byType(InspiredTracksView), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'phone filter popup wraps its actions with large text and Back cancels',
+    (tester) async {
+      _size(tester, 320, 740);
+      final container = await _pump(
+        tester,
+        _ScriptedApi(
+          inspired: {
+            'localfiles': [_track('localfiles', '1', 'Jazz song')],
+          },
+        ),
+        shell: true,
+        scale: 2,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(CatalogFiltersButton));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Jazz'));
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(SearchFilterOverlay), findsNothing);
+      expect(
+        container.read(searchSessionProvider).resultsFilter.genreIds,
+        isEmpty,
+      );
+      expect(
+        container.read(searchSessionProvider).activeView,
+        FindMusicView.results,
+      );
+    },
+  );
+
+  testWidgets(
+    'Source excludes browse-only folders while retaining searchable catalogs and collections',
+    (tester) async {
+      _size(tester, 1100);
+      ModuleInfo module(
+        String name, {
+        bool builtin = false,
+        bool catalogs = true,
+      }) => ModuleInfo(
+        name: name,
+        title: name,
+        enabled: true,
+        state: ModuleState.ready,
+        builtin: builtin,
+        capabilities: [if (catalogs) ModuleCapability.catalogs],
+      );
+      BrowseItem root(String source, {bool searchable = false}) => BrowseItem(
+        id: 'kalinka:$source:catalog:root',
+        name: source,
+        canBrowse: true,
+        canAdd: false,
+        catalog: Catalog(
+          id: 'kalinka:$source:catalog:root',
+          title: source,
+          previewConfig: Preview(type: PreviewType.folder),
+          filters: [
+            if (searchable)
+              const FilterSpec(id: 'q', kind: FilterKind.text, label: 'Search'),
+          ],
+        ),
+      );
+      final api = _ScriptedApi(
+        roots: [
+          root('drives'),
+          root('other-folders'),
+          root('searchable-folders', searchable: true),
+        ],
+      );
+      final container = await _pump(
+        tester,
+        api,
+        shell: true,
+        modules: [
+          ..._modules,
+          module('drives', builtin: true),
+          module('other-folders'),
+          module('searchable-folders'),
+          module('collections', builtin: true, catalogs: false),
+          module('receiver', catalogs: false),
+        ],
+        preloadSources: true,
+      );
+      await tester.pumpAndSettle();
+      expect(
+        api.matchCalls.keys,
+        unorderedEquals([
+          'localfiles',
+          'jamendo',
+          'searchable-folders',
+          'collections',
+        ]),
+      );
+      expect(
+        container.read(searchSessionProvider).results!.sourceNames,
+        isNot(
+          anyOf(
+            contains('drives'),
+            contains('other-folders'),
+            contains('receiver'),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(CatalogFiltersButton));
+      await tester.pumpAndSettle();
+      expect(find.text('drives'), findsNothing);
+      expect(find.text('other-folders'), findsNothing);
+      expect(find.text('receiver'), findsNothing);
+      expect(find.text('searchable-folders'), findsOneWidget);
+      expect(find.text('collections'), findsOneWidget);
+    },
+  );
+
+  testWidgets('nothing found retains the query controls', (tester) async {
+    await _pump(tester, _ScriptedApi(), shell: true);
+    await tester.pumpAndSettle();
+    expect(find.text('No matches'), findsOneWidget);
+    expect(find.text('Try rephrasing your request'), findsOneWidget);
+    expect(find.byType(CatalogFiltersButton), findsOneWidget);
+    expect(find.text('Genre'), findsNothing);
+    expect(find.text('Source'), findsNothing);
   });
 }

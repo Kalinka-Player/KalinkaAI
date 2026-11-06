@@ -618,20 +618,22 @@ Future<void> _tapTab(WidgetTester tester, PluginTab tab) async {
 void _expectTab(WidgetTester tester, PluginTab selected) {
   for (final tab in [PluginTab.sources, PluginTab.server, PluginTab.devices]) {
     final button = find.byKey(ValueKey('catalog-tab-${tab.name}'));
-    final box = tester.widget<Container>(
-      find.descendant(of: button, matching: find.byType(Container)).first,
+    final indicator = find.descendant(
+      of: button,
+      matching: find.byType(AnimatedContainer),
     );
-    final underline = (box.decoration! as BoxDecoration).border!.bottom;
-    final label = tester.widget<Text>(
-      find.descendant(of: button, matching: find.byType(Text)),
-    );
+    final box = tester.widget<AnimatedContainer>(indicator);
+    final underline = box.decoration! as BoxDecoration;
+    final labelStyle = DefaultTextStyle.of(
+      tester.element(find.descendant(of: button, matching: find.byType(Text))),
+    ).style;
     expect(
       underline.color,
       tab == selected ? KalinkaColors.accent : Colors.transparent,
     );
-    expect(underline.width, 2);
+    expect(tester.getSize(indicator).height, 2);
     expect(
-      label.style!.color,
+      labelStyle.color,
       tab == selected ? KalinkaColors.textPrimary : KalinkaColors.textSecondary,
     );
     expect(
@@ -1868,9 +1870,14 @@ void main() {
       _CatalogApi(_catalog()),
     );
     await _screen(tester, container);
-    final tabStyle = tester.widget<Text>(find.text('MUSIC SOURCES')).style!;
+    final tabStyle = DefaultTextStyle.of(
+      tester.element(find.text('MUSIC SOURCES')),
+    ).style;
     expect(tabStyle.fontFamily, KalinkaFonts.monoFamily);
-    expect(tabStyle.letterSpacing, 1);
+    expect(
+      tabStyle.letterSpacing,
+      KalinkaTextStyles.sectionLabel.letterSpacing,
+    );
     expect(tabStyle.color, KalinkaColors.textPrimary);
     // Section names are set as the shelves over tracks and albums.
     expect(
@@ -1941,7 +1948,7 @@ void main() {
     // Updates head each list rather than having a tab of their own.
     expect(find.text('UPDATES'), findsNothing);
     expect(find.byType(ChoiceChip), findsNothing);
-    // The berry line sits on the grey rule that runs the whole width.
+    // Only the selected tab has an underline; the strip has no divider.
     final tabs = tester.getRect(find.byKey(const ValueKey('catalog-tabs')));
     expect(tabs.height, 48);
     final hifi = tester.getRect(
@@ -1954,12 +1961,14 @@ void main() {
     final server = tester.getRect(
       find.byKey(const ValueKey('catalog-tab-server')),
     );
-    expect(sources.left, closeTo(tabs.left + 20, 0.1));
+    final labelLeft = tester.getTopLeft(find.text('MUSIC SOURCES')).dx;
+    expect(labelLeft, closeTo(tabs.left + 20, 0.1));
+    expect(sources.left, closeTo(labelLeft - 8, 0.1));
     expect(server.left - hifi.right, closeTo(hifi.left - sources.right, 0.1));
     final strip = find.byKey(const PageStorageKey('catalog-tab-scroll'));
     expect(tester.getRect(strip).right, closeTo(tabs.right - 20, 0.1));
     expect(server.right, greaterThan(tester.getRect(strip).right));
-    expect(hifi.width / 12, closeTo(sources.width / 13, 0.1));
+    expect((hifi.width - 16) / 12, closeTo((sources.width - 16) / 13, 0.1));
     expect(
       tester.getRect(find.byKey(const ValueKey('catalog-tab-sources'))).bottom,
       tabs.bottom,
@@ -2406,12 +2415,15 @@ void main() {
         final inset = appWidth < 900 ? 20.0 : 25.0;
         expect(
           tester.getRect(tabScroll).left,
-          closeTo(resting.left + inset, 0.1),
+          closeTo(resting.left + inset - 8, 0.1),
         );
         expect(sources.right, lessThan(hifi.left));
         expect(hifi.right, lessThan(streamer.left));
-        expect(hifi.width / 12, closeTo(streamer.width / 8, 0.1));
-        expect(sources.width / 13, closeTo(streamer.width / 8, 0.1));
+        expect((hifi.width - 16) / 12, closeTo((streamer.width - 16) / 8, 0.1));
+        expect(
+          (sources.width - 16) / 13,
+          closeTo((streamer.width - 16) / 8, 0.1),
+        );
         for (final (tab, name) in [
           (PluginTab.sources, 'Music sources'),
           (PluginTab.devices, 'HiFi control'),

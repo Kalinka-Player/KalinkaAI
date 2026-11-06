@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/shell_nav_provider.dart';
 import '../theme/app_theme.dart';
-import '../utils/click_cursor.dart';
+import 'section_tab_button.dart';
 
 /// The player's two views as tabs in the section headings' caps, the chosen
 /// one underlined in berry.
@@ -14,8 +14,8 @@ class PlayerViewSwitch extends ConsumerWidget {
     (view: PlayerView.nowPlaying, label: 'PLAYING', spoken: 'Now playing'),
     (view: PlayerView.queue, label: 'QUEUE', spoken: 'Queue'),
   ];
-  static const _gap = 8.0;
-  static const _horizontalPadding = 8.0;
+  static const _gap = SectionTabButton.spacing;
+  static const _horizontalPadding = SectionTabButton.horizontalPadding;
 
   /// The section headings' caps.
   static final _labelStyle = KalinkaTextStyles.sectionLabel;
@@ -48,9 +48,6 @@ class PlayerViewSwitch extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final current = ref.watch(playerViewProvider);
-    final duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : const Duration(milliseconds: 180);
     final labelWidths = _labelWidths(context);
     final width = labelWidths.fold(
       _gap,
@@ -73,12 +70,10 @@ class PlayerViewSwitch extends ConsumerWidget {
                   width: vertical
                       ? constraints.maxWidth
                       : _targetWidth(labelWidths[i]),
-                  child: _ViewTab(
+                  child: SectionTabButton(
                     label: _views[i].label,
-                    spoken: _views[i].spoken,
-                    labelWidth: labelWidths[i],
-                    active: _views[i].view == current,
-                    duration: duration,
+                    semanticLabel: _views[i].spoken,
+                    selected: _views[i].view == current,
                     onTap: () => ref
                         .read(playerViewProvider.notifier)
                         .show(_views[i].view),
@@ -88,89 +83,6 @@ class PlayerViewSwitch extends ConsumerWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _ViewTab extends StatelessWidget {
-  final String label;
-  final String spoken;
-  final double labelWidth;
-  final bool active;
-  final Duration duration;
-  final VoidCallback onTap;
-
-  const _ViewTab({
-    required this.label,
-    required this.spoken,
-    required this.labelWidth,
-    required this.active,
-    required this.duration,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: spoken,
-      button: true,
-      selected: active,
-      inMutuallyExclusiveGroup: true,
-      excludeSemantics: true,
-      onTap: onTap,
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(6),
-          focusColor: KalinkaColors.surfaceOverlay,
-          hoverColor: KalinkaColors.surfaceInput,
-          mouseCursor: clickCursor(interactive: !active),
-          child: Stack(
-            children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: PlayerViewSwitch._horizontalPadding,
-                    vertical: 12,
-                  ),
-                  child: Center(
-                    heightFactor: 1,
-                    child: AnimatedDefaultTextStyle(
-                      duration: duration,
-                      curve: Curves.easeOutCubic,
-                      style: PlayerViewSwitch._labelStyle.copyWith(
-                        color: active
-                            ? KalinkaColors.textPrimary
-                            : KalinkaColors.textSecondary,
-                      ),
-                      child: Text(label, textAlign: TextAlign.center),
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 4,
-                child: Center(
-                  child: AnimatedContainer(
-                    duration: duration,
-                    curve: Curves.easeOutCubic,
-                    width: labelWidth,
-                    height: 2,
-                    decoration: BoxDecoration(
-                      color: active ? KalinkaColors.accent : Colors.transparent,
-                      borderRadius: BorderRadius.circular(1),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

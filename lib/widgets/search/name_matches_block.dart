@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/browse_filters.dart';
+import '../../data_model/data_model.dart';
 import '../../data_model/search_results.dart';
-import '../../providers/source_modules_provider.dart';
+import '../../providers/listing_presentation_provider.dart';
+import '../browse_filters/filters_match_nothing.dart';
+import '../browse_filters/presentation_toggle.dart';
 import '../browse_rows_shimmer.dart';
-import '../edge_fading_rail.dart';
-import '../search_cards/action_pill_button.dart';
+import '../search_cards/artwork_grid.dart';
+import '../search_cards/artwork_grid_card.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../shelf_heading.dart';
 import '../source_badge.dart';
 import 'source_unavailable_row.dart';
 
-/// What every source found by name, as one list — the best few, with the
-/// rest a View All away.
+/// What the selected sources found by name, as one ranked list. Narrow
+/// overviews with inspired results show a short preview and View All.
 ///
 /// Waits for every source before showing anything: the list is a merge, and
 /// a merge that fills in as sources answer would reshuffle under the eye. A
@@ -23,17 +25,14 @@ class NameMatchesBlock extends StatelessWidget {
   final NarrowedResults narrowed;
   final BrowseFilterQuery filter;
 
-  /// The one source being read, or null for the merged list. Ignored when it
-  /// names a source these results no longer hold.
-  final String? source;
-
-  final ValueChanged<String?> onSource;
   final VoidCallback onViewAll;
   final ValueChanged<String> onRetry;
+  final VoidCallback onReset;
+  final ListingLayout? layout;
+  final bool grid;
 
-  /// How far the pane's edge lies past the block's: the source line runs
-  /// out to it.
-  final double gutter;
+  /// Narrow overviews preview names only when inspired results follow.
+  final bool preview;
 
   /// How many lead the block before View All.
   static const previewCount = 4;
@@ -43,11 +42,12 @@ class NameMatchesBlock extends StatelessWidget {
     required this.results,
     required this.narrowed,
     required this.filter,
-    required this.source,
-    required this.onSource,
     required this.onViewAll,
     required this.onRetry,
-    this.gutter = 0,
+    required this.onReset,
+    this.preview = true,
+    this.layout,
+    this.grid = false,
   });
 
   /// Whether the block has anything to say under [filter]: rows, rows still
@@ -58,7 +58,8 @@ class NameMatchesBlock extends StatelessWidget {
     BrowseFilterQuery filter,
   ) {
     if (filter.kind == ResultKind.recommendations) return false;
-    return !results.matchesSettled ||
+    return ListingLayout.forSearch(filter.type) != null ||
+        !results.matchesSettled ||
         narrowed.matches.isNotEmpty ||
         _unavailable(results, filter).isNotEmpty;
   }
@@ -71,40 +72,14 @@ class NameMatchesBlock extends StatelessWidget {
       if (filter.sources.isEmpty || filter.sources.contains(source)) source,
   ];
 
-  /// The sources the merged list actually holds, in display order.
-  ///
-  /// Read off the rows rather than off the module list, so a pill is never
-  /// offered for a source that found nothing — and never for one the filter
-  /// already excluded, since these rows have been through it. Computed
-  /// before [source] is applied, so picking one does not take the others
-  /// away.
-  List<String> get _present {
-    final held = {
-      for (final item in narrowed.matches) SearchResults.sourceOf(item),
-    };
-    return [
-      for (final option in results.sources)
-        if (held.contains(option.name)) option.name,
-    ];
-  }
-
   @override
   Widget build(BuildContext context) {
     final settled = results.matchesSettled;
-    final present = _present;
-    final picked = present.contains(source) ? source : null;
-    final all = picked == null
-        ? narrowed.matches
-        : [
-            for (final item in narrowed.matches)
-              if (SearchResults.sourceOf(item) == picked) item,
-          ];
-    final expanded = filter.kind == ResultKind.nameMatches;
+    final all = narrowed.matches;
+    final expanded = filter.kind == ResultKind.nameMatches || !preview;
     final shown = expanded ? all : all.take(previewCount).toList();
-    final unavailable = [
-      for (final failed in _unavailable(results, filter))
-        if (picked == null || failed == picked) failed,
-    ];
+    final unavailable = _unavailable(results, filter);
+    final inset = grid ? ArtworkGridCard.inset : 0.0;
 
     // A sliver: opened in full it can hold hundreds of rows, and only those
     // in view are built.
@@ -114,103 +89,79 @@ class NameMatchesBlock extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ShelfHeading(
-                title: 'MATCHES BY NAME',
-                count: settled ? all.length : null,
-                onViewAll: settled && shown.length < all.length
-                    ? onViewAll
-                    : null,
-              ),
-              if (settled && present.length > 1) ...[
-                const SizedBox(height: 10),
-                _SourceChoices(
-                  sources: present,
-                  picked: picked,
-                  onPick: onSource,
-                  gutter: gutter,
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: inset),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final heading = ShelfHeading(
+                      title: 'NAME MATCHES',
+                      count: settled ? all.length : null,
+                      onViewAll: settled && shown.length < all.length
+                          ? onViewAll
+                          : null,
+                    );
+                    final layout = this.layout;
+                    if (layout == null) return heading;
+                    return Row(
+                      children: [
+                        Expanded(child: heading),
+                        const SizedBox(width: 12),
+                        PresentationToggle(
+                          layout: layout,
+                          compact:
+                              constraints.maxWidth <
+                              600 *
+                                  MediaQuery.textScalerOf(context).scale(16) /
+                                  16,
+                        ),
+                      ],
+                    );
+                  },
                 ),
-              ],
+              ),
               const SizedBox(height: 10),
             ],
           ),
         ),
-        if (!settled)
+        if (settled && shown.isEmpty && unavailable.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: inset, vertical: 28),
+              child: FiltersMatchNothing(onReset: onReset),
+            ),
+          )
+        else if (grid)
+          SourceAttributionScope(
+            source: null,
+            child: SliverArtworkGrid(
+              items: shown,
+              loading: !settled,
+              artists: filter.type == SearchType.artist,
+            ),
+          )
+        else if (!settled)
           const SliverToBoxAdapter(
             child: BrowseRowsShimmer(count: previewCount),
           )
         else
-          SliverBrowseItemRows(items: shown),
+          SourceAttributionScope(
+            source: null,
+            child: SliverBrowseItemRows(items: shown),
+          ),
         if (unavailable.isNotEmpty)
           SliverList.list(
             children: [
               for (final failed in unavailable)
-                SourceUnavailableRow(
-                  source: failed,
-                  title: results.sources.titleOf(failed),
-                  onRetry: () => onRetry(failed),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: inset),
+                  child: SourceUnavailableRow(
+                    source: failed,
+                    title: results.sources.titleOf(failed),
+                    onRetry: () => onRetry(failed),
+                  ),
                 ),
             ],
           ),
-      ],
-    );
-  }
-}
-
-/// Which source's matches to read: each named in full behind the letter it
-/// wears on its rows, the one being read highlighted like a Play all beside
-/// a plain Enqueue. All is on when no source is.
-///
-/// All stays put; the sources after it scroll rather than wrap, out to the
-/// pane's edge and fading wherever there are more — the names are as long
-/// as the sources are, and a control that reflows as sources come and go is
-/// harder to aim at than one that runs off the edge.
-class _SourceChoices extends ConsumerWidget {
-  final List<String> sources;
-  final String? picked;
-  final ValueChanged<String?> onPick;
-
-  /// How far the pane's edge lies past the line's end.
-  final double gutter;
-
-  const _SourceChoices({
-    required this.sources,
-    required this.picked,
-    required this.onPick,
-    required this.gutter,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final info = ref.watch(sourceDisplayInfoProvider);
-
-    return Row(
-      children: [
-        ActionPillButton(
-          label: 'All',
-          accent: picked == null,
-          selected: picked == null,
-          onTap: () => onPick(null),
-          semanticsLabel: 'All sources',
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: EdgeFadingRail(
-            storageId: 'results-match-sources',
-            gutter: gutter,
-            centred: false,
-            bleedStart: false,
-            children: [
-              for (final source in sources)
-                ActionPillButton(
-                  leading: SourceTile(source: source, size: 18),
-                  label: info[source]?.title ?? source,
-                  accent: picked == source,
-                  selected: picked == source,
-                  onTap: () => onPick(source),
-                ),
-            ],
-          ),
-        ),
       ],
     );
   }

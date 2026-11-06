@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/data_model/browse_filters.dart';
+import 'package:kalinka/widgets/browse_filters/browse_filter_form.dart';
 import 'package:kalinka/data_model/module_icons.dart';
 import 'package:kalinka/data_model/plugin_catalog.dart';
 import 'package:kalinka/data_model/presentation_schema.dart';
@@ -439,6 +441,161 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets(
+    'source filter logos and fallback icons share the primary foreground',
+    (tester) async {
+      final cache = ModuleIconCache(
+        client: MockClient((_) async => http.Response.bytes(_png, 200)),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            urlResolverProvider.overrideWithValue(UrlResolver('http://server')),
+            moduleIconCacheProvider.overrideWithValue(cache),
+            sourceModulesProvider.overrideWith(
+              (ref) => [
+                for (final name in ['qobuz', 'tidal', 'localfiles'])
+                  ModuleInfo(
+                    name: name,
+                    title: name,
+                    enabled: true,
+                    state: ModuleState.ready,
+                    icons: name == 'localfiles' ? null : _icons,
+                    icon: name == 'localfiles' ? 'folder_outlined' : null,
+                  ),
+              ],
+            ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: Scaffold(
+              body: BrowseFilterForm(
+                showSearch: false,
+                capabilities: const BrowseFilterCapabilities(
+                  source: FacetSupport.supported,
+                  sources: [
+                    (name: 'qobuz', title: 'Qobuz'),
+                    (name: 'tidal', title: 'Tidal'),
+                    (name: 'localfiles', title: 'My Library'),
+                  ],
+                ),
+                query: const BrowseFilterQuery(),
+                onChanged: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        final bytes = await cache.load(
+          'http://server/standard',
+          _icons.standard,
+          small: false,
+        );
+        await precacheImage(
+          MemoryImage(bytes),
+          tester.element(find.byType(ModuleArtwork).first),
+        );
+      });
+      await tester.pumpAndSettle();
+      final images = tester.widgetList<Image>(find.byType(Image));
+      expect(images, hasLength(2));
+      expect(
+        images.map((image) => image.color),
+        everyElement(KalinkaColors.textPrimary),
+      );
+      final library = find.byWidgetPredicate(
+        (widget) => widget is SourceTile && widget.source == 'localfiles',
+      );
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(of: library, matching: find.byType(Icon)),
+            )
+            .color,
+        KalinkaColors.textPrimary,
+      );
+      for (final title in ['Qobuz', 'Tidal', 'My Library']) {
+        expect(
+          tester.widget<Text>(find.text(title)).style!.color,
+          KalinkaColors.textPrimary,
+        );
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'cached source badges paint immediately through rebuilds and navigation',
+    (tester) async {
+      var fetched = 0;
+      final cache = ModuleIconCache(
+        client: MockClient((_) async {
+          fetched++;
+          return http.Response.bytes(_png, 200);
+        }),
+      );
+      final version = ValueNotifier(0);
+      addTearDown(version.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            urlResolverProvider.overrideWithValue(UrlResolver('http://server')),
+            moduleIconCacheProvider.overrideWithValue(cache),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ValueListenableBuilder<int>(
+                valueListenable: version,
+                builder: (context, v, _) => v == 3
+                    ? const SizedBox.shrink()
+                    : ModuleArtwork(
+                        key: ValueKey(v ~/ 2),
+                        icons: ModuleIcons.tryParse(_icons.toJson()),
+                        small: true,
+                        size: v.isEven ? 20 : 24,
+                        inheritIconColor: true,
+                        fallback: const Icon(Icons.cast),
+                      ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.runAsync(() async {
+        final bytes = await cache.load(
+          'http://server/small',
+          _icons.small,
+          small: true,
+        );
+        await precacheImage(
+          MemoryImage(bytes),
+          tester.element(find.byType(ModuleArtwork)),
+        );
+      });
+      await tester.pumpAndSettle();
+      final image = tester.widget<RawImage>(find.byType(RawImage)).image;
+      expect(image, isNotNull);
+      for (final v in [1, 2, 3, 4, 5, 6]) {
+        version.value = v;
+        // Inspect the first rendered frame, not just the settled result.
+        await tester.pump();
+        if (v == 3) continue;
+        expect(find.byIcon(Icons.cast), findsNothing);
+        expect(
+          tester
+              .widget<RawImage>(find.byType(RawImage))
+              .image!
+              .isCloneOf(image!),
+          isTrue,
+        );
+        expect(fetched, 1);
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('unavailable artwork keeps the material fallback', (
     tester,

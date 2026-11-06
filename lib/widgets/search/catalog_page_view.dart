@@ -31,11 +31,11 @@ import '../browse_filters/presentation_toggle.dart';
 import '../browse_rows_shimmer.dart';
 import '../home/catalog_pin_button.dart';
 import '../infinite_list_view.dart';
-import '../loading_shimmer.dart';
 import '../measure_size.dart';
 import '../page_banner.dart';
 import '../search_cards/action_pill_button.dart';
 import '../search_cards/artwork_grid_card.dart';
+import '../search_cards/artwork_grid.dart';
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/browse_navigation_scope.dart';
 import '../search_cards/editable_track_list.dart';
@@ -738,7 +738,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             )
           : gridKind == null
           ? const LoadingSpinner()
-          : _GridShimmer(
+          : ArtworkGridShimmer(
               columns: columns,
               rows: 3,
               catalogs: gridKind == BrowseType.catalog,
@@ -749,7 +749,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: BrowseRowsShimmer(count: 3, leadingDivider: true),
             )
-          : _GridShimmer(
+          : ArtworkGridShimmer(
               columns: columns,
               rows: 1,
               catalogs: gridKind == BrowseType.catalog,
@@ -802,7 +802,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           ? listOf(
               header,
               grid: true,
-              columns: _gridColumns(
+              columns: artworkGridColumns(
                 constraints.maxWidth - 2 * (16 - ArtworkGridCard.inset),
                 scale,
                 wide: cardShape > 1,
@@ -987,7 +987,10 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final columns = grid
-            ? _gridColumns(width - 2 * (16 - ArtworkGridCard.inset), scale)
+            ? artworkGridColumns(
+                width - 2 * (16 - ArtworkGridCard.inset),
+                scale,
+              )
             : 1;
         return InfiniteListView<BrowseItem>(
           key: ValueKey('${page.id}|$shown'),
@@ -1049,13 +1052,13 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             );
           },
           initialPlaceholder: grid
-              ? _GridShimmer(columns: columns, rows: 2)
+              ? ArtworkGridShimmer(columns: columns, rows: 2)
               : const Padding(
                   padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
                   child: BrowseRowsShimmer(count: 6),
                 ),
           loadMorePlaceholder: grid
-              ? _GridShimmer(columns: columns, rows: 1)
+              ? ArtworkGridShimmer(columns: columns, rows: 1)
               : const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: BrowseRowsShimmer(count: 3, leadingDivider: true),
@@ -1110,24 +1113,6 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     tracks: loaded.every((item) => item.browseType == BrowseType.track),
     titleInset: BrowseItemRows.textInsetOf(loaded.first),
   );
-
-  /// Covers of about 180–220 across, more columns as the pane grows, never
-  /// narrower than a readable caption; [wide] art, a category's card or a
-  /// banner, about 220–340. A track keeps its row, which needs 68% more room
-  /// than a cover to read.
-  static int _gridColumns(
-    double width,
-    double scale, {
-    bool wide = false,
-    bool tracks = false,
-  }) {
-    // Each card is its cover with a frame inset either side.
-    const frame = 2 * ArtworkGridCard.inset;
-    final grow = tracks ? 1.68 : 1.0;
-    final wanted = (width / ((wide ? 340 : 220) * grow * scale + frame)).ceil();
-    final fits = (width / ((wide ? 220 : 140) * grow * scale + frame)).floor();
-    return wanted.clamp(1, fits < 1 ? 1 : fits).clamp(1, 10);
-  }
 
   /// Over each disc's first track, a section heading from the rows' own
   /// edge, a shade under the titles so it reads apart from them.
@@ -1951,76 +1936,6 @@ class _CatalogEmpty extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text('Nothing here yet', style: KalinkaTextStyles.cardTitle),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Where a grid's covers will be, while they load.
-class _GridShimmer extends StatelessWidget {
-  final int columns;
-  final int rows;
-
-  /// Catalog cards: 3:1, their name on them.
-  final bool catalogs;
-
-  /// Other covers' shape, captioned under it.
-  final double coverRatio;
-
-  const _GridShimmer({
-    required this.columns,
-    required this.rows,
-    this.catalogs = false,
-    this.coverRatio = 1,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ShimmerPulse(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-        child: Column(
-          children: [
-            for (var r = 0; r < rows; r++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 22),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (var c = 0; c < columns; c++) ...[
-                      if (c > 0) const SizedBox(width: 22),
-                      Expanded(
-                        child: catalogs
-                            ? const AspectRatio(
-                                aspectRatio: 3,
-                                child: ShimmerBlock(radius: 10),
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  AspectRatio(
-                                    aspectRatio: coverRatio,
-                                    child: const ShimmerBlock(radius: 10),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  const FractionallySizedBox(
-                                    widthFactor: 0.7,
-                                    child: ShimmerBlock(height: 14, radius: 4),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  const FractionallySizedBox(
-                                    widthFactor: 0.45,
-                                    child: ShimmerBlock(height: 12, radius: 4),
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
           ],
         ),
       ),

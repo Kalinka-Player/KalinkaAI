@@ -573,6 +573,12 @@ class KalinkaTextStyles {
     color: KalinkaColors.textPrimary,
   );
 
+  static TextStyle inspiredSourceTitle = KalinkaFonts.sans(
+    fontSize: KalinkaTypography.baseSize + 8,
+    fontWeight: FontWeight.w500,
+    color: KalinkaColors.textPrimary,
+  );
+
   static TextStyle tagPill = KalinkaFonts.sans(
     fontSize: KalinkaTypography.baseSize - 2,
     fontWeight: FontWeight.w500,

@@ -54,7 +54,7 @@ Read these values from `KalinkaColors`, never duplicate hex literals in a screen
 | Online badge text on tinted fill | `statusOnlineLight` | `#5FB07E` |
 | Pending badge text on tinted fill | `statusPendingLight` | `#E8B86A` |
 
-The header always has the same opaque fill, a 1dp bottom rule and no shadow or elevation. There is no transparent variant. Card borders and internal row dividers are also 1dp. These rules group content; they are not the only cue identifying a control. Settings tabs have no rule under them: only the selected tab's 2dp berry indicator, then the content. Tab labels stay on one line at their full width in a horizontally scrollable strip, with 48dp minimum targets. Keep the active tab visible when selecting a tab or resizing the pane, and keep the strip pinned above the vertically scrolling content.
+The header always has the same opaque fill, a 1dp bottom rule and no shadow or elevation. There is no transparent variant. Card borders and internal row dividers are also 1dp. These rules group content; they are not the only cue identifying a control. Settings and search tabs share the PLAYING / QUEUE button: 8dp horizontal and 12dp vertical padding, 8dp gaps, 6dp rounded corners, `surfaceInput` on hover and `surfaceOverlay` on keyboard focus. The underline sits inside the horizontal padding, 4dp above the bottom, with 1dp rounded ends. Align the first tab’s visible label to the page content gutter; its 8dp highlight padding extends outside that gutter and remains visible inside the scroll viewport. They have no rule under them: only the selected tab's 2dp berry indicator, then the content. Tab labels stay on one line at their full width in a horizontally scrollable strip, with 48dp minimum targets. Keep the active tab visible when selecting a tab or resizing the pane, and keep the strip pinned above the vertically scrolling content.
 
 Measured sRGB contrast: primary/secondary text on the header is **17.82:1 / 7.65:1**; on cards it is **16.88:1 / 7.25:1**. Muted text on a card is **4.95:1**. Keep normal text at least 4.5:1 and meaningful icons at least 3:1. Do not use the base green as small text on cards (4.33:1); use the brighter status text token on its intended tinted surface. Recheck the composed colour when introducing any tint or opacity.
 
@@ -70,7 +70,7 @@ Use the bundled IBM Plex families. System text scaling is respected, not clamped
 | Help, caption and metadata | IBM Plex Sans | 13 / 500 | Natural; no added tracking |
 | Inline plugin status | IBM Plex Sans | 13 / 500 | 18.2dp; sentence case; no added tracking |
 | Section label | IBM Plex Mono | 13 / 600 | Natural; 1.8dp tracking; uppercase |
-| Settings tab | IBM Plex Mono | 14 / 600 | Natural; 1.4dp tracking; uppercase |
+| Settings tab | IBM Plex Mono | 13 / 600 | `sectionLabel`, as PLAYING / QUEUE; 1.5dp tracking; uppercase |
 | Server name in identity card | Playfair Display | 24 / 500 | Natural; no added tracking |
 | Server address | IBM Plex Sans | 16 / 400 | Natural; inherited −0.1dp tracking |
 

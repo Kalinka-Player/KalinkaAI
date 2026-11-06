@@ -109,14 +109,17 @@ class _SearchFilterOverlayState extends State<SearchFilterOverlay> {
   }
 
   Widget _buildFooter() {
-    return DecoratedBox(
+    return Container(
+      width: double.infinity,
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: KalinkaColors.borderSubtle)),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        child: Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 10,
+          runSpacing: 8,
           children: [
             KalinkaButton(
               label: 'Cancel',
@@ -124,7 +127,6 @@ class _SearchFilterOverlayState extends State<SearchFilterOverlay> {
               size: KalinkaButtonSize.compact,
               onTap: widget.onCancel,
             ),
-            const SizedBox(width: 10),
             KalinkaButton(
               // The app's primary CTA, filled — the same weight as committing
               // anything else. No count: the filtered total is not known

@@ -98,6 +98,19 @@ class _FakeApi implements KalinkaPlayerProxy {
       throw UnimplementedError('${invocation.memberName}');
 }
 
+/// Root discovery can wait while the independent search endpoints answer.
+class _HeldRootsApi extends _FakeApi {
+  final roots = Completer<BrowseItemsList>();
+
+  @override
+  Future<BrowseItemsList> browse(
+    String id, {
+    int offset = 0,
+    int limit = 10,
+    String? filter,
+  }) => roots.future;
+}
+
 /// The search that never answers — neither leg's future ever completes.
 class _HangingApi extends _FakeApi {
   @override
@@ -396,6 +409,43 @@ void main() {
   }
 
   group('SearchSessionNotifier', () {
+    for (final failRoots in [false, true]) {
+      test(
+        'search dispatch is independent of pending roots (fail=$failRoots)',
+        () {
+          fakeAsync((async) {
+            final api = _HeldRootsApi();
+            final container = makeContainer(api);
+            final notifier = container.read(searchSessionProvider.notifier);
+            notifier.submit('jazz');
+            async.flushMicrotasks();
+            expect(api.matchSources, ['qobuz']);
+            expect(api.aiSources, ['qobuz']);
+            expect(container.read(catalogSourcesProvider).isLoading, isTrue);
+            async.elapse(_settle);
+            expect(
+              container.read(searchSessionProvider).results!.settled,
+              isTrue,
+            );
+            final results = container.read(searchSessionProvider).results;
+
+            if (failRoots) {
+              api.roots.completeError(Exception('root discovery failed'));
+            } else {
+              api.roots.complete(BrowseItemsList(0, 100, 0, []));
+            }
+            async.flushMicrotasks();
+            expect(
+              container.read(searchSessionProvider).results,
+              same(results),
+            );
+            expect(api.matchCalls, 1);
+            expect(api.aiSearchCalls, 1);
+          });
+        },
+      );
+    }
+
     test(
       'plugin refresh updates search sources, tracks and source filters',
       () async {
@@ -912,7 +962,7 @@ void main() {
   });
 
   group('filters', () {
-    test('reset clears facets even when all of them are hidden', () async {
+    test('reset clears a selected type even with no matching items', () async {
       final container = makeContainer(_FakeApi());
       final notifier = container.read(searchSessionProvider.notifier);
       notifier.submit('jazz');
@@ -921,8 +971,8 @@ void main() {
         const BrowseFilterQuery(type: SearchType.album),
       );
       expect(
-        container.read(searchSessionProvider).resultsFilter.isEmpty,
-        isTrue,
+        container.read(searchSessionProvider).resultsFilter.type,
+        SearchType.album,
       );
 
       notifier.resetResults();
@@ -933,7 +983,7 @@ void main() {
       );
     });
 
-    test('card reset clears hidden facets', () async {
+    test('card reset clears a selected type', () async {
       final container = makeContainer(_FakeApi());
       final notifier = container.read(searchSessionProvider.notifier);
       notifier.submit('jazz');
@@ -942,7 +992,7 @@ void main() {
         const BrowseFilterQuery(type: SearchType.album),
       );
       final shown = container.read(searchSessionProvider).resultsFilter;
-      expect(shown.isEmpty, isTrue);
+      expect(shown.type, SearchType.album);
 
       notifier.setResultsFilter(
         const BrowseFilterQuery(order: NameMatchOrder.alphabetical),
@@ -1072,73 +1122,76 @@ void main() {
       expect(state().expandedBlock, isNull);
     });
 
-    test('a kind cut for lacking is kept through other changes and a retry brings it back', () async {
-      final api = _AlbumsLateApi();
-      final container = makeContainer(api, modules: _twoSources);
-      final notifier = container.read(searchSessionProvider.notifier);
-      SearchSessionState state() => container.read(searchSessionProvider);
-      notifier.refresh();
-      notifier.submit('jazz');
-      await Future.delayed(_settle);
-      notifier.setResultsFilter(
-        const BrowseFilterQuery(type: SearchType.album),
-      );
-      expect(state().results!.matches['qobuz'], isA<LegFailed>());
-      expect(state().resultsFilter.type, isNull);
-      expect(state().resultsChoice.type, SearchType.album);
+    test(
+      'a selected type stays active while a retry brings matching items',
+      () async {
+        final api = _AlbumsLateApi();
+        final container = makeContainer(api, modules: _twoSources);
+        final notifier = container.read(searchSessionProvider.notifier);
+        SearchSessionState state() => container.read(searchSessionProvider);
+        notifier.refresh();
+        notifier.submit('jazz');
+        await Future.delayed(_settle);
+        notifier.setResultsFilter(
+          const BrowseFilterQuery(type: SearchType.album),
+        );
+        expect(state().results!.matches['qobuz'], isA<LegFailed>());
+        expect(state().resultsFilter.type, SearchType.album);
+        expect(state().resultsChoice.type, SearchType.album);
 
-      notifier.setResultsFilter(
-        state().resultsFilter.copyWith(order: NameMatchOrder.alphabetical),
-      );
-      expect(state().resultsChoice.type, SearchType.album);
-      expect(state().resultsChoice.order, NameMatchOrder.alphabetical);
+        notifier.setResultsFilter(
+          state().resultsFilter.copyWith(order: NameMatchOrder.alphabetical),
+        );
+        expect(state().resultsChoice.type, SearchType.album);
+        expect(state().resultsChoice.order, NameMatchOrder.alphabetical);
 
-      notifier.retry(ResultsLeg.matches, 'qobuz');
-      expect(state().results!.matches['qobuz'], isA<LegLoading>());
-      expect(state().resultsFilter.type, isNull);
-      expect(
-        state().results!.narrow(state().resultsFilter).matches,
-        isNotEmpty,
-      );
+        notifier.retry(ResultsLeg.matches, 'qobuz');
+        expect(state().results!.matches['qobuz'], isA<LegLoading>());
+        expect(state().resultsFilter.type, SearchType.album);
+        expect(state().results!.narrow(state().resultsFilter).matches, isEmpty);
 
-      await Future.delayed(_settle);
-      expect(state().results!.matches['qobuz'], isA<LegReady>());
-      expect(state().resultsFilter.type, SearchType.album);
-      expect(
-        state().results!.narrow(state().resultsFilter).matches.single.name,
-        'An Album',
-      );
-      expect(state().resultsFilter.order, NameMatchOrder.alphabetical);
-    });
+        await Future.delayed(_settle);
+        expect(state().results!.matches['qobuz'], isA<LegReady>());
+        expect(state().resultsFilter.type, SearchType.album);
+        expect(
+          state().results!.narrow(state().resultsFilter).matches.single.name,
+          'An Album',
+        );
+        expect(state().resultsFilter.order, NameMatchOrder.alphabetical);
+      },
+    );
 
-    test('a kind a leg brings back under an open card is not taken from the choice', () async {
-      final api = _AlbumsLateApi();
-      final container = makeContainer(api, modules: _twoSources);
-      final notifier = container.read(searchSessionProvider.notifier);
-      SearchSessionState state() => container.read(searchSessionProvider);
-      notifier.refresh();
-      notifier.submit('jazz');
-      await Future.delayed(_settle);
-      notifier.setResultsFilter(
-        const BrowseFilterQuery(type: SearchType.album),
-      );
-      expect(state().resultsFilter.type, isNull);
+    test(
+      'a type selection survives a late response under an open card',
+      () async {
+        final api = _AlbumsLateApi();
+        final container = makeContainer(api, modules: _twoSources);
+        final notifier = container.read(searchSessionProvider.notifier);
+        SearchSessionState state() => container.read(searchSessionProvider);
+        notifier.refresh();
+        notifier.submit('jazz');
+        await Future.delayed(_settle);
+        notifier.setResultsFilter(
+          const BrowseFilterQuery(type: SearchType.album),
+        );
+        expect(state().resultsFilter.type, SearchType.album);
 
-      final opened = state().resultsFilter.copyWith(text: 'jazz');
-      notifier.retry(ResultsLeg.matches, 'qobuz');
-      await Future.delayed(_settle);
-      expect(state().resultsFilter.type, SearchType.album);
+        final opened = state().resultsFilter.copyWith(text: 'jazz');
+        notifier.retry(ResultsLeg.matches, 'qobuz');
+        await Future.delayed(_settle);
+        expect(state().resultsFilter.type, SearchType.album);
 
-      notifier.setResultsFilter(
-        opened.copyWith(order: NameMatchOrder.alphabetical),
-        shown: opened,
-      );
-      expect(state().resultsChoice.type, SearchType.album);
-      expect(state().resultsFilter.type, SearchType.album);
-      expect(state().resultsFilter.order, NameMatchOrder.alphabetical);
-    });
+        notifier.setResultsFilter(
+          opened.copyWith(order: NameMatchOrder.alphabetical),
+          shown: opened,
+        );
+        expect(state().resultsChoice.type, SearchType.album);
+        expect(state().resultsFilter.type, SearchType.album);
+        expect(state().resultsFilter.order, NameMatchOrder.alphabetical);
+      },
+    );
 
-    test('a reset drops what the results hid of the choice too', () async {
+    test('reset drops the selected type and source', () async {
       final api = _FakeApi();
       final container = makeContainer(api, modules: _twoNameOnlySources);
       final notifier = container.read(searchSessionProvider.notifier);
@@ -1148,7 +1201,10 @@ void main() {
       notifier.setResultsFilter(
         const BrowseFilterQuery(type: SearchType.album, sources: ['qobuz']),
       );
-      expect(container.read(searchSessionProvider).resultsFilter.type, isNull);
+      expect(
+        container.read(searchSessionProvider).resultsFilter.type,
+        SearchType.album,
+      );
 
       notifier.setResultsFilter(const BrowseFilterQuery());
 
@@ -1203,30 +1259,33 @@ void main() {
       );
     });
 
-    test('a source not searched, or a facet the results hide, does not narrow them', () async {
-      final api = _FakeApi();
-      final container = makeContainer(api, modules: _twoNameOnlySources);
-      final notifier = container.read(searchSessionProvider.notifier);
-      notifier.refresh();
-      notifier.submit('night');
-      await Future.delayed(_settle);
-      notifier.setResultsFilter(
-        const BrowseFilterQuery(
-          type: SearchType.album,
-          genreIds: ['jazz'],
-          sources: ['jamendo', 'qobuz'],
-        ),
-      );
+    test(
+      'unknown sources and genres are discarded while the selected type stays',
+      () async {
+        final api = _FakeApi();
+        final container = makeContainer(api, modules: _twoNameOnlySources);
+        final notifier = container.read(searchSessionProvider.notifier);
+        notifier.refresh();
+        notifier.submit('night');
+        await Future.delayed(_settle);
+        notifier.setResultsFilter(
+          const BrowseFilterQuery(
+            type: SearchType.album,
+            genreIds: ['jazz'],
+            sources: ['jamendo', 'qobuz'],
+          ),
+        );
 
-      final state = container.read(searchSessionProvider);
-      final capabilities = state.resultsFilterCapabilities;
-      expect(capabilities.type, FacetSupport.hidden);
-      expect(capabilities.genre, FacetSupport.hidden);
-      expect(state.resultsFilter.type, isNull);
-      expect(state.resultsFilter.genreIds, isEmpty);
-      expect(state.resultsFilter.sources, ['qobuz']);
-      expect(state.results!.narrow(state.resultsFilter).matches, hasLength(1));
-    });
+        final state = container.read(searchSessionProvider);
+        final capabilities = state.resultsFilterCapabilities;
+        expect(capabilities.type, FacetSupport.supported);
+        expect(capabilities.genre, FacetSupport.hidden);
+        expect(state.resultsFilter.type, SearchType.album);
+        expect(state.resultsFilter.genreIds, isEmpty);
+        expect(state.resultsFilter.sources, ['qobuz']);
+        expect(state.results!.narrow(state.resultsFilter).matches, isEmpty);
+      },
+    );
 
     test('catalog filters this build cannot read are let go', () {
       prefs.setString('Kalinka.catalogFilters', '[not json');
