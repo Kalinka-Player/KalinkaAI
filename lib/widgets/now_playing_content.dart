@@ -87,6 +87,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         (s) => (
           trackId: s.currentTrack?.id,
           mimeType: s.mimeType,
+          audioCodec: s.audioCodec,
           bitsPerSample: s.audioInfo?.bitsPerSample,
           sampleRate: s.audioInfo?.sampleRate,
         ),
@@ -120,7 +121,10 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         ? urlResolver.abs(imageUrl)
         : null;
 
-    final mimeLabel = mimeTypeLabel(playbackState.mimeType);
+    final mimeLabel = audioFormatLabel(
+      playbackState.mimeType,
+      audioCodec: playbackState.audioCodec,
+    );
     final qualityLabel = audioQualityLabel(playbackState.audioInfo);
 
     // Source display info for the attribution line.

@@ -126,6 +126,56 @@ Future<void> pumpMiniPlayer(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
+  testWidgets('wide mini player follows codec-only changes for DASH', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1800, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final track = Track(
+      id: 'kalinka:tidal:track:1',
+      title: 'Song',
+      duration: 120,
+    );
+    PlayQueueState playing(String? codec) => PlayQueueState(
+      playbackState: PlaybackState(
+        state: PlayerStateType.playing,
+        currentTrack: track,
+        mimeType: 'application/dash+xml',
+        audioCodec: codec,
+      ),
+      trackList: [track],
+      playbackMode: PlaybackMode.empty,
+      seq: 1,
+    );
+    final container = ProviderContainer(
+      overrides: [
+        ..._buildOverrides(queueState: playing('flac')),
+        sourceModulesProvider.overrideWith((ref) => const []),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: MiniPlayer())),
+      ),
+    );
+    expect(find.text('FLAC'), findsOneWidget);
+    expect(find.textContaining('DASH+XML'), findsNothing);
+    final queue = container.read(
+      playQueueStateStoreProvider.notifier,
+    ) as _SettableQueueNotifier;
+    queue.emit(playing('aac'));
+    await tester.pump();
+    expect(find.text('AAC'), findsOneWidget);
+    expect(find.text('FLAC'), findsNothing);
+    queue.emit(playing(null));
+    await tester.pump();
+    expect(find.text('DASH+XML'), findsOneWidget);
+  });
+
   group('swipe track changes', () {
     final current = Track(id: 'current', title: 'Current track', duration: 120);
     final next = Track(id: 'next', title: 'Old next track', duration: 180);

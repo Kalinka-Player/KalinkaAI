@@ -891,7 +891,7 @@ class _AlbumDetails extends ConsumerWidget {
     final format = ref.watch(
       playerStateProvider.select(
         (s) => [
-          mimeTypeLabel(s.mimeType),
+          audioFormatLabel(s.mimeType, audioCodec: s.audioCodec),
           audioQualityLabel(s.audioInfo),
         ].where((part) => part.isNotEmpty).join(' '),
       ),

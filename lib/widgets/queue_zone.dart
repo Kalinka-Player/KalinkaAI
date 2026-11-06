@@ -642,6 +642,7 @@ class _NowPlayingHeaderContentState
         (s) => (
           state: s.state,
           mimeType: s.mimeType,
+          audioCodec: s.audioCodec,
           bitsPerSample: s.audioInfo?.bitsPerSample ?? 0,
           sampleRate: s.audioInfo?.sampleRate ?? 0,
         ),
@@ -658,6 +659,7 @@ class _NowPlayingHeaderContentState
       columns: widget.columns,
       suffix: _buildFormatSuffix(
         mimeType: fmt.mimeType,
+        audioCodec: fmt.audioCodec,
         bitsPerSample: fmt.bitsPerSample,
         sampleRate: fmt.sampleRate,
       ),
@@ -669,14 +671,14 @@ class _NowPlayingHeaderContentState
 /// playback state. Returns null when nothing meaningful is known yet.
 String? _buildFormatSuffix({
   required String? mimeType,
+  required String? audioCodec,
   required int bitsPerSample,
   required int sampleRate,
 }) {
-  final label = mimeTypeLabel(mimeType);
-  final mime = label.isEmpty ? null : label;
+  final mime = audioFormatLabel(mimeType, audioCodec: audioCodec);
 
   final parts = <String>[];
-  if (mime != null) {
+  if (mime.isNotEmpty) {
     parts.add(bitsPerSample > 0 ? '$mime $bitsPerSample-bit' : mime);
   } else if (bitsPerSample > 0) {
     parts.add('$bitsPerSample-bit');

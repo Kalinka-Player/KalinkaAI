@@ -1016,7 +1016,7 @@ class _PlayingView extends ConsumerWidget {
     final stream = ref.watch(
       playerStateProvider.select(
         (s) => (
-          mime: mimeTypeLabel(s.mimeType),
+          mime: audioFormatLabel(s.mimeType, audioCodec: s.audioCodec),
           quality: audioQualityLabel(s.audioInfo),
         ),
       ),

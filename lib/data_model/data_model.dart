@@ -163,6 +163,10 @@ class PlaybackState {
   AudioInfo? audioInfo;
   String? mimeType;
 
+  /// Encoded audio codec, separate from the source container/transport.
+  /// Absent on older servers or when the source does not know it.
+  String? audioCodec;
+
   /// Where the renderer is fetching the current stream from. Null on a server
   /// that does not report it, and while nothing is loaded.
   String? streamUrl;
@@ -176,6 +180,7 @@ class PlaybackState {
     this.message,
     this.audioInfo,
     this.mimeType,
+    this.audioCodec,
     this.streamUrl,
     this.timestampNs = 0,
   });
@@ -196,6 +201,7 @@ class PlaybackState {
         ? null
         : AudioInfo.fromJson(json["audio_info"]),
     mimeType: json["mime_type"],
+    audioCodec: json["audio_codec"],
     streamUrl: json["stream_url"],
     timestampNs: json["timestamp_ns"] ?? 0,
   );
@@ -208,6 +214,7 @@ class PlaybackState {
     "message": message,
     "audio_info": audioInfo?.toJson(),
     "mime_type": mimeType,
+    "audio_codec": audioCodec,
     "stream_url": streamUrl,
     "timestamp_ns": timestampNs,
   };
@@ -223,6 +230,7 @@ class PlaybackState {
       message: other.message,
       audioInfo: other.audioInfo,
       mimeType: other.mimeType,
+      audioCodec: other.audioCodec,
       // Replaced, not merged: the URL is only true while the renderer holds
       // that stream, so a state reporting none must clear the last one rather
       // than leave a link to something that stopped playing.
@@ -240,6 +248,7 @@ class PlaybackState {
     message: message,
     audioInfo: audioInfo,
     mimeType: mimeType,
+    audioCodec: audioCodec,
     streamUrl: streamUrl,
     timestampNs: timestampNs,
   );
@@ -252,6 +261,7 @@ class PlaybackState {
     String? message,
     AudioInfo? audioInfo,
     String? mimeType,
+    String? audioCodec,
     String? streamUrl,
     int? timestampNs,
   }) {
@@ -263,6 +273,7 @@ class PlaybackState {
       message: message ?? this.message,
       audioInfo: audioInfo ?? this.audioInfo,
       mimeType: mimeType ?? this.mimeType,
+      audioCodec: audioCodec ?? this.audioCodec,
       streamUrl: streamUrl ?? this.streamUrl,
       timestampNs: timestampNs ?? this.timestampNs,
     );

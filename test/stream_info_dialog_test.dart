@@ -78,6 +78,20 @@ List<Override> _overrides(PlaybackState state) => [
 
 void main() {
   group('streamInfoFields', () {
+    test('DASH shows the audio codec in stream information', () {
+      final state = _playing()
+        ..mimeType = 'application/dash+xml'
+        ..audioCodec = 'flac';
+      final fields = streamInfoFields(
+        state,
+        positionMs: 0,
+        queueLength: 1,
+        bitPerfect: false,
+      );
+      expect(_valueOf(fields, 'Format'), 'FLAC');
+      expect(state.mimeType, 'application/dash+xml');
+    });
+
     test('external playback has stream info without a local queue', () {
       final state = PlaybackState(
         state: PlayerStateType.playing,
