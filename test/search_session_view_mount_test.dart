@@ -863,7 +863,7 @@ void main() {
           final area = find
               .ancestor(of: entry, matching: find.byType(Align))
               .first;
-          expect(tester.getCenter(entry).dx, tester.getCenter(area).dx);
+          expect(tester.getTopLeft(entry).dx, tester.getTopLeft(area).dx);
         }
         expect(
           tester.widget<Text>(find.text('the beatles')).style,
