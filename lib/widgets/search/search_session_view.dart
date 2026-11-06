@@ -1589,7 +1589,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         );
       }
       return Align(
-        alignment: Alignment.center,
+        alignment: Alignment.centerLeft,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: kHomeSearchMaxWidth),
           child: Builder(

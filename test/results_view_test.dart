@@ -68,6 +68,7 @@ BrowseItem _track(
   String genre = 'Jazz',
   String? performer = 'Someone',
   String? albumArtist,
+  String? cover,
 }) => BrowseItem(
   id: 'kalinka:$source:track:$id',
   canBrowse: false,
@@ -76,6 +77,7 @@ BrowseItem _track(
     id: 'kalinka:$source:track:$id',
     title: title,
     duration: 200,
+    image: cover == null ? null : AlbumImage(small: cover),
     album: Album(
       id: 'kalinka:$source:album:al',
       title: 'An Album',
@@ -1292,6 +1294,57 @@ void main() {
     await _capture(tester, key, 'search-wide-collage');
     expect(tester.takeException(), isNull);
   });
+
+  for (final distinct in [2, 4]) {
+    testWidgets(
+      'collage finds $distinct distinct covers without changing playback',
+      (tester) async {
+        final tracks = [
+          _track('localfiles', 'missing', 'Missing cover'),
+          for (var i = 0; i < distinct; i++) ...[
+            _track(
+              'localfiles',
+              'first-$i',
+              'Track $i',
+              cover: '/cover-$i.jpg',
+            ),
+            _track(
+              'localfiles',
+              'same-$i',
+              'Another track $i',
+              cover: '/cover-$i.jpg',
+            ),
+          ],
+        ];
+        final api = _ScriptedApi(inspired: {'localfiles': tracks});
+        await _pump(tester, api);
+        await tester.pumpAndSettle();
+        final card = find.byType(InspiredSourceCard);
+        final covers = tester
+            .widgetList<TrackThumb>(
+              find.descendant(of: card, matching: find.byType(TrackThumb)),
+            )
+            .map((cover) => cover.item)
+            .toList();
+        expect(covers, hasLength(4));
+        expect(covers.map((item) => item.image?.smallest).toSet(), {
+          for (var i = 0; i < distinct; i++) '/cover-$i.jpg',
+        });
+        expect(covers.take(distinct).map((item) => item.id), [
+          for (var i = 0; i < distinct; i++)
+            'kalinka:localfiles:track:first-$i',
+        ]);
+        expect(api.aiCalls, {'localfiles': 1, 'jamendo': 1});
+        await tester.tap(card);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Play all'));
+        await tester.pumpAndSettle();
+        expect(api.replacements.single, tracks.map((item) => item.id));
+        await tester.pump(const Duration(seconds: 4));
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   for (final width in [320.0, 640.0, 1100.0]) {
     testWidgets('inspired shimmer matches the four-cover card at $width', (

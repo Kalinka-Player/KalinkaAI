@@ -169,6 +169,21 @@ List<String> _performersOf(List<BrowseItem> tracks) {
   return names;
 }
 
+/// Pick distinct artwork paths from the existing answer without changing
+/// its playback order or looking up more albums. Prefer actual covers; when
+/// none are supplied, keep the normal per-track artwork fallbacks.
+List<BrowseItem> _collageTracks(List<BrowseItem> tracks) {
+  final covers = <BrowseItem>[];
+  final seen = <String>{};
+  for (final item in tracks) {
+    final path = item.image?.smallest;
+    if (path == null || path.isEmpty || !seen.add(path)) continue;
+    covers.add(item);
+    if (covers.length == 4) break;
+  }
+  return covers.isEmpty ? tracks.take(4).toList() : covers;
+}
+
 class InspiredSourceCard extends StatelessWidget {
   final InspiredGroup group;
   final String title;
@@ -183,6 +198,7 @@ class InspiredSourceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final performers = _performersOf(group.tracks);
+    final covers = _collageTracks(group.tracks);
     return Semantics(
       button: true,
       child: Material(
@@ -195,7 +211,7 @@ class InspiredSourceCard extends StatelessWidget {
           focusColor: KalinkaColors.surfaceOverlay,
           child: _SourceCardLayout(
             cover: (i, size) => TrackThumb(
-              item: group.tracks[i % group.tracks.length],
+              item: covers[i % covers.length],
               size: size,
               radius: 0,
             ),
