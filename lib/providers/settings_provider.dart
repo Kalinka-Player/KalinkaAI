@@ -57,13 +57,18 @@ class SettingsState {
   bool isImmediateAction(String path) =>
       schema?.field(path)?.applyImmediately == true;
 
+  /// Whether the server takes a save of [path] in as it is made: the field,
+  /// or the collection, at that path says so. A path with neither restarts.
+  bool appliesLive(String path) {
+    final field = schema?.field(path);
+    if (field != null) return !field.needsRestart;
+    return schema?.collection(path)?.needsRestart == false;
+  }
+
   /// Whether applying what is staged leaves the server running: every
-  /// staged field is one the server takes in as it is saved.
+  /// staged path is one the server takes in as it is saved.
   bool get onlyLiveChanges =>
-      hasPendingChanges &&
-      stagedChanges.keys.every(
-        (path) => schema?.field(path)?.needsRestart == false,
-      );
+      hasPendingChanges && stagedChanges.keys.every(appliesLive);
 
   bool get onlyImmediateChanges =>
       hasPendingChanges && stagedChanges.keys.every(isImmediateAction);
@@ -442,7 +447,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
     final server = _server();
     if (state.schema == null) await loadConfig(preserveStagedChanges: true);
     if (_stale(server)) throw StateError('The connected streamer changed');
-    if (state.schema?.field(path)?.needsRestart != false) {
+    if (!state.appliesLive(path)) {
       throw StateError('This setting requires Configuration on this server');
     }
     await ref
