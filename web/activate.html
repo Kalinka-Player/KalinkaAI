@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <!--
+    The setup hotspot's captive portal sends phones here. The supervisor
+    serves it under a CSP that refuses inline styles and scripts, so the look
+    is in activate.css and the hand-over is a meta refresh.
+  -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta http-equiv="refresh" content="1;url=/?setup=network">
+  <title>Set up Kalinka</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="stylesheet" href="activate.css">
+</head>
+
+<body>
+  <main>
+    <img class="mark" src="assets/assets/images/kalinka_icon.svg" alt="" width="56" height="56">
+    <h1>Set up your Kalinka streamer</h1>
+    <p class="status" role="status"><span class="spinner" aria-hidden="true"></span>Opening Network setup…</p>
+    <a class="button" href="/?setup=network">Open Kalinka setup</a>
+    <p class="hint">If this window closes, open <span class="address">http://192.168.4.1</span> in your browser.</p>
+  </main>
+</body>
+
+</html>

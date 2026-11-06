@@ -176,7 +176,7 @@ class _NameFormState extends State<_NameForm> {
               textCapitalization: TextCapitalization.sentences,
               maxLength: 200,
               onSubmitted: (_) => _submit(),
-              style: KalinkaTextStyles.cardTitle,
+              style: kalinkaFieldText(KalinkaTextStyles.cardTitle),
               decoration: kalinkaFieldDecoration(hint: 'Name it'),
             ),
             const SizedBox(height: 18),
