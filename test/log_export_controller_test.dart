@@ -311,7 +311,7 @@ void main() {
       async.flushMicrotasks();
       screen.close();
       async.elapse(const Duration(milliseconds: 1));
-      expect(container.exists(logExportProvider), isFalse);
+      expect(container.read(logExportProvider.exists), isFalse);
 
       saver.gate.complete();
       async.flushMicrotasks();

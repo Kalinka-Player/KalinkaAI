@@ -140,7 +140,7 @@ class _CatalogSectionsViewState extends ConsumerState<CatalogSectionsView> {
     // must be asked whether it still is.
     final requests = [
       for (final shelf in _shelves)
-        if (ref.exists(catalogSectionProvider(shelf.request)) ||
+        if (ref.read(catalogSectionProvider(shelf.request).exists) ||
             _empty.contains(shelf.request))
           shelf.request,
     ];
@@ -148,7 +148,7 @@ class _CatalogSectionsViewState extends ConsumerState<CatalogSectionsView> {
     // fetches it already.
     final alive = [
       for (final request in requests)
-        ref.exists(catalogSectionProvider(request)),
+        ref.read(catalogSectionProvider(request).exists),
     ];
     // A shelf left out as empty watches nothing meanwhile.
     final held = [
@@ -308,7 +308,7 @@ class SectionShelves extends StatelessWidget {
   ]) => Future.wait([
     for (final section in sections)
       if (_plan(section, query, 0) case final shelf?)
-        if (ref.exists(catalogSectionProvider(shelf.request)))
+        if (ref.read(catalogSectionProvider(shelf.request).exists))
           ref
               .refresh(catalogSectionProvider(shelf.request).future)
               .then<void>((_) {}, onError: (_) {}),
