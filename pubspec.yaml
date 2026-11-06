@@ -39,7 +39,8 @@ dependencies:
   # 3.4.2 fixes a markNeedsBuild crash: a paused provider invalidated during
   # a resume-flush scheduled a refresh mid-build. Ours hit it through
   # rendererHostProvider whenever a route uncovered the player.
-  flutter_riverpod: ^3.4.3
+  # 3.5.0 supplies the provider.exists listenable used for non-initializing checks.
+  flutter_riverpod: ^3.5.0
   logger: ^2.8.0
   shared_preferences: ^2.5.6
   dio: ^5.11.1

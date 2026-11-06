@@ -437,8 +437,10 @@ class SoundcardChange extends Notifier<SoundcardStep> {
     final id = box.rendererId;
     if (id == null) return;
     final settings = rendererSettingsProvider(id);
-    if (!ref.exists(settings)) return;
-    if (!await _rendererBack(id) || !ref.mounted || !ref.exists(settings)) {
+    if (!ref.read(settings.exists)) return;
+    if (!await _rendererBack(id) ||
+        !ref.mounted ||
+        !ref.read(settings.exists)) {
       return;
     }
     // A save under way reads the settings again itself once it is done.
