@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/box_control_provider.dart';
+import '../providers/power_off_status_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../providers/timezone_provider.dart';
 import '../providers/toast_provider.dart';
@@ -102,7 +103,11 @@ class BoxSection extends ConsumerWidget {
                 ),
               if (control.offers(BoxAction.powerOff)) ...[
                 SettingsActionRow(
-                  label: 'Power off streamer',
+                  label:
+                      ref
+                          .watch(currentPowerOffStatusProvider)
+                          ?.countdownLabel ??
+                      'Power off streamer',
                   sublabel:
                       'Shuts the player down safely, so it can be '
                       'unplugged',
