@@ -426,6 +426,10 @@ class CollectionSpec {
   /// rather than on its own.
   final String? status;
 
+  /// What the server says a save of the whole list costs; null from one
+  /// that does not say.
+  final Apply? apply;
+
   const CollectionSpec({
     required this.path,
     required this.title,
@@ -435,7 +439,12 @@ class CollectionSpec {
     this.after,
     this.replaces = const [],
     this.status,
+    this.apply,
   });
+
+  /// Whether saving this collection restarts the server: what `apply` says,
+  /// or a restart from a server that does not say.
+  bool get needsRestart => apply != Apply.instant;
 
   factory CollectionSpec.fromJson(Map<String, dynamic> j) => CollectionSpec(
     path: j['path'] as String,
@@ -448,6 +457,7 @@ class CollectionSpec {
         .map((e) => e.toString())
         .toList(),
     status: j['status'] as String?,
+    apply: Apply.fromName(j['apply'] as String?),
   );
 }
 
