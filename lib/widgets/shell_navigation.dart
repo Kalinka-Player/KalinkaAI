@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/box_control_provider.dart';
+import '../providers/power_off_status_provider.dart';
 import '../data_model/module_icons.dart';
 import '../providers/catalog_sources_provider.dart';
 import '../providers/collections_provider.dart';
@@ -108,6 +109,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
     // Only where the server keeps collections.
     final collections = ref.watch(collectionsShelfProvider).value?.plan;
     final box = ref.watch(boxControlProvider).value;
+    final powerStatus = ref.watch(currentPowerOffStatusProvider);
 
     _Item item(
       String id,
@@ -180,6 +182,9 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
         label: control.label,
         tooltip: control.tooltip,
         icon: control.icon,
+        minutes: control.action == ShellAction.powerOff
+            ? powerStatus?.remainingMinutes
+            : null,
         // In berry: the one of them that leaves the box off.
         iconColor: control.action == ShellAction.powerOff
             ? KalinkaColors.accent
@@ -221,9 +226,9 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
       if (box?.offers(BoxAction.powerOff) ?? false)
         (
           action: ShellAction.powerOff,
-          label: 'Power off',
+          label: powerStatus?.remainingMinutes == null ? 'Power off' : 'Off in',
           icon: Icons.power_settings_new,
-          tooltip: 'Power off the streamer',
+          tooltip: powerStatus?.countdownLabel ?? 'Power off the streamer',
           selected: false,
         ),
     ];
@@ -622,6 +627,7 @@ class _NavigationButton extends StatelessWidget {
 
   /// How many of what it opens there are, shown on its icon.
   final int? count;
+  final int? minutes;
 
   /// The icon's own colour while it can be followed; null takes the label's.
   final Color? iconColor;
@@ -640,6 +646,7 @@ class _NavigationButton extends StatelessWidget {
     required this.icon,
     this.icons,
     this.count,
+    this.minutes,
     this.iconColor,
     required this.selected,
     required this.extended,
@@ -650,16 +657,25 @@ class _NavigationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final artwork = ModuleArtwork(
-      icons: icons,
-      inheritIconColor: true,
-      size: 24,
-      fallback: Icon(
-        icon,
-        size: 24,
-        color: onPressed == null ? null : iconColor,
-      ),
-    );
+    final artwork = minutes != null && !extended
+        ? Text(
+            '$minutes',
+            style: KalinkaFonts.mono(
+              fontSize: 24,
+              fontWeight: FontWeight.w500,
+              color: onPressed == null ? KalinkaColors.textMuted : iconColor,
+            ),
+          )
+        : ModuleArtwork(
+            icons: icons,
+            inheritIconColor: true,
+            size: 24,
+            fallback: Icon(
+              icon,
+              size: 24,
+              color: onPressed == null ? null : iconColor,
+            ),
+          );
     final glyph = ExcludeSemantics(
       child: count == null
           ? artwork
@@ -676,27 +692,49 @@ class _NavigationButton extends StatelessWidget {
               child: artwork,
             ),
     );
+    final labelStyle = KalinkaFonts.sans(
+      fontSize: extended ? 16 : 12,
+      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+      color: selected
+          ? KalinkaColors.textPrimary
+          : onPressed == null
+          ? KalinkaColors.textMuted
+          : KalinkaColors.textSecondary,
+    );
     final text = ExcludeSemantics(
-      child: Text(
-        extended ? label : compactLabel ?? label,
-        textAlign: extended ? TextAlign.start : TextAlign.center,
-        style: KalinkaFonts.sans(
-          fontSize: extended ? 16 : 12,
-          fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-          color: selected
-              ? KalinkaColors.textPrimary
-              : onPressed == null
-              ? KalinkaColors.textMuted
-              : KalinkaColors.textSecondary,
-        ),
-      ),
+      child: extended && minutes != null
+          ? Text.rich(
+              TextSpan(
+                children: [
+                  const TextSpan(text: 'Power off in '),
+                  TextSpan(
+                    text: '${minutes}m',
+                    style: TextStyle(
+                      color: onPressed == null
+                          ? KalinkaColors.textMuted
+                          : KalinkaColors.accentTint,
+                    ),
+                  ),
+                ],
+              ),
+              style: labelStyle,
+            )
+          : Text(
+              extended ? label : compactLabel ?? label,
+              textAlign: extended ? TextAlign.start : TextAlign.center,
+              style: labelStyle,
+            ),
     );
     // The full name is on show beside the icon, so only an addition to it
     // makes a tooltip.
     final message = extended ? tooltip : tooltip ?? label;
     final button = MergeSemantics(
       child: Semantics(
-        label: count == null ? label : '$label, $count',
+        label: minutes != null
+            ? tooltip
+            : count == null
+            ? label
+            : '$label, $count',
         selected: selected,
         child: TextButton(
           onPressed: onPressed,
@@ -768,7 +806,8 @@ class _NavigationButton extends StatelessWidget {
         ),
       ),
     );
-    final duration = popupOpen != null || MediaQuery.disableAnimationsOf(context)
+    final duration =
+        popupOpen != null || MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 180);
     return Padding(

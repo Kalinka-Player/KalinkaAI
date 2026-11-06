@@ -70,6 +70,16 @@ SupervisorInfo supervisorInfo({
 /// A box that answers [answers] to `/info` in turn, the last one for good, and
 /// [reports] to `/v1/soundcard` likewise. Both lists may be changed meanwhile.
 class FakeBox implements SupervisorApi {
+  @override
+  Future<BoxPowerStatus?> powerStatus() async => null;
+  @override
+  Future<void> schedulePowerOff(
+    int minutes, {
+    required String serverId,
+  }) async {}
+  @override
+  Future<void> cancelPowerOff({required String serverId}) async {}
+
   FakeBox({
     List<SupervisorInfo?>? answers,
     List<SoundcardReport?>? reports,

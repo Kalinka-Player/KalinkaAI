@@ -30,6 +30,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/server_answer.dart';
 
 class _FakeBox implements SupervisorApi {
+  @override
+  Future<BoxPowerStatus?> powerStatus() async => null;
+  @override
+  Future<void> schedulePowerOff(
+    int minutes, {
+    required String serverId,
+  }) async {}
+  @override
+  Future<void> cancelPowerOff({required String serverId}) async {}
+
   _FakeBox({
     this.answer,
     this.state = 'active',

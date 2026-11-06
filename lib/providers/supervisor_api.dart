@@ -66,6 +66,7 @@ class SupervisorInfo {
 
   final Set<String> actions;
   final bool supportsPowerOffTimer;
+  final bool supportsPowerOffSchedule;
 
   const SupervisorInfo({
     required this.version,
@@ -75,6 +76,7 @@ class SupervisorInfo {
     this.rendererId,
     required this.actions,
     this.supportsPowerOffTimer = false,
+    this.supportsPowerOffSchedule = false,
   });
 
   /// Whether this app and the supervisor share a protocol version.
@@ -107,6 +109,48 @@ class SupervisorInfo {
       rendererId: id(json['renderer_id']),
       actions: actions.whereType<String>().toSet(),
       supportsPowerOffTimer: json['poweroff_timer'] == true,
+      supportsPowerOffSchedule: json['poweroff_schedule'] == true,
+    );
+  }
+}
+
+/// The supervisor owns the sleep timer, including while this app is closed.
+class BoxPowerStatus {
+  final String serverId;
+  final String state;
+  final int? remainingSeconds;
+
+  const BoxPowerStatus({
+    required this.serverId,
+    required this.state,
+    this.remainingSeconds,
+  });
+
+  int? get remainingMinutes => state == 'scheduled' && remainingSeconds != null
+      ? (remainingSeconds! / 60).ceil()
+      : null;
+
+  String? get countdownLabel => remainingMinutes == null
+      ? null
+      : 'Power off in $remainingMinutes ${remainingMinutes == 1 ? 'minute' : 'minutes'}';
+
+  static BoxPowerStatus? fromJson(Object? json) {
+    if (json is! Map || json['server_id'] is! String) return null;
+    final state = json['state'];
+    final seconds = json['remaining_seconds'];
+    if (!const [
+          'on',
+          'scheduled',
+          'powering_off',
+          'restarting',
+        ].contains(state) ||
+        (state == 'scheduled' && (seconds is! int || seconds < 0))) {
+      return null;
+    }
+    return BoxPowerStatus(
+      serverId: json['server_id'] as String,
+      state: state as String,
+      remainingSeconds: seconds is int ? seconds : null,
     );
   }
 }
@@ -285,6 +329,10 @@ abstract class SupervisorApi {
   /// [info] reported, so a box that took over the address refuses it.
   Future<void> run(BoxAction action, {required String serverId});
 
+  Future<BoxPowerStatus?> powerStatus();
+  Future<void> schedulePowerOff(int minutes, {required String serverId});
+  Future<void> cancelPowerOff({required String serverId});
+
   /// What the box knows about its sound card; null when it has none to set
   /// up, or does not answer.
   Future<SoundcardReport?> soundcard();
@@ -359,6 +407,25 @@ class DioSupervisorApi implements SupervisorApi {
       _act(action.wire, BoxIdentity(serverId: serverId).toJson());
 
   @override
+  Future<BoxPowerStatus?> powerStatus() async {
+    try {
+      return BoxPowerStatus.fromJson(
+        (await _client.get('/v$_protocol/power-off')).data,
+      );
+    } on DioException {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> schedulePowerOff(int minutes, {required String serverId}) =>
+      _act('schedule_poweroff', {'server_id': serverId, 'minutes': minutes});
+
+  @override
+  Future<void> cancelPowerOff({required String serverId}) =>
+      _act('cancel_poweroff', {'server_id': serverId});
+
+  @override
   Future<SoundcardReport?> soundcard() async {
     try {
       return SoundcardReport.fromJson(
@@ -404,7 +471,7 @@ class DioSupervisorApi implements SupervisorApi {
 
   Future<Object?> _act(
     String action,
-    Map<String, String> body, {
+    Map<String, Object> body, {
     Duration? receiveTimeout,
   }) async {
     try {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/app_version_provider.dart';
 import '../providers/box_control_provider.dart';
+import '../providers/power_off_status_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/demo_mode.dart';
@@ -13,12 +14,7 @@ import '../theme/app_theme.dart';
 import 'kalinka_bottom_sheet.dart';
 
 /// Actions that can be returned from the server sheet.
-enum ServerSheetAction {
-  openSettings,
-  openDiscovery,
-  openPlugins,
-  powerOff,
-}
+enum ServerSheetAction { openSettings, openDiscovery, openPlugins, powerOff }
 
 /// Content body for the server sheet — used directly by [showKalinkaBottomSheet]
 /// on phone, and wrapped by [ServerSheet] (with animation/scrim) on tablet.
@@ -567,7 +563,9 @@ class _PowerOffRow extends ConsumerWidget {
           icon: Icons.power_settings_new,
           iconBackground: KalinkaColors.actionDelete.withValues(alpha: 0.14),
           iconColor: KalinkaColors.actionDelete,
-          label: 'Power off',
+          label:
+              ref.watch(currentPowerOffStatusProvider)?.countdownLabel ??
+              'Power off',
           onTap: onTap,
         ),
       ],

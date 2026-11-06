@@ -85,6 +85,83 @@ const _info = {
 }
 
 void main() {
+  group('sleep timer', () {
+    test('reads capability, status and rounded minutes', () async {
+      final (api, adapter) = _api(
+        (request) => request.path == '/info'
+            ? _json(200, {..._info, 'poweroff_schedule': true})
+            : _json(200, {
+                'server_id': 'box-1',
+                'state': 'scheduled',
+                'remaining_seconds': 61,
+              }),
+      );
+      expect((await api.info())!.supportsPowerOffSchedule, isTrue);
+      final status = (await api.powerStatus())!;
+      expect(status.remainingMinutes, 2);
+      expect(status.countdownLabel, 'Power off in 2 minutes');
+      expect(adapter.requests.last.path, '/v1/power-off');
+      expect(
+        const BoxPowerStatus(
+          serverId: 'box-1',
+          state: 'scheduled',
+          remainingSeconds: 1,
+        ).countdownLabel,
+        'Power off in 1 minute',
+      );
+    });
+
+    test('schedules and cancels with identity and numeric delay', () async {
+      final (api, adapter) = _api((_) => _json(200, {}));
+      await api.schedulePowerOff(60, serverId: 'box-1');
+      await api.cancelPowerOff(serverId: 'box-1');
+      expect(adapter.requests[0].method, 'POST');
+      expect(adapter.requests[0].path, '/v1/actions/schedule_poweroff');
+      expect(adapter.requests[0].data, {'server_id': 'box-1', 'minutes': 60});
+      expect(adapter.requests[1].path, '/v1/actions/cancel_poweroff');
+      expect(adapter.requests[1].data, {'server_id': 'box-1'});
+    });
+
+    test('refusals surface for scheduling and cancellation', () async {
+      final (api, _) = _api((_) => _refusal(409, 'shutting_down'));
+      final refusal = isA<BoxActionException>().having(
+        (e) => e.code,
+        'code',
+        'shutting_down',
+      );
+      await expectLater(
+        api.schedulePowerOff(30, serverId: 'box-1'),
+        throwsA(refusal),
+      );
+      await expectLater(
+        api.cancelPowerOff(serverId: 'box-1'),
+        throwsA(refusal),
+      );
+    });
+
+    test('unreachable or malformed status never invents a countdown', () async {
+      final (api, _) = _api((_) => null);
+      expect(await api.powerStatus(), isNull);
+      for (final value in [
+        null,
+        {},
+        {'server_id': 'box-1', 'state': 'scheduled'},
+        {'server_id': 'box-1', 'state': 'scheduled', 'remaining_seconds': -1},
+        {'server_id': 'box-1', 'state': 'scheduled', 'remaining_seconds': '60'},
+        {'server_id': 'box-1', 'state': 'unknown'},
+      ]) {
+        expect(BoxPowerStatus.fromJson(value), isNull);
+      }
+      for (final state in ['on', 'powering_off', 'restarting']) {
+        expect(
+          BoxPowerStatus.fromJson({'server_id': 'box-1', 'state': state})!
+              .remainingMinutes,
+          isNull,
+        );
+      }
+    });
+  });
+
   group('info', () {
     test('reads the supervisor and what it offers', () async {
       final (api, adapter) = _api((_) => _json(200, _info));
