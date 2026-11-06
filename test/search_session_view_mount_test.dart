@@ -23,6 +23,7 @@ import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_button.dart';
+import 'package:kalinka/widgets/home/home_layout.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
 import 'package:kalinka/widgets/overlay_card.dart';
 import 'package:kalinka/widgets/search/folder_trail.dart';
@@ -852,6 +853,13 @@ void main() {
         expect(find.byType(CatalogFiltersButton), findsOneWidget);
         expect(find.byType(SearchComposer), findsNothing);
         expect(find.byType(TextField), findsNothing);
+        final searchWidth = tester
+            .getSize(find.byKey(const ValueKey('results-search-entry')))
+            .width;
+        expect(searchWidth, lessThanOrEqualTo(kHomeSearchMaxWidth));
+        if (width > kHomeSearchMaxWidth + 200) {
+          expect(searchWidth, kHomeSearchMaxWidth);
+        }
         expect(
           tester.widget<Text>(find.text('the beatles')).style,
           KalinkaTextStyles.searchPlaceholder,

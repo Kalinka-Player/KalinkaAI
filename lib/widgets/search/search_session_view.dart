@@ -1588,15 +1588,21 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           ),
         );
       }
-      return Builder(
-        builder: (entryContext) => _SearchEntryButton(
-          key: const ValueKey('results-search-entry'),
-          hint: session.searchQuery,
-          smart: ref.watch(smartSearchAvailableProvider) ?? true,
-          compact: true,
-          onTap: () =>
-              _openSearch(from: entryContext, prefill: session.searchQuery),
-          onClear: () => _openSearch(from: entryContext),
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: kHomeSearchMaxWidth),
+          child: Builder(
+            builder: (entryContext) => _SearchEntryButton(
+              key: const ValueKey('results-search-entry'),
+              hint: session.searchQuery,
+              smart: ref.watch(smartSearchAvailableProvider) ?? true,
+              compact: true,
+              onTap: () =>
+                  _openSearch(from: entryContext, prefill: session.searchQuery),
+              onClear: () => _openSearch(from: entryContext),
+            ),
+          ),
         ),
       );
     } else {
