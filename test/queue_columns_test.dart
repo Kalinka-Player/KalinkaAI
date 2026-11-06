@@ -59,10 +59,11 @@ Future<ProviderContainer> _pump(
   double scale = 1,
   bool albums = true,
   Key? captureKey,
+  SettableQueue? queue,
 }) async {
   final container = await pumpHomeShell(
     tester,
-    queue: SettableQueue(_queue(albums: albums)),
+    queue: queue ?? SettableQueue(_queue(albums: albums)),
     size: Size(width, 900),
     overrides: [kalinkaWsApiProvider.overrideWith((ref) => _Api(ref))],
   );
@@ -90,6 +91,27 @@ Future<ProviderContainer> _pump(
 }
 
 void main() {
+  testWidgets('queue format follows codec changes without a MIME change', (
+    tester,
+  ) async {
+    PlayQueueState playing(String codec) {
+      final state = _queue();
+      state.playbackState
+        ..mimeType = 'application/dash+xml'
+        ..audioCodec = codec;
+      return state;
+    }
+
+    final queue = SettableQueue(playing('flac'));
+    await _pump(tester, queue: queue);
+    expect(find.text('NOW PLAYING · FLAC'), findsOneWidget);
+    expect(find.textContaining('DASH+XML'), findsNothing);
+    queue.set(playing('aac'));
+    await tester.pumpAndSettle();
+    expect(find.text('NOW PLAYING · AAC'), findsOneWidget);
+    expect(find.text('NOW PLAYING · FLAC'), findsNothing);
+  });
+
   final captures = Platform.environment['KALINKA_REVIEW_DIR'];
   setUpAll(() async {
     if (captures == null) return;

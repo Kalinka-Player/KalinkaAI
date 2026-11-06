@@ -73,6 +73,7 @@ void main() {
     final local = PlaybackState(
       state: PlayerStateType.playing,
       mimeType: 'audio/flac',
+      audioCodec: 'flac',
       audioInfo: AudioInfo(sampleRate: 192000, bitsPerSample: 24, channels: 2),
       message: 'Local playback',
       streamUrl: 'http://server/local.flac',
@@ -88,11 +89,13 @@ void main() {
       ),
     );
     expect(roon.mimeType, isNull);
+    expect(roon.audioCodec, isNull);
     expect(roon.audioInfo, isNull);
     expect(roon.message, isNull);
     expect(roon.streamUrl, isNull);
     final resumed = roon.copyWith(local);
     expect(resumed.mimeType, 'audio/flac');
+    expect(resumed.audioCodec, 'flac');
     expect(resumed.audioInfo!.sampleRate, 192000);
   });
   group('playback control', () {

@@ -70,7 +70,18 @@ String formatClock(Duration position) {
   return '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 }
 
-/// Short codec name for a stream's MIME type — `FLAC`, `MP3` — or empty.
+/// The encoded audio format when supplied, with the legacy MIME fallback for
+/// older servers and sources that do not know their codec.
+String audioFormatLabel(String? mimeType, {String? audioCodec}) {
+  final codec = audioCodec?.trim().toLowerCase();
+  if (codec == null || codec.isEmpty) return mimeTypeLabel(mimeType);
+  return switch (codec) {
+    'mp4a' || 'mp4a.40.2' || 'mp4a.40.5' || 'mp4a.40.29' => 'AAC',
+    _ => codec.toUpperCase(),
+  };
+}
+
+/// Short label for a stream's MIME type — `FLAC`, `MP3` — or empty.
 String mimeTypeLabel(String? mimeType) {
   if (mimeType == null) return '';
   if (mimeType == 'application/vnd.kalinka.pcm') return 'PCM';

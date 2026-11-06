@@ -144,6 +144,44 @@ Future<ProviderContainer> _pump(
 
 void main() {
   final captures = Platform.environment['KALINKA_REVIEW_DIR'];
+  testWidgets('Now Playing updates when only the audio codec changes', (
+    tester,
+  ) async {
+    PlayQueueState playing(String? codec) {
+      final state = _queue();
+      state.playbackState
+        ..mimeType = 'application/dash+xml'
+        ..audioCodec = codec;
+      return state;
+    }
+
+    final queue = SettableQueue(playing('flac'));
+    final captureKey = GlobalKey();
+    await _pump(tester, queue: queue, captureKey: captureKey);
+    expect(find.text('FLAC'), findsOneWidget);
+    expect(find.textContaining('DASH+XML'), findsNothing);
+    if (captures != null) {
+      await tester.runAsync(() async {
+        final boundary =
+            captureKey.currentContext!.findRenderObject()
+                as RenderRepaintBoundary;
+        final image = await boundary.toImage();
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        final file = File('$captures/audio-codec.png');
+        await file.parent.create(recursive: true);
+        await file.writeAsBytes(bytes!.buffer.asUint8List());
+        image.dispose();
+      });
+    }
+    queue.set(playing('aac'));
+    await tester.pumpAndSettle();
+    expect(find.text('AAC'), findsOneWidget);
+    expect(find.text('FLAC'), findsNothing);
+    queue.set(playing(null));
+    await tester.pumpAndSettle();
+    expect(find.text('DASH+XML'), findsOneWidget);
+  });
+
   setUpAll(() async {
     if (captures == null) return;
     for (final (family, file) in [

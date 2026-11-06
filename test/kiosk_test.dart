@@ -337,6 +337,25 @@ Finder logo() => find.descendant(
 );
 
 void main() {
+  testWidgets('kiosk displays the codec and follows codec-only updates', (
+    tester,
+  ) async {
+    PlayQueueState playing(String codec) {
+      final state = _queue(PlayerStateType.playing);
+      state.playbackState
+        ..mimeType = 'application/dash+xml'
+        ..audioCodec = codec;
+      return state;
+    }
+
+    final harness = await _pump(tester, playing('flac'));
+    expect(find.text('Qobuz · FLAC 24-bit • 96 kHz'), findsOneWidget);
+    expect(find.textContaining('DASH+XML'), findsNothing);
+    harness.queue.set(playing('aac'));
+    await tester.pump();
+    expect(find.text('Qobuz · AAC 24-bit • 96 kHz'), findsOneWidget);
+  });
+
   group('launch flag', () {
     final page = Uri.parse('http://streamer.local:8080/');
 
