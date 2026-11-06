@@ -538,7 +538,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                   if (tier == _MiniPlayerTier.volume) ...[
                     const ColumnSeparator(),
                     SizedBox(
-                      width: 140,
+                      width: 180,
                       child: AwayLock(
                         away: isOffline,
                         child: const NowPlayingVolumeControl(
@@ -551,7 +551,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                       currentTrack != null) ...[
                     const ColumnSeparator(),
                     SizedBox(
-                      width: 200,
+                      width: 150,
                       child: _AlbumDetails(track: currentTrack),
                     ),
                   ],
@@ -904,7 +904,7 @@ class _AlbumDetails extends ConsumerWidget {
         : '${album.title} · ${album.year}';
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         if (albumLine != null)
           Text(
