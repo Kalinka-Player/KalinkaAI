@@ -16,6 +16,7 @@ import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'kalinka_dialog.dart' show showKalinkaDialog;
+import 'overlay_card.dart';
 import 'renderer_upgrade_dialog.dart';
 import 'sheet_anchor.dart';
 import 'tap_highlight.dart';
@@ -267,6 +268,8 @@ Future<void> showRendererPicker(
   notifier.refresh();
   final choice = await showKalinkaBottomSheet<RendererPickerChoice>(
     context: context,
+    dialogMaxWidth: 448,
+    useBeak: true,
     contentBuilder: (_) => RendererPickerContent(configurable: configurable),
   );
   if (choice == null) return;
@@ -454,15 +457,9 @@ class _PickerHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          IconButton(
-            tooltip: 'Close output picker',
-            onPressed: () => Navigator.of(context).pop(),
-            style: kalinkaIconButtonStyle,
-            icon: const Icon(
-              Icons.close,
-              size: 20,
-              color: KalinkaColors.textSecondary,
-            ),
+          OverlayCloseButton(
+            label: 'Close output picker',
+            onTap: () => Navigator.of(context).pop(),
           ),
         ],
       ),
@@ -611,12 +608,7 @@ class _RendererRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      name,
-                      style: KalinkaTextStyles.trayRowLabel.copyWith(
-                        fontSize: 20,
-                      ),
-                    ),
+                    Text(name, style: KalinkaTextStyles.settingsPageTitle),
                     if (detail.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(detail, style: KalinkaTextStyles.trayRowSublabel),

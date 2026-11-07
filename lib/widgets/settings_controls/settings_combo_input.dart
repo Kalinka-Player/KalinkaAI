@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../../data_model/presentation_schema.dart' show OptionSpec;
 import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
 import '../kalinka_bottom_sheet.dart';
+import '../kalinka_popover.dart';
 import 'option_picker.dart';
 import 'settings_text_input.dart';
 
@@ -51,6 +53,7 @@ class SettingsComboInput extends StatelessWidget {
   ) async {
     final picked = await showKalinkaBottomSheet<String>(
       context: context,
+      dialogMaxWidth: kKalinkaContentMaxWidth,
       contentBuilder: (_) => OptionPicker(
         options: options,
         selectedValue: value,
@@ -73,7 +76,7 @@ class _BrowseButton extends StatelessWidget {
       button: true,
       label: 'Browse',
       child: GestureDetector(
-        onTap: onTap,
+        onTap: () => KalinkaPopupOrigin.run(context, onTap),
         child: MouseRegion(
           cursor: clickCursor(interactive: true),
           child: Container(

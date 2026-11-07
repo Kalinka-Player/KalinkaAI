@@ -557,14 +557,15 @@ Future<void> _screen(
       container: container,
       child: MaterialApp(
         theme: AppTheme.dark(),
-        home: MediaQuery(
-          data: MediaQueryData(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
             size: Size(appWidth ?? size.width, size.height),
             textScaler: TextScaler.linear(scale),
             disableAnimations: disableAnimations,
           ),
-          child: Scaffold(body: PluginCatalogScreen(onClose: onClose)),
+          child: child!,
         ),
+        home: Scaffold(body: PluginCatalogScreen(onClose: onClose)),
       ),
     ),
   );
@@ -2238,7 +2239,10 @@ void main() {
       expect(find.byTooltip('Catalog options'), findsNothing);
       final back = tester.widget<Icon>(find.byIcon(Icons.arrow_back));
       expect(back.size, 22);
-      expect(back.color, KalinkaColors.textPrimary);
+      expect(
+        IconTheme.of(tester.element(find.byIcon(Icons.arrow_back))).color,
+        KalinkaColors.textPrimary,
+      );
       expect(
         tester.getSize(find.byKey(const ValueKey('settings-back'))),
         const Size(48, 48),
@@ -3235,7 +3239,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(
           find.descendant(
-            of: find.byType(ServerSheet),
+            of: find.byType(ServerSheetContent),
             matching: find.text(label),
           ),
         );

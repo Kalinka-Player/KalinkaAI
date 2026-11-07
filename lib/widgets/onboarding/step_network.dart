@@ -8,6 +8,7 @@ import '../../providers/network_setup_api.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/field_decoration.dart';
 import '../kalinka_button.dart';
+import '../kalinka_back_button.dart';
 import 'setup_discovery.dart';
 
 /// Network review and Wi-Fi selection used in onboarding and hotspot activation.
@@ -454,9 +455,9 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
           ),
         Align(
           alignment: Alignment.centerRight,
-          child: TextButton(
+          child: KalinkaBackButton(
             onPressed: !_busy ? _showNetworks : null,
-            child: const Text('Back to available networks'),
+            label: 'Back to available networks',
           ),
         ),
         _field(

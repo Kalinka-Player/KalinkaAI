@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
+import '../kalinka_back_button.dart';
 
 /// The input row of the docked search surface. Chromeless — the parent
 /// container paints the surface and border — so the field and the suggestion
@@ -98,26 +99,7 @@ class _SearchComposerState extends State<SearchComposer> {
         children: [
           // Back arrow where the caller asked for one, magnifier at rest.
           if (widget.onBack != null)
-            Semantics(
-              label: 'Close search',
-              button: true,
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: widget.onBack,
-                  behavior: HitTestBehavior.opaque,
-                  child: SizedBox(
-                    width: 38,
-                    height: line,
-                    child: const Icon(
-                      Icons.arrow_back,
-                      size: 20,
-                      color: KalinkaColors.textSecondary,
-                    ),
-                  ),
-                ),
-              ),
-            )
+            KalinkaBackButton(label: 'Close search', onPressed: widget.onBack)
           else
             SizedBox(
               width: 38,

@@ -2,41 +2,31 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// Which pane of the tablet layout a dialog belongs to.
+/// Legacy ownership hint retained for callers; dialogs now center in the window.
 enum KalinkaDialogSide {
-  /// The player's pane, at the window's right — Now Playing and the queue,
-  /// so queue and playback confirmations belong here.
+  /// Playback and queue callers.
   player,
 
-  /// Browsing, at the window's left — Home, its pages and the management
-  /// overlays.
+  /// Home, browsing and management callers.
   browsing,
 
-  /// Screens with no split layout, such as onboarding: the dialog owns the
-  /// whole window at every width.
+  /// Screens with no split layout, such as onboarding.
   full,
 }
 
 /// The app's dialog surface: a card over its own scrim.
-/// Defaults to bottom-anchored; [centered] uses a regular centered dialog.
-///
-/// In a single-pane window the dialog owns the window. Split
-/// ([kalinkaSplitLayout]), card *and* scrim confine themselves to the [side]
-/// panel, so a queue confirmation sits over the player and a settings
-/// confirmation over settings instead of stretching across both. The other panel stays
-/// undimmed but inert — tapping it dismisses. That choice is re-made from
-/// layout constraints on every build, so a window resized across the
-/// breakpoint while the dialog is open re-homes the card.
+/// Settings, forms and confirmations are always centered in the whole window,
+/// with a dimmed background and no beak. Content survives resizing.
 ///
 /// The content shape is fixed — optional icon tile, title, optional message,
 /// optional [content] slot, and a row of [actions] — so every dialog in the
 /// app reads the same; [iconBeside] only turns the tile, title and message
 /// into one row. Show it with [showKalinkaDialog].
-class KalinkaDialog extends StatelessWidget {
-  /// Panel the dialog belongs to once the layout splits.
+class KalinkaDialog extends StatefulWidget {
+  /// Retained for caller compatibility; placement is always window-centered.
   final KalinkaDialogSide side;
 
-  /// Centers the card within its panel, using only the route's fade-in.
+  /// Retained for caller compatibility; all dialogs now use centered placement.
   final bool centered;
 
   /// Glyph for the tinted tile above the title. Without it the card starts at
@@ -74,7 +64,7 @@ class KalinkaDialog extends StatelessWidget {
     super.key,
     required this.side,
     required this.title,
-    this.centered = false,
+    this.centered = true,
     this.icon,
     this.iconColor = KalinkaColors.accent,
     this.iconGlyphColor,
@@ -88,7 +78,7 @@ class KalinkaDialog extends StatelessWidget {
   /// confirmation on a tablet panel, wider still on desktop.
   static const double _maxCardWidth = 460;
 
-  /// Gap between the card and the panel edges on narrow windows.
+  /// Gap between the card and the window edges on narrow windows.
   static const double _cardMargin = 20;
 
   /// Marks the card itself, so placement tests can measure where it landed.
@@ -96,77 +86,34 @@ class KalinkaDialog extends StatelessWidget {
   static const cardKey = Key('kalinka_dialog_card');
 
   @override
-  Widget build(BuildContext context) {
-    // LayoutBuilder (not MediaQuery) so the decision comes from the same
-    // constraints the layout underneath splits on, and re-runs on resize.
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final panel = Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildTapToDismiss(context, dimmed: true),
-            _buildCard(context),
-          ],
-        );
-        // The shell keeps clear of side insets; so do its panes.
-        final padding = MediaQuery.paddingOf(context);
-        final shellWidth = constraints.maxWidth - padding.horizontal;
-        final split = kalinkaSplitLayout(
-          shellWidth,
-          textScaler: MediaQuery.textScalerOf(context),
-        );
-        if (side == KalinkaDialogSide.full ||
-            (!split && side == KalinkaDialogSide.player)) {
-          return panel;
-        }
-        // The player's pane has a bounded width at the right; browsing
-        // takes the rest.
-        final player = split ? kalinkaPlayerPaneWidth(shellWidth) : 0.0;
-        final rail = kalinkaNavigationRailWidth(
-          shellWidth,
-          windowHeight: MediaQuery.sizeOf(context).height,
-          textScaler: MediaQuery.textScalerOf(context),
-        );
-        final railEdge = rail > 0 ? padding.left + rail : 0.0;
-        final away = _buildTapToDismiss(context, dimmed: false);
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: side == KalinkaDialogSide.player
-              ? [
-                  Expanded(child: away),
-                  SizedBox(width: player, child: panel),
-                  if (padding.right > 0)
-                    SizedBox(width: padding.right, child: away),
-                ]
-              : [
-                  if (rail > 0) SizedBox(width: railEdge, child: away),
-                  Expanded(child: panel),
-                  if (split)
-                    SizedBox(width: player + 1 + padding.right, child: away),
-                ],
-        );
-      },
-    );
-  }
+  State<KalinkaDialog> createState() => _KalinkaDialogState();
+}
 
-  /// Everything around the card closes the dialog on tap. [dimmed] paints the
-  /// scrim; the panel the dialog isn't in stays clear but still swallows taps,
-  /// so the app behind can't be poked while a dialog is up.
-  Widget _buildTapToDismiss(BuildContext context, {required bool dimmed}) =>
+class _KalinkaDialogState extends State<KalinkaDialog> {
+  final _bodyKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
       GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => Navigator.of(context).maybePop(),
-        child: dimmed
-            ? ColoredBox(color: Colors.black.withValues(alpha: 0.60))
-            : const SizedBox.expand(),
-      );
+        child: ColoredBox(
+          key: const ValueKey('kalinka-dialog-scrim'),
+          color: Colors.black.withValues(alpha: 0.60),
+        ),
+      ),
+      _buildCard(context),
+    ],
+  );
 
   Widget _buildCard(BuildContext context) {
     final card = Container(
-      key: cardKey,
+      key: KalinkaDialog.cardKey,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: KalinkaColors.surfaceRaised,
+        color: KalinkaColors.surfaceDialog,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: KalinkaColors.borderDefault),
         boxShadow: [
@@ -177,43 +124,17 @@ class KalinkaDialog extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (iconBeside)
-            _buildHeadingBeside()
-          else ...[
-            if (icon != null) ...[_buildIconTile(), const SizedBox(height: 14)],
-            Text(
-              title,
-              style: KalinkaTextStyles.dialogTitle,
-              textAlign: TextAlign.center,
-            ),
-            if (message != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                message!,
-                style: KalinkaTextStyles.dialogBody,
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ],
-          if (content != null) ...[const SizedBox(height: 16), content!],
-          if (actions.isNotEmpty) ...[
-            const SizedBox(height: 22),
-            Row(
-              spacing: 10,
-              children: [for (final action in actions) Expanded(child: action)],
-            ),
-          ],
-        ],
-      ),
+      child: _buildContents(),
     );
 
     final cardContent = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: _cardMargin),
+      padding: const EdgeInsets.symmetric(
+        horizontal: KalinkaDialog._cardMargin,
+      ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: _maxCardWidth),
+        constraints: const BoxConstraints(
+          maxWidth: KalinkaDialog._maxCardWidth,
+        ),
         // Absorb taps on the card so they don't reach the scrim.
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -223,35 +144,71 @@ class KalinkaDialog extends StatelessWidget {
       ),
     );
 
-    if (centered) {
-      return SafeArea(
-        minimum: const EdgeInsets.symmetric(vertical: _cardMargin),
-        child: Center(child: SingleChildScrollView(child: cardContent)),
-      );
-    }
-
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Flexible(
-          child: _slideIn(context, SingleChildScrollView(child: cardContent)),
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        minimum: const EdgeInsets.symmetric(
+          vertical: KalinkaDialog._cardMargin,
         ),
-        SizedBox(height: MediaQuery.of(context).padding.bottom + 28),
-      ],
+        child: Center(child: SingleChildScrollView(child: cardContent)),
+      ),
     );
   }
 
+  Widget _buildContents() => KeyedSubtree(
+    key: _bodyKey,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.iconBeside)
+          _buildHeadingBeside()
+        else ...[
+          if (widget.icon != null) ...[
+            _buildIconTile(),
+            const SizedBox(height: 14),
+          ],
+          Text(
+            widget.title,
+            style: KalinkaTextStyles.dialogTitle,
+            textAlign: TextAlign.center,
+          ),
+          if (widget.message != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              widget.message!,
+              style: KalinkaTextStyles.dialogBody,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ],
+        if (widget.content != null) ...[
+          const SizedBox(height: 16),
+          widget.content!,
+        ],
+        if (widget.actions.isNotEmpty) ...[
+          const SizedBox(height: 22),
+          Row(
+            spacing: 10,
+            children: [
+              for (final action in widget.actions) Expanded(child: action),
+            ],
+          ),
+        ],
+      ],
+    ),
+  );
+
   Widget _buildHeadingBeside() => Row(
     children: [
-      if (icon != null) ...[_buildIconTile(), const SizedBox(width: 16)],
+      if (widget.icon != null) ...[_buildIconTile(), const SizedBox(width: 16)],
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: KalinkaTextStyles.dialogTitle),
-            if (message != null) ...[
+            Text(widget.title, style: KalinkaTextStyles.dialogTitle),
+            if (widget.message != null) ...[
               const SizedBox(height: 4),
-              Text(message!, style: KalinkaTextStyles.dialogBody),
+              Text(widget.message!, style: KalinkaTextStyles.dialogBody),
             ],
           ],
         ),
@@ -264,30 +221,15 @@ class KalinkaDialog extends StatelessWidget {
       width: 52,
       height: 52,
       decoration: BoxDecoration(
-        color: iconColor.withValues(alpha: 0.12),
+        color: widget.iconColor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: iconColor.withValues(alpha: 0.2)),
+        border: Border.all(color: widget.iconColor.withValues(alpha: 0.2)),
       ),
-      child: Icon(icon, size: 24, color: iconGlyphColor ?? iconColor),
-    );
-  }
-
-  /// Lifts the card into place on open. Driven off the route animation so
-  /// only the card moves: a scrim that slid in with it would leave an
-  /// undimmed strip along the top. Outside a route (widget tests) it is a
-  /// no-op.
-  Widget _slideIn(BuildContext context, Widget child) {
-    final animation = ModalRoute.of(context)?.animation;
-    if (animation == null) return child;
-    return SlideTransition(
-      position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
-          .animate(
-            CurvedAnimation(
-              parent: animation,
-              curve: const Cubic(0.4, 0, 0.2, 1),
-            ),
-          ),
-      child: child,
+      child: Icon(
+        widget.icon,
+        size: 24,
+        color: widget.iconGlyphColor ?? widget.iconColor,
+      ),
     );
   }
 }
@@ -295,8 +237,7 @@ class KalinkaDialog extends StatelessWidget {
 /// Shows a [KalinkaDialog] with the app's standard fade-in.
 ///
 /// The route barrier stays transparent — [KalinkaDialog] paints its own scrim
-/// so it can dim a single panel and follow live resizes — and only serves to
-/// block input to the app behind.
+/// across the whole window — and blocks input to the app behind.
 Future<T?> showKalinkaDialog<T>({
   required BuildContext context,
   required Widget Function(BuildContext) builder,
@@ -306,12 +247,16 @@ Future<T?> showKalinkaDialog<T>({
     barrierColor: Colors.transparent,
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
-    transitionDuration: const Duration(milliseconds: 280),
+    transitionDuration: MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 280),
     transitionBuilder: (ctx, anim, _, child) => FadeTransition(
       opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
       child: child,
     ),
-    pageBuilder: (ctx, _, _) =>
-        Material(type: MaterialType.transparency, child: builder(ctx)),
+    pageBuilder: (ctx, _, _) => Material(
+      type: MaterialType.transparency,
+      child: Builder(builder: builder),
+    ),
   );
 }

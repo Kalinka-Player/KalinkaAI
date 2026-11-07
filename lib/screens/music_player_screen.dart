@@ -107,9 +107,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   late final Animation<double> _miniPlayerReveal;
   late final Animation<Offset> _miniPlayerSlide;
 
-  // In-screen overlays. Settings and discovery render in both layouts;
-  // the server sheet overlay is tablet-only (phone uses a modal sheet).
-  bool _serverSheetOpen = false;
+  // In-screen management overlays; menus use adaptive popup routes.
   bool _settingsOpen = false;
   bool _pluginsOpen = false;
 
@@ -294,7 +292,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
   Future<void> _showServerSheet() async {
     final result = await showKalinkaBottomSheet<ServerSheetAction>(
-      context: context,
+      context: _connectionDotKey.currentContext ?? context,
+      dialogMaxWidth: 380,
       contentBuilder: (_) => const ServerSheetContent(),
     );
     if (!mounted) return;
@@ -452,7 +451,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       ref.read(homeCustomisationProvider.notifier).close();
       ref.read(rendererSettingsRouteProvider.notifier).close();
       setState(() {
-        _serverSheetOpen = false;
         _settingsOpen = false;
         _settingsCovering = false;
         _pluginsOpen = false;
@@ -1223,7 +1221,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     if (!ref.watch(homeCustomisationProvider) ||
         _settingsOpen ||
         _pluginsOpen ||
-        _serverSheetOpen ||
         ref.watch(rendererSettingsRouteProvider) != null) {
       return null;
     }
@@ -1243,17 +1240,14 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     final disconnected =
         ref.watch(connectionStateProvider) == ConnectionStatus.none;
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
-    final VoidCallback onServerTap = isTablet
-        ? () => setState(() => _serverSheetOpen = true)
-        : _showServerSheet;
+    final VoidCallback onServerTap = _showServerSheet;
     // Whatever is open over Home takes the back press instead.
     final covered =
         ref.watch(homeCustomisationProvider) ||
         _settingsOpen ||
         _pluginsOpen ||
         _discoveryOpen ||
-        rendererSettings != null ||
-        (isTablet && _serverSheetOpen);
+        rendererSettings != null;
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 200),
       layoutBuilder: _topmostScreenLayout,
@@ -1360,20 +1354,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         ref.watch(connectionStateProvider) == ConnectionStatus.none;
     _publishToastInset(24 + _escalationHeight);
     return PopScope(
-      canPop:
-          !_settingsOpen &&
-          !_pluginsOpen &&
-          !_serverSheetOpen &&
-          rendererSettings == null,
+      canPop: !_settingsOpen && !_pluginsOpen && rendererSettings == null,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // Settings, renderer settings and Home own their back via internal
         // PopScopes.
         if (_settingsOpen || _pluginsOpen || rendererSettings != null) return;
-        if (_serverSheetOpen) {
-          setState(() => _serverSheetOpen = false);
-          return;
-        }
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1425,17 +1411,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                         // Within browsing, so it ends above the queue's bar.
                         if (customise != null)
                           Positioned.fill(child: customise),
-                        if (_serverSheetOpen)
-                          Positioned.fill(
-                            child: ServerSheet(
-                              onClose: () =>
-                                  setState(() => _serverSheetOpen = false),
-                              onOpenDiscovery: _openDiscovery,
-                              onOpenSettings: _openSettings,
-                              onOpenPlugins: _openPlugins,
-                              onPowerOff: _powerOffServer,
-                            ),
-                          ),
                         // Management overlays share browsing's bounds,
                         // including their sheets and slide motion.
                         if (_settingsOpen)

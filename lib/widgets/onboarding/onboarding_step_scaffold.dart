@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 import '../kalinka_button.dart';
+import '../kalinka_back_button.dart';
 
 /// Every setup screen's column: [kKalinkaContentMaxWidth] of content inside
 /// its 20dp sides, centred.
@@ -99,12 +100,7 @@ class OnboardingStepScaffold extends StatelessWidget {
                 child: Row(
                   children: [
                     if (onBack != null) ...[
-                      KalinkaButton(
-                        label: 'Back',
-                        variant: KalinkaButtonVariant.neutral,
-                        size: KalinkaButtonSize.normal,
-                        onTap: onBack,
-                      ),
+                      KalinkaBackButton(onPressed: onBack),
                       const SizedBox(width: 12),
                     ],
                     Expanded(

@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/widgets/kalinka_bottom_sheet.dart';
+import 'package:kalinka/widgets/kalinka_centered_surface.dart';
+import 'package:kalinka/widgets/kalinka_popover.dart';
 import 'package:kalinka/widgets/sheet_anchor.dart';
 
-// showModalBottomSheet positions sheets against the whole window (M3 caps
-// them at 640px and centres them). SheetAnchor pins sheets launched from a
-// tablet panel to that panel's horizontal bounds instead — these tests pin
-// down the geometry and the tap-outside dismiss on the uncovered side.
+// Phone sheets retain their panel anchor. Wider windows default to a dialog
+// centered in the whole window, independent of the panel width.
 
 const _sheetKey = Key('sheet_content');
 
 Widget _host({required bool anchored}) {
-  Widget openButton = Builder(
-    builder: (ctx) => Center(
-      child: ElevatedButton(
+  Widget openButton = Center(
+    child: Builder(
+      builder: (ctx) => ElevatedButton(
         onPressed: () => showKalinkaBottomSheet<void>(
           context: ctx,
           contentBuilder: (_) => const SizedBox(key: _sheetKey, height: 120),
@@ -36,20 +36,26 @@ Widget _host({required bool anchored}) {
 }
 
 void main() {
-  // Default test window is 800x600 — the anchored panel is the left 400px.
+  void phone(WidgetTester tester, {double width = 600}) {
+    tester.view.physicalSize = Size(width, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+  }
+
   testWidgets('sheet launched inside a SheetAnchor spans the panel', (
     tester,
   ) async {
+    phone(tester);
     await tester.pumpWidget(_host(anchored: true));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
     final rect = tester.getRect(find.byKey(_sheetKey));
     expect(rect.left, 0);
-    expect(rect.right, 400);
+    expect(rect.right, 300);
   });
 
-  testWidgets('a sheet over a wide panel keeps to its width, centred', (
+  testWidgets('a wide window centers the dialog across both panes', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(2000, 800);
@@ -59,22 +65,26 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    // The panel is the left 1000.
+    expect(find.byType(KalinkaAnchoredSurface), findsNothing);
+    expect(find.byType(KalinkaCenteredSurface), findsOneWidget);
+    expect(find.byType(BottomSheet), findsNothing);
+    // The caller is in the left pane, but its dialog centers in the window.
     final rect = tester.getRect(find.byKey(_sheetKey));
     expect(rect.width, kSheetMaxWidth);
-    expect(rect.center.dx, 500);
+    expect(rect.center, const Offset(1000, 400));
   });
 
   testWidgets('tap beside the anchored sheet still dismisses it', (
     tester,
   ) async {
+    phone(tester);
     await tester.pumpWidget(_host(anchored: true));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
     // Right of the panel, at sheet height — the dismiss zone behind the
     // sheet must close it, mirroring the barrier above.
-    await tester.tapAt(const Offset(600, 590));
+    await tester.tapAt(const Offset(500, 790));
     await tester.pumpAndSettle();
     expect(find.byKey(_sheetKey), findsNothing);
   });
@@ -82,29 +92,30 @@ void main() {
   testWidgets('anchored sheet tracks the panel across window resizes', (
     tester,
   ) async {
+    phone(tester);
     await tester.pumpWidget(_host(anchored: true));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    await tester.binding.setSurfaceSize(const Size(1000, 600));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.view.physicalSize = const Size(700, 800);
     await tester.pumpAndSettle();
 
     final rect = tester.getRect(find.byKey(_sheetKey));
     expect(rect.left, 0);
-    expect(rect.right, 500);
+    expect(rect.right, 350);
   });
 
   testWidgets('sheet without an anchor keeps the default placement', (
     tester,
   ) async {
+    phone(tester, width: 700);
     await tester.pumpWidget(_host(anchored: false));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    // M3 default: 640px wide, centred in the 800px window.
+    // The 640dp sheet cap still centres a sheet in a 700dp phone layout.
     final rect = tester.getRect(find.byKey(_sheetKey));
-    expect(rect.left, 80);
-    expect(rect.right, 720);
+    expect(rect.left, 30);
+    expect(rect.right, 670);
   });
 }

@@ -133,6 +133,7 @@ Future<void> chooseTimezone(
   }
   final picked = await showKalinkaBottomSheet<String>(
     context: context,
+    dialogMaxWidth: kKalinkaContentMaxWidth,
     mayFillScreen: true,
     contentBuilder: (_) =>
         TimezonePicker(zones: zones, current: box.zone, local: localZone),

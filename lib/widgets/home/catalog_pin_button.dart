@@ -11,7 +11,7 @@ import '../../providers/source_modules_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
 import '../kalinka_bottom_sheet.dart';
-import '../tap_highlight.dart';
+import '../overlay_card.dart';
 import 'home_preview_choices.dart';
 
 Future<void> saveHomeChange(BuildContext context, Future<void> change) async {
@@ -113,14 +113,9 @@ class CatalogPinButton extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Close',
-                        style: kalinkaIconButtonStyle,
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          color: KalinkaColors.textSecondary,
-                        ),
+                      OverlayCloseButton(
+                        label: 'Close',
+                        onTap: () => Navigator.pop(context),
                       ),
                     ],
                   ),

@@ -6,6 +6,7 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/settings_top_bar.dart';
+import 'package:kalinka/widgets/kalinka_back_button.dart';
 import 'package:kalinka/widgets/slide_in_panel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -97,7 +98,10 @@ void main() {
         isTrue,
       );
       expect(tester.widget<Text>(title).maxLines, isNull);
-      expect(tester.getSize(find.byTooltip('Back')), const Size(48, 48));
+      expect(
+        tester.getSize(find.byType(KalinkaBackButton)),
+        const Size(48, 48),
+      );
       expect(
         find.byTooltip('About this library').hitTestable(),
         findsOneWidget,

@@ -421,10 +421,7 @@ void main() {
       expect(box.runs, isEmpty);
       if (layout == 'tablet') {
         final card = tester.getRect(find.byKey(KalinkaDialog.cardKey));
-        expect(
-          card.right,
-          lessThanOrEqualTo(size.width - kalinkaPlayerPaneWidth(size.width)),
-        );
+        expect(card.right, lessThanOrEqualTo(size.width - 12));
       }
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();

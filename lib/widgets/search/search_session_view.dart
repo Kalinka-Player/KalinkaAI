@@ -31,6 +31,9 @@ import '../browse_filters/search_filter_overlay.dart';
 import '../mini_player.dart';
 import '../measure_size.dart';
 import '../overlay_card.dart';
+import '../kalinka_popover.dart';
+import '../kalinka_centered_surface.dart';
+import '../kalinka_back_button.dart';
 import '../selection_overlay.dart';
 import '../server_chip.dart';
 import '../tap_highlight.dart' show kalinkaIconButtonStyle, kalinkaOverlay;
@@ -256,6 +259,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   final _ownEntryKey = GlobalKey();
   GlobalKey get _entryKey => widget.entryKey ?? _ownEntryKey;
   Rect? _originRect;
+  KalinkaPopupOrigin? _filterPopupOrigin;
+  final _searchCardKey = GlobalKey();
+  final _filterCardKey = GlobalKey();
 
   // Tracks the keyboard so its dismissal (e.g. the hardware back that hides it)
   // also closes the overlay — one back drops both.
@@ -520,8 +526,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     _heroFold.value = 0;
   }
 
-  void _openFilters() {
+  void _openFilters({BuildContext? from}) {
     if (_filtersOpen) return;
+    _filterPopupOrigin = KalinkaPopupOrigin.capture(from ?? context);
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _barSearchOpen = false;
@@ -1201,6 +1208,13 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// [button] on a grey disc of its own while it stands over an album's
   /// cover, so it shows on the palest art, and gone as the bar fills in.
   Widget _onDisc(bool overAlbum, Widget button) {
+    // Album Back has a separate design, including wide albums whose cover is
+    // beside the tracks. Keep its caller and artwork treatment unchanged.
+    final session = ref.read(searchSessionProvider);
+    final album =
+        session.activeView == FindMusicView.catalogs &&
+        session.catalogPage.isAlbum;
+    if (!album) return KalinkaBackButton(onPressed: _handleBack);
     if (!overAlbum) return button;
     return ListenableBuilder(
       listenable: _albumBar,
@@ -1376,10 +1390,12 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                 if (!catalogChrome &&
                     !onResults &&
                     !_filterCapabilities(session).isEmpty)
-                  SearchFilterButton(
-                    activeCount: _appliedFilter(session).activeCount,
-                    open: _filtersOpen,
-                    onTap: _openFilters,
+                  Builder(
+                    builder: (buttonContext) => SearchFilterButton(
+                      activeCount: _appliedFilter(session).activeCount,
+                      open: _filtersOpen,
+                      onTap: () => _openFilters(from: buttonContext),
+                    ),
                   ),
                 SizedBox(
                   height: _kBarMinHeight,
@@ -1517,12 +1533,14 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       }
       filter = session.catalogFilter.copyWith(type: session.expandedShelf);
     }
-    return CatalogFiltersButton(
-      key: const ValueKey('bar-filters'),
-      count: filter.copyWith(text: '').activeCount,
-      labelled: false,
-      rowHeight: _kBarMinHeight,
-      onTap: _openFilters,
+    return Builder(
+      builder: (buttonContext) => CatalogFiltersButton(
+        key: const ValueKey('bar-filters'),
+        count: filter.copyWith(text: '').activeCount,
+        labelled: false,
+        rowHeight: _kBarMinHeight,
+        onTap: () => _openFilters(from: buttonContext),
+      ),
     );
   }
 
@@ -1784,9 +1802,8 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   static const _plainHint = 'Artist, album or track…';
 
   /// The unfolded search-and-filters card, resting under the title bar so the
-  /// pill it came from stays visible above it. The scrim is lighter than the
-  /// search overlay's: the rows behind stay legible, since the whole point of
-  /// the card is to narrow them.
+  /// pill it came from stays visible above it. Its dismiss layer is transparent
+  /// so the listing stays visible while choosing filters.
   Widget _buildFiltersOverlay(SearchSessionState session) {
     final page = session.catalogPage;
     final onResults = session.activeView == FindMusicView.results;
@@ -1808,6 +1825,30 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
               constraints.maxWidth - 32,
               _kFiltersMaxWidth * scale,
             );
+            Widget buildCard() => SearchFilterOverlay(
+              key: _filterCardKey,
+              capabilities: _filterCapabilities(session),
+              applied: _filtersOpenedOn,
+              // Search is the bar's on results and catalogs.
+              showSearch: !onResults && !CatalogSliverHeader.appliesTo(page),
+              title: onResults || CatalogSliverHeader.appliesTo(page)
+                  ? 'FILTERS'
+                  : 'SEARCH & FILTERS',
+              searchHint: page.title == null || page.title!.isEmpty
+                  ? 'Search'
+                  : 'Search ${page.title}',
+              // Clamped: a window short enough to make this
+              // negative would assert on the card's constraints.
+              maxHeight: math.max(
+                math.min(
+                  constraints.maxHeight - targetTop - 24,
+                  _kFiltersMaxHeight * scale,
+                ),
+                120.0,
+              ),
+              onApply: _applyFilters,
+              onCancel: _closeFilters,
+            );
             return AnimatedBuilder(
               animation: _filtersCtrl,
               builder: (context, _) {
@@ -1818,51 +1859,39 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                       child: GestureDetector(
                         onTap: _closeFilters,
                         behavior: HitTestBehavior.opaque,
-                        child: ColoredBox(
-                          color: Colors.black.withValues(alpha: 0.72 * t),
-                        ),
+                        child: const SizedBox.expand(),
                       ),
                     ),
-                    Positioned(
-                      top: targetTop,
-                      right: 16,
-                      width: width,
-                      child: Opacity(
-                        opacity: t,
-                        child: Transform.scale(
-                          scale: lerpDouble(0.92, 1, t)!,
-                          // Unfolds out of the pill it replaced, top-right.
-                          alignment: Alignment.topRight,
-                          child: SearchFilterOverlay(
-                            capabilities: _filterCapabilities(session),
-                            applied: _filtersOpenedOn,
-                            // Search is the bar's on results and catalogs.
-                            showSearch:
-                                !onResults &&
-                                !CatalogSliverHeader.appliesTo(page),
-                            title:
-                                onResults || CatalogSliverHeader.appliesTo(page)
-                                ? 'FILTERS'
-                                : 'SEARCH & FILTERS',
-                            searchHint:
-                                page.title == null || page.title!.isEmpty
-                                ? 'Search'
-                                : 'Search ${page.title}',
-                            // Clamped: a window short enough to make this
-                            // negative would assert on the card's constraints.
-                            maxHeight: math.max(
-                              math.min(
-                                constraints.maxHeight - targetTop - 24,
-                                _kFiltersMaxHeight * scale,
-                              ),
-                              120.0,
+                    if (kalinkaUsesPopovers(context) &&
+                        _filterPopupOrigin != null)
+                      Positioned.fill(
+                        child: Opacity(
+                          opacity: t,
+                          child: KalinkaAnchoredSurface(
+                            origin: _filterPopupOrigin!,
+                            maxWidth: math.min(
+                              kKalinkaPopupMaxWidth,
+                              _kFiltersMaxWidth * scale,
                             ),
-                            onApply: _applyFilters,
-                            onCancel: _closeFilters,
+                            child: buildCard(),
+                          ),
+                        ),
+                      )
+                    else
+                      Positioned(
+                        top: targetTop,
+                        right: 16,
+                        width: width,
+                        child: Opacity(
+                          opacity: t,
+                          child: Transform.scale(
+                            scale: lerpDouble(0.92, 1, t)!,
+                            // Unfolds out of the pill it replaced, top-right.
+                            alignment: Alignment.topRight,
+                            child: buildCard(),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 );
               },
@@ -1923,6 +1952,72 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                   double.infinity,
                 );
 
+            Widget buildCard() => KalinkaOverlayCard(
+              key: _searchCardKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // The card names itself and carries its own dismiss,
+                  // like every other surface that opens over the title
+                  // bar; the field below is then only a field.
+                  OverlayCardHeader(
+                    icon: smart ? Icons.auto_awesome : Icons.search_rounded,
+                    title: smart ? 'SMART SEARCH' : 'SEARCH',
+                    onClose: _closeSearch,
+                    closeLabel: 'Close search',
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                    child: DecoratedBox(
+                      // The field is drawn as a field: the composer is
+                      // chromeless, so the outline belongs here.
+                      decoration: BoxDecoration(
+                        color: KalinkaColors.surfaceInput,
+                        borderRadius: BorderRadius.circular(26),
+                        border: Border.all(
+                          color: smart
+                              ? KalinkaColors.accentBorder
+                              : KalinkaColors.borderDefault,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
+                        child: SearchComposer(
+                          controller: _composerController,
+                          focusNode: _composerFocus,
+                          onSubmit: _submit,
+                          hint: smart
+                              ? 'Search music, or describe a mood'
+                              : _plainHint,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // The suggestion panel grows top-down; rows fade/slide
+                  // in staggered inside it.
+                  Flexible(
+                    child: ClipRect(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        heightFactor: panelReveal,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxHeight: listMaxHeight),
+                          child: SearchSuggestionsList(
+                            query: _typed,
+                            onInsert: _insert,
+                            onSubmit: _submitFromTile,
+                            reveal: _overlayCtrl,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
             return Stack(
               children: [
                 // Dim scrim — almost opaque at rest — over the whole screen. Tap to
@@ -1936,78 +2031,23 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                     ),
                   ),
                 ),
-                Positioned(
-                  top: top,
-                  left: left,
-                  right: right,
-                  child: KalinkaOverlayCard(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // The card names itself and carries its own dismiss,
-                        // like every other surface that opens over the title
-                        // bar; the field below is then only a field.
-                        OverlayCardHeader(
-                          icon: smart
-                              ? Icons.auto_awesome
-                              : Icons.search_rounded,
-                          title: smart ? 'SMART SEARCH' : 'SEARCH',
-                          onClose: _closeSearch,
-                          closeLabel: 'Close search',
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                          child: DecoratedBox(
-                            // The field is drawn as a field: the composer is
-                            // chromeless, so the outline belongs here.
-                            decoration: BoxDecoration(
-                              color: KalinkaColors.surfaceInput,
-                              borderRadius: BorderRadius.circular(26),
-                              border: Border.all(
-                                color: smart
-                                    ? KalinkaColors.accentBorder
-                                    : KalinkaColors.borderDefault,
-                              ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 4,
-                              ),
-                              child: SearchComposer(
-                                controller: _composerController,
-                                focusNode: _composerFocus,
-                                onSubmit: _submit,
-                                hint: smart
-                                    ? 'Search music, or describe a mood'
-                                    : _plainHint,
-                              ),
-                            ),
-                          ),
-                        ),
-                        // The suggestion panel grows top-down; rows fade/slide
-                        // in staggered inside it.
-                        ClipRect(
-                          child: Align(
-                            alignment: Alignment.topCenter,
-                            heightFactor: panelReveal,
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxHeight: listMaxHeight,
-                              ),
-                              child: SearchSuggestionsList(
-                                query: _typed,
-                                onInsert: _insert,
-                                onSubmit: _submitFromTile,
-                                reveal: _overlayCtrl,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                if (kalinkaUsesPopovers(context))
+                  Positioned.fill(
+                    child: Opacity(
+                      opacity: t,
+                      child: KalinkaCenteredSurface(
+                        maxWidth: kHomeSearchMaxWidth,
+                        child: buildCard(),
+                      ),
                     ),
+                  )
+                else
+                  Positioned(
+                    top: top,
+                    left: left,
+                    right: right,
+                    child: buildCard(),
                   ),
-                ),
               ],
             );
           },

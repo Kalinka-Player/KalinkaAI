@@ -161,9 +161,8 @@ void main() {
           {BrowseFacet.genre},
         );
         expect(
-          const BrowseFilterQuery(
-            genreIds: ['jazz', 'jazz'],
-          ).facetsChangedFrom(picked),
+          const BrowseFilterQuery(genreIds: ['jazz', 'jazz'])
+              .facetsChangedFrom(picked),
           {BrowseFacet.genre},
         );
       },
@@ -241,7 +240,7 @@ void main() {
   });
 
   group('pill styling', () {
-    testWidgets('a chosen pill fills crimson, white-labelled, and lightens', (
+    testWidgets('chosen pills use primary outlines and alternatives stay dim', (
       tester,
     ) async {
       await _pumpForm(
@@ -251,15 +250,13 @@ void main() {
         onChanged: (_) {},
       );
 
-      // Fill and edge say which pill is chosen; the label stays white either
-      // way, so the two read as one family.
       expect(
         tester.widget<Text>(find.text('Albums')).style?.color,
         KalinkaColors.textPrimary,
       );
       expect(
         tester.widget<Text>(find.text('Tracks')).style?.color,
-        KalinkaColors.textPrimary,
+        KalinkaColors.textSecondary,
       );
 
       BoxDecoration chosen() =>
@@ -275,21 +272,82 @@ void main() {
                   .decoration
               as BoxDecoration;
 
-      final atRest = chosen().color;
+      expect(chosen().color, KalinkaColors.surfaceElevated);
+      expect(chosen().border, Border.all(color: KalinkaColors.textPrimary));
       final pointer = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await pointer.addPointer(location: Offset.zero);
       addTearDown(pointer.removePointer);
       await pointer.moveTo(tester.getCenter(find.text('Albums')));
       await tester.pumpAndSettle();
 
-      // The chosen pill is a solid crimson segment, like the settings
-      // segmented control; hover lightens the crimson itself.
-      expect(atRest, KalinkaColors.accent);
-      expect(chosen().color, KalinkaColors.accentTint);
+      expect(chosen().color, KalinkaColors.surfaceOverlay);
+      expect(chosen().border, Border.all(color: KalinkaColors.textPrimary));
     });
   });
 
   group('live facets', () {
+    testWidgets('All genres highlights only itself, matching All sources', (
+      tester,
+    ) async {
+      var query = const BrowseFilterQuery();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            browseGenresProvider(_vocabulary).overrideWith(
+              (ref) async => [
+                Genre(id: 'jazz', name: 'Jazz'),
+                Genre(id: 'rock', name: 'Rock'),
+                Genre(id: 'blues', name: 'Blues'),
+              ],
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: StatefulBuilder(
+                builder: (context, setState) => BrowseFilterForm(
+                  capabilities: _liveCaps,
+                  query: query,
+                  onChanged: (next) => setState(() => query = next),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      List<String> selectedGenres() => tester
+          .widgetList<FilterPill>(find.byType(FilterPill))
+          .where(
+            (pill) =>
+                ['All genres', 'Jazz', 'Rock', 'Blues'].contains(pill.label) &&
+                pill.selected,
+          )
+          .map((pill) => pill.label)
+          .toList();
+
+      expect(selectedGenres(), ['All genres']);
+      expect(query.genreIds, isEmpty);
+      await tester.tap(find.text('Jazz'));
+      await tester.pumpAndSettle();
+      expect(selectedGenres(), ['Jazz']);
+      expect(query.genreIds, ['jazz']);
+      await tester.tap(find.text('Rock'));
+      await tester.pumpAndSettle();
+      expect(selectedGenres(), ['Jazz', 'Rock']);
+      expect(query.genreIds, ['jazz', 'rock']);
+      await tester.tap(find.text('All genres'));
+      await tester.pumpAndSettle();
+      expect(selectedGenres(), ['All genres']);
+      expect(query.genreIds, isEmpty);
+      await tester.tap(find.text('Blues'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Blues'));
+      await tester.pumpAndSettle();
+      expect(selectedGenres(), ['All genres']);
+      expect(query.genreIds, isEmpty);
+    });
+
     testWidgets('text is debounced into one query', (tester) async {
       final emitted = <BrowseFilterQuery>[];
       await _pumpForm(tester, capabilities: _liveCaps, onChanged: emitted.add);

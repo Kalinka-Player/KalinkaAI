@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import 'hover_text_action.dart';
+import 'kalinka_popover.dart';
 
 /// The chrome shared by the surfaces that open over the title bar — smart
 /// search and search-and-filters.
@@ -21,6 +22,14 @@ class KalinkaOverlayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (KalinkaPopoverContentScope.contains(context)) {
+      return TextFieldTapRegion(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight ?? double.infinity),
+          child: child,
+        ),
+      );
+    }
     return TextFieldTapRegion(
       child: Material(
         type: MaterialType.transparency,
@@ -29,7 +38,7 @@ class KalinkaOverlayCard extends StatelessWidget {
               ? null
               : BoxConstraints(maxHeight: maxHeight!),
           decoration: BoxDecoration(
-            color: KalinkaColors.surfaceRaised,
+            color: KalinkaColors.surfaceDialog,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(color: KalinkaColors.borderDefault, width: 1),
             // Elevation so the card lifts off the fading scrim.
@@ -129,9 +138,10 @@ class _AccentMark extends StatelessWidget {
   }
 }
 
-/// Dismisses an overlay card. Its ring lightens under the pointer, the same
-/// cue the pills and the title-bar button use.
-class OverlayCloseButton extends StatefulWidget {
+/// Shared dismiss button for dialogs, popovers and sheets. The filter card's
+/// 34dp ring sits inside a 48dp target, with the same neutral feedback for
+/// hover and press and a primary outline for keyboard focus.
+class OverlayCloseButton extends StatelessWidget {
   final VoidCallback onTap;
   final String label;
 
@@ -142,61 +152,56 @@ class OverlayCloseButton extends StatefulWidget {
   });
 
   @override
-  State<OverlayCloseButton> createState() => _OverlayCloseButtonState();
-}
-
-class _OverlayCloseButtonState extends State<OverlayCloseButton> {
-  bool _hovering = false;
-
-  void _setHovering(bool value) {
-    if (value == _hovering) return;
-    setState(() => _hovering = value);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: widget.label,
-      button: true,
-      excludeSemantics: true,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => _setHovering(true),
-        onExit: (_) => _setHovering(false),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 130),
-            curve: Curves.easeOut,
-            width: 34,
-            height: 34,
-            margin: const EdgeInsets.only(left: 4),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _hovering
-                  ? KalinkaColors.surfaceOverlay
-                  : Colors.transparent,
-              border: Border.all(
-                color: _hovering
-                    ? KalinkaColors.textMuted
-                    : KalinkaColors.borderDefault,
-              ),
-            ),
-            child: const Icon(
-              Icons.close_rounded,
-              size: 18,
-              color: KalinkaColors.textPrimary,
-            ),
-          ),
+    return IconButton(
+      tooltip: label,
+      onPressed: onTap,
+      icon: Icon(Icons.close_rounded, size: 18, semanticLabel: label),
+      style: ButtonStyle(
+        fixedSize: const WidgetStatePropertyAll(Size.square(34)),
+        minimumSize: const WidgetStatePropertyAll(Size.square(34)),
+        maximumSize: const WidgetStatePropertyAll(Size.square(34)),
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+        visualDensity: VisualDensity.standard,
+        tapTargetSize: MaterialTapTargetSize.padded,
+        shape: const WidgetStatePropertyAll(CircleBorder()),
+        foregroundColor: const WidgetStatePropertyAll(
+          KalinkaColors.textPrimary,
         ),
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.any(
+                {
+                  WidgetState.hovered,
+                  WidgetState.pressed,
+                  WidgetState.focused,
+                }.contains,
+              )
+              ? KalinkaColors.surfaceOverlay
+              : Colors.transparent,
+        ),
+        side: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) {
+            return const BorderSide(color: KalinkaColors.textPrimary, width: 2);
+          }
+          return BorderSide(
+            color:
+                states.any({WidgetState.hovered, WidgetState.pressed}.contains)
+                ? KalinkaColors.textMuted
+                : KalinkaColors.borderDefault,
+          );
+        }),
+        animationDuration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 130),
       ),
     );
   }
 }
 
-/// An overlay card's textual action (Reset, Clear). Crimson inside the card,
-/// where there is nothing tinted for it to compete with.
+/// An overlay card's secondary textual action (Reset, Clear). Stay neutral so
+/// the primary action is the card's only crimson control.
 class OverlayTextAction extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
@@ -212,8 +217,8 @@ class OverlayTextAction extends StatelessWidget {
     return HoverTextAction(
       label: label,
       onTap: onTap,
-      color: KalinkaColors.accentTint,
-      hoverColor: KalinkaColors.accentBright,
+      color: KalinkaColors.textSecondary,
+      hoverColor: KalinkaColors.textPrimary,
       fontSize: KalinkaTypography.baseSize + 1,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     );

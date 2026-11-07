@@ -18,6 +18,7 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_rows_shimmer.dart' show LoadingSpinner;
 import 'package:kalinka/widgets/home/catalog_pin_button.dart';
 import 'package:kalinka/widgets/home/home_preview_illustration.dart';
+import 'package:kalinka/widgets/kalinka_centered_surface.dart';
 import 'package:kalinka/widgets/sheet_anchor.dart';
 
 import 'support/home_shell.dart' show SettableConnection;
@@ -152,8 +153,19 @@ void main() {
         expect(compact.hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
         if (size.width >= 900) {
-          expect(tester.getRect(compact).left, greaterThanOrEqualTo(600));
-          expect(tester.getRect(compact).right, lessThanOrEqualTo(1200));
+          final dialog = tester.getRect(
+            find.byKey(KalinkaCenteredSurface.surfaceKey),
+          );
+          expect(dialog.center, size.center(Offset.zero));
+          expect(dialog.width, 640);
+          expect(
+            tester.getRect(compact).left,
+            greaterThanOrEqualTo(dialog.left),
+          );
+          expect(
+            tester.getRect(compact).right,
+            lessThanOrEqualTo(dialog.right),
+          );
         }
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();

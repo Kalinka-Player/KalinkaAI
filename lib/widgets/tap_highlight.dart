@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import 'kalinka_popover.dart';
+
 import '../utils/click_cursor.dart';
 
 /// A tint laid *over* a control rather than a ground laid under it, so one
@@ -200,7 +202,9 @@ class _TapHighlightState extends State<TapHighlight> {
       onEnter: (_) => _hover(true),
       onExit: (_) => _hover(false),
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: live
+            ? () => KalinkaPopupOrigin.run(context, widget.onTap!)
+            : null,
         onTapDown: live ? (_) => _press(true) : null,
         onTapUp: live ? (_) => _press(false) : null,
         onTapCancel: live ? () => _press(false) : null,

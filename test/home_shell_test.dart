@@ -14,6 +14,7 @@ import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/coach_marks_overlay.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
+import 'package:kalinka/widgets/kalinka_popover.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/player_queue_view.dart';
@@ -425,38 +426,49 @@ void main() {
     );
   });
 
-  testWidgets('the output sheet opens over the player, from it or its bar', (
-    tester,
-  ) async {
-    await pumpHomeShell(
-      tester,
-      queue: SettableQueue(queueOf(3)),
-      size: const Size(1400, 900),
-      overrides: [rendererListProvider.overrideWith(_Renderers.new)],
-    );
-    final player = tester.getRect(find.byType(NowPlayingContent));
+  testWidgets(
+    'the output picker uses a window-sized popover from player and bar',
+    (tester) async {
+      await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(3)),
+        size: const Size(1400, 900),
+        overrides: [rendererListProvider.overrideWith(_Renderers.new)],
+      );
+      void expectPopover() {
+        expect(find.byType(KalinkaAnchoredSurface), findsOneWidget);
+        expect(find.byType(BottomSheet), findsNothing);
+        expect(
+          tester
+                  .widget<ModalBarrier>(find.byType(ModalBarrier).last)
+                  .color
+                  ?.a ??
+              0,
+          0,
+        );
+        final surface = tester.getRect(
+          find.byKey(KalinkaAnchoredSurface.surfaceKey),
+        );
+        expect(surface.left, greaterThanOrEqualTo(12));
+        expect(surface.right, lessThanOrEqualTo(1388));
+      }
 
-    void expectOverPlayer() {
-      final sheet = tester.getRect(find.byType(RendererPickerContent));
-      expect(sheet.left, greaterThanOrEqualTo(player.left));
-      expect(sheet.right, lessThanOrEqualTo(player.right));
-    }
+      await tester.tap(find.text('SMSL SU-1'));
+      await tester.pumpAndSettle();
+      expectPopover();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(RendererPickerContent), findsNothing);
 
-    await tester.tap(find.text('SMSL SU-1'));
-    await tester.pumpAndSettle();
-    expectOverPlayer();
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    expect(find.byType(RendererPickerContent), findsNothing);
-
-    await tester.tap(_side('QUEUE'));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.descendant(of: _queueMiniPlayer, matching: find.text('SMSL SU-1')),
-    );
-    await tester.pumpAndSettle();
-    expectOverPlayer();
-  });
+      await tester.tap(_side('QUEUE'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(of: _queueMiniPlayer, matching: find.text('SMSL SU-1')),
+      );
+      await tester.pumpAndSettle();
+      expectPopover();
+    },
+  );
 
   testWidgets('a box restarting for its sound card holds the mini-player and '
       'the rail only until it answers', (tester) async {

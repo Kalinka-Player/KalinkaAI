@@ -443,7 +443,7 @@ void main() {
   }
 
   testWidgets(
-    'source filter logos and fallback icons share the primary foreground',
+    'source filter artwork stays primary while unselected labels are dim',
     (tester) async {
       final cache = ModuleIconCache(
         client: MockClient((_) async => http.Response.bytes(_png, 200)),
@@ -520,9 +520,13 @@ void main() {
       for (final title in ['Qobuz', 'Tidal', 'My Library']) {
         expect(
           tester.widget<Text>(find.text(title)).style!.color,
-          KalinkaColors.textPrimary,
+          KalinkaColors.textSecondary,
         );
       }
+      expect(
+        tester.widget<Text>(find.text('All sources')).style!.color,
+        KalinkaColors.textPrimary,
+      );
       expect(tester.takeException(), isNull);
     },
   );

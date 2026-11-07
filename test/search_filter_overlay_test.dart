@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -9,6 +10,7 @@ import 'package:kalinka/providers/browse_genres_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_button.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_overlay.dart';
+import 'package:kalinka/widgets/overlay_card.dart';
 
 const _vocabulary = (
   catalogId: 'kalinka:localfiles:catalog:albums',
@@ -117,6 +119,35 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pump();
     expect(cancelled, 1);
+  });
+
+  testWidgets('circular Close supports keyboard and the full touch target', (
+    tester,
+  ) async {
+    var cancelled = 0;
+    await _pumpOverlay(
+      tester,
+      onApply: (_) => fail('closing must not apply staged filters'),
+      onCancel: () => cancelled++,
+    );
+    await tester.tap(find.text('Tracks'));
+    await tester.pump();
+
+    final close = find.byType(OverlayCloseButton);
+    expect(tester.getSize(close), const Size(48, 48));
+    expect(find.byTooltip('Close filters'), findsOneWidget);
+    expect(find.bySemanticsLabel('Close filters'), findsOneWidget);
+
+    // The seven pixels outside the visible 34dp circle still dismiss.
+    await tester.tapAt(tester.getTopLeft(close) + const Offset(2, 24));
+    await tester.pump();
+    expect(cancelled, 1);
+
+    Focus.of(tester.element(find.byIcon(Icons.close_rounded))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(cancelled, 2);
   });
 
   testWidgets('Reset appears with a staged selection and empties it', (

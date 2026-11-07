@@ -45,7 +45,8 @@ class _ReceiverApprovalHostState extends ConsumerState<ReceiverApprovalHost> {
       builder: (_) => PopScope(
         canPop: false,
         child: Dialog(
-          backgroundColor: KalinkaColors.surfaceRaised,
+          backgroundColor: KalinkaColors.surfaceDialog,
+          surfaceTintColor: Colors.transparent,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: SingleChildScrollView(

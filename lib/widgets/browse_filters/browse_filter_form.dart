@@ -614,16 +614,8 @@ String filterTypeLabel(SearchType type) {
   }
 }
 
-/// A filter pill: a filled crimson segment when it carries the current answer,
-/// plain surface when it is an available alternative, outline-only when the
-/// surface does not offer it.
-///
-/// A solid fill because that is what a chosen value looks like everywhere else
-/// in the app — the settings segmented control, a toggle that is on, the
-/// primary button. Crimson *outlines* are reserved for things that are
-/// accent-flavoured without being a value: the action a set leads with, the
-/// current-item row tint. What a choice leaves behind — the chips above the
-/// listing — is grey.
+/// A neutral filter pill: primary text and outline mark the current answer;
+/// alternatives use dim text and outlines. Crimson belongs to the action.
 class FilterPill extends StatefulWidget {
   final String label;
   final bool selected;
@@ -702,6 +694,9 @@ class FilterPillFace extends StatelessWidget {
   final bool muted;
   final bool hovered;
 
+  /// Applied-filter receipts retain a primary label with a quiet border.
+  final bool applied;
+
   /// A mark ahead of the label, such as a source's tile.
   final Widget? leading;
 
@@ -714,6 +709,7 @@ class FilterPillFace extends StatelessWidget {
     this.selected = false,
     this.muted = false,
     this.hovered = false,
+    this.applied = false,
     this.leading,
     this.trailing,
   });
@@ -727,15 +723,16 @@ class FilterPillFace extends StatelessWidget {
     final Color border;
     if (on) {
       fg = KalinkaColors.textPrimary;
-      // Hover lightens the crimson itself — berry over the base red.
-      bg = hovered ? KalinkaColors.accentTint : KalinkaColors.accent;
-      border = bg;
+      bg = hovered
+          ? KalinkaColors.surfaceOverlay
+          : KalinkaColors.surfaceElevated;
+      border = KalinkaColors.textPrimary;
     } else if (muted) {
       fg = KalinkaColors.textMuted;
       bg = Colors.transparent;
       border = KalinkaColors.borderSubtle;
     } else {
-      fg = KalinkaColors.textPrimary;
+      fg = applied ? KalinkaColors.textPrimary : KalinkaColors.textSecondary;
       bg = hovered
           ? KalinkaColors.surfaceOverlay
           : KalinkaColors.surfaceElevated;

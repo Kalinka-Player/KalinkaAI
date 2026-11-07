@@ -24,6 +24,8 @@ Use sentence case: **Download server logs**, **Check your changes**. A renderer'
 
 Back closes the current panel through `SlideInPanel.closeOf(context)`. System Back does the same. Returning preserves the parent tab, scroll position and staged edits. Only the uppermost panel owns Back. The header remains outside the content scroll.
 
+Use the shared `KalinkaBackButton`: a 40dp outlined circle in a 48dp target, matching filter controls, with neutral hover/press and a primary keyboard focus ring. This also applies to browsing, search and setup; the album view retains its separate treatment. See [Back buttons](../PALETTE.md#back-buttons) for exact states.
+
 The shell's labelled navigation rail remains available beside settings on wider windows. Settings occupy the browsing pane, leaving the player available, and use the shared adaptive split calculation. On phones, Settings remains in the existing server menu; settings retain their Back button with no additional navigation menu. Beside the rail, which names Settings and is how it is left, Settings has no top bar: its tabs start at the top of the pane, taking the top safe inset themselves. Choosing another destination runs the existing pending-change guard and cannot dismiss an active operation. Resizing preserves the current settings page and staged changes. The mini-player grows with system text size, and settings reserve that height.
 
 About is a labelled icon button in a plugin's title bar. Install/Uninstall belongs beside its status in the scrolling introduction. A renderer's page is titled with the renderer's name, in the top bar's title face, and ends its top bar with the Expert settings switch: a round 40dp `{}` icon button with a matching compact tap target, grey (`surfaceElevated`, `borderDefault`, `textSecondary` icon) while off and outlined in berry (`accentSubtle`, `accentBorder`, `accentTint` icon) while on, since expert is a mode the page stays in. Do not add further controls to the title row.
@@ -37,6 +39,7 @@ Read these values from `KalinkaColors`, never duplicate hex literals in a screen
 | Page canvas | `background` | `#080808` |
 | Fixed settings header | `surfaceBase` | `#0E0E0E` |
 | Cards | `surfaceRaised` | `#151513` |
+| Dialogs, popovers and bottom sheets (Connect reference) | `surfaceDialog` | `#151513` |
 | Inputs | `surfaceInput` | `#171715` |
 | Unselected pills / raised controls | `surfaceElevated` | `#1C1C1A` |
 | Header-button hover / press | `surfaceOverlay` | `#222220` |
@@ -55,6 +58,10 @@ Read these values from `KalinkaColors`, never duplicate hex literals in a screen
 | Pending badge text on tinted fill | `statusPendingLight` | `#E8B86A` |
 
 The header always has the same opaque fill, a 1dp bottom rule and no shadow or elevation. There is no transparent variant. Card borders and internal row dividers are also 1dp. These rules group content; they are not the only cue identifying a control. Settings and search tabs share the PLAYING / QUEUE button: 8dp horizontal and 12dp vertical padding, 8dp gaps, 6dp rounded corners, `surfaceInput` on hover and `surfaceOverlay` on keyboard focus. The underline sits inside the horizontal padding, 4dp above the bottom, with 1dp rounded ends. Align the first tab’s visible label to the page content gutter; its 8dp highlight padding extends outside that gutter and remains visible inside the scroll viewport. They have no rule under them: only the selected tab's 2dp berry indicator, then the content. Tab labels stay on one line at their full width in a horizontally scrollable strip, with 48dp minimum targets. Keep the active tab visible when selecting a tab or resizing the pane, and keep the strip pinned above the vertically scrolling content.
+
+Dialogs and bottom sheets share Connect's neutral `surfaceDialog` background, including plugin editors, option pickers and confirmations. Keep Material surface tint transparent. Their X uses the shared `OverlayCloseButton`: the filter dialog's 34dp outlined circle, 18dp primary icon and 48dp target. Hover/press use a neutral fill and brighter ring; keyboard focus uses a primary ring. See [dialog and sheet chrome](../PALETTE.md#dialogs-and-bottom-sheets) for the exact states. Preserve the kiosk output panel's dedicated controls.
+
+Sheets remain bottom sheets on phones. On desktop/tablet windows they become centered dialogs without a beak, with a 60% black scrim behind them. All dialogs opened from settings, including Drives & Shares’ **+** form, center in the **whole window**, as do confirmations and notices. Cap settings dialogs at the shared settings content width, `kKalinkaContentMaxWidth` (560dp), using `dialogMaxWidth` for adaptive editors and pickers. Compact forms and confirmations retain their narrower 460dp cap. Only output selector, Filters and Connect use beaked dialogs, with no background dimming. Use the whole window's usable dimensions (width at least 720dp and greater than the 640dp sheet cap, height at least 480dp), even for a narrow settings or player pane. Short landscape phones keep sheets and their dimmed background. Use the shared helpers so positioning avoids screen edges and keyboards, outside tap/Escape dismiss, and staged edits survive crossing the breakpoint. References to sheets below describe their content and phone presentation; their wide presentation defaults to a centered, dimmed dialog.
 
 Measured sRGB contrast: primary/secondary text on the header is **17.82:1 / 7.65:1**; on cards it is **16.88:1 / 7.25:1**. Muted text on a card is **4.95:1**. Keep normal text at least 4.5:1 and meaningful icons at least 3:1. Do not use the base green as small text on cards (4.33:1); use the brighter status text token on its intended tinted surface. Recheck the composed colour when introducing any tint or opacity.
 
@@ -78,7 +85,7 @@ Use the bundled IBM Plex families. System text scaling is respected, not clamped
 
 ## Geometry and spacing
 
-**Customise Home** follows the same fixed header, typography and page gutters. With no pins, it shows brief pinning instructions and source tiles; choosing a source opens its catalog and closes the panel. If no sources are enabled, explain that a source must be enabled in Settings. With pins, its scrolling introduction contains only **Drag catalogs to reorder.** and **Search, collections and sources stay in place.**, using `settingsDescription` and 20dp vertical padding. A full-width 1dp `borderSubtle` separator follows the explanation. The content below is a draggable list of catalog names and metadata, with subtle row separators. It occupies the browsing pane on wider layouts, ending above the queue's mini-player while that spans the window, and the space above the mini-player on phones. The preview and Unpin row actions use Kalinka’s round 48dp icon buttons with the shared hover/press highlight. The preview trigger has no menu-open or focus-only fill and remains keyboard-operable; it does not use the header’s outlined focus style. The preview icon opens an anchored picker with geometric illustrations and labels for all four layouts, using a crimson outline and checkmark for the current choice; it closes after three seconds of inactivity. The crossed-out Unpin icon opens a centered confirmation dialog with Cancel and Unpin actions. Center it within the browsing pane on wider layouts and within the screen on phones; use a fade-in, not a bottom-sheet slide. Dismissing the dialog leaves the catalog pinned. See [Customise Home](../PALETTE.md#customise-home) for the interaction rules.
+**Customise Home** follows the same fixed header, typography and page gutters. With no pins, it shows brief pinning instructions and source tiles; choosing a source opens its catalog and closes the panel. If no sources are enabled, explain that a source must be enabled in Settings. With pins, its scrolling introduction contains only **Drag catalogs to reorder.** and **Search, collections and sources stay in place.**, using `settingsDescription` and 20dp vertical padding. A full-width 1dp `borderSubtle` separator follows the explanation. The content below is a draggable list of catalog names and metadata, with subtle row separators. It occupies the browsing pane on wider layouts, ending above the queue's mini-player while that spans the window, and the space above the mini-player on phones. The preview and Unpin row actions use Kalinka’s round 48dp icon buttons with the shared hover/press highlight. The preview trigger has no menu-open or focus-only fill and remains keyboard-operable; it does not use the header’s outlined focus style. The preview icon opens an anchored picker with geometric illustrations and labels for all four layouts, using a crimson outline and checkmark for the current choice; it closes after three seconds of inactivity. The crossed-out Unpin icon opens a confirmation with Cancel and Unpin actions: centered in the whole window with a dimmed background at every width. Use a fade-in. Dismissing the dialog leaves the catalog pinned. See [Customise Home](../PALETTE.md#customise-home) for the interaction rules.
 
 | Element | Specification |
 | --- | --- |
@@ -89,7 +96,8 @@ Use the bundled IBM Plex families. System text scaling is respected, not clamped
 | Title-to-optional-action gap | 8dp |
 | Space before connection dot | 12dp |
 | Connection dot | 8 × 8dp, centred in a 48dp-high status region |
-| Header button corners / focus | Radius 8dp; 2dp primary-colour focus outline |
+| Back shape / focus | 40dp circle; 2dp primary-colour focus outline |
+| Other header button corners / focus | Radius 8dp; 2dp primary-colour focus outline |
 | Page gutter | 20dp below the 900dp app-window breakpoint; 25dp at/above it |
 | Secondary toolbar | Page gutter horizontally; 8dp vertically; 12dp between items, 8dp between wrapped runs |
 | Scrolling introduction | Page gutter horizontally; 20dp above and below |
@@ -123,7 +131,7 @@ A plugin's settings follow its introduction and controls as labelled cards, with
 
 A collection lists one row per entry: a 36dp icon tile, where the entry points, and its kind beneath. A row opens the entry in a sheet. The status the server reports for the collection follows the rows, and the card ends with one compact neutral button per kind of entry (**Folder on the server**, **Network share**), or a single **Add** where there is one kind; a long label is cut at large text rather than overflowing. A button opens the sheet for that kind, titled with it and describing it, so the sheet never asks for the kind again. The form's first group has no heading, as the sheet's title already introduces it.
 
-A folder on the server is picked, not typed, where the server can be browsed (API 0.21). A path field that offers suggestions ends with a folder button, `textSecondary`, with **Choose a folder on the server** as its tooltip; on an older server it is absent and the field is typed as before. The button opens a sheet titled **CHOOSE A MUSIC FOLDER** that walks the server's places through `GET /server/storage/folders`: the server's own music folder, each mounted drive and share, and the home folders. It lists folders only, never files. Each place and folder is a sheet row with a folder tile, its name and what the server says it holds ("4 folders", "48 tracks", "In My Library"), ending with a chevron. Opening one replaces the list with its folders, the trail under the title and an **Up** row at the top naming the folder it returns to. **Use this folder** is the sheet's one filled button, as the sheet is where the choice is made; it is off at the places themselves, and writes the chosen folder's path into the field.
+Temporarily hide the **Choose a folder on the server** button in all settings, regardless of server capabilities, while server folder browsing is broken. Keep manual path entry and server-provided suggestions available. Retain the folder picker implementation for later repair.
 
 **Storage** is a section of the Streamer tab (`base_config.storage`): **Mount USB drives automatically** and **Show drives as a source**, then the **Mounts** collection with one button per kind, **NFS share** and **Disk on this machine**, as any collection lays them out.
 
@@ -215,7 +223,7 @@ pairing too, keeps Wi-Fi configuration and requires re-pairing. Leave 16dp befor
 the paired-device label and 8dp before its rows. Align a custom receiver name
 under the receiver title, keeping it separate from the devices. Device names
 wrap at large text sizes.
-Use the centered `KalinkaDialog` and shared buttons. Cancel is neutral and gets
+Use `KalinkaDialog` and shared buttons: centered in the whole window with a dimmed background at every width. Cancel is neutral and gets
 initial keyboard focus. Forget uses the berry action style. Keep the message
 short: "Removes the Bluetooth pairing. Pair again to reconnect."
 

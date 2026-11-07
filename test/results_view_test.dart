@@ -34,6 +34,7 @@ import 'package:kalinka/widgets/browse_filters/presentation_toggle.dart';
 import 'package:kalinka/widgets/shelf_heading.dart';
 import 'package:kalinka/widgets/source_badge.dart';
 import 'package:kalinka/widgets/module_artwork.dart';
+import 'package:kalinka/widgets/kalinka_popover.dart';
 import 'package:kalinka/widgets/section_tab_button.dart';
 
 import 'support/server_answer.dart';
@@ -1441,7 +1442,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsNothing);
       final popup = find.byType(SearchFilterOverlay);
-      expect(tester.getRect(popup).top, greaterThan(trigger.bottom));
+      if (width >= 720) {
+        final surface = tester.getRect(
+          find.byKey(KalinkaAnchoredSurface.surfaceKey),
+        );
+        expect(surface.overlaps(trigger), isFalse);
+        expect(surface.left, greaterThanOrEqualTo(12));
+        expect(surface.right, lessThanOrEqualTo(width - 12));
+        expect(surface.top, greaterThanOrEqualTo(12));
+        expect(
+          surface.bottom,
+          lessThanOrEqualTo(tester.view.physicalSize.height - 12),
+        );
+      } else {
+        expect(find.byType(KalinkaAnchoredSurface), findsNothing);
+        expect(tester.getRect(popup).top, greaterThan(trigger.bottom));
+      }
       expect(tester.getRect(popup).width, lessThanOrEqualTo(480));
       expect(
         find.descendant(of: popup, matching: find.text('GENRE')),

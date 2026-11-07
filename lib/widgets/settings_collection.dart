@@ -91,18 +91,18 @@ class _SchemaCollectionRendererState extends State<SchemaCollectionRenderer> {
     ];
   }
 
-  Future<void> _add(VariantSpec variant) async {
+  Future<void> _add(VariantSpec variant, BuildContext origin) async {
     final discriminator = _collection.discriminator;
     final entry = <String, dynamic>{
       'id': newRecordId(),
       ?discriminator: variant.key,
     };
-    await _open(_entries(), null, entry);
+    await _open(_entries(), null, entry, origin);
   }
 
-  Future<void> _edit(int index) async {
+  Future<void> _edit(int index, BuildContext origin) async {
     final entries = _entries();
-    await _open(entries, index, entries[index]);
+    await _open(entries, index, entries[index], origin);
   }
 
   /// Opens the sheet on [entry], at [index] in [before] or added after it.
@@ -110,10 +110,12 @@ class _SchemaCollectionRendererState extends State<SchemaCollectionRenderer> {
     List<Map<String, dynamic>> before,
     int? index,
     Map<String, dynamic> entry,
+    BuildContext origin,
   ) async {
     final binding = _binding!;
     final outcome = await showKalinkaBottomSheet<_Outcome>(
-      context: context,
+      context: origin,
+      dialogMaxWidth: kKalinkaContentMaxWidth,
       mayFillScreen: true,
       contentBuilder: (_) => _EntrySheet(
         collection: _collection,
@@ -169,7 +171,7 @@ class _SchemaCollectionRendererState extends State<SchemaCollectionRenderer> {
               variant: _collection.variantOf(entries[i]),
               entry: entries[i],
               issues: _issuesOf(binding, entries[i]),
-              onTap: () => _edit(i),
+              onTap: (origin) => _edit(i, origin),
             ),
           ],
           if (status.isNotEmpty)
@@ -201,17 +203,19 @@ class _SchemaCollectionRendererState extends State<SchemaCollectionRenderer> {
                     // As wide as its label, short of the row: a long one at
                     // large text is cut rather than overflowing.
                     IntrinsicWidth(
-                      child: KalinkaButton(
-                        label: variants.length == 1 ? 'Add' : variant.label,
-                        variant: KalinkaButtonVariant.neutral,
-                        size: KalinkaButtonSize.compact,
-                        fullWidth: true,
-                        leading: const Icon(
-                          Icons.add,
-                          size: 16,
-                          color: KalinkaColors.accent,
+                      child: Builder(
+                        builder: (origin) => KalinkaButton(
+                          label: variants.length == 1 ? 'Add' : variant.label,
+                          variant: KalinkaButtonVariant.neutral,
+                          size: KalinkaButtonSize.compact,
+                          fullWidth: true,
+                          leading: const Icon(
+                            Icons.add,
+                            size: 16,
+                            color: KalinkaColors.accent,
+                          ),
+                          onTap: () => _add(variant, origin),
                         ),
-                        onTap: () => _add(variant),
                       ),
                     ),
                 ],
@@ -282,7 +286,7 @@ class _EntryRow extends StatelessWidget {
   final VariantSpec? variant;
   final Map<String, dynamic> entry;
   final List<ConfigIssue> issues;
-  final VoidCallback onTap;
+  final ValueChanged<BuildContext> onTap;
 
   const _EntryRow({
     super.key,
@@ -300,7 +304,7 @@ class _EntryRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         InkWell(
-          onTap: onTap,
+          onTap: () => onTap(context),
           mouseCursor: clickCursor(interactive: true),
           overlayColor: kalinkaOverlay,
           child: Padding(

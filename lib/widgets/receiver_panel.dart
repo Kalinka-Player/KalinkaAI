@@ -15,6 +15,7 @@ import 'home/source_button_style.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'kalinka_button.dart';
 import 'kalinka_dialog.dart';
+import 'overlay_card.dart';
 
 const kConnectIcon = Icons.phonelink_ring_outlined;
 
@@ -28,6 +29,8 @@ Future<void> showReceiverPanel(BuildContext context) =>
     showKalinkaBottomSheet<void>(
       context: context,
       mayFillScreen: true,
+      useBeak: true,
+      dialogMaxWidth: 380,
       contentBuilder: (_) => const ReceiverPanel(),
     );
 
@@ -52,11 +55,8 @@ class ConnectSourceButton extends ConsumerWidget {
 /// A pointed, animated panel anchored to the sidebar's Connect button.
 class ReceiverPopover extends StatefulWidget {
   final String? receiverId;
-  final Widget Function(
-    VoidCallback open,
-    FocusNode focusNode,
-    bool isOpen,
-  ) builder;
+  final Widget Function(VoidCallback open, FocusNode focusNode, bool isOpen)
+  builder;
   const ReceiverPopover({super.key, this.receiverId, required this.builder});
   @override
   State<ReceiverPopover> createState() => _ReceiverPopoverState();
@@ -123,7 +123,8 @@ class _ReceiverPopoverState extends State<ReceiverPopover>
     _secretReset.value++;
     // Pointer dismissal leaves the trigger idle. Keyboard dismissal returns
     // focus so navigation can continue from the button that opened the panel.
-    _restoreButtonFocus = HardwareKeyboard.instance.logicalKeysPressed.isNotEmpty;
+    _restoreButtonFocus =
+        HardwareKeyboard.instance.logicalKeysPressed.isNotEmpty;
     _hideOverlay = hideOverlay;
     setState(() => _open = false);
     unawaited(
@@ -201,7 +202,8 @@ class _ReceiverPopoverState extends State<ReceiverPopover>
                           ),
                           child: Material(
                             key: const ValueKey('receiver-popover-surface'),
-                            color: KalinkaColors.surfaceRaised,
+                            color: KalinkaColors.surfaceDialog,
+                            surfaceTintColor: Colors.transparent,
                             elevation: 8,
                             shadowColor: Colors.black,
                             shape: _ReceiverPopoverBorder(layout),
@@ -372,6 +374,7 @@ class _ReceiverPopoverReveal extends CustomClipper<Rect> {
 class ReceiverPanel extends ConsumerWidget {
   final String? receiverId;
   final VoidCallback? onClose;
+
   /// Discards secrets immediately while the panel stays mounted for dismissal.
   final Listenable? secretReset;
   const ReceiverPanel({
@@ -405,10 +408,9 @@ class ReceiverPanel extends ConsumerWidget {
                     style: KalinkaTextStyles.settingsPageTitle,
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Close',
-                  onPressed: onClose ?? () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
+                OverlayCloseButton(
+                  label: 'Close',
+                  onTap: onClose ?? () => Navigator.pop(context),
                 ),
               ],
             ),
@@ -763,7 +765,10 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
                         ],
                         if (widget.available && receiver.state == 'ready') ...[
                           const SizedBox(height: 4),
-                          Text(status, style: KalinkaTextStyles.trayRowSublabel),
+                          Text(
+                            status,
+                            style: KalinkaTextStyles.trayRowSublabel,
+                          ),
                         ],
                       ],
                     ),
@@ -852,9 +857,9 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
     );
   }
 
-  Future<void> _forget(ReceiverPeer peer) async {
+  Future<void> _forget(ReceiverPeer peer, BuildContext origin) async {
     final confirmed = await showKalinkaDialog<bool>(
-      context: context,
+      context: origin,
       builder: (context) => KalinkaDialog(
         side: KalinkaDialogSide.browsing,
         centered: true,
@@ -959,7 +964,10 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
       children: [
         if (roomy)
           Row(
-            children: [Expanded(child: title), pairControl],
+            children: [
+              Expanded(child: title),
+              pairControl,
+            ],
           )
         else ...[
           title,
@@ -1041,50 +1049,52 @@ class _ReceiverDetailsState extends ConsumerState<_ReceiverDetails>
             ),
           ),
           if (receiver.offers('forget_device') || session != null)
-            PopupMenuButton<String>(
-              tooltip: 'Device options for ${peer.name}',
-              enabled: enabled,
-              icon: _busy && _busyPeerId == peer.id
-                  ? _spinner('Updating ${peer.name}')
-                  : const Icon(
-                      Icons.more_vert,
-                      size: 24,
-                      color: KalinkaColors.textSecondary,
+            Builder(
+              builder: (buttonContext) => PopupMenuButton<String>(
+                tooltip: 'Device options for ${peer.name}',
+                enabled: enabled,
+                icon: _busy && _busyPeerId == peer.id
+                    ? _spinner('Updating ${peer.name}')
+                    : const Icon(
+                        Icons.more_vert,
+                        size: 24,
+                        color: KalinkaColors.textSecondary,
+                      ),
+                constraints: const BoxConstraints(minWidth: 168, maxWidth: 280),
+                color: KalinkaColors.surfaceRaised,
+                surfaceTintColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: KalinkaColors.borderDefault),
+                ),
+                onSelected: (action) {
+                  if (action == 'forget') {
+                    _forget(peer, buttonContext);
+                  } else if (action == 'disconnect' && session != null) {
+                    _command('disconnect_audio', {'session_id': session.id});
+                  }
+                },
+                itemBuilder: (_) => [
+                  if (session != null && receiver.offers('disconnect_audio'))
+                    PopupMenuItem(
+                      value: 'disconnect',
+                      enabled: receiver.can('disconnect_audio'),
+                      child: Text(
+                        'Disconnect',
+                        style: KalinkaTextStyles.trayRowLabel,
+                      ),
                     ),
-              constraints: const BoxConstraints(minWidth: 168, maxWidth: 280),
-              color: KalinkaColors.surfaceRaised,
-              surfaceTintColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: KalinkaColors.borderDefault),
+                  if (receiver.offers('forget_device'))
+                    PopupMenuItem(
+                      value: 'forget',
+                      enabled: receiver.can('forget_device'),
+                      child: Text(
+                        'Forget',
+                        style: KalinkaTextStyles.trayRowLabel,
+                      ),
+                    ),
+                ],
               ),
-              onSelected: (action) {
-                if (action == 'forget') {
-                  _forget(peer);
-                } else if (action == 'disconnect' && session != null) {
-                  _command('disconnect_audio', {'session_id': session.id});
-                }
-              },
-              itemBuilder: (_) => [
-                if (session != null && receiver.offers('disconnect_audio'))
-                  PopupMenuItem(
-                    value: 'disconnect',
-                    enabled: receiver.can('disconnect_audio'),
-                    child: Text(
-                      'Disconnect',
-                      style: KalinkaTextStyles.trayRowLabel,
-                    ),
-                  ),
-                if (receiver.offers('forget_device'))
-                  PopupMenuItem(
-                    value: 'forget',
-                    enabled: receiver.can('forget_device'),
-                    child: Text(
-                      'Forget',
-                      style: KalinkaTextStyles.trayRowLabel,
-                    ),
-                  ),
-              ],
             ),
         ],
       ),

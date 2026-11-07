@@ -90,6 +90,7 @@ class SettingsEnumDropdown extends StatelessWidget {
   Future<void> _openPicker(BuildContext context) async {
     final picked = await showKalinkaBottomSheet<String>(
       context: context,
+      dialogMaxWidth: kKalinkaContentMaxWidth,
       contentBuilder: (_) =>
           OptionPicker(options: options, selectedValue: selectedValue),
     );

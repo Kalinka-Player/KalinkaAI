@@ -381,7 +381,7 @@ class _ServerSheetState extends ConsumerState<ServerSheet>
                       onTap: () {}, // Prevent backdrop tap from passing through
                       child: Container(
                         decoration: BoxDecoration(
-                          color: KalinkaColors.surfaceRaised,
+                          color: KalinkaColors.surfaceDialog,
                           borderRadius: const BorderRadius.vertical(
                             top: Radius.circular(24),
                           ),

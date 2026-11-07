@@ -15,6 +15,7 @@ import '../providers/provisioning_transport_ble.dart'
 import '../theme/app_theme.dart';
 import '../theme/field_decoration.dart';
 import '../widgets/kalinka_button.dart';
+import '../widgets/kalinka_back_button.dart';
 import '../widgets/onboarding/onboarding_step_scaffold.dart';
 import '../widgets/onboarding/setup_discovery.dart';
 
@@ -902,11 +903,8 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
           ],
           LayoutBuilder(
             builder: (context, constraints) {
-              final back = KalinkaButton(
-                label: 'Back',
-                variant: KalinkaButtonVariant.neutral,
-                enabled: phase != SetupPhase.changingNetwork,
-                onTap: _back,
+              final back = KalinkaBackButton(
+                onPressed: phase != SetupPhase.changingNetwork ? _back : null,
               );
               final primary = KalinkaButton(
                 label: label,
@@ -917,10 +915,10 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
                 enabled: action != null,
                 fullWidth: true,
               );
-              // Keep both labels readable with large text on narrow phones.
+              // Keep the primary label readable beside the 48dp Back target.
               final labels = TextPainter(
                 text: TextSpan(
-                  text: 'Back$label',
+                  text: label,
                   style: KalinkaTextStyles.trayRowLabel.copyWith(
                     fontSize: KalinkaTypography.baseSize + 3,
                   ),
@@ -928,12 +926,16 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
                 textDirection: Directionality.of(context),
                 textScaler: MediaQuery.textScalerOf(context),
               )..layout();
-              final stacked = labels.width + 92 > constraints.maxWidth;
+              final stacked = labels.width + 108 > constraints.maxWidth;
               labels.dispose();
               if (stacked) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [primary, const SizedBox(height: 8), back],
+                  children: [
+                    primary,
+                    const SizedBox(height: 8),
+                    Align(alignment: Alignment.centerLeft, child: back),
+                  ],
                 );
               }
               return Row(
