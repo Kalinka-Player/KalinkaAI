@@ -22,7 +22,11 @@ fi
 
 if [ "${1:-}" != "--no-build" ]; then
   echo "Building web bundle, version: $GIT_DESCRIBE"
-  flutter build web --release --dart-define=GIT_DESCRIBE="$GIT_DESCRIBE"
+  # --wasm compiles the Dart app to WebAssembly with a JS fallback bundled
+  # alongside it; the loader picks whichever the browser supports. Still
+  # renders with CanvasKit (index.html pins that), so this doesn't need the
+  # COOP/COEP headers the skwasm renderer would.
+  flutter build web --release --wasm --dart-define=GIT_DESCRIBE="$GIT_DESCRIBE"
 fi
 [ -d build/web ] || { echo "build/web missing — run without --no-build first" >&2; exit 1; }
 # The supervisor serves the setup hotspot's activation page from this package.

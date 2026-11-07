@@ -88,10 +88,13 @@
     {{flutter_build_config}}
     _flutter.loader.load({
       config: {
-        // Bundled CanvasKit (no CDN — works on LANs without internet), pinned
-        // so browsers don't try skwasm, which needs COOP/COEP headers.
+        // Bundled CanvasKit/skwasm (no CDN — works on LANs without
+        // internet). No explicit renderer: the loader auto-selects the
+        // WASM-compiled app + skwasm on Chromium-based browsers (falls
+        // back to single-threaded skwasm if the server isn't sending the
+        // COOP/COEP headers — see kalinka-server's response middleware),
+        // and the classic JS + CanvasKit build everywhere else.
         canvasKitBaseUrl: "canvaskit/",
-        renderer: "canvaskit",
       },
     });
   </script>
