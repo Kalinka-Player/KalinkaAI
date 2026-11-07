@@ -25,6 +25,7 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_button.dart';
 import 'package:kalinka/widgets/home/home_layout.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
+import 'package:kalinka/widgets/top_bar_content_fade.dart';
 import 'package:kalinka/widgets/overlay_card.dart';
 import 'package:kalinka/widgets/search/folder_trail.dart';
 import 'package:kalinka/widgets/search/album_page_header.dart';
@@ -162,15 +163,9 @@ void main() {
         ..addFont(rootBundle.load('assets/fonts/$file'));
       await loader.load();
     }
-    final material = File(
-      '${Platform.environment['FLUTTER_ROOT']}/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
-    );
-    if (material.existsSync()) {
-      await (FontLoader('MaterialIcons')..addFont(
-            Future.value(ByteData.sublistView(material.readAsBytesSync())),
-          ))
-          .load();
-    }
+    await (FontLoader(
+      'MaterialIcons',
+    )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
   });
 
   late SharedPreferences prefs;
@@ -438,17 +433,18 @@ void main() {
 
   final rootList = find.byKey(const PageStorageKey('discoverRoot'));
   final backdrop = find.byKey(const ValueKey('discover-backdrop'));
-  final headerSurface = find.byKey(const ValueKey('discover-header-surface'));
-  // Opaque at the top of the status area, clear at the bar's foot.
-  List<Color> headerColors(WidgetTester tester) =>
-      ((tester.widget<DecoratedBox>(headerSurface).decoration as BoxDecoration)
-                  .gradient!
-              as LinearGradient)
-          .colors;
-  final scrolledHeader = [
-    KalinkaColors.background,
-    KalinkaColors.background.withValues(alpha: 0),
-  ];
+  final homeFade = find.byKey(const ValueKey('home-content-fade'));
+  void expectContentFade(WidgetTester tester) {
+    final bar = find.byType(KalinkaTopBar);
+    expect(
+      tester.widget<TopBarContentFade>(homeFade).extent,
+      tester.getSize(bar).height,
+    );
+    expect(find.ancestor(of: rootList, matching: homeFade), findsOneWidget);
+    expect(find.ancestor(of: bar, matching: homeFade), findsNothing);
+    expect(find.ancestor(of: backdrop, matching: homeFade), findsNothing);
+    expect(tester.widget<KalinkaTopBar>(bar).transparent, isTrue);
+  }
 
   ScrollPosition rootPosition(WidgetTester tester) => tester
       .state<ScrollableState>(
@@ -520,12 +516,11 @@ void main() {
         // From a little above the top, so the bloom never meets an edge.
         expect(backdropRect.top, lessThan(0));
         expect(headerRect.height, kKalinkaTopBarHeight + topInset);
-        expect(tester.getRect(headerSurface), headerRect);
         // The viewport reaches the screen edge, with the header reserving its
-        // initial space in the scroll; content can pass behind the gradient.
+        // initial space in the scroll; content can pass behind the opacity mask.
         expect(tester.getRect(rootList).top, headerRect.top);
         expect(entryRect.top, headerRect.bottom + 8);
-        expect(headerColors(tester).first.a, 0);
+        expectContentFade(tester);
         await _captureHome(
           tester,
           captureKey,
@@ -541,8 +536,8 @@ void main() {
         );
         expect(tester.getRect(entry), entryRect.shift(const Offset(0, -80)));
         expect(tester.getRect(find.byType(KalinkaTopBar)), headerRect);
-        expect(headerColors(tester), scrolledHeader);
-        expect(tester.getRect(headerSurface).top, 0);
+        expectContentFade(tester);
+        expect(tester.getRect(homeFade).top, 0);
         expect(headerRect.overlaps(tester.getRect(entry)), isTrue);
         rootPosition(tester).jumpTo(180);
         await tester.pump();
@@ -564,7 +559,7 @@ void main() {
         rootPosition(tester).jumpTo(0);
         await tester.pump();
         expect(tester.getRect(backdrop), backdropRect);
-        expect(headerColors(tester).first.a, 0);
+        expectContentFade(tester);
       },
     );
   }
@@ -776,7 +771,7 @@ void main() {
 
     expect(rootPosition(tester).pixels, offset);
     expect(tester.getRect(backdrop), rect);
-    expect(headerColors(tester), scrolledHeader);
+    expectContentFade(tester);
     expect(tester.takeException(), isNull);
   });
 

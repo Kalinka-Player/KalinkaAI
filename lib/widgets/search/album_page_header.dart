@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart';
@@ -14,7 +15,6 @@ import '../fitted_title.dart';
 import '../measure_size.dart';
 import '../procedural_album_art.dart';
 import '../search_cards/action_pill_button.dart';
-import '../search_cards/browse_item_rows.dart';
 import '../search_cards/track_row_support.dart';
 import '../source_badge.dart';
 import 'track_group_actions.dart';
@@ -23,7 +23,7 @@ import 'track_group_actions.dart';
 /// here the cover and what it says stand in a column beside them.
 const double kAlbumSideLayoutWidth = 528;
 
-/// Where the cover starts in that column, and the actions over the tracks.
+/// Where the cover starts below the navigation.
 const double _sideTop = 8;
 
 /// The artist an album page can open: only one its listing named by a full
@@ -84,13 +84,15 @@ class _SourceLine extends ConsumerWidget {
 }
 
 /// What an album is, beside its tracks on a wide pane: the square cover,
-/// title, artist, source, year and extent. The page scrolls this content
-/// together with the tracks, including enlarged text.
+/// title, artist, source, year and extent, above always-visible actions.
+/// Only an identity too tall to fit needs its own independent scroll.
 class AlbumIdentityColumn extends StatelessWidget {
   final CatalogPage page;
   final int? year;
   final int? trackCount;
   final int? totalDurationSeconds;
+  final double topInset;
+  final bool showActions;
 
   const AlbumIdentityColumn({
     super.key,
@@ -98,6 +100,8 @@ class AlbumIdentityColumn extends StatelessWidget {
     this.year,
     this.trackCount,
     this.totalDurationSeconds,
+    this.topInset = 0,
+    this.showActions = true,
   });
 
   @override
@@ -110,19 +114,11 @@ class AlbumIdentityColumn extends StatelessWidget {
       totalDurationSeconds ?? page.totalDurationSeconds,
     );
     return LayoutBuilder(
-      builder: (context, constraints) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, _sideTop, 16, 24),
-        child: Column(
+      builder: (context, constraints) {
+        final metadata = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            AspectRatio(
-              aspectRatio: 1,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: AlbumArtwork(page: page),
-              ),
-            ),
-            const SizedBox(height: 20),
             Text(
               'ALBUM',
               style: KalinkaFonts.mono(
@@ -161,31 +157,189 @@ class AlbumIdentityColumn extends StatelessWidget {
               ),
             ],
           ],
-        ),
-      ),
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Flexible(
+              child: LayoutBuilder(
+                builder: (context, space) => SingleChildScrollView(
+                  primary: false,
+                  padding: EdgeInsets.fromLTRB(16, topInset + _sideTop, 16, 16),
+                  child: _AlbumIdentityLayout(
+                    availableHeight: math.max(
+                      0,
+                      space.maxHeight - topInset - _sideTop - 16,
+                    ),
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: AlbumArtwork(page: page),
+                      ),
+                      metadata,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (showActions)
+              AlbumTrackActions(page: page, trackCount: trackCount),
+          ],
+        );
+      },
     );
   }
 }
 
-/// Play all and Enqueue over an album's tracks on a wide pane, the pills'
-/// tops level with the cover's beside them and their start with the titles
-/// under them.
+/// Keeps the cover at its pane's full width. Details sit below it when there
+/// is room, otherwise over its lower portion on a shade. The scroll view
+/// accommodates tall artwork or enlarged text without moving the actions.
+class _AlbumIdentityLayout extends MultiChildRenderObjectWidget {
+  final double availableHeight;
+
+  const _AlbumIdentityLayout({
+    required this.availableHeight,
+    required super.children,
+  });
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderAlbumIdentity(availableHeight);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderAlbumIdentity renderObject,
+  ) {
+    renderObject
+      ..availableHeight = availableHeight
+      ..markNeedsLayout();
+  }
+}
+
+class _RenderAlbumIdentity extends RenderBox
+    with
+        ContainerRenderObjectMixin<
+          RenderBox,
+          ContainerBoxParentData<RenderBox>
+        >,
+        RenderBoxContainerDefaultsMixin<
+          RenderBox,
+          ContainerBoxParentData<RenderBox>
+        > {
+  _RenderAlbumIdentity(this.availableHeight);
+
+  double availableHeight;
+  bool _overlay = false;
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! ContainerBoxParentData<RenderBox>) {
+      child.parentData = _AlbumIdentityParentData();
+    }
+  }
+
+  @override
+  void performLayout() {
+    final cover = firstChild!;
+    final metadata = lastChild!;
+    final width = constraints.maxWidth;
+    metadata.layout(
+      BoxConstraints.tightFor(width: width),
+      parentUsesSize: true,
+    );
+    _overlay = width + 20 + metadata.size.height > availableHeight;
+    cover.layout(BoxConstraints.tight(Size.square(width)));
+    final coverData = cover.parentData! as ContainerBoxParentData<RenderBox>;
+    final textData = metadata.parentData! as ContainerBoxParentData<RenderBox>;
+    coverData.offset = Offset.zero;
+    if (_overlay) {
+      metadata.layout(
+        BoxConstraints.tightFor(width: width - 32),
+        parentUsesSize: true,
+      );
+      size = constraints.constrain(
+        Size(width, math.max(width, metadata.size.height + 64)),
+      );
+      textData.offset = Offset(16, size.height - metadata.size.height);
+    } else {
+      textData.offset = Offset(0, width + 20);
+      size = constraints.constrain(
+        Size(width, width + 20 + metadata.size.height),
+      );
+    }
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final metadata = lastChild!;
+    final textData = metadata.parentData! as ContainerBoxParentData<RenderBox>;
+    context.paintChild(firstChild!, offset);
+    if (_overlay) {
+      final textTop = textData.offset.dy;
+      final shadeTop = math.max(0.0, textTop - 64);
+      final bounds = Rect.fromLTWH(
+        offset.dx,
+        offset.dy + shadeTop,
+        size.width,
+        size.height - shadeTop,
+      );
+      context.canvas.drawRect(
+        bounds,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              KalinkaColors.background.withValues(alpha: 0),
+              KalinkaColors.background.withValues(alpha: 0.76),
+              KalinkaColors.background,
+            ],
+            stops: [0, (textTop - shadeTop) / bounds.height, 1],
+          ).createShader(bounds),
+      );
+    }
+    context.paintChild(metadata, offset + textData.offset);
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
+}
+
+class _AlbumIdentityParentData extends ContainerBoxParentData<RenderBox> {}
+
+/// Play all and Enqueue stay just below the identity, outside its scroll.
 class AlbumTrackActions extends StatelessWidget {
   final CatalogPage page;
   final int? trackCount;
 
+  static const _padding = EdgeInsets.fromLTRB(16, 8, 16, 16);
+  static const _gap = 8.0;
+
   const AlbumTrackActions({super.key, required this.page, this.trackCount});
+
+  /// Include the gutters and run spacing used below. The column must fit
+  /// either label at the user's text size, and reserve the real target height.
+  static ({double minWidth, double rowWidth, double columnHeight}) measure(
+    BuildContext context,
+  ) {
+    final play = ActionPillButton.widthOf(context, 'Play all');
+    final enqueue = ActionPillButton.widthOf(context, 'Enqueue');
+    final height = ActionPillButton.heightOf(context);
+    return (
+      minWidth: _padding.horizontal + math.max(play, enqueue),
+      rowWidth: _padding.horizontal + play + _gap + enqueue,
+      columnHeight: _padding.vertical + height * 2 + _gap,
+    );
+  }
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsetsDirectional.fromSTEB(
-      16 + BrowseItemRows.trackTextInset,
-      _sideTop - ActionPillButton.edgeInset(context),
-      16,
-      16,
-    ),
+    padding: _padding,
     child: Wrap(
-      spacing: 8,
+      spacing: _gap,
+      runSpacing: _gap,
       children: [
         PlayAllChip(trackIds: [page.id!], trackCount: trackCount),
         AddAllChip(

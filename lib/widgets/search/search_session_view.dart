@@ -724,6 +724,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           // A wide album sets its cover beside the tracks, not behind them.
           final onAlbum =
               albumPage && constraints.maxWidth < kAlbumSideLayoutWidth;
+          final wideAlbum = albumPage && !onAlbum;
           final chromeHeight =
               MediaQuery.paddingOf(context).top + kKalinkaTopBarHeight;
           _albumStretches =
@@ -849,6 +850,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                     ),
                   ),
                 Column(
+                  // The phone artwork backdrop is inserted before this
+                  // child; keep mounted visits when crossing that breakpoint.
+                  key: const ValueKey('search-session-content'),
                   children: [
                     if (onAlbum)
                       AnnotatedRegion<SystemUiOverlayStyle>(
@@ -870,7 +874,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                           child: _buildHeader(session, overAlbum: true),
                         ),
                       )
-                    else if (!session.atHome)
+                    else if (!session.atHome && !wideAlbum)
                       _buildHeader(session)
                     else
                       const SizedBox.shrink(),
@@ -892,6 +896,21 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                       const MultiSelectBottomBar(),
                   ],
                 ),
+                if (wideAlbum)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: const SystemUiOverlayStyle(
+                        statusBarColor: Colors.transparent,
+                        statusBarIconBrightness: Brightness.light,
+                        statusBarBrightness: Brightness.dark,
+                        systemStatusBarContrastEnforced: false,
+                      ),
+                      child: _buildHeader(session, wideAlbum: true),
+                    ),
+                  ),
                 // On a wide one a card over the pages' bottom right.
                 if (selectionActive && barFloats)
                   const Positioned(
@@ -1109,6 +1128,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       },
       child: CatalogPageView(
         page: page,
+        wideAlbumBehindTopBar: true,
         onHeaderCollapsed: (collapsed) {
           if (_catalogHeadersCollapsed[id] == collapsed) return;
           _catalogHeadersCollapsed[id] = collapsed;
@@ -1204,7 +1224,11 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     );
   }
 
-  Widget _buildHeader(SearchSessionState session, {bool overAlbum = false}) {
+  Widget _buildHeader(
+    SearchSessionState session, {
+    bool overAlbum = false,
+    bool wideAlbum = false,
+  }) {
     final onResults = session.activeView == FindMusicView.results;
     final catalogChrome =
         !onResults && CatalogSliverHeader.appliesTo(session.catalogPage);
@@ -1216,59 +1240,44 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         children: [
           ValueListenableBuilder<double>(
             valueListenable: _discoverOffset,
-            // The gradient spans the top inset as well as the toolbar:
-            // opaque at the screen edge, clear at the toolbar's bottom.
-            builder: (context, offset, child) => DecoratedBox(
-              key: const ValueKey('discover-header-surface'),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    KalinkaColors.background.withValues(
-                      alpha: offset > 0 ? 1 : 0,
-                    ),
-                    KalinkaColors.background.withValues(alpha: 0),
-                  ],
-                ),
-              ),
-              child: KalinkaTopBar(
-                transparent: true,
-                onServerChipTap: widget.onServerTap,
-                onResultsTap:
-                    session.resultsAvailable && !widget.navigationVisible
-                    ? () async {
-                        if (!await prepareToNavigate() || !mounted) return;
-                        ref
-                            .read(searchSessionProvider.notifier)
-                            .showResults(restore: false);
-                      }
-                    : null,
-                connectionKey: widget.connectionKey,
-                searchFallback: session.resultsAvailable
-                    ? null
-                    : Builder(
-                        builder: (context) => IconButton(
-                          key: const ValueKey('home-header-search-button'),
-                          tooltip: 'Search',
-                          style: kalinkaIconButtonStyle,
-                          onPressed: () => _openSearch(from: context),
-                          icon: const Icon(Icons.search_rounded, size: 24),
-                        ),
+            // Only the scrolling content fades; the bloom and controls keep
+            // their own colours, with no painted surface over either.
+            builder: (context, offset, child) => KalinkaTopBar(
+              transparent: true,
+              onServerChipTap: widget.onServerTap,
+              onResultsTap:
+                  session.resultsAvailable && !widget.navigationVisible
+                  ? () async {
+                      if (!await prepareToNavigate() || !mounted) return;
+                      ref
+                          .read(searchSessionProvider.notifier)
+                          .showResults(restore: false);
+                    }
+                  : null,
+              connectionKey: widget.connectionKey,
+              searchFallback: session.resultsAvailable
+                  ? null
+                  : Builder(
+                      builder: (context) => IconButton(
+                        key: const ValueKey('home-header-search-button'),
+                        tooltip: 'Search',
+                        style: kalinkaIconButtonStyle,
+                        onPressed: () => _openSearch(from: context),
+                        icon: const Icon(Icons.search_rounded, size: 24),
                       ),
-                searchEntry:
-                    hasPins && offset >= kHomeTopInset + _kSearchEntryHeight
-                    ? Builder(
-                        builder: (context) => _SearchEntryButton(
-                          key: const ValueKey('home-header-search'),
-                          hint: _hintText(session, smart: smart),
-                          smart: smart,
-                          compact: true,
-                          onTap: () => _openSearch(from: context),
-                        ),
-                      )
-                    : null,
-              ),
+                    ),
+              searchEntry:
+                  hasPins && offset >= kHomeTopInset + _kSearchEntryHeight
+                  ? Builder(
+                      builder: (context) => _SearchEntryButton(
+                        key: const ValueKey('home-header-search'),
+                        hint: _hintText(session, smart: smart),
+                        smart: smart,
+                        compact: true,
+                        onTap: () => _openSearch(from: context),
+                      ),
+                    )
+                  : null,
             ),
           ),
           MeasureSize(
@@ -1291,24 +1300,48 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           child: LayoutBuilder(
             builder: (context, constraints) => Row(
               children: [
-                _onDisc(
-                  overAlbum,
+                if (wideAlbum)
                   IconButton(
                     tooltip: 'Back',
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
                     onPressed: _handleBack,
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      size: 22,
-                      color: KalinkaColors.textPrimary,
+                    style: IconButton.styleFrom(
+                      fixedSize: const Size.square(kKalinkaPillHeight),
+                      minimumSize: const Size.square(kKalinkaPillHeight),
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.standard,
+                      tapTargetSize: MaterialTapTargetSize.padded,
+                      backgroundColor: KalinkaColors.surfaceElevated,
+                      foregroundColor: KalinkaColors.textPrimary,
+                      side: const BorderSide(
+                        color: KalinkaColors.borderDefault,
+                      ),
+                      shape: const CircleBorder(),
+                    ).copyWith(overlayColor: kalinkaOverlay),
+                    icon: const Icon(Icons.arrow_back, size: 20),
+                  )
+                else
+                  _onDisc(
+                    overAlbum,
+                    IconButton(
+                      tooltip: 'Back',
+                      constraints: const BoxConstraints(
+                        minWidth: 48,
+                        minHeight: 48,
+                      ),
+                      onPressed: _handleBack,
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        size: 22,
+                        color: KalinkaColors.textPrimary,
+                      ),
                     ),
                   ),
-                ),
                 const SizedBox(width: 8),
-                Expanded(child: _buildTitle(session, overAlbum: overAlbum)),
+                Expanded(
+                  child: wideAlbum
+                      ? const SizedBox.shrink()
+                      : _buildTitle(session, overAlbum: overAlbum),
+                ),
                 // What joins the bar on scroll comes in before what is always
                 // there, so Search and Grid/List never move under a finger.
                 if ((catalogChrome ||
