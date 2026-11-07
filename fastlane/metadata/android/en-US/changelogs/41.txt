@@ -1,0 +1,5 @@
+- Pair and manage Bluetooth and AirPlay receivers from Connect
+- Drives & shares under Streamer → Storage
+- Scheduled power-off alongside the one-shot timer
+- The stream's encoded codec shown in Now Playing and the queue
+- Plugin installs follow the server's own progress, without always restarting

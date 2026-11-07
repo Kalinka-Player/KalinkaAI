@@ -10,9 +10,33 @@ paragraph, however long; blank lines separate paragraphs.
 
 ## Unreleased
 
+## 0.26.0
+
+Bluetooth and AirPlay receivers paired and managed from Connect, a Drives & shares screen, scheduled power-off, and the stream's own encoded codec shown everywhere playback is. Receivers need a server that reports them, plugin installs run in place without a restart on a server speaking REST 0.22, and scheduled power-off needs a supervisor that offers it; against an older server, Connect shows no receivers, a plugin install falls back to the restart it asked for before, and Streamer offers no power-off schedule, all as before.
+
+### Added
+- Connect pairs and manages Bluetooth receivers and AirPlay inputs: Pair, Disconnect and Forget on each device, a shared receiver sheet with live settings and device audio access, and an AirPlay receiver's password revealed directly from its row. A receiver's row holds its place while an action is pending, and the pairing countdown keeps ticking between server updates.
+- A Drives & shares row, under Streamer → Storage, replaces the Mounts list where the server reports its storage devices: the streamer's own storage, USB drives, saved network shares and shares found on the network, each with Unmount or Eject where mounted. Add network share takes a server and a folder and offers the shares the server already knows; unmounting asks first and says whether the device returns after a restart.
+- A plugin install, update or removal the server can carry out without restarting follows the server's own progress: the row's button greys and fills in from the left through "Installing…" or "Updating…", a failure turns it amber for a retry, and leaving the Plugins page and coming back picks the operation up where the server left it. A plugin field read once at startup, such as AI search's packages, turns its page's Apply into Apply & restart; the rest of the page still applies as saved.
+- Streamer offers scheduled power-off alongside the one-shot timer, with an adaptive countdown on the control and on the server sheet.
+- Playback views show the stream's own encoded codec — AAC, FLAC and so on — ahead of the container's MIME type, in Now Playing, the mini player, the queue and the kiosk's stream info.
+- The setup hotspot's activation page ships inside the web build in the app's own look — the bundle's fonts, the app's palette, a dark canvas with the Kalinka mark pulsing until the first frame — instead of the supervisor's unstyled page.
+- Streamer gained local kiosk idle controls and screen blanking.
+
+### Changed
+- Search results carry a redesigned layout and keep their browsing state — filters, scroll position, expanded sections — across a visit.
+- The miniplayer's layout on wide screens spaces its controls more evenly.
+- Tablet album pages keep their actions visible while scrolling, and every page that fades content under the top bar now shares one fading behaviour.
+- Dialogs, navigation controls and filters follow one adaptive standard across Settings, Customise Home, the player screen and provisioning.
+- The Network panel draws its fields and hints in the app's own text colours instead of Material's defaults.
+- Home and Settings navigation were polished, and Now Playing's typography was refined; artist and album links there and on the album page drop their underline for a plain chevron line.
+- A staged Music sources change applies live, without restarting the server, when the server says the change costs nothing — including a change to a collection, which the live check had been missing.
+- Collage covers for a mixed catalogue now choose distinct art instead of repeating; the capped results search field is centred and left-aligned again.
+
 ### Fixed
 - Updating the streamer's software asks for the release the server offers at that moment, not the one listed when Settings opened, so a release that came out in between no longer stops the update with "Requested version … is not the available update …". The upgrade screen says when a newer release is being installed, and the confirmation lists it if the server's answer arrives while it is open. When there is nothing left to install, as after another device ran the update first, it says the server is already up to date rather than failing. A request the server turns down shows the server's reason, with Retry when asking again can help, as while renderers upgrade first or when the server did not answer. A demo server, or a streamer that cannot update itself, shows its reason with Close alone.
 - An update that brings only a new web player, renderer or supervisor, while the server stays on its version or runs a build newer than the latest release, stays on Updating packages until the server reports every part current, instead of saying it is done after a few seconds and then offering the same update again. It needs no newer server; on one older than 5.14.0, which does not name the web player, the wait lasts until the server offers no update at all.
+- A power-off status timer no longer keeps running, or throws, after its provider is disposed — closing a page or switching servers while a countdown was live used to leave a timer ticking against a gone provider.
 
 ## 0.25.0
 
