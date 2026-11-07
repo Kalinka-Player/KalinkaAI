@@ -191,8 +191,6 @@ jobs:
   build-macos:
     needs: verify-version
     runs-on: macos-latest
-    env:
-      V: ${{ needs.verify-version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -203,18 +201,13 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Build macOS desktop
-        # Universal binary (x86_64 + arm64) by default via Xcode's standard
-        # ARCHS — one dmg covers both Intel and Apple Silicon Macs.
-        run: scripts/build_release.sh macos
-      - name: Package dmg
+      - name: Build macOS desktop + dmg
+        run: scripts/build_macos_dmg.sh
+      - name: Collect dmg
         run: |
           set -euo pipefail
-          mkdir -p dist stage
-          cp -R "build/macos/Build/Products/Release/kalinka.app" stage/
-          ln -s /Applications stage/Applications
-          hdiutil create -volname Kalinka -srcfolder stage -ov -format UDZO \
-            "dist/kalinka-$V-macos-beta.dmg"
+          mkdir -p dist
+          cp build/macos/kalinka-*-macos-beta.dmg dist/
       - uses: actions/upload-artifact@v4
         with:
           name: macos
