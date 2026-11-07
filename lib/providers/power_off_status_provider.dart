@@ -18,14 +18,22 @@ final powerOffStatusProvider = FutureProvider.autoDispose<BoxPowerStatus?>((
       !box.offers(BoxAction.powerOff)) {
     return null;
   }
+  // Invalidation runs disposal callbacks before the old Ref stops reporting
+  // mounted. A response in that gap must not create a timer after cleanup.
+  var current = true;
   Timer? refresh;
-  ref.onDispose(() => refresh?.cancel());
+  ref.onDispose(() {
+    current = false;
+    refresh?.cancel();
+  });
   try {
     final status = await api.powerStatus();
     return status?.serverId == box.serverId ? status : null;
   } finally {
-    if (ref.mounted) {
-      refresh = Timer(const Duration(seconds: 5), ref.invalidateSelf);
+    if (current && ref.mounted) {
+      refresh = Timer(const Duration(seconds: 5), () {
+        if (current && ref.mounted) ref.invalidateSelf();
+      });
     }
   }
 });
