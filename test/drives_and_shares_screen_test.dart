@@ -21,6 +21,7 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/demo_read_only_dialog.dart';
 import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
+import 'package:kalinka/widgets/kalinka_popover.dart';
 
 import 'support/server_answer.dart';
 
@@ -928,6 +929,26 @@ void main() {
 
     expect(api.calls, ['forget $_music']);
     expect(find.byKey(const ValueKey('device-save')), findsNothing);
+  });
+
+  testWidgets('add share is centered and dims the whole wide window', (
+    tester,
+  ) async {
+    await _pump(tester, _Api(), size: const Size(1200, 800));
+    await _tap(tester, find.byKey(const ValueKey('add-share')));
+
+    expect(find.byType(KalinkaAnchoredSurface), findsNothing);
+    expect(
+      tester.getCenter(find.byKey(KalinkaDialog.cardKey)),
+      const Offset(600, 400),
+    );
+    final scrim = find.byKey(const ValueKey('kalinka-dialog-scrim'));
+    expect(tester.getSize(scrim), const Size(1200, 800));
+    expect(tester.widget<ColoredBox>(scrim).color.a, closeTo(0.6, 0.01));
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pumpAndSettle();
+    expect(find.byType(KalinkaDialog), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a share is added by its server and folder, mounted as set', (

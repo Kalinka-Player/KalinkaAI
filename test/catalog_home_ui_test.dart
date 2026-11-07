@@ -30,6 +30,8 @@ import 'package:kalinka/widgets/home/home_preview_choices.dart';
 import 'package:kalinka/widgets/home/home_preview_illustration.dart';
 import 'package:kalinka/widgets/kalinka_bottom_sheet.dart' show kSheetMaxWidth;
 import 'package:kalinka/widgets/kalinka_dialog.dart';
+import 'package:kalinka/widgets/kalinka_centered_surface.dart';
+import 'package:kalinka/widgets/kalinka_popover.dart';
 import 'package:kalinka/widgets/home/catalog_pin_button.dart';
 import 'package:kalinka/widgets/search/artist_page_header.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
@@ -296,7 +298,7 @@ void main() {
     const Size(1200, 800),
     const Size(1920, 1080),
   ]) {
-    testWidgets('Pin sheet stays compact in the Home panel at $size', (
+    testWidgets('Pin dialog stays compact and centered at $size', (
       tester,
     ) async {
       final container = await pump(tester, size: size);
@@ -312,12 +314,15 @@ void main() {
       void expectPanelBounds() {
         final choices = find.byType(HomePreviewChoices);
         final rect = tester.getRect(choices);
-        // Over the Home panel, centred on it, and no wider than a sheet gets.
-        final panel = tester.getRect(find.byType(SearchSessionView));
-        expect(rect.left, greaterThanOrEqualTo(panel.left - 1));
-        expect(rect.right, lessThanOrEqualTo(panel.right + 1));
+        final windowWidth = tester.view.physicalSize.width;
+        expect(find.byType(KalinkaAnchoredSurface), findsNothing);
+        expect(
+          tester.getCenter(find.byKey(KalinkaCenteredSurface.surfaceKey)),
+          Offset(windowWidth / 2, size.height / 2),
+        );
+        expect(rect.left, greaterThanOrEqualTo(12));
+        expect(rect.right, lessThanOrEqualTo(windowWidth - 12));
         expect(rect.width, lessThanOrEqualTo(kSheetMaxWidth));
-        expect(rect.center.dx, closeTo(panel.center.dx, 1));
         final scroll = find.ancestor(
           of: choices,
           matching: find.byType(SingleChildScrollView),
@@ -335,7 +340,7 @@ void main() {
       }
 
       expectPanelBounds();
-      // Follow the actual Home panel as the window changes size.
+      // Stay centered as the window changes size.
       tester.view.physicalSize = Size(size.width + 100, size.height);
       await tester.pumpAndSettle();
       expectPanelBounds();
@@ -344,7 +349,7 @@ void main() {
       // pinning anything.
       await tester.tapAt(Offset(size.width + 80, size.height - 20));
       await tester.pumpAndSettle();
-      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.byType(KalinkaCenteredSurface), findsNothing);
       expect(container.read(pinnedCatalogsProvider), isEmpty);
     });
   }
@@ -1115,13 +1120,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Unpin Editorial'));
       await tester.pumpAndSettle();
-      expect(
-        tester.getRect(find.byKey(KalinkaDialog.cardKey)).right,
-        lessThanOrEqualTo(browsing.right),
-      );
-      final card = tester.getCenter(find.byKey(KalinkaDialog.cardKey));
-      expect(card.dx, closeTo(browsing.center.dx, 0.01));
-      expect(card.dy, 450);
+      final card = tester.getRect(find.byKey(KalinkaDialog.cardKey));
+      expect(find.byType(KalinkaAnchoredSurface), findsNothing);
+      expect(card.center, const Offset(600, 450));
       tester.view.physicalSize = const Size(375, 812);
       await tester.pumpAndSettle();
       expect(

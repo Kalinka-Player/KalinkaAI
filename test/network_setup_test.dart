@@ -344,8 +344,8 @@ void main() {
       findsOneWidget,
     );
     await tester.enterText(passwordField, 'test-password');
-    await tester.ensureVisible(find.text('Back to available networks'));
-    await tester.tap(find.text('Back to available networks'));
+    await tester.ensureVisible(find.byTooltip('Back to available networks'));
+    await tester.tap(find.byTooltip('Back to available networks'));
     await tester.pump();
     expect(find.text('Home'), findsOneWidget);
     expect(passwordField, findsNothing);
@@ -908,7 +908,7 @@ void main() {
     expect(find.text('Connect your streamer'), findsOneWidget);
     expect(find.byType(HotspotSetupGuide), findsOneWidget);
     expect(find.text('kalinka-setup'), findsOneWidget);
-    await tester.tap(find.text('Back'));
+    await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
     expect(find.text('Search using Bluetooth'), findsOneWidget);
     expect(find.text('Start setup'), findsNothing);

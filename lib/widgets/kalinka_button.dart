@@ -1,10 +1,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
 import 'package:flutter/rendering.dart';
 
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
+import 'kalinka_popover.dart';
 
 enum KalinkaButtonVariant { accent, neutral }
 
@@ -86,7 +88,9 @@ class KalinkaButton extends StatelessWidget {
       opacity: enabled ? 1.0 : 0.35,
       duration: const Duration(milliseconds: 150),
       child: PillTarget(
-        onTap: interactive ? onTap : null,
+        onTap: interactive
+            ? () => KalinkaPopupOrigin.run(context, onTap!)
+            : null,
         child: Material(
           color: bgColor,
           shape: StadiumBorder(side: BorderSide(color: borderColor)),
@@ -94,7 +98,9 @@ class KalinkaButton extends StatelessWidget {
           child: InkWell(
             autofocus: autofocus,
             mouseCursor: clickCursor(interactive: interactive),
-            onTap: enabled ? onTap : null,
+            onTap: interactive
+                ? () => KalinkaPopupOrigin.run(context, onTap!)
+                : null,
             overlayColor: WidgetStateProperty.resolveWith((states) {
               if (states.contains(WidgetState.pressed) ||
                   states.contains(WidgetState.hovered)) {

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
 import '../kalinka_button.dart' show PillTarget;
+import '../kalinka_popover.dart';
 
 /// Pill button for batch actions ("Play all", "Enqueue", a page's Edit) and
 /// the choices beside them, 40dp tall in a 48dp target.
@@ -89,15 +90,18 @@ class ActionPillButton extends StatelessWidget {
             _vertical,
           );
     final interactive = enabled && onTap != null;
+    final activate = interactive
+        ? () => KalinkaPopupOrigin.run(context, onTap!)
+        : null;
 
     Widget button = PillTarget(
-      onTap: interactive ? onTap : null,
+      onTap: activate,
       child: Material(
         color: bg,
         shape: StadiumBorder(side: BorderSide(color: border, width: 1)),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: enabled ? onTap : null,
+          onTap: activate,
           mouseCursor: clickCursor(interactive: interactive),
           child: Padding(
             padding: padding,

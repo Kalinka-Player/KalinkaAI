@@ -280,9 +280,9 @@ void main() {
     testWidgets('leaves the output’s other settings for later', (tester) async {
       await atSoundStep(tester, FakeBox(reports: [_playing]));
 
-      await tester.tap(find.text('Back'));
+      await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Back'));
+      await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
 
       expect(find.text('Audio output'), findsOne);

@@ -5,6 +5,7 @@ import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
+import 'kalinka_popover.dart';
 
 /// Server status chip — top-right of the header.
 ///
@@ -66,13 +67,16 @@ class _ServerChipState extends ConsumerState<ServerChip>
     }
 
     final chipData = _getChipData(connectionState, settings.name);
+    final onTap = widget.onTap == null
+        ? null
+        : () => KalinkaPopupOrigin.run(context, widget.onTap!);
 
     if (widget.compact) {
       final chip = Semantics(
         label: chipData.label,
         button: widget.onTap != null,
         child: GestureDetector(
-          onTap: widget.onTap,
+          onTap: onTap,
           behavior: HitTestBehavior.opaque,
           child: Padding(
             padding: const EdgeInsets.all(10),
@@ -87,7 +91,7 @@ class _ServerChipState extends ConsumerState<ServerChip>
     }
 
     final chip = GestureDetector(
-      onTap: widget.onTap,
+      onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),

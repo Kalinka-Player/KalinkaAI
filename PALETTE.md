@@ -13,13 +13,31 @@ Six-step depth scale — each level sits above the previous. Use the shallowest 
 | Token | Hex | Usage |
 |---|---|---|
 | `background` | `#080808` | Page canvas — near-black, behind all surfaces |
-| `surfaceBase` | `#0E0E0E` | Header · tab bar · bottom sheets |
+| `surfaceBase` | `#0E0E0E` | Header · tab bar |
 | `surfaceRaised` | `#151513` | Cards · queue rows · mini-player |
 | `surfaceInput` | `#171715` | Input fields · search bar · chips |
 | `surfaceElevated` | `#1C1C1A` | Pills (unselected) · toggle off · nested |
 | `surfaceOverlay` | `#222220` | Hover · pressed · active row tint |
 
 A surface may also be spread as a *wash*: a gradient that lifts a region out of the canvas and dies inside it, marking where a section begins without a rule or a box. See *Atmosphere is neutral* under [Fill or outline](#fill-or-outline).
+
+### Dialogs and bottom sheets
+
+Connect is the background reference: every dialog, popover and bottom sheet uses `surfaceDialog` (`surfaceRaised`, `#151513`). Use this semantic token in shared chrome and keep Material surface tint transparent so elevation does not change the colour. This includes filters, renderer selection, plugin/settings sheets and confirmation dialogs; nested inputs and cards keep their own surface tokens.
+
+Use `OverlayCloseButton` wherever a dialog or sheet has an X. It follows the filter dialog: an 18dp `close_rounded` icon in `textPrimary`, inside a 34dp circular `borderDefault` outline and a 48dp interaction target. Hover and press use `surfaceOverlay` fill and a `textMuted` ring; keyboard focus uses the same fill and a 2dp `textPrimary` ring. Keep the circle and target stable across states, use a descriptive tooltip, and skip animation with reduced motion. The kiosk output panel retains its dedicated controls.
+
+Use `showKalinkaBottomSheet` for adaptive editors and pickers and `showKalinkaDialog` for confirmations. On phone layouts, sheets keep their bottom placement and drag dismissal. On wider windows (at least 720dp usable width, exceeding the 640dp sheet cap, and at least 480dp usable height), sheets become centered dialogs by default. Choose the mode from the **whole window**, even when a player or settings pane is narrow. Short landscape phones retain bottom sheets. Settings dialogs, forms (including Drives & Shares’ **+**), confirmations and notices have no beak, center in the whole window and dim the background with a 60% black scrim.
+
+Only **output selector**, **Filters** and **Connect** use beaked dialogs. These optional-action pickers leave the background undimmed; a transparent dismiss layer still handles outside taps. Output selector and Connect opt into `useBeak` in the sheet helper. Their phone bottom sheets retain normal dimming. Filters uses its own transparent overlay. Search has no beak and retains its dimmed backdrop.
+
+The shared `KalinkaAnchoredSurface` keeps a 12dp safe-area/keyboard margin, caps picker bodies at 640dp and places or flips the card beside its caller. Its 8dp beak joins the same neutral surface and outline without a seam; rounded corners are 16dp. Pass the actual button or row as the origin for these three pickers. `KalinkaCenteredSurface` gives other adaptive sheets the same neutral chrome and a 640dp cap, centered in the available safe area. Settings editors and pickers override the wide-dialog cap with `kKalinkaContentMaxWidth` (560dp), matching settings content. `KalinkaDialog` keeps its narrower 460dp card cap for forms and confirmations. Outside tap, Escape, system Back, returned results and staged input must continue to work; resizing changes the presentation without discarding edits. Skip opening/closing motion when animations are disabled.
+
+Compact menus override that default body cap: **output selector 448dp** (30% below 640dp), **server menu 380dp**, matching Connect's compact width. These caps apply to wide dialogs; phone sheets retain their normal width. The server menu is centered with a dimmed background. The output selector uses Connect's typography: `settingsPageTitle` (18dp) for the current output, `trayRowLabel` (16dp) for other outputs and `trayRowSublabel` (13dp) for details. Keep system text scaling and scrolling intact.
+
+### Back buttons
+
+Use `KalinkaBackButton` for navigation Back throughout the app, including settings, browsing, search and setup. The album view keeps its separate artwork treatment. The shared button matches the filter controls: a 40dp circle inside a 48dp target, a 22dp `arrow_back` in `textPrimary`, `surfaceElevated` fill and `borderDefault` outline. Hover/press use `surfaceOverlay` and a `textMuted` outline; keyboard focus uses the same fill with a 2dp `textPrimary` outline. Preserve the circle and target size in every state, provide a tooltip, and respect reduced motion.
 
 ## Borders
 
@@ -59,7 +77,9 @@ Primary interactive accent — deep natural red of guelder-rose berries. Active 
 
 Berry has two treatments, and which one a control gets is not a matter of taste.
 
-**Fill** — `accent` background, `textPrimary` label — marks *where the decision is being made*: the active `SettingsEnumPills` segment, a selected chip inside the filter card, `SettingsToggle` on, the primary `KalinkaButton`. Fill is what makes one chip findable among twenty.
+**Fill** — `accent` background, `textPrimary` label — marks *where the decision is being made*: the active `SettingsEnumPills` segment, `SettingsToggle` on, the primary `KalinkaButton`. Filter chips use the neutral selection rule below; inside filters, reserve crimson for the action button.
+
+**Filter choices are neutral.** Selected filter chips use bright `textPrimary` labels and a `textPrimary` outline. Unselected chips use `textSecondary` labels and a dim `borderDefault` outline. Both use `surfaceElevated`, lifting to `surfaceOverlay` on hover; an unselected outline may lift to `textMuted`, but stays dimmer than a selected outline. Never use crimson fill, bright crimson text or crimson outlines for filter selection. Unavailable choices remain muted and inert. Genres follow the same selection behaviour as sources: **All genres** means no genre restriction and highlights only itself; individual genres stay dim. Choosing an individual genre highlights only that genre, dims All and every other genre, and subsequent choices toggle independently. Clearing the final individual choice or choosing All restores the state where only All is highlighted.
 
 **Outline** — `accentSubtle` fill (laid on `background` where it is a pill, so it reads the same over a page's art), `accentBorder` edge, `accentTint` label — marks *the one a set leads with*, or the thing the app is doing right now: `ActionPillButton(accent:)`'s Play all beside a plain Enqueue, the now-playing row tint (the bars beside its duration stay grey, `textSecondary`, as motion needs no hue to be seen). It reads as "this one", not "pick me".
 
@@ -67,11 +87,11 @@ Berry has two treatments, and which one a control gets is not a matter of taste.
 
 **Atmosphere is neutral.** A *wash* — a surface colour spread as a gradient and dissolved back into the canvas inside the height of the thing it hangs off — colours a region instead of marking a control, so it can say *a different kind of section starts here* without claiming a decision. It is drawn in the depth scale, never in berry: the Inspired block's heading sits on `surfaceElevated` rising out of `background` and gone by the heading's foot, edge to edge, the only thing marking where that block begins. Its voice comes from typography, and its link to the search entry is the sparkle, not a hue. The one berry atmosphere is the Discover root's bloom, on the surface where the app is being asked. (Revised 2026-09-11: the heading carried that bloom at a section's scale, two rows above the berry now-playing row, and the two read as one signal. The wash went grey; berry is back to two treatments.) Anything with an edge you can point at is a mark, and takes the two rules above instead.
 
-The same value takes both treatments depending on where it is drawn, and that is the rule working rather than an inconsistency: a genre chip is filled inside the filter card, where you are choosing it, and grey in the header of the listing it produced, where it is a receipt you keep looking at.
+Filter choices and their receipts both remain neutral: a genre being chosen has a primary outline, while an applied genre in the listing header has a quiet outline and a primary label.
 
 Duration settles what the first test leaves open. Berry is loud — a surface you look at for four seconds while choosing can afford it; chrome that stays on screen for a whole session cannot. That is why the filter pill holds genuine state and is still grey.
 
-**The budget:** a screen at rest carries at most one crimson fill. A decision surface — a filter card, a dialog — is not at rest, and inside it fill is the vocabulary of choosing.
+**The budget:** a screen at rest carries at most one crimson fill. Filter cards reserve that fill for their primary action; selection is conveyed with neutral text and outlines.
 
 ## Accent — Warm Brass
 
@@ -149,9 +169,9 @@ Use the shared `SettingsTopBar` and settings typography: a single IBM Plex Sans 
 
 The preview icon opens an anchored visual layout picker: Cards, Artwork, List and Compact. Each choice shows the same locally drawn geometric layout illustration used in the Pin sheet, with its name underneath. Use four columns when the available panel width and text size allow, otherwise two; constrain the menu to its panel and allow scrolling on short screens. Mark the selected layout with a crimson `accentTint` outline, subtle accent surface and a filled crimson checkmark. This outline-and-check treatment belongs to the illustrated choices; it preserves the artwork's readability while making the choice clear without colour alone. Keep other choices neutral. Give all illustrated picker choices 16dp of vertical padding and 6dp horizontally, keeping the selected outline clear of the artwork and all four choices aligned. The trigger retains its round shape and highlights only on hover or press, including while its menu is open or it retains focus after dismissal. Choices save immediately and keep the overlay open; dismiss it after three seconds without interaction, restarting that timer on selection, scrolling, pointer activity or keyboard interaction. Outside taps, Escape and Back dismiss it; Back closes the picker before closing the screen. Every choice is a native button with its name, description and selected semantics, keyboard focus feedback and at least a 48dp target. Use the shared `homePreviewIcon` mapping for row triggers only; layout examples are decorative and need no image requests.
 
-Initial pinning opens **Pin to Home**, a bottom sheet with the catalog name, a reminder that current filters are saved (for an artist, **Home shows their albums.**, or **Home shows their tracks.** where they have none), **Choose a preview**, and four rounded outlined option rows. Each row pairs a geometric preview on the left with its name and short description on the right. Use IBM Plex Sans, semantic neutral surfaces, subtle borders and no added card shadows. Keep the title at the shared 18dp size and illustrations at most 120dp wide. The scrollable body grows to its content, capped at 560dp or the available height, so large windows do not enlarge this short decision. Compact examples use the source's declared colour. The footer says **Tap a layout to pin it.** Selecting a row pins immediately; Close or dismissing the sheet leaves Home unchanged. On tablets, anchor the sheet to Home's right panel, tracking its bounds during resizing; taps beside it dismiss it. Keep scrolling available for landscape screens and large text.
+Initial pinning opens **Pin to Home**, a bottom sheet with the catalog name, a reminder that current filters are saved (for an artist, **Home shows their albums.**, or **Home shows their tracks.** where they have none), **Choose a preview**, and four rounded outlined option rows. Each row pairs a geometric preview on the left with its name and short description on the right. Use IBM Plex Sans, semantic neutral surfaces, subtle borders and no added card shadows. Keep the title at the shared 18dp size and illustrations at most 120dp wide. The scrollable body grows to its content, capped at 560dp or the available height, so large windows do not enlarge this short decision. Compact examples use the source's declared colour. The footer says **Tap a layout to pin it.** Selecting a row pins immediately; Close or dismissing the sheet leaves Home unchanged. On wider windows, show a centered dialog with a dimmed background; taps beside it dismiss it. Keep scrolling available for landscape screens and large text.
 
-Unpin opens a centered `KalinkaDialog` confirmation (`centered: true`) with the catalog name and **Cancel** / **Unpin** actions. Remove the catalog only after confirmation; cancelling, tapping outside or going back leaves it pinned. Center the dialog within the browsing pane on wider layouts and within the screen on phones. Use a fade-in rather than a bottom-sheet slide. Reordering uses the drag handle and the list’s built-in accessibility actions. Pinning and layout changes share `HomePreviewIllustration` and the same layout names and descriptions.
+Unpin opens a `KalinkaDialog` confirmation with the catalog name and **Cancel** / **Unpin** actions: centered in the whole window with a dimmed background at every width. Remove the catalog only after confirmation; cancelling, tapping outside or going back leaves it pinned. Use a fade-in. Reordering uses the drag handle and the list’s built-in accessibility actions. Pinning and layout changes share `HomePreviewIllustration` and the same layout names and descriptions.
 
 ### Catalog page headers
 

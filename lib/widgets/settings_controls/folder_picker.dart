@@ -16,6 +16,7 @@ import '../tap_highlight.dart' show kalinkaIconButtonStyle;
 Future<String?> showFolderPicker(BuildContext context) =>
     showKalinkaBottomSheet<String>(
       context: context,
+      dialogMaxWidth: kKalinkaContentMaxWidth,
       mayFillScreen: true,
       contentBuilder: (_) => const FolderPickerSheet(),
     );

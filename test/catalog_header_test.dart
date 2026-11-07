@@ -492,7 +492,9 @@ void main() {
         scale: scale,
         captureKey: key,
       );
-      final viewportTop = tester.getRect(find.byTooltip('Back')).bottom + 2;
+      // Measure the header's boundary directly: Back's circular visual is
+      // smaller than its target and does not define the bar's lower edge.
+      final viewportTop = tester.getRect(_surface).top;
       final initialFootTop = _foot(tester).top;
       final identity = find.byKey(const ValueKey('catalog-identity'));
       // The title hands over once it has passed under the bar.

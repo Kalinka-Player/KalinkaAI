@@ -133,9 +133,7 @@ class KalinkaColors {
   static const background = Color(
     0xFF080808,
   ); // Page canvas — near-black, behind all surfaces
-  static const surfaceBase = Color(
-    0xFF0E0E0E,
-  ); // Header · tab bar · bottom sheets
+  static const surfaceBase = Color(0xFF0E0E0E); // Header · tab bar
   static const surfaceRaised = Color(
     0xFF151513,
   ); // Cards · queue rows · mini-player
@@ -148,6 +146,10 @@ class KalinkaColors {
   static const surfaceOverlay = Color(
     0xFF222220,
   ); // Hover · pressed · active row tint
+
+  /// All dialog, popover and bottom-sheet surfaces match Connect's neutral
+  /// background. Keep Material surface tint transparent on these surfaces.
+  static const surfaceDialog = surfaceRaised;
 
   // ── Borders ─────────────────────────────────────────────────────────────
   // Pure white alpha — clean neutral separation.
@@ -820,7 +822,7 @@ class KalinkaTextStyles {
   static TextStyle filterPillActive = KalinkaFonts.sans(
     fontSize: KalinkaTypography.baseSize + 2,
     fontWeight: FontWeight.w500,
-    color: KalinkaColors.accentBright,
+    color: KalinkaColors.textPrimary,
   );
 
   /// "Clear all" button in the chip row
@@ -857,6 +859,15 @@ class AppTheme {
         onSecondary: KalinkaColors.background,
       ),
       scaffoldBackgroundColor: KalinkaColors.background,
+      dialogTheme: const DialogThemeData(
+        backgroundColor: KalinkaColors.surfaceDialog,
+        surfaceTintColor: Colors.transparent,
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: KalinkaColors.surfaceDialog,
+        modalBackgroundColor: KalinkaColors.surfaceDialog,
+        surfaceTintColor: Colors.transparent,
+      ),
       splashFactory: NoSplash.splashFactory,
       highlightColor: Colors.transparent,
       textButtonTheme: TextButtonThemeData(style: buttonCursor),

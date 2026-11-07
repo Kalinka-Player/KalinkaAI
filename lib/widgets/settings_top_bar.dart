@@ -6,6 +6,7 @@ import '../providers/connection_state_provider.dart';
 import '../theme/app_theme.dart';
 import 'configuration_appearance.dart';
 import 'slide_in_panel.dart';
+import 'kalinka_back_button.dart';
 
 /// Back to the previous page, the current page title and a connection dot.
 /// Owns the top safe inset so the header background reaches the screen edge.
@@ -82,19 +83,9 @@ class SettingsTopBar extends ConsumerWidget {
                         Row(
                           children: [
                             if (showBack)
-                              IconButton(
+                              KalinkaBackButton(
                                 key: const ValueKey('settings-back'),
-                                tooltip: 'Back',
                                 onPressed: () => SlideInPanel.closeOf(context),
-                                constraints: const BoxConstraints(
-                                  minWidth: 48,
-                                  minHeight: 48,
-                                ),
-                                icon: const Icon(
-                                  Icons.arrow_back,
-                                  size: 22,
-                                  color: KalinkaColors.textPrimary,
-                                ),
                               )
                             else
                               // The title on the content's gutter.

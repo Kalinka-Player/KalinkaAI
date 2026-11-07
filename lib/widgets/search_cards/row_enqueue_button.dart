@@ -20,7 +20,7 @@ class RowEnqueueButton extends ConsumerStatefulWidget {
 
   /// Its square, as tall as the row's cover, and the gap before it.
   static const double size = 44;
-  static const double gap = 4;
+  static const double gap = 8;
 
   @override
   ConsumerState<RowEnqueueButton> createState() => _RowEnqueueButtonState();

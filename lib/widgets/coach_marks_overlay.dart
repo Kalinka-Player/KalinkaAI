@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
 import 'kalinka_button.dart';
 
@@ -154,7 +155,7 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
       constraints: const BoxConstraints(maxWidth: 420),
       decoration: BoxDecoration(
-        color: KalinkaColors.surfaceRaised,
+        color: KalinkaColors.surfaceDialog,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: KalinkaColors.borderDefault),
         boxShadow: [

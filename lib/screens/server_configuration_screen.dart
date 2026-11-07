@@ -361,29 +361,32 @@ class _ServerName extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               if (field != null && !field.readonly)
-                IconButton(
-                  key: const ValueKey('server-name-edit'),
-                  tooltip: 'Edit server name',
-                  constraints: const BoxConstraints(
-                    minWidth: 48,
-                    minHeight: 48,
+                Builder(
+                  builder: (buttonContext) => IconButton(
+                    key: const ValueKey('server-name-edit'),
+                    tooltip: 'Edit server name',
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                    icon: const Icon(
+                      Icons.edit_outlined,
+                      size: 20,
+                      color: KalinkaColors.textSecondary,
+                    ),
+                    onPressed: () async {
+                      final name = await showKalinkaBottomSheet<String>(
+                        context: buttonContext,
+                        dialogMaxWidth: kKalinkaContentMaxWidth,
+                        contentBuilder: (_) =>
+                            _ServerNameSheet(field: field, initialValue: value),
+                      );
+                      if (name == null || name == value || !context.mounted) {
+                        return;
+                      }
+                      SettingsScope.of(context).stage(field.path, name);
+                    },
                   ),
-                  icon: const Icon(
-                    Icons.edit_outlined,
-                    size: 20,
-                    color: KalinkaColors.textSecondary,
-                  ),
-                  onPressed: () async {
-                    final name = await showKalinkaBottomSheet<String>(
-                      context: context,
-                      contentBuilder: (_) =>
-                          _ServerNameSheet(field: field, initialValue: value),
-                    );
-                    if (name == null || name == value || !context.mounted) {
-                      return;
-                    }
-                    SettingsScope.of(context).stage(field.path, name);
-                  },
                 ),
             ],
           ),

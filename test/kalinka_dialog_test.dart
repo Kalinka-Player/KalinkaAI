@@ -2,19 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
+import 'package:kalinka/widgets/kalinka_popover.dart';
 
-// Every dialog in the app renders through KalinkaDialog, so its placement is
-// pinned down here: the window on phone, the panel it belongs to on tablet,
-// and re-homed live when the window crosses the breakpoint while the dialog
-// is open.
+// Dialogs stay centered in the whole window at every size,
+// including when their caller belongs to a narrow pane.
 
 const _card = KalinkaDialog.cardKey;
 
 Widget _host(KalinkaDialogSide side, {bool iconBeside = false}) => MaterialApp(
   home: Scaffold(
-    body: Builder(
-      builder: (ctx) => Center(
-        child: ElevatedButton(
+    body: Align(
+      alignment: Alignment.topCenter,
+      child: Builder(
+        builder: (ctx) => ElevatedButton(
           onPressed: () => showKalinkaDialog<void>(
             context: ctx,
             builder: (_) => KalinkaDialog(
@@ -46,8 +46,9 @@ Future<void> _open(
 }
 
 Future<void> _resizeTo(WidgetTester tester, Size size) async {
-  await tester.binding.setSurfaceSize(size);
-  addTearDown(() => tester.binding.setSurfaceSize(null));
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
 }
 
 void main() {
@@ -58,42 +59,45 @@ void main() {
     final rect = tester.getRect(find.byKey(_card));
     expect(rect.left, 20);
     expect(rect.right, 380);
+    expect(rect.center, const Offset(200, 400));
   });
 
-  testWidgets('narrow desktop width: the card centres at its cap', (
+  testWidgets('narrow desktop width: the card centers at its cap', (
     tester,
   ) async {
     // Default test window is 800x600: rail and browsing with a mini-player.
     await _open(tester, KalinkaDialogSide.browsing);
 
     final rect = tester.getRect(find.byKey(_card));
-    expect(rect.left, 214);
-    expect(rect.right, 674);
+    expect(rect.left, 170);
+    expect(rect.right, 630);
+    expect(rect.center, const Offset(400, 300));
   });
 
-  testWidgets('tablet width: a browsing dialog sits in the browsing pane', (
+  testWidgets('tablet width: a browsing dialog uses the whole window', (
     tester,
   ) async {
     await _resizeTo(tester, const Size(1200, 800));
     await _open(tester, KalinkaDialogSide.browsing);
 
-    // Capped at 460 and centred in the browsing pane (88..767).
+    // Capped at 460 and centered in the whole window.
     final rect = tester.getRect(find.byKey(_card));
-    expect(rect.left, closeTo(197.5, 0.01));
-    expect(rect.right, closeTo(657.5, 0.01));
+    expect(rect.left, 370);
+    expect(rect.right, 830);
+    expect(rect.center, const Offset(600, 400));
   });
 
-  testWidgets('tablet width: a player dialog sits in the player pane', (
+  testWidgets('tablet width: a player dialog uses the whole window', (
     tester,
   ) async {
     await _resizeTo(tester, const Size(1200, 800));
     await _open(tester, KalinkaDialogSide.player);
 
-    // The player's pane is the right 432dp here, so the card fills it to its
-    // margins.
+    expect(find.byType(KalinkaAnchoredSurface), findsNothing);
     final rect = tester.getRect(find.byKey(_card));
-    expect(rect.left, 788);
-    expect(rect.right, 1180);
+    expect(rect.left, 370);
+    expect(rect.right, 830);
+    expect(rect.center, const Offset(600, 400));
   });
 
   testWidgets('tablet width: a full-width dialog centres in the window', (
@@ -107,34 +111,35 @@ void main() {
     expect(rect.right, 830);
   });
 
-  testWidgets(
-    'an open dialog re-homes when the window crosses the breakpoint',
-    (tester) async {
-      await _resizeTo(tester, const Size(1200, 800));
-      await _open(tester, KalinkaDialogSide.browsing);
-      expect(tester.getRect(find.byKey(_card)).left, closeTo(197.5, 0.01));
+  testWidgets('an open dialog stays centered across window sizes', (
+    tester,
+  ) async {
+    await _resizeTo(tester, const Size(1200, 800));
+    await _open(tester, KalinkaDialogSide.browsing);
+    expect(tester.getRect(find.byKey(_card)).left, 370);
 
-      // Split → rail and browsing: the card centres beside the rail.
-      await _resizeTo(tester, const Size(800, 800));
-      await tester.pumpAndSettle();
-      expect(tester.getRect(find.byKey(_card)).center.dx, 444);
+    // Phones keep the card centered too.
+    await _resizeTo(tester, const Size(400, 800));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byKey(_card)).center, const Offset(200, 400));
+    expect(find.byType(KalinkaAnchoredSurface), findsNothing);
 
-      // Phone → tablet: back into the browsing pane.
-      await _resizeTo(tester, const Size(1200, 800));
-      await tester.pumpAndSettle();
-      final rect = tester.getRect(find.byKey(_card));
-      expect(rect.left, closeTo(197.5, 0.01));
-      expect(rect.right, closeTo(657.5, 0.01));
-    },
-  );
+    // Phone → tablet: remains centered.
+    await _resizeTo(tester, const Size(1200, 800));
+    await tester.pumpAndSettle();
+    final rect = tester.getRect(find.byKey(_card));
+    expect(rect.left, 370);
+    expect(rect.right, 830);
+    expect(rect.center, const Offset(600, 400));
+  });
 
-  testWidgets('tapping the undimmed panel dismisses the dialog', (
+  testWidgets('tapping outside the centered dialog dismisses it', (
     tester,
   ) async {
     await _resizeTo(tester, const Size(1200, 800));
     await _open(tester, KalinkaDialogSide.browsing);
 
-    await tester.tapAt(const Offset(1000, 400)); // player pane, no scrim
+    await tester.tapAt(const Offset(1000, 400)); // Outside the card
     await tester.pumpAndSettle();
     expect(find.byKey(_card), findsNothing);
   });

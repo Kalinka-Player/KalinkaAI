@@ -125,6 +125,7 @@ Future<SoundcardOption?> pickSoundcard(
 }) async {
   final picked = await showKalinkaBottomSheet<String>(
     context: context,
+    dialogMaxWidth: kKalinkaContentMaxWidth,
     mayFillScreen: true,
     contentBuilder: (_) => SoundcardPicker(noun: box.noun, report: report),
   );

@@ -605,40 +605,42 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     final showBadge = sourceBadgeVisible(ref, currentTrack.id);
 
     // The line that names the stream is also the way into its details.
-    return Semantics(
-      label: 'Stream info',
-      button: true,
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(6),
-          mouseCursor: clickCursor(interactive: true),
-          onTap: () {
-            showKalinkaDialog<void>(
-              context: context,
-              builder: (_) => const StreamInfoDialog(),
-            );
-          },
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(leftAligned ? 0 : 6, 4, 6, 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (showBadge) SourceBadge(entityId: currentTrack.id),
-                if (attributionText.isNotEmpty) ...[
-                  if (showBadge) const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      attributionText,
-                      style: KalinkaTextStyles.expandedAttribution,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+    return Builder(
+      builder: (triggerContext) => Semantics(
+        label: 'Stream info',
+        button: true,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(6),
+            mouseCursor: clickCursor(interactive: true),
+            onTap: () {
+              showKalinkaDialog<void>(
+                context: triggerContext,
+                builder: (_) => const StreamInfoDialog(),
+              );
+            },
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(leftAligned ? 0 : 6, 4, 6, 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (showBadge) SourceBadge(entityId: currentTrack.id),
+                  if (attributionText.isNotEmpty) ...[
+                    if (showBadge) const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        attributionText,
+                        style: KalinkaTextStyles.expandedAttribution,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
+                  ],
+                  const BitPerfectBadge(),
                 ],
-                const BitPerfectBadge(),
-              ],
+              ),
             ),
           ),
         ),

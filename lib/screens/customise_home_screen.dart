@@ -224,15 +224,21 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                                           onMenuChanged: (close) =>
                                               _menuChanged(pin.key, close),
                                         ),
-                                        IconButton(
-                                          tooltip: 'Unpin $title',
-                                          style: kalinkaIconButtonStyle,
-                                          icon: const Icon(
-                                            CupertinoIcons.pin_slash,
-                                            size: 20,
-                                          ),
-                                          onPressed: () =>
-                                              _confirmUnpin(context, ref, pin),
+                                        Builder(
+                                          builder: (buttonContext) =>
+                                              IconButton(
+                                                tooltip: 'Unpin $title',
+                                                style: kalinkaIconButtonStyle,
+                                                icon: const Icon(
+                                                  CupertinoIcons.pin_slash,
+                                                  size: 20,
+                                                ),
+                                                onPressed: () => _confirmUnpin(
+                                                  buttonContext,
+                                                  ref,
+                                                  pin,
+                                                ),
+                                              ),
                                         ),
                                       ],
                                     ),

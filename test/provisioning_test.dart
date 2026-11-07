@@ -189,7 +189,10 @@ void main() {
       final transport = FakeTransport()
         ..changeSupported = true
         ..holdNetworkChange = true;
-      final controller = ProvisioningController(transport, (_, _) async => null);
+      final controller = ProvisioningController(
+        transport,
+        (_, _) async => null,
+      );
       controller.select(const NearbyBox('radio', 'Box'));
       async.flushMicrotasks();
       controller.changeNetwork();
@@ -213,7 +216,10 @@ void main() {
       final transport = FakeTransport()
         ..changeSupported = true
         ..holdNetworkChange = true;
-      final controller = ProvisioningController(transport, (_, _) async => null);
+      final controller = ProvisioningController(
+        transport,
+        (_, _) async => null,
+      );
       controller.select(const NearbyBox('radio', 'Box'));
       async.flushMicrotasks();
       controller.changeNetwork();
@@ -234,7 +240,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Set up a streamer'), findsOneWidget);
     expect(
-      find.text('Find nearby streamers and send Wi-Fi settings over Bluetooth.'),
+      find.text(
+        'Find nearby streamers and send Wi-Fi settings over Bluetooth.',
+      ),
       findsOneWidget,
     );
   });
@@ -252,9 +260,8 @@ void main() {
         ProviderScope(
           child: MaterialApp(
             builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: const TextScaler.linear(1.5)),
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: const TextScaler.linear(1.5)),
               child: child!,
             ),
             home: ProvisioningScreen(transport: transport),
@@ -279,7 +286,7 @@ void main() {
         lessThan(460),
       );
       // Back edits the network choice rather than abandoning setup.
-      await tester.tap(find.text('Back'));
+      await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
       expect(find.text('Enter custom SSID'), findsOneWidget);
       expect(find.byKey(const ValueKey('custom-ssid')), findsNothing);
@@ -322,14 +329,13 @@ void main() {
       find.byKey(const ValueKey('wifi-password')),
       'dummy secret',
     );
-    await tester.tap(find.text('Back'));
+    await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
     expect(find.text('Choose your Wi-Fi.'), findsOneWidget);
     expect(transport.disconnects, 0);
     // System navigation has the same behavior as the footer.
-    await Navigator.of(
-      tester.element(find.byType(ProvisioningScreen)),
-    ).maybePop();
+    await Navigator.of(tester.element(find.byType(ProvisioningScreen)))
+        .maybePop();
     await tester.pump();
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pump(const Duration(milliseconds: 300));
@@ -351,13 +357,13 @@ void main() {
           .text,
       isEmpty,
     );
-    await tester.tap(find.text('Back'));
+    await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Back'));
+    await tester.tap(find.byTooltip('Back'));
     await tester.pump();
     await tester.runAsync(() => Future<void>.delayed(Duration.zero));
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text('Back'));
+    await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
     expect(find.text('Player discovery'), findsOneWidget);
     expect(find.byType(ProvisioningScreen), findsNothing);
@@ -442,42 +448,36 @@ void main() {
     },
   );
 
-  test(
-    'reports real join stages and changes network without resending credentials',
-    () async {
-      final transport = FakeTransport()
-        ..holdJoin = true
-        ..changeSupported = true;
-      transport.progressStages.addAll([1, 2, 3]);
-      final controller = ProvisioningController(
-        transport,
-        (_, _) async => null,
-        pollInterval: const Duration(milliseconds: 1),
-        handoffTimeout: const Duration(milliseconds: 5),
-      );
-      addTearDown(controller.dispose);
-      final stages = <WifiJoinStage?>[];
-      controller.addListener(() => stages.add(controller.wifiStage));
-      await controller.select(const NearbyBox('radio', 'Box'));
-      await controller.join('Home', 'dummy secret', 'GB');
-      expect(
-        stages,
-        containsAll([
-          WifiJoinStage.preparing,
-          WifiJoinStage.authenticating,
-          WifiJoinStage.gettingAddress,
-          WifiJoinStage.saving,
-        ]),
-      );
-      expect(controller.phase, SetupPhase.reaching);
-      await controller.changeNetwork();
-      expect(controller.phase, SetupPhase.credentials);
-      expect(transport.commands.map((c) => c['op']), [
-        'join',
-        'change_network',
-      ]);
-    },
-  );
+  test('reports real join stages and changes network without resending credentials', () async {
+    final transport = FakeTransport()
+      ..holdJoin = true
+      ..changeSupported = true;
+    transport.progressStages.addAll([1, 2, 3]);
+    final controller = ProvisioningController(
+      transport,
+      (_, _) async => null,
+      pollInterval: const Duration(milliseconds: 1),
+      handoffTimeout: const Duration(milliseconds: 5),
+    );
+    addTearDown(controller.dispose);
+    final stages = <WifiJoinStage?>[];
+    controller.addListener(() => stages.add(controller.wifiStage));
+    await controller.select(const NearbyBox('radio', 'Box'));
+    await controller.join('Home', 'dummy secret', 'GB');
+    expect(
+      stages,
+      containsAll([
+        WifiJoinStage.preparing,
+        WifiJoinStage.authenticating,
+        WifiJoinStage.gettingAddress,
+        WifiJoinStage.saving,
+      ]),
+    );
+    expect(controller.phase, SetupPhase.reaching);
+    await controller.changeNetwork();
+    expect(controller.phase, SetupPhase.credentials);
+    expect(transport.commands.map((c) => c['op']), ['join', 'change_network']);
+  });
 
   testWidgets(
     'player checks stay active without Retry and Back reopens networks',
@@ -510,7 +510,7 @@ void main() {
       expect(find.text('Retry'), findsNothing);
       expect(find.text('Choose another network'), findsNothing);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      await tester.tap(find.text('Back'));
+      await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
       expect(find.text('Enter custom SSID'), findsOneWidget);
       expect(find.text('Home'), findsOneWidget);
@@ -574,7 +574,7 @@ void main() {
     expect(find.text('Retry'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(transport.commands.where((c) => c['op'] == 'join'), hasLength(2));
-    await tester.tap(find.text('Back'));
+    await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
     expect(find.text('Choose your Wi-Fi.'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -912,37 +912,34 @@ void main() {
     },
   );
 
-  test(
-    'credentials sent once; reconnect resumes result and completes network handoff',
-    () async {
-      final transport = FakeTransport()..dropRead = true;
-      var reaches = 0;
-      final controller = ProvisioningController(transport, (status, id) async {
-        expect(id, '00112233-4455-6677-8899-aabbccddeeff');
-        reaches++;
-        if (reaches == 1) return null; // Core's cold start
-        return ProvisionedEndpoint(
-          'Living room',
-          status.address!,
-          status.port,
-          id,
-        );
-      }, pollInterval: Duration.zero);
-      addTearDown(controller.dispose);
-      await controller.scan();
-      transport.stream.add(const NearbyBox('radio', 'Kalinka-1234'));
-      await Future<void>.delayed(Duration.zero);
-      expect(controller.boxes.single.name, 'Kalinka-1234');
-      await controller.select(controller.boxes.single);
-      expect(controller.phase, SetupPhase.credentials);
-      await controller.join(' Home ', 'dummy secret', 'GB');
-      expect(controller.phase, SetupPhase.done);
-      expect(transport.connects, 2);
-      expect(transport.commands.map((c) => c['op']), ['join', 'complete']);
-      expect(transport.commands.first['ssid'], ' Home ');
-      expect(controller.endpoint!.host, '192.168.1.4');
-    },
-  );
+  test('credentials sent once; reconnect resumes result and completes network handoff', () async {
+    final transport = FakeTransport()..dropRead = true;
+    var reaches = 0;
+    final controller = ProvisioningController(transport, (status, id) async {
+      expect(id, '00112233-4455-6677-8899-aabbccddeeff');
+      reaches++;
+      if (reaches == 1) return null; // Core's cold start
+      return ProvisionedEndpoint(
+        'Living room',
+        status.address!,
+        status.port,
+        id,
+      );
+    }, pollInterval: Duration.zero);
+    addTearDown(controller.dispose);
+    await controller.scan();
+    transport.stream.add(const NearbyBox('radio', 'Kalinka-1234'));
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.boxes.single.name, 'Kalinka-1234');
+    await controller.select(controller.boxes.single);
+    expect(controller.phase, SetupPhase.credentials);
+    await controller.join(' Home ', 'dummy secret', 'GB');
+    expect(controller.phase, SetupPhase.done);
+    expect(transport.connects, 2);
+    expect(transport.commands.map((c) => c['op']), ['join', 'complete']);
+    expect(transport.commands.first['ssid'], ' Home ');
+    expect(controller.endpoint!.host, '192.168.1.4');
+  });
 
   test(
     'lost final join acknowledgement resumes without resending credentials',
@@ -1222,26 +1219,23 @@ void main() {
     },
   );
 
-  test(
-    'disposing during a pending handoff never connects or acknowledges afterwards',
-    () async {
-      final transport = FakeTransport();
-      final pending = Completer<ProvisionedEndpoint?>();
-      final reaching = Completer<void>();
-      final controller = ProvisioningController(transport, (status, id) {
-        reaching.complete();
-        return pending.future;
-      });
-      await controller.select(const NearbyBox('radio', 'Box'));
-      final join = controller.join('Home', 'dummy secret', 'GB');
-      await reaching.future;
-      controller.dispose();
-      pending.complete(
-        const ProvisionedEndpoint('Box', '192.168.1.4', 8123, null),
-      );
-      await join;
-      expect(transport.commands.map((c) => c['op']), ['join']);
-      expect(transport.disposed, isTrue);
-    },
-  );
+  test('disposing during a pending handoff never connects or acknowledges afterwards', () async {
+    final transport = FakeTransport();
+    final pending = Completer<ProvisionedEndpoint?>();
+    final reaching = Completer<void>();
+    final controller = ProvisioningController(transport, (status, id) {
+      reaching.complete();
+      return pending.future;
+    });
+    await controller.select(const NearbyBox('radio', 'Box'));
+    final join = controller.join('Home', 'dummy secret', 'GB');
+    await reaching.future;
+    controller.dispose();
+    pending.complete(
+      const ProvisionedEndpoint('Box', '192.168.1.4', 8123, null),
+    );
+    await join;
+    expect(transport.commands.map((c) => c['op']), ['join']);
+    expect(transport.disposed, isTrue);
+  });
 }

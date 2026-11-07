@@ -26,6 +26,7 @@ import 'package:kalinka/widgets/browse_filters/search_filter_button.dart';
 import 'package:kalinka/widgets/home/home_layout.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
 import 'package:kalinka/widgets/top_bar_content_fade.dart';
+import 'package:kalinka/widgets/kalinka_back_button.dart';
 import 'package:kalinka/widgets/overlay_card.dart';
 import 'package:kalinka/widgets/search/folder_trail.dart';
 import 'package:kalinka/widgets/search/album_page_header.dart';
@@ -682,6 +683,41 @@ void main() {
     expect(tester.getRect(backdrop).top, lessThan(0));
   });
 
+  for (final width in [375.0, 1200.0]) {
+    testWidgets('album Back keeps its separate control at $width', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 812);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final container = await pumpSurface(tester, reduceMotion: true);
+      final navigation = container.read(searchSessionProvider.notifier);
+      navigation.openCatalog(
+        id: 'kalinka:localfiles:catalog:albums',
+        title: 'My Albums',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(KalinkaBackButton), findsOneWidget);
+
+      navigation.openCatalog(
+        id: 'kalinka:localfiles:album:example',
+        title: 'Abbey Road',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(KalinkaBackButton), findsNothing);
+      expect(find.byTooltip('Back').hitTestable(), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(searchSessionProvider).catalogPage.isAlbum,
+        isFalse,
+      );
+      expect(find.byType(KalinkaBackButton), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('an album flung down, left and opened again keeps its cover', (
     tester,
   ) async {
@@ -778,7 +814,8 @@ void main() {
   testWidgets('a catalog page carries the filter control, and it opens', (
     tester,
   ) async {
-    final container = await pumpSurface(tester);
+    final captureKey = GlobalKey();
+    final container = await pumpSurface(tester, captureKey: captureKey);
 
     container
         .read(searchSessionProvider.notifier)
@@ -810,6 +847,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('FILTERS'), findsOneWidget);
+    await _captureHome(tester, captureKey, 'catalog-filters');
 
     // Cancel folds it away again without touching the applied filter.
     await tester.tap(find.text('Cancel'));

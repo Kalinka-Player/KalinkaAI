@@ -1,114 +1,257 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'kalinka_centered_surface.dart';
+import 'kalinka_popover.dart';
+import 'overlay_card.dart';
 import 'sheet_anchor.dart';
 import 'tap_highlight.dart';
 
-/// The widest a sheet grows: Material's own cap, kept for one anchored to a
-/// wide panel too, so its rows stay a readable length.
-const double kSheetMaxWidth = 640;
+/// The width cap shared by sheets and their desktop dialogs.
+const double kSheetMaxWidth = kKalinkaPopupMaxWidth;
 
-/// Shows a modal bottom sheet styled with the Kalinka visual identity.
-///
-/// Wraps [showModalBottomSheet] with the app's standard chrome: scrim,
-/// surface container with rounded top corners, drag handle, and shadow.
-/// The [contentBuilder] receives the sheet context and should return the
-/// sheet body (rows, cards, etc.) — the chrome is added automatically.
-/// When launched from inside a [SheetAnchor] (the tablet layout's panels),
-/// the sheet slides up over that panel instead of the window centre, at most
-/// [kSheetMaxWidth] wide and centred on it.
-///
-/// The body is bounded by the room there is, so a part of it that scrolls
-/// can be [Flexible]. [mayFillScreen] gives it the whole screen below the
-/// status bar; otherwise a sheet caps its own height.
+/// Opens a bottom sheet on phones and a centered, dimmed dialog on wider
+/// windows. Only the output selector and Connect opt into [useBeak]: an
+/// anchored popup with a transparent barrier. Pass their control's context
+/// (or [origin]) for the pointer. Content and edits survive resizing. Phone
+/// sheets retain drag dismissal and their [SheetAnchor] pane placement.
+/// [dialogMaxWidth] caps wide dialogs without narrowing phone sheets.
 Future<T?> showKalinkaBottomSheet<T>({
   required BuildContext context,
   required Widget Function(BuildContext) contentBuilder,
   bool mayFillScreen = false,
+  KalinkaPopupOrigin? origin,
+  double dialogMaxWidth = kSheetMaxWidth,
+  bool useBeak = false,
 }) {
-  final anchor = SheetAnchor.elementOf(context);
-  return showModalBottomSheet<T>(
-    context: context,
-    backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.60),
-    isScrollControlled: true,
-    useSafeArea: mayFillScreen,
-    // Anchored sheets span the window and get padded down to the panel —
-    // the M3 640px cap would re-centre them.
-    constraints: anchor != null
-        ? const BoxConstraints(maxWidth: double.infinity)
-        : null,
-    builder: (ctx) {
-      final sheet = Container(
-        decoration: BoxDecoration(
-          color: KalinkaColors.surfaceRaised,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: const Border(
-            top: BorderSide(color: KalinkaColors.borderDefault),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.7),
-              blurRadius: 60,
-              offset: const Offset(0, -20),
-            ),
-          ],
+  final navigator = Navigator.of(context);
+  return navigator.push<T>(
+    _AdaptiveSheetRoute<T>(
+      origin: origin ?? KalinkaPopupOrigin.forContext(context),
+      anchor: SheetAnchor.elementOf(context),
+      contentBuilder: contentBuilder,
+      mayFillScreen: mayFillScreen,
+      dialogMaxWidth: dialogMaxWidth,
+      useBeak: useBeak,
+      themes: InheritedTheme.capture(from: context, to: navigator.context),
+      reducedMotion: MediaQuery.disableAnimationsOf(context),
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    ),
+  );
+}
+
+class _AdaptiveSheetRoute<T> extends PopupRoute<T> {
+  final KalinkaPopupOrigin origin;
+  final Element? anchor;
+  final WidgetBuilder contentBuilder;
+  final bool mayFillScreen;
+  final double dialogMaxWidth;
+  final bool useBeak;
+  final CapturedThemes themes;
+  final bool reducedMotion;
+
+  _AdaptiveSheetRoute({
+    required this.origin,
+    required this.anchor,
+    required this.contentBuilder,
+    required this.mayFillScreen,
+    required this.dialogMaxWidth,
+    required this.useBeak,
+    required this.themes,
+    required this.reducedMotion,
+    required this.barrierLabel,
+  });
+
+  @override
+  final String barrierLabel;
+  @override
+  Color get barrierColor => Colors.black.withValues(alpha: 0.60);
+  @override
+  bool get barrierDismissible => true;
+  @override
+  Duration get transitionDuration =>
+      reducedMotion ? Duration.zero : const Duration(milliseconds: 280);
+  @override
+  Duration get reverseTransitionDuration =>
+      reducedMotion ? Duration.zero : const Duration(milliseconds: 180);
+
+  @override
+  Widget buildModalBarrier() => Builder(
+    builder: (context) => AnimatedModalBarrier(
+      color: animation!.drive(
+        ColorTween(
+          begin: Colors.transparent,
+          end: offstage || (useBeak && kalinkaUsesPopovers(context))
+              ? Colors.transparent
+              : barrierColor,
+        ).chain(CurveTween(curve: barrierCurve)),
+      ),
+      dismissible: barrierDismissible,
+      semanticsLabel: barrierLabel,
+      barrierSemanticsDismissible: semanticsDismissible,
+    ),
+  );
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) => themes.wrap(
+    KalinkaPopupOriginScope(
+      origin: origin,
+      // Preserve ModalBottomSheetRoute's announcement and child semantics
+      // for both phone sheets and their wide dialog presentation.
+      child: Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: switch (defaultTargetPlatform) {
+          TargetPlatform.iOS || TargetPlatform.macOS => '',
+          _ => MaterialLocalizations.of(context).dialogLabel,
+        },
+        child: _AdaptiveSheet(
+          origin: origin,
+          anchor: anchor,
+          contentBuilder: contentBuilder,
+          mayFillScreen: mayFillScreen,
+          dialogMaxWidth: dialogMaxWidth,
+          useBeak: useBeak,
+          animation: animation,
+          controller: controller!,
+          onClosing: () {
+            if (isCurrent) navigator!.pop();
+          },
         ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Drag handle
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(top: 12),
-                    decoration: BoxDecoration(
-                      color: KalinkaColors.surfaceOverlay,
-                      borderRadius: BorderRadius.circular(2),
+      ),
+    ),
+  );
+}
+
+class _AdaptiveSheet extends StatefulWidget {
+  final KalinkaPopupOrigin origin;
+  final Element? anchor;
+  final WidgetBuilder contentBuilder;
+  final bool mayFillScreen;
+  final double dialogMaxWidth;
+  final bool useBeak;
+  final Animation<double> animation;
+  final AnimationController controller;
+  final VoidCallback onClosing;
+
+  const _AdaptiveSheet({
+    required this.origin,
+    required this.anchor,
+    required this.contentBuilder,
+    required this.mayFillScreen,
+    required this.dialogMaxWidth,
+    required this.useBeak,
+    required this.animation,
+    required this.controller,
+    required this.onClosing,
+  });
+
+  @override
+  State<_AdaptiveSheet> createState() => _AdaptiveSheetState();
+}
+
+class _AdaptiveSheetState extends State<_AdaptiveSheet> {
+  final _bodyKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
+    final body = KeyedSubtree(
+      key: _bodyKey,
+      child: Builder(builder: widget.contentBuilder),
+    );
+    if (kalinkaUsesPopovers(context)) {
+      final content = MediaQuery.removeViewInsets(
+        context: context,
+        removeBottom: true,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: body,
+        ),
+      );
+      return FadeTransition(
+        opacity: widget.animation,
+        child: widget.useBeak
+            ? KalinkaAnchoredSurface(
+                origin: widget.origin,
+                maxWidth: widget.dialogMaxWidth,
+                child: content,
+              )
+            : KalinkaCenteredSurface(
+                maxWidth: widget.dialogMaxWidth,
+                child: content,
+              ),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final padding = SheetAnchor.paddingFor(
+          widget.anchor,
+          constraints.maxWidth,
+        );
+        return Padding(
+          padding: padding,
+          child: SafeArea(
+            top: widget.mayFillScreen,
+            bottom: false,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 1),
+                  end: Offset.zero,
+                ).animate(widget.animation),
+                child: BottomSheet(
+                  animationController: widget.controller,
+                  onClosing: widget.onClosing,
+                  backgroundColor: KalinkaColors.surfaceDialog,
+                  elevation: 20,
+                  shadowColor: Colors.black,
+                  constraints: const BoxConstraints(maxWidth: kSheetMaxWidth),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                    side: BorderSide(color: KalinkaColors.borderDefault),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  builder: (_) => SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 36,
+                              height: 4,
+                              margin: const EdgeInsets.only(top: 12),
+                              decoration: BoxDecoration(
+                                color: KalinkaColors.surfaceOverlay,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                          Flexible(child: body),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-                Flexible(child: contentBuilder(ctx)),
-              ],
+              ),
             ),
           ),
-        ),
-      );
-      if (anchor == null) return sheet;
-      final capped = Align(
-        alignment: Alignment.bottomCenter,
-        heightFactor: 1,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: kSheetMaxWidth),
-          child: sheet,
-        ),
-      );
-      // LayoutBuilder re-runs at layout time, after the page below (and so
-      // the anchor panel) has laid out for the current window size — the
-      // inset tracks live resizes, and falls back to full width if the
-      // anchor is gone after crossing the tablet breakpoint.
-      return LayoutBuilder(
-        builder: (_, constraints) {
-          final padding = SheetAnchor.paddingFor(anchor, constraints.maxWidth);
-          // The window-wide sheet's Material claims taps beside the sheet,
-          // so the route's own barrier never sees them — this one restores
-          // tap-outside-to-close there.
-          return Stack(
-            children: [
-              const Positioned.fill(child: ModalBarrier(color: null)),
-              Padding(padding: padding, child: capped),
-            ],
-          );
-        },
-      );
-    },
-  );
+        );
+      },
+    );
+  }
 }
 
 /// The margin a sheet's rows keep: where their content starts, how far the
@@ -143,17 +286,9 @@ class SheetHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          TapHighlight(
+          OverlayCloseButton(
             onTap: () => Navigator.of(context).pop(),
-            borderRadius: BorderRadius.circular(8),
-            child: const Padding(
-              padding: EdgeInsets.all(8),
-              child: Icon(
-                Icons.close_rounded,
-                size: 22,
-                color: KalinkaColors.textMuted,
-              ),
-            ),
+            label: 'Close',
           ),
         ],
       ),

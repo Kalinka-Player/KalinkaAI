@@ -18,6 +18,7 @@ import '../providers/supervisor_api.dart';
 import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
 import 'measure_size.dart';
+import 'kalinka_popover.dart';
 import 'module_artwork.dart';
 import 'receiver_panel.dart';
 
@@ -737,7 +738,9 @@ class _NavigationButton extends StatelessWidget {
             : '$label, $count',
         selected: selected,
         child: TextButton(
-          onPressed: onPressed,
+          onPressed: onPressed == null
+              ? null
+              : () => KalinkaPopupOrigin.run(context, onPressed!),
           focusNode: focusNode,
           style: ButtonStyle(
             minimumSize: const WidgetStatePropertyAll(Size(48, 48)),

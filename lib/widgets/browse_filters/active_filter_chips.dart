@@ -189,6 +189,7 @@ class _ActiveFilterChipState extends State<ActiveFilterChip> {
                 widthFactor: 1,
                 child: FilterPillFace(
                   label: widget.label,
+                  applied: true,
                   hovered: _hovering,
                   leading: widget.icon == null
                       ? null

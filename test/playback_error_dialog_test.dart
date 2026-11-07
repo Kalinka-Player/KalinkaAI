@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
-import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/playback_error_dialog.dart';
 
@@ -64,11 +63,10 @@ void main() {
       expect(find.text('This track couldn’t be played.'), findsOneWidget);
     });
 
-    testWidgets('wide (tablet) layout keeps the card in the player panel', (
+    testWidgets('wide (tablet) layout centers the card in the whole window', (
       tester,
     ) async {
-      // The tablet/phone split is decided reactively from layout constraints,
-      // so drive it with a wide surface rather than a constructor flag.
+      // Playback errors require attention across the whole window.
       await tester.binding.setSurfaceSize(const Size(1200, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -84,11 +82,9 @@ void main() {
 
       expect(find.text('Playback error'), findsOneWidget);
       expect(find.text('Boom'), findsOneWidget);
-      // The player's pane, at the window's right.
-      expect(
-        tester.getRect(find.byKey(KalinkaDialog.cardKey)).left,
-        greaterThanOrEqualTo(1200 - kalinkaPlayerPaneWidth(1200)),
-      );
+      final card = tester.getRect(find.byKey(KalinkaDialog.cardKey));
+      expect(card.center, const Offset(600, 400));
+      expect(card.width, 460);
     });
   });
 
