@@ -30,6 +30,14 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
+      # A tag old enough to need backfilling predates this script — pull it
+      # from the ref that's actually running this workflow (main) instead.
+      - uses: actions/checkout@v4
+        with:
+          path: ci-main
+      - run: |
+          cp ci-main/scripts/build_macos_dmg.sh scripts/build_macos_dmg.sh
+          chmod +x scripts/build_macos_dmg.sh
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
