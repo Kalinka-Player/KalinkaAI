@@ -90,11 +90,15 @@
       config: {
         // Bundled CanvasKit/skwasm (no CDN — works on LANs without
         // internet). No explicit renderer: the loader auto-selects the
-        // WASM-compiled app + skwasm on Chromium-based browsers (falls
-        // back to single-threaded skwasm if the server isn't sending the
-        // COOP/COEP headers — see kalinka-server's response middleware),
-        // and the classic JS + CanvasKit build everywhere else.
+        // WASM-compiled app + skwasm where the browser's own WasmGC
+        // support probe passes (Chromium always; Firefox 147+/Safari
+        // 26.2+ only because of the allowlist below — older versions
+        // fall back to it automatically), and the classic JS +
+        // CanvasKit build everywhere else. Falls back to single-threaded
+        // skwasm if the server isn't sending the COOP/COEP headers (see
+        // kalinka-server's response middleware).
         canvasKitBaseUrl: "canvaskit/",
+        wasmAllowList: { blink: true, webkit: true, gecko: true },
       },
     });
   </script>
