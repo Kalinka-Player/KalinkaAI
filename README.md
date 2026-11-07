@@ -58,6 +58,7 @@ The APKs on GitHub Releases are signed with the Kalinka release key. Certificate
 |---|---|
 | 🪟 **Windows (x64)** | Download and run [`kalinka-windows-x64-setup.exe`](https://github.com/Kalinka-Player/KalinkaAI/releases/latest/download/kalinka-windows-x64-setup.exe). The installer is not code-signed, so Windows may warn about it: choose **More info → Run anyway**. |
 | 🐧 **Linux desktop (x64)** | Download [`kalinka-linux-x64.tar.gz`](https://github.com/Kalinka-Player/KalinkaAI/releases/latest/download/kalinka-linux-x64.tar.gz), extract it and run `./install.sh` to add a launcher icon (`--uninstall` reverses it), or just run the `kalinka` binary. |
+| 🍎 **macOS (Intel + Apple Silicon)** | Download [`kalinka-macos-beta.dmg`](https://github.com/Kalinka-Player/KalinkaAI/releases/latest/download/kalinka-macos-beta.dmg), open it and drag Kalinka to Applications. It's not notarized, so the first launch needs an approval: right-click the app → **Open**, or allow it in **System Settings → Privacy & Security**. |
 | 🌐 **Browser** | Nothing to install: open `http://<server-address>:8000`. The server serves the web player itself, and the browser can play the music too. |
 
 Everything is also on the [releases page](https://github.com/Kalinka-Player/KalinkaAI/releases).

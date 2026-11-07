@@ -5,12 +5,22 @@ name: Release
 #   2. git tag -a vX.Y.Z -m "Kalinka AI App X.Y.Z" && git push origin vX.Y.Z
 # The tag push runs this pipeline: it checks the tag matches pubspec's version
 # (ignoring the +build suffix), builds the signed universal APK, Linux desktop
-# tarball, Windows zip + installer, and the web and on-device display (kiosk)
-# .debs, and publishes them to a GitHub Release.
+# tarball, Windows zip + installer, a macOS universal (Intel + Apple Silicon)
+# dmg, and the web and on-device display (kiosk) .debs, and publishes them to
+# a GitHub Release.
+#
+# The macOS dmg is ad-hoc signed, not notarized (no Apple Developer account),
+# so it ships under a "-beta" filename to signal that Gatekeeper will ask for
+# a manual approval (right-click > Open, or allow it in Privacy & Security).
+#
+# workflow_dispatch lets you re-run the pipeline against an existing tag, e.g.
+# to backfill a platform added after that tag was released:
+#   gh workflow run release.yml --ref vX.Y.Z
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write # required to create the GitHub Release
@@ -178,6 +188,39 @@ jobs:
             dist/*.exe
           if-no-files-found: error
 
+  build-macos:
+    needs: verify-version
+    runs-on: macos-latest
+    env:
+      V: ${{ needs.verify-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build macOS desktop
+        # Universal binary (x86_64 + arm64) by default via Xcode's standard
+        # ARCHS — one dmg covers both Intel and Apple Silicon Macs.
+        run: scripts/build_release.sh macos
+      - name: Package dmg
+        run: |
+          set -euo pipefail
+          mkdir -p dist stage
+          cp -R "build/macos/Build/Products/Release/kalinka.app" stage/
+          ln -s /Applications stage/Applications
+          hdiutil create -volname Kalinka -srcfolder stage -ov -format UDZO \
+            "dist/kalinka-$V-macos-beta.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*.dmg
+          if-no-files-found: error
+
   # Architecture-independent browser UI package: the Flutter web bundle,
   # installed where kalinka-server serves it (/usr/share/kalinka-web). The
   # server repo's install script fetches it from this repo's latest release.
@@ -247,7 +290,15 @@ jobs:
 
   publish:
     needs:
-      [verify-version, build-android, build-linux, build-windows, build-web-deb, build-kiosk-deb]
+      [
+        verify-version,
+        build-android,
+        build-linux,
+        build-windows,
+        build-macos,
+        build-web-deb,
+        build-kiosk-deb,
+      ]
     runs-on: ubuntu-latest
     env:
       V: ${{ needs.verify-version.outputs.version }}
@@ -266,6 +317,7 @@ jobs:
           cp "kalinka-$V.apk" kalinka-android-universal.apk
           cp "kalinka-$V-linux-x64.tar.gz" kalinka-linux-x64.tar.gz
           cp "kalinka-$V-windows-x64-setup.exe" kalinka-windows-x64-setup.exe
+          cp "kalinka-$V-macos-beta.dmg" kalinka-macos-beta.dmg
       - name: Checksums
         run: |
           set -euo pipefail
@@ -301,9 +353,11 @@ jobs:
             dist/kalinka-${{ env.V }}-linux-x64.tar.gz
             dist/kalinka-${{ env.V }}-windows-x64.zip
             dist/kalinka-${{ env.V }}-windows-x64-setup.exe
+            dist/kalinka-${{ env.V }}-macos-beta.dmg
             dist/kalinka-web_${{ env.V }}_all.deb
             dist/kalinka-kiosk_${{ env.V }}_arm64.deb
             dist/kalinka-android-universal.apk
             dist/kalinka-linux-x64.tar.gz
             dist/kalinka-windows-x64-setup.exe
+            dist/kalinka-macos-beta.dmg
             dist/md5.txt

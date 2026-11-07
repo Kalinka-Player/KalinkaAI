@@ -1,0 +1,53 @@
+name: macOS backfill
+
+# One-off: attach a macOS beta dmg to a GitHub Release that was already cut
+# before the macOS build existed in release.yml. Builds from that tag's
+# source and uploads to the existing release — doesn't touch the tag or any
+# of the release's other assets.
+#
+#   gh workflow run macos-backfill.yml --ref main -f tag=v0.26.0
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach the dmg to (e.g. v0.26.0)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: "3.47.6"
+
+jobs:
+  build-and-upload:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build macOS desktop
+        run: scripts/build_release.sh macos
+      - name: Package dmg
+        run: |
+          set -euo pipefail
+          V="${{ inputs.tag }}"
+          V="${V#v}"
+          mkdir -p dist stage
+          cp -R "build/macos/Build/Products/Release/kalinka.app" stage/
+          ln -s /Applications stage/Applications
+          hdiutil create -volname Kalinka -srcfolder stage -ov -format UDZO \
+            "dist/kalinka-$V-macos-beta.dmg"
+          cp "dist/kalinka-$V-macos-beta.dmg" dist/kalinka-macos-beta.dmg
+      - name: Upload to existing release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ inputs.tag }}" dist/*.dmg --clobber
