@@ -152,6 +152,16 @@ class ActionPillButton extends StatelessWidget {
     return math.max(0, (kKalinkaPillTarget - height) / 2);
   }
 
+  /// The target's height, including labels enlarged by the system text size.
+  static double heightOf(BuildContext context) => math.max(
+    kKalinkaPillTarget,
+    math.max(
+      kKalinkaPillHeight,
+      _lineHeightOf(context, _labelStyle(KalinkaColors.textPrimary)) +
+          2 * _vertical,
+    ),
+  );
+
   /// How wide a pill with an icon ahead of [label] sets, as [build] lays it
   /// out.
   static double widthOf(BuildContext context, String label) {

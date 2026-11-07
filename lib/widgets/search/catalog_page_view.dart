@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -43,6 +44,7 @@ import '../search_cards/row_columns.dart';
 import '../search_cards/search_track_row.dart';
 import '../shelf_heading.dart';
 import '../source_badge.dart';
+import '../top_bar_content_fade.dart';
 import 'add_queue_chip.dart';
 import 'album_page_header.dart';
 import 'artist_page_header.dart';
@@ -93,6 +95,10 @@ class CatalogPageView extends ConsumerStatefulWidget {
   /// How far a catalog's header scrolls before it is fully collapsed.
   final ValueChanged<double>? onHeaderCollapseExtent;
 
+  /// Both wide album columns scroll behind the host's pinned top bar.
+  /// Initial content clears the bar and system inset; narrow pages ignore it.
+  final bool wideAlbumBehindTopBar;
+
   /// Returns to the Catalogs root — used by the error state's action.
   final VoidCallback onBackToCatalogs;
 
@@ -104,6 +110,7 @@ class CatalogPageView extends ConsumerStatefulWidget {
     this.onAlbumInsets,
     this.onHeaderCollapsed,
     this.onHeaderCollapseExtent,
+    this.wideAlbumBehindTopBar = false,
   });
 
   /// The Grid/List choice a visit's listing offers, if any. Folders, albums
@@ -523,8 +530,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       Widget? head, {
       int columns = 1,
       bool grid = false,
-      Widget? sideHeader,
-      double sideHeaderWidth = 0,
+      double topInset = 0,
     }) => InfiniteListView(
       // Scroll kept for this visit only: the same page opened again starts
       // at its top. A folder's place is kept in [_folderPlacesProvider].
@@ -549,10 +555,13 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       fastScrollLabel: page.folderLayout ? _initialOf : null,
       fastScrollPadding: EdgeInsets.only(
         // Without the chrome, the actions are held over the list instead.
-        top: CatalogSliverHeader.pinnedExtent(
-          context,
-          actions: page.folderLayout && _FolderActions.anyFor(page, listing),
-        ),
+        top:
+            topInset +
+            CatalogSliverHeader.pinnedExtent(
+              context,
+              actions:
+                  page.folderLayout && _FolderActions.anyFor(page, listing),
+            ),
         bottom: 8,
       ),
       // Album and folder headings change as later chunks land.
@@ -568,9 +577,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       // separators carry their own 16px inset instead.
       padding: const EdgeInsets.only(bottom: 24),
       header: head,
-      sliverHeader: sliverHeader,
-      sideHeader: sideHeader,
-      sideHeaderWidth: sideHeaderWidth,
+      // Register the overlaid toolbar as an obstruction for keyboard reveal,
+      // while still letting tracks paint behind its transparent fade.
+      sliverHeader: topInset > 0
+          ? PinnedHeaderSliver(child: SizedBox(height: topInset))
+          : sliverHeader,
       columns: columns,
       rowPadding: EdgeInsets.symmetric(
         horizontal: grid ? 16 - ArtworkGridCard.inset : 16,
@@ -758,12 +769,12 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       emptyBuilder: (context) => _emptyState(page, filter, onReset: setQuery),
       // The error state replaces only the rows, never the header — a filter
       // that failed has to stay reachable to be undone.
-      errorBuilder: (context, _) => sideHeader != null || sliverHeader != null
+      errorBuilder: (context, _) => topInset > 0 || sliverHeader != null
           ? _CatalogError(onReturn: widget.onBackToCatalogs)
           : CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                SliverToBoxAdapter(child: header),
+                if (head != null) SliverToBoxAdapter(child: header),
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: _CatalogError(onReturn: widget.onBackToCatalogs),
@@ -772,24 +783,68 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             ),
     );
     if (isAlbum) {
-      // A wide pane sets the album's cover and details beside its tracks,
-      // with one viewport scrolling both columns.
+      // Keep the list at the same keyed location across width changes so
+      // its fetched tracks and pagination survive switching to/from phone.
       return LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
-          if (width < kAlbumSideLayoutWidth) return listOf(header);
-          return listOf(
-            AlbumTrackActions(
-              page: page,
-              trackCount: _total < 0 ? null : _total,
-            ),
-            sideHeaderWidth: (width * 0.4).clamp(220.0, 520.0),
-            sideHeader: AlbumIdentityColumn(
-              page: page,
-              year: _shownAlbumYear,
-              trackCount: _total < 0 ? null : _total,
-              totalDurationSeconds: _albumDuration,
-            ),
+          final wide = width >= kAlbumSideLayoutWidth;
+          final topInset = wide && widget.wideAlbumBehindTopBar
+              ? MediaQuery.paddingOf(context).top + kKalinkaTopBarHeight
+              : 0.0;
+          var sideWidth = (width * 0.4).clamp(220.0, 520.0);
+          var actionsBelowColumns = false;
+          if (wide) {
+            final actions = AlbumTrackActions.measure(context);
+            sideWidth = math.max(sideWidth, actions.minWidth);
+            // A wrapped action row must not consume the identity's entire
+            // usable viewport beneath the toolbar. Prefer a wider column;
+            // in a narrow, short pane put one action row below both columns.
+            if (sideWidth < actions.rowWidth &&
+                constraints.maxHeight - topInset - actions.columnHeight <
+                    kKalinkaPillTarget) {
+              if (width - actions.rowWidth >= kAlbumSideLayoutWidth / 2) {
+                sideWidth = actions.rowWidth;
+              } else {
+                actionsBelowColumns = true;
+              }
+            }
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: TopBarContentFade(
+                  extent: topInset,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (wide)
+                        SizedBox(
+                          width: sideWidth,
+                          child: AlbumIdentityColumn(
+                            page: page,
+                            year: _shownAlbumYear,
+                            trackCount: _total < 0 ? null : _total,
+                            totalDurationSeconds: _albumDuration,
+                            topInset: topInset,
+                            showActions: !actionsBelowColumns,
+                          ),
+                        ),
+                      Expanded(
+                        key: const ValueKey('album-tracks'),
+                        child: listOf(wide ? null : header, topInset: topInset),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (actionsBelowColumns)
+                AlbumTrackActions(
+                  page: page,
+                  trackCount: _total < 0 ? null : _total,
+                ),
+            ],
           );
         },
       );

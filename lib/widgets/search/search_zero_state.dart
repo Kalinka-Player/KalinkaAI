@@ -20,6 +20,7 @@ import '../home/pinned_catalogs_section.dart';
 import '../measure_size.dart';
 import '../modifier_click.dart';
 import '../pull_to_refresh.dart';
+import '../top_bar_content_fade.dart';
 import 'collections_section.dart';
 
 /// The Catalogs root body: the search invitation (passed in via [leading]),
@@ -38,7 +39,7 @@ class SearchZeroState extends ConsumerWidget {
   final ScrollController? controller;
 
   /// The pinned Home bar shares the viewport with the content, which scrolls
-  /// behind its gradient. Its extent also keeps the empty state centred in
+  /// under an opacity mask. Its extent also keeps the empty state centred in
   /// the unobscured space and the refresh indicator below the bar.
   final Widget? header;
   final double headerExtent;
@@ -99,7 +100,7 @@ class SearchZeroState extends ConsumerWidget {
         pins.isEmpty &&
         (collections == null || collections.isEmpty);
     const top = kHomeTopInset;
-    return PullToRefresh(
+    final content = PullToRefresh(
       edgeOffset: headerExtent,
       onRefresh: ref.read(searchSessionProvider.notifier).refreshAll,
       child: LayoutBuilder(
@@ -113,7 +114,8 @@ class SearchZeroState extends ConsumerWidget {
           // Pinning in the viewport also teaches ensureVisible and keyboard
           // focus how much of the list the header obscures.
           slivers: [
-            if (header != null) PinnedHeaderSliver(child: header),
+            if (header != null)
+              PinnedHeaderSliver(child: SizedBox(height: headerExtent)),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(
                 kHomeSideInset,
@@ -176,6 +178,22 @@ class SearchZeroState extends ConsumerWidget {
           ],
         ),
       ),
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        TopBarContentFade(
+          key: const ValueKey('home-content-fade'),
+          extent: header == null
+              ? 0
+              : MediaQuery.paddingOf(context).top + kKalinkaTopBarHeight,
+          child: content,
+        ),
+        // Reserve the pinned sliver's space for keyboard reveal and initial
+        // clearance, but paint the actual controls outside the content mask.
+        if (header != null)
+          Positioned(top: 0, left: 0, right: 0, child: header!),
+      ],
     );
   }
 }
