@@ -10,6 +10,7 @@ import '../../providers/search_session_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/browse_links.dart';
+import '../../utils/web_build_target.dart';
 import '../browse_metadata_link.dart';
 import '../fitted_title.dart';
 import '../measure_size.dart';
@@ -646,7 +647,7 @@ class _AlbumCoverImageState extends State<_AlbumCoverImage> {
     widget.url,
     fit: BoxFit.cover,
     alignment: Alignment.topCenter,
-    cacheWidth: _decodeSize,
+    cacheWidth: wasmSafeCacheSize(_decodeSize),
     gaplessPlayback: true,
     errorBuilder: (_, _, _) => widget.fallback,
   );

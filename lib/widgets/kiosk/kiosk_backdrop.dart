@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../../utils/web_build_target.dart';
 
 /// Full-bleed backdrop of the cover itself, blurred and zoomed in past its
 /// edges.
@@ -74,6 +75,12 @@ class KioskBackdrop extends StatelessWidget {
 const _blurSide = 128;
 const _blurSigma = 2.4;
 
+/// skwasm_heavy corrupts ImageFilter.blur (see CatalogArt's _bake), so a
+/// wasm build skips it and leans on the final stretch's own bilinear
+/// upscale for softness instead — the same trick as there, so it needs the
+/// much smaller source _blurSide would otherwise be.
+const _wasmBlurSide = 28;
+
 class _BlurredCover extends StatefulWidget {
   final String url;
 
@@ -102,12 +109,18 @@ class _BlurredCoverState extends State<_BlurredCover> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_stream != null) return;
-    _stream = ResizeImage(
-      NetworkImage(widget.url),
-      width: _blurSide,
-      height: _blurSide,
-      policy: ResizeImagePolicy.fit,
-    ).resolve(createLocalImageConfiguration(context))..addListener(_listener);
+    // ResizeImage's decode-at-size is corrupted under skwasm_heavy (see
+    // CatalogArt) — decode at native size there instead.
+    final ImageProvider provider = compiledToWasm
+        ? NetworkImage(widget.url)
+        : ResizeImage(
+            NetworkImage(widget.url),
+            width: _blurSide,
+            height: _blurSide,
+            policy: ResizeImagePolicy.fit,
+          );
+    _stream = provider.resolve(createLocalImageConfiguration(context))
+      ..addListener(_listener);
   }
 
   Future<void> _onImage(ImageInfo info, bool _) async {
@@ -167,14 +180,15 @@ class _BlurredCoverState extends State<_BlurredCover> {
 
 /// The centre square of [source], blurred, and how light it is.
 Future<(ui.Image, double)> _blur(ui.Image source) async {
-  const side = _blurSide;
+  final side = compiledToWasm ? _wasmBlurSide : _blurSide;
   final w = source.width.toDouble();
   final h = source.height.toDouble();
   final crop = w < h ? w : h;
   final recorder = ui.PictureRecorder();
   final bounds = Rect.fromLTWH(0, 0, side.toDouble(), side.toDouble());
-  Canvas(recorder)
-    ..saveLayer(
+  final canvas = Canvas(recorder);
+  if (!compiledToWasm) {
+    canvas.saveLayer(
       bounds,
       Paint()
         ..imageFilter = ui.ImageFilter.blur(
@@ -182,14 +196,15 @@ Future<(ui.Image, double)> _blur(ui.Image source) async {
           sigmaY: _blurSigma,
           tileMode: TileMode.clamp,
         ),
-    )
-    ..drawImageRect(
-      source,
-      Rect.fromCenter(center: Offset(w / 2, h / 2), width: crop, height: crop),
-      bounds,
-      Paint()..filterQuality = FilterQuality.medium,
-    )
-    ..restore();
+    );
+  }
+  canvas.drawImageRect(
+    source,
+    Rect.fromCenter(center: Offset(w / 2, h / 2), width: crop, height: crop),
+    bounds,
+    Paint()..filterQuality = FilterQuality.medium,
+  );
+  if (!compiledToWasm) canvas.restore();
   final picture = recorder.endRecording();
   final image = await picture.toImage(side, side);
   picture.dispose();

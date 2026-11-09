@@ -7,6 +7,7 @@ import '../../providers/artist_relations_provider.dart' show imagePathOf;
 import '../../providers/selection_state_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/web_build_target.dart';
 import '../catalog_art.dart';
 import '../fitted_art.dart';
 import '../modifier_click.dart';
@@ -272,8 +273,12 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
                 url,
                 width: size,
                 height: height,
-                cacheWidth: byHeight ? null : (size * 2.5).round(),
-                cacheHeight: byHeight ? (height * 2.5).round() : null,
+                cacheWidth: wasmSafeCacheSize(
+                  byHeight ? null : (size * 2.5).round(),
+                ),
+                cacheHeight: wasmSafeCacheSize(
+                  byHeight ? (height * 2.5).round() : null,
+                ),
                 fit: fills ? BoxFit.cover : BoxFit.contain,
                 gaplessPlayback: true,
                 filterQuality: FilterQuality.medium,

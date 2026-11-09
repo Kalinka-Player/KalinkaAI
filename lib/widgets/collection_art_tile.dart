@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../utils/web_build_target.dart';
 import 'procedural_album_art.dart';
 
 /// A collection's cover wherever it is shown: the server's collage once
@@ -42,8 +43,8 @@ class CollectionCover extends StatelessWidget {
         width: size,
         height: size,
         fit: BoxFit.cover,
-        cacheWidth: (size * 3).round(),
-        cacheHeight: (size * 3).round(),
+        cacheWidth: wasmSafeCacheSize((size * 3).round()),
+        cacheHeight: wasmSafeCacheSize((size * 3).round()),
         gaplessPlayback: true,
         filterQuality: FilterQuality.low,
         errorBuilder: (_, _, _) => tile,

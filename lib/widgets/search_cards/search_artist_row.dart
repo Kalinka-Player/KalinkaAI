@@ -6,6 +6,7 @@ import '../../providers/selection_state_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/web_build_target.dart';
 import '../modifier_click.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
@@ -100,13 +101,18 @@ class _SearchArtistRowState extends ConsumerState<SearchArtistRow> {
                                   // time. The Image.network shortcut wraps with the
                                   // default ResizeImagePolicy.exact, which squashes
                                   // non-square artist photos into 180x180 — visible
-                                  // as stretching even after BoxFit.cover.
-                                  image: ResizeImage(
-                                    NetworkImage(resolvedImageUrl),
-                                    width: 180,
-                                    height: 180,
-                                    policy: ResizeImagePolicy.fit,
-                                  ),
+                                  // as stretching even after BoxFit.cover. On wasm
+                                  // ResizeImage's decode-at-size is corrupted
+                                  // entirely (see CatalogArt), so skip it there —
+                                  // a native decode can't squash either.
+                                  image: compiledToWasm
+                                      ? NetworkImage(resolvedImageUrl)
+                                      : ResizeImage(
+                                          NetworkImage(resolvedImageUrl),
+                                          width: 180,
+                                          height: 180,
+                                          policy: ResizeImagePolicy.fit,
+                                        ),
                                   width: 60,
                                   height: 60,
                                   fit: BoxFit.cover,

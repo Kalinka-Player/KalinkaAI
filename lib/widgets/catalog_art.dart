@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
+import '../utils/web_build_target.dart';
 import 'catalog_art_background.dart';
 import 'fitted_art.dart';
 
@@ -85,6 +86,22 @@ class CatalogArt extends ConsumerWidget {
     final path = artPath;
     if (path == null || path.isEmpty) return drawn;
     final url = ref.watch(urlResolverProvider).abs(path);
+    if (compiledToWasm) {
+      // skwasm_heavy's decode-at-reduced-size path (cacheWidth/cacheHeight
+      // below, same ResizeImage machinery) corrupts the art entirely — plain
+      // Image.network at native size (BoxFit.cover scales it down after)
+      // decodes correctly. Skips the inset/crop card layout too, so every
+      // card is full-bleed art on wasm rather than matching the server's
+      // 3:1 card shape; fine for now, worth revisiting if that's wanted.
+      // CatalogCard holds its own box to that 3:1 shape on wasm (see there),
+      // so this can just cover whatever box it's handed.
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => drawn,
+      );
+    }
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final ratio = aspectRatio ?? 1;
     return LayoutBuilder(
@@ -250,19 +267,6 @@ class CatalogCard extends StatelessWidget {
     Shadow(color: Color(0x99000000), blurRadius: 10),
   ];
 
-  /// Holds the caption's side dark where covers in the art run beneath it.
-  static const _scrim = BoxDecoration(
-    gradient: LinearGradient(
-      colors: [
-        Color(0xCC000000),
-        Color(0xB3000000),
-        Color(0x59000000),
-        Color(0x00000000),
-      ],
-      stops: [0, 0.35, 0.55, 0.75],
-    ),
-  );
-
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -281,68 +285,78 @@ class CatalogCard extends StatelessWidget {
               entityId: entityId,
             ),
           ),
-          const Positioned.fill(child: DecoratedBox(decoration: _scrim)),
           SizedBox(
             width: width,
+            // On wasm the art is a full-bleed image rather than an inset
+            // cover (see CatalogArt), so a caption that grows the box taller
+            // than the card's 3:1 shape would crop more of it — hold the
+            // height fixed there and let the caption clip/ellipsis instead
+            // of growing. Off wasm the inset art doesn't care, so the card
+            // keeps growing with a tall caption as before.
+            height: compiledToWasm ? width / CatalogArt.cardRatio : null,
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 minHeight: width / CatalogArt.cardRatio,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: width * captionShare),
-                    child: Padding(
-                      padding: EdgeInsets.all(16 * scale),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              if (leading case final leading?) ...[
-                                leading(scale),
-                                SizedBox(width: 8 * scale),
-                              ],
-                              Expanded(
-                                child: Text(
-                                  title,
-                                  maxLines: maxLines,
-                                  overflow: maxLines == null
-                                      ? null
-                                      : TextOverflow.ellipsis,
-                                  style: KalinkaTextStyles.trackRowTitle
-                                      .copyWith(
-                                        fontSize: _titleSize * scale,
-                                        shadows: _captionShadows,
-                                      ),
+              child: ClipRect(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: width * captionShare,
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.all(16 * scale),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                if (leading case final leading?) ...[
+                                  leading(scale),
+                                  SizedBox(width: 8 * scale),
+                                ],
+                                Expanded(
+                                  child: Text(
+                                    title,
+                                    maxLines: maxLines,
+                                    overflow: maxLines == null
+                                        ? null
+                                        : TextOverflow.ellipsis,
+                                    style: KalinkaTextStyles.trackRowTitle
+                                        .copyWith(
+                                          fontSize: _titleSize * scale,
+                                          shadows: _captionShadows,
+                                        ),
+                                  ),
                                 ),
+                              ],
+                            ),
+                            if (subtitle != null && subtitle.isNotEmpty) ...[
+                              SizedBox(height: 4 * scale),
+                              Text(
+                                subtitle,
+                                maxLines: maxLines,
+                                overflow: maxLines == null
+                                    ? null
+                                    : TextOverflow.ellipsis,
+                                style: KalinkaTextStyles.trackRowSubtitle
+                                    .copyWith(
+                                      fontSize: _subtitleSize * subtitleScale,
+                                      shadows: _captionShadows,
+                                    ),
                               ),
                             ],
-                          ),
-                          if (subtitle != null && subtitle.isNotEmpty) ...[
-                            SizedBox(height: 4 * scale),
-                            Text(
-                              subtitle,
-                              maxLines: maxLines,
-                              overflow: maxLines == null
-                                  ? null
-                                  : TextOverflow.ellipsis,
-                              style: KalinkaTextStyles.trackRowSubtitle
-                                  .copyWith(
-                                    fontSize: _subtitleSize * subtitleScale,
-                                    shadows: _captionShadows,
-                                  ),
-                            ),
                           ],
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

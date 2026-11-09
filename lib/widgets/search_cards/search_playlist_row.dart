@@ -8,6 +8,7 @@ import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/play_next.dart';
+import '../../utils/web_build_target.dart';
 import '../modifier_click.dart';
 import '../procedural_album_art.dart';
 import '../source_badge.dart';
@@ -173,8 +174,8 @@ class _SearchPlaylistRowState extends ConsumerState<SearchPlaylistRow>
                                   fit: BoxFit.cover,
                                   width: 56,
                                   height: 56,
-                                  cacheWidth: 168,
-                                  cacheHeight: 168,
+                                  cacheWidth: wasmSafeCacheSize(168),
+                                  cacheHeight: wasmSafeCacheSize(168),
                                   gaplessPlayback: true,
                                   filterQuality: FilterQuality.low,
                                   errorBuilder: (context, error, stackTrace) {

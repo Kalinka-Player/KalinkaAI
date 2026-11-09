@@ -25,6 +25,7 @@ import '../../providers/source_modules_provider.dart';
 import '../../providers/storage_volumes_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/web_build_target.dart';
 import '../browse_filters/active_filter_chips.dart';
 import '../browse_filters/browse_filter_form.dart' show filterTypeLabel;
 import '../browse_filters/filters_match_nothing.dart';
@@ -1835,7 +1836,15 @@ class _BakedBlurImageState extends State<_BakedBlurImage> {
   // Bake resolution: small enough that the one-shot blur is negligible, big
   // enough that the cover-fit upscale stays smooth. Sigma is in bake pixels,
   // so on-screen softness grows with the window — fine, it's a backdrop.
-  static const int _bakeWidth = 320;
+  //
+  // skwasm corrupts ImageFilter.blur (see _bake), so on a wasm build there is
+  // no blur pass to mask a 320px decode's pixelation under the cover-fit
+  // upscale. Decoding much smaller instead and leaning on the upscale's own
+  // bilinear filtering for softness — the same trick SoftImageFill uses —
+  // reads as a blur without ever calling the broken filter. wasm is still
+  // experimental, so this keeps non-wasm's original look rather than
+  // downgrading it to match what wasm can safely do.
+  static int get _bakeWidth => compiledToWasm ? 32 : 320;
   static const double _sigma = 14;
 
   ImageStream? _stream;
@@ -1866,10 +1875,14 @@ class _BakedBlurImageState extends State<_BakedBlurImage> {
       (info, _) => _bake(info, gen),
       onError: (_, _) {}, // No art is a valid banner — keep what's shown.
     );
-    _stream = ResizeImage(
-      NetworkImage(widget.url),
-      width: _bakeWidth,
-    ).resolve(ImageConfiguration.empty);
+    // ResizeImage's decode-at-reduced-size (skwasm_heavy, same as
+    // Image.network's cacheWidth/cacheHeight — see CatalogArt) corrupts the
+    // image on a wasm build; decode at native size there instead and let the
+    // canvas.drawImageRect below do the downscale.
+    final ImageProvider provider = compiledToWasm
+        ? NetworkImage(widget.url)
+        : ResizeImage(NetworkImage(widget.url), width: _bakeWidth);
+    _stream = provider.resolve(ImageConfiguration.empty);
     _stream!.addListener(_listener!);
     if (oldStream != null && oldListener != null) {
       oldStream.removeListener(oldListener);
@@ -1880,23 +1893,54 @@ class _BakedBlurImageState extends State<_BakedBlurImage> {
     final src = info.image;
     final outW = _bakeWidth;
     final outH = (outW * src.height / src.width).round().clamp(1, 1024);
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    final paint = Paint()
-      ..imageFilter = ui.ImageFilter.blur(
-        sigmaX: _sigma,
-        sigmaY: _sigma,
-        tileMode: TileMode.clamp,
+    final ui.Image image;
+    if (compiledToWasm) {
+      // skwasm (the renderer a WASM-compiled build uses) corrupts the real
+      // blur below — mostly-black output with only a sliver of the source
+      // visible, most likely a TileMode.clamp edge-sampling bug in its blur
+      // shader — so this experimental path skips the filter entirely. A
+      // single huge downscale (native res straight to outW) then reads as
+      // blobby/pixelated rather than blurred, since FilterQuality.medium's
+      // mipmapping doesn't box-filter cleanly over a 40-60x minification in
+      // one draw — halving down in steps instead keeps each draw's
+      // minification small enough to properly average its neighbourhood,
+      // which — stacked — reads as a real blur without ever calling the
+      // broken filter.
+      var current = src;
+      var owned = false;
+      var w = src.width;
+      var h = src.height;
+      while (w ~/ 2 >= outW && h ~/ 2 >= outH) {
+        final nextW = w ~/ 2;
+        final nextH = h ~/ 2;
+        final stepped = await _resized(current, nextW, nextH);
+        if (owned) current.dispose();
+        current = stepped;
+        owned = true;
+        w = nextW;
+        h = nextH;
+      }
+      image = await _resized(current, outW, outH);
+      if (owned) current.dispose();
+    } else {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      final paint = Paint()
+        ..imageFilter = ui.ImageFilter.blur(
+          sigmaX: _sigma,
+          sigmaY: _sigma,
+          tileMode: TileMode.clamp,
+        );
+      canvas.drawImageRect(
+        src,
+        Rect.fromLTWH(0, 0, src.width.toDouble(), src.height.toDouble()),
+        Rect.fromLTWH(0, 0, outW.toDouble(), outH.toDouble()),
+        paint,
       );
-    canvas.drawImageRect(
-      src,
-      Rect.fromLTWH(0, 0, src.width.toDouble(), src.height.toDouble()),
-      Rect.fromLTWH(0, 0, outW.toDouble(), outH.toDouble()),
-      paint,
-    );
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(outW, outH);
-    picture.dispose();
+      final picture = recorder.endRecording();
+      image = await picture.toImage(outW, outH);
+      picture.dispose();
+    }
     info.dispose();
     if (!mounted || gen != _bakeGen) {
       image.dispose();
@@ -1906,6 +1950,24 @@ class _BakedBlurImageState extends State<_BakedBlurImage> {
       _baked?.dispose();
       _baked = image;
     });
+  }
+
+  /// wasm-only helper (see _bake): one downscale step, properly filtered so
+  /// it averages rather than point-samples.
+  static Future<ui.Image> _resized(ui.Image src, int w, int h) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final paint = Paint()..filterQuality = FilterQuality.medium;
+    canvas.drawImageRect(
+      src,
+      Rect.fromLTWH(0, 0, src.width.toDouble(), src.height.toDouble()),
+      Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+      paint,
+    );
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(w, h);
+    picture.dispose();
+    return image;
   }
 
   @override
@@ -1922,7 +1984,10 @@ class _BakedBlurImageState extends State<_BakedBlurImage> {
     return RawImage(
       image: baked,
       fit: BoxFit.cover,
-      filterQuality: FilterQuality.medium,
+      // The wasm bake skips the (skwasm-broken) blur and relies on this
+      // upscale alone for softness, so it needs the better filter; the
+      // non-wasm bake is already blurred and medium was plenty.
+      filterQuality: compiledToWasm ? FilterQuality.high : FilterQuality.medium,
     );
   }
 }
