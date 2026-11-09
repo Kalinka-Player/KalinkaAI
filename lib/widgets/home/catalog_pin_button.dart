@@ -9,10 +9,6 @@ import '../../providers/box_control_provider.dart';
 import '../../providers/browse_genres_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../providers/search_session_provider.dart';
-import '../../theme/app_theme.dart';
-import '../kalinka_bottom_sheet.dart';
-import '../overlay_card.dart';
-import 'home_preview_choices.dart';
 
 Future<void> saveHomeChange(BuildContext context, Future<void> change) async {
   try {
@@ -52,20 +48,12 @@ class CatalogPinButton extends ConsumerWidget {
         ? imagePathOf(page.item?.image) ??
               ref.watch(artistPortraitProvider(page.id!)).value
         : null;
-    // Home previews an artist's tracks only where they have no releases.
-    final tracksOnly =
-        page.isArtist &&
-        !(ref
-                .watch(artistRelationsProvider(page.id!))
-                .value
-                ?.contains(ArtistRelation.albums) ??
-            true);
     final candidate = PinnedCatalog(
       page: portrait == null
           ? page
           : CatalogPage.fromJson({...page.toJson(), 'artPath': portrait}),
       filter: filter.fittedTo(page.filterCapabilities),
-      preview: HomePreviewType.list,
+      preview: HomePreviewType.automatic,
       genreNames: {for (final genre in genres ?? []) genre.id: genre.name},
     );
     final pins = ref.watch(pinnedCatalogsProvider);
@@ -74,112 +62,11 @@ class CatalogPinButton extends ConsumerWidget {
       serverStorageKeyProvider.select((key) => key?.confirmed ?? false),
     );
     Future<void> toggle() async {
-      final server = ref.read(serverStorageKeyProvider);
       final notifier = ref.read(pinnedCatalogsProvider.notifier);
-      if (pinned) {
-        await saveHomeChange(context, notifier.unpin(candidate.key));
-        return;
-      }
-      final type = await showKalinkaBottomSheet<HomePreviewType>(
-        context: context,
-        mayFillScreen: true,
-        contentBuilder: (context) => ConstrainedBox(
-          // A short decision sheet, even on a tall tablet. Enlarged text
-          // and short windows scroll within the available space.
-          constraints: const BoxConstraints(maxHeight: 560),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(kSheetGutter, 12, 12, 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Pin to Home',
-                              style: KalinkaTextStyles.settingsPageTitle,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              page.title ?? 'Catalog',
-                              style: KalinkaTextStyles.trayRowSublabel,
-                            ),
-                          ],
-                        ),
-                      ),
-                      OverlayCloseButton(
-                        label: 'Close',
-                        onTap: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    kSheetGutter,
-                    0,
-                    kSheetGutter,
-                    12,
-                  ),
-                  child: Text(
-                    !page.isArtist
-                        ? 'Your current filters are saved with this pin.'
-                        : tracksOnly
-                        ? 'Home shows their tracks.'
-                        : 'Home shows their albums.',
-                    style: KalinkaTextStyles.trackRowSubtitle,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    kSheetGutter,
-                    0,
-                    kSheetGutter,
-                    8,
-                  ),
-                  child: Text(
-                    'Choose a preview',
-                    style: KalinkaTextStyles.trayRowLabel,
-                  ),
-                ),
-                HomePreviewChoices(
-                  sourceColor:
-                      ref
-                          .read(sourceDisplayInfoProvider)[sourceOfId(page.id!)]
-                          ?.color ??
-                      KalinkaColors.accent,
-                  onSelected: (type) => Navigator.pop(context, type),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: kSheetGutter,
-                    vertical: 12,
-                  ),
-                  child: Text(
-                    'Tap a layout to pin it.',
-                    textAlign: TextAlign.center,
-                    style: KalinkaTextStyles.trayRowSublabel,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      await saveHomeChange(
+        context,
+        pinned ? notifier.unpin(candidate.key) : notifier.pin(candidate),
       );
-      if (type != null &&
-          context.mounted &&
-          ref.read(serverStorageKeyProvider) == server) {
-        await saveHomeChange(
-          context,
-          notifier.pin(candidate.withPreview(type)),
-        );
-      }
     }
 
     return IconButton(
