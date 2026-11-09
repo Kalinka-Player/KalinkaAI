@@ -526,4 +526,31 @@ void main() {
     expect(find.byType(CoachMarksOverlay), findsOneWidget);
     expect(find.text('Find music'), findsOneWidget);
   });
+
+  testWidgets('on a phone the first tip keeps clear of the search entry', (
+    tester,
+  ) async {
+    await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(2)),
+      size: const Size(360, 800),
+      coachMarksShown: false,
+    );
+    final entry = tester.getRect(
+      find.byKey(const ValueKey('search-entry-surface')),
+    );
+    final card = tester.getRect(
+      find
+          .ancestor(
+            of: find.text('Find music'),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
+    );
+    expect(
+      card.overlaps(entry.inflate(6)),
+      isFalse,
+      reason: 'card $card, entry $entry',
+    );
+  });
 }
