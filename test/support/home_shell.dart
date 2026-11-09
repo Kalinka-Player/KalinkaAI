@@ -128,6 +128,7 @@ Future<ProviderContainer> pumpHomeShell(
   bool? reducedMotion,
   bool themed = false,
   Key? captureKey,
+  Widget? screen,
 }) async {
   SharedPreferences.setMockInitialValues({
     'Kalinka.host': 'localhost',
@@ -183,7 +184,7 @@ Future<ProviderContainer> pumpHomeShell(
             ),
             child: child!,
           ),
-          home: const MusicPlayerScreen(),
+          home: screen ?? const MusicPlayerScreen(),
         ),
       ),
     ),

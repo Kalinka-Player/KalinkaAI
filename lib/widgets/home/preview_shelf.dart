@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart';
@@ -20,6 +21,225 @@ import '../search/search_zero_state.dart' show kHomeSideInset;
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/track_row_support.dart' show CornerGlyph;
 import '../tap_highlight.dart' show kalinkaOverlay;
+
+typedef HomeAlbumFolderEntry = ({
+  String key,
+  BrowseItem album,
+  String? homeName,
+  VoidCallback onOpen,
+});
+
+/// Consecutive album-folder pins share card-sized space. Unlike a catalogue's
+/// sampled preview, every pin stays accessible: wrap on desktop, swipe on phone.
+class HomeAlbumFolderCards extends StatelessWidget {
+  final List<HomeAlbumFolderEntry> entries;
+  final bool wide;
+  final String storageId;
+
+  const HomeAlbumFolderCards({
+    super.key,
+    required this.entries,
+    required this.wide,
+    required this.storageId,
+  });
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      final size = wide
+          ? math.min(176.0, constraints.maxWidth - 2 * _Tile.inset)
+          : math.min(
+              160.0,
+              (constraints.maxWidth / 2.25 - 2 * _Tile.inset) * scale,
+            );
+      final cards = [
+        for (final entry in entries)
+          SizedBox(
+            key: ValueKey(entry.key),
+            width: size + 2 * _Tile.inset,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Tile(
+                  key: ValueKey('home-album-${entry.album.id}'),
+                  item: entry.album,
+                  size: size,
+                  shape: 1,
+                  homeName: entry.homeName,
+                  onOpen: (_) => entry.onOpen(),
+                  inFolder: false,
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: _Tile.inset),
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: KalinkaColors.textSecondary,
+                      minimumSize: const Size(0, 44),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 8,
+                      ),
+                      textStyle: KalinkaFonts.sans(
+                        fontSize: KalinkaTypography.baseSize,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    onPressed: entry.onOpen,
+                    child: const Text('View All'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ];
+      if (wide) return Wrap(runSpacing: 12, children: cards);
+      return ScrollEdgeFade(
+        axis: Axis.horizontal,
+        extent: 20,
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context)
+              .copyWith(dragDevices: PointerDeviceKind.values.toSet()),
+          child: SingleChildScrollView(
+            key: PageStorageKey('album-folder-rail:$storageId'),
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: cards,
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// A bounded album shelf for adaptive Home pins. [wide] describes the Home
+/// pane, not the window: a split kiosk can still need the swipeable row.
+class AdaptiveAlbumPreview extends StatelessWidget {
+  static const _ordinaryCover = 176.0;
+  static const _smallCover = 160.0;
+  static const _leadExtra = 8.0;
+  static const _collageGap = 16.0;
+
+  // Include the frames as well as the artwork when budgeting columns. Add
+  // content once covers reach their cap, rather than leaving unused width.
+  static int capacityFor(double width, {required bool large}) {
+    if (!large) {
+      return math.max(1, (width / (_ordinaryCover + 2 * _Tile.inset)).ceil());
+    }
+    final columns = math.max(
+      1,
+      ((width - _collageGap - _leadExtra - 2 * _Tile.inset - 2 * _smallCover) /
+              (_smallCover + 2 * _Tile.inset))
+          .ceil(),
+    );
+    return 1 + 2 * columns;
+  }
+
+  final List<BrowseItem> items;
+  final bool wide;
+  final bool large;
+  final bool single;
+  final String storageId;
+  final ValueChanged<BrowseItem> onOpen;
+
+  const AdaptiveAlbumPreview({
+    super.key,
+    required this.items,
+    required this.wide,
+    required this.storageId,
+    required this.onOpen,
+    this.large = false,
+    this.single = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      Widget tile(int index, double size) => _Tile(
+        key: ValueKey('home-album-${items[index].id}'),
+        item: items[index],
+        size: size,
+        shape: 1,
+        onOpen: onOpen,
+        inFolder: false,
+      );
+      if (single || items.length == 1) {
+        return Align(
+          alignment: AlignmentDirectional.topStart,
+          child: tile(0, math.min(_ordinaryCover, width - 2 * _Tile.inset)),
+        );
+      }
+      if (wide && large && width >= 360) {
+        final count = math.min(items.length, capacityFor(width, large: true));
+        final columns = ((count - 1) / 2).ceil();
+        final small = math.min(
+          _smallCover,
+          (width - _collageGap - _leadExtra - (columns + 1) * 2 * _Tile.inset) /
+              (columns + 2),
+        );
+        final lead = small * 2 + _leadExtra;
+        return Row(
+          key: const ValueKey('home-album-collage'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            tile(0, lead),
+            const SizedBox(width: _collageGap),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var row = 0; row < ((count - 1) / columns).ceil(); row++)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var col = 0; col < columns; col++)
+                        if (1 + row * columns + col < count)
+                          tile(1 + row * columns + col, small),
+                    ],
+                  ),
+              ],
+            ),
+          ],
+        );
+      }
+      if (wide) {
+        final count = math.min(items.length, capacityFor(width, large: false));
+        final size = math.min(_ordinaryCover, width / count - 2 * _Tile.inset);
+        return Row(
+          key: const ValueKey('home-album-bounded-row'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [for (var i = 0; i < count; i++) tile(i, size)],
+        );
+      }
+      // Two full covers and a visible part of the next on a phone. Square
+      // covers stay at ordinary card size even on a tall or narrow pane.
+      final size = math.min(160.0, width / 2.25 - 2 * _Tile.inset);
+      return ScrollEdgeFade(
+        axis: Axis.horizontal,
+        extent: 20,
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context)
+              .copyWith(dragDevices: PointerDeviceKind.values.toSet()),
+          child: SizedBox(
+            height: _albumTileHeight(context, size),
+            child: ListView.builder(
+              key: PageStorageKey('adaptive-rail:$storageId'),
+              scrollDirection: Axis.horizontal,
+              itemExtent: size + 2 * _Tile.inset,
+              scrollCacheExtent: ScrollCacheExtent.pixels(
+                size + 2 * _Tile.inset,
+              ),
+              itemCount: items.length,
+              itemBuilder: (_, index) => tile(index, size),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
 
 /// A catalog's preview, drawn the way its source asked: `image` as square
 /// tiles with their text underneath, in rows that scroll sideways; any other
@@ -141,31 +361,6 @@ class _TileRail extends StatelessWidget {
   static const _widthGrowth = 0.5;
   static const _maxGrowth = 1.768;
 
-  /// The art, then a line each of title and subtitle at the user's text size.
-  double _tileHeight(BuildContext context, double tileSize) {
-    final scaler = MediaQuery.textScalerOf(context);
-    // Merged as Text merges it, so the measure is the line it will draw.
-    final base = DefaultTextStyle.of(context).style;
-    double line(TextStyle style) {
-      final painter = TextPainter(
-        text: TextSpan(text: 'Ag', style: base.merge(style)),
-        textDirection: TextDirection.ltr,
-        textScaler: scaler,
-        maxLines: 1,
-      )..layout();
-      final height = painter.height;
-      painter.dispose();
-      return height;
-    }
-
-    return (2 * _Tile.inset +
-            tileSize +
-            _Tile.artGap +
-            line(_Tile.titleStyle) +
-            line(_Tile.subtitleStyle))
-        .ceilToDouble();
-  }
-
   @override
   Widget build(BuildContext context) {
     final columns = (count / rows).ceil();
@@ -180,7 +375,7 @@ class _TileRail extends StatelessWidget {
         final growth =
             1 + (math.max(width, _phoneWidth) / _phoneWidth - 1) * _widthGrowth;
         final size = fit * sizeFactor * math.min(growth, _maxGrowth);
-        final tileHeight = _tileHeight(context, size);
+        final tileHeight = _albumTileHeight(context, size);
         // The height first: an OverflowBox fills what it is offered, and a
         // list offers unbounded height.
         return SizedBox(
@@ -233,6 +428,31 @@ class _TileRail extends StatelessWidget {
   }
 }
 
+/// The art, then a line each of title and subtitle at the user's text size.
+double _albumTileHeight(BuildContext context, double tileSize) {
+  final scaler = MediaQuery.textScalerOf(context);
+  // Merged as Text merges it, so the measure is the line it will draw.
+  final base = DefaultTextStyle.of(context).style;
+  double line(TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: 'Ag', style: base.merge(style)),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return height;
+  }
+
+  return (2 * _Tile.inset +
+          tileSize +
+          _Tile.artGap +
+          line(_Tile.titleStyle) +
+          line(_Tile.subtitleStyle))
+      .ceilToDouble();
+}
+
 /// A tile's art and its two lines, as grey blocks.
 class _TilePlaceholder extends StatelessWidget {
   final double size;
@@ -270,6 +490,7 @@ class _TilePlaceholder extends StatelessWidget {
 class _Tile extends ConsumerStatefulWidget {
   final BrowseItem item;
   final double size;
+  final String? homeName;
 
   /// The shelf's shape for covers; a catalog's art and an artist's portrait
   /// stay square.
@@ -278,11 +499,13 @@ class _Tile extends ConsumerStatefulWidget {
   final bool inFolder;
 
   const _Tile({
+    super.key,
     required this.item,
     required this.size,
     required this.shape,
     required this.onOpen,
     required this.inFolder,
+    this.homeName,
   });
 
   /// Between the card's frame and its art and text: half the room between
@@ -387,7 +610,11 @@ class _TileState extends ConsumerState<_Tile> {
 
     return Semantics(
       button: true,
-      label: subtitle.isEmpty ? _title : '$_title, $subtitle',
+      label: [
+        if (widget.homeName?.trim().isNotEmpty == true) widget.homeName!.trim(),
+        _title,
+        if (subtitle.isNotEmpty) subtitle,
+      ].join(', '),
       excludeSemantics: true,
       child: Material(
         type: MaterialType.transparency,
@@ -446,6 +673,13 @@ class _TileState extends ConsumerState<_Tile> {
                             },
                           ),
                     const SizedBox(height: _Tile.artGap),
+                    if (widget.homeName?.trim().isNotEmpty == true)
+                      Text(
+                        widget.homeName!.trim(),
+                        style: _Tile.titleStyle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     Text(
                       _title,
                       style: _Tile.titleStyle,

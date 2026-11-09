@@ -99,6 +99,12 @@ class SearchZeroState extends ConsumerWidget {
         pins != null &&
         pins.isEmpty &&
         (collections == null || collections.isEmpty);
+    final centredShortcuts =
+        pins != null &&
+        pins.isNotEmpty &&
+        pins.length <= 4 &&
+        pins.every((pin) => pin.shortcut) &&
+        (collections == null || collections.isEmpty);
     const top = kHomeTopInset;
     final content = PullToRefresh(
       edgeOffset: headerExtent,
@@ -129,7 +135,7 @@ class SearchZeroState extends ConsumerWidget {
                     valueListenable:
                         roomLent ?? const AlwaysStoppedAnimation(0.0),
                     builder: (context, lent, child) => _Centring(
-                      centred: empty,
+                      centred: empty || centredShortcuts,
                       room:
                           constraints.maxHeight -
                           headerExtent -
@@ -151,6 +157,14 @@ class SearchZeroState extends ConsumerWidget {
                         ] else
                           const SizedBox(height: 12),
                         ?activity,
+                        if (centredShortcuts) ...[
+                          PinnedCatalogsSection(pins: pins),
+                          _CustomiseLine(
+                            onCustomise: () => ref
+                                .read(homeCustomisationProvider.notifier)
+                                .open(),
+                          ),
+                        ],
                         if (empty)
                           _PinHint(
                             onCustomise: () => ref
@@ -164,7 +178,7 @@ class SearchZeroState extends ConsumerWidget {
                     CollectionsSection(onOpenCatalog: onOpenCatalog),
                   if (pins == null)
                     const LoadingSpinner()
-                  else if (pins.isNotEmpty) ...[
+                  else if (pins.isNotEmpty && !centredShortcuts) ...[
                     PinnedCatalogsSection(pins: pins),
                     // After the pins, quietly: where to change them.
                     _CustomiseLine(

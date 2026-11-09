@@ -7,6 +7,9 @@ import '../tap_highlight.dart';
 import 'home_preview_illustration.dart';
 
 IconData homePreviewIcon(HomePreviewType type) => switch (type) {
+  HomePreviewType.automatic => Icons.auto_awesome_outlined,
+  HomePreviewType.preview => Icons.dashboard_outlined,
+  HomePreviewType.large => Icons.view_quilt_outlined,
   HomePreviewType.cards => Icons.view_carousel_outlined,
   HomePreviewType.artwork => Icons.image_outlined,
   HomePreviewType.list => Icons.view_list_outlined,
@@ -33,7 +36,7 @@ class HomePreviewChoices extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: 8,
       children: [
-        for (final type in HomePreviewType.values)
+        for (final type in HomePreviewType.choices)
           HomePreviewOption(
             type: type,
             selected: type == selected,
@@ -45,7 +48,7 @@ class HomePreviewChoices extends StatelessWidget {
   );
 }
 
-/// A compact visual picker, adapting to two columns for enlarged text.
+/// Four choices across when they fit, otherwise two or one for enlarged text.
 class HomePreviewGrid extends StatelessWidget {
   final double width;
   final HomePreviewType selected;
@@ -63,13 +66,17 @@ class HomePreviewGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-    final columns = width >= 4 * 68 * scale + 24 ? 4 : 2;
+    final columns = width >= 4 * 88 * scale + 24
+        ? 4
+        : width >= 2 * 88 * scale + 8
+        ? 2
+        : 1;
     final optionWidth = (width - (columns - 1) * 8) / columns;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
-        for (final type in HomePreviewType.values)
+        for (final type in HomePreviewType.choices)
           SizedBox(
             width: optionWidth,
             child: HomePreviewOption(

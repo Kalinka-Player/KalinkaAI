@@ -3,19 +3,34 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/browse_filters.dart';
+import '../data_model/data_model.dart';
 import 'box_control_provider.dart';
 import 'connection_settings_provider.dart';
 import 'search_session_provider.dart';
 
 enum HomePreviewType {
+  automatic('Automatic', 'Choose a preview to suit the content'),
+  // Keep the stored name "preview" compatible with existing prototype pins.
+  preview(
+    'Small preview',
+    'Equal-sized album covers or a short list of tracks',
+  ),
+  large(
+    'Large preview',
+    'A lead cover and smaller album tiles on wider screens',
+  ),
   cards('Cards', 'Horizontally scrolling covers'),
   artwork('Artwork', 'Catalog image, title and description'),
   list('List', 'Five items in a vertical list'),
-  compact('Compact', 'Small tile in the source colour');
+  compact('Shortcut only', 'A small shortcut to the original destination');
 
   final String label;
   final String description;
   const HomePreviewType(this.label, this.description);
+
+  static const choices = [automatic, preview, large, compact];
+  bool get adaptive => this == automatic || this == preview || this == large;
+  HomePreviewType get choice => choices.contains(this) ? this : automatic;
 }
 
 /// What Home can pin: a catalog, or an artist for their releases.
@@ -29,13 +44,31 @@ class PinnedCatalog {
   final BrowseFilterQuery filter;
   final HomePreviewType preview;
   final Map<String, String> genreNames;
+  final String? homeName;
 
   const PinnedCatalog({
     required this.page,
     required this.filter,
     required this.preview,
     this.genreNames = const {},
+    this.homeName,
   });
+
+  String get title => homeName?.trim().isNotEmpty == true
+      ? homeName!.trim()
+      : page.title ?? 'Catalog';
+
+  bool get shortcut =>
+      preview == HomePreviewType.compact ||
+      (preview == HomePreviewType.automatic &&
+          page.preview?.type == PreviewType.none);
+
+  /// A user choice can request the collage without changing source metadata.
+  /// Single albums and non-album contents retain their content-specific layout.
+  bool get largePreview =>
+      preview == HomePreviewType.large ||
+      (preview == HomePreviewType.automatic &&
+          page.preview?.cardSize == CardSize.large);
 
   String get key {
     final json = filter.toJson();
@@ -52,6 +85,15 @@ class PinnedCatalog {
     filter: filter,
     preview: value,
     genreNames: genreNames,
+    homeName: homeName,
+  );
+
+  PinnedCatalog withHomeName(String? value) => PinnedCatalog(
+    page: page,
+    filter: filter,
+    preview: preview,
+    genreNames: genreNames,
+    homeName: value?.trim().isEmpty == true ? null : value?.trim(),
   );
 
   String get description => [
@@ -70,7 +112,8 @@ class PinnedCatalog {
     'page': page.toJson(),
     'filter': filter.toJson(),
     'preview': preview.name,
-    'previewVersion': 2,
+    'previewVersion': 3,
+    if (homeName != null) 'homeName': homeName,
     'genreNames': genreNames,
   };
 
@@ -80,15 +123,15 @@ class PinnedCatalog {
       Map<String, dynamic>.from(json['filter'] as Map),
     ),
     genreNames: Map<String, String>.from(json['genreNames'] as Map? ?? {}),
-    preview: json['previewVersion'] == null
-        ? switch (json['preview']) {
-            // The original Artwork mode rendered a horizontal item rail.
-            'artwork' => HomePreviewType.cards,
-            'compact' => HomePreviewType.compact,
-            _ => HomePreviewType.list,
-          }
+    homeName: json['homeName'] as String?,
+    // Existing folder pins gain album recognition. Explicit compact choices
+    // remain shortcuts; destinations, filters and order are unchanged.
+    preview: json['previewVersion'] != 3
+        ? json['preview'] == 'compact'
+              ? HomePreviewType.compact
+              : HomePreviewType.automatic
         : HomePreviewType.values.asNameMap()[json['preview']] ??
-              HomePreviewType.list,
+              HomePreviewType.automatic,
   );
 }
 
@@ -166,6 +209,14 @@ class PinnedCatalogsNotifier extends Notifier<List<PinnedCatalog>?> {
     ]);
   }
 
+  Future<void> setHomeName(String key, String? name) {
+    final pins = _editable;
+    if (pins == null) return _serverNotKnown();
+    return _save([
+      for (final pin in pins) pin.key == key ? pin.withHomeName(name) : pin,
+    ]);
+  }
+
   /// Uses ReorderableListView's insertion index convention.
   Future<void> reorder(int oldIndex, int newIndex) {
     final pins = _editable;
@@ -208,3 +259,11 @@ final pinnedCatalogsProvider =
     NotifierProvider<PinnedCatalogsNotifier, List<PinnedCatalog>?>(
       PinnedCatalogsNotifier.new,
     );
+
+/// A few shortcuts retain the search-led landing, with their tiles underneath.
+final homeHasPreviewsProvider = Provider<bool>((ref) {
+  final pins = ref.watch(pinnedCatalogsProvider);
+  return pins != null &&
+      pins.isNotEmpty &&
+      (pins.length > 4 || pins.any((pin) => !pin.shortcut));
+});

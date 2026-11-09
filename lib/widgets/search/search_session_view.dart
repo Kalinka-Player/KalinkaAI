@@ -810,11 +810,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                                   decoration: BoxDecoration(
                                     gradient: _discoverBloom(
                                       MediaQuery.paddingOf(context).top,
-                                      hasHeading:
-                                          ref
-                                              .watch(pinnedCatalogsProvider)
-                                              ?.isNotEmpty !=
-                                          true,
+                                      hasHeading: !ref.watch(
+                                        homeHasPreviewsProvider,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1247,7 +1245,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     final catalogChrome =
         !onResults && CatalogSliverHeader.appliesTo(session.catalogPage);
     if (session.atHome) {
-      final hasPins = ref.watch(pinnedCatalogsProvider)?.isNotEmpty ?? false;
+      final hasPins = ref.watch(homeHasPreviewsProvider);
       final smart = ref.watch(smartSearchAvailableProvider) ?? true;
       return Column(
         mainAxisSize: MainAxisSize.min,
@@ -1761,8 +1759,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
               children: [
                 _DiscoverHero(
                   entryKey: _entryKey,
-                  showHeading:
-                      ref.watch(pinnedCatalogsProvider)?.isNotEmpty != true,
+                  showHeading: !ref.watch(homeHasPreviewsProvider),
                   hint: _hintText(session, smart: smart),
                   smartSearch: smart,
                   smartSources: smart

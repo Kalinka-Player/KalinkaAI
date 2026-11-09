@@ -93,11 +93,22 @@ class _LayoutPainter extends CustomPainter {
     }
 
     switch (type) {
+      case HomePreviewType.automatic:
+      case HomePreviewType.preview:
       case HomePreviewType.cards:
         for (var i = 0; i < 4; i++) {
           cover(10 + i * 62, 16, 54, i);
           box(10 + i * 62, 77, 40, 4, KalinkaColors.textMuted);
           box(10 + i * 62, 85, 28, 3, KalinkaColors.borderDefault);
+        }
+      case HomePreviewType.large:
+        cover(10, 10, 72, 0);
+        box(10, 88, 54, 4, KalinkaColors.textMuted);
+        for (var i = 0; i < 4; i++) {
+          final x = 100.0 + (i % 2) * 50;
+          final y = 8.0 + (i ~/ 2) * 46;
+          cover(x, y, 36, i + 1);
+          box(x, y + 40, 28, 3, KalinkaColors.textMuted);
         }
       case HomePreviewType.artwork:
         cover(10, 10, 80, 0);

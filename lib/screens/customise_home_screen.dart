@@ -111,7 +111,7 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                                       noSources
                                           ? 'Enable a music source in Settings to start pinning catalogs.'
                                           : 'Choose a source below, browse to a catalog and use '
-                                                '“Pin catalog to Home” to choose its preview.',
+                                                '“Pin catalog to Home”. You can customise it here.',
                                       style:
                                           KalinkaTextStyles.settingsDescription,
                                     ),
@@ -153,7 +153,7 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                         ),
                         itemBuilder: (_, index) {
                           final pin = pins![index];
-                          final title = pin.page.title ?? 'Catalog';
+                          final title = pin.title;
                           return Material(
                             key: ValueKey(pin.key),
                             color: KalinkaColors.background,
@@ -198,10 +198,36 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                title,
-                                                style: KalinkaTextStyles
-                                                    .trayRowLabel,
+                                              TextButton(
+                                                style: TextButton.styleFrom(
+                                                  alignment:
+                                                      Alignment.centerLeft,
+                                                  padding: EdgeInsets.zero,
+                                                  foregroundColor:
+                                                      KalinkaColors.textPrimary,
+                                                  minimumSize: const Size(
+                                                    48,
+                                                    48,
+                                                  ),
+                                                ),
+                                                onPressed: () =>
+                                                    _rename(context, ref, pin),
+                                                child: Row(
+                                                  children: [
+                                                    Flexible(
+                                                      child: Text(
+                                                        title,
+                                                        style: KalinkaTextStyles
+                                                            .trayRowLabel,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    const Icon(
+                                                      Icons.edit_outlined,
+                                                      size: 16,
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
                                               const SizedBox(height: 4),
                                               Text(
@@ -210,7 +236,7 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                                                       .description
                                                       .isNotEmpty)
                                                     pin.description,
-                                                  '${pin.preview.label} preview',
+                                                  pin.preview.choice.label,
                                                 ].join(' · '),
                                                 style: KalinkaTextStyles
                                                     .trayRowSublabel,
@@ -278,7 +304,7 @@ class _HomeLayoutIntro extends StatelessWidget {
           vertical: 20,
         ),
         child: Text(
-          'Drag catalogs to reorder.\nSearch, collections and sources stay in place.',
+          'Drag catalogs to reorder. Tap a name to change it on Home.\nSearch, collections and sources stay in place.',
           style: KalinkaTextStyles.settingsDescription,
         ),
       ),
@@ -306,7 +332,7 @@ Future<void> _confirmUnpin(
       icon: CupertinoIcons.pin_slash,
       iconGlyphColor: KalinkaColors.accentTint,
       title: pin.page.isArtist ? 'Unpin artist?' : 'Unpin catalog?',
-      message: 'Remove “${pin.page.title ?? 'Catalog'}” from Home?',
+      message: 'Remove “${pin.title}” from Home?',
       actions: [
         KalinkaButton(
           label: 'Cancel',
@@ -329,5 +355,76 @@ Future<void> _confirmUnpin(
   await saveHomeChange(
     context,
     ref.read(pinnedCatalogsProvider.notifier).unpin(pin.key),
+  );
+}
+
+Future<void> _rename(
+  BuildContext context,
+  WidgetRef ref,
+  PinnedCatalog pin,
+) async {
+  final server = ref.read(serverStorageKeyProvider);
+  final result = await showKalinkaDialog<String>(
+    context: context,
+    builder: (_) => _HomeNameDialog(pin: pin),
+  );
+  if (result == null ||
+      !context.mounted ||
+      ref.read(serverStorageKeyProvider) != server) {
+    return;
+  }
+  await saveHomeChange(
+    context,
+    ref.read(pinnedCatalogsProvider.notifier).setHomeName(pin.key, result),
+  );
+}
+
+class _HomeNameDialog extends StatefulWidget {
+  final PinnedCatalog pin;
+  const _HomeNameDialog({required this.pin});
+
+  @override
+  State<_HomeNameDialog> createState() => _HomeNameDialogState();
+}
+
+class _HomeNameDialogState extends State<_HomeNameDialog> {
+  late final _name = TextEditingController(text: widget.pin.homeName ?? '');
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => KalinkaDialog(
+    side: KalinkaDialogSide.browsing,
+    title: 'Home name',
+    content: TextField(
+      controller: _name,
+      autofocus: true,
+      textCapitalization: TextCapitalization.sentences,
+      textInputAction: TextInputAction.done,
+      decoration: InputDecoration(
+        labelText: 'Home name (optional)',
+        hintText: widget.pin.page.title,
+        helperText: 'Leave empty to use the original name.',
+        helperMaxLines: 3,
+      ),
+      onSubmitted: (value) => Navigator.pop(context, value),
+    ),
+    actions: [
+      KalinkaButton(
+        label: 'Cancel',
+        variant: KalinkaButtonVariant.neutral,
+        fullWidth: true,
+        onTap: () => Navigator.pop(context),
+      ),
+      KalinkaButton(
+        label: 'Save',
+        fullWidth: true,
+        onTap: () => Navigator.pop(context, _name.text),
+      ),
+    ],
   );
 }

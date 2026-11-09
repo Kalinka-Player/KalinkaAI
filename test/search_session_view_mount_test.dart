@@ -654,34 +654,45 @@ void main() {
     );
   }
 
-  testWidgets('with reduced motion the backdrop rises with the first pin', (
-    tester,
-  ) async {
-    final container = await pumpSurface(tester, reduceMotion: true);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('home-pin-hint')), findsOneWidget);
-    expect(find.text('What shall we play?'), findsOneWidget);
-    final centred = tester.getRect(backdrop);
+  testWidgets(
+    'with reduced motion only a content preview raises the backdrop',
+    (tester) async {
+      final container = await pumpSurface(tester, reduceMotion: true);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('home-pin-hint')), findsOneWidget);
+      expect(find.text('What shall we play?'), findsOneWidget);
+      final centred = tester.getRect(backdrop);
 
-    await container
-        .read(pinnedCatalogsProvider.notifier)
-        .pin(
-          PinnedCatalog(
-            page: CatalogPage.category(
-              id: 'kalinka:localfiles:catalog:new',
-              title: 'New',
+      await container
+          .read(pinnedCatalogsProvider.notifier)
+          .pin(
+            PinnedCatalog(
+              page: CatalogPage.category(
+                id: 'kalinka:localfiles:catalog:new',
+                title: 'New',
+              ),
+              filter: const BrowseFilterQuery(),
+              preview: HomePreviewType.compact,
             ),
-            filter: const BrowseFilterQuery(),
-            preview: HomePreviewType.compact,
-          ),
-        );
-    await tester.pumpAndSettle();
+          );
+      await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-    expect(find.byKey(const ValueKey('home-pin-hint')), findsNothing);
-    expect(tester.getRect(backdrop).top, lessThan(centred.top));
-    expect(tester.getRect(backdrop).top, lessThan(0));
-  });
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const ValueKey('home-pin-hint')), findsNothing);
+      expect(find.text('What shall we play?'), findsOneWidget);
+      expect(tester.getRect(backdrop).top, greaterThan(0));
+
+      final pin = container.read(pinnedCatalogsProvider)!.single;
+      await container
+          .read(pinnedCatalogsProvider.notifier)
+          .setPreview(pin.key, HomePreviewType.preview);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(tester.getRect(backdrop).top, lessThan(centred.top));
+      expect(tester.getRect(backdrop).top, lessThan(0));
+    },
+  );
 
   for (final width in [375.0, 1200.0]) {
     testWidgets('album Back keeps its separate control at $width', (

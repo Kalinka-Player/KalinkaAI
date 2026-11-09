@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +17,6 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_rows_shimmer.dart' show LoadingSpinner;
 import 'package:kalinka/widgets/home/catalog_pin_button.dart';
 import 'package:kalinka/widgets/home/home_preview_illustration.dart';
-import 'package:kalinka/widgets/kalinka_centered_surface.dart';
 import 'package:kalinka/widgets/sheet_anchor.dart';
 
 import 'support/home_shell.dart' show SettableConnection;
@@ -111,25 +109,120 @@ Future<ProviderContainer> _pump(
 }
 
 void main() {
-  for (final type in HomePreviewType.values) {
+  testWidgets('Customise Home edits a name and each preview preference', (
+    tester,
+  ) async {
+    final container = await _pump(tester);
+    await tester.tap(find.byTooltip('Pin catalog to Home'));
+    await tester.pumpAndSettle();
+    final original = container.read(pinnedCatalogsProvider)!.single;
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: const CustomiseHomeScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Recently added'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'My discoveries');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(
+      container.read(pinnedCatalogsProvider)!.single.title,
+      'My discoveries',
+    );
+    expect(container.read(pinnedCatalogsProvider)!.single.key, original.key);
+    for (final type in HomePreviewType.choices) {
+      await tester.tap(find.byTooltip('Preview for My discoveries'));
+      await tester.pumpAndSettle();
+      final option = find.byKey(ValueKey('home-preview-option-${type.name}'));
+      await tester.ensureVisible(option);
+      await tester.tap(option);
+      await tester.pumpAndSettle();
+      expect(container.read(pinnedCatalogsProvider)!.single.preview, type);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('My discoveries'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(
+      container.read(pinnedCatalogsProvider)!.single.title,
+      'Recently added',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final (size, scale) in [
+    (const Size(390, 844), 1.0),
+    (const Size(320, 700), 2.0),
+    (const Size(812, 375), 2.0),
+  ]) {
     testWidgets(
-      'pinning with the ${type.label} illustration saves that layout',
+      'four preview choices stay selectable at $size and text scale $scale',
       (tester) async {
-        final container = await _pump(tester);
-        await tester.tap(find.byTooltip('Pin catalog to Home'));
+        final container = await _pump(tester, size: size);
+        await container
+            .read(pinnedCatalogsProvider.notifier)
+            .pin(
+              PinnedCatalog(
+                page: _page,
+                filter: const BrowseFilterQuery(),
+                preview: HomePreviewType.automatic,
+              ),
+            );
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: AppTheme.dark(),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: true,
+                ),
+                child: child!,
+              ),
+              home: const CustomiseHomeScreen(),
+            ),
+          ),
+        );
         await tester.pumpAndSettle();
-        expect(find.text('Pin to Home'), findsOneWidget);
+        final trigger = find.byTooltip('Preview for Recently added');
+        await tester.scrollUntilVisible(
+          trigger,
+          100,
+          scrollable: find
+              .descendant(
+                of: find.byType(ReorderableListView),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(trigger);
+        await tester.pumpAndSettle();
+        await tester.tap(trigger);
+        await tester.pumpAndSettle();
         expect(find.byType(HomePreviewIllustration), findsNWidgets(4));
-        expect(container.read(pinnedCatalogsProvider), isEmpty);
-        final option = find.byKey(ValueKey('home-preview-option-${type.name}'));
-        await tester.ensureVisible(option);
-        await tester.pumpAndSettle();
-        expect(tester.getSize(option).height, greaterThanOrEqualTo(48));
-        await tester.tap(option);
-        await tester.pumpAndSettle();
-        expect(container.read(pinnedCatalogsProvider)!.single.preview, type);
-        expect(find.byType(BottomSheet), findsNothing);
+        for (final type in [HomePreviewType.large, HomePreviewType.compact]) {
+          final option = find.byKey(
+            ValueKey('home-preview-option-${type.name}'),
+          );
+          await tester.ensureVisible(option);
+          await tester.tap(option);
+          await tester.pumpAndSettle();
+          expect(container.read(pinnedCatalogsProvider)!.single.preview, type);
+        }
         expect(tester.takeException(), isNull);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
       },
     );
   }
@@ -139,61 +232,23 @@ void main() {
     const Size(812, 375),
     const Size(1200, 800),
   ]) {
-    testWidgets(
-      'pin choices scroll, dismiss and support keyboard at $size with large text',
-      (tester) async {
-        final container = await _pump(tester, size: size, textScale: 2);
-        await tester.tap(find.byTooltip('Pin catalog to Home'));
-        await tester.pumpAndSettle();
-        final compact = find.byKey(
-          const ValueKey('home-preview-option-compact'),
-        );
-        await tester.ensureVisible(compact);
-        await tester.pumpAndSettle();
-        expect(compact.hitTestable(), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        if (size.width >= 900) {
-          final dialog = tester.getRect(
-            find.byKey(KalinkaCenteredSurface.surfaceKey),
-          );
-          expect(dialog.center, size.center(Offset.zero));
-          expect(dialog.width, 640);
-          expect(
-            tester.getRect(compact).left,
-            greaterThanOrEqualTo(dialog.left),
-          );
-          expect(
-            tester.getRect(compact).right,
-            lessThanOrEqualTo(dialog.right),
-          );
-        }
-        await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
-        expect(container.read(pinnedCatalogsProvider), isEmpty);
-        await tester.tap(find.byTooltip('Pin catalog to Home'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byTooltip('Close'));
-        await tester.pumpAndSettle();
-        expect(container.read(pinnedCatalogsProvider), isEmpty);
-        await tester.tap(find.byTooltip('Pin catalog to Home'));
-        await tester.pumpAndSettle();
-        await tester.ensureVisible(compact);
-        await tester.pumpAndSettle();
-        final label = find.descendant(
-          of: compact,
-          matching: find.text('Compact'),
-        );
-        Focus.of(tester.element(label)).requestFocus();
-        await tester.pump();
-        await tester.sendKeyEvent(LogicalKeyboardKey.space);
-        await tester.pumpAndSettle();
-        expect(
-          container.read(pinnedCatalogsProvider)!.single.preview,
-          HomePreviewType.compact,
-        );
-        expect(tester.takeException(), isNull);
-      },
-    );
+    testWidgets('one tap pins Automatic at $size and another unpins', (
+      tester,
+    ) async {
+      final container = await _pump(tester, size: size, textScale: 2);
+      await tester.tap(find.byTooltip('Pin catalog to Home'));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(pinnedCatalogsProvider)!.single.preview,
+        HomePreviewType.automatic,
+      );
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.byType(HomePreviewIllustration), findsNothing);
+      await tester.tap(find.byTooltip('Unpin catalog'));
+      await tester.pumpAndSettle();
+      expect(container.read(pinnedCatalogsProvider), isEmpty);
+      expect(tester.takeException(), isNull);
+    });
   }
 
   testWidgets('pinning waits for the server to be known', (tester) async {
@@ -259,33 +314,26 @@ void main() {
     expect(find.text('Recently added'), findsOneWidget);
   });
 
-  testWidgets('a layout chosen once another server answers is not pinned', (
+  testWidgets('one-tap pins stay on their server after another answers', (
     tester,
   ) async {
     final servers = ServersByHost()..ids['localhost'] = 'box-a';
     final container = await _pump(tester, servers: servers);
     await tester.tap(find.byTooltip('Pin catalog to Home'));
     await tester.pumpAndSettle();
-
+    expect(container.read(pinnedCatalogsProvider), hasLength(1));
     servers.ids['localhost'] = 'box-b';
     final connection =
         container.read(connectionStateProvider.notifier) as SettableConnection;
     connection.set(ConnectionStatus.reconnecting);
     connection.set(ConnectionStatus.connected);
     await tester.pump(const Duration(milliseconds: 1));
-    final option = find.byKey(const ValueKey('home-preview-option-list'));
-    await tester.ensureVisible(option);
-    await tester.pumpAndSettle();
-    await tester.tap(option);
-    await tester.pumpAndSettle();
-
     expect(container.read(pinnedCatalogsProvider), isEmpty);
     expect(
       container
           .read(sharedPrefsProvider)
-          .getKeys()
-          .where((k) => k.startsWith('Kalinka.pinnedCatalogs')),
-      isEmpty,
+          .getString('Kalinka.pinnedCatalogs.v1:id:box-a'),
+      isNotNull,
     );
   });
 }
