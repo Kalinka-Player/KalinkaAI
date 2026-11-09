@@ -181,6 +181,69 @@ void main() {
   });
 
   test(
+    'Home names survive editing, reorder and restart without changing identity',
+    () async {
+      await known(container);
+      final notifier = container.read(pinnedCatalogsProvider.notifier);
+      final original = pin('one', genres: ['jazz']);
+      await notifier.pin(original);
+      await notifier.setHomeName(original.key, '  Sunday listening  ');
+      await notifier.setPreview(original.key, HomePreviewType.preview);
+      final restored = (await known(open())).single;
+      expect(restored.title, 'Sunday listening');
+      expect(restored.page.title, original.page.title);
+      expect(restored.page.id, original.page.id);
+      expect(restored.filter.toJson(), original.filter.toJson());
+      expect(restored.key, original.key);
+      expect(restored.preview, HomePreviewType.preview);
+      await notifier.setHomeName(original.key, '  ');
+      expect((await known(open())).single.title, original.page.title);
+    },
+  );
+
+  test('Large preview survives restart without replacing the plugin hint or pin identity', () async {
+    await known(container);
+    final notifier = container.read(pinnedCatalogsProvider.notifier);
+    final original = pin(
+      'one',
+      genres: ['jazz'],
+      preview: HomePreviewType.automatic,
+    ).withHomeName('My releases');
+    await notifier.pin(original);
+    await notifier.setPreview(original.key, HomePreviewType.large);
+    final restored = (await known(open())).single;
+    expect(restored.preview, HomePreviewType.large);
+    expect(restored.largePreview, isTrue);
+    expect(restored.page.toJson(), original.page.toJson());
+    expect(restored.filter.toJson(), original.filter.toJson());
+    expect(restored.homeName, original.homeName);
+    expect(restored.key, original.key);
+    expect(
+      restored.withPreview(HomePreviewType.automatic).largePreview,
+      isFalse,
+    );
+  });
+
+  test(
+    'version two folder pins adopt Automatic while explicit compact survives',
+    () {
+      for (final preview in ['cards', 'artwork', 'list', 'compact']) {
+        final old = pin('old').toJson()
+          ..['previewVersion'] = 2
+          ..['preview'] = preview;
+        final restored = PinnedCatalog.fromJson(old);
+        expect(
+          restored.preview,
+          preview == 'compact'
+              ? HomePreviewType.compact
+              : HomePreviewType.automatic,
+        );
+        expect(restored.key, pin('old').key);
+      }
+    },
+  );
+
+  test(
     'legacy previews migrate and new choices persist after a restart',
     () async {
       const legacyModes = ['artwork', 'compact', 'list'];
@@ -195,9 +258,9 @@ void main() {
       );
       final migrated = await known(container);
       expect(migrated.map((pin) => pin.preview), [
-        HomePreviewType.cards,
+        HomePreviewType.automatic,
         HomePreviewType.compact,
-        HomePreviewType.list,
+        HomePreviewType.automatic,
       ]);
       expect(migrated.map((pin) => pin.page.provider), legacyModes);
       expect(
@@ -208,8 +271,8 @@ void main() {
       container.invalidate(pinnedCatalogsProvider);
       final restored = container.read(pinnedCatalogsProvider)!;
       expect(restored.map((pin) => pin.preview), [
-        HomePreviewType.list,
-        HomePreviewType.cards,
+        HomePreviewType.automatic,
+        HomePreviewType.automatic,
         HomePreviewType.compact,
       ]);
       await container

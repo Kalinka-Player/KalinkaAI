@@ -134,7 +134,7 @@ class _HomePreviewSwitchState extends ConsumerState<HomePreviewSwitch> {
                 width: (menuWidth - 24).clamp(0.0, 476.0),
                 child: HomePreviewGrid(
                   width: (menuWidth - 24).clamp(0.0, 476.0),
-                  selected: widget.pin.preview,
+                  selected: widget.pin.preview.choice,
                   sourceColor: sourceColor,
                   onSelected: _select,
                 ),
@@ -145,7 +145,7 @@ class _HomePreviewSwitchState extends ConsumerState<HomePreviewSwitch> {
       ],
       builder: (_, controller, _) => IconButton(
         focusNode: _buttonFocus,
-        tooltip: 'Preview for ${widget.pin.page.title ?? 'Catalog'}',
+        tooltip: 'Preview for ${widget.pin.title}',
         style: kalinkaIconButtonStyle.copyWith(
           backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
           // Returning null falls back to IconButton's focused overlay. MenuAnchor
