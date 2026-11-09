@@ -149,6 +149,8 @@ void main() {
     ),
     ('folder-shortcuts-phone', const Size(390, 1000), 'folder-shortcuts', 1.0),
     ('one-catalogue', const Size(1920, 1000), 'catalogue', 1.0),
+    ('balanced-collage-desktop', const Size(1920, 1000), 'balanced', 1.0),
+    ('balanced-collage-narrow', const Size(1000, 1000), 'balanced', 1.0),
     ('small-phone-large-text', const Size(320, 700), 'three', 2.0),
     ('landscape-large-text', const Size(812, 375), 'three', 2.0),
   ]) {
@@ -157,6 +159,25 @@ void main() {
     ) async {
       await warmArtwork(tester);
       final api = AdaptiveHomeApi(art: artDirectory != null);
+      if (scenario == 'balanced') {
+        api.listings[awardsId] = [
+          ...api.awards,
+          demoAlbum(
+            'dive',
+            'Dive',
+            'Tycho',
+            source: 'qobuz',
+            art: artDirectory != null,
+          ),
+          demoAlbum(
+            'moon',
+            'Moon Safari',
+            'Air',
+            source: 'qobuz',
+            art: artDirectory != null,
+          ),
+        ];
+      }
       final key = GlobalKey();
       final container = await pumpHomeShell(
         tester,
@@ -207,6 +228,7 @@ void main() {
               .toList(),
         'folder-shortcuts' => shortcutFolders(api),
         'catalogue' => [awardsPin],
+        'balanced' => [awardsPin, artistPin, folderPin()],
         _ => <PinnedCatalog>[],
       };
       for (final pin in pins) {
@@ -215,6 +237,32 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await capture(tester, key, name);
+
+      if (scenario == 'balanced') {
+        final covers = find.descendant(
+          of: find.byKey(const ValueKey('home-album-collage')),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget.key is ValueKey<String> &&
+                (widget.key! as ValueKey<String>).value.startsWith(
+                  'home-album-',
+                ),
+          ),
+        );
+        expect(covers, findsNWidgets(5));
+        expect(
+          tester.getRect(covers.first).bottom,
+          closeTo(tester.getRect(covers.last).bottom, .01),
+        );
+        final feature = tester.getRect(find.byKey(ValueKey(awardsPin.key)));
+        final neighbour = tester.getRect(find.byKey(ValueKey(artistPin.key)));
+        if (size.width == 1920) {
+          expect(feature.width, greaterThan(neighbour.width));
+          expect(neighbour.top, feature.top);
+        } else {
+          expect(neighbour.top, greaterThanOrEqualTo(feature.bottom));
+        }
+      }
 
       if (scenario == 'zero' || scenario == 'shortcuts') {
         expect(find.text('What shall we play?'), findsOneWidget);
@@ -757,11 +805,14 @@ void main() {
           for (final rect in rects) {
             expect(rect.right, lessThanOrEqualTo(shelf.right + 0.01));
           }
-          if (large) {
+          final collage = find.byKey(const ValueKey('home-album-collage'));
+          if (collage.evaluate().isNotEmpty) {
             expect(rects.first.width, greaterThan(rects[1].width));
-            expect(rects.first.width, lessThanOrEqualTo(350.01));
-            expect(rects[1].width, lessThanOrEqualTo(182.01));
+            expect(rects[1].width, inInclusiveRange(142, 222.01));
             expect(rects.last.top, greaterThan(rects.first.top));
+            // Captions and frame spacing now count towards the lead cover:
+            // both the artwork and the complete tile align with row two.
+            expect(rects.first.bottom, closeTo(rects.last.bottom, 0.01));
           } else {
             for (final rect in rects) {
               expect(rect.width, closeTo(rects.first.width, 0.01));
@@ -797,58 +848,64 @@ void main() {
   }
 
   for (final columns in [2, 3, 4]) {
-    testWidgets('$columns equal Home columns use all their available width', (
-      tester,
-    ) async {
-      final api = AdaptiveHomeApi();
-      final pins = [
-        for (var i = 0; i < columns; i++)
-          PinnedCatalog(
-            page: CatalogPage.category(
-              id: 'kalinka:qobuz:catalog:section-$i',
-              title: 'Catalogue $i',
-              provider: 'Qobuz',
-              preview: Preview(
-                type: PreviewType.imageText,
-                cardSize: i == 0 ? CardSize.large : CardSize.small,
+    testWidgets(
+      '$columns balanced Home columns use all their available width',
+      (tester) async {
+        final api = AdaptiveHomeApi();
+        final pins = [
+          for (var i = 0; i < columns; i++)
+            PinnedCatalog(
+              page: CatalogPage.category(
+                id: 'kalinka:qobuz:catalog:section-$i',
+                title: 'Catalogue $i',
+                provider: 'Qobuz',
+                preview: Preview(
+                  type: PreviewType.imageText,
+                  cardSize: i == 0 ? CardSize.large : CardSize.small,
+                ),
               ),
-            ),
-            filter: awardsPin.filter,
-            preview: HomePreviewType.automatic,
-          ),
-      ];
-      for (final pin in pins) {
-        api.listings[pin.page.id!] = [
-          for (var i = 0; i < 24; i++)
-            demoAlbum(
-              '${pin.page.id!}-$i',
-              'Album $i',
-              'Artist',
-              source: 'qobuz',
+              filter: awardsPin.filter,
+              preview: HomePreviewType.automatic,
             ),
         ];
-      }
-      await pumpHomeShell(
-        tester,
-        queue: SettableQueue(queueOf(0)),
-        api: api,
-        sources: demoSources,
-        size: Size(columns * 552 - 32, 1000),
-        screen: Scaffold(body: PinnedCatalogsSection(pins: pins)),
-      );
-      final shelves = find
-          .byType(AdaptiveAlbumPreview)
-          .evaluate()
-          .map((element) => tester.getRect(find.byWidget(element.widget)))
-          .toList();
-      expect(shelves.length, columns);
-      for (var i = 0; i < columns; i++) {
-        expect(shelves[i].width, closeTo(520, 0.01));
-        expect(shelves[i].left, closeTo(i * 552, 0.01));
-        expect(shelves[i].top, shelves.first.top);
-      }
-      expect(tester.takeException(), isNull);
-    });
+        for (final pin in pins) {
+          api.listings[pin.page.id!] = [
+            for (var i = 0; i < 24; i++)
+              demoAlbum(
+                '${pin.page.id!}-$i',
+                'Album $i',
+                'Artist',
+                source: 'qobuz',
+              ),
+          ];
+        }
+        await pumpHomeShell(
+          tester,
+          queue: SettableQueue(queueOf(0)),
+          api: api,
+          sources: demoSources,
+          size: Size(columns * 552 - 32, 1000),
+          screen: Scaffold(body: PinnedCatalogsSection(pins: pins)),
+        );
+        final shelves = find
+            .byType(AdaptiveAlbumPreview)
+            .evaluate()
+            .map((element) => tester.getRect(find.byWidget(element.widget)))
+            .toList();
+        expect(shelves.length, columns);
+        expect(shelves.first.width, greaterThan(shelves[1].width));
+        expect(shelves.first.left, 0);
+        expect(shelves.last.right, closeTo(columns * 552 - 32, 0.01));
+        for (var i = 0; i < columns; i++) {
+          if (i > 0) {
+            expect(shelves[i].width, greaterThanOrEqualTo(284));
+            expect(shelves[i].left, closeTo(shelves[i - 1].right + 32, 0.01));
+          }
+          expect(shelves[i].top, shelves.first.top);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets(

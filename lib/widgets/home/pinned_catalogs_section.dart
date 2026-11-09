@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -20,6 +18,7 @@ import '../shelf_heading.dart';
 import 'catalog_tile.dart';
 import 'catalog_artwork.dart';
 import 'home_layout.dart';
+import 'home_preview_layout.dart';
 import 'preview_shelf.dart';
 
 /// Group adjacent shortcuts and recognised album folders without crossing any
@@ -87,91 +86,67 @@ class PinnedCatalogsSection extends ConsumerWidget {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-        final wide = constraints.maxWidth >= 800 * scale;
-        final columnCount = wide
-            ? math.max(
-                2,
-                ((constraints.maxWidth + 32) / (520 * scale + 32)).floor(),
-              )
-            : 1;
-        Widget preview(List<PinnedCatalog> block) => block.length == 1
-            ? PinnedCatalogPreview(
-                key: ValueKey(block.first.key),
-                pin: block.first,
-                wide: wide,
-              )
-            : HomeAlbumFolderGroup(
-                key: ValueKey('album-folders:${block.first.key}'),
-                pins: block,
-                albums: albums,
-                wide: wide,
-              );
-        bool large(List<PinnedCatalog> block) =>
-            block.length == 1 &&
-            block.first.preview.adaptive &&
-            !block.first.page.folderLayout &&
-            block.first.largePreview;
-        bool adaptive(List<PinnedCatalog> block) =>
-            block.first.preview.adaptive && !block.first.shortcut;
-        final children = <Widget>[];
-        for (var index = 0; index < blocks.length;) {
-          if (blocks[index].first.shortcut) {
-            final tiles = <Widget>[];
-            do {
-              tiles.add(preview(blocks[index++]));
-            } while (index < blocks.length && blocks[index].first.shortcut);
-            children.add(
-              Padding(
-                padding: const EdgeInsets.only(bottom: kHomePinGap),
-                child: CatalogTileGrid(children: tiles),
-              ),
-            );
-          } else if (wide &&
-              index + 1 < blocks.length &&
-              adaptive(blocks[index]) &&
-              adaptive(blocks[index + 1])) {
-            final columns = <List<List<PinnedCatalog>>>[];
-            while (columns.length < columnCount &&
-                index < blocks.length &&
-                adaptive(blocks[index])) {
-              columns.add([blocks[index++]]);
-            }
-            // Stack ordinary previews alongside a taller catalogue. A grouped
-            // album row occupies one slot, just like an ordinary preview.
-            if (columns.any((column) => large(column.first))) {
-              for (final column in columns) {
-                if (!large(column.first) &&
-                    index < blocks.length &&
-                    adaptive(blocks[index]) &&
-                    !large(blocks[index])) {
-                  column.add(blocks[index++]);
-                }
-              }
-            }
-            children.add(
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (var i = 0; i < columns.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 32),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: columns[i].map(preview).toList(),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            );
-          } else {
-            children.add(preview(blocks[index++]));
-          }
+        final plan = homeSectionLayout(
+          width: constraints.maxWidth,
+          textScale: MediaQuery.textScalerOf(context).scale(14) / 14,
+          captionExtent: homeAlbumCaptionExtent(context),
+          kinds: [
+            for (final block in blocks)
+              block.first.shortcut
+                  ? HomePreviewBlockKind.shortcut
+                  : !block.first.preview.adaptive
+                  ? HomePreviewBlockKind.standalone
+                  : block.length == 1 &&
+                        !block.first.page.folderLayout &&
+                        block.first.largePreview
+                  ? HomePreviewBlockKind.collage
+                  : HomePreviewBlockKind.ordinary,
+          ],
+        );
+        Widget preview(int index) {
+          final block = blocks[index];
+          return block.length == 1
+              ? PinnedCatalogPreview(
+                  key: ValueKey(block.first.key),
+                  pin: block.first,
+                  wide: plan.wide,
+                )
+              : HomeAlbumFolderGroup(
+                  key: ValueKey('album-folders:${block.first.key}'),
+                  pins: block,
+                  albums: albums,
+                  wide: plan.wide,
+                );
         }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: children,
+          children: [
+            for (final row in plan.rows)
+              if (row.shortcuts)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: kHomePinGap),
+                  child: CatalogTileGrid(
+                    children: row.columns.single.blocks.map(preview).toList(),
+                  ),
+                )
+              else
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < row.columns.length; i++) ...[
+                      if (i > 0) const SizedBox(width: homePreviewColumnGap),
+                      SizedBox(
+                        width: row.columns[i].width,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: row.columns[i].blocks.map(preview).toList(),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+          ],
         );
       },
     );
@@ -329,28 +304,37 @@ class PinnedCatalogPreview extends StatelessWidget {
       if (!available && !loadingSources) 'Unavailable',
       ?about,
     ].join(' · ');
-    final heading = LayoutBuilder(
-      builder: (context, constraints) {
-        final measure = TextPainter(
-          text: TextSpan(
-            text: title.toUpperCase(),
-            style: KalinkaTextStyles.sectionLabel,
-          ),
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-        )..layout();
-        final fits =
-            measure.width + MediaQuery.textScalerOf(context).scale(100) + 60 <
-            constraints.maxWidth;
-        measure.dispose();
-        return ShelfHeading(
-          title: title.toUpperCase(),
-          source: source,
-          showDivider: fits,
-          subtitle: detail.isEmpty ? null : detail,
-          onViewAll: available ? open : null,
-        );
-      },
+    final sourceArtwork = info?.icons?.standard;
+    final sourceWidth =
+        ((sourceArtwork?.minHeight ?? 0) * (sourceArtwork?.aspectRatio ?? 1))
+            .clamp(20.0, double.infinity);
+    final headingWidth =
+        homeLabelWidth(
+          context,
+          title.toUpperCase(),
+          KalinkaTextStyles.sectionLabel,
+        ) +
+        sourceWidth +
+        10 +
+        12 +
+        (available
+            ? 12 +
+                  24 +
+                  homeLabelWidth(
+                    context,
+                    'View All',
+                    KalinkaFonts.sans(
+                      fontSize: KalinkaTypography.baseSize,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  )
+            : 0);
+    final heading = ShelfHeading(
+      title: title.toUpperCase(),
+      source: source,
+      showDivider: headingWidth < width,
+      subtitle: detail.isEmpty ? null : detail,
+      onViewAll: available ? open : null,
     );
     if (!available && !loadingSources) {
       return Padding(
@@ -360,7 +344,11 @@ class PinnedCatalogPreview extends StatelessWidget {
     }
     if (pin.preview.adaptive) {
       final capacity = wide
-          ? AdaptiveAlbumPreview.capacityFor(width, large: pin.largePreview)
+          ? AdaptiveAlbumPreview.capacityFor(
+              width,
+              large: pin.largePreview,
+              captionExtent: homeAlbumCaptionExtent(context),
+            )
           : 8;
       final request = (
         listing: requestOf(homePreviewFetchLimit(capacity)),

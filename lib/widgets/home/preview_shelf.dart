@@ -21,6 +21,7 @@ import '../search/search_zero_state.dart' show kHomeSideInset;
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/track_row_support.dart' show CornerGlyph;
 import '../tap_highlight.dart' show kalinkaOverlay;
+import 'home_preview_layout.dart';
 
 typedef HomeAlbumFolderEntry = ({
   String key,
@@ -93,25 +94,17 @@ class HomeAlbumFolderCards extends StatelessWidget {
 /// A bounded album shelf for adaptive Home pins. [wide] describes the Home
 /// pane, not the window: a split kiosk can still need the swipeable row.
 class AdaptiveAlbumPreview extends StatelessWidget {
-  static const _ordinaryCover = 176.0;
-  static const _smallCover = 160.0;
-  static const _leadExtra = 8.0;
-  static const _collageGap = 16.0;
-
-  // Include the frames as well as the artwork when budgeting columns. Add
-  // content once covers reach their cap, rather than leaving unused width.
-  static int capacityFor(double width, {required bool large}) {
-    if (!large) {
-      return math.max(1, (width / (_ordinaryCover + 2 * _Tile.inset)).ceil());
-    }
-    final columns = math.max(
-      1,
-      ((width - _collageGap - _leadExtra - 2 * _Tile.inset - 2 * _smallCover) /
-              (_smallCover + 2 * _Tile.inset))
-          .ceil(),
-    );
-    return 1 + 2 * columns;
-  }
+  static int capacityFor(
+    double width, {
+    required bool large,
+    required double captionExtent,
+  }) => homeAlbumLayout(
+    width: width,
+    captionExtent: captionExtent,
+    count: 64,
+    wide: true,
+    large: large,
+  ).count;
 
   final List<BrowseItem> items;
   final bool wide;
@@ -142,37 +135,37 @@ class AdaptiveAlbumPreview extends StatelessWidget {
         onOpen: onOpen,
         inFolder: false,
       );
-      if (single || items.length == 1) {
+      final plan = homeAlbumLayout(
+        width: width,
+        captionExtent: homeAlbumCaptionExtent(context),
+        count: items.length,
+        wide: wide,
+        large: large,
+        single: single,
+      );
+      if (plan.arrangement == HomeAlbumArrangement.single) {
         return Align(
           alignment: AlignmentDirectional.topStart,
-          child: tile(0, math.min(_ordinaryCover, width - 2 * _Tile.inset)),
+          child: tile(0, plan.cover),
         );
       }
-      if (wide && large && width >= 360) {
-        final count = math.min(items.length, capacityFor(width, large: true));
-        final columns = ((count - 1) / 2).ceil();
-        final small = math.min(
-          _smallCover,
-          (width - _collageGap - _leadExtra - (columns + 1) * 2 * _Tile.inset) /
-              (columns + 2),
-        );
-        final lead = small * 2 + _leadExtra;
+      if (plan.arrangement == HomeAlbumArrangement.collage) {
         return Row(
           key: const ValueKey('home-album-collage'),
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            tile(0, lead),
-            const SizedBox(width: _collageGap),
+            tile(0, plan.leadCover),
+            const SizedBox(width: homeCollageGap),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (var row = 0; row < ((count - 1) / columns).ceil(); row++)
+                for (var row = 0; row < 2; row++)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (var col = 0; col < columns; col++)
-                        if (1 + row * columns + col < count)
-                          tile(1 + row * columns + col, small),
+                      for (var col = 0; col < plan.columns; col++)
+                        if (1 + row * plan.columns + col < plan.count)
+                          tile(1 + row * plan.columns + col, plan.cover),
                     ],
                   ),
               ],
@@ -180,18 +173,14 @@ class AdaptiveAlbumPreview extends StatelessWidget {
           ],
         );
       }
-      if (wide) {
-        final count = math.min(items.length, capacityFor(width, large: false));
-        final size = math.min(_ordinaryCover, width / count - 2 * _Tile.inset);
+      if (plan.arrangement == HomeAlbumArrangement.row) {
         return Row(
           key: const ValueKey('home-album-bounded-row'),
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [for (var i = 0; i < count; i++) tile(i, size)],
+          children: [for (var i = 0; i < plan.count; i++) tile(i, plan.cover)],
         );
       }
-      // Two full covers and a visible part of the next on a phone. Square
-      // covers stay at ordinary card size even on a tall or narrow pane.
-      final size = math.min(160.0, width / 2.25 - 2 * _Tile.inset);
+      final size = plan.cover;
       return ScrollEdgeFade(
         axis: Axis.horizontal,
         extent: 20,
@@ -405,29 +394,8 @@ class _TileRail extends StatelessWidget {
 }
 
 /// The art, then a line each of title and subtitle at the user's text size.
-double _albumTileHeight(BuildContext context, double tileSize) {
-  final scaler = MediaQuery.textScalerOf(context);
-  // Merged as Text merges it, so the measure is the line it will draw.
-  final base = DefaultTextStyle.of(context).style;
-  double line(TextStyle style) {
-    final painter = TextPainter(
-      text: TextSpan(text: 'Ag', style: base.merge(style)),
-      textDirection: TextDirection.ltr,
-      textScaler: scaler,
-      maxLines: 1,
-    )..layout();
-    final height = painter.height;
-    painter.dispose();
-    return height;
-  }
-
-  return (2 * _Tile.inset +
-          tileSize +
-          _Tile.artGap +
-          line(_Tile.titleStyle) +
-          line(_Tile.subtitleStyle))
-      .ceilToDouble();
-}
+double _albumTileHeight(BuildContext context, double tileSize) =>
+    (tileSize + homeAlbumCaptionExtent(context)).ceilToDouble();
 
 /// A tile's art and its two lines, as grey blocks.
 class _TilePlaceholder extends StatelessWidget {
@@ -486,8 +454,8 @@ class _Tile extends ConsumerStatefulWidget {
 
   /// Between the card's frame and its art and text: half the room between
   /// two cards' art.
-  static const inset = kKalinkaFrameInset;
-  static const artGap = 8.0;
+  static const inset = homeAlbumInset;
+  static const artGap = homeAlbumArtGap;
   static final titleStyle = KalinkaTextStyles.trackRowTitle;
   static final subtitleStyle = KalinkaTextStyles.trackRowSubtitle;
 
