@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart';
@@ -20,6 +21,192 @@ import '../search/search_zero_state.dart' show kHomeSideInset;
 import '../search_cards/browse_item_rows.dart';
 import '../search_cards/track_row_support.dart' show CornerGlyph;
 import '../tap_highlight.dart' show kalinkaOverlay;
+import 'home_preview_layout.dart';
+
+typedef HomeAlbumFolderEntry = ({
+  String key,
+  BrowseItem album,
+  String? homeName,
+  VoidCallback onOpen,
+});
+
+/// Consecutive album-folder pins share card-sized space. Unlike a catalogue's
+/// sampled preview, every pin stays accessible: wrap on desktop, swipe on phone.
+class HomeAlbumFolderCards extends StatelessWidget {
+  final List<HomeAlbumFolderEntry> entries;
+  final bool wide;
+  final bool large;
+  final String storageId;
+
+  const HomeAlbumFolderCards({
+    super.key,
+    required this.entries,
+    required this.wide,
+    this.large = false,
+    required this.storageId,
+  });
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      final size = homeFolderCover(
+        constraints.maxWidth,
+        wide: wide,
+        large: large,
+        textScale: scale,
+      );
+      final cards = [
+        for (final entry in entries)
+          SizedBox(
+            key: ValueKey(entry.key),
+            width: size + 2 * _Tile.inset,
+            child: _Tile(
+              key: ValueKey('home-album-${entry.album.id}'),
+              item: entry.album,
+              size: size,
+              shape: 1,
+              homeName: entry.homeName,
+              onOpen: (_) => entry.onOpen(),
+              inFolder: false,
+            ),
+          ),
+      ];
+      if (wide) return Wrap(runSpacing: 12, children: cards);
+      return ScrollEdgeFade(
+        axis: Axis.horizontal,
+        extent: 20,
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context)
+              .copyWith(dragDevices: PointerDeviceKind.values.toSet()),
+          child: SingleChildScrollView(
+            key: PageStorageKey('album-folder-rail:$storageId'),
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: cards,
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// A bounded album shelf for adaptive Home pins. [wide] describes the Home
+/// pane, not the window: a split kiosk can still need the swipeable row.
+class AdaptiveAlbumPreview extends StatelessWidget {
+  static int capacityFor(
+    double width, {
+    required bool large,
+    required double captionExtent,
+  }) => homeAlbumLayout(
+    width: width,
+    captionExtent: captionExtent,
+    count: 64,
+    wide: true,
+    large: large,
+  ).count;
+
+  final List<BrowseItem> items;
+  final bool wide;
+  final bool large;
+  final bool single;
+  final String storageId;
+  final ValueChanged<BrowseItem> onOpen;
+
+  const AdaptiveAlbumPreview({
+    super.key,
+    required this.items,
+    required this.wide,
+    required this.storageId,
+    required this.onOpen,
+    this.large = false,
+    this.single = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      Widget tile(int index, double size) => _Tile(
+        key: ValueKey('home-album-${items[index].id}'),
+        item: items[index],
+        size: size,
+        shape: 1,
+        onOpen: onOpen,
+        inFolder: false,
+      );
+      final plan = homeAlbumLayout(
+        width: width,
+        captionExtent: homeAlbumCaptionExtent(context),
+        count: items.length,
+        wide: wide,
+        large: large,
+        single: single,
+      );
+      if (plan.arrangement == HomeAlbumArrangement.single) {
+        return Align(
+          alignment: AlignmentDirectional.topStart,
+          child: tile(0, plan.cover),
+        );
+      }
+      if (plan.arrangement == HomeAlbumArrangement.collage) {
+        return Row(
+          key: const ValueKey('home-album-collage'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            tile(0, plan.leadCover),
+            const SizedBox(width: homeCollageGap),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var row = 0; row < 2; row++)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (var col = 0; col < plan.columns; col++)
+                        if (1 + row * plan.columns + col < plan.count)
+                          tile(1 + row * plan.columns + col, plan.cover),
+                    ],
+                  ),
+              ],
+            ),
+          ],
+        );
+      }
+      if (plan.arrangement == HomeAlbumArrangement.row) {
+        return Row(
+          key: const ValueKey('home-album-bounded-row'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [for (var i = 0; i < plan.count; i++) tile(i, plan.cover)],
+        );
+      }
+      final size = plan.cover;
+      return ScrollEdgeFade(
+        axis: Axis.horizontal,
+        extent: 20,
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context)
+              .copyWith(dragDevices: PointerDeviceKind.values.toSet()),
+          child: SizedBox(
+            height: _albumTileHeight(context, size),
+            child: ListView.builder(
+              key: PageStorageKey('adaptive-rail:$storageId'),
+              scrollDirection: Axis.horizontal,
+              itemExtent: size + 2 * _Tile.inset,
+              scrollCacheExtent: ScrollCacheExtent.pixels(
+                size + 2 * _Tile.inset,
+              ),
+              itemCount: items.length,
+              itemBuilder: (_, index) => tile(index, size),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
 
 /// A catalog's preview, drawn the way its source asked: `image` as square
 /// tiles with their text underneath, in rows that scroll sideways; any other
@@ -141,31 +328,6 @@ class _TileRail extends StatelessWidget {
   static const _widthGrowth = 0.5;
   static const _maxGrowth = 1.768;
 
-  /// The art, then a line each of title and subtitle at the user's text size.
-  double _tileHeight(BuildContext context, double tileSize) {
-    final scaler = MediaQuery.textScalerOf(context);
-    // Merged as Text merges it, so the measure is the line it will draw.
-    final base = DefaultTextStyle.of(context).style;
-    double line(TextStyle style) {
-      final painter = TextPainter(
-        text: TextSpan(text: 'Ag', style: base.merge(style)),
-        textDirection: TextDirection.ltr,
-        textScaler: scaler,
-        maxLines: 1,
-      )..layout();
-      final height = painter.height;
-      painter.dispose();
-      return height;
-    }
-
-    return (2 * _Tile.inset +
-            tileSize +
-            _Tile.artGap +
-            line(_Tile.titleStyle) +
-            line(_Tile.subtitleStyle))
-        .ceilToDouble();
-  }
-
   @override
   Widget build(BuildContext context) {
     final columns = (count / rows).ceil();
@@ -180,7 +342,7 @@ class _TileRail extends StatelessWidget {
         final growth =
             1 + (math.max(width, _phoneWidth) / _phoneWidth - 1) * _widthGrowth;
         final size = fit * sizeFactor * math.min(growth, _maxGrowth);
-        final tileHeight = _tileHeight(context, size);
+        final tileHeight = _albumTileHeight(context, size);
         // The height first: an OverflowBox fills what it is offered, and a
         // list offers unbounded height.
         return SizedBox(
@@ -233,6 +395,10 @@ class _TileRail extends StatelessWidget {
   }
 }
 
+/// The art, then a line each of title and subtitle at the user's text size.
+double _albumTileHeight(BuildContext context, double tileSize) =>
+    (tileSize + homeAlbumCaptionExtent(context)).ceilToDouble();
+
 /// A tile's art and its two lines, as grey blocks.
 class _TilePlaceholder extends StatelessWidget {
   final double size;
@@ -270,6 +436,7 @@ class _TilePlaceholder extends StatelessWidget {
 class _Tile extends ConsumerStatefulWidget {
   final BrowseItem item;
   final double size;
+  final String? homeName;
 
   /// The shelf's shape for covers; a catalog's art and an artist's portrait
   /// stay square.
@@ -278,17 +445,19 @@ class _Tile extends ConsumerStatefulWidget {
   final bool inFolder;
 
   const _Tile({
+    super.key,
     required this.item,
     required this.size,
     required this.shape,
     required this.onOpen,
     required this.inFolder,
+    this.homeName,
   });
 
   /// Between the card's frame and its art and text: half the room between
   /// two cards' art.
-  static const inset = kKalinkaFrameInset;
-  static const artGap = 8.0;
+  static const inset = homeAlbumInset;
+  static const artGap = homeAlbumArtGap;
   static final titleStyle = KalinkaTextStyles.trackRowTitle;
   static final subtitleStyle = KalinkaTextStyles.trackRowSubtitle;
 
@@ -387,7 +556,11 @@ class _TileState extends ConsumerState<_Tile> {
 
     return Semantics(
       button: true,
-      label: subtitle.isEmpty ? _title : '$_title, $subtitle',
+      label: [
+        if (widget.homeName?.trim().isNotEmpty == true) widget.homeName!.trim(),
+        _title,
+        if (subtitle.isNotEmpty) subtitle,
+      ].join(', '),
       excludeSemantics: true,
       child: Material(
         type: MaterialType.transparency,
@@ -446,6 +619,13 @@ class _TileState extends ConsumerState<_Tile> {
                             },
                           ),
                     const SizedBox(height: _Tile.artGap),
+                    if (widget.homeName?.trim().isNotEmpty == true)
+                      Text(
+                        widget.homeName!.trim(),
+                        style: _Tile.titleStyle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     Text(
                       _title,
                       style: _Tile.titleStyle,

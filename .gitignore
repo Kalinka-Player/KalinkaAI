@@ -31,5 +31,8 @@ android/.idea
 .vscode
 screenshots/
 
+# Generated Home review captures; keep local rather than in version control.
+/docs/review/adaptive-home/
+
 # Internal, local-only planning doc — not for the public repo
 docs/publishing/launch-plan.md
