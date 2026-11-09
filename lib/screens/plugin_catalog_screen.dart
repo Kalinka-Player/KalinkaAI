@@ -69,8 +69,6 @@ class PluginCatalogScreen extends ConsumerStatefulWidget {
 class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   final _scroll = ScrollController();
   PluginTab _tab = PluginTab.sources;
-  final _tabKeys = {for (final tab in PluginTab.values) tab: GlobalKey()};
-  (PluginTab, double, double)? _tabLayout;
   CatalogPlugin? _settingsFor;
   CatalogPlugin? _aboutFor;
   bool _logsOpen = false;
@@ -110,6 +108,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   void _reload() {
     // Only reread the server cache, never an installation/update-check call.
     ref.invalidate(serverInfoProvider);
+    ref.invalidate(serverUpdateProvider);
     ref.invalidate(pluginCatalogProvider);
     ref.invalidate(pluginUpdatesProvider);
     ref.invalidate(modulesStateProvider);
@@ -307,6 +306,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     final enabled = ref.watch(pluginCatalogEnabledProvider);
     final info = ref.watch(serverInfoProvider);
     final catalog = enabled ? ref.watch(pluginCatalogProvider) : null;
+    final updateCounts = _updateCounts(catalog?.value);
     final settings = ref.watch(settingsProvider);
     final upgrading = ref.watch(upgradeProvider).isUpgrading;
     final expert = ref.watch(expertModeProvider);
@@ -484,7 +484,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                                 controller: _scroll,
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 slivers: [
-                                  _tabs(_tab, gutter),
+                                  _tabs(_tab, gutter, updateCounts),
                                   if (_sectionDescription(_tab, gutter)
                                       case final description?)
                                     SliverToBoxAdapter(child: description),
@@ -733,12 +733,35 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     ];
   }
 
-  Widget _tabs(PluginTab tab, double gutter) => PinnedHeaderSliver(
+  Map<PluginTab, int> _updateCounts(PluginCatalog? catalog) {
+    final counts = {for (final tab in PluginTab.values) tab: 0};
+    final systemUpdate = ref.watch(serverUpdateProvider).value;
+    if (systemUpdate != null &&
+        systemUpdate.updateAvailable &&
+        systemUpdate.upgradeSupported) {
+      counts[PluginTab.server] = 1;
+    }
+    if (!ref.watch(pluginUpdateChecksProvider)) return counts;
+    // Use the same installed-plugin state as the update sections, including
+    // while Streamer is open and neither plugin list is being built.
+    for (final plugin in catalog?.plugins ?? const <CatalogPlugin>[]) {
+      if (ref.watch(pluginStateProvider(plugin)).update == null) continue;
+      final tab = plugin.isDevice ? PluginTab.devices : PluginTab.sources;
+      counts[tab] = counts[tab]! + 1;
+    }
+    return counts;
+  }
+
+  Widget _tabs(
+    PluginTab tab,
+    double gutter,
+    Map<PluginTab, int> updateCounts,
+  ) => PinnedHeaderSliver(
     child: ColoredBox(
       key: const ValueKey('catalog-tabs'),
       color: KalinkaColors.background,
-      // Full labels scroll horizontally, while the active tab stays in view
-      // on selection and resize. The whole strip stays pinned above content.
+      // All three destinations stay visible, including their update badges.
+      // Longer labels receive proportionally more room and ellipsize as needed.
       child: Padding(
         padding: EdgeInsets.only(
           left: gutter - SectionTabButton.horizontalPadding,
@@ -747,60 +770,35 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         child: Row(
           children: [
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final layout = (
-                    tab,
-                    constraints.maxWidth,
-                    MediaQuery.textScalerOf(context).scale(14),
-                  );
-                  if (_tabLayout != layout) {
-                    _tabLayout = layout;
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted) return;
-                      final target = _tabKeys[_tab]?.currentContext;
-                      if (target == null) return;
-                      // Only move the horizontal strip, preserving the page's
-                      // vertical position when the window changes size.
-                      Scrollable.of(
-                        target,
-                        axis: Axis.horizontal,
-                      ).position.ensureVisible(
-                        target.findRenderObject()!,
-                        alignment: 0.5,
-                      );
-                    });
-                  }
-                  return SingleChildScrollView(
-                    key: const PageStorageKey('catalog-tab-scroll'),
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: SectionTabButton.spacing,
-                      children: [
-                        for (final (option, label) in [
-                          (PluginTab.sources, 'Music sources'),
-                          (PluginTab.devices, 'HiFi control'),
-                          (PluginTab.server, 'Streamer'),
-                        ])
-                          KeyedSubtree(
-                            key: _tabKeys[option],
-                            child: SectionTabButton(
-                              key: ValueKey('catalog-tab-${option.name}'),
-                              label: label,
-                              contentAlignment:
-                                  AlignmentDirectional.centerStart,
-                              selected: tab == option,
-                              onTap: () {
-                                setState(() => _tab = option);
-                                _scroll.jumpTo(0);
-                              },
-                            ),
-                          ),
-                      ],
+              child: Row(
+                spacing: SectionTabButton.spacing,
+                children: [
+                  for (final (option, label) in [
+                    (PluginTab.sources, 'Music sources'),
+                    (PluginTab.devices, 'HiFi control'),
+                    (PluginTab.server, 'Streamer'),
+                  ])
+                    Expanded(
+                      flex: label.length,
+                      child: SectionTabButton(
+                        key: ValueKey('catalog-tab-${option.name}'),
+                        label: label,
+                        overflow: TextOverflow.ellipsis,
+                        showBadge: updateCounts[option]! > 0,
+                        semanticLabel: updateCounts[option]! > 0
+                            ? option == PluginTab.server
+                                  ? '$label, system update available'
+                                  : '$label, ${updateCounts[option]} '
+                                        '${updateCounts[option] == 1 ? 'update' : 'updates'} available'
+                            : label,
+                        selected: tab == option,
+                        onTap: () {
+                          setState(() => _tab = option);
+                          _scroll.jumpTo(0);
+                        },
+                      ),
                     ),
-                  );
-                },
+                ],
               ),
             ),
             if (tab == PluginTab.server && !widget.showBack) ...[

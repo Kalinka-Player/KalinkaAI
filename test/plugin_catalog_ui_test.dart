@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/rendering.dart'
+    show RenderParagraph, RenderRepaintBoundary;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -249,6 +252,7 @@ class _CatalogApi implements PluginCatalogApi {
   }
 
   List<PluginUpdate> available = const [];
+  int updateReads = 0;
   final runs = <(String, PluginOperation)>[];
   Completer<void>? running;
   String? refusal;
@@ -264,7 +268,10 @@ class _CatalogApi implements PluginCatalogApi {
   int operationReads = 0;
 
   @override
-  Future<List<PluginUpdate>> updates() async => available;
+  Future<List<PluginUpdate>> updates() async {
+    updateReads++;
+    return available;
+  }
 
   @override
   Future<PluginAccepted> run(String pluginId, PluginOperation operation) async {
@@ -548,7 +555,9 @@ Future<void> _screen(
   double scale = 1,
   double? appWidth,
   bool disableAnimations = false,
+  bool showBack = true,
   VoidCallback? onClose,
+  GlobalKey? captureKey,
 }) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -565,7 +574,12 @@ Future<void> _screen(
           ),
           child: child!,
         ),
-        home: Scaffold(body: PluginCatalogScreen(onClose: onClose)),
+        home: RepaintBoundary(
+          key: captureKey,
+          child: Scaffold(
+            body: PluginCatalogScreen(onClose: onClose, showBack: showBack),
+          ),
+        ),
       ),
     ),
   );
@@ -615,6 +629,11 @@ Future<void> _tapTab(WidgetTester tester, PluginTab tab) async {
   await tester.tap(button);
   await tester.pumpAndSettle();
 }
+
+Finder _tabBadge(PluginTab tab) => find.descendant(
+  of: find.byKey(ValueKey('catalog-tab-${tab.name}')),
+  matching: find.byKey(const ValueKey('section-tab-badge')),
+);
 
 void _expectTab(WidgetTester tester, PluginTab selected) {
   for (final tab in [PluginTab.sources, PluginTab.server, PluginTab.devices]) {
@@ -692,6 +711,40 @@ Finder _onPage<T>(Finder matching) =>
 final _changesBar = find.byKey(const ValueKey('configuration-changes'));
 
 void main() {
+  final captures = Platform.environment['KALINKA_REVIEW_DIR'];
+  setUpAll(() async {
+    if (captures == null) return;
+    for (final (family, files) in [
+      (
+        'IBM Plex Sans',
+        [
+          'IBMPlexSans-Regular.ttf',
+          'IBMPlexSans-Medium.ttf',
+          'IBMPlexSans-SemiBold.ttf',
+        ],
+      ),
+      (
+        'IBM Plex Mono',
+        ['IBMPlexMono-Regular.ttf', 'IBMPlexMono-SemiBold.ttf'],
+      ),
+      ('Playfair Display', ['PlayfairDisplay-Regular.ttf']),
+    ]) {
+      final loader = FontLoader(family);
+      for (final file in files) {
+        loader.addFont(rootBundle.load('assets/fonts/$file'));
+      }
+      await loader.load();
+    }
+    final material = File(
+      '${Platform.environment['FLUTTER_ROOT']}/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+    );
+    if (material.existsSync()) {
+      await (FontLoader('MaterialIcons')..addFont(
+            Future.value(ByteData.sublistView(material.readAsBytesSync())),
+          ))
+          .load();
+    }
+  });
   group('Display settings', () {
     for (final enabled in [false, true]) {
       testWidgets('section follows the saved display setting: $enabled', (
@@ -1925,14 +1978,14 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(375, 812));
       await tester.pumpAndSettle();
       _expectTab(tester, PluginTab.server);
-      final strip = tester.getRect(
-        find.byKey(const PageStorageKey('catalog-tab-scroll')),
-      );
-      final tab = tester.getRect(
-        find.byKey(const ValueKey('catalog-tab-server')),
-      );
-      expect(tab.left, greaterThanOrEqualTo(strip.left));
-      expect(tab.right, lessThanOrEqualTo(strip.right));
+      final strip = tester.getRect(find.byKey(const ValueKey('catalog-tabs')));
+      for (final option in PluginTab.values) {
+        final button = find.byKey(ValueKey('catalog-tab-${option.name}'));
+        final tab = tester.getRect(button);
+        expect(tab.left, greaterThanOrEqualTo(strip.left));
+        expect(tab.right, lessThanOrEqualTo(strip.right));
+        expect(button.hitTestable(), findsOneWidget);
+      }
       expect(tester.takeException(), isNull);
     },
   );
@@ -1962,14 +2015,10 @@ void main() {
     final server = tester.getRect(
       find.byKey(const ValueKey('catalog-tab-server')),
     );
-    final labelLeft = tester.getTopLeft(find.text('MUSIC SOURCES')).dx;
-    expect(labelLeft, closeTo(tabs.left + 20, 0.1));
-    expect(sources.left, closeTo(labelLeft - 8, 0.1));
+    expect(sources.left, closeTo(tabs.left + 12, 0.1));
     expect(server.left - hifi.right, closeTo(hifi.left - sources.right, 0.1));
-    final strip = find.byKey(const PageStorageKey('catalog-tab-scroll'));
-    expect(tester.getRect(strip).right, closeTo(tabs.right - 20, 0.1));
-    expect(server.right, greaterThan(tester.getRect(strip).right));
-    expect((hifi.width - 16) / 12, closeTo((sources.width - 16) / 13, 0.1));
+    expect(server.right, closeTo(tabs.right - 20, 0.1));
+    expect(hifi.width / 12, closeTo(sources.width / 13, 0.1));
     expect(
       tester.getRect(find.byKey(const ValueKey('catalog-tab-sources'))).bottom,
       tabs.bottom,
@@ -2324,15 +2373,19 @@ void main() {
   );
 
   for (final (size, appWidth, scale) in [
+    (const Size(375, 730), 375.0, 1.0),
     (const Size(390, 730), 390.0, 1.0),
+    (const Size(812, 375), 812.0, 1.0),
     (const Size(483, 619), 1024.0, 1.0),
     (const Size(320, 640), 320.0, 1.8),
+    (const Size(320, 640), 320.0, 2.0),
     (const Size(483, 619), 1024.0, 1.8),
   ]) {
     testWidgets(
       'description scrolls away under a fixed title bar and pinned tabs at $size, '
       'text scale $scale',
       (tester) async {
+        final captureKey = GlobalKey();
         final catalog = PluginCatalog(
           status: 'available',
           plugins: [
@@ -2352,18 +2405,30 @@ void main() {
         );
         final container = await _container(
           _Proxy({
-            'enabled': true,
-            'catalog_browsing': true,
-            'update_checks': true,
-          }),
+              'enabled': true,
+              'catalog_browsing': true,
+              'update_checks': true,
+              'installation': true,
+            })
+            ..updateInfo = {
+              'current_version': '5.5.0',
+              'latest_version': '5.6.0',
+              'update_available': true,
+              'upgrade_supported': true,
+            },
           _CatalogApi(catalog)
             ..available = const [
               PluginUpdate(pluginId: 'spotify', version: '0.4.0'),
+              PluginUpdate(pluginId: 'musiccast', version: '1.1.0'),
             ],
           live: _Live(
-            ModulesAndDevices(inputModules: [_module('spotify')], devices: []),
+            ModulesAndDevices(
+              inputModules: [_module('spotify')],
+              devices: [_module('musiccast')],
+            ),
           ),
           name: 'A streamer with a long name',
+          settings: _serverSettings(details: true),
         );
         await _screen(
           tester,
@@ -2372,6 +2437,7 @@ void main() {
           appWidth: appWidth,
           scale: scale,
           disableAnimations: scale > 1,
+          captureKey: captureKey,
         );
         expect(find.byKey(const ValueKey('catalog-description')), findsNothing);
         await _tapTab(tester, PluginTab.devices);
@@ -2405,7 +2471,7 @@ void main() {
           of: tabs,
           matching: find.byType(SingleChildScrollView),
         );
-        expect(tabScroll, findsOneWidget);
+        expect(tabScroll, findsNothing);
         final hifi = tester.getRect(
           find.byKey(const ValueKey('catalog-tab-devices')),
         );
@@ -2416,34 +2482,33 @@ void main() {
           find.byKey(const ValueKey('catalog-tab-sources')),
         );
         // The content's inset: wider from the tablet breakpoint.
-        final inset = appWidth < 900 ? 20.0 : 25.0;
-        expect(
-          tester.getRect(tabScroll).left,
-          closeTo(resting.left + inset - 8, 0.1),
+        final baseInset = appWidth < 900 ? 20.0 : 25.0;
+        final inset = ((size.width - kKalinkaContentMaxWidth) / 2).clamp(
+          baseInset,
+          double.infinity,
         );
+        expect(sources.left, closeTo(resting.left + inset - 8, 0.1));
         expect(sources.right, lessThan(hifi.left));
         expect(hifi.right, lessThan(streamer.left));
-        expect((hifi.width - 16) / 12, closeTo((streamer.width - 16) / 8, 0.1));
-        expect(
-          (sources.width - 16) / 13,
-          closeTo((streamer.width - 16) / 8, 0.1),
-        );
+        expect(hifi.width / 12, closeTo(streamer.width / 8, 0.1));
+        expect(sources.width / 13, closeTo(streamer.width / 8, 0.1));
         for (final (tab, name) in [
           (PluginTab.sources, 'Music sources'),
           (PluginTab.devices, 'HiFi control'),
           (PluginTab.server, 'Streamer'),
         ]) {
           final button = find.byKey(ValueKey('catalog-tab-${tab.name}'));
-          await tester.ensureVisible(button);
-          await tester.pumpAndSettle();
           final bounds = tester.getRect(button);
           expect(resting.contains(bounds.center), isTrue);
-          if (bounds.width <= tester.getSize(tabScroll).width) {
-            expect(bounds.left, greaterThanOrEqualTo(resting.left));
-            expect(bounds.right, lessThanOrEqualTo(resting.right));
-          }
+          expect(bounds.left, greaterThanOrEqualTo(resting.left));
+          expect(bounds.right, lessThanOrEqualTo(resting.right));
+          expect(bounds.width, greaterThanOrEqualTo(48));
+          expect(bounds.height, greaterThanOrEqualTo(48));
           expect(button.hitTestable(), findsOneWidget);
-          expect(find.byTooltip(name), findsOneWidget);
+          final semanticLabel = tab == PluginTab.server
+              ? '$name, system update available'
+              : '$name, 1 update available';
+          expect(find.byTooltip(semanticLabel), findsOneWidget);
           final label = tester.widget<Text>(
             find.descendant(
               of: button,
@@ -2451,16 +2516,51 @@ void main() {
             ),
           );
           expect(label.maxLines, 1);
-          expect(label.overflow, isNot(TextOverflow.ellipsis));
+          expect(label.overflow, TextOverflow.ellipsis);
           final paragraph = tester.renderObject<RenderParagraph>(
             find.descendant(of: button, matching: find.byType(RichText)),
           );
-          expect(paragraph.didExceedMaxLines, isFalse);
-          expect(tester.getSemantics(button), isSemantics(label: name));
+          expect(paragraph.text.style!.fontFamily, KalinkaFonts.monoFamily);
+          expect(_tabBadge(tab), findsOneWidget);
+          final badge = tester.getRect(_tabBadge(tab));
+          final textBounds = tester.getRect(find.text(name.toUpperCase()));
+          expect(badge.width, closeTo(7.8, 0.01));
+          expect(badge.height, closeTo(7.8, 0.01));
+          expect(badge.top, greaterThanOrEqualTo(bounds.top));
+          expect(badge.right, lessThanOrEqualTo(bounds.right));
+          expect(badge.top, lessThan(textBounds.top));
+          expect(badge.left, closeTo(textBounds.right, 0.1));
+          expect(
+            (tester.widget<DecoratedBox>(_tabBadge(tab)).decoration
+                    as BoxDecoration)
+                .color,
+            KalinkaColors.accent,
+          );
+          expect(
+            tester.getSemantics(button),
+            isSemantics(label: semanticLabel),
+          );
           await tester.tap(button);
           await tester.pumpAndSettle();
           expect(tester.getSemantics(button), isSemantics(isSelected: true));
           expect(tester.takeException(), isNull);
+          if (captures != null) {
+            await tester.runAsync(() async {
+              final image =
+                  await (captureKey.currentContext!.findRenderObject()
+                          as RenderRepaintBoundary)
+                      .toImage();
+              final bytes = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final file = File(
+                '$captures/settings-tabs-${size.width}-${size.height}-$scale-${tab.name}.png',
+              );
+              await file.parent.create(recursive: true);
+              await file.writeAsBytes(bytes!.buffer.asUint8List());
+              image.dispose();
+            });
+          }
         }
         await _tapTab(tester, PluginTab.devices);
         for (var pass = 0; pass < 2; pass++) {
@@ -4093,6 +4193,12 @@ void main() {
       );
       await _screen(tester, container, size: const Size(900, 1400));
       expect(find.byKey(const ValueKey('catalog-tab-updates')), findsNothing);
+      expect(_tabBadge(PluginTab.sources), findsOneWidget);
+      expect(_tabBadge(PluginTab.devices), findsOneWidget);
+      expect(_tabBadge(PluginTab.server), findsNothing);
+      final tabBounds = tester.getRect(
+        find.byKey(const ValueKey('catalog-tabs')),
+      );
       // Listed once, above the plugins already up to date.
       expect(_listed(tester).first, 'spotify');
       expect(find.text('UPDATE AVAILABLE · 1'), findsOneWidget);
@@ -4146,6 +4252,7 @@ void main() {
       expect(busy.label, 'Updating…');
       expect(busy.onTap, isNull);
       expect(_badgeOf(tester, 'spotify')!.label, 'UPDATING');
+      expect(_tabBadge(PluginTab.sources), findsOneWidget);
       api.running!.complete();
       await tester.pumpAndSettle();
       // Done: back among the others, with nothing to offer.
@@ -4153,6 +4260,13 @@ void main() {
       expect(find.textContaining('UPDATE AVAILABLE'), findsNothing);
       expect(find.text('YOUR SOURCES · 2'), findsOneWidget);
       expect(_badgeOf(tester, 'spotify')!.label, 'READY');
+      expect(_tabBadge(PluginTab.sources), findsNothing);
+      expect(_tabBadge(PluginTab.devices), findsOneWidget);
+      expect(find.byTooltip('Music sources'), findsOneWidget);
+      expect(
+        tester.getRect(find.byKey(const ValueKey('catalog-tabs'))),
+        tabBounds,
+      );
 
       await _tapTab(tester, PluginTab.devices);
       expect(_listed(tester).first, 'musiccast');
@@ -4171,6 +4285,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('UPDATE AVAILABLE'), findsNothing);
       expect(find.text('YOUR CONTROLS · 1'), findsOneWidget);
+      expect(_tabBadge(PluginTab.sources), findsNothing);
+      expect(_tabBadge(PluginTab.devices), findsNothing);
+      expect(find.byTooltip('HiFi control'), findsOneWidget);
       // Let the toast time out.
       await tester.pump(const Duration(seconds: 10));
       expect(tester.takeException(), isNull);
@@ -4297,6 +4414,178 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('tab badges follow installed updates while Streamer is open', (
+    tester,
+  ) async {
+    final api = _CatalogApi(_catalog())
+      ..available = const [
+        PluginUpdate(pluginId: 'musiccast', version: '1.1.0'),
+        PluginUpdate(pluginId: 'qobuz', version: '6.0.0'),
+        PluginUpdate(pluginId: 'local-plugin', version: '2.0.0'),
+      ];
+    final live = _Live(
+      ModulesAndDevices(
+        inputModules: [
+          _module('spotify'),
+          _module('jamendo'),
+          _module('local-plugin'),
+        ],
+        devices: [_module('musiccast', enabled: false)],
+      ),
+    );
+    final proxy = _Proxy({
+      'enabled': true,
+      'catalog_browsing': true,
+      'update_checks': true,
+    });
+    final container = await _container(proxy, api, live: live);
+    await _screen(
+      tester,
+      container,
+      size: const Size(320, 640),
+      scale: 1.8,
+      showBack: false,
+    );
+    // The default tab exposes updates on inactive tabs, including disabled
+    // installed plugins. Uninstalled and unlisted plugins do not count.
+    expect(_tabBadge(PluginTab.sources), findsNothing);
+    expect(_tabBadge(PluginTab.devices), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('HiFi control, 1 update available'),
+      findsOneWidget,
+    );
+    expect(_tabBadge(PluginTab.server), findsNothing);
+
+    await _tapTab(tester, PluginTab.server);
+    // Beside the navigation rail, Expert settings shares the tab row.
+    final expert = find.byKey(const ValueKey('expert-mode-toggle'));
+    expect(expert.hitTestable(), findsOneWidget);
+    for (final tab in PluginTab.values) {
+      final button = find.byKey(ValueKey('catalog-tab-${tab.name}'));
+      final bounds = tester.getRect(button);
+      expect(button.hitTestable(), findsOneWidget);
+      expect(bounds.width, greaterThanOrEqualTo(48));
+      expect(bounds.height, greaterThanOrEqualTo(48));
+      expect(bounds.right, lessThanOrEqualTo(tester.getRect(expert).left));
+    }
+    api.available = const [
+      PluginUpdate(pluginId: 'spotify', version: '0.4.0'),
+      PluginUpdate(pluginId: 'jamendo', version: '2.0.0'),
+    ];
+    container.invalidate(pluginUpdatesProvider);
+    await tester.pumpAndSettle();
+    expect(_tabBadge(PluginTab.devices), findsNothing);
+    expect(_tabBadge(PluginTab.sources), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Music sources, 2 updates available'),
+      findsOneWidget,
+    );
+    expect(_tabBadge(PluginTab.server), findsNothing);
+
+    // Refreshing only part of the list keeps the remaining update visible.
+    api.available = const [PluginUpdate(pluginId: 'jamendo', version: '2.0.0')];
+    container.invalidate(pluginUpdatesProvider);
+    await tester.pumpAndSettle();
+    expect(_tabBadge(PluginTab.sources), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Music sources, 1 update available'),
+      findsOneWidget,
+    );
+
+    // Losing update-check support hides even a previously cached update.
+    proxy.capabilities = {'enabled': true, 'catalog_browsing': true};
+    container.invalidate(serverInfoProvider);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('section-tab-badge')), findsNothing);
+    expect(find.bySemanticsLabel('Music sources'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final packagesOnly in [false, true]) {
+    testWidgets(
+      'Streamer badge follows system updates independently of plugin checks, '
+      'packages only: $packagesOnly',
+      (tester) async {
+        final proxy = _Proxy({'enabled': true, 'catalog_browsing': true})
+          ..updateInfo = {
+            'current_version': '5.5.0',
+            'latest_version': packagesOnly ? '5.5.0' : '5.6.0',
+            'update_available': true,
+            'upgrade_supported': true,
+            if (packagesOnly) ...{
+              'renderer_update_available': true,
+              'renderer_current_version': '1.0.0',
+              'renderer_latest_version': '1.1.0',
+            },
+          };
+        final api = _CatalogApi(_catalog())
+          ..available = const [
+            PluginUpdate(pluginId: 'spotify', version: '0.4.0'),
+          ];
+        final container = await _container(
+          proxy,
+          api,
+          live: _Live(
+            ModulesAndDevices(inputModules: [_module('spotify')], devices: []),
+          ),
+          settings: _serverSettings(),
+        );
+        await _screen(tester, container);
+        final tab = find.byKey(const ValueKey('catalog-tab-server'));
+        final label = find.text('STREAMER');
+        final originalTabBounds = tester.getRect(tab);
+        final originalLabelBounds = tester.getRect(label);
+        expect(_tabBadge(PluginTab.server), findsOneWidget);
+        expect(_tabBadge(PluginTab.sources), findsNothing);
+        expect(_tabBadge(PluginTab.devices), findsNothing);
+        expect(api.updateReads, 0);
+        expect(
+          tester.getSemantics(tab),
+          isSemantics(label: 'Streamer, system update available'),
+        );
+        expect(
+          find.byTooltip('Streamer, system update available'),
+          findsOneWidget,
+        );
+
+        // A pull-to-refresh from Music sources also refreshes system status.
+        proxy.updateInfo = {
+          ...proxy.updateInfo!,
+          'update_available': false,
+          'renderer_update_available': false,
+        };
+        await tester.fling(
+          find.byKey(const ValueKey('catalog-scroll')),
+          const Offset(0, 400),
+          1000,
+        );
+        await tester.pumpAndSettle();
+        expect(_tabBadge(PluginTab.server), findsNothing);
+        expect(tester.getRect(tab), originalTabBounds);
+        expect(tester.getRect(label), originalLabelBounds);
+        expect(tester.getSemantics(tab), isSemantics(label: 'Streamer'));
+
+        // Reappear from a provider refresh without opening the Streamer tab.
+        proxy.updateInfo = {...proxy.updateInfo!, 'update_available': true};
+        container.invalidate(serverUpdateProvider);
+        await tester.pumpAndSettle();
+        expect(_tabBadge(PluginTab.server), findsOneWidget);
+        expect(tester.getRect(label), originalLabelBounds);
+
+        // Match the software card: unsupported upgrades advertise no update.
+        proxy.updateInfo = {...proxy.updateInfo!, 'upgrade_supported': false};
+        container.invalidate(serverUpdateProvider);
+        await tester.pumpAndSettle();
+        expect(_tabBadge(PluginTab.server), findsNothing);
+        proxy.updateInfo = null;
+        container.invalidate(serverUpdateProvider);
+        await tester.pumpAndSettle();
+        expect(_tabBadge(PluginTab.server), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('a server without update checks never offers an update', (
     tester,
   ) async {
@@ -4311,6 +4600,8 @@ void main() {
     );
     await _screen(tester, container, size: const Size(400, 1400));
     expect(find.textContaining('UPDATE AVAILABLE'), findsNothing);
+    expect(find.byKey(const ValueKey('section-tab-badge')), findsNothing);
+    expect(api.updateReads, 0);
     expect(
       find.byKey(const ValueKey('plugin-row-update-spotify')),
       findsNothing,
