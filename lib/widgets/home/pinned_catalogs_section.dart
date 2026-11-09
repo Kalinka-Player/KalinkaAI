@@ -271,7 +271,7 @@ class PinnedCatalogPreview extends StatelessWidget {
 
     if (pin.shortcut) {
       if (loadingSources) {
-        return const CatalogTileShimmer(hasSubtitle: true);
+        return const CatalogTileShimmer(hasSubtitle: true, shortcut: true);
       }
       // A sectioned catalog's own total counts its shelves, not its items.
       final list = available && pin.page.sections.isEmpty
@@ -285,6 +285,7 @@ class PinnedCatalogPreview extends StatelessWidget {
           ? PreviewContentType.track
           : PreviewContentType.album;
       return CatalogTile(
+        shortcut: true,
         title: pin.title,
         subtitle: [
           sourceTitle,

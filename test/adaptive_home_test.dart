@@ -108,6 +108,31 @@ void main() {
     });
   }
 
+  List<PinnedCatalog> shortcutFolders(AdaptiveHomeApi api) {
+    const titles = [
+      '1973 (2021) Pink Floyd - The Dark Side Of The Moon (2011 Remastered Version) [24B-96kHz] flac',
+      'Jean-Michel Jarre - 2018 - Equinoxe Infinity [Hi-Res]',
+      'Polly Gibbons - Ballads and Blues (NativeDSD, 2023)(DSD512)',
+    ];
+    final pins = <PinnedCatalog>[];
+    for (var i = 0; i < titles.length; i++) {
+      final id = 'kalinka:localfiles:catalog:shortcut-$i';
+      api.listings[id] = List.filled(10 + i, api.looseTracks.first);
+      pins.add(
+        PinnedCatalog(
+          page: CatalogPage.fromJson({
+            ...folderPin().page.toJson(),
+            'id': id,
+            'title': titles[i],
+          }),
+          filter: folderPin().filter,
+          preview: HomePreviewType.compact,
+        ),
+      );
+    }
+    return pins;
+  }
+
   for (final (name, size, scenario, scale) in [
     ('three-pin-phone', const Size(390, 1200), 'three', 1.0),
     ('three-pin-desktop', const Size(1920, 1000), 'three', 1.0),
@@ -116,6 +141,13 @@ void main() {
     ('album-folder-phone', const Size(390, 844), 'album', 1.0),
     ('zero-pins', const Size(390, 844), 'zero', 1.0),
     ('shortcuts-only', const Size(390, 844), 'shortcuts', 1.0),
+    (
+      'folder-shortcuts-desktop',
+      const Size(1920, 1000),
+      'folder-shortcuts',
+      1.0,
+    ),
+    ('folder-shortcuts-phone', const Size(390, 1000), 'folder-shortcuts', 1.0),
     ('one-catalogue', const Size(1920, 1000), 'catalogue', 1.0),
     ('small-phone-large-text', const Size(320, 700), 'three', 2.0),
     ('landscape-large-text', const Size(812, 375), 'three', 2.0),
@@ -173,6 +205,7 @@ void main() {
           threePins
               .map((pin) => pin.withPreview(HomePreviewType.compact))
               .toList(),
+        'folder-shortcuts' => shortcutFolders(api),
         'catalogue' => [awardsPin],
         _ => <PinnedCatalog>[],
       };

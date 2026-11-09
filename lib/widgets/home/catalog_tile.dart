@@ -17,6 +17,7 @@ class CatalogTile extends StatelessWidget {
   final ModuleIcons? icons;
   final Color? tint;
   final VoidCallback? onTap;
+  final bool shortcut;
 
   const CatalogTile({
     super.key,
@@ -26,6 +27,7 @@ class CatalogTile extends StatelessWidget {
     this.icons,
     this.tint,
     required this.onTap,
+    this.shortcut = false,
   });
 
   @override
@@ -34,29 +36,92 @@ class CatalogTile extends StatelessWidget {
     return _CatalogTileSurface(
       tint: tint,
       onTap: onTap,
-      child: ListTile(
-        enabled: onTap != null,
-        leading: ModuleArtwork(
-          icons: icons,
-          size: 24 * scale,
-          fallback: Icon(icon, color: tint, size: 24 * scale),
-        ),
-        title: Text(
-          title,
-          style: _scaled(KalinkaTextStyles.trackRowTitle, scale),
-        ),
-        subtitle: subtitle == null || subtitle!.isEmpty
-            ? null
-            : Text(
-                subtitle!,
-                style: _scaled(KalinkaTextStyles.trackRowSubtitle, scale),
+      centerContent: !shortcut,
+      child: shortcut
+          ? Semantics(
+              button: true,
+              enabled: onTap != null,
+              child: _ShortcutTileContents(
+                title: Text(title, style: KalinkaTextStyles.trackRowTitle),
+                footer: Row(
+                  children: [
+                    ModuleArtwork(
+                      icons: icons,
+                      small: true,
+                      size: MediaQuery.textScalerOf(context).scale(18),
+                      fallback: Icon(
+                        icon,
+                        color: KalinkaColors.textSecondary,
+                        size: MediaQuery.textScalerOf(context).scale(18),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        subtitle ?? '',
+                        style: KalinkaTextStyles.trackRowSubtitle,
+                      ),
+                    ),
+                    if (onTap != null) ...[
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 20,
+                        color: KalinkaColors.textSecondary,
+                      ),
+                    ],
+                  ],
+                ),
               ),
-        trailing: onTap == null
-            ? null
-            : Icon(Icons.chevron_right, size: 24 * scale),
-      ),
+            )
+          : ListTile(
+              enabled: onTap != null,
+              leading: ModuleArtwork(
+                icons: icons,
+                size: 24 * scale,
+                fallback: Icon(icon, color: tint, size: 24 * scale),
+              ),
+              title: Text(
+                title,
+                style: _scaled(KalinkaTextStyles.trackRowTitle, scale),
+              ),
+              subtitle: subtitle == null || subtitle!.isEmpty
+                  ? null
+                  : Text(
+                      subtitle!,
+                      style: _scaled(KalinkaTextStyles.trackRowSubtitle, scale),
+                    ),
+              trailing: onTap == null
+                  ? null
+                  : Icon(Icons.chevron_right, size: 24 * scale),
+            ),
     );
   }
+}
+
+/// Shrinks to the wrapped content during grid measurement, then uses the
+/// common tile height to align the title at the top and attribution below.
+class _ShortcutTileContents extends StatelessWidget {
+  final Widget title;
+  final Widget footer;
+
+  const _ShortcutTileContents({required this.title, required this.footer});
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 132),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          title,
+          Padding(padding: const EdgeInsets.only(top: 24), child: footer),
+        ],
+      ),
+    ),
+  );
 }
 
 TextStyle _scaled(TextStyle style, double scale) =>
@@ -80,8 +145,13 @@ class _TileScale extends InheritedWidget {
 /// Uses the source tile's own frame and list layout while its metadata loads.
 class CatalogTileShimmer extends StatelessWidget {
   final bool hasSubtitle;
+  final bool shortcut;
 
-  const CatalogTileShimmer({super.key, this.hasSubtitle = false});
+  const CatalogTileShimmer({
+    super.key,
+    this.hasSubtitle = false,
+    this.shortcut = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -119,24 +189,48 @@ class CatalogTileShimmer extends StatelessWidget {
     );
     return ShimmerPulse(
       child: _CatalogTileSurface(
-        child: ListTile(
-          leading: ShimmerBlock(width: 24 * scale, height: 24 * scale),
-          title: line(0.7, _scaled(KalinkaTextStyles.trackRowTitle, scale)),
-          subtitle: hasSubtitle
-              ? line(0.5, _scaled(KalinkaTextStyles.trackRowSubtitle, scale))
-              : null,
-          trailing: SizedBox(
-            width: 24 * scale,
-            height: 24 * scale,
-            child: Center(
-              child: ShimmerBlock(
-                width: 8 * scale,
-                height: 16 * scale,
-                radius: 4,
+        centerContent: !shortcut,
+        child: shortcut
+            ? _ShortcutTileContents(
+                title: line(0.8, KalinkaTextStyles.trackRowTitle),
+                footer: Row(
+                  children: [
+                    ShimmerBlock(
+                      width: MediaQuery.textScalerOf(context).scale(18),
+                      height: MediaQuery.textScalerOf(context).scale(18),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: line(0.7, KalinkaTextStyles.trackRowSubtitle),
+                    ),
+                    const ShimmerBlock(width: 8, height: 16, radius: 4),
+                  ],
+                ),
+              )
+            : ListTile(
+                leading: ShimmerBlock(width: 24 * scale, height: 24 * scale),
+                title: line(
+                  0.7,
+                  _scaled(KalinkaTextStyles.trackRowTitle, scale),
+                ),
+                subtitle: hasSubtitle
+                    ? line(
+                        0.5,
+                        _scaled(KalinkaTextStyles.trackRowSubtitle, scale),
+                      )
+                    : null,
+                trailing: SizedBox(
+                  width: 24 * scale,
+                  height: 24 * scale,
+                  child: Center(
+                    child: ShimmerBlock(
+                      width: 8 * scale,
+                      height: 16 * scale,
+                      radius: 4,
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -146,8 +240,14 @@ class _CatalogTileSurface extends StatelessWidget {
   final Widget child;
   final Color? tint;
   final VoidCallback? onTap;
+  final bool centerContent;
 
-  const _CatalogTileSurface({required this.child, this.tint, this.onTap});
+  const _CatalogTileSurface({
+    required this.child,
+    this.tint,
+    this.onTap,
+    this.centerContent = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -182,7 +282,7 @@ class _CatalogTileSurface extends StatelessWidget {
           minLeadingWidth: 24 * scale,
           minVerticalPadding: scale == 1 ? null : 10 * scale,
           minTileHeight: scale == 1 ? null : 56 * scale,
-          child: Center(child: child),
+          child: centerContent ? Center(child: child) : child,
         ),
       ),
     );
@@ -190,8 +290,8 @@ class _CatalogTileSurface extends StatelessWidget {
 }
 
 /// Equal-size tiles in reading order, allowing more room at large text sizes.
-/// A wide pane adds columns rather than stretching tiles, so a short row of
-/// pinned catalogs keeps tile-sized tiles at its start.
+/// Shortcut tiles share the available width up to a scaled 480dp cap. Count
+/// actual children when choosing columns, so short rows can use that space.
 ///
 /// With [fill], as for the music sources, the tiles share the whole width
 /// instead — a lone one spans it — in as few rows as fit, as evenly filled
@@ -212,10 +312,10 @@ class CatalogTileGrid extends StatelessWidget {
       final fit = ((constraints.maxWidth + gap) / (240 * scale + gap))
           .floor()
           .clamp(1, 6);
-      final columns = fill ? _balanced(fit) : fit;
+      final columns = _balanced(fit);
       final grid = _EqualHeightTileGrid(
         columns: columns,
-        maxTileWidth: fill || columns == 1 ? double.infinity : 260 * scale,
+        maxTileWidth: fill ? double.infinity : 480 * scale,
         textDirection: Directionality.of(context),
         children: children,
       );
@@ -345,7 +445,17 @@ class _RenderEqualHeightTileGrid extends RenderBox
     size = _gridSize(constraints, tileSize.height);
     var index = 0;
     for (var child = firstChild; child != null; child = childAfter(child)) {
-      child.layout(BoxConstraints.tight(tileSize), parentUsesSize: true);
+      // Keep height as a minimum, not a tight constraint: if metadata arrives
+      // and wraps onto another line, the child must invalidate this grid's
+      // measurement instead of overflowing inside its previous fixed height.
+      child.layout(
+        BoxConstraints(
+          minWidth: tileSize.width,
+          maxWidth: tileSize.width,
+          minHeight: tileSize.height,
+        ),
+        parentUsesSize: true,
+      );
       final column = index % _columns;
       final x = column * (tileSize.width + _gap);
       final parentData = child.parentData! as _TileParentData;
