@@ -19,9 +19,10 @@ class CoachMarkStop {
 }
 
 /// One-time UI tour shown the first time the play queue appears: a dimmed
-/// scrim with a pulsing cutout around each target and the tip card centred
-/// on screen, where it stays from stop to stop. Tapping anywhere, or the Next
-/// button, advances; Skip ends the tour.
+/// scrim with a pulsing cutout around each target and the tip card pinned to
+/// the edge of the screen away from it, or centred when there is no target,
+/// sliding there from stop to stop. Tapping anywhere, or the Next button,
+/// advances; Skip ends the tour.
 class CoachMarksOverlay extends StatefulWidget {
   final List<CoachMarkStop> stops;
   final VoidCallback onDismiss;
@@ -40,6 +41,10 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
     with SingleTickerProviderStateMixin {
   int _index = 0;
   Rect? _targetRect;
+
+  /// Null until the first stop is measured, so the card appears in place
+  /// rather than sliding there from the centre.
+  Alignment? _cardAlignment;
   late final AnimationController _pulse = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1600),
@@ -96,8 +101,16 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
     // card would still describe a missing control.
     if (rect != null && (rect.width < 4 || rect.height < 4)) rect = null;
 
-    if (rect == _targetRect) return;
-    setState(() => _targetRect = rect);
+    final alignment = rect == null
+        ? Alignment.center
+        : rect.center.dy < overlayBox!.size.height / 2
+        ? Alignment.bottomCenter
+        : Alignment.topCenter;
+    if (rect == _targetRect && alignment == _cardAlignment) return;
+    setState(() {
+      _targetRect = rect;
+      _cardAlignment = alignment;
+    });
   }
 
   void _next() {
@@ -117,6 +130,8 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
     if (widget.stops.isEmpty) return const SizedBox.shrink();
     final stop = widget.stops[_index.clamp(0, widget.stops.length - 1)];
     final isLast = _index >= widget.stops.length - 1;
+    final safeArea = MediaQuery.paddingOf(context);
+    final cardAlignment = _cardAlignment;
 
     // The spotlight is a screen-space rectangle, so anything that moves the
     // target invalidates it. Resizing across the tablet breakpoint moves this
@@ -141,7 +156,23 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
                   ),
                 ),
               ),
-              Center(child: _buildTipCard(stop, isLast)),
+              if (cardAlignment != null)
+                Positioned.fill(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      top: 24 + safeArea.top,
+                      bottom: 24 + safeArea.bottom,
+                    ),
+                    child: AnimatedAlign(
+                      alignment: cardAlignment,
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 220),
+                      curve: Curves.easeInOut,
+                      child: _buildTipCard(stop, isLast),
+                    ),
+                  ),
+                ),
             ],
           ),
         );
