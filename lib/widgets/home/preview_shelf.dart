@@ -35,12 +35,14 @@ typedef HomeAlbumFolderEntry = ({
 class HomeAlbumFolderCards extends StatelessWidget {
   final List<HomeAlbumFolderEntry> entries;
   final bool wide;
+  final bool large;
   final String storageId;
 
   const HomeAlbumFolderCards({
     super.key,
     required this.entries,
     required this.wide,
+    this.large = false,
     required this.storageId,
   });
 
@@ -48,12 +50,12 @@ class HomeAlbumFolderCards extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-      final size = wide
-          ? math.min(176.0, constraints.maxWidth - 2 * _Tile.inset)
-          : math.min(
-              160.0,
-              (constraints.maxWidth / 2.25 - 2 * _Tile.inset) * scale,
-            );
+      final size = homeFolderCover(
+        constraints.maxWidth,
+        wide: wide,
+        large: large,
+        textScale: scale,
+      );
       final cards = [
         for (final entry in entries)
           SizedBox(

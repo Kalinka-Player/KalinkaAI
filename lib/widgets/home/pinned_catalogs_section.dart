@@ -23,8 +23,8 @@ import 'home_section_plan.dart';
 import 'planned_home_sections.dart';
 import 'preview_shelf.dart';
 
-/// Group adjacent shortcuts and recognised album folders without crossing any
-/// intervening pin. Saved pins and destinations remain independent.
+/// Group adjacent shortcuts and same-size recognised album folders without
+/// crossing any intervening pin. Saved pins and destinations remain independent.
 class PinnedCatalogsSection extends ConsumerWidget {
   final List<PinnedCatalog> pins;
 
@@ -80,7 +80,9 @@ class PinnedCatalogsSection extends ConsumerWidget {
     for (final pin in pins) {
       if (albums.containsKey(pin.key) &&
           blocks.isNotEmpty &&
-          albums.containsKey(blocks.last.last.key)) {
+          albums.containsKey(blocks.last.last.key) &&
+          (pin.preview == HomePreviewType.large) ==
+              (blocks.last.last.preview == HomePreviewType.large)) {
         blocks.last.add(pin);
       } else {
         blocks.add([pin]);
@@ -104,7 +106,9 @@ class PinnedCatalogsSection extends ConsumerWidget {
                 : !pin.preview.adaptive
                 ? HomePreviewBlockKind.standalone
                 : block.length > 1
-                ? HomePreviewBlockKind.folders
+                ? (pin.preview == HomePreviewType.large
+                      ? HomePreviewBlockKind.largeFolders
+                      : HomePreviewBlockKind.folders)
                 : pin.largePreview && !pin.page.folderLayout
                 ? HomePreviewBlockKind.collage
                 : HomePreviewBlockKind.ordinary;
@@ -170,7 +174,9 @@ class PinnedCatalogsSection extends ConsumerWidget {
                   // next bounded bucket before requesting a more spacious plan.
                   count = content.folderAlbum != null ? 1 : items.length;
                   kind = content.folderAlbum != null
-                      ? HomePreviewBlockKind.ordinary
+                      ? (pin.preview == HomePreviewType.large
+                            ? HomePreviewBlockKind.collage
+                            : HomePreviewBlockKind.ordinary)
                       : items.isNotEmpty &&
                             items.every((item) => item.album != null)
                       ? (pin.largePreview
@@ -256,7 +262,7 @@ class PinnedCatalogsSection extends ConsumerWidget {
   }
 }
 
-/// Album-folder pins share a compact row, each keeping its own name and link.
+/// Album-folder pins share a row at their chosen size, keeping names and links.
 class HomeAlbumFolderGroup extends ConsumerWidget {
   final List<PinnedCatalog> pins;
   final Map<String, BrowseItem> albums;
@@ -286,6 +292,7 @@ class HomeAlbumFolderGroup extends ConsumerWidget {
           const SizedBox(height: kHomeHeadingGap),
           HomeAlbumFolderCards(
             wide: wide,
+            large: pins.first.preview == HomePreviewType.large,
             storageId: pins.first.key,
             entries: [
               for (final pin in pins)
@@ -518,7 +525,9 @@ class PinnedCatalogPreview extends StatelessWidget {
                                     items: album == null ? items : [album],
                                     wide: wide,
                                     single: album != null,
-                                    large: pin.largePreview,
+                                    large: album != null
+                                        ? pin.preview == HomePreviewType.large
+                                        : pin.largePreview,
                                     storageId: pin.key,
                                     // The album-folder remains a folder destination.
                                     onOpen: album != null

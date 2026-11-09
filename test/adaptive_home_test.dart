@@ -558,6 +558,157 @@ void main() {
     );
   }
 
+  for (final size in [const Size(1920, 1000), const Size(390, 1000)]) {
+    testWidgets('Large folder cards resize and group by size at $size', (
+      tester,
+    ) async {
+      await warmArtwork(tester);
+      final api = AdaptiveHomeApi(art: artDirectory != null);
+      final pins = albumFolderPins(api);
+      final captureKey = GlobalKey();
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(0)),
+        api: api,
+        sources: demoSources,
+        size: size,
+        themed: true,
+        captureKey: captureKey,
+      );
+      final notifier = container.read(pinnedCatalogsProvider.notifier);
+      await notifier.pin(pins.first);
+      await tester.pumpAndSettle();
+      final cover = find.byKey(ValueKey('home-album-${api.albums.first.id}'));
+      final smallWidth = tester.getSize(cover).width;
+      // Exercise the actual control for a folder, not only the preference API.
+      await tester.ensureVisible(find.text('Customise Home'));
+      await tester.tap(find.text('Customise Home'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Preview for Sunday listening'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('home-preview-option-large')));
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(tester.getSize(cover).width, greaterThan(smallWidth * 1.4));
+      expect(tester.getSize(cover).width, lessThanOrEqualTo(342));
+      expect(find.text('SUNDAY LISTENING'), findsOneWidget);
+      await notifier.pin(pins.last);
+      await tester.pumpAndSettle();
+      expect(find.byType(HomeAlbumFolderGroup), findsNothing);
+      await notifier.setPreview(pins.last.key, HomePreviewType.large);
+      await tester.pumpAndSettle();
+      expect(find.byType(HomeAlbumFolderGroup), findsOneWidget);
+      final first = find.byKey(ValueKey(pins.first.key));
+      final second = find.byKey(ValueKey(pins.last.key));
+      expect(tester.getSize(first).width, tester.getSize(second).width);
+      expect(tester.getSize(first).width, greaterThan(260));
+      expect(tester.getTopLeft(first).dy, tester.getTopLeft(second).dy);
+      expect(find.text('Sunday listening'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(HomeAlbumFolderGroup),
+          matching: find.text('View All'),
+        ),
+        findsNothing,
+      );
+      await capture(
+        tester,
+        captureKey,
+        size.width == 1920
+            ? 'large-album-folders-desktop'
+            : 'large-album-folders-phone',
+      );
+      final navigation = container.read(searchSessionProvider.notifier);
+      for (final pin in pins) {
+        await tester.ensureVisible(find.byKey(ValueKey(pin.key)));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(ValueKey(pin.key)));
+        expect(
+          container.read(searchSessionProvider).catalogPage.id,
+          pin.page.id,
+        );
+        navigation.goBack();
+        await tester.pumpAndSettle();
+      }
+      // Moving a small pin between two large pins must split that group.
+      const middleId = 'kalinka:localfiles:catalog:small-copy';
+      final middle = PinnedCatalog(
+        page: CatalogPage.fromJson({
+          ...pins.first.page.toJson(),
+          'id': middleId,
+        }),
+        filter: pins.first.filter,
+        preview: HomePreviewType.preview,
+      );
+      api.listings[middleId] = api.albumTracks;
+      await notifier.pin(middle);
+      await notifier.reorder(2, 1);
+      await tester.pumpAndSettle();
+      expect(find.byType(HomeAlbumFolderGroup), findsNothing);
+      await notifier.reorder(1, 3);
+      await tester.pumpAndSettle();
+      expect(find.byType(HomeAlbumFolderGroup), findsOneWidget);
+      for (final pin in pins) {
+        await notifier.setPreview(pin.key, HomePreviewType.preview);
+      }
+      await tester.pumpAndSettle();
+      expect(find.byType(HomeAlbumFolderGroup), findsOneWidget);
+      expect(
+        tester
+            .widget<HomeAlbumFolderGroup>(find.byType(HomeAlbumFolderGroup))
+            .pins
+            .length,
+        3,
+      );
+      expect(
+        tester.getSize(find.byKey(ValueKey(pins.first.key))).width,
+        lessThanOrEqualTo(198),
+      );
+      expect(
+        api.metadataCalls.where((id) => id == api.albums.first.id).length,
+        2,
+      );
+      expect(api.metadataCalls.where((id) => id == api.albums[1].id).length, 1);
+      expect(api.replaced, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final count in [1, 2]) {
+    testWidgets('Large preview enlarges a catalogue of $count albums', (
+      tester,
+    ) async {
+      final api = AdaptiveHomeApi();
+      api.listings[awardsId] = api.awards.take(count).toList();
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(0)),
+        api: api,
+        sources: demoSources,
+        size: const Size(1920, 1000),
+      );
+      final notifier = container.read(pinnedCatalogsProvider.notifier);
+      await notifier.pin(awardsPin.withPreview(HomePreviewType.preview));
+      await tester.pumpAndSettle();
+      final tile = find.byKey(ValueKey('home-album-${api.awards.first.id}'));
+      final smallWidth = tester.getSize(tile).width;
+      await notifier.setPreview(awardsPin.key, HomePreviewType.large);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(tile).width, greaterThan(smallWidth * 1.4));
+      expect(tester.getSize(tile).width, lessThanOrEqualTo(342));
+      await tester.tap(tile);
+      expect(
+        container.read(searchSessionProvider).catalogPage.id,
+        api.awards.first.id,
+      );
+      expect(api.replaced, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'album groups follow reordering, stop at other pins and tolerate duplicate albums',
     (tester) async {

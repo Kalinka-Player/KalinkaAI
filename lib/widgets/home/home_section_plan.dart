@@ -10,6 +10,7 @@ enum HomePreviewBlockKind {
   ordinary,
   collage,
   folders,
+  largeFolders,
   tracks,
 }
 
@@ -122,7 +123,15 @@ HomeSectionLayout planHomeSections(HomeSectionRequest request) {
       blocks[i].kind != HomePreviewBlockKind.standalone;
   bool large(int i) =>
       blocks[i].kind == HomePreviewBlockKind.collage && blocks[i].count >= 3;
-  double minimum(int i) => large(i)
+  bool folderCards(int i) =>
+      blocks[i].kind == HomePreviewBlockKind.folders ||
+      blocks[i].kind == HomePreviewBlockKind.largeFolders;
+  double minimum(int i) => blocks[i].kind == HomePreviewBlockKind.largeFolders
+      ? homeAlbumLargeCover + 2 * homeAlbumInset
+      : blocks[i].kind == HomePreviewBlockKind.collage && blocks[i].count <= 2
+      ? math.max(1, blocks[i].count) *
+            (homeAlbumMinimumLargeCover + 2 * homeAlbumInset)
+      : large(i)
       ? (blocks[i].count >= 4 ? 4 : 3) * homeAlbumMinimumCover +
             caption +
             (blocks[i].count >= 4 ? 6 : 4) * homeAlbumInset +
@@ -139,10 +148,14 @@ HomeSectionLayout planHomeSections(HomeSectionRequest request) {
           (count == 0 ? 24 : math.min(3, count) * 64 * request.textScale);
       return (height: height, occupied: height * w, utility: 0);
     }
-    if (block.kind == HomePreviewBlockKind.folders) {
-      // Match HomeAlbumFolderCards' ordinary-size Wrap, including optional
+    if (folderCards(i)) {
+      // Match HomeAlbumFolderCards' selected-size Wrap, including optional
       // Home names. Every folder must remain visible; none is sampled away.
-      final size = math.min(homeAlbumOrdinaryCover, w - 2 * homeAlbumInset);
+      final size = homeFolderCover(
+        w,
+        wide: true,
+        large: block.kind == HomePreviewBlockKind.largeFolders,
+      );
       final columns = math.max(
         1,
         ((w + .001) / (size + 2 * homeAlbumInset)).floor(),
@@ -160,7 +173,7 @@ HomeSectionLayout planHomeSections(HomeSectionRequest request) {
       captionExtent: caption,
       count: count,
       wide: true,
-      large: large(i),
+      large: block.kind == HomePreviewBlockKind.collage,
     );
     final collage = album.arrangement == HomeAlbumArrangement.collage;
     final height = collage ? album.leadCover + caption : album.cover + caption;
@@ -208,9 +221,12 @@ HomeSectionLayout planHomeSections(HomeSectionRequest request) {
       for (final c in columns)
         c
             .map(
-              (i) => blocks[i].kind == HomePreviewBlockKind.folders
+              (i) => folderCards(i)
                   ? blocks[i].count *
-                        (homeAlbumOrdinaryCover + 2 * homeAlbumInset)
+                        (2 * homeAlbumInset +
+                            (blocks[i].kind == HomePreviewBlockKind.largeFolders
+                                ? homeAlbumLargeCover
+                                : homeAlbumOrdinaryCover))
                   : large(i)
                   ? 4 * 160 + collageFixed
                   : 3 * (160 + 2 * homeAlbumInset),

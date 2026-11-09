@@ -15,10 +15,7 @@ enum HomePreviewType {
     'Small preview',
     'Equal-sized album covers or a short list of tracks',
   ),
-  large(
-    'Large preview',
-    'A lead cover and smaller album tiles on wider screens',
-  ),
+  large('Large preview', 'Large album cards or a featured catalogue collage'),
   cards('Cards', 'Horizontally scrolling covers'),
   artwork('Artwork', 'Catalog image, title and description'),
   list('List', 'Five items in a vertical list'),
@@ -64,7 +61,7 @@ class PinnedCatalog {
           page.preview?.type == PreviewType.none);
 
   /// A user choice can request the collage without changing source metadata.
-  /// Single albums and non-album contents retain their content-specific layout.
+  /// Single albums use large cards; non-album contents keep their ordered rows.
   bool get largePreview =>
       preview == HomePreviewType.large ||
       (preview == HomePreviewType.automatic &&

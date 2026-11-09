@@ -7,6 +7,58 @@ void main() {
   const collage = HomePreviewBlockKind.collage;
   const shortcut = HomePreviewBlockKind.shortcut;
 
+  test(
+    'Large enlarges single albums and pairs within the pane and cover cap',
+    () {
+      for (final width in [280.0, 358.0, 592.0, 1248.0]) {
+        for (final count in [1, 2]) {
+          for (final single in [false, true]) {
+            final small = homeAlbumLayout(
+              width: width,
+              captionExtent: 60,
+              count: count,
+              wide: width >= 800,
+              large: false,
+              single: single,
+            );
+            final large = homeAlbumLayout(
+              width: width,
+              captionExtent: 60,
+              count: count,
+              wide: width >= 800,
+              large: true,
+              single: single,
+            );
+            expect(large.cover, greaterThan(small.cover));
+            expect(large.cover, lessThanOrEqualTo(homeAlbumLargeCover));
+            expect(large.cover + 2 * homeAlbumInset, lessThanOrEqualTo(width));
+            expect(large.count, lessThanOrEqualTo(count));
+          }
+        }
+      }
+    },
+  );
+
+  test('packing accounts for large folder cards and changing their size', () {
+    HomeSectionLayout layout(HomePreviewBlockKind kind) => planHomeSections(
+      HomeSectionRequest(
+        width: 1248,
+        textScale: 1,
+        captionExtent: 60,
+        blocks: [
+          (kind: kind, count: 3, extraCaption: 0),
+          (kind: ordinary, count: 16, extraCaption: 0),
+        ],
+      ),
+    );
+    final large = layout(HomePreviewBlockKind.largeFolders);
+    expect(large.rows.first.columns.single.blocks, [0]);
+    expect(large.rows.first.columns.single.width, 1248);
+    expect(homeFolderCover(1248, wide: true, large: true), homeAlbumLargeCover);
+    final small = layout(HomePreviewBlockKind.folders);
+    expect(small.rows.single.columns.length, 2);
+  });
+
   test('four folders get a full row before a plentiful catalogue', () {
     for (final width in [1000.0, 1248.0, 1300.0]) {
       final layout = planHomeSections(
@@ -143,6 +195,7 @@ void main() {
       ordinary,
       collage,
       ordinary,
+      HomePreviewBlockKind.largeFolders,
     ];
     for (final width in [320.0, 592.0, 800.0, 1248.0, 1800.0, 3200.0]) {
       for (final scale in [1.0, 2.0]) {

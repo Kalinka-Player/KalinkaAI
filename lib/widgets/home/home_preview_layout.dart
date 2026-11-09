@@ -29,9 +29,30 @@ const homeAlbumInset = kKalinkaFrameInset;
 const homeAlbumArtGap = 8.0;
 const homeAlbumMinimumCover = 120.0;
 const homeAlbumOrdinaryCover = 176.0;
+const homeAlbumLargeCover = 320.0;
+const homeAlbumMinimumLargeCover = 240.0;
 const homeAlbumMaximumSmallCover = 200.0;
 const homeCollageGap = 16.0;
 const homePreviewColumnGap = 32.0;
+
+/// Shared by the folder renderer and background planner so wrapping uses the
+/// same card dimensions. Large phone cards leave a glimpse of the next cover.
+double homeFolderCover(
+  double width, {
+  required bool wide,
+  required bool large,
+  double textScale = 1,
+}) => math.max(
+  0,
+  large
+      ? math.min(
+          homeAlbumLargeCover,
+          width / (wide ? 1 : 1.15) - 2 * homeAlbumInset,
+        )
+      : wide
+      ? math.min(homeAlbumOrdinaryCover, width - 2 * homeAlbumInset)
+      : math.min(160, (width / 2.25 - 2 * homeAlbumInset) * textScale),
+);
 
 final _captionMetrics =
     HomeLayoutMemo<(TextScaler, TextStyle, TextStyle), double>();
@@ -146,14 +167,33 @@ HomeAlbumLayout homeAlbumLayout({
       return layout(
         HomeAlbumArrangement.single,
         count,
-        math.min(homeAlbumOrdinaryCover, width - 2 * homeAlbumInset),
+        math.min(
+          large ? homeAlbumLargeCover : homeAlbumOrdinaryCover,
+          width - 2 * homeAlbumInset,
+        ),
       );
     }
     if (!wide) {
       return layout(
         HomeAlbumArrangement.rail,
         count,
-        math.min(160, width / 2.25 - 2 * homeAlbumInset),
+        large && count == 2
+            ? homeFolderCover(width, wide: false, large: true)
+            : math.min(160, width / 2.25 - 2 * homeAlbumInset),
+      );
+    }
+    if (large && count == 2) {
+      final visible = math.min(
+        count,
+        math.max(
+          1,
+          (width / (homeAlbumMinimumLargeCover + 2 * homeAlbumInset)).floor(),
+        ),
+      );
+      return layout(
+        HomeAlbumArrangement.row,
+        visible,
+        math.min(homeAlbumLargeCover, width / visible - 2 * homeAlbumInset),
       );
     }
     if (large && count >= 3) {
