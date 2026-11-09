@@ -19,6 +19,8 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
 import 'package:kalinka/screens/music_player_screen.dart';
+import 'package:kalinka/widgets/home/home_section_plan.dart';
+import 'package:kalinka/widgets/home/planned_home_sections.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -144,6 +146,11 @@ Future<ProviderContainer> pumpHomeShell(
 
   final container = ProviderContainer(
     overrides: [
+      homeSectionPlannerProvider.overrideWith(
+        (ref) => HomeSectionPlanner(
+          calculate: (request) async => planHomeSections(request),
+        ),
+      ),
       if (receivers == null)
         noReceivers
       else

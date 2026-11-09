@@ -19,6 +19,8 @@ import 'catalog_tile.dart';
 import 'catalog_artwork.dart';
 import 'home_layout.dart';
 import 'home_preview_layout.dart';
+import 'home_section_plan.dart';
+import 'planned_home_sections.dart';
 import 'preview_shelf.dart';
 
 /// Group adjacent shortcuts and recognised album folders without crossing any
@@ -85,70 +87,171 @@ class PinnedCatalogsSection extends ConsumerWidget {
       }
     }
     return LayoutBuilder(
-      builder: (context, constraints) {
-        final plan = homeSectionLayout(
-          width: constraints.maxWidth,
-          textScale: MediaQuery.textScalerOf(context).scale(14) / 14,
-          captionExtent: homeAlbumCaptionExtent(context),
-          kinds: [
-            for (final block in blocks)
-              block.first.shortcut
-                  ? HomePreviewBlockKind.shortcut
-                  : !block.first.preview.adaptive
-                  ? HomePreviewBlockKind.standalone
-                  : block.length == 1 &&
-                        !block.first.page.folderLayout &&
-                        block.first.largePreview
-                  ? HomePreviewBlockKind.collage
-                  : HomePreviewBlockKind.ordinary,
-          ],
-        );
-        Widget preview(int index) {
-          final block = blocks[index];
-          return block.length == 1
-              ? PinnedCatalogPreview(
-                  key: ValueKey(block.first.key),
-                  pin: block.first,
-                  wide: plan.wide,
-                )
-              : HomeAlbumFolderGroup(
-                  key: ValueKey('album-folders:${block.first.key}'),
-                  pins: block,
-                  albums: albums,
-                  wide: plan.wide,
-                );
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final row in plan.rows)
-              if (row.shortcuts)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: kHomePinGap),
-                  child: CatalogTileGrid(
-                    children: row.columns.single.blocks.map(preview).toList(),
-                  ),
-                )
-              else
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (var i = 0; i < row.columns.length; i++) ...[
-                      if (i > 0) const SizedBox(width: homePreviewColumnGap),
-                      SizedBox(
-                        width: row.columns[i].width,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: row.columns[i].blocks.map(preview).toList(),
+      builder: (context, constraints) => Consumer(
+        // These subscriptions belong to this constraint-dependent build. Old
+        // width buckets are released even while the next request is loading.
+        builder: (context, ref, _) {
+          final width = constraints.maxWidth;
+          final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+          final caption = homeAlbumCaptionExtent(context);
+          final wide = width >= 800 * textScale;
+          final limits = <String, int>{};
+          final shapes = <HomePreviewBlock>[];
+          for (final block in blocks) {
+            final pin = block.first;
+            var kind = pin.shortcut
+                ? HomePreviewBlockKind.shortcut
+                : !pin.preview.adaptive
+                ? HomePreviewBlockKind.standalone
+                : block.length > 1
+                ? HomePreviewBlockKind.folders
+                : pin.largePreview && !pin.page.folderLayout
+                ? HomePreviewBlockKind.collage
+                : HomePreviewBlockKind.ordinary;
+            var count = block.length > 1 ? block.length : 8;
+            if (block.length == 1 && pin.preview.adaptive && !pin.shortcut) {
+              // Fetch enough for the widest candidate once, rather than making
+              // network requests for each layout the optimiser considers. The
+              // child reuses exactly this request, including its bucket/revision.
+              final limit = pin.page.isArtist
+                  ? artistProbe
+                  : homePreviewFetchLimit(
+                      wide
+                          ? AdaptiveAlbumPreview.capacityFor(
+                              width,
+                              large: pin.largePreview,
+                              captionExtent: caption,
+                            )
+                          : 8,
+                    );
+              limits[pin.key] = limit;
+              final source = sourceOfId(pin.page.id!);
+              final available =
+                  ref
+                      .watch(sourceModulesProvider)
+                      .value
+                      ?.any(
+                        (module) =>
+                            module.enabled &&
+                            module.name == source &&
+                            (pin.page.isArtist ||
+                                module.can(ModuleCapability.catalogs)),
+                      ) ??
+                  false;
+              if (available) {
+                final content = ref
+                    .watch(
+                      homePinContentProvider((
+                        listing: (
+                          id: pin.page.id!,
+                          filter: pin.filter.encoded(
+                            pin.page.filterCapabilities,
+                          ),
+                          limit: limit,
+                          revision:
+                              ref.watch(collectionsRevisionProvider) +
+                              (source == 'localfiles'
+                                  ? ref.watch(
+                                      indexerStatusProvider.select(
+                                        (s) => s.libraryRevision,
+                                      ),
+                                    )
+                                  : 0),
                         ),
+                        folder: pin.page.folderLayout,
+                      )),
+                    )
+                    .asData
+                    ?.value;
+                if (content != null) {
+                  final items = _previewItems(pin, content);
+                  // Use loaded, displayable items, never an optimistic total from
+                  // a paginated or mixed listing. Growing the pane fetches the
+                  // next bounded bucket before requesting a more spacious plan.
+                  count = content.folderAlbum != null ? 1 : items.length;
+                  kind = content.folderAlbum != null
+                      ? HomePreviewBlockKind.ordinary
+                      : items.isNotEmpty &&
+                            items.every((item) => item.album != null)
+                      ? (pin.largePreview
+                            ? HomePreviewBlockKind.collage
+                            : HomePreviewBlockKind.ordinary)
+                      : HomePreviewBlockKind.tracks;
+                }
+              }
+            }
+            shapes.add((
+              kind: kind,
+              count: count,
+              extraCaption:
+                  block.length > 1 && block.any((pin) => pin.homeName != null)
+                  ? 2 * 20 * textScale
+                  : 0,
+            ));
+          }
+          return PlannedHomeSections(
+            request: HomeSectionRequest(
+              width: width,
+              textScale: textScale,
+              captionExtent: caption,
+              blocks: shapes,
+            ),
+            builder: (plan) {
+              Widget preview(int index) {
+                final block = blocks[index];
+                return block.length == 1
+                    ? PinnedCatalogPreview(
+                        key: ValueKey(block.first.key),
+                        pin: block.first,
+                        wide: plan.wide,
+                        requestLimit: limits[block.first.key],
+                      )
+                    : HomeAlbumFolderGroup(
+                        key: ValueKey('album-folders:${block.first.key}'),
+                        pins: block,
+                        albums: albums,
+                        wide: plan.wide,
+                      );
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final row in plan.rows)
+                    if (row.shortcuts)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: kHomePinGap),
+                        child: CatalogTileGrid(
+                          children: row.columns.single.blocks
+                              .map(preview)
+                              .toList(),
+                        ),
+                      )
+                    else
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (var i = 0; i < row.columns.length; i++) ...[
+                            if (i > 0)
+                              const SizedBox(width: homePreviewColumnGap),
+                            SizedBox(
+                              width: row.columns[i].width,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: row.columns[i].blocks
+                                    .map(preview)
+                                    .toList(),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                  ],
-                ),
-          ],
-        );
-      },
+                ],
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
@@ -204,7 +307,13 @@ class HomeAlbumFolderGroup extends ConsumerWidget {
 class PinnedCatalogPreview extends StatelessWidget {
   final PinnedCatalog pin;
   final bool wide;
-  const PinnedCatalogPreview({super.key, required this.pin, this.wide = false});
+  final int? requestLimit;
+  const PinnedCatalogPreview({
+    super.key,
+    required this.pin,
+    this.wide = false,
+    this.requestLimit,
+  });
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -343,15 +452,19 @@ class PinnedCatalogPreview extends StatelessWidget {
       );
     }
     if (pin.preview.adaptive) {
-      final capacity = wide
-          ? AdaptiveAlbumPreview.capacityFor(
-              width,
-              large: pin.largePreview,
-              captionExtent: homeAlbumCaptionExtent(context),
-            )
-          : 8;
+      final limit =
+          requestLimit ??
+          homePreviewFetchLimit(
+            wide
+                ? AdaptiveAlbumPreview.capacityFor(
+                    width,
+                    large: pin.largePreview,
+                    captionExtent: homeAlbumCaptionExtent(context),
+                  )
+                : 8,
+          );
       final request = (
-        listing: requestOf(homePreviewFetchLimit(capacity)),
+        listing: requestOf(limit),
         folder: pin.page.folderLayout,
       );
       return Padding(
@@ -388,16 +501,7 @@ class PinnedCatalogPreview extends StatelessWidget {
                         ),
                         data: (content) {
                           final album = content.folderAlbum;
-                          final items =
-                              pin.page.isArtist && source == 'localfiles'
-                              ? content.listing.items
-                                    .where(
-                                      (item) =>
-                                          item.album != null &&
-                                          sourceOfId(item.id) == source,
-                                    )
-                                    .toList()
-                              : content.listing.items;
+                          final items = _previewItems(pin, content);
                           if (items.isEmpty) {
                             return Text(
                               'No items match this catalog.',
@@ -501,3 +605,12 @@ String _countLabel(int count, PreviewContentType? kind) {
   };
   return '$count ${count == 1 ? one : many}';
 }
+
+List<BrowseItem> _previewItems(PinnedCatalog pin, HomePinContent content) =>
+    pin.page.isArtist && sourceOfId(pin.page.id!) == 'localfiles'
+    ? content.listing.items
+          .where(
+            (item) => item.album != null && sourceOfId(item.id) == 'localfiles',
+          )
+          .toList()
+    : content.listing.items;

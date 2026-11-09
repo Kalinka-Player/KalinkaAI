@@ -384,6 +384,103 @@ void main() {
     return [first, second];
   }
 
+  testWidgets('four folders occupy one row before full-width Top Releases', (
+    tester,
+  ) async {
+    await warmArtwork(tester);
+    final api = AdaptiveHomeApi(art: artDirectory != null);
+    final pins = albumFolderPins(api);
+    api.albums.add(
+      demoAlbum('moon', 'Moon Safari', 'Air', art: artDirectory != null),
+    );
+    for (final album in api.albums.skip(2)) {
+      final id = 'kalinka:localfiles:catalog:folder-${album.album!.title}';
+      final tracks = [
+        for (var i = 0; i < 6; i++)
+          demoTrack('$id-$i', 'Track $i', 'Artist', album: album.album),
+      ];
+      api.listings[id] = tracks;
+      api.listings[album.id] = tracks;
+      pins.add(
+        PinnedCatalog(
+          page: CatalogPage.category(
+            id: id,
+            title: album.album!.title,
+            provider: 'My Library',
+            folderLayout: true,
+          ),
+          filter: pins.first.filter,
+          preview: HomePreviewType.automatic,
+        ),
+      );
+    }
+    final releases = PinnedCatalog(
+      page: CatalogPage.fromJson({
+        ...awardsPin.page.toJson(),
+        'title': 'Top Releases',
+        'description': "Qobuz’s most-streamed albums right now",
+      }),
+      filter: awardsPin.filter,
+      preview: HomePreviewType.preview,
+    );
+    final art = [...api.awards, ...api.albums];
+    api.listings[awardsId] = [
+      for (var i = 0; i < 24; i++)
+        BrowseItem.fromJson({
+          ...art[i % art.length].toJson(),
+          'id': 'kalinka:qobuz:album:release-$i',
+        }),
+    ];
+    final key = GlobalKey();
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(0)),
+      api: api,
+      sources: demoSources,
+      size: const Size(1920, 1000),
+      captureKey: key,
+      themed: true,
+    );
+    final notifier = container.read(pinnedCatalogsProvider.notifier);
+    for (final pin in [...pins, releases]) {
+      await notifier.pin(pin);
+    }
+    await tester.pumpAndSettle();
+    final group = tester.getRect(find.byType(HomeAlbumFolderGroup));
+    final catalogue = tester.getRect(find.byKey(ValueKey(releases.key)));
+    final pane = tester.getRect(find.byType(PinnedCatalogsSection));
+    expect(group.width, pane.width);
+    expect(catalogue.width, pane.width);
+    expect(catalogue.top, greaterThanOrEqualTo(group.bottom));
+    final first = tester.getRect(find.byKey(ValueKey(pins.first.key)));
+    for (final pin in pins.skip(1)) {
+      expect(tester.getRect(find.byKey(ValueKey(pin.key))).top, first.top);
+    }
+    final previews = tester.widget<AdaptiveAlbumPreview>(
+      find.byType(AdaptiveAlbumPreview),
+    );
+    expect(previews.items.length, greaterThanOrEqualTo(7));
+    final covers = find.descendant(
+      of: find.byType(AdaptiveAlbumPreview),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>).value.startsWith('home-album-'),
+      ),
+    );
+    expect(covers.evaluate().length, greaterThan(4));
+    expect(tester.takeException(), isNull);
+    expect(api.calls.where((call) => call.id == awardsId).length, 1);
+    await capture(tester, key, 'four-folders-top-releases-desktop');
+    for (final pin in pins) {
+      await tester.tap(find.byKey(ValueKey(pin.key)));
+      expect(container.read(searchSessionProvider).catalogPage.id, pin.page.id);
+      container.read(searchSessionProvider.notifier).goBack();
+      await tester.pumpAndSettle();
+    }
+    expect(api.replaced, isEmpty);
+  });
+
   for (final (name, size, scale) in [
     ('grouped-album-folders-desktop', const Size(1920, 1000), 1.0),
     ('grouped-album-folders-phone', const Size(390, 1000), 1.0),
@@ -849,7 +946,7 @@ void main() {
 
   for (final columns in [2, 3, 4]) {
     testWidgets(
-      '$columns balanced Home columns use all their available width',
+      '$columns catalogues fit a variable-width Home without overlaps',
       (tester) async {
         final api = AdaptiveHomeApi();
         final pins = [
@@ -885,7 +982,11 @@ void main() {
           api: api,
           sources: demoSources,
           size: Size(columns * 552 - 32, 1000),
-          screen: Scaffold(body: PinnedCatalogsSection(pins: pins)),
+          screen: Scaffold(
+            body: SingleChildScrollView(
+              child: PinnedCatalogsSection(pins: pins),
+            ),
+          ),
         );
         final shelves = find
             .byType(AdaptiveAlbumPreview)
@@ -893,15 +994,16 @@ void main() {
             .map((element) => tester.getRect(find.byWidget(element.widget)))
             .toList();
         expect(shelves.length, columns);
-        expect(shelves.first.width, greaterThan(shelves[1].width));
         expect(shelves.first.left, 0);
-        expect(shelves.last.right, closeTo(columns * 552 - 32, 0.01));
+        expect(
+          shelves.map((r) => r.right).reduce((a, b) => a > b ? a : b),
+          closeTo(columns * 552 - 32, 0.01),
+        );
         for (var i = 0; i < columns; i++) {
-          if (i > 0) {
-            expect(shelves[i].width, greaterThanOrEqualTo(284));
-            expect(shelves[i].left, closeTo(shelves[i - 1].right + 32, 0.01));
+          expect(shelves[i].width, greaterThanOrEqualTo(284));
+          for (var j = i + 1; j < columns; j++) {
+            expect(shelves[i].overlaps(shelves[j]), isFalse);
           }
-          expect(shelves[i].top, shelves.first.top);
         }
         expect(tester.takeException(), isNull);
       },
