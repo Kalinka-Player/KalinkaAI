@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../utils/web_build_target.dart';
 import '../procedural_album_art.dart';
 
 /// The cover, swinging aside cover-flow style when the track changes: the
@@ -94,9 +95,10 @@ class KioskCoverFill extends StatelessWidget {
                   : Image.network(
                       url,
                       fit: BoxFit.cover,
-                      cacheWidth:
-                          (side * MediaQuery.devicePixelRatioOf(context))
-                              .round(),
+                      cacheWidth: wasmSafeCacheSize(
+                        (side * MediaQuery.devicePixelRatioOf(context))
+                            .round(),
+                      ),
                       gaplessPlayback: true,
                       errorBuilder: (_, _, _) => fallback(),
                     ),
@@ -165,7 +167,9 @@ class _Cover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(size * 0.03);
-    final cacheWidth = (size * MediaQuery.devicePixelRatioOf(context)).round();
+    final cacheWidth = wasmSafeCacheSize(
+      (size * MediaQuery.devicePixelRatioOf(context)).round(),
+    );
     return RepaintBoundary(
       child: Container(
         width: size,

@@ -10,6 +10,7 @@ import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/web_build_target.dart';
 import '../browse_rows_shimmer.dart';
 import '../catalog_art.dart';
 import '../fitted_art.dart';
@@ -703,8 +704,8 @@ class _TileArtState extends State<_TileArt> {
       width: width,
       height: size,
       fit: widget.fills ? BoxFit.cover : BoxFit.contain,
-      cacheWidth: byHeight ? null : decode,
-      cacheHeight: byHeight ? decode : null,
+      cacheWidth: wasmSafeCacheSize(byHeight ? null : decode),
+      cacheHeight: wasmSafeCacheSize(byHeight ? decode : null),
       gaplessPlayback: true,
       frameBuilder: (_, child, frame, _) {
         if (frame != null) _shown = true;
