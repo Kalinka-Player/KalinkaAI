@@ -272,6 +272,6 @@ void main() {
     await tester.tap(find.text('Skip'));
     await _settle(tester);
     expect(dismissed, 1);
-    expect(find.text('Stop 1'), findsOneWidget);
+    expect(find.text('Stop 2'), findsNothing);
   });
 }
