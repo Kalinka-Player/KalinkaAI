@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/web_build_target.dart';
+
 /// Whether an image of [aspectRatio], unstated a square, fills a box of
 /// [shape]: covering it crops no more than a sliver.
 bool fillsShape(double? aspectRatio, double shape) =>
@@ -25,7 +27,7 @@ class SoftImageFill extends StatelessWidget {
   Widget build(BuildContext context) => Image.network(
     url,
     fit: BoxFit.cover,
-    cacheWidth: _decodeWidth,
+    cacheWidth: wasmSafeCacheSize(_decodeWidth),
     filterQuality: FilterQuality.medium,
     color: const Color(0x73000000),
     colorBlendMode: BlendMode.srcATop,

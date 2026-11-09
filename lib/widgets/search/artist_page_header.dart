@@ -8,6 +8,7 @@ import '../../providers/search_session_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/web_build_target.dart';
 import '../browse_filters/presentation_toggle.dart';
 import '../home/catalog_pin_button.dart';
 import '../procedural_album_art.dart';
@@ -64,7 +65,7 @@ class ArtistPageHeader extends ConsumerWidget {
                         : Image.network(
                             url,
                             fit: BoxFit.cover,
-                            cacheWidth: (size * 3).round(),
+                            cacheWidth: wasmSafeCacheSize((size * 3).round()),
                             gaplessPlayback: true,
                             errorBuilder: (_, _, _) => stand,
                           ),

@@ -12,6 +12,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/kalinka_icons.dart';
 import '../../utils/haptics.dart';
 import '../../utils/play_next.dart';
+import '../../utils/web_build_target.dart';
 import '../now_playing_bars.dart';
 import '../procedural_album_art.dart';
 
@@ -85,8 +86,8 @@ class TrackThumb extends ConsumerWidget {
               ref.read(urlResolverProvider).abs(path),
               width: size,
               height: size,
-              cacheWidth: (size * 3).round(),
-              cacheHeight: (size * 3).round(),
+              cacheWidth: wasmSafeCacheSize((size * 3).round()),
+              cacheHeight: wasmSafeCacheSize((size * 3).round()),
               fit: BoxFit.cover,
               gaplessPlayback: true,
               filterQuality: FilterQuality.low,

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 import '../utils/catalog_casefold.dart';
+import '../utils/web_build_target.dart';
 
 /// Geometry around the artwork side, independent of the caption and overlays.
 @immutable
@@ -211,6 +212,9 @@ class CatalogArtPainter extends CustomPainter {
 
   Paint _fill(int gray) {
     if (!captioned) return Paint()..color = seed.tone(gray);
+    // DIAGNOSTIC: the shapes below are invisible on Firefox/skwasm_heavy;
+    // testing whether the Gradient.linear shader is why, by skipping it.
+    if (compiledToWasm) return Paint()..color = seed.tone(gray);
     // Fade in grayscale before applying the LUT, just like the backend.
     final colors = <Color>[seed.tone(48)];
     final stops = <double>[0];

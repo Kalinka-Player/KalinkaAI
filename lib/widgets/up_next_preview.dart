@@ -12,6 +12,7 @@ import '../providers/shell_nav_provider.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
 import '../utils/playback_utils.dart';
+import '../utils/web_build_target.dart';
 import 'away.dart';
 import 'column_separator.dart';
 import 'procedural_album_art.dart';
@@ -314,7 +315,7 @@ class _UpcomingTrack extends ConsumerWidget {
                             )
                           : Image.network(
                               resolved,
-                              cacheWidth: 120,
+                              cacheWidth: wasmSafeCacheSize(120),
                               fit: BoxFit.cover,
                               errorBuilder: (_, _, _) => ProceduralAlbumArt(
                                 trackId: track.id,

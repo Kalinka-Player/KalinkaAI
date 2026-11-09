@@ -10,6 +10,7 @@ import '../../providers/toast_provider.dart';
 import '../../providers/url_resolver.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/playback_utils.dart';
+import '../../utils/web_build_target.dart';
 import '../modifier_click.dart';
 import '../source_badge.dart';
 import '../swipe_to_act_row.dart';
@@ -356,8 +357,8 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
                         resolvedImageUrl,
                         width: 44,
                         height: 44,
-                        cacheWidth: 132,
-                        cacheHeight: 132,
+                        cacheWidth: wasmSafeCacheSize(132),
+                        cacheHeight: wasmSafeCacheSize(132),
                         fit: BoxFit.cover,
                         gaplessPlayback: true,
                         filterQuality: FilterQuality.low,
