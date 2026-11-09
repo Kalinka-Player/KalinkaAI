@@ -58,38 +58,14 @@ class HomeAlbumFolderCards extends StatelessWidget {
           SizedBox(
             key: ValueKey(entry.key),
             width: size + 2 * _Tile.inset,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _Tile(
-                  key: ValueKey('home-album-${entry.album.id}'),
-                  item: entry.album,
-                  size: size,
-                  shape: 1,
-                  homeName: entry.homeName,
-                  onOpen: (_) => entry.onOpen(),
-                  inFolder: false,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: _Tile.inset),
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      foregroundColor: KalinkaColors.textSecondary,
-                      minimumSize: const Size(0, 44),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 8,
-                      ),
-                      textStyle: KalinkaFonts.sans(
-                        fontSize: KalinkaTypography.baseSize,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    onPressed: entry.onOpen,
-                    child: const Text('View All'),
-                  ),
-                ),
-              ],
+            child: _Tile(
+              key: ValueKey('home-album-${entry.album.id}'),
+              item: entry.album,
+              size: size,
+              shape: 1,
+              homeName: entry.homeName,
+              onOpen: (_) => entry.onOpen(),
+              inFolder: false,
             ),
           ),
       ];

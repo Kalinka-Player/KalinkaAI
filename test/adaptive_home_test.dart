@@ -332,7 +332,7 @@ void main() {
         }
         await tester.pumpAndSettle();
         expect(find.byType(HomeAlbumFolderGroup), findsOneWidget);
-        expect(find.text('PINNED ALBUMS'), findsOneWidget);
+        expect(find.text('PINNED FOLDERS'), findsOneWidget);
         expect(find.text('Sunday listening'), findsOneWidget);
         expect(find.text(pins[1].title.toUpperCase()), findsNothing);
         expect(find.text('Oxygène, Pt. 1'), findsNothing);
@@ -352,13 +352,14 @@ void main() {
         await capture(tester, captureKey, name);
         final navigation = container.read(searchSessionProvider.notifier);
         for (final pin in pins) {
-          final action = tester.widget<TextButton>(
-            find.descendant(
-              of: find.byKey(ValueKey(pin.key)),
-              matching: find.byType(TextButton),
-            ),
+          final card = find.byKey(ValueKey(pin.key));
+          expect(
+            find.descendant(of: card, matching: find.text('View All')),
+            findsNothing,
           );
-          action.onPressed!();
+          await tester.ensureVisible(card);
+          await tester.pumpAndSettle();
+          await tester.tap(card);
           expect(
             container.read(searchSessionProvider).catalogPage.id,
             pin.page.id,
@@ -370,18 +371,6 @@ void main() {
           navigation.goBack();
           await tester.pumpAndSettle();
         }
-        final album = find.descendant(
-          of: find.byKey(ValueKey(pins.first.key)),
-          matching: find.byKey(ValueKey('home-album-${api.albums.first.id}')),
-        );
-        await tester.ensureVisible(album);
-        await tester.tap(album);
-        expect(
-          container.read(searchSessionProvider).catalogPage.id,
-          pins.first.page.id,
-        );
-        navigation.goBack();
-        await tester.pumpAndSettle();
         expect(api.replaced, isEmpty);
         expect(container.read(pinnedCatalogsProvider)!.map((pin) => pin.key), [
           awardsPin.key,

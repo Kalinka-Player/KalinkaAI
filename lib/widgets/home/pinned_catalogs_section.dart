@@ -200,7 +200,7 @@ class HomeAlbumFolderGroup extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ShelfHeading(
-            title: 'PINNED ALBUMS',
+            title: 'PINNED FOLDERS',
             source: 'localfiles',
             subtitle:
                 '${ref.watch(sourceDisplayInfoProvider)['localfiles']?.title ?? 'My Library'} · Folders',
