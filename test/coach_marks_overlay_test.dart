@@ -8,7 +8,9 @@ import 'package:kalinka/widgets/kalinka_button.dart';
 /// Hosts the tour over three targets and can drop the middle one, the way a
 /// server without renderers drops the output switcher's stop.
 class _Host extends StatefulWidget {
-  const _Host();
+  final Rect middle;
+
+  const _Host({this.middle = const Rect.fromLTWH(20, 140, 40, 40)});
 
   @override
   State<_Host> createState() => _HostState();
@@ -34,10 +36,9 @@ class _HostState extends State<_Host> {
               left: 20,
               child: SizedBox(key: _first, width: 40, height: 40),
             ),
-            Positioned(
-              top: 140,
-              left: 20,
-              child: SizedBox(key: _middle, width: 40, height: 40),
+            Positioned.fromRect(
+              rect: widget.middle,
+              child: SizedBox(key: _middle),
             ),
             Positioned(
               top: 240,
@@ -108,8 +109,8 @@ Rect _hole(Rect target) => target.inflate(6);
 Rect _pulse(Rect target) => target.inflate(38);
 
 /// The tour, one stop per rect, titled 'Stop 1', 'Stop 2'...; a null rect
-/// leaves that stop's key unmounted.
-Future<void> _pumpTour(
+/// leaves that stop's key unmounted. The returned notifier moves the targets.
+Future<ValueNotifier<List<Rect?>>> _pumpTour(
   WidgetTester tester,
   List<Rect?> targets, {
   Size size = _phone,
@@ -121,6 +122,8 @@ Future<void> _pumpTour(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
+  final placed = ValueNotifier(targets);
+  addTearDown(placed.dispose);
   final keys = [for (final _ in targets) GlobalKey()];
   await tester.pumpWidget(
     MaterialApp(
@@ -132,33 +135,37 @@ Future<void> _pumpTour(
         child: child!,
       ),
       home: Scaffold(
-        body: Stack(
-          children: [
-            for (final (i, rect) in targets.indexed)
-              if (rect != null)
-                Positioned.fromRect(
-                  rect: rect,
-                  child: SizedBox(key: keys[i]),
+        body: ValueListenableBuilder(
+          valueListenable: placed,
+          builder: (context, targets, _) => Stack(
+            children: [
+              for (final (i, rect) in targets.indexed)
+                if (rect != null)
+                  Positioned.fromRect(
+                    rect: rect,
+                    child: SizedBox(key: keys[i]),
+                  ),
+              Positioned.fill(
+                child: CoachMarksOverlay(
+                  stops: [
+                    for (final (i, key) in keys.indexed)
+                      CoachMarkStop(
+                        targetKey: key,
+                        title: 'Stop ${i + 1}',
+                        body: body,
+                      ),
+                  ],
+                  onDismiss: onDismiss ?? () {},
                 ),
-            Positioned.fill(
-              child: CoachMarksOverlay(
-                stops: [
-                  for (final (i, key) in keys.indexed)
-                    CoachMarkStop(
-                      targetKey: key,
-                      title: 'Stop ${i + 1}',
-                      body: body,
-                    ),
-                ],
-                onDismiss: onDismiss ?? () {},
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     ),
   );
   await _settle(tester);
+  return placed;
 }
 
 /// The painted card.
@@ -255,6 +262,28 @@ void main() {
 
     expect(find.text('Choose where it plays'), findsNothing);
     expect(find.text('Your server lives here'), findsOneWidget);
+  });
+
+  testWidgets('a stop dropped from under the card slides it to the next', (
+    tester,
+  ) async {
+    tester.view.physicalSize = _phone;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const _Host(middle: _outputSwitcher));
+    await _settle(tester);
+    await _next(tester);
+    final start = _card(tester, 'Choose where it plays').top;
+
+    tester.state<_HostState>(find.byType(_Host)).dropMiddleStop();
+    await _settle(tester);
+    await tester.pump(const Duration(milliseconds: 110));
+    final halfway = _card(tester, 'Your server lives here').top;
+    await tester.pump(const Duration(milliseconds: 200));
+    final end = _card(tester, 'Your server lives here').top;
+
+    expect(halfway, greaterThan(start));
+    expect(halfway, lessThan(end));
   });
 
   testWidgets('the card sits in the third away from each control', (
@@ -396,6 +425,18 @@ void main() {
     expect(card.center.dy, moreOrLessEquals(_phone.height / 2));
   });
 
+  testWidgets('a centred card stays put between untargeted stops', (
+    tester,
+  ) async {
+    await _pumpTour(tester, [_searchEntry, null, null]);
+    await _next(tester);
+
+    await tester.tap(find.text('Next'));
+    await _settle(tester);
+    final card = _card(tester, 'Stop 3');
+    expect(card.center.dy, moreOrLessEquals(_phone.height / 2));
+  });
+
   testWidgets('the card slides between stops', (tester) async {
     await _pumpTour(tester, [_searchEntry, _outputSwitcher]);
     final start = _card(tester, 'Stop 1').top;
@@ -409,6 +450,25 @@ void main() {
 
     expect(halfway, lessThan(start));
     expect(halfway, greaterThan(end));
+  });
+
+  testWidgets('a target that moves mid-slide turns the card where it is', (
+    tester,
+  ) async {
+    final targets = await _pumpTour(tester, [_searchEntry, _outputSwitcher]);
+    await tester.tap(find.text('Next'));
+    await _settle(tester);
+    await tester.pump(const Duration(milliseconds: 110));
+    final before = _card(tester, 'Stop 2').top;
+
+    const moved = Rect.fromLTWH(300, 60, 44, 44);
+    targets.value = [_searchEntry, moved];
+    await tester.pump();
+    await tester.pump();
+    expect(_card(tester, 'Stop 2').top, moreOrLessEquals(before));
+
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(_card(tester, 'Stop 2').overlaps(_pulse(moved)), isFalse);
   });
 
   testWidgets('with reduced motion the card moves at once', (tester) async {

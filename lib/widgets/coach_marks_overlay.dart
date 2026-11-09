@@ -66,9 +66,10 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
   /// the next one is measured, so the card doesn't head for the centre.
   Rect? _cardTarget;
 
-  /// The stop the card was last placed for; null until the first stop is
-  /// measured, so the card appears in place rather than sliding there.
-  int? _placedIndex;
+  /// The target of the stop the card was last placed for; null until the
+  /// first stop is measured, so the card appears in place rather than
+  /// sliding there. A key, not an index: the list can change under the index.
+  GlobalKey? _placedKey;
   int _misses = 0;
   bool _resolvePending = false;
 
@@ -101,8 +102,12 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
   @override
   void didUpdateWidget(covariant CoachMarksOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final oldStops = oldWidget.stops;
+    final wasKey = _index < oldStops.length ? oldStops[_index].targetKey : null;
     if (_index >= widget.stops.length && widget.stops.isNotEmpty) {
       _index = widget.stops.length - 1;
+    }
+    if (widget.stops.isNotEmpty && widget.stops[_index].targetKey != wasKey) {
       _targetRect = null;
       _misses = 0;
     }
@@ -149,9 +154,11 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
     }
     if (rect != null) _misses = 0;
 
-    final newStop = _placedIndex != _index;
+    final key = widget.stops[_index].targetKey;
+    final newStop = _placedKey != key;
     if (!newStop && rect == _targetRect && rect == _cardTarget) return;
-    if (newStop && _placedIndex != null) {
+    // A target that moves mid-slide restarts the slide from where it is.
+    if ((newStop && _placedKey != null) || _move.isAnimating) {
       _move.duration = MediaQuery.disableAnimationsOf(context)
           ? Duration.zero
           : const Duration(milliseconds: 220);
@@ -160,7 +167,7 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
     setState(() {
       _targetRect = rect;
       _cardTarget = rect;
-      _placedIndex = _index;
+      _placedKey = key;
     });
   }
 
@@ -207,7 +214,7 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
                   ),
                 ),
               ),
-              if (_placedIndex != null)
+              if (_placedKey != null)
                 Positioned.fill(
                   child: _CardPlacement(
                     target: _cardTarget,
@@ -410,6 +417,8 @@ class _RenderCardPlacement extends RenderShiftedBox {
         ? to
         : Offset.lerp(from, to, Curves.easeInOut.transform(_move.value))!;
     _shown = shown;
+    // Done sliding: a later slide with no new target has nowhere to come from.
+    if (_move.isCompleted) _from = null;
     (card.parentData! as BoxParentData).offset = shown;
   }
 
