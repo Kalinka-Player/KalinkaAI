@@ -108,18 +108,15 @@ class _ShortcutTileContents extends StatelessWidget {
   const _ShortcutTileContents({required this.title, required this.footer});
 
   @override
-  Widget build(BuildContext context) => ConstrainedBox(
-    constraints: const BoxConstraints(minHeight: 132),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          title,
-          Padding(padding: const EdgeInsets.only(top: 24), child: footer),
-        ],
-      ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        title,
+        Padding(padding: const EdgeInsets.only(top: 12), child: footer),
+      ],
     ),
   );
 }
@@ -289,7 +286,7 @@ class _CatalogTileSurface extends StatelessWidget {
   }
 }
 
-/// Equal-size tiles in reading order, allowing more room at large text sizes.
+/// Equal-width tiles in reading order, matching heights within each row.
 /// Shortcut tiles share the available width up to a scaled 480dp cap. Count
 /// actual children when choosing columns, so short rows can use that space.
 ///
@@ -316,6 +313,7 @@ class CatalogTileGrid extends StatelessWidget {
       final grid = _EqualHeightTileGrid(
         columns: columns,
         maxTileWidth: fill ? double.infinity : 480 * scale,
+        uniformRows: fill,
         textDirection: Directionality.of(context),
         children: children,
       );
@@ -341,25 +339,37 @@ class CatalogTileGrid extends StatelessWidget {
 class _EqualHeightTileGrid extends MultiChildRenderObjectWidget {
   final int columns;
   final double maxTileWidth;
+  final bool uniformRows;
   final TextDirection textDirection;
 
   const _EqualHeightTileGrid({
     required this.columns,
     required this.maxTileWidth,
+    required this.uniformRows,
     required this.textDirection,
     required super.children,
   });
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderEqualHeightTileGrid(columns, maxTileWidth, textDirection);
+      _RenderEqualHeightTileGrid(
+        columns,
+        maxTileWidth,
+        uniformRows,
+        textDirection,
+      );
 
   @override
   void updateRenderObject(
     BuildContext context,
     _RenderEqualHeightTileGrid renderObject,
   ) {
-    renderObject.updateLayout(columns, maxTileWidth, textDirection);
+    renderObject.updateLayout(
+      columns,
+      maxTileWidth,
+      uniformRows,
+      textDirection,
+    );
   }
 }
 
@@ -372,26 +382,31 @@ class _RenderEqualHeightTileGrid extends RenderBox
   static const _gap = 8.0;
   int _columns;
   double _maxTileWidth;
+  bool _uniformRows;
   TextDirection _textDirection;
 
   _RenderEqualHeightTileGrid(
     this._columns,
     this._maxTileWidth,
+    this._uniformRows,
     this._textDirection,
   );
 
   void updateLayout(
     int columns,
     double maxTileWidth,
+    bool uniformRows,
     TextDirection textDirection,
   ) {
     if (_columns == columns &&
         _maxTileWidth == maxTileWidth &&
+        _uniformRows == uniformRows &&
         _textDirection == textDirection) {
       return;
     }
     _columns = columns;
     _maxTileWidth = maxTileWidth;
+    _uniformRows = uniformRows;
     _textDirection = textDirection;
     markNeedsLayout();
   }
@@ -403,13 +418,17 @@ class _RenderEqualHeightTileGrid extends RenderBox
     }
   }
 
-  Size _measure(BoxConstraints constraints, {required bool dry}) {
+  ({double width, List<double> heights}) _measure(
+    BoxConstraints constraints, {
+    required bool dry,
+  }) {
     final width = math.min(
       (constraints.maxWidth - _gap * (_columns - 1)) / _columns,
       _maxTileWidth,
     );
     final tileConstraints = BoxConstraints.tightFor(width: width);
-    var height = 0.0;
+    final heights = List.filled((childCount / _columns).ceil(), 0.0);
+    var index = 0;
     for (var child = firstChild; child != null; child = childAfter(child)) {
       final Size childSize;
       if (dry) {
@@ -418,32 +437,39 @@ class _RenderEqualHeightTileGrid extends RenderBox
         child.layout(tileConstraints, parentUsesSize: true);
         childSize = child.size;
       }
-      height = math.max(height, childSize.height);
+      final row = index++ ~/ _columns;
+      heights[row] = math.max(heights[row], childSize.height);
     }
-    return Size(width, height);
+    // Filling source grids retain their existing uniform tile treatment.
+    if (_uniformRows && heights.isNotEmpty) {
+      final tallest = heights.reduce(math.max);
+      heights.fillRange(0, heights.length, tallest);
+    }
+    return (width: width, heights: heights);
   }
 
-  Size _gridSize(BoxConstraints constraints, double tileHeight) {
-    final rows = (childCount / _columns).ceil();
+  Size _gridSize(BoxConstraints constraints, List<double> heights) {
     return constraints.constrain(
       Size(
         constraints.maxWidth,
-        rows == 0 ? 0 : rows * tileHeight + (rows - 1) * _gap,
+        heights.fold(0.0, (sum, height) => sum + height) +
+            math.max(0, heights.length - 1) * _gap,
       ),
     );
   }
 
   @override
   Size computeDryLayout(BoxConstraints constraints) =>
-      _gridSize(constraints, _measure(constraints, dry: true).height);
+      _gridSize(constraints, _measure(constraints, dry: true).heights);
 
   @override
   void performLayout() {
-    // Measure wrapped content first, then give every tile the same full frame.
-    // This also keeps the final, partially filled row the same size.
+    // Measure wrapped content first, then align cards within their own row.
+    // A long title in another row must not make short shortcuts taller.
     final tileSize = _measure(constraints, dry: false);
-    size = _gridSize(constraints, tileSize.height);
+    size = _gridSize(constraints, tileSize.heights);
     var index = 0;
+    var y = 0.0;
     for (var child = firstChild; child != null; child = childAfter(child)) {
       // Keep height as a minimum, not a tight constraint: if metadata arrives
       // and wraps onto another line, the child must invalidate this grid's
@@ -452,18 +478,21 @@ class _RenderEqualHeightTileGrid extends RenderBox
         BoxConstraints(
           minWidth: tileSize.width,
           maxWidth: tileSize.width,
-          minHeight: tileSize.height,
+          minHeight: tileSize.heights[index ~/ _columns],
         ),
         parentUsesSize: true,
       );
       final column = index % _columns;
+      if (index > 0 && column == 0) {
+        y += tileSize.heights[index ~/ _columns - 1] + _gap;
+      }
       final x = column * (tileSize.width + _gap);
       final parentData = child.parentData! as _TileParentData;
       parentData.offset = Offset(
         _textDirection == TextDirection.ltr
             ? x
             : size.width - tileSize.width - x,
-        (index ~/ _columns) * (tileSize.height + _gap),
+        y,
       );
       index++;
     }

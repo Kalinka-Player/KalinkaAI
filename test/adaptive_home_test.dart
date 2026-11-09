@@ -1241,6 +1241,81 @@ void main() {
     },
   );
 
+  for (final migrated in [false, true]) {
+    testWidgets(
+      'local artist track fallback stays playable, migrated=$migrated',
+      (tester) async {
+        final api = AdaptiveHomeApi();
+        api.listings[artistId] = [
+          demoTrack('loose', 'A loose track', 'Jean-Michel Jarre'),
+          demoTrack(
+            'compilation',
+            'A compilation track',
+            'Jean-Michel Jarre',
+            album: api.albums.first.album,
+          ),
+          demoTrack('third', 'Third track', 'Jean-Michel Jarre'),
+          demoTrack('fourth', 'Fourth track', 'Jean-Michel Jarre'),
+        ];
+        final container = await pumpHomeShell(
+          tester,
+          queue: SettableQueue(queueOf(0)),
+          api: api,
+          sources: demoSources,
+        );
+        final pin = migrated
+            ? PinnedCatalog.fromJson({
+                ...artistPin.toJson(),
+                'previewVersion': 2,
+                'preview': 'cards',
+              })
+            : artistPin;
+        await container.read(pinnedCatalogsProvider.notifier).pin(pin);
+        await tester.pumpAndSettle();
+        expect(find.text('No items match this catalog.'), findsNothing);
+        expect(find.byType(AdaptiveAlbumPreview), findsNothing);
+        final rows = tester
+            .widgetList<SearchTrackRow>(find.byType(SearchTrackRow))
+            .toList();
+        expect(rows, hasLength(3));
+        final first = find.text('A loose track');
+        final second = find.text('A compilation track');
+        final third = find.text('Third track');
+        expect(
+          tester.getTopLeft(first).dy,
+          lessThan(tester.getTopLeft(second).dy),
+        );
+        expect(
+          tester.getTopLeft(second).dy,
+          lessThan(tester.getTopLeft(third).dy),
+        );
+        expect(find.text('Fourth track'), findsNothing);
+        await tester.tap(second);
+        await tester.pumpAndSettle();
+        expect(api.replaced, [
+          ['kalinka:localfiles:track:compilation'],
+        ]);
+        expect(api.played, [0]);
+        expect(api.calls.where((call) => call.id == artistId), hasLength(1));
+        // Album preference and source filtering still apply after a library
+        // update; allowing track fallback must not leak foreign-source albums.
+        api.listings[artistId] = [
+          api.listings[artistId]!.first,
+          api.albums.first,
+          demoAlbum('foreign', 'Remote album', 'Artist', source: 'qobuz'),
+        ];
+        container.read(searchSessionProvider.notifier).refreshAll();
+        await tester.pumpAndSettle();
+        expect(find.byType(SearchTrackRow), findsNothing);
+        final albums = tester.widget<AdaptiveAlbumPreview>(
+          find.byType(AdaptiveAlbumPreview),
+        );
+        expect(albums.items.map((item) => item.id), [api.albums.first.id]);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'phone albums swipe and local artist covers open their own albums',
     (tester) async {

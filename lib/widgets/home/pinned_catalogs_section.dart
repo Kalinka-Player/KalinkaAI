@@ -615,11 +615,17 @@ String _countLabel(int count, PreviewContentType? kind) {
   return '$count ${count == 1 ? one : many}';
 }
 
-List<BrowseItem> _previewItems(PinnedCatalog pin, HomePinContent content) =>
-    pin.page.isArtist && sourceOfId(pin.page.id!) == 'localfiles'
-    ? content.listing.items
-          .where(
-            (item) => item.album != null && sourceOfId(item.id) == 'localfiles',
-          )
-          .toList()
-    : content.listing.items;
+List<BrowseItem> _previewItems(PinnedCatalog pin, HomePinContent content) {
+  if (!pin.page.isArtist || sourceOfId(pin.page.id!) != 'localfiles') {
+    return content.listing.items;
+  }
+  final local = content.listing.items.where(
+    (item) => sourceOfId(item.id) == 'localfiles',
+  );
+  final albums = local.where((item) => item.album != null).toList();
+  // artistPreviewOf returns tracks when the artist has no releases. Keep that
+  // fallback: a compilation track's album metadata is not an album child.
+  return albums.isNotEmpty
+      ? albums
+      : local.where((item) => item.track != null).toList();
+}

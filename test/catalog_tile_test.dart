@@ -4,6 +4,83 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/home/catalog_tile.dart';
 
 void main() {
+  testWidgets(
+    'compact rows grow and shrink with their own asynchronous content',
+    (tester) async {
+      final label = ValueNotifier(
+        'A long folder name that wraps over several lines '
+        'with an edition, a recording date, a resolution and a file format',
+      );
+      final detail = ValueNotifier('My Library · 12 items');
+      addTearDown(label.dispose);
+      addTearDown(detail.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark(),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 600,
+                child: CatalogTileGrid(
+                  children: [
+                    ValueListenableBuilder(
+                      valueListenable: label,
+                      builder: (_, title, _) => ValueListenableBuilder(
+                        valueListenable: detail,
+                        builder: (_, subtitle, _) => CatalogTile(
+                          key: const ValueKey(0),
+                          shortcut: true,
+                          title: title,
+                          subtitle: subtitle,
+                          icon: Icons.folder_outlined,
+                          onTap: () {},
+                        ),
+                      ),
+                    ),
+                    for (var i = 1; i < 4; i++)
+                      CatalogTile(
+                        key: ValueKey(i),
+                        shortcut: true,
+                        title: 'Top Releases $i',
+                        subtitle: 'Qobuz · 101 albums',
+                        icon: Icons.album_outlined,
+                        onTap: () {},
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      Rect card(int i) => tester.getRect(find.byKey(ValueKey(i)));
+      final compactHeight = card(2).height;
+      expect(compactHeight, inInclusiveRange(48, 100));
+      expect(card(0).height, greaterThan(compactHeight));
+      expect(card(1).height, card(0).height);
+      expect(card(3).height, compactHeight);
+      expect(card(2).top, card(0).bottom + 8);
+      label.value = 'Polly Gibbons';
+      await tester.pump();
+      expect(card(0).height, compactHeight);
+      expect(card(1).height, compactHeight);
+      expect(card(2).top, card(0).bottom + 8);
+      detail.value =
+          'My Library · A long saved filter with multiple genres and '
+          'additional metadata that arrives after the initial preview';
+      await tester.pump();
+      expect(card(0).height, greaterThan(compactHeight));
+      expect(card(1).height, card(0).height);
+      expect(card(2).height, compactHeight);
+      expect(card(2).top, card(0).bottom + 8);
+      detail.value = 'My Library · 12 items';
+      await tester.pump();
+      expect(card(0).height, compactHeight);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   for (final (width, scale, columns, direction, count) in [
     (960.0, 1.0, 3, TextDirection.ltr, 5),
     (1600.0, 1.0, 5, TextDirection.ltr, 5),
@@ -16,7 +93,7 @@ void main() {
     (960.0, 1.0, 2, TextDirection.ltr, 2),
     (1600.0, 1.0, 1, TextDirection.ltr, 1),
   ]) {
-    testWidgets('equal tiles at $width, text scale $scale, $direction', (
+    testWidgets('equal row heights at $width, text scale $scale, $direction', (
       tester,
     ) async {
       tester.view.physicalSize = Size(width, 1600);
@@ -81,10 +158,13 @@ void main() {
             ((width - (columns - 1) * 8) / columns).clamp(0, 480 * scale),
           ),
         );
-        expect(rects[i].height, moreOrLessEquals(first.height));
+        final row = i ~/ columns;
+        expect(rects[i].height, moreOrLessEquals(rects[row * columns].height));
         expect(
           rects[i].top,
-          moreOrLessEquals(first.top + (i ~/ columns) * (first.height + 8)),
+          moreOrLessEquals(
+            row == 0 ? first.top : rects[(row - 1) * columns].bottom + 8,
+          ),
         );
         expect(rects[i].left, greaterThanOrEqualTo(-0.001));
         expect(rects[i].right, lessThanOrEqualTo(width + 0.001));
@@ -101,7 +181,7 @@ void main() {
         );
         expect(
           tester.getRect(footer).top - tester.getRect(title).bottom,
-          greaterThanOrEqualTo(24),
+          greaterThanOrEqualTo(12),
         );
       }
       if (columns > 1) {
