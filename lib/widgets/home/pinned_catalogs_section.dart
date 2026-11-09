@@ -292,6 +292,7 @@ class PinnedCatalogPreview extends StatelessWidget {
           if (total != null && total >= 0) _countLabel(total, kind),
           if (!available) 'Unavailable',
         ].join(' · '),
+        icons: info?.icons,
         icon: info?.icon ?? Icons.library_music_outlined,
         tint: info?.color ?? colorForSourceName(source),
         onTap: available ? open : null,
