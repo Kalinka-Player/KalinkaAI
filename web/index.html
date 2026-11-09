@@ -86,19 +86,23 @@
     );
     {{flutter_js}}
     {{flutter_build_config}}
+    // "Use WebAssembly" in Settings → Streamer → Support writes this same
+    // key and reloads — off (the default) pins the classic JS + CanvasKit
+    // build below, on lets the loader auto-select WASM + skwasm where the
+    // browser's own WasmGC support probe passes (Chromium always; Firefox
+    // 147+/Safari 26.2+ only because of the allowlist below — older
+    // versions fall back to CanvasKit automatically either way).
+    const useWasm = localStorage.getItem("kalinka.useWasm") === "1";
     _flutter.loader.load({
       config: {
         // Bundled CanvasKit/skwasm (no CDN — works on LANs without
-        // internet). No explicit renderer: the loader auto-selects the
-        // WASM-compiled app + skwasm where the browser's own WasmGC
-        // support probe passes (Chromium always; Firefox 147+/Safari
-        // 26.2+ only because of the allowlist below — older versions
-        // fall back to it automatically), and the classic JS +
-        // CanvasKit build everywhere else. Falls back to single-threaded
-        // skwasm if the server isn't sending the COOP/COEP headers (see
-        // kalinka-server's response middleware).
+        // internet).
         canvasKitBaseUrl: "canvaskit/",
         wasmAllowList: { blink: true, webkit: true, gecko: true },
+        ...(useWasm ? {} : { renderer: "canvaskit" }),
+        // TEMP diagnostic — testing whether forcing single-threaded skwasm
+        // fixes the icon/artwork corruption seen with multi-threading on.
+        forceSingleThreadedSkwasm: true,
       },
     });
   </script>

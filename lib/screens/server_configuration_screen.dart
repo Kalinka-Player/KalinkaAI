@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,6 +12,8 @@ import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/field_decoration.dart';
 import '../theme/kalinka_icons.dart';
+import '../utils/wasm_renderer_preference.dart';
+import '../utils/web_build_target.dart';
 import '../widgets/box_section.dart';
 import '../widgets/configuration_appearance.dart';
 import '../widgets/display_settings_section.dart';
@@ -22,6 +25,7 @@ import '../widgets/settings_controls/settings_binding.dart';
 import '../widgets/settings_controls/settings_card.dart';
 import '../widgets/settings_controls/issue_notes.dart';
 import '../widgets/settings_controls/settings_row.dart';
+import '../widgets/settings_controls/settings_toggle.dart';
 import '../widgets/settings_renderer.dart';
 
 /// The Streamer tab keeps server information and management beside its settings.
@@ -161,9 +165,35 @@ class ServerSettingsBody extends ConsumerWidget {
                 leading: Icons.description_outlined,
                 onTap: onDownloadLogs,
               ),
+              if (kIsWeb) const _UseWebAssemblyRow(),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Experimental: tries the WebAssembly (skwasm) renderer instead of the
+/// default JavaScript (CanvasKit) one. Off by default — skwasm still has
+/// rendering quirks on some browsers. The choice is fixed for a page load,
+/// so flipping it reloads the page.
+class _UseWebAssemblyRow extends StatelessWidget {
+  const _UseWebAssemblyRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsRow(
+      label: 'Use WebAssembly',
+      sublabel:
+          'Experimental rendering engine, generally faster but with the '
+          'occasional visual glitch. Reloads the page.',
+      status: compiledToWasm
+          ? 'Currently running **WebAssembly** (skwasm).'
+          : 'Currently running **JavaScript** (CanvasKit).',
+      control: SettingsToggle(
+        value: useWasmPreference,
+        onChanged: setUseWasmPreference,
       ),
     );
   }
