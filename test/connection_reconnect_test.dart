@@ -793,6 +793,117 @@ void main() {
         });
       }
 
+      for (final on in [false, true]) {
+        test(
+          'coming back to the app asks the box once${on ? ', and reconnects to it once on' : ''}',
+          () {
+            fakeAsync((async) {
+              final api = _FakeApi(shouldSucceed: on);
+              final container = fakeClockContainer(async, api, kiosk: false);
+              final lifecycle = container.read(
+                appLifecycleProvider.notifier,
+              ) as _ResumedLifecycle;
+              final notifier = container.read(connectionStateProvider.notifier);
+              final epoch = container.read(retryEpochProvider);
+              notifier.connected();
+              notifier.poweredOff();
+
+              lifecycle.set(AppLifecycleState.paused);
+              async.elapse(const Duration(minutes: 5));
+              lifecycle.set(AppLifecycleState.resumed);
+              async.flushMicrotasks();
+              expect(api.listModulesCalls, 1);
+
+              if (on) {
+                expect(
+                  container.read(connectionStateProvider),
+                  ConnectionStatus.reconnecting,
+                );
+                expect(notifier.boxPoweredOff, isFalse);
+                expect(notifier.escalationReached, isFalse);
+                expect(container.read(retryEpochProvider), epoch + 1);
+                expect(async.periodicTimerCount, 1);
+              } else {
+                async.elapse(const Duration(seconds: 60));
+                expect(
+                  container.read(connectionStateProvider),
+                  ConnectionStatus.offline,
+                );
+                expect(notifier.boxPoweredOff, isTrue);
+                expect(notifier.escalationReached, isTrue);
+                expect(api.listModulesCalls, 1);
+                expect(container.read(retryEpochProvider), epoch);
+              }
+            });
+          },
+        );
+      }
+
+      test('closing the picker asks the box once and keeps it off', () {
+        fakeAsync((async) {
+          final api = _FakeApi(shouldSucceed: false);
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final notifier = container.read(connectionStateProvider.notifier);
+          notifier.connected();
+          notifier.poweredOff();
+
+          notifier.pauseReconnect().release();
+          async.elapse(const Duration(seconds: 60));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.offline,
+          );
+          expect(notifier.boxPoweredOff, isTrue);
+          expect(api.listModulesCalls, 1);
+        });
+      });
+
+      test('a Retry asked in the picker reconnects once it closes', () {
+        fakeAsync((async) {
+          final api = _FakeApi(shouldSucceed: false);
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final notifier = container.read(connectionStateProvider.notifier);
+          notifier.connected();
+          notifier.poweredOff();
+
+          final pause = notifier.pauseReconnect();
+          notifier.retryNow();
+          pause.release();
+          async.flushMicrotasks();
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+          expect(notifier.boxPoweredOff, isFalse);
+          async.elapse(const Duration(seconds: 5));
+          expect(api.listModulesCalls, 2);
+        });
+      });
+
+      test('a Retry while the box is asked is not undone by its answer', () {
+        fakeAsync((async) {
+          final api = _FakeApi()..reply = Completer<void>();
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final lifecycle = container.read(
+            appLifecycleProvider.notifier,
+          ) as _ResumedLifecycle;
+          final notifier = container.read(connectionStateProvider.notifier);
+          final epoch = container.read(retryEpochProvider);
+          notifier.connected();
+          notifier.poweredOff();
+          lifecycle.set(AppLifecycleState.paused);
+          lifecycle.set(AppLifecycleState.resumed);
+          expect(api.listModulesCalls, 1);
+
+          notifier.retryNow();
+          api.reply!.complete();
+          async.flushMicrotasks();
+          // Only the Retry's own probe rebuilds the socket.
+          expect(container.read(retryEpochProvider), epoch + 1);
+          expect(async.periodicTimerCount, 1);
+        });
+      });
+
       test('powering off once already offline still tells listeners', () {
         fakeAsync((async) {
           final api = _FakeApi(shouldSucceed: false);
@@ -887,6 +998,20 @@ void main() {
         container.read(connectionStateProvider),
         ConnectionStatus.connected,
       );
+    });
+
+    // A box still accepts sockets for a moment after it accepts a power-off.
+    test('a queue socket opening across a power-off leaves it off', () async {
+      final container = await connectedContainer();
+      final notifier = container.read(connectionStateProvider.notifier);
+
+      final socket = container.read(queueWebSocketProvider.future);
+      notifier.poweredOff();
+      await socket;
+      await pumpEventQueue();
+
+      expect(container.read(connectionStateProvider), ConnectionStatus.offline);
+      expect(notifier.boxPoweredOff, isTrue);
     });
 
     // A resume after a long background replaces a live socket. Its stream
