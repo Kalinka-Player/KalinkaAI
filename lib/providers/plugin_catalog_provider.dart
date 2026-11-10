@@ -37,7 +37,7 @@ class PluginAcceptance {
       'applying' => PluginAccepted.applying,
       'queued' => PluginAccepted.queued,
       _ => PluginAccepted.done,
-    }, id: json['id'] as String?);
+    }, id: json['id']?.toString());
   }
 }
 
@@ -269,20 +269,22 @@ class DioPluginCatalogApi implements PluginCatalogApi {
         data: {'plugin_ids': pluginIds},
       )).data;
       final json = data is Map ? data : const {};
+      List<Object?> list(Object? value) => value is List ? value : const [];
       return PluginUpdatesAccepted(
         accepted: {
-          for (final accepted in json['operations'] as List? ?? const [])
+          for (final accepted in list(json['operations']))
             if (accepted is Map && accepted['plugin_id'] is String)
               accepted['plugin_id'] as String: PluginAcceptance.fromJson(
                 accepted,
               ),
         },
         refused: {
-          for (final refused in json['refused'] as List? ?? const [])
+          for (final refused in list(json['refused']))
             if (refused is Map && refused['plugin_id'] is String)
-              refused['plugin_id'] as String:
-                  refused['message'] as String? ??
-                  'The server could not finish. Try again.',
+              refused['plugin_id'] as String: switch (refused['message']) {
+                final String message when message.isNotEmpty => message,
+                _ => 'The server could not finish. Try again.',
+              },
         },
       );
     } on DioException catch (error) {
@@ -324,7 +326,11 @@ class DioPluginCatalogApi implements PluginCatalogApi {
           ? PluginOperationsReport.fromJson(data.cast<String, dynamic>())
           : const PluginOperationsReport();
     } on DioException catch (error) {
-      if (error.response != null) return const PluginOperationsReport();
+      // A server before 0.22 has no such route, and one with its catalog off
+      // refuses it. A 5xx, as the web UI's proxy answers while the server
+      // restarts, is the server not answering.
+      final status = error.response?.statusCode;
+      if (status != null && status < 500) return const PluginOperationsReport();
       rethrow;
     }
   }
@@ -474,6 +480,9 @@ class PluginOperationsNotifier extends Notifier<Map<String, PluginProgress>> {
     } on PluginCatalogException catch (error) {
       _drop(pluginId);
       return _fail(pluginId, operation, error.message);
+    } catch (_) {
+      _drop(pluginId);
+      rethrow;
     }
     if (!ref.mounted) return PluginOutcome.unknown;
     if (accepted.id case final id?
@@ -527,9 +536,13 @@ class PluginOperationsNotifier extends Notifier<Map<String, PluginProgress>> {
         _fail(id, PluginOperation.update, error.message);
       }
       return;
+    } catch (_) {
+      ids.forEach(_drop);
+      rethrow;
     }
     if (!ref.mounted) return;
     final followed = <Future<PluginOutcome>>[];
+    var settle = false;
     for (final id in ids) {
       final accepted = answer.accepted[id];
       if (accepted?.id case final operationId?) {
@@ -544,9 +557,19 @@ class PluginOperationsNotifier extends Notifier<Map<String, PluginProgress>> {
         );
         continue;
       }
-      _drop(id);
       if (answer.refused[id] case final message?) {
+        _drop(id);
         _fail(id, PluginOperation.update, message);
+        continue;
+      }
+      // Nothing left to do for it: the lists say so once read again.
+      settle = settle || accepted != null;
+      if (!settle) _drop(id);
+    }
+    if (settle) {
+      await _settle();
+      for (final id in ids) {
+        if (!_waiting.containsKey(id)) _drop(id);
       }
     }
     await Future.wait(followed);
@@ -665,6 +688,7 @@ class PluginOperationsNotifier extends Notifier<Map<String, PluginProgress>> {
           current?.id,
           current?.status,
           current?.step,
+          current?.stepIndex,
           current?.updatedAt,
           for (final entry in report.queued) entry.id,
           for (final result in report.results) result.id,
@@ -699,7 +723,7 @@ class PluginOperationsNotifier extends Notifier<Map<String, PluginProgress>> {
           } else if (report.results.where((r) => r.id == waiter.id).lastOrNull
               case final result?) {
             _end(pluginId, waiter, result);
-          } else if (++waiter.unseen >= 3) {
+          } else if (report.queues && ++waiter.unseen >= 3) {
             // Gone without a trace, as with its record lost to a restart.
             _end(pluginId, waiter, null);
           }
@@ -758,22 +782,22 @@ class PluginOperationsNotifier extends Notifier<Map<String, PluginProgress>> {
   /// Follows the restart that carries [record]'s operation out, or whichever
   /// the server went down for; whether to follow the queue on after it.
   Future<bool> _restarted(PluginOperationRecord? record) async {
-    final waiter = _waiting[record?.pluginId] ?? _waiting.values.firstOrNull;
+    final pluginId = _waiting.containsKey(record?.pluginId)
+        ? record!.pluginId
+        : _waiting.keys.firstOrNull;
+    final waiter = _waiting[pluginId];
     await ref
         .read(restartProvider.notifier)
         .followRestart(
           subtitle: _subtitle(
             waiter?.operation ?? record?.operation ?? PluginOperation.update,
-            waiter?.name,
+            waiter?.name ?? _nameOf(pluginId),
           ),
         );
     if (!ref.mounted) return false;
     final restart = ref.read(restartProvider);
     if (restart.error != null) {
-      _giveUp(
-        'The server did not come back after its restart, so how this ended '
-        'is not known.',
-      );
+      _giveUp(_lostInRestart);
       return false;
     }
     // The wait was given up; the server finishes on its own.
@@ -782,6 +806,25 @@ class PluginOperationsNotifier extends Notifier<Map<String, PluginProgress>> {
       return false;
     }
     return true;
+  }
+
+  static const _lostInRestart =
+      'The server did not come back after its restart, so how this ended '
+      'is not known.';
+
+  /// The plugin's name as the catalog on screen has it; one picked up
+  /// rather than asked for here comes without.
+  String? _nameOf(String? pluginId) {
+    if (pluginId == null || !ref.read(pluginCatalogProvider.exists)) {
+      return null;
+    }
+    return ref
+        .read(pluginCatalogProvider)
+        .value
+        ?.plugins
+        .where((plugin) => plugin.id == pluginId)
+        .firstOrNull
+        ?.name;
   }
 
   static String _subtitle(PluginOperation operation, String? name) {
@@ -879,12 +922,7 @@ class PluginOperationsNotifier extends Notifier<Map<String, PluginProgress>> {
     if (!ref.mounted) return PluginOutcome.unknown;
     final restart = ref.read(restartProvider);
     if (restart.error != null) {
-      return _fail(
-        pluginId,
-        operation,
-        'The server did not come back after its restart, so how this ended '
-        'is not known.',
-      );
+      return _fail(pluginId, operation, _lostInRestart);
     }
     // The wait was given up; the server finishes on its own.
     if (!restart.isDone) return PluginOutcome.unknown;
