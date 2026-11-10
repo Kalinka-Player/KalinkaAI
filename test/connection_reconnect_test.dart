@@ -690,6 +690,132 @@ void main() {
         });
       });
     });
+
+    group('after the box is powered off (#162)', () {
+      for (final dropFirst in [false, true]) {
+        test(
+          'goes offline at once and stays there${dropFirst ? ' when the socket closed first' : ''}',
+          () {
+            fakeAsync((async) {
+              final api = _FakeApi(shouldSucceed: false);
+              final container = fakeClockContainer(async, api, kiosk: false);
+              final notifier = container.read(connectionStateProvider.notifier);
+              notifier.connected();
+              if (dropFirst) notifier.startReconnecting();
+
+              notifier.poweredOff();
+              expect(
+                container.read(connectionStateProvider),
+                ConnectionStatus.offline,
+              );
+              expect(notifier.boxPoweredOff, isTrue);
+              expect(notifier.escalationReached, isTrue);
+              expect(async.periodicTimerCount, 0);
+
+              // The box's socket closing as it shuts down.
+              notifier.startReconnecting();
+              async.elapse(const Duration(seconds: 60));
+              expect(
+                container.read(connectionStateProvider),
+                ConnectionStatus.offline,
+              );
+              expect(notifier.escalationReached, isTrue);
+              expect(api.listModulesCalls, 0);
+            });
+          },
+        );
+      }
+
+      test('Retry gives the box a fresh 30s window', () {
+        fakeAsync((async) {
+          final api = _FakeApi(shouldSucceed: false);
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final notifier = container.read(connectionStateProvider.notifier);
+          notifier.connected();
+          notifier.poweredOff();
+          notifier.markEscalationDismissed();
+          async.elapse(const Duration(seconds: 10));
+
+          notifier.retryNow();
+          async.flushMicrotasks();
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+          expect(notifier.boxPoweredOff, isFalse);
+          expect(notifier.escalationReached, isFalse);
+          expect(notifier.escalationDismissed, isFalse);
+          expect(api.listModulesCalls, 1);
+
+          async.elapse(const Duration(seconds: 25));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+          expect(notifier.escalationReached, isFalse);
+          async.elapse(const Duration(seconds: 5));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.offline,
+          );
+          expect(notifier.boxPoweredOff, isFalse);
+        });
+      });
+
+      for (final exit in ['connected', 'connecting', 'disconnected']) {
+        test('$exit clears it, so a later outage is not taken for it', () {
+          fakeAsync((async) {
+            final api = _FakeApi(shouldSucceed: false);
+            final container = fakeClockContainer(async, api, kiosk: false);
+            final notifier = container.read(connectionStateProvider.notifier);
+            notifier.connected();
+            notifier.poweredOff();
+
+            switch (exit) {
+              case 'connected':
+                notifier.connected();
+              case 'connecting':
+                notifier.connecting();
+              default:
+                notifier.disconnected();
+            }
+            expect(notifier.boxPoweredOff, isFalse);
+            expect(notifier.escalationReached, isFalse);
+
+            notifier.startReconnecting();
+            expect(notifier.escalationReached, isFalse);
+            async.elapse(const Duration(seconds: 25));
+            expect(
+              container.read(connectionStateProvider),
+              ConnectionStatus.reconnecting,
+            );
+          });
+        });
+      }
+
+      test('powering off once already offline still tells listeners', () {
+        fakeAsync((async) {
+          final api = _FakeApi(shouldSucceed: false);
+          final container = fakeClockContainer(async, api, kiosk: false);
+          final notifier = container.read(connectionStateProvider.notifier);
+          notifier.startReconnecting();
+          async.elapse(const Duration(seconds: 35));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.offline,
+          );
+          final seen = <ConnectionStatus>[];
+          container.listen(
+            connectionStateProvider,
+            (_, next) => seen.add(next),
+          );
+
+          notifier.poweredOff();
+          expect(seen, [ConnectionStatus.offline]);
+          expect(notifier.boxPoweredOff, isTrue);
+        });
+      });
+    });
   });
 
   // Issue #21, second failure mode (Copilot review): the play-queue socket is

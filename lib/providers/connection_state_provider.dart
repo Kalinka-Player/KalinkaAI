@@ -84,10 +84,17 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   /// Whether the user dismissed the 30-second escalation card this session.
   bool escalationDismissed = false;
 
-  /// True when reconnecting has been going for >= 30 seconds.
+  bool _poweredOff = false;
+
+  /// Whether the app went offline because its box was powered off from here.
+  bool get boxPoweredOff => _poweredOff;
+
+  /// True when reconnecting has been going for >= 30 seconds, or the box was
+  /// powered off.
   bool get escalationReached =>
-      _reconnectStartedAt != null &&
-      _monotonicNow - _reconnectStartedAt! >= const Duration(seconds: 30);
+      _poweredOff ||
+      (_reconnectStartedAt != null &&
+          _monotonicNow - _reconnectStartedAt! >= const Duration(seconds: 30));
 
   Duration get _monotonicNow => ref.read(monotonicClockProvider).elapsed;
 
@@ -150,6 +157,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
 
   void connecting() {
     _cancelRetryTimer();
+    _poweredOff = false;
     state = ConnectionStatus.connecting;
   }
 
@@ -157,13 +165,29 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     _cancelRetryTimer();
     _retryCount = 0;
     _reconnectStartedAt = null;
+    _poweredOff = false;
     lastConnectedAt = _now();
     state = ConnectionStatus.connected;
   }
 
   void disconnected() {
     _cancelRetryTimer();
+    _poweredOff = false;
     state = ConnectionStatus.none;
+  }
+
+  /// The box accepted a power-off, so its socket closing is not a drop to
+  /// reconnect from.
+  void poweredOff() {
+    _cancelRetryTimer();
+    _poweredOff = true;
+    escalationDismissed = false;
+    // Already offline, the card still has to change its wording.
+    if (state == ConnectionStatus.offline) {
+      ref.notifyListeners();
+    } else {
+      state = ConnectionStatus.offline;
+    }
   }
 
   /// Begin automatic reconnect attempts every 5 seconds.
@@ -241,6 +265,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   void _leaveOffline() {
     _retryCount = 0;
     _reconnectStartedAt = _monotonicNow;
+    _poweredOff = false;
     state = ConnectionStatus.reconnecting;
   }
 
