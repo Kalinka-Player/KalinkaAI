@@ -726,6 +726,25 @@ void main() {
         );
       }
 
+      test('the display keeps probing until the box is back', () {
+        fakeAsync((async) {
+          final api = _FakeApi(shouldSucceed: false);
+          final container = fakeClockContainer(async, api, kiosk: true);
+          final notifier = container.read(connectionStateProvider.notifier);
+          notifier.connected();
+          notifier.startReconnecting();
+
+          notifier.poweredOff();
+          async.elapse(const Duration(seconds: 60));
+          expect(
+            container.read(connectionStateProvider),
+            ConnectionStatus.reconnecting,
+          );
+          expect(notifier.boxPoweredOff, isFalse);
+          expect(api.listModulesCalls, greaterThanOrEqualTo(12));
+        });
+      });
+
       test('Retry gives the box a fresh 30s window', () {
         fakeAsync((async) {
           final api = _FakeApi(shouldSucceed: false);

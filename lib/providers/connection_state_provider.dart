@@ -186,6 +186,9 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   /// The box is powering off, so its socket closing is not a drop to
   /// reconnect from.
   void poweredOff() {
+    // The display has no Retry button, so it keeps probing until the box is
+    // back on.
+    if (ref.read(kioskActiveProvider)) return;
     _cancelRetryTimer();
     _poweredOff = true;
     _powerOffs++;
