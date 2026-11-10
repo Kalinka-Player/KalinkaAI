@@ -58,12 +58,9 @@ bool kioskRunsOn(RendererInfo renderer) {
 }
 
 /// The Kalinka wordmark, over the line that says what it is where there is
-/// room for it. Tapping it is the way out of a device-locked display.
+/// room for it.
 class KioskLogo extends StatelessWidget {
   final double scale;
-
-  /// Each tap on the mark.
-  final VoidCallback? onTap;
 
   /// `OPEN SOURCE MUSIC STREAMER` under the wordmark.
   final bool tagline;
@@ -74,7 +71,6 @@ class KioskLogo extends StatelessWidget {
   const KioskLogo({
     super.key,
     required this.scale,
-    this.onTap,
     this.tagline = false,
     this.shadowed = false,
   });
@@ -88,61 +84,53 @@ class KioskLogo extends StatelessWidget {
       height: s(52),
       semanticsLabel: 'Kalinka',
     );
-    final header = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (shadowed)
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // The mark's own shape, dark, softened and a pixel lower —
-                // the same shade the text over the cover wears.
-                ExcludeSemantics(
-                  child: Transform.translate(
-                    offset: const Offset(0, 1),
-                    child: ImageFiltered(
-                      imageFilter: ImageFilter.blur(sigmaX: 1.5, sigmaY: 1.5),
-                      child: SvgPicture.asset(
-                        asset,
-                        height: s(52),
-                        colorFilter: const ColorFilter.mode(
-                          Color(0x59000000),
-                          BlendMode.srcIn,
-                        ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (shadowed)
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // The mark's own shape, dark, softened and a pixel lower —
+              // the same shade the text over the cover wears.
+              ExcludeSemantics(
+                child: Transform.translate(
+                  offset: const Offset(0, 1),
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 1.5, sigmaY: 1.5),
+                    child: SvgPicture.asset(
+                      asset,
+                      height: s(52),
+                      colorFilter: const ColorFilter.mode(
+                        Color(0x59000000),
+                        BlendMode.srcIn,
                       ),
                     ),
                   ),
                 ),
-                mark,
-              ],
-            )
-          else
-            mark,
-          if (tagline) ...[
-            SizedBox(height: s(8)),
-            ExcludeSemantics(
-              child: Text(
-                'OPEN SOURCE MUSIC STREAMER',
-                style: KalinkaFonts.mono(
-                  fontSize: s(11),
-                  letterSpacing: s(2.9),
-                  color: KalinkaColors.textPrimary.withValues(alpha: 0.82),
-                  height: 1,
-                ).copyWith(shadows: shadowed ? kioskTextPolish : null),
-                maxLines: 1,
               ),
+              mark,
+            ],
+          )
+        else
+          mark,
+        if (tagline) ...[
+          SizedBox(height: s(8)),
+          ExcludeSemantics(
+            child: Text(
+              'OPEN SOURCE MUSIC STREAMER',
+              style: KalinkaFonts.mono(
+                fontSize: s(11),
+                letterSpacing: s(2.9),
+                color: KalinkaColors.textPrimary.withValues(alpha: 0.82),
+                height: 1,
+              ).copyWith(shadows: shadowed ? kioskTextPolish : null),
+              maxLines: 1,
             ),
-          ],
+          ),
         ],
-      ),
-    );
-    return MouseRegion(
-      cursor: clickCursor(interactive: onTap != null),
-      child: header,
+      ],
     );
   }
 }

@@ -5,7 +5,6 @@ import '../../data_model/data_model.dart' show ModuleInfo;
 import '../../providers/catalog_sources_provider.dart';
 import '../../providers/connection_state_provider.dart';
 import '../../providers/receiver_provider.dart';
-import '../../providers/server_info_provider.dart';
 import '../../providers/shell_nav_provider.dart';
 import '../../utils/schema_icons.dart';
 import '../edge_fading_rail.dart';
@@ -35,7 +34,7 @@ class HomeSourceList extends ConsumerWidget {
         ref.invalidate(catalogSourcesProvider);
       }
     });
-    final configurable = ref.watch(pluginCatalogEnabledProvider);
+    final configurable = ref.watch(configurationAvailableProvider);
     final receivers = showConnect ? ref.watch(enabledReceiversProvider) : [];
     final sources = ref.watch(catalogSourcesProvider);
     if (sources.isLoading && receivers.isEmpty) {

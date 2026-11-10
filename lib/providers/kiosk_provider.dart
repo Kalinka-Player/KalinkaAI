@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../utils/local_platform.dart';
-import 'connection_settings_provider.dart';
 
 /// Whether the app was started as a display: `--dart-define=KALINKA_KIOSK=…`;
 /// failing that a `KALINKA_KIOSK` environment variable, so an installed build
@@ -42,13 +41,10 @@ enum KioskLock {
   /// Opened from the player: the exit button leaves.
   none,
 
-  /// This device's setting: five taps on the logo leave, and turn it off.
-  device,
-
   /// Server display: Home leaves temporarily; inactivity brings it back.
   server,
 
-  /// Started by the launch flag: no way out. Outranks the setting.
+  /// Started by the launch flag: no way out.
   launch,
 }
 
@@ -70,8 +66,6 @@ class KioskState {
 }
 
 class KioskNotifier extends Notifier<KioskState> {
-  static const sharedPrefLocked = 'Kalinka.kioskLocked';
-
   /// Whether this run began on the display, rather than reaching it later.
   bool startedAsDisplay = false;
 
@@ -84,19 +78,12 @@ class KioskNotifier extends Notifier<KioskState> {
       initial = const KioskState(active: true, lock: KioskLock.server);
     } else if (ref.read(kioskLaunchProvider)) {
       initial = const KioskState(active: true, lock: KioskLock.launch);
-    } else if (ref.read(sharedPrefsProvider).getBool(sharedPrefLocked) ??
-        false) {
-      initial = const KioskState(active: true, lock: KioskLock.device);
     } else {
       initial = KioskState.inactive;
     }
     startedAsDisplay = initial.active;
     return initial;
   }
-
-  /// This device's setting, as stored.
-  bool get lockedToDevice =>
-      ref.read(sharedPrefsProvider).getBool(sharedPrefLocked) ?? false;
 
   /// Opens the display from the player.
   void enter() {
@@ -111,21 +98,6 @@ class KioskNotifier extends Notifier<KioskState> {
     if (state.lock == KioskLock.none || state.lock == KioskLock.server) {
       state = KioskState(active: false, lock: state.lock);
     }
-  }
-
-  /// Turns this device's setting on: the display comes up now and on every
-  /// launch after, until five taps on its logo turn it off.
-  Future<void> lockToDevice() async {
-    await ref.read(sharedPrefsProvider).setBool(sharedPrefLocked, true);
-    state = const KioskState(active: true, lock: KioskLock.device);
-  }
-
-  /// Five taps on the logo: leaves a display this device's setting holds, and
-  /// turns the setting off. Does nothing to one the launch flag started.
-  Future<void> unlockDevice() async {
-    if (state.lock != KioskLock.device) return;
-    await ref.read(sharedPrefsProvider).setBool(sharedPrefLocked, false);
-    state = KioskState.inactive;
   }
 }
 

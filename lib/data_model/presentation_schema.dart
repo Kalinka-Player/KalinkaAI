@@ -505,9 +505,7 @@ class ModuleSpec {
   final String kind; // "input_module" | "device"
   final String title;
   final String? icon;
-  final String? iconColor;
   final ModuleIcons? icons;
-  final List<String> previewFields;
   final List<BannerSpec> banners;
   // Top-level scalar fields of the module's config. Backend hoists these
   // out of an auto-generated "General" section so the client renders
@@ -521,9 +519,7 @@ class ModuleSpec {
     required this.kind,
     required this.title,
     this.icon,
-    this.iconColor,
     this.icons,
-    this.previewFields = const [],
     this.banners = const [],
     this.fields = const [],
     this.collections = const [],
@@ -535,11 +531,7 @@ class ModuleSpec {
     kind: j['kind'] as String,
     title: j['title'] as String,
     icon: j['icon'] as String?,
-    iconColor: j['icon_color'] as String?,
     icons: ModuleIcons.tryParse(j['icons']),
-    previewFields: ((j['preview_fields'] as List?) ?? [])
-        .map((e) => e.toString())
-        .toList(),
     banners: _listOf(j['banners'], BannerSpec.fromJson),
     fields: _listOf(j['fields'], FieldSpec.fromJson),
     collections: _listOf(j['collections'], CollectionSpec.fromJson),

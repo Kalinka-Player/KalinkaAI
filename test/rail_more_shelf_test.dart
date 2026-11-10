@@ -11,7 +11,6 @@ import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/catalog_sources_provider.dart';
 import 'package:kalinka/providers/collections_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
-import 'package:kalinka/providers/server_info_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
@@ -45,7 +44,6 @@ Future<void> _pumpRail(
         ),
         collectionsShelfProvider.overrideWith((ref) async => null),
         boxControlProvider.overrideWith((ref) async => null),
-        pluginCatalogEnabledProvider.overrideWithValue(true),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -166,7 +164,6 @@ void main() {
       queue: SettableQueue(queueOf(4)),
       size: const Size(1000, 480),
       overrides: [
-        pluginCatalogEnabledProvider.overrideWithValue(true),
         boxControlProvider.overrideWith(
           (ref) async => const BoxControl(
             SupervisorInfo(

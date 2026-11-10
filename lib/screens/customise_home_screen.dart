@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/box_control_provider.dart';
 import '../providers/catalog_sources_provider.dart';
 import '../providers/pinned_catalogs_provider.dart';
-import '../providers/server_info_provider.dart';
 import '../providers/shell_nav_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/browse_rows_shimmer.dart' show LoadingSpinner;
@@ -126,7 +125,9 @@ class _CustomiseHomeScreenState extends ConsumerState<CustomiseHomeScreen> {
                                           ),
                                     ),
                                     if (noSources &&
-                                        ref.watch(pluginCatalogEnabledProvider))
+                                        ref.watch(
+                                          configurationAvailableProvider,
+                                        ))
                                       KalinkaButton(
                                         label: 'Configure music sources',
                                         variant: KalinkaButtonVariant.neutral,

@@ -99,13 +99,6 @@ extension CollectionEntries on CollectionSpec {
 
   /// Where the server reports on [entry], and on its fields below that.
   String entryPath(Map<String, dynamic> entry) => '$path.${entry['id']}';
-
-  /// [entries] in a few words: the one entry's summary, or how many there are.
-  String previewOf(List<Map<String, dynamic>> entries) => switch (entries) {
-    [] => '',
-    [final entry] => variantOf(entry)?.summaryOf(entry) ?? '',
-    _ => '${entries.length} items',
-  };
 }
 
 extension GroupVariants on GroupSpec {

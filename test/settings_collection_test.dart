@@ -34,7 +34,7 @@ import 'package:kalinka/widgets/settings_controls/settings_binding.dart';
 import 'package:kalinka/widgets/settings_controls/settings_enum_pills.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
-import 'package:kalinka/widgets/settings_renderer.dart' show SchemaModuleCard;
+import 'package:kalinka/widgets/settings_renderer.dart' show SchemaModuleGroups;
 
 const _path = 'input_modules.localfiles.music_sources';
 const _folders = 'input_modules.localfiles.music_folders';
@@ -673,12 +673,11 @@ void main() {
       await _pump(
         tester,
         library(),
-        child: SchemaModuleCard(module: _module, initiallyExpanded: true),
+        child: SchemaModuleGroups(module: _module, gutter: 16),
       );
 
-      expect(find.text('Music sources'), findsOneWidget);
+      expect(find.byType(SchemaCollectionRenderer), findsOneWidget);
       expect(find.text('Music folders'), findsNothing);
-      expect(find.text('2 items · 15'), findsOneWidget);
     });
 
     testWidgets('one in a section still stands in for the module field', (
@@ -699,10 +698,10 @@ void main() {
       await _pump(
         tester,
         library(),
-        child: SchemaModuleCard(module: nested, initiallyExpanded: true),
+        child: SchemaModuleGroups(module: nested, gutter: 16),
       );
 
-      expect(find.text('Music sources'), findsOneWidget);
+      expect(find.byType(SchemaCollectionRenderer), findsOneWidget);
       expect(find.text('Music folders'), findsNothing);
     });
 
@@ -713,17 +712,11 @@ void main() {
       await _pump(
         tester,
         library(),
-        child: SchemaModuleCard(module: older, initiallyExpanded: true),
+        child: SchemaModuleGroups(module: older, gutter: 16),
       );
 
       expect(find.text('Music folders'), findsOneWidget);
-      expect(find.text('Music sources'), findsNothing);
-      expect(find.text('/mnt/usb/Music · 15'), findsOneWidget);
-    });
-
-    test('one source is previewed by where it points', () {
-      expect(_sources.previewOf([_share()]), 'nas.local · Music');
-      expect(_sources.previewOf([]), '');
+      expect(find.byType(SchemaCollectionRenderer), findsNothing);
     });
   });
 

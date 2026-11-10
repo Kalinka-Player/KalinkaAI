@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data_model/presentation_schema.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/app_theme.dart';
-import '../settings_controls/module_header_row.dart' show ModuleHeaderRow;
 import '../settings_controls/settings_card.dart';
 import '../settings_controls/settings_toggle.dart';
 import 'onboarding_fields.dart';
@@ -52,7 +51,7 @@ class _SourceRow extends ConsumerWidget {
     final isLocalFiles = module.id == 'localfiles';
     final enabledField = moduleEnabledField(module);
     final enabled = inputModuleEnabled(state, module);
-    final (icon, iconColor) = ModuleHeaderRow.iconForModule(module.id);
+    final (icon, iconColor) = _iconForModule(module.id);
 
     final sublabel = isLocalFiles
         ? 'Your music folders on the server — always on.'
@@ -113,4 +112,22 @@ class _SourceRow extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// A source's fallback glyph and tint, from its module name.
+(IconData, Color) _iconForModule(String moduleName) {
+  final name = moduleName.toLowerCase();
+  if (name.contains('local') || name.contains('file')) {
+    return (Icons.folder_outlined, KalinkaColors.textSecondary);
+  }
+  if (name.contains('qobuz')) {
+    return (Icons.music_note_outlined, KalinkaColors.gold);
+  }
+  if (name.contains('tidal')) {
+    return (Icons.waves_outlined, const Color(0xFF4AC4D0));
+  }
+  if (name.contains('spotify')) {
+    return (Icons.music_note_outlined, const Color(0xFF1DB954));
+  }
+  return (Icons.extension_outlined, KalinkaColors.textSecondary);
 }

@@ -5,7 +5,6 @@ import '../../data_model/data_model.dart';
 import '../../providers/catalog_sources_provider.dart';
 import '../../providers/connection_state_provider.dart';
 import '../../providers/search_session_provider.dart';
-import '../../providers/server_info_provider.dart';
 import '../../providers/shell_nav_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
@@ -105,7 +104,7 @@ class CatalogCardsSection extends ConsumerWidget {
       Row(
         children: [
           const Expanded(child: ShelfHeading(title: 'MUSIC SOURCES')),
-          if (ref.watch(pluginCatalogEnabledProvider)) ...[
+          if (ref.watch(configurationAvailableProvider)) ...[
             const SizedBox(width: 8),
             IconButton(
               key: const ValueKey('music-sources-settings-button'),

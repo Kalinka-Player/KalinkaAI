@@ -1,6 +1,6 @@
 # Kalinka settings design guide
 
-Settings use one fixed page title, a restrained dark header and directly accessible controls. This specification covers Settings, plugin settings and About, the expert settings list, change review, Download server logs, Output settings and the older Server settings screen. All dimensions are Flutter logical pixels (dp); text sizes are before the system text scaler.
+Settings use one fixed page title, a restrained dark header and directly accessible controls. This specification covers Settings, plugin settings and About, the expert settings list, change review, Download server logs and Output settings. All dimensions are Flutter logical pixels (dp); text sizes are before the system text scaler.
 
 ## Direction and rationale
 
@@ -18,7 +18,7 @@ This is the settings specification. The branded player/search bars and editorial
 2. Optional secondary toolbar for page-specific controls, then the connection notice.
 3. Optional pinned tabs on an overview. Other pages start with an introduction or their first controls.
 4. Independently scrolling content, ending with 32dp breathing room. The host reserves space for the mini-player; content must not render underneath it.
-5. While changes are staged, `PendingChangesBanner` at the foot: the amber bar (count, consequence, Discard, APPLY) that a renderer, Server settings and Settings share. It is laid out under the content, never over it, so the page shrinks to make room and its last controls scroll up into view above the bar. The Settings banner sits under every page it opens; when an issue blocks applying, the bar names it and APPLY becomes REVIEW. Its actions are 48dp targets, and each first leaves the field being typed in, so its text is staged and the keyboard closes. In a field, the keyboard's Done keeps the value and closes the keyboard, and a number is staged as soon as it is one inside its bounds.
+5. While changes are staged, `PendingChangesBanner` at the foot: the amber bar (count, consequence, Discard, APPLY) that a renderer and Settings share. It is laid out under the content, never over it, so the page shrinks to make room and its last controls scroll up into view above the bar. The Settings banner sits under every page it opens; when an issue blocks applying, the bar names it and APPLY becomes REVIEW. Its actions are 48dp targets, and each first leaves the field being typed in, so its text is staged and the keyboard closes. In a field, the keyboard's Done keeps the value and closes the keyboard, and a number is staged as soon as it is one inside its bounds.
 
 Use sentence case: **Download server logs**, **Check your changes**. A renderer's page is titled with the renderer's name alone. Plugin titles include their subject: **Qobuz settings**, **About Qobuz**. Do not add breadcrumbs, a second large title, a logo in place of the title, or a decorative heading icon.
 

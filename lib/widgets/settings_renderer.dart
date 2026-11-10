@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data_model/collection_entry.dart';
-import '../data_model/data_model.dart' show ModuleInfo, ModuleState;
 import '../data_model/presentation_schema.dart';
 import '../providers/connection_settings_provider.dart';
-import '../providers/modules_state_provider.dart';
 import '../providers/server_info_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
@@ -15,7 +12,6 @@ import 'settings_controls/footer_note.dart';
 import 'settings_controls/inline_markdown.dart';
 import 'settings_controls/issue_notes.dart';
 import 'settings_controls/settings_binding.dart';
-import 'settings_controls/module_header_row.dart';
 import 'settings_controls/settings_card.dart';
 import 'settings_controls/settings_combo_input.dart';
 import 'settings_controls/settings_combo_list.dart';
@@ -32,7 +28,6 @@ import 'settings_controls/settings_text_input.dart';
 import 'settings_controls/settings_toggle.dart';
 import 'settings_controls/settings_toggleable_section.dart';
 import 'settings_controls/warning_note.dart';
-import 'modules_empty_state.dart';
 import 'settings_collection.dart';
 
 // ---------------------------------------------------------------------------
@@ -43,13 +38,6 @@ import 'settings_collection.dart';
 /// has none by that name.
 IconData schemaIcon(String? name) =>
     iconNamed(name) ?? Icons.extension_outlined;
-
-Color _colorFromHex(String? hex, Color fallback) {
-  if (hex == null || !hex.startsWith('#')) return fallback;
-  final value = int.tryParse(hex.substring(1), radix: 16);
-  if (value == null) return fallback;
-  return Color(0xFF000000 | value);
-}
 
 // ---------------------------------------------------------------------------
 // Banner
@@ -741,212 +729,6 @@ class _ServerAddressBadge extends ConsumerWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Module card renderer
-// ---------------------------------------------------------------------------
-
-class SchemaModuleCard extends ConsumerStatefulWidget {
-  final ModuleSpec module;
-  final bool initiallyExpanded;
-  const SchemaModuleCard({
-    super.key,
-    required this.module,
-    this.initiallyExpanded = false,
-  });
-
-  @override
-  ConsumerState<SchemaModuleCard> createState() => _SchemaModuleCardState();
-}
-
-class _SchemaModuleCardState extends ConsumerState<SchemaModuleCard> {
-  late bool _expanded;
-
-  @override
-  void initState() {
-    super.initState();
-    _expanded = widget.initiallyExpanded;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final m = widget.module;
-    // Modules only ever appear on the server's own settings page, but they read
-    // values through the same binding as everything else — nothing here needs
-    // to know which store is behind it.
-    final binding = SettingsScope.of(context);
-
-    // Live module state lives at /server/modules — the schema deliberately
-    // doesn't carry it so schema_version doesn't churn on plugin hiccups.
-    final liveSnapshot = ref.watch(modulesStateProvider).value;
-    final ModuleInfo? live = liveSnapshot == null
-        ? null
-        : lookupModule(liveSnapshot, m.id, m.kind);
-    final status = live == null ? null : _moduleStatusFor(live.state);
-    final message = live?.message;
-
-    // Preview subtitle from backend-declared preview_fields.
-    final subtitle = _subtitleFor(m, binding);
-    final icon = schemaIcon(m.icon);
-    final color = _colorFromHex(m.iconColor, KalinkaColors.textSecondary);
-
-    // Hoist a module-level `.enabled` field into the header switch, mirroring
-    // the toggleable-section pattern used for nested sub-features.
-    final enabledField = m.enabledField;
-    final bool? enabledValue = enabledField == null
-        ? null
-        : (binding.effectiveValue(enabledField.path) ??
-                  enabledField.defaultValue ??
-                  false)
-              as bool;
-
-    final hasBody =
-        (message != null && message.isNotEmpty) ||
-        m.banners.isNotEmpty ||
-        SchemaModuleBody.rowsOf(m).isNotEmpty;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      decoration: BoxDecoration(
-        color: KalinkaColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: KalinkaColors.borderSubtle),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ModuleHeaderRow(
-            title: m.title,
-            subtitle: subtitle,
-            icon: icon,
-            icons: live?.icons ?? m.icons,
-            iconColor: color,
-            status: status,
-            expanded: _expanded,
-            onToggle: () => setState(() => _expanded = !_expanded),
-            hasBody: hasBody,
-            enabled: enabledValue,
-            onEnabledChanged: enabledField == null
-                ? null
-                : (v) => binding.stage(enabledField.path, v),
-          ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 340),
-            curve: const Cubic(0.4, 0, 0.2, 1),
-            alignment: Alignment.topCenter,
-            child: _expanded
-                ? SchemaModuleBody(module: m)
-                : const SizedBox.shrink(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  ModuleStatus _moduleStatusFor(ModuleState state) => switch (state) {
-    ModuleState.ready => ModuleStatus.ready,
-    ModuleState.warning => ModuleStatus.warning,
-    ModuleState.error => ModuleStatus.error,
-    ModuleState.disabled => ModuleStatus.disabled,
-  };
-
-  /// Build the subtitle by reading `module.previewFields` from the staged/server values.
-  String _subtitleFor(ModuleSpec m, SettingsBinding binding) {
-    final parts = <String>[];
-    final prefix = m.kind == 'device'
-        ? 'devices.${m.id}'
-        : 'input_modules.${m.id}';
-    for (final name in m.previewFields) {
-      final path = '$prefix.$name';
-      final collection = m.collectionReplacing(path);
-      if (collection != null) {
-        final preview = collection.previewOf(
-          entriesOf(binding.effectiveValue(collection.path)),
-        );
-        if (preview.isNotEmpty) parts.add(preview);
-        continue;
-      }
-      final v = binding.effectiveValue(path);
-      if (v == null) continue;
-      if (v is List) {
-        if (v.isNotEmpty) {
-          parts.add(v.length == 1 ? v.first.toString() : '${v.length} items');
-        }
-      } else if (v is num) {
-        if (v > 0) parts.add(v.toString());
-      } else {
-        final s = v.toString();
-        if (s.isNotEmpty) parts.add(s);
-      }
-    }
-    if (parts.isEmpty) {
-      return m.kind == 'device' ? 'Output device' : 'Input module';
-    }
-    return parts.join(' \u00b7 ');
-  }
-}
-
-/// What a module configures, below its header in [SchemaModuleCard]: its live
-/// message, banners and rows, dimmed while the module is switched off.
-class SchemaModuleBody extends ConsumerWidget {
-  final ModuleSpec module;
-
-  const SchemaModuleBody({super.key, required this.module});
-
-  /// Backend prunes EXPERT content out of the simple page tree, so the only
-  /// filter here is "drop the .enabled field the header shows".
-  static List<Widget> rowsOf(ModuleSpec module) {
-    final replaced = _shownByCollections(module.allCollections);
-    return _rowsOf(
-      _laidOut(
-        module.fields,
-        module.collections,
-        module.sections,
-        hidden: {?module.enabledField},
-        replaced: replaced,
-      ),
-      replaced: replaced,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final binding = SettingsScope.of(context);
-    final liveSnapshot = ref.watch(modulesStateProvider).value;
-    final ModuleInfo? live = liveSnapshot == null
-        ? null
-        : lookupModule(liveSnapshot, module.id, module.kind);
-    final message = live?.message;
-    final enabledField = module.enabledField;
-    final dimmed =
-        enabledField != null &&
-        (binding.effectiveValue(enabledField.path) ??
-                enabledField.defaultValue ??
-                false) ==
-            false;
-
-    return Opacity(
-      opacity: dimmed ? 0.45 : 1.0,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (message != null && message.isNotEmpty)
-            WarningNote(
-              message: message,
-              severity: live?.state == ModuleState.error
-                  ? WarningNoteSeverity.error
-                  : WarningNoteSeverity.warning,
-            ),
-          for (final b in module.banners) SchemaBanner(banner: b),
-          // A divider above each row, so it reads as continuous content under
-          // the header rather than floating.
-          for (final row in rowsOf(module)) ...[_rowDivider, row],
-        ],
-      ),
-    );
-  }
-}
-
 /// A plugin's settings page: what the module configures as labelled cards —
 /// one for each collection, each section, and each run of fields a heading
 /// opens — with nothing folded away. Sections inside a card open in place,
@@ -1157,67 +939,4 @@ class _Group {
   final List<Widget> rows = [];
 
   _Group(this.label, {this.caption});
-}
-
-// ---------------------------------------------------------------------------
-// Page renderer
-// ---------------------------------------------------------------------------
-
-class SchemaPageRenderer extends ConsumerWidget {
-  final PageSpec page;
-
-  /// Drawn after the page's own sections — what the app adds to a page the
-  /// server describes.
-  final Widget? footer;
-
-  const SchemaPageRenderer({super.key, required this.page, this.footer});
-
-  /// True for the output-devices page. Page ids mirror the config paths
-  /// (`devices.*`), so a `device` substring identifies it.
-  bool get _isDevicePage =>
-      page.id.toLowerCase().contains('device') ||
-      page.title.toLowerCase().contains('device');
-
-  /// True for either plugin-backed page (input modules or output devices) —
-  /// the pages whose body is a list of installed plugins.
-  bool get _isPluginPage =>
-      _isDevicePage ||
-      page.id.toLowerCase().contains('module') ||
-      page.title.toLowerCase().contains('module');
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // A modules/devices page with nothing to show means the server has no
-    // plugins of that kind installed. Surface a dedicated empty state telling
-    // the user to install plugins rather than rendering a blank list. The
-    // General page (base_config) always carries sections, so it never trips
-    // this branch.
-    if (_isPluginPage && page.modules.isEmpty && page.sections.isEmpty) {
-      return ModulesEmptyState(isDevice: _isDevicePage);
-    }
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 32),
-      children: [
-        for (final b in page.banners) SchemaBanner(banner: b),
-        for (final s in page.sections)
-          SchemaSectionRenderer(
-            key: ValueKey(s.id),
-            section: s,
-            isTopLevel: true,
-          ),
-        if (page.modules.isNotEmpty) ...[
-          for (int i = 0; i < page.modules.length; i++)
-            Padding(
-              padding: EdgeInsets.only(top: i == 0 ? 8 : 0),
-              child: SchemaModuleCard(
-                key: ValueKey(page.modules[i].id),
-                module: page.modules[i],
-                initiallyExpanded: i == 0,
-              ),
-            ),
-        ],
-        ?footer,
-      ],
-    );
-  }
 }

@@ -303,9 +303,9 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
       ref.read(pluginFailuresProvider.notifier).clear();
       if (_scroll.hasClients) _scroll.jumpTo(0);
     });
-    final enabled = ref.watch(pluginCatalogEnabledProvider);
+    final available = ref.watch(pluginCatalogAvailableProvider);
     final info = ref.watch(serverInfoProvider);
-    final catalog = enabled ? ref.watch(pluginCatalogProvider) : null;
+    final catalog = available ? ref.watch(pluginCatalogProvider) : null;
     final updateCounts = _updateCounts(catalog?.value);
     final settings = ref.watch(settingsProvider);
     final upgrading = ref.watch(upgradeProvider).isUpgrading;
@@ -501,13 +501,30 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                                         child: CircularProgressIndicator(),
                                       ),
                                     )
-                                  else if (!enabled)
+                                  else if (!available)
                                     ..._catalogSlivers(
                                       const PluginCatalog(status: 'disabled'),
                                       gutter,
-                                      notice: const _Notice(
-                                        'Plugin catalog preview is off or unavailable on this server. Enable it on the Streamer tab, with Expert settings on.',
-                                      ),
+                                      // A failed capability check says
+                                      // nothing about what the server offers.
+                                      notice: info.hasError
+                                          ? _Notice(
+                                              'Could not check what this server offers. Try again.',
+                                              onRetry: _reload,
+                                            )
+                                          : info.value?.pluginCatalogOff == true
+                                          ? const _Notice(
+                                              'The plugin catalog is turned off on this server.',
+                                            )
+                                          // It lists one, but the connection
+                                          // is down for now.
+                                          : info.value?.pluginCatalog == true
+                                          ? const _Notice(
+                                              'The plugin catalog is unavailable until the server is connected again.',
+                                            )
+                                          : const _Notice(
+                                              'This server does not offer the plugin catalog.',
+                                            ),
                                     )
                                   else
                                     ...catalog!.when<List<Widget>>(
