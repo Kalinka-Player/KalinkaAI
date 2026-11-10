@@ -79,6 +79,7 @@ class CatalogSectionsView extends ConsumerStatefulWidget {
   /// Content below the pinned header, scrolling with the shelves.
   final Widget header;
   final Widget? sliverHeader;
+  final double topInset;
 
   /// Shown when all eligible shelves are empty.
   final Widget empty;
@@ -93,6 +94,7 @@ class CatalogSectionsView extends ConsumerStatefulWidget {
     required this.revision,
     required this.header,
     this.sliverHeader,
+    this.topInset = 0,
     required this.empty,
     required this.onViewAll,
   });
@@ -181,8 +183,11 @@ class _CatalogSectionsViewState extends ConsumerState<CatalogSectionsView> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      PullToRefresh(onRefresh: _refresh, child: _buildShelves());
+  Widget build(BuildContext context) => PullToRefresh(
+    onRefresh: _refresh,
+    edgeOffset: widget.topInset,
+    child: _buildShelves(),
+  );
 
   Widget _buildShelves() {
     const physics = AlwaysScrollableScrollPhysics();

@@ -228,11 +228,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   // Move the same editable field between the toolbar and its narrow-screen
   // row. Replacing it would discard drafts, selection and the input connection.
   GlobalKey _catalogSearchFieldKey = GlobalKey();
-  // A catalog's bar takes on its collapsing header's surface at the same
-  // pace, so once collapsed the two read as one over the art.
-  final _catalogSurface = ValueNotifier<double>(0);
-  final _catalogOffsets = <int, double>{};
-  final _catalogExtents = <int, double>{};
 
   /// How many of the latest visits stay built under the shown one.
   static const _retainedVisits = 6;
@@ -365,7 +360,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     _discoverCentring.dispose();
     _homeBannerHeight.dispose();
     _albumOffset.dispose();
-    _catalogSurface.dispose();
     _albumHeaderHeight.dispose();
     _albumInsets.dispose();
     _composerController.removeListener(_onTextChange);
@@ -682,7 +676,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       _albumOffset.value = _albumOffsets[visit] ?? 0;
       _albumHeaderHeight.value = _albumHeaderHeights[visit] ?? 0;
       _albumInsets.value = _albumInsetsOf[visit];
-      _catalogSurface.value = _catalogSurfaceOf(visit);
       final kept = {
         for (final each in ref.read(searchSessionProvider).allVisits)
           each.visitId,
@@ -690,8 +683,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       _albumOffsets.removeWhere((id, _) => !kept.contains(id));
       _albumHeaderHeights.removeWhere((id, _) => !kept.contains(id));
       _albumInsetsOf.removeWhere((id, _) => !kept.contains(id));
-      _catalogOffsets.removeWhere((id, _) => !kept.contains(id));
-      _catalogExtents.removeWhere((id, _) => !kept.contains(id));
     });
 
     // ...and drop the flag too, so back does not spend a press closing a card
@@ -754,6 +745,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           final onAlbum =
               albumPage && constraints.maxWidth < kAlbumSideLayoutWidth;
           final wideAlbum = albumPage && !onAlbum;
+          final catalogBehindBar =
+              session.activeView == FindMusicView.catalogs &&
+              !session.catalogPage.isRoot &&
+              !albumPage;
           final chromeHeight =
               MediaQuery.paddingOf(context).top + kKalinkaTopBarHeight;
           _albumStretches =
@@ -901,7 +896,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                           child: _buildHeader(session, overAlbum: true),
                         ),
                       )
-                    else if (!session.atHome && !wideAlbum)
+                    else if (!session.atHome && !wideAlbum && !catalogBehindBar)
                       _buildHeader(session)
                     else
                       const SizedBox.shrink(),
@@ -936,6 +931,21 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                         systemStatusBarContrastEnforced: false,
                       ),
                       child: _buildHeader(session, wideAlbum: true),
+                    ),
+                  ),
+                if (catalogBehindBar)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: const SystemUiOverlayStyle(
+                        statusBarColor: Colors.transparent,
+                        statusBarIconBrightness: Brightness.light,
+                        statusBarBrightness: Brightness.dark,
+                        systemStatusBarContrastEnforced: false,
+                      ),
+                      child: _buildHeader(session),
                     ),
                   ),
                 // On a wide one a card over the pages' bottom right.
@@ -1104,10 +1114,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     });
   }
 
-  void _showCatalogSurface(int id) => _afterLayout(() {
-    if (_isShown(id)) _catalogSurface.value = _catalogSurfaceOf(id);
-  });
-
   Widget _buildVisit(SearchSessionState visit) {
     if (visit.activeView == FindMusicView.results) {
       return visit.resultsAvailable
@@ -1143,52 +1149,47 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           if (notification is ScrollNotification) {
             _forwardAlbumStretch(id, notification);
           }
-        } else if (CatalogSliverHeader.appliesTo(page) &&
-            depth == 0 &&
-            metrics != null &&
-            metrics.axis == Axis.vertical) {
-          _catalogOffsets[id] = math.max(0.0, metrics.pixels);
-          _showCatalogSurface(id);
         }
         if (notification is UserScrollNotification) {
           _closeSearchOnScroll(id, notification);
         }
         return false;
       },
-      child: CatalogPageView(
-        page: page,
-        wideAlbumBehindTopBar: true,
-        onHeaderCollapsed: (collapsed) {
-          if (_catalogHeadersCollapsed[id] == collapsed) return;
-          _catalogHeadersCollapsed[id] = collapsed;
-          if (mounted && _isShown(id)) setState(() {});
-        },
-        onHeaderCollapseExtent: (extent) {
-          _catalogExtents[id] = extent;
-          _showCatalogSurface(id);
-        },
-        onAlbumHeaderHeight: page.isAlbum
-            ? (height) {
-                _albumHeaderHeights[id] = height;
-                if (_isShown(id)) _albumHeaderHeight.value = height;
-              }
-            : null,
-        onAlbumInsets: page.isAlbum
-            ? (insets) {
-                _albumInsetsOf[id] = insets;
-                if (_isShown(id)) _albumInsets.value = insets;
-              }
-            : null,
-        onBackToCatalogs: () =>
-            ref.read(searchSessionProvider.notifier).backToCatalogsRoot(),
+      child: Builder(
+        builder: (context) => CatalogPageView(
+          page: page,
+          topBarInset: page.isAlbum || page.isRoot
+              ? 0
+              : MediaQuery.paddingOf(context).top + _barHeight(context, visit),
+          wideAlbumBehindTopBar: true,
+          onHeaderCollapsed: (collapsed) {
+            if (_catalogHeadersCollapsed[id] == collapsed) return;
+            _catalogHeadersCollapsed[id] = collapsed;
+            if (mounted && _isShown(id)) setState(() {});
+          },
+          onAlbumHeaderHeight: page.isAlbum
+              ? (height) {
+                  _albumHeaderHeights[id] = height;
+                  if (_isShown(id)) _albumHeaderHeight.value = height;
+                }
+              : null,
+          onAlbumInsets: page.isAlbum
+              ? (insets) {
+                  _albumInsetsOf[id] = insets;
+                  if (_isShown(id)) _albumInsets.value = insets;
+                }
+              : null,
+          onBackToCatalogs: () =>
+              ref.read(searchSessionProvider.notifier).backToCatalogsRoot(),
+        ),
       ),
     );
   }
 
   /// The top level's bar is the app's own: wordmark and connection chip.
-  /// Catalog filters stay in their sliver; title and Pin join Back on collapse.
-  /// Results retain their search-and-filters control in this bar.
-  double _barHeight(SearchSessionState session) =>
+  /// Catalog Search, Filters and Grid/List stay in the bar; title and Pin
+  /// join Back on collapse. Results retain their search-and-filters control.
+  double _barHeight(BuildContext context, SearchSessionState session) =>
       session.activeView == FindMusicView.results ||
           (session.activeView == FindMusicView.catalogs &&
               CatalogSliverHeader.appliesTo(session.catalogPage))
@@ -1325,12 +1326,12 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     }
 
     // No opaque fill and no bottom rule — the bar and the content below it
-    // read as one surface, with the Discover glow showing through both. On
-    // a catalog it fills as the header's surface does, over the art.
-    final bar = SafeArea(
+    // read as one surface. Catalog content fades underneath while its art
+    // and these controls retain their own colours.
+    return SafeArea(
       bottom: false,
       child: SizedBox(
-        height: _barHeight(session),
+        height: _barHeight(context, session),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(6, 2, 6, 2),
           child: LayoutBuilder(
@@ -1432,28 +1433,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         ),
       ),
     );
-    if (!catalogChrome) return bar;
-    return ValueListenableBuilder<double>(
-      valueListenable: _catalogSurface,
-      builder: (context, surface, child) => ColoredBox(
-        key: const ValueKey('catalog-bar-surface'),
-        color: KalinkaColors.background.withValues(
-          alpha: _barSearchOpen ? 1 : surface,
-        ),
-        child: child,
-      ),
-      child: bar,
-    );
-  }
-
-  /// How far visit [id]'s catalog header has collapsed, as the opacity of
-  /// its surface.
-  double _catalogSurfaceOf(int id) {
-    final offset = _catalogOffsets[id] ?? 0;
-    final extent = _catalogExtents[id];
-    if (extent == null) return 0;
-    if (extent <= 0) return offset > 0 ? 1 : 0;
-    return (offset / extent).clamp(0.0, 1.0);
   }
 
   /// Puts [text] in as the shown catalog's search, unless another visit has
@@ -1587,7 +1566,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   Widget _buildUnrolledSearch(SearchSessionState session) {
     final search = _barSearchOf(session)!;
     return Positioned(
-      top: MediaQuery.paddingOf(context).top + _barHeight(session),
+      top: MediaQuery.paddingOf(context).top + _barHeight(context, session),
       left: 0,
       right: 0,
       child: _Unroll(
@@ -1824,7 +1803,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     final page = session.catalogPage;
     final onResults = session.activeView == FindMusicView.results;
     final topInset = MediaQuery.paddingOf(context).top;
-    final targetTop = topInset + _barHeight(session);
+    final targetTop = topInset + _barHeight(context, session);
 
     final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
 
