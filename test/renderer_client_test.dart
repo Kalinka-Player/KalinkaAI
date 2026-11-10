@@ -4,13 +4,26 @@ import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:fixnum/fixnum.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/generated/kalinka/renderer/v1/renderer.pb.dart' as pb;
+import 'package:kalinka/providers/connection_settings_provider.dart';
+import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/renderer_host_provider.dart';
+import 'package:kalinka/providers/websocket_provider.dart'
+    show rendererSocketRetryEpochProvider;
 import 'package:kalinka/renderer/renderer_backend.dart';
 import 'package:kalinka/renderer/renderer_connection.dart';
 import 'package:kalinka/renderer/renderer_engine.dart';
 import 'package:kalinka/renderer/renderer_identity.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class _Connection extends ConnectionStateNotifier {
+  @override
+  ConnectionStatus build() => ConnectionStatus.connected;
+
+  void set(ConnectionStatus next) => state = next;
+}
 
 class FakeBackend implements RendererAudioBackend {
   final _events = StreamController<BackendEvent>.broadcast(sync: true);
@@ -98,8 +111,9 @@ class FakeBackend implements RendererAudioBackend {
       sampleFormat: sampleFormat,
     ),
   );
-  void duration({int durationMs = 300000, int? forGeneration}) =>
-      emit(BackendDuration(forGeneration ?? generation, durationMs: durationMs));
+  void duration({int durationMs = 300000, int? forGeneration}) => emit(
+    BackendDuration(forGeneration ?? generation, durationMs: durationMs),
+  );
 }
 
 const identity = RendererIdentity(
@@ -864,6 +878,72 @@ void main() {
       });
     },
   );
+
+  test('renderer socket backoff waits while held until resumed', () {
+    fakeAsync((async) {
+      var retries = 0;
+      var held = true;
+      final backoff = RendererReconnectBackoff(
+        () => retries++,
+        held: () => held,
+      );
+      backoff.failed();
+      async.elapse(const Duration(minutes: 5));
+      expect(retries, 0);
+      held = false;
+      backoff.resume();
+      expect(retries, 1);
+      backoff.resume();
+      expect(retries, 1);
+
+      // Held while its delay runs.
+      backoff.failed();
+      held = true;
+      async.elapse(const Duration(minutes: 5));
+      expect(retries, 1);
+      held = false;
+      backoff.resume();
+      expect(retries, 2);
+
+      backoff.failed();
+      async.elapse(const Duration(seconds: 4));
+      expect(retries, 3);
+      backoff.dispose();
+    });
+  });
+
+  test('the renderer socket stops retrying while the server is offline', () {
+    fakeAsync((async) {
+      SharedPreferences.setMockInitialValues({
+        'Kalinka.host': 'kalinka.local',
+        'Kalinka.port': 8000,
+      });
+      late SharedPreferences prefs;
+      SharedPreferences.getInstance().then((p) => prefs = p);
+      async.flushMicrotasks();
+      final connection = _Connection();
+      final container = ProviderContainer(
+        overrides: [
+          sharedPrefsProvider.overrideWithValue(prefs),
+          connectionStateProvider.overrideWith(() => connection),
+        ],
+      );
+      addTearDown(container.dispose);
+      int epoch() => container.read(rendererSocketRetryEpochProvider);
+      final backoff = container.read(rendererReconnectBackoffProvider);
+
+      connection.poweredOff();
+      backoff.failed();
+      async.elapse(const Duration(minutes: 5));
+      expect(epoch(), 0);
+
+      connection.set(ConnectionStatus.reconnecting);
+      expect(epoch(), 1);
+      backoff.failed();
+      async.elapse(const Duration(seconds: 2));
+      expect(epoch(), 2);
+    });
+  });
 
   test('an unexpected renderer socket close requests one retry', () async {
     final backend = FakeBackend();

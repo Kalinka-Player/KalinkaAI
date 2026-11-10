@@ -11,6 +11,7 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
+import 'package:kalinka/providers/power_off_status_provider.dart';
 import 'package:kalinka/providers/server_info_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
@@ -19,6 +20,7 @@ import 'package:kalinka/providers/websocket_provider.dart';
 import 'package:kalinka/screens/music_player_screen.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/box_actions.dart';
+import 'package:kalinka/widgets/escalation_card.dart';
 import 'package:kalinka/widgets/kalinka_bottom_sheet.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/kalinka_toast_overlay.dart';
@@ -190,6 +192,17 @@ final _confirm = find.descendant(
   matching: find.text('Power off'),
 );
 
+ConnectionStatus _status(WidgetTester tester) =>
+    ProviderScope.containerOf(tester.element(find.byType(MaterialApp)))
+        .read(connectionStateProvider);
+
+/// Offline, Home's shimmer never settles.
+Future<void> _confirmPowerOff(WidgetTester tester) async {
+  await tester.tap(_confirm);
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 1));
+}
+
 void main() {
   for (final size in [
     const Size(375, 812),
@@ -294,6 +307,67 @@ void main() {
       expect(box.scheduled, [(minutes, 'server-1')]);
       expect(box.runs, isEmpty);
       expect(find.text('The streamer is busy.'), findsOneWidget);
+      expect(_status(tester), ConnectionStatus.connected);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    });
+  }
+
+  // The app cannot tell when a timer fires, so its drop stays a drop.
+  for (final minutes in [30, 60, 90]) {
+    testWidgets('a $minutes-minute timer leaves the connection alone', (
+      tester,
+    ) async {
+      final box = _Box(scheduling: true);
+      await _pumpPlayer(tester, size: const Size(375, 812), box: box);
+      await _askToPowerOff(tester);
+      await tester.tap(find.byKey(const ValueKey('power-off-delay')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('$minutes mins').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Set timer'));
+      await tester.pumpAndSettle();
+      expect(box.scheduled, [(minutes, 'server-1')]);
+      expect(_status(tester), ConnectionStatus.connected);
+      expect(find.byKey(EscalationCard.cardKey), findsNothing);
+      // Kept so the drop when it fires is taken for the power-off.
+      final due = ProviderScope.containerOf(
+        tester.element(find.byType(MaterialApp)),
+      ).read(scheduledPowerOffProvider);
+      expect(due?.serverId, 'server-1');
+      expect(
+        due!.at.difference(DateTime.now()).inSeconds,
+        closeTo(minutes * 60, 60),
+      );
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    });
+  }
+
+  for (final (power, off) in [('powering_off', true), ('restarting', false)]) {
+    testWidgets('a refusal from a box already ${power.replaceAll('_', ' ')} '
+        '${off ? 'shows it powered off' : 'leaves the connection alone'}', (
+      tester,
+    ) async {
+      const busy = 'The streamer is already restarting or powering off.';
+      final box = _Box()
+        ..refusal = const BoxActionException('shutting_down', busy)
+        ..power = BoxPowerStatus(serverId: 'server-1', state: power);
+      await _pumpPlayer(tester, size: const Size(375, 812), box: box);
+      await _askToPowerOff(tester);
+      await _confirmPowerOff(tester);
+
+      expect(box.runs, [(BoxAction.powerOff, 'server-1')]);
+      expect(find.text(busy), findsOneWidget);
+      expect(
+        _status(tester),
+        off ? ConnectionStatus.offline : ConnectionStatus.connected,
+      );
+      expect(
+        find.byKey(EscalationCard.cardKey),
+        off ? findsOneWidget : findsNothing,
+      );
+      await tester.pump(const Duration(seconds: 10));
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
     });
@@ -312,10 +386,10 @@ void main() {
     await _askToPowerOff(tester);
     expect(find.text('Now'), findsOneWidget);
     expect(find.text('Cancel power-off'), findsNothing);
-    await tester.tap(_confirm);
-    await tester.pumpAndSettle();
+    await _confirmPowerOff(tester);
     expect(box.runs, [(BoxAction.powerOff, 'server-1')]);
     expect(box.scheduled, isEmpty);
+    expect(_status(tester), ConnectionStatus.offline);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();
   });
@@ -413,7 +487,8 @@ void main() {
     testWidgets('$layout menu shuts down only after confirmation', (
       tester,
     ) async {
-      final box = _Box();
+      // A box that could restart its server, which a powered-off one cannot.
+      final box = _Box(actions: {'poweroff', 'restart_core'});
       final prefs = await _pumpPlayer(tester, size: size, box: box);
 
       await _askToPowerOff(tester);
@@ -432,14 +507,28 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(BoxActionDialog), findsNothing);
       expect(box.runs, isEmpty);
+      expect(_status(tester), ConnectionStatus.connected);
 
       await _askToPowerOff(tester);
-      await tester.tap(_confirm);
-      await tester.pumpAndSettle();
+      await _confirmPowerOff(tester);
       expect(box.runs, [(BoxAction.powerOff, 'server-1')]);
       expect(find.textContaining('Powering off.'), findsOneWidget);
       expect(prefs.getString('Kalinka.host'), 'kalinka.local');
+      expect(_status(tester), ConnectionStatus.offline);
+      final card = find.byKey(EscalationCard.cardKey);
+      expect(card, findsOneWidget);
+      for (final label in ['Scan for servers', 'Retry']) {
+        expect(
+          find.descendant(of: card, matching: find.text(label)),
+          findsOneWidget,
+        );
+      }
+      expect(find.text('Restart server'), findsNothing);
+      expect(find.textContaining('Reconnecting'), findsNothing);
       await tester.pump(const Duration(seconds: 10));
+      expect(_status(tester), ConnectionStatus.offline);
+      expect(find.textContaining('Reconnecting'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
     });
 
@@ -454,6 +543,8 @@ void main() {
       expect(box.runs, [(BoxAction.powerOff, 'server-1')]);
       expect(find.text('The streamer is busy.'), findsOneWidget);
       expect(find.textContaining('Powering off.'), findsNothing);
+      expect(_status(tester), ConnectionStatus.connected);
+      expect(find.byKey(EscalationCard.cardKey), findsNothing);
       await tester.pump(const Duration(seconds: 10));
       await tester.pumpAndSettle();
     });

@@ -84,10 +84,22 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   /// Whether the user dismissed the 30-second escalation card this session.
   bool escalationDismissed = false;
 
-  /// True when reconnecting has been going for >= 30 seconds.
+  bool _poweredOff = false;
+  int _powerOffs = 0;
+
+  /// Whether the app went offline because its box was powered off.
+  bool get boxPoweredOff => _poweredOff;
+
+  /// Counts [poweredOff] calls, so a socket that began opening before the
+  /// latest one can tell its open is stale.
+  int get powerOffs => _powerOffs;
+
+  /// True when reconnecting has been going for >= 30 seconds, or the box was
+  /// powered off.
   bool get escalationReached =>
-      _reconnectStartedAt != null &&
-      _monotonicNow - _reconnectStartedAt! >= const Duration(seconds: 30);
+      _poweredOff ||
+      (_reconnectStartedAt != null &&
+          _monotonicNow - _reconnectStartedAt! >= const Duration(seconds: 30));
 
   Duration get _monotonicNow => ref.read(monotonicClockProvider).elapsed;
 
@@ -121,7 +133,9 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
       _backgroundedAt = null;
 
       // Foregrounded: restart reconnection immediately, unless it is held.
-      if (state.isInterrupted && !_paused) {
+      if (_poweredOff && !_paused) {
+        _tryPoweredOffBox();
+      } else if (state.isInterrupted && !_paused) {
         // If we'd escalated to `offline`, drop back into the active reconnect
         // cycle with a fresh escalation window before retrying. The event
         // socket hangs while `offline` (see websocket_provider), so it must see
@@ -150,6 +164,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
 
   void connecting() {
     _cancelRetryTimer();
+    _poweredOff = false;
     state = ConnectionStatus.connecting;
   }
 
@@ -157,13 +172,33 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     _cancelRetryTimer();
     _retryCount = 0;
     _reconnectStartedAt = null;
+    _poweredOff = false;
     lastConnectedAt = _now();
     state = ConnectionStatus.connected;
   }
 
   void disconnected() {
     _cancelRetryTimer();
+    _poweredOff = false;
     state = ConnectionStatus.none;
+  }
+
+  /// The box is powering off, so its socket closing is not a drop to
+  /// reconnect from.
+  void poweredOff() {
+    // The display has no Retry button, so it keeps probing until the box is
+    // back on.
+    if (ref.read(kioskActiveProvider)) return;
+    _cancelRetryTimer();
+    _poweredOff = true;
+    _powerOffs++;
+    escalationDismissed = false;
+    // Already offline, the card still has to change its wording.
+    if (state == ConnectionStatus.offline) {
+      ref.notifyListeners();
+    } else {
+      state = ConnectionStatus.offline;
+    }
   }
 
   /// Begin automatic reconnect attempts every 5 seconds.
@@ -228,6 +263,10 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     if (!offline) _reconnectStartedAt = _monotonicNow;
     // While backgrounded, resuming the app starts the timer.
     if (ref.read(appLifecycleProvider) != AppLifecycleState.resumed) return;
+    if (_poweredOff && !retryAsked) {
+      _tryPoweredOffBox();
+      return;
+    }
     if (offline) {
       _leaveOffline();
       // Only a retry shows a dismissed escalation card again.
@@ -241,7 +280,26 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   void _leaveOffline() {
     _retryCount = 0;
     _reconnectStartedAt = _monotonicNow;
+    _poweredOff = false;
     state = ConnectionStatus.reconnecting;
+  }
+
+  /// Asks a powered-off box once whether it is back, and only reconnects if
+  /// it answers: it stays off until someone turns it on.
+  Future<void> _tryPoweredOffBox() async {
+    _probesInFlight++;
+    try {
+      await ref.read(kalinkaProxyProvider).listModules();
+    } on Exception {
+      return;
+    } finally {
+      _probesInFlight--;
+    }
+    // A retry, a pause or another server may have taken over meanwhile.
+    if (!ref.mounted || !_poweredOff || _paused) return;
+    _leaveOffline();
+    _startRetryTimer();
+    ref.read(retryEpochProvider.notifier).increment();
   }
 
   Future<void> _attemptReconnect() async {

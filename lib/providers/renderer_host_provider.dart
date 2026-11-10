@@ -14,6 +14,7 @@ import '../renderer/renderer_engine.dart';
 import '../renderer/renderer_identity.dart';
 import '../renderer/renderer_platform.dart';
 import 'connection_settings_provider.dart';
+import 'connection_state_provider.dart';
 import 'demo_mode.dart';
 import 'renderer_provider.dart';
 import 'websocket_provider.dart';
@@ -60,30 +61,55 @@ class RendererReconnectBackoff {
   ];
 
   final void Function() _retry;
+
+  /// Whether a retry waits for [resume] instead of running.
+  final bool Function() _held;
   Timer? _timer;
   int _attempt = 0;
   bool _terminal = false;
+  bool _waiting = false;
 
-  RendererReconnectBackoff(this._retry);
+  RendererReconnectBackoff(this._retry, {bool Function()? held})
+    : _held = held ?? _never;
+
+  static bool _never() => false;
 
   void connected() {
     _timer?.cancel();
     _timer = null;
     _attempt = 0;
+    _waiting = false;
   }
 
   void failed() {
-    if (_terminal || _timer != null) return;
+    if (_terminal || _timer != null || _waiting) return;
+    if (_held()) {
+      _waiting = true;
+      return;
+    }
     final index = _attempt < _delays.length ? _attempt : _delays.length - 1;
     _attempt++;
     _timer = Timer(_delays[index], () {
       _timer = null;
-      if (!_terminal) _retry();
+      if (_terminal) return;
+      if (_held()) {
+        _waiting = true;
+      } else {
+        _retry();
+      }
     });
+  }
+
+  /// Runs the retry that waited while held.
+  void resume() {
+    if (!_waiting || _terminal) return;
+    _waiting = false;
+    _retry();
   }
 
   void giveUp() {
     _terminal = true;
+    _waiting = false;
     _timer?.cancel();
     _timer = null;
   }
@@ -99,10 +125,20 @@ final rendererReconnectBackoffProvider = Provider<RendererReconnectBackoff>((
 ) {
   // Terminal rejection applies only to the current endpoint.
   ref.watch(connectionSettingsProvider.select((settings) => settings.address));
-  final backoff = RendererReconnectBackoff(() {
-    if (ref.mounted) {
-      ref.read(rendererSocketRetryEpochProvider.notifier).increment();
-    }
+  // Offline, the UI sockets wait for a retry or the box to answer; so does
+  // this one, rather than knock on a switched-off box forever.
+  final backoff = RendererReconnectBackoff(
+    () {
+      if (ref.mounted) {
+        ref.read(rendererSocketRetryEpochProvider.notifier).increment();
+      }
+    },
+    held: () =>
+        ref.mounted &&
+        ref.read(connectionStateProvider) == ConnectionStatus.offline,
+  );
+  ref.listen<ConnectionStatus>(connectionStateProvider, (_, next) {
+    if (next != ConnectionStatus.offline) backoff.resume();
   });
   ref.onDispose(backoff.dispose);
   return backoff;
