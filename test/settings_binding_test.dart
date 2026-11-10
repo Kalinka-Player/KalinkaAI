@@ -97,7 +97,12 @@ Widget _wrap(SettingsBinding binding) => ProviderScope(
     home: Scaffold(
       body: SettingsScope(
         binding: binding,
-        child: const SchemaPageRenderer(page: _page),
+        child: ListView(
+          children: [
+            for (final section in _page.sections)
+              SchemaSectionRenderer(section: section, isTopLevel: true),
+          ],
+        ),
       ),
     ),
   ),

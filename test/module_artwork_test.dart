@@ -17,7 +17,6 @@ import 'package:kalinka/providers/catalog_sources_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/module_icon_cache.dart';
 import 'package:kalinka/providers/plugin_state.dart';
-import 'package:kalinka/providers/server_info_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/theme/app_theme.dart';
@@ -371,7 +370,6 @@ void main() {
             connectionStateProvider.overrideWithBuild(
               (ref, notifier) => ConnectionStatus.connected,
             ),
-            pluginCatalogEnabledProvider.overrideWithValue(false),
             catalogSourcesProvider.overrideWith(
               (ref) async => [
                 (

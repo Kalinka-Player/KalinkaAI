@@ -324,25 +324,6 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
 
   void _exit() => ref.read(kioskProvider.notifier).exit();
 
-  static const _logoTapsToLeave = 5;
-  static const _logoTapWindow = Duration(milliseconds: 1500);
-  int _logoTaps = 0;
-  DateTime? _lastLogoTap;
-
-  /// Five quick taps on the logo leave a display this device's setting holds.
-  void _onLogoTap() {
-    final now = DateTime.now();
-    final last = _lastLogoTap;
-    _logoTaps = last != null && now.difference(last) <= _logoTapWindow
-        ? _logoTaps + 1
-        : 1;
-    _lastLogoTap = now;
-    if (_logoTaps >= _logoTapsToLeave) {
-      _logoTaps = 0;
-      ref.read(kioskProvider.notifier).unlockDevice();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final track = ref.watch(
@@ -376,10 +357,9 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
         ? null
         : (track.smallImage ?? track.largeImage);
     final imagePath = standby ? null : (track.largeImage ?? track.smallImage);
-    // Opened from the player, the way out is in plain sight. Held by this
-    // device's setting, it is five taps on the logo; started by the launch
-    // flag, there is none except on the server's local display, where Home
-    // temporarily returns to the main interface.
+    // Opened from the player, the way out is in plain sight. Started by the
+    // launch flag, there is none except on the server's local display, where
+    // Home temporarily returns to the main interface.
     final lock = ref.watch(kioskProvider.select((s) => s.lock));
     final showHome = lock == KioskLock.server;
     final canExit = lock == KioskLock.none;
@@ -498,9 +478,6 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                           showHome: showHome,
                           controlsUp: controlsUp,
                           away: away,
-                          onLogoTap: lock == KioskLock.device
-                              ? _onLogoTap
-                              : null,
                           onOutputTap: volume || outputs ? _openOutputs : null,
                         ),
                       ),
@@ -626,7 +603,6 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     required bool showHome,
     required bool controlsUp,
     required bool away,
-    required VoidCallback? onLogoTap,
     required VoidCallback? onOutputTap,
   }) {
     double s(double v) => v * scale;
@@ -654,7 +630,6 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     // wordmark has room again.
     final logo = KioskLogo(
       scale: fill ? math.max(scale * 0.75, 0.52) : header,
-      onTap: onLogoTap,
       tagline: fill && scale >= 1.4,
       shadowed: fill,
     );

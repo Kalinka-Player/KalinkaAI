@@ -197,7 +197,7 @@ final pluginCatalogApiProvider = Provider<PluginCatalogApi>(
 
 final pluginCatalogProvider = FutureProvider.autoDispose<PluginCatalog>(
   (ref) async {
-    if (!ref.watch(pluginCatalogEnabledProvider)) {
+    if (!ref.watch(pluginCatalogAvailableProvider)) {
       return const PluginCatalog(status: 'disabled');
     }
     final api = ref.watch(pluginCatalogApiProvider);

@@ -159,11 +159,8 @@ Future<ProviderContainer> _pump(
     settingsProvider.overrideWith(_Settings.new),
     restartProvider.overrideWith(_Restart.new),
     serverInfoProvider.overrideWith(
-      (ref) async => const ServerInfo(
-        version: 'test',
-        latencyMs: 1,
-        pluginCatalogEnabled: true,
-      ),
+      (ref) async =>
+          const ServerInfo(version: 'test', latencyMs: 1, pluginCatalog: true),
     ),
     modulesStateProvider.overrideWithBuild(
       (ref, _) async =>

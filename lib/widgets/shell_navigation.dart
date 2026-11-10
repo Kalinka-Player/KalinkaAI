@@ -12,7 +12,7 @@ import '../providers/collections_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/receiver_provider.dart';
 import '../providers/search_session_provider.dart';
-import '../providers/server_info_provider.dart';
+import '../providers/shell_nav_provider.dart';
 import '../providers/source_modules_provider.dart' show colorForSourceName;
 import '../providers/supervisor_api.dart';
 import '../theme/app_theme.dart';
@@ -205,7 +205,6 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Divider(height: 1, color: KalinkaColors.borderSubtle),
     );
-    final configuration = ref.watch(pluginCatalogEnabledProvider);
     final List<_Control> controls = [
       if (box?.offers(BoxAction.reboot) ?? false)
         (
@@ -317,7 +316,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
     ];
     // At the rail's foot.
     final foot = <_Item>[
-      if (configuration)
+      if (ref.watch(configurationAvailableProvider))
         destination(
           'configuration',
           'Settings',

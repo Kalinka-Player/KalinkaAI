@@ -33,7 +33,7 @@ import '../widgets/soundcard_row.dart';
 /// values live on the renderer: they are read from it on demand, written path
 /// by path, and apply without restarting the server.
 ///
-/// Hosted the same way as [SettingsScreen] — a [SlideInPanel] the host places
+/// Hosted the same way as Configuration — a [SlideInPanel] the host places
 /// over the whole screen on phone and inside the browsing pane on tablet.
 class RendererSettingsScreen extends ConsumerStatefulWidget {
   final String rendererId;

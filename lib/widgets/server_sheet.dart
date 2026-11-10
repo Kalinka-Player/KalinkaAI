@@ -9,15 +9,16 @@ import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/demo_mode.dart';
 import '../providers/server_info_provider.dart';
+import '../providers/shell_nav_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../theme/app_theme.dart';
 import 'kalinka_bottom_sheet.dart';
 
 /// Actions that can be returned from the server sheet.
-enum ServerSheetAction { openSettings, openDiscovery, openPlugins, powerOff }
+enum ServerSheetAction { openDiscovery, openPlugins, powerOff }
 
-/// Content body for the server sheet — used directly by [showKalinkaBottomSheet]
-/// on phone, and wrapped by [ServerSheet] (with animation/scrim) on tablet.
+/// The server menu's body, shown through [showKalinkaBottomSheet]: a bottom
+/// sheet on phone, a dialog on wider windows.
 class ServerSheetContent extends ConsumerWidget {
   const ServerSheetContent({super.key});
 
@@ -46,23 +47,10 @@ class ServerSheetContent extends ConsumerWidget {
           const SizedBox(height: 4),
           // Separator
           const SheetDivider(),
-          // Configuration replaces Server settings once the server opts in.
-          if (ref.watch(pluginCatalogEnabledProvider))
+          if (ref.watch(configurationAvailableProvider))
             _PluginsRow(
               onTap: () =>
                   Navigator.pop(context, ServerSheetAction.openPlugins),
-            )
-          else
-            SheetRow(
-              icon: Icons.settings_outlined,
-              iconBackground: KalinkaColors.surfaceOverlay,
-              iconColor: KalinkaColors.textSecondary,
-              label: 'Server settings',
-              sublabel: 'Modules, audio, enrichment',
-              trailing: const SheetChevron(),
-              onTap: () {
-                Navigator.pop(context, ServerSheetAction.openSettings);
-              },
             ),
           // Web is bound to its serving origin — no discovery, no disconnect.
           if (!kIsWeb) ...[
@@ -293,251 +281,6 @@ class _DemoPill extends StatelessWidget {
           letterSpacing: 0.8,
         ),
       ),
-    );
-  }
-}
-
-/// Tablet-only: server sheet with its own animation and scrim, at most
-/// [kSheetMaxWidth] wide and centred on the pane like the other sheets.
-///
-/// On phone, use [showKalinkaBottomSheet] with [ServerSheetContent] instead.
-class ServerSheet extends ConsumerStatefulWidget {
-  final VoidCallback onClose;
-  final VoidCallback onOpenDiscovery;
-  final VoidCallback onOpenSettings;
-  final VoidCallback onOpenPlugins;
-  final VoidCallback onPowerOff;
-
-  const ServerSheet({
-    super.key,
-    required this.onClose,
-    required this.onOpenDiscovery,
-    required this.onOpenSettings,
-    required this.onOpenPlugins,
-    required this.onPowerOff,
-  });
-
-  @override
-  ConsumerState<ServerSheet> createState() => _ServerSheetState();
-}
-
-class _ServerSheetState extends ConsumerState<ServerSheet>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _slideController;
-  late Animation<Offset> _slideAnimation;
-  late Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _slideController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 320),
-    );
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
-        .animate(
-          CurvedAnimation(
-            parent: _slideController,
-            curve: const Cubic(0.4, 0, 0.2, 1),
-          ),
-        );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _slideController,
-        curve: const Interval(0.0, 0.75, curve: Curves.easeOut),
-      ),
-    );
-    _slideController.forward();
-  }
-
-  @override
-  void dispose() {
-    _slideController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _animateClose() async {
-    await _slideController.reverse();
-    widget.onClose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: GestureDetector(
-        onTap: _animateClose,
-        child: Container(
-          color: Colors.black.withValues(alpha: 0.60),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Flexible(
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: kSheetMaxWidth),
-                    child: GestureDetector(
-                      onTap: () {}, // Prevent backdrop tap from passing through
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: KalinkaColors.surfaceDialog,
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(24),
-                          ),
-                          border: const Border(
-                            top: BorderSide(color: KalinkaColors.borderDefault),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.7),
-                              blurRadius: 60,
-                              offset: const Offset(0, -20),
-                            ),
-                          ],
-                        ),
-                        child: SafeArea(
-                          top: false,
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                // Drag handle
-                                Center(
-                                  child: Container(
-                                    width: 36,
-                                    height: 4,
-                                    margin: const EdgeInsets.only(top: 12),
-                                    decoration: BoxDecoration(
-                                      color: KalinkaColors.surfaceOverlay,
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  ),
-                                ),
-                                Flexible(
-                                  child: SingleChildScrollView(
-                                    child: _TabletServerSheetContent(
-                                      onClose: _animateClose,
-                                      onOpenPlugins: () async {
-                                        await _animateClose();
-                                        widget.onOpenPlugins();
-                                      },
-                                      onOpenSettings: () async {
-                                        await _animateClose();
-                                        widget.onOpenSettings();
-                                      },
-                                      onOpenDiscovery: () async {
-                                        await _animateClose();
-                                        widget.onOpenDiscovery();
-                                      },
-                                      onPowerOff: () async {
-                                        await _animateClose();
-                                        widget.onPowerOff();
-                                      },
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Tablet-specific content that uses callback-based actions (animate-close
-/// before triggering the next screen), unlike [ServerSheetContent] which
-/// uses Navigator.pop with result values.
-class _TabletServerSheetContent extends ConsumerWidget {
-  final Future<void> Function() onClose;
-  final VoidCallback onOpenSettings;
-  final VoidCallback onOpenDiscovery;
-  final VoidCallback onOpenPlugins;
-  final VoidCallback onPowerOff;
-
-  const _TabletServerSheetContent({
-    required this.onClose,
-    required this.onOpenSettings,
-    required this.onOpenDiscovery,
-    required this.onOpenPlugins,
-    required this.onPowerOff,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final connectionState = ref.watch(connectionStateProvider);
-    final settings = ref.watch(connectionSettingsProvider);
-    final serverInfo = ref.watch(serverInfoProvider);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Section label
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
-          child: Text('SERVER', style: KalinkaTextStyles.sectionHeaderMuted),
-        ),
-        // Status card
-        _ServerStatusCard(
-          connectionState: connectionState,
-          settings: settings,
-          serverInfo: serverInfo,
-        ),
-        const SizedBox(height: 4),
-        const SheetDivider(),
-        // Configuration replaces Server settings once the server opts in.
-        if (ref.watch(pluginCatalogEnabledProvider))
-          _PluginsRow(onTap: onOpenPlugins)
-        else
-          SheetRow(
-            icon: Icons.settings_outlined,
-            iconBackground: KalinkaColors.surfaceOverlay,
-            iconColor: KalinkaColors.textSecondary,
-            label: 'Server settings',
-            sublabel: 'Modules, audio, enrichment',
-            trailing: const SheetChevron(),
-            onTap: onOpenSettings,
-          ),
-        // Web is bound to its serving origin — no discovery, no disconnect.
-        if (!kIsWeb) ...[
-          const SheetDivider(),
-          SheetRow(
-            icon: Icons.language,
-            iconBackground: KalinkaColors.surfaceOverlay,
-            iconColor: KalinkaColors.textSecondary,
-            label: 'Connect to different server',
-            sublabel: 'Scan network for other instances',
-            trailing: const SheetChevron(),
-            onTap: onOpenDiscovery,
-          ),
-          const SheetDivider(),
-          SheetRow(
-            icon: Icons.logout,
-            iconBackground: KalinkaColors.accent.withValues(alpha: 0.14),
-            iconColor: KalinkaColors.accent,
-            label: 'Disconnect',
-            onTap: () async {
-              await ref.read(connectionSettingsProvider.notifier).clearDevice();
-              ref.read(connectionStateProvider.notifier).disconnected();
-              await onClose();
-            },
-          ),
-        ],
-        _PowerOffRow(onTap: onPowerOff),
-        const _AppVersionFooter(),
-      ],
     );
   }
 }

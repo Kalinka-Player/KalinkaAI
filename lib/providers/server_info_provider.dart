@@ -2,14 +2,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'kalinka_player_api_provider.dart';
 import 'connection_state_provider.dart';
-import 'settings_provider.dart';
-
-const pluginCatalogSettingPath = 'base_config.server.plugin_catalog_enabled';
 
 class ServerInfo {
   final String version;
   final int latencyMs;
-  final bool pluginCatalogEnabled;
+
+  /// The server lists the public plugin catalog.
+  final bool pluginCatalog;
+
+  /// The server could list the catalog, but has it turned off.
+  final bool pluginCatalogOff;
 
   /// The server installs, removes and updates catalog plugins itself.
   final bool pluginInstallation;
@@ -26,7 +28,8 @@ class ServerInfo {
   const ServerInfo({
     required this.version,
     required this.latencyMs,
-    this.pluginCatalogEnabled = false,
+    this.pluginCatalog = false,
+    this.pluginCatalogOff = false,
     this.pluginInstallation = false,
     this.pluginUpdateChecks = false,
     this.storage = false,
@@ -38,8 +41,6 @@ class ServerInfo {
 final serverInfoProvider = FutureProvider.autoDispose<ServerInfo>((ref) async {
   final api = ref.watch(kalinkaProxyProvider);
   ref.watch(connectionStateProvider);
-  // Only saved values invalidate capabilities; staging an edit is not opt-in.
-  ref.watch(settingsProvider.select((s) => s.values[pluginCatalogSettingPath]));
   final stopwatch = Stopwatch()..start();
   final info = await api.getServerVersion();
   stopwatch.stop();
@@ -48,12 +49,14 @@ final serverInfoProvider = FutureProvider.autoDispose<ServerInfo>((ref) async {
   final capabilities = info['plugin_management'];
   bool can(String capability) =>
       capabilities is Map && capabilities[capability] == true;
+  // `enabled` is the server saying its catalog is on, whatever turns it on.
   final browsing = can('enabled') && can('catalog_browsing');
   final storage = info['storage'];
   return ServerInfo(
     version: version,
     latencyMs: stopwatch.elapsedMilliseconds,
-    pluginCatalogEnabled: browsing,
+    pluginCatalog: browsing,
+    pluginCatalogOff: !can('enabled') && can('catalog_browsing'),
     pluginInstallation: browsing && can('installation'),
     pluginUpdateChecks: browsing && can('update_checks'),
     storage: storage is Map && storage['folders'] == true,
@@ -77,27 +80,26 @@ final storageDevicesSupportedProvider = Provider<bool>((ref) {
       info.value?.storageDevices == true;
 });
 
-/// Fail closed during connection changes, errors and on older servers.
-final pluginCatalogEnabledProvider = Provider<bool>((ref) {
+/// Whether the public plugin catalog can be listed. Fails closed during
+/// connection changes, errors, and on servers without it or with it off.
+final pluginCatalogAvailableProvider = Provider<bool>((ref) {
   if (ref.watch(connectionStateProvider) != ConnectionStatus.connected) {
     return false;
   }
   final info = ref.watch(serverInfoProvider);
-  return !info.isLoading &&
-      !info.hasError &&
-      info.value?.pluginCatalogEnabled == true;
+  return !info.isLoading && !info.hasError && info.value?.pluginCatalog == true;
 });
 
 /// Whether Install, Uninstall and Update can be offered on this server.
 final pluginInstallationProvider = Provider<bool>(
   (ref) =>
-      ref.watch(pluginCatalogEnabledProvider) &&
+      ref.watch(pluginCatalogAvailableProvider) &&
       ref.watch(serverInfoProvider).value?.pluginInstallation == true,
 );
 
 /// Whether this server reports newer releases of installed plugins.
 final pluginUpdateChecksProvider = Provider<bool>(
   (ref) =>
-      ref.watch(pluginCatalogEnabledProvider) &&
+      ref.watch(pluginCatalogAvailableProvider) &&
       ref.watch(serverInfoProvider).value?.pluginUpdateChecks == true,
 );

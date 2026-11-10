@@ -206,7 +206,7 @@ void main() {
             (ref) async => const ServerInfo(
               version: 'test',
               latencyMs: 1,
-              pluginCatalogEnabled: true,
+              pluginCatalog: true,
             ),
           ),
           modulesStateProvider.overrideWithBuild(
@@ -303,7 +303,7 @@ void main() {
             (ref) async => const ServerInfo(
               version: '5.8.0',
               latencyMs: 2,
-              pluginCatalogEnabled: true,
+              pluginCatalog: true,
             ),
           ),
           modulesStateProvider.overrideWithBuild(
@@ -360,11 +360,11 @@ void main() {
     });
   }
 
-  testWidgets('Music sources stays browsable without Configuration support', (
+  testWidgets('Music sources offers its settings without the plugin catalog', (
     tester,
   ) async {
     await pump(tester);
-    expect(find.byTooltip('Music source settings'), findsNothing);
+    expect(find.byTooltip('Music source settings'), findsOneWidget);
     expect(find.byKey(const ValueKey('home-source-alpha')), findsOneWidget);
   });
 

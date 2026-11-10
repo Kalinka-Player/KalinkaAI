@@ -24,7 +24,6 @@ import '../providers/server_address.dart';
 import '../providers/server_connect.dart';
 import '../providers/settings_provider.dart';
 import '../providers/shell_nav_provider.dart';
-import '../providers/server_info_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../providers/toast_provider.dart';
 import '../providers/upgrade_provider.dart';
@@ -50,7 +49,6 @@ import '../widgets/server_sheet.dart';
 import 'onboarding_screen.dart';
 import 'customise_home_screen.dart';
 import 'renderer_settings_screen.dart';
-import 'settings_screen.dart';
 import 'plugin_catalog_screen.dart';
 import '../widgets/kalinka_toast_overlay.dart';
 import '../widgets/sheet_anchor.dart';
@@ -84,9 +82,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   final _playerPaneKey = GlobalKey();
   final _browsingPaneKey = GlobalKey();
   final _homeKey = GlobalKey<SearchSessionViewState>();
-  // Same trick for the settings panel, so a resize moves it rather than
+  // Same trick for Configuration, so a resize moves it rather than
   // remounting it (which would reload config and drop staged edits).
-  final _settingsKey = GlobalKey();
   final _pluginsKey = GlobalKey<PluginCatalogScreenState>();
 
   /// The volumes last listed, and the server that listed them.
@@ -108,7 +105,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   late final Animation<Offset> _miniPlayerSlide;
 
   // In-screen management overlays; menus use adaptive popup routes.
-  bool _settingsOpen = false;
   bool _pluginsOpen = false;
 
   /// Configuration slides in over what it was opened from, but is switched
@@ -298,8 +294,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
     if (!mounted) return;
     switch (result) {
-      case ServerSheetAction.openSettings:
-        _openSettings();
       case ServerSheetAction.openDiscovery:
         _openDiscovery();
       case ServerSheetAction.openPlugins:
@@ -321,17 +315,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
   }
 
-  void _openSettings() => setState(() {
-    _pluginsOpen = false;
-    _settingsCovering = false;
-    _settingsOpen = true;
-  });
-
   void _openPlugins({bool slide = true}) {
-    if (!ref.read(pluginCatalogEnabledProvider)) return;
+    if (!ref.read(configurationAvailableProvider)) return;
     ref.read(rendererSettingsRouteProvider.notifier).close();
     setState(() {
-      _settingsOpen = false;
       _settingsCovering = false;
       if (!_pluginsOpen) _pluginsSlide = slide;
       _pluginsOpen = true;
@@ -367,9 +354,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   Widget _navigation({required bool extended}) => ShellNavigation(
     extended: extended,
     configurationOpen:
-        _pluginsOpen ||
-        _settingsOpen ||
-        ref.watch(rendererSettingsRouteProvider) != null,
+        _pluginsOpen || ref.watch(rendererSettingsRouteProvider) != null,
     changeServerOpen: _discoveryOpen,
     // The picker can be left for another destination only where it could
     // be cancelled: with no server to go back to, it is the way on.
@@ -451,7 +436,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       ref.read(homeCustomisationProvider.notifier).close();
       ref.read(rendererSettingsRouteProvider.notifier).close();
       setState(() {
-        _settingsOpen = false;
         _settingsCovering = false;
         _pluginsOpen = false;
       });
@@ -939,18 +923,17 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   Widget _buildRendererSettings(RendererSettingsRoute route) {
     return RendererSettingsScreen(
       // Keyed by the open route: a resize re-homes the panel like
-      // [_settingsKey], while switching targets rebuilds rather than reusing
+      // [_pluginsKey], while switching targets rebuilds rather than reusing
       // the previous renderer's page and its staged edits.
       key: GlobalObjectKey(route),
       rendererId: route.rendererId,
       rendererName: route.rendererName,
       onClose: () {
         ref.read(rendererSettingsRouteProvider.notifier).close();
-        setState(() => _settingsCovering = _settingsOpen || _pluginsOpen);
+        setState(() => _settingsCovering = _pluginsOpen);
       },
-      onCoverageChanged: (covering) => setState(
-        () => _settingsCovering = covering || _settingsOpen || _pluginsOpen,
-      ),
+      onCoverageChanged: (covering) =>
+          setState(() => _settingsCovering = covering || _pluginsOpen),
     );
   }
 
@@ -974,10 +957,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       (miniPlayer ? kalinkaMiniPlayerHeight(context) : 0) + _escalationHeight,
     );
 
-    // Settings, configuration and renderer panels handle their own layered
-    // Back navigation; Home its own at its top level.
+    // Configuration and renderer panels handle their own layered Back
+    // navigation; Home its own at its top level.
     return PopScope(
-      canPop: !_settingsOpen && !_pluginsOpen && rendererSettings == null,
+      canPop: !_pluginsOpen && rendererSettings == null,
       child: Stack(
         children: [
           Column(
@@ -1078,27 +1061,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   _discoveryOpen ||
                   (!_pluginsOpen && _settingsCovering),
             ),
-          // Settings — full-screen overlay on phone (slides in from the right).
-          // The same flag renders it in the browsing pane on tablet, so
-          // resizing across the breakpoint just re-homes it.
-          if (_settingsOpen)
-            Positioned(
-              left: railWidth,
-              top: 0,
-              right: 0,
-              bottom: 0,
-              child: SettingsScreen(
-                key: _settingsKey,
-                handlesBack: rendererSettings == null,
-                onClose: () => setState(() {
-                  _settingsOpen = false;
-                  _settingsCovering = false;
-                }),
-                onCoverageChanged: (covering) =>
-                    setState(() => _settingsCovering = covering),
-              ),
-            ),
-          // A renderer's own settings, hosted exactly like the server's.
+          // A renderer's own settings, full screen beside the rail.
           if (rendererSettings != null && !_pluginsOpen)
             Positioned(
               left: railWidth,
@@ -1219,7 +1182,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// layouts, so a resize moves it rather than remounting it.
   Widget? _buildCustomiseHome() {
     if (!ref.watch(homeCustomisationProvider) ||
-        _settingsOpen ||
         _pluginsOpen ||
         ref.watch(rendererSettingsRouteProvider) != null) {
       return null;
@@ -1244,7 +1206,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     // Whatever is open over Home takes the back press instead.
     final covered =
         ref.watch(homeCustomisationProvider) ||
-        _settingsOpen ||
         _pluginsOpen ||
         _discoveryOpen ||
         rendererSettings != null;
@@ -1354,13 +1315,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         ref.watch(connectionStateProvider) == ConnectionStatus.none;
     _publishToastInset(24 + _escalationHeight);
     return PopScope(
-      canPop: !_settingsOpen && !_pluginsOpen && rendererSettings == null,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        // Settings, renderer settings and Home own their back via internal
-        // PopScopes.
-        if (_settingsOpen || _pluginsOpen || rendererSettings != null) return;
-      },
+      canPop: !_pluginsOpen && rendererSettings == null,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
@@ -1413,24 +1368,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           Positioned.fill(child: customise),
                         // Management overlays share browsing's bounds,
                         // including their sheets and slide motion.
-                        if (_settingsOpen)
-                          Positioned.fill(
-                            child: SheetAnchor(
-                              child: ClipRect(
-                                child: SettingsScreen(
-                                  key: _settingsKey,
-                                  handlesBack: rendererSettings == null,
-                                  onClose: () => setState(() {
-                                    _settingsOpen = false;
-                                    _settingsCovering = false;
-                                  }),
-                                  onCoverageChanged: (covering) => setState(
-                                    () => _settingsCovering = covering,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
                         if (_pluginsOpen)
                           Positioned.fill(
                             child: SheetAnchor(

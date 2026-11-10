@@ -237,7 +237,6 @@ Future<_Harness> _pump(
   bool localDisplay = false,
   bool idleHost = false,
   bool reducedMotion = false,
-  bool deviceLocked = false,
   String rendererHost = '',
   bool aloneOutput = false,
   Widget home = const KioskScreen(),
@@ -254,7 +253,6 @@ Future<_Harness> _pump(
     ConnectionSettingsNotifier.sharedPrefName: 'Den server',
     ConnectionSettingsNotifier.sharedPrefHost: '10.0.0.2',
     ConnectionSettingsNotifier.sharedPrefPort: 8000,
-    if (deviceLocked) KioskNotifier.sharedPrefLocked: true,
     ...preferences,
   });
   final prefs = await SharedPreferences.getInstance();
@@ -387,13 +385,8 @@ void main() {
   });
 
   group('the way out', () {
-    Future<ProviderContainer> container({
-      bool launched = false,
-      bool deviceLocked = false,
-    }) async {
-      SharedPreferences.setMockInitialValues({
-        if (deviceLocked) KioskNotifier.sharedPrefLocked: true,
-      });
+    Future<ProviderContainer> container({bool launched = false}) async {
+      SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       final c = ProviderContainer(
         overrides: [
@@ -416,45 +409,12 @@ void main() {
       expect(c.read(kioskActiveProvider), isFalse);
     });
 
-    test('this device\'s setting holds it across launches', () async {
-      final first = await container();
-      await first.read(kioskProvider.notifier).lockToDevice();
-      expect(first.read(kioskProvider).lock, KioskLock.device);
-
-      final prefs = await SharedPreferences.getInstance();
-      final next = ProviderContainer(
-        overrides: [
-          sharedPrefsProvider.overrideWithValue(prefs),
-          kioskLaunchProvider.overrideWithValue(false),
-        ],
-      );
-      addTearDown(next.dispose);
-      expect(
-        next.read(kioskProvider),
-        const KioskState(active: true, lock: KioskLock.device),
-      );
-    });
-
-    test('held by the setting, only the unlock leaves, and it turns the '
-        'setting off', () async {
-      final c = await container(deviceLocked: true);
-      final kiosk = c.read(kioskProvider.notifier);
-
-      kiosk.exit();
-      expect(c.read(kioskActiveProvider), isTrue);
-
-      await kiosk.unlockDevice();
-      expect(c.read(kioskActiveProvider), isFalse);
-      expect(kiosk.lockedToDevice, isFalse);
-    });
-
     test('started by the launch flag, nothing leaves', () async {
-      final c = await container(launched: true, deviceLocked: true);
+      final c = await container(launched: true);
       final kiosk = c.read(kioskProvider.notifier);
       expect(c.read(kioskProvider).lock, KioskLock.launch);
 
       kiosk.exit();
-      await kiosk.unlockDevice();
       expect(c.read(kioskActiveProvider), isTrue);
     });
   });
@@ -929,10 +889,9 @@ void main() {
     expect(find.textContaining('Living Room'), findsNothing);
   });
 
-  for (final (label, launched, deviceLocked, localDisplay) in const [
-    ('the setting', false, true, false),
-    ('the launch flag', true, false, false),
-    ('the server display', true, false, true),
+  for (final (label, launched, localDisplay) in const [
+    ('the launch flag', true, false),
+    ('the server display', true, true),
   ]) {
     testWidgets(
       'locked by $label, the renderer picker opens and switches output',
@@ -941,7 +900,6 @@ void main() {
           tester,
           _queue(PlayerStateType.paused),
           launched: launched,
-          deviceLocked: deviceLocked,
           localDisplay: localDisplay,
           idleHost: localDisplay,
           home: localDisplay
@@ -1910,14 +1868,6 @@ void main() {
     expect(find.byType(KioskSplash), findsNothing);
   });
 
-  testWidgets('started on this device\'s setting, the logo shows too', (
-    tester,
-  ) async {
-    await _pump(tester, _queue(PlayerStateType.playing), deviceLocked: true);
-
-    expect(find.byType(KioskSplash), findsOneWidget);
-  });
-
   testWidgets('entered from the app, there is no logo', (tester) async {
     await _pump(tester, _queue(PlayerStateType.playing));
 
@@ -1984,45 +1934,6 @@ void main() {
     expect(h.container.read(kioskActiveProvider), isFalse);
   });
 
-  testWidgets('held by this device\'s setting, five taps on the logo leave '
-      'it', (tester) async {
-    final h = await _pump(
-      tester,
-      _queue(PlayerStateType.playing),
-      deviceLocked: true,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byIcon(Icons.fullscreen_exit_rounded), findsNothing);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    for (var i = 0; i < 4; i++) {
-      await tester.tap(logo());
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    expect(h.container.read(kioskActiveProvider), isTrue);
-
-    await tester.tap(logo());
-    await tester.pump();
-    expect(h.container.read(kioskActiveProvider), isFalse);
-    expect(h.container.read(kioskProvider.notifier).lockedToDevice, isFalse);
-  });
-
-  testWidgets('on a phone, five taps on the mark leave too', (tester) async {
-    final h = await _pump(
-      tester,
-      _queue(PlayerStateType.playing),
-      size: const Size(390, 844),
-      deviceLocked: true,
-    );
-    await tester.pumpAndSettle();
-
-    for (var i = 0; i < 5; i++) {
-      await tester.tap(logo());
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    expect(h.container.read(kioskActiveProvider), isFalse);
-  });
-
   testWidgets('started by the launch flag, there is no way out', (
     tester,
   ) async {
@@ -2035,10 +1946,7 @@ void main() {
 
     expect(find.byIcon(Icons.fullscreen_exit_rounded), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    for (var i = 0; i < 5; i++) {
-      await tester.tap(logo());
-      await tester.pump(const Duration(milliseconds: 100));
-    }
+    await tester.pump();
     expect(h.container.read(kioskActiveProvider), isTrue);
   });
 

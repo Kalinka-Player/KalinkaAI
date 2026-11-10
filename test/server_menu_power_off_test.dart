@@ -182,7 +182,6 @@ Future<void> _askToPowerOff(WidgetTester tester) async {
   await tester.tap(powerOff);
   await tester.pumpAndSettle();
   expect(find.byType(ServerSheetContent), findsNothing);
-  expect(find.byType(ServerSheet), findsNothing);
   expect(find.text('Power off streamer?'), findsOneWidget);
 }
 

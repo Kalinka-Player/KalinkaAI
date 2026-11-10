@@ -20,7 +20,7 @@ import '../widgets/hover_text_action.dart';
 import '../widgets/kalinka_button.dart';
 import '../widgets/kalinka_dialog.dart';
 import '../widgets/search_cards/track_row_support.dart' show itemIcon;
-import '../widgets/settings_controls/module_header_row.dart'
+import '../widgets/settings_controls/module_status_badge.dart'
     show ModuleStatusBadge;
 import '../widgets/settings_controls/settings_card.dart';
 import '../widgets/settings_controls/settings_combo_input.dart';

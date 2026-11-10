@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'connection_state_provider.dart';
+
 /// What the player shows: the playing track, or the queue around it.
 enum PlayerView { nowPlaying, queue }
 
@@ -40,6 +42,12 @@ final musicSourcesSettingsRequestProvider =
     NotifierProvider<MusicSourcesSettingsRequest, int>(
       MusicSourcesSettingsRequest.new,
     );
+
+/// Whether Configuration can be opened: only with a server answering, so its
+/// ways in go while the connection is down.
+final configurationAvailableProvider = Provider<bool>(
+  (ref) => ref.watch(connectionStateProvider) == ConnectionStatus.connected,
+);
 
 /// Hosted by the player shell so tablet customisation stays in browsing.
 class HomeCustomisationNotifier extends Notifier<bool> {

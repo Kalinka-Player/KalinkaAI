@@ -18,6 +18,7 @@ import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/data_model/configuration_sections.dart';
 import 'package:kalinka/widgets/settings_controls/settings_toggle.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
+import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/display_settings_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/box_control_provider.dart';
@@ -46,7 +47,6 @@ import 'package:kalinka/screens/log_export_screen.dart';
 import 'package:kalinka/screens/plugin_about_screen.dart';
 import 'package:kalinka/screens/plugin_catalog_screen.dart';
 import 'package:kalinka/screens/plugin_settings_screen.dart';
-import 'package:kalinka/screens/settings_screen.dart';
 import 'package:kalinka/screens/renderer_settings_screen.dart';
 import 'package:kalinka/widgets/server_sheet.dart';
 import 'package:kalinka/widgets/breadcrumb_crumb.dart';
@@ -55,6 +55,7 @@ import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/page_banner.dart';
+import 'package:kalinka/widgets/demo_read_only_dialog.dart';
 import 'package:kalinka/widgets/pending_changes_banner.dart';
 import 'package:kalinka/widgets/configuration_appearance.dart';
 import 'package:kalinka/widgets/settings_controls/settings_action_row.dart';
@@ -70,7 +71,7 @@ import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/sheet_anchor.dart';
 import 'package:kalinka/widgets/settings_controls/inline_markdown.dart';
 import 'package:kalinka/widgets/expert_settings_screen.dart';
-import 'package:kalinka/widgets/settings_controls/module_header_row.dart';
+import 'package:kalinka/widgets/settings_controls/module_status_badge.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
 
@@ -126,9 +127,6 @@ class _Settings extends SettingsNotifier {
   Future<void> loadConfig({bool preserveStagedChanges = false}) async {
     loads++;
   }
-
-  void saved(bool enabled) =>
-      state = state.copyWith(values: {pluginCatalogSettingPath: enabled});
 }
 
 class _Restart extends RestartNotifier {
@@ -198,8 +196,13 @@ class _Proxy implements KalinkaPlayerProxy {
   Future<ModulesAndDevices> listModules() async => live.value;
   @override
   Future<List<RendererInfo>> listRenderers() async => [];
+  int updateChecks = 0;
   @override
-  Future<Map<String, dynamic>?> getServerUpdateInfo() async => updateInfo;
+  Future<Map<String, dynamic>?> getServerUpdateInfo() async {
+    updateChecks++;
+    return updateInfo;
+  }
+
   @override
   Future<Map<String, dynamic>> getServerVersion() async {
     reads++;
@@ -678,7 +681,7 @@ String _statusOf(WidgetTester tester, String id) => tester
     )
     .data!;
 
-/// The word a row's badge says, as Server settings says it.
+/// The word a row's badge says.
 ModuleStatusBadge? _badgeOf(WidgetTester tester, String id) {
   final badge = find.descendant(
     of: find.byKey(ValueKey('plugin-$id')),
@@ -2153,7 +2156,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    // Its state as Server settings words it, then the module's own words.
+    // Its state as its badge words it, then the module's own words.
     expect(_badgeOf(tester, 'localfiles')!.label, 'READY');
     expect(_badgeOf(tester, 'localfiles')!.color, KalinkaColors.statusOnline);
     expect(_statusOf(tester, 'localfiles'), '2 folders connected');
@@ -2591,45 +2594,46 @@ void main() {
     );
   }
 
-  for (final capabilities in [
-    <String, dynamic>{},
-    {'enabled': false, 'catalog_browsing': true},
-    {'enabled': true, 'catalog_browsing': false},
+  for (final (capabilities, notice) in [
+    (<String, dynamic>{}, 'does not offer the plugin catalog'),
+    (
+      {'enabled': true, 'catalog_browsing': false},
+      'does not offer the plugin catalog',
+    ),
+    (
+      {'enabled': false, 'catalog_browsing': true},
+      'plugin catalog is turned off on this server',
+    ),
   ]) {
-    testWidgets(
-      'preview stays hidden without both explicit capabilities: $capabilities',
-      (tester) async {
-        final api = _CatalogApi(_catalog());
-        final container = await _container(_Proxy(capabilities), api);
-        await _screen(tester, container);
-        expect(find.textContaining('preview is off'), findsOneWidget);
-        expect(api.reads, 0);
-        expect(
-          (await container.read(pluginCatalogProvider.future)).status,
-          'disabled',
-        );
-        expect(api.reads, 0);
-      },
-    );
+    testWidgets('the catalog stays hidden unless the server lists it: '
+        '$capabilities', (tester) async {
+      final api = _CatalogApi(_catalog());
+      final container = await _container(_Proxy(capabilities), api);
+      await _screen(tester, container);
+      expect(find.textContaining(notice), findsOneWidget);
+      expect(api.reads, 0);
+      expect(
+        (await container.read(pluginCatalogProvider.future)).status,
+        'disabled',
+      );
+      expect(api.reads, 0);
+    });
   }
 
-  test('staged settings never enable the feature; a saved flag refreshes capabilities', () async {
-    final proxy = _Proxy({'enabled': false, 'catalog_browsing': true});
+  testWidgets('opening Configuration re-checks for a release', (tester) async {
+    final proxy = _Proxy({'enabled': true, 'catalog_browsing': true});
     final container = await _container(proxy, _CatalogApi(_catalog()));
-    final subscription = container.listen(serverInfoProvider, (_, next) {});
+    // Watched as the update banner watches it, so the refresh on open must
+    // not rebuild the scope mid-build.
+    final subscription = container.listen(serverUpdateProvider, (_, _) {});
     addTearDown(subscription.close);
-    await container.read(serverInfoProvider.future);
-    expect(container.read(pluginCatalogEnabledProvider), false);
-    container
-        .read(settingsProvider.notifier)
-        .stageChange(pluginCatalogSettingPath, true);
-    expect(container.read(pluginCatalogEnabledProvider), false);
-    expect(proxy.reads, 1);
-    proxy.capabilities = {'enabled': true, 'catalog_browsing': true};
-    (container.read(settingsProvider.notifier) as _Settings).saved(true);
-    await container.read(serverInfoProvider.future);
-    expect(container.read(pluginCatalogEnabledProvider), true);
-    expect(proxy.reads, 2);
+    await container.read(serverUpdateProvider.future);
+    expect(proxy.updateChecks, 1);
+
+    await _screen(tester, container);
+    await container.read(serverUpdateProvider.future);
+    expect(proxy.updateChecks, 2);
+    expect(tester.takeException(), isNull);
   });
 
   test(
@@ -2649,7 +2653,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       (container.read(connectionStateProvider.notifier) as _Connected)
           .setStatus(ConnectionStatus.offline);
-      expect(container.read(pluginCatalogEnabledProvider), false);
+      expect(container.read(pluginCatalogAvailableProvider), false);
       api.pending!.complete(_catalog());
       expect(
         (await container.read(pluginCatalogProvider.future)).status,
@@ -2688,27 +2692,11 @@ void main() {
     },
   );
 
-  testWidgets('disabling the preview hides an already open catalog', (
-    tester,
-  ) async {
-    final proxy = _Proxy({'enabled': true, 'catalog_browsing': true});
-    final api = _CatalogApi(_catalog());
-    final container = await _container(proxy, api);
-    await _screen(tester, container);
-    expect(find.byKey(const ValueKey('plugin-jamendo')), findsOneWidget);
-    proxy.capabilities['enabled'] = false;
-    (container.read(settingsProvider.notifier) as _Settings).saved(false);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('preview is off'), findsOneWidget);
-    expect(find.byType(PluginRow), findsNothing);
-    expect(api.reads, 1);
-  });
-
-  testWidgets('switching to a non-opted-in server revokes browsing', (
+  testWidgets('switching to a server without the catalog revokes browsing', (
     tester,
   ) async {
     final api = _CatalogApi(_catalog());
-    final other = _Proxy({'enabled': false, 'catalog_browsing': true});
+    final other = _Proxy({});
     final container = await _container(
       _Proxy({'enabled': true, 'catalog_browsing': true}),
       api,
@@ -2718,9 +2706,12 @@ void main() {
     container
         .read(connectionSettingsProvider.notifier)
         .setDeviceEphemeral('Other server', 'other', 8080);
-    expect(container.read(pluginCatalogEnabledProvider), false);
+    expect(container.read(pluginCatalogAvailableProvider), false);
     await tester.pumpAndSettle();
-    expect(find.textContaining('preview is off'), findsOneWidget);
+    expect(
+      find.textContaining('does not offer the plugin catalog'),
+      findsOneWidget,
+    );
     expect(find.byType(PluginRow), findsNothing);
     // The new streamer's name, at once.
     expect(
@@ -3308,131 +3299,121 @@ void main() {
     },
   );
 
-  // Each is offered only on its side of the server's catalog opt-in.
-  for (final (label, panelType, catalog) in [
-    ('Server settings', SettingsScreen, false),
-    ('Settings', PluginCatalogScreen, true),
-  ]) {
-    testWidgets(
-      '$label covers only the tablet content pane and preserves state across resize',
-      (tester) async {
-        final container = await _container(
-          _Proxy({'enabled': catalog, 'catalog_browsing': true}),
-          _CatalogApi(_catalog()),
-          player: true,
-        );
-        await tester.binding.setSurfaceSize(const Size(1280, 850));
-        addTearDown(() => tester.binding.setSurfaceSize(null));
-        await tester.pumpWidget(
-          UncontrolledProviderScope(
-            container: container,
-            child: MaterialApp(
-              theme: AppTheme.dark(),
-              home: const MusicPlayerScreen(),
-            ),
+  testWidgets(
+    'Settings covers only the tablet content pane and preserves state across resize',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        player: true,
+      );
+      await tester.binding.setSurfaceSize(const Size(1280, 850));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: const MusicPlayerScreen(),
           ),
-        );
-        await tester.pumpAndSettle();
-        final queue = tester.getRect(find.byType(SearchSessionView));
-        final nowPlaying = tester.getRect(find.byType(NowPlayingContent));
-        await tester.tap(find.byType(ServerChip));
-        await tester.pumpAndSettle();
-        await tester.tap(
-          find.descendant(
-            of: find.byType(ServerSheetContent),
-            matching: find.text(label),
-          ),
-        );
-        // The incoming management panel never blocks the left-hand controls.
+        ),
+      );
+      await tester.pumpAndSettle();
+      final queue = tester.getRect(find.byType(SearchSessionView));
+      final nowPlaying = tester.getRect(find.byType(NowPlayingContent));
+      await tester.tap(find.byType(ServerChip));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(ServerSheetContent),
+          matching: find.text('Settings'),
+        ),
+      );
+      // The incoming management panel never blocks the left-hand controls.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 160));
+      expect(
+        find.byType(RendererSwitcherDropdown).hitTestable(),
+        findsOneWidget,
+      );
+      await tester.pumpAndSettle();
+
+      final panel = find.byType(PluginCatalogScreen);
+      final panelState = tester.state(panel);
+      final panelRect = tester.getRect(panel);
+      expect(panelRect.left, queue.left);
+      expect(panelRect.right, queue.right);
+      expect(panelRect.right, lessThan(nowPlaying.left));
+      expect(tester.getRect(find.byType(NowPlayingContent)), nowPlaying);
+      expect(
+        find.byType(RendererSwitcherDropdown).hitTestable(),
+        findsOneWidget,
+      );
+      expect(find.byType(ServerChip).hitTestable(), findsNothing);
+      final anchor = SheetAnchor.elementOf(tester.element(panel));
+      expect(SheetAnchor.paddingFor(anchor, 1280).left, panelRect.left);
+      expect(
+        SheetAnchor.paddingFor(anchor, 1280).right,
+        1280 - panelRect.right,
+      );
+
+      final settings = container.read(settingsProvider.notifier) as _Settings;
+      settings.stageChange('base_config.server.name', 'Staged name');
+      final loads = settings.loads;
+      // Now Playing can open renderer settings without discarding the panel
+      // underneath. System Back must dismiss only that topmost overlay.
+      container
+          .read(rendererSettingsRouteProvider.notifier)
+          .open('living-room', 'Living Room');
+      await tester.pumpAndSettle();
+      final rendererRect = tester.getRect(find.byType(RendererSettingsScreen));
+      expect(rendererRect, panelRect);
+      expect(
+        find.byType(RendererSwitcherDropdown).hitTestable(),
+        findsOneWidget,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(RendererSettingsScreen), findsNothing);
+      expect(tester.state(panel), same(panelState));
+      expect(find.byType(ServerChip).hitTestable(), findsNothing);
+
+      for (final size in [const Size(400, 850), const Size(1280, 850)]) {
+        await tester.binding.setSurfaceSize(size);
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 160));
-        expect(
-          find.byType(RendererSwitcherDropdown).hitTestable(),
-          findsOneWidget,
-        );
+        final exception = tester.takeException();
+        if (exception != null) {
+          expect('$exception', contains('RenderFlex overflowed'));
+        }
         await tester.pumpAndSettle();
-
-        final panel = find.byType(panelType);
-        final panelState = tester.state(panel);
-        final panelRect = tester.getRect(panel);
-        expect(panelRect.left, queue.left);
-        expect(panelRect.right, queue.right);
-        expect(panelRect.right, lessThan(nowPlaying.left));
-        expect(tester.getRect(find.byType(NowPlayingContent)), nowPlaying);
-        expect(
-          find.byType(RendererSwitcherDropdown).hitTestable(),
-          findsOneWidget,
-        );
-        expect(find.byType(ServerChip).hitTestable(), findsNothing);
-        final anchor = SheetAnchor.elementOf(tester.element(panel));
-        expect(SheetAnchor.paddingFor(anchor, 1280).left, panelRect.left);
-        expect(
-          SheetAnchor.paddingFor(anchor, 1280).right,
-          1280 - panelRect.right,
-        );
-
-        final settings = container.read(settingsProvider.notifier) as _Settings;
-        settings.stageChange('base_config.server.name', 'Staged name');
-        final loads = settings.loads;
-        // Now Playing can open renderer settings without discarding the panel
-        // underneath. System Back must dismiss only that topmost overlay.
-        container
-            .read(rendererSettingsRouteProvider.notifier)
-            .open('living-room', 'Living Room');
-        await tester.pumpAndSettle();
-        final rendererRect = tester.getRect(
-          find.byType(RendererSettingsScreen),
-        );
-        expect(rendererRect, panelRect);
-        expect(
-          find.byType(RendererSwitcherDropdown).hitTestable(),
-          findsOneWidget,
-        );
-        await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
-        expect(find.byType(RendererSettingsScreen), findsNothing);
         expect(tester.state(panel), same(panelState));
-        expect(find.byType(ServerChip).hitTestable(), findsNothing);
-
-        for (final size in [const Size(400, 850), const Size(1280, 850)]) {
-          await tester.binding.setSurfaceSize(size);
-          await tester.pump();
-          final exception = tester.takeException();
-          if (exception != null) {
-            expect('$exception', contains('RenderFlex overflowed'));
-          }
-          await tester.pumpAndSettle();
-          expect(tester.state(panel), same(panelState));
-          final rect = tester.getRect(panel);
-          expect(rect.left, size.width == 400 ? 0 : queue.left);
-          expect(rect.right, size.width == 400 ? size.width : queue.right);
-          expect(settings.loads, loads);
-          expect(
-            container
-                .read(settingsProvider)
-                .getEffective('base_config.server.name'),
-            'Staged name',
-          );
-          expect(tester.takeException(), isNull);
-        }
-
-        await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
-        if (panelType == PluginCatalogScreen) {
-          await tester.tap(find.byKey(const ValueKey('configuration-discard')));
-          await tester.pumpAndSettle();
-        }
-        expect(panel, findsNothing);
-        expect(find.byType(ServerChip).hitTestable(), findsOneWidget);
+        final rect = tester.getRect(panel);
+        expect(rect.left, size.width == 400 ? 0 : queue.left);
+        expect(rect.right, size.width == 400 ? size.width : queue.right);
+        expect(settings.loads, loads);
         expect(
-          find.byType(RendererSwitcherDropdown).hitTestable(),
-          findsOneWidget,
+          container
+              .read(settingsProvider)
+              .getEffective('base_config.server.name'),
+          'Staged name',
         );
-        expect(tester.getRect(find.byType(SearchSessionView)), queue);
         expect(tester.takeException(), isNull);
-      },
-    );
-  }
+      }
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('configuration-discard')));
+      await tester.pumpAndSettle();
+      expect(panel, findsNothing);
+      expect(find.byType(ServerChip).hitTestable(), findsOneWidget);
+      expect(
+        find.byType(RendererSwitcherDropdown).hitTestable(),
+        findsOneWidget,
+      );
+      expect(tester.getRect(find.byType(SearchSessionView)), queue);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('model lookup stays inline and never claims verification', (
     tester,
@@ -3460,92 +3441,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'phone sheet swaps Server settings for Configuration after opt-in',
-    (tester) async {
-      final proxy = _Proxy({'enabled': false, 'catalog_browsing': true});
-      final container = await _container(
-        proxy,
-        _CatalogApi(_catalog()),
-        settings: const SettingsState(
-          values: {pluginCatalogSettingPath: false},
-        ),
-      );
-      final settings = container.read(settingsProvider.notifier) as _Settings;
-      ServerSheetAction? action;
-      await tester.binding.setSurfaceSize(const Size(320, 640));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: MaterialApp(
-            theme: AppTheme.dark(),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(context)
-                  .copyWith(textScaler: TextScaler.linear(1.8)),
-              child: child!,
-            ),
-            home: Scaffold(
-              body: Builder(
-                builder: (context) => TextButton(
-                  onPressed: () async {
-                    action = await showKalinkaBottomSheet<ServerSheetAction>(
-                      context: context,
-                      contentBuilder: (_) => const ServerSheetContent(),
-                    );
-                  },
-                  child: const Text('Open menu'),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('Open menu'));
-      await tester.pumpAndSettle();
-      expect(find.text('Settings'), findsNothing);
-      expect(find.text('Server settings'), findsOneWidget);
-      expect(find.text('Now-playing display'), findsNothing);
-      expect(find.text('THIS APP'), findsNothing);
-      settings.stageChange(pluginCatalogSettingPath, true);
-      await tester.pumpAndSettle();
-      expect(find.text('Settings'), findsNothing);
-      expect(find.text('Server settings'), findsOneWidget);
-      proxy.capabilities['enabled'] = true;
-      await settings.applyChanges();
-      await tester.pumpAndSettle();
-      expect(find.text('Settings'), findsWidgets);
-      expect(find.text('Server settings'), findsNothing);
-      expect(find.text('Now-playing display'), findsNothing);
-      expect(find.text('THIS APP'), findsNothing);
-      await tester.ensureVisible(find.text('Settings'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Settings').hitTestable());
-      await tester.pumpAndSettle();
-      expect(action, ServerSheetAction.openPlugins);
-
-      proxy.capabilities['enabled'] = false;
-      settings.saved(false);
-      await tester.tap(find.text('Open menu'));
-      await tester.pumpAndSettle();
-      expect(find.text('Settings'), findsNothing);
-      expect(find.text('Server settings'), findsOneWidget);
-      await tester.tap(find.text('Server settings'));
-      await tester.pumpAndSettle();
-      expect(action, ServerSheetAction.openSettings);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('tablet sheet closes before opening Configuration', (
+  testWidgets('phone sheet offers Settings, which opens Configuration', (
     tester,
   ) async {
-    final container = await _container(
-      _Proxy({'enabled': true, 'catalog_browsing': true}),
-      _CatalogApi(_catalog()),
-    );
-    final actions = <String>[];
-    await tester.binding.setSurfaceSize(const Size(640, 480));
+    // Even a server without the catalog has Configuration for its settings.
+    final container = await _container(_Proxy({}), _CatalogApi(_catalog()));
+    ServerSheetAction? action;
+    await tester.binding.setSurfaceSize(const Size(320, 640));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -3558,24 +3460,42 @@ void main() {
             child: child!,
           ),
           home: Scaffold(
-            body: ServerSheet(
-              onClose: () => actions.add('close'),
-              onOpenSettings: () {},
-              onOpenDiscovery: () {},
-              onOpenPlugins: () => actions.add('plugins'),
-              onPowerOff: () {},
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async {
+                  action = await showKalinkaBottomSheet<ServerSheetAction>(
+                    context: context,
+                    contentBuilder: (_) => const ServerSheetContent(),
+                  );
+                },
+                child: const Text('Open menu'),
+              ),
             ),
           ),
         ),
       ),
     );
+    await tester.tap(find.text('Open menu'));
     await tester.pumpAndSettle();
     expect(find.text('Server settings'), findsNothing);
+    expect(find.text('Now-playing display'), findsNothing);
+    expect(find.text('THIS APP'), findsNothing);
     await tester.ensureVisible(find.text('Settings'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Settings').hitTestable());
     await tester.pumpAndSettle();
-    expect(actions, ['close', 'plugins']);
+    expect(action, ServerSheetAction.openPlugins);
+
+    // With the server unreachable there is nothing to configure.
+    (container.read(connectionStateProvider.notifier) as _Connected).setStatus(
+      ConnectionStatus.offline,
+    );
+    await tester.tap(find.text('Open menu'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Music sources, your player and hi-fi controls'),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -3598,6 +3518,7 @@ void main() {
           true,
           true,
         ),
+        ({'installation': true, 'update_checks': true}, false, false),
         (
           {
             'enabled': false,
@@ -3647,7 +3568,7 @@ void main() {
         }),
       );
       await _screen(tester, container, size: const Size(400, 1400));
-      // The words and colours of Server settings' cards.
+      // The words and colours of the status badges.
       for (final (id, label, color) in [
         ('localfiles', 'READY', KalinkaColors.statusOnline),
         ('jamendo', 'DISABLED', KalinkaColors.textMuted),
@@ -3937,6 +3858,78 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(PluginSettingsScreen), findsNothing);
       expect(find.byType(PluginCatalogScreen), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'on the demo server nothing installs, updates, uninstalls or applies',
+    (tester) async {
+      final api = _CatalogApi(_catalog())
+        ..available = const [
+          PluginUpdate(pluginId: 'spotify', version: '0.4.0'),
+        ];
+      final plugins = _settingsWith({
+        'localfiles': true,
+        'spotify': true,
+        'jamendo': false,
+      });
+      final container = await _container(
+        _Proxy({
+          'enabled': true,
+          'catalog_browsing': true,
+          'installation': true,
+          'update_checks': true,
+        }),
+        api,
+        live: _Live(
+          ModulesAndDevices(
+            inputModules: [
+              _module('localfiles'),
+              _module('spotify'),
+              _module('jamendo', enabled: false, state: 'disabled'),
+            ],
+            devices: [],
+          ),
+        ),
+        settings: plugins.copyWith(
+          values: {...plugins.values, demoModeFlagPath: true},
+        ),
+      );
+      final settings = container.read(settingsProvider.notifier) as _Settings;
+      await _screen(tester, container, size: const Size(900, 1400));
+
+      // Each change says why it cannot happen, and goes no further.
+      Future<void> refused(Finder control) async {
+        await tester.ensureVisible(control);
+        await tester.pumpAndSettle();
+        await tester.tap(control);
+        await tester.pumpAndSettle();
+        expect(find.byType(DemoReadOnlyDialog), findsOneWidget);
+        await tester.tap(find.text('Got it'));
+        await tester.pumpAndSettle();
+        expect(find.byType(DemoReadOnlyDialog), findsNothing);
+      }
+
+      await refused(find.byKey(const ValueKey('plugin-install-qobuz')));
+      await refused(find.byKey(const ValueKey('plugin-row-update-spotify')));
+      await _open(tester, 'spotify');
+      await refused(find.byKey(const ValueKey('plugin-update-spotify')));
+      await refused(find.byKey(const ValueKey('plugin-uninstall-spotify')));
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(api.runs, isEmpty);
+
+      // A switch still stages, to look at; applying it is refused.
+      await _open(tester, 'jamendo');
+      await tester.tap(find.byKey(const ValueKey('plugin-enabled-jamendo')));
+      await tester.pumpAndSettle();
+      expect(container.read(settingsProvider).stagedChanges, {
+        'input_modules.jamendo.enabled': true,
+      });
+      await refused(find.text('APPLY'));
+      expect(settings.saves, 0);
+      expect(container.read(settingsProvider).stagedChanges, isNotEmpty);
       expect(tester.takeException(), isNull);
     },
   );

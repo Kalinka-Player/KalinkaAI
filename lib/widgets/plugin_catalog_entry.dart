@@ -13,7 +13,7 @@ import '../utils/schema_icons.dart';
 import 'configuration_appearance.dart';
 import 'failure_note.dart';
 import 'module_artwork.dart';
-import 'settings_controls/module_header_row.dart';
+import 'settings_controls/module_status_badge.dart';
 import 'kalinka_button.dart';
 import 'settings_controls/settings_toggle.dart';
 import 'settings_controls/inline_markdown.dart';
@@ -81,7 +81,7 @@ IconData pluginIcon(CatalogPlugin plugin, PluginState state) =>
       _ => plugin.isDevice ? Icons.speaker_outlined : Icons.music_note_outlined,
     };
 
-/// A plugin's state as Server settings words it — READY and the rest — or
+/// A plugin's state as its status badge words it — READY and the rest — or
 /// what the server is busy doing to it. Null for a plugin it lacks, unless
 /// [notInstalled] asks for that to be said too.
 ModuleStatusBadge? pluginBadge(PluginState state, {bool notInstalled = false}) {
