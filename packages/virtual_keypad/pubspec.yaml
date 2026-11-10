@@ -1,0 +1,14 @@
+name: virtual_keypad
+description: Virtual keypad 1.11.0 with Kalinka typography and custom accent and language pickers.
+version: 1.11.0
+publish_to: none
+repository: https://github.com/almasumdev/virtual_keypad
+
+environment:
+  sdk: ^3.0.0
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  emoji_picker_flutter: ^4.4.0

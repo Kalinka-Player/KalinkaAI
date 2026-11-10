@@ -15,6 +15,7 @@ import '../theme/kalinka_icons.dart';
 import '../utils/wasm_renderer_preference.dart';
 import '../utils/web_build_target.dart';
 import '../widgets/box_section.dart';
+import '../widgets/client_settings_section.dart';
 import '../widgets/configuration_appearance.dart';
 import '../widgets/display_settings_section.dart';
 import '../widgets/kalinka_button.dart';
@@ -121,6 +122,7 @@ class ServerSettingsBody extends ConsumerWidget {
           if (settings.values['base_config.display.enabled'] == true ||
               ref.watch(kioskLaunchProvider))
             const DisplaySettingsSection(),
+          const ClientSettingsSection(),
           if (sections.updates.isNotEmpty || showUpdate) ...[
             Padding(
               padding: ConfigurationAppearance.sectionPadding(context),

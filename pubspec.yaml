@@ -61,6 +61,9 @@ dependencies:
   crypto: ^3.0.7
   # Keep normalization on Unicode 16, matching the backend's Python tables.
   unorm_dart: 0.3.1+1
+  # 1.11.0 with a small accent-picker hook; see the package README.
+  virtual_keypad:
+    path: packages/virtual_keypad
 
 dev_dependencies:
   flutter_test:

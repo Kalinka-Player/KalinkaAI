@@ -149,6 +149,7 @@ Off, keep this order directly on the tab:
 | --- | --- |
 | SERVER | Identity card: name and pencil, selectable address, server version, raw backend supervisor status |
 | DISPLAY | Shown when the saved `base_config.display.enabled` is true or the app is launched with kiosk enabled: local display inactivity timeouts |
+| THIS DEVICE | Always available in the simple Streamer tab: the local on-screen keyboard switch |
 | SOFTWARE UPDATES | Bundle/component update state and automatic updates in one card |
 | MANAGEMENT | Restart Kalinka, Network, dashboard, restart streamer, power off streamer, when supported |
 | SUPPORT | Download server logs |
@@ -162,6 +163,63 @@ The address has 16dp side padding, a 4dp label/value gap and 20dp bottom padding
 **Display** contains **Return to now playing** (15 s, 30 s, 1 min, 2 min; default 30 s) and **Blank screen after** (Off, 5 min, 10 min, 15 min, 30 min; default 5 min). Place each dropdown to the right of its label and help, reserving room by wrapping the text on the left. Use an anchored popup with the Bluetooth device menu's neutral surface and border, not a bottom sheet. Show whole-minute durations in minutes. Keep help brief: **After inactivity.** and **When idle and paused or stopped.**, plus a short backlight capability note. Save immediately in the local display's SharedPreferences, using seconds internally and 0 for Off. Remote clients show a note directing the user to the streamer's screen instead of editing unrelated local preferences. An explicit kiosk launch (`KALINKA_KIOSK`) also shows editable controls for testing, even when the server display setting is off. Blanking runs only while paused or stopped; touch, keyboard input or resumed playback wakes it, and the waking input does not activate a control. These changes do not stage server settings or require a restart.
 
 Display the supervisor status exactly as the backend returns it; do not parse a version or infer health from “Installed”. Package updates show the components the backend identifies as changed. Sound-card controls belong in Output settings. Device automation belongs in the expert list.
+
+**This device** contains **On-screen keyboard**. Default it on for Kalinka's
+Flutter Pi launcher (`localDisplayKioskProvider`), and off elsewhere. Use that
+default only when no preference is saved; an explicit on or off always wins.
+Save immediately
+to this device's SharedPreferences (`Kalinka.client.onScreenKeyboard`), independent
+of server connections, display capability and staged server settings. Switching it
+off restores platform input. Keyboard labels, previews and pickers use Kalinka's
+existing IBM Plex Sans; do not bundle additional keyboard fonts.
+The keyboard uses neutral Kalinka surfaces and labels;
+the setting's enabled switch carries the crimson fill. Float the keyboard over
+the whole app Navigator, centered at the bottom, with no full-width strip behind
+it. Keep the catalogue and rail painted and interactive beside it. Supply its
+height as a keyboard inset so forms, sheets and dialogs avoid the keys.
+Keep the whole panel within 37% of the window height (260dp at most),
+including the bottom safe area. Derive its width from the available key height
+and the standard four-row, ten-column letter layout, allowing character keys up
+to twice as wide as they are tall. Include the 4dp column gaps and toolbar in
+that width; cap it at the available window width and 900dp. Center the panel and
+its surface together so
+there are no empty side bands. At 1024×600 the English layout is 900×222, with
+48dp-tall letter keys and 378dp above it. Use clearly visible 6dp gaps between
+rows. In landscape windows, put Hide and Done/Search/Next in a 52dp side column.
+In portrait windows, move these controls into a 48dp toolbar above the
+keys so the keypad uses the full panel width. The toolbar stays within the
+panel's height limit. Preserve keypad state when resizing changes the toolbar
+position. Use tooltips and accessible labels; character labels are 20dp IBM Plex Sans.
+Use the neutral sheet surface with rounded top corners. Slide up in 180ms and
+down in 140ms without a backdrop or dismiss barrier. First let the phone or
+tablet mini-player slide out; restore it only once the keyboard has closed.
+This applies to catalogue text filters as well as main search and settings.
+Skip both transitions with reduced motion, and do not wait for a bar that is
+already hidden. Keep the catalogue and its results interactive above the keys.
+Keep the field's focus while tapping keys or opening accent/language menus;
+preserve the active field, draft and selection when resizing moves a catalogue
+search between its toolbar and narrow-screen row. Resizing must not reopen a
+keyboard the user has dismissed. Preserve formatters,
+password masking, selection and field submit actions. Provide Hide and an explicit
+Done/Search/Next action even on numeric layouts. Touches count as local kiosk
+activity, and the blanking host covers both the app and keyboard.
+
+Long-press accents use compact horizontal rows of at least 48dp character buttons,
+wrapping on narrow screens without a scrollbar. Keep uppercase alternatives and
+the field's selection intact. Outside tap or Escape dismisses the choices without
+inserting a character; Escape leaves the keyboard open while a picker is showing.
+
+Place an outlined globe key immediately beside Space. A tap opens a language
+grid with all 16 layouts: four columns on smaller panes and five when the picker
+is at least 800dp wide. Keep at least 48dp targets and 8dp gaps. Mark the current
+layout with a check and neutral outline. The picker can extend above the keyboard
+without enlarging it or dimming the app; retain field focus and selection. It
+reflows when the window resizes. Use full language names normally, and short
+language codes on narrow panes where names would break across lines. Large text
+can reduce the column count to keep the codes readable; full names remain in
+tooltips and accessibility labels. Never use a scrolling list. A
+selection applies immediately; X, outside tap or Escape cancels it. Holding
+Space remains an alternative way to open the same grid.
 
 ## Responsive layout and interaction
 
