@@ -97,6 +97,12 @@ final webSocketProvider = FutureProvider.family<WebSocketChannel, String>((
   // _connectionStatePath). Auxiliary sockets (e.g. /device/ws) must not touch
   // it — a second socket initialising lazily must not downgrade global state.
   final ownsConnectionState = path == _connectionStatePath;
+  // A box powered off while this socket opened may still accept it for a
+  // moment; that open must not clear the power-off.
+  final powerOffs = connection.powerOffs;
+  void report(void Function() update) => Future.microtask(() {
+    if (connection.powerOffs == powerOffs) update();
+  });
 
   // Defer state updates to avoid modifying providers during build.
   // Skip during reconnection (connecting() would cancel the retry timer that
@@ -105,7 +111,7 @@ final webSocketProvider = FutureProvider.family<WebSocketChannel, String>((
   if (ownsConnectionState &&
       currentStatus != ConnectionStatus.reconnecting &&
       currentStatus != ConnectionStatus.connected) {
-    Future.microtask(connection.connecting);
+    report(connection.connecting);
   }
 
   final uri = Uri(
@@ -121,9 +127,7 @@ final webSocketProvider = FutureProvider.family<WebSocketChannel, String>((
     await channel.ready.timeout(_connectTimeout);
     // Report `connected` only for the queue socket, whose open triggers the
     // queue replay — a device socket opening over a still-dead queue must not.
-    if (ownsConnectionState) {
-      Future.microtask(connection.connected);
-    }
+    if (ownsConnectionState) report(connection.connected);
 
     ref.onDispose(() {
       _closedByApp[channel] = true;

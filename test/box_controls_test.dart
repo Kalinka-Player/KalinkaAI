@@ -23,6 +23,7 @@ import 'package:kalinka/widgets/expert_settings_screen.dart';
 import 'package:kalinka/widgets/configuration_appearance.dart';
 import 'package:kalinka/widgets/settings_controls/settings_action_row.dart';
 import 'package:kalinka/widgets/escalation_card.dart';
+import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/timezone_row.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -712,7 +713,12 @@ void main() {
     });
 
     testWidgets('powers off only once confirmed', (tester) async {
-      final (_, box) = await pump(tester, answer: _info(), configuration: true);
+      final (container, box) = await pump(
+        tester,
+        answer: _info(),
+        configuration: true,
+      );
+      final before = container.read(connectionStateProvider);
 
       await tester.tap(find.text('Power off streamer'));
       await tester.pumpAndSettle();
@@ -720,6 +726,7 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(box.runs, isEmpty);
+      expect(container.read(connectionStateProvider), before);
 
       await tester.tap(find.text('Power off streamer'));
       await tester.pumpAndSettle();
@@ -731,6 +738,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(box.runs, [(BoxAction.powerOff, 'box-1')]);
+      expect(container.read(connectionStateProvider), ConnectionStatus.offline);
+      expect(
+        container.read(connectionStateProvider.notifier).boxPoweredOff,
+        isTrue,
+      );
       await tester.pump(const Duration(seconds: 3));
     });
 
@@ -756,6 +768,7 @@ void main() {
       WidgetTester tester, {
       SupervisorInfo? answer,
       String state = 'active',
+      bool canScan = true,
     }) async {
       final box = _FakeBox(answer: answer, state: state);
       final connection = _Connection(ConnectionStatus.offline);
@@ -768,7 +781,9 @@ void main() {
         UncontrolledProviderScope(
           container: container,
           child: MaterialApp(
-            home: Scaffold(body: EscalationCard(onScanForServers: () {})),
+            home: Scaffold(
+              body: EscalationCard(onScanForServers: () {}, canScan: canScan),
+            ),
           ),
         ),
       );
@@ -834,5 +849,49 @@ void main() {
       expect(connection.retries, 1);
       await tester.pump(const Duration(seconds: 3));
     });
+
+    for (final canScan in [true, false]) {
+      testWidgets(
+        'a box powered off from here offers ${canScan ? 'a scan' : 'Retry alone, as on web'}',
+        (tester) async {
+          final (box, connection) = await pump(
+            tester,
+            answer: _info(),
+            canScan: canScan,
+          );
+          expect(find.text('Restart server'), findsOneWidget);
+
+          connection.poweredOff();
+          await tester.pumpAndSettle();
+
+          expect(find.text('Restart server'), findsNothing);
+          expect(find.textContaining('30 seconds'), findsNothing);
+          expect(
+            find.text(
+              canScan
+                  ? 'The streamer is powered off. Turn it back on, then '
+                        'Retry, or scan for another server.'
+                  : 'The streamer is powered off. Turn it back on, then '
+                        'Retry.',
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.text('Scan for servers'),
+            canScan ? findsOneWidget : findsNothing,
+          );
+          final retry = find.widgetWithText(KalinkaButton, 'Retry');
+          expect(
+            tester.widget<KalinkaButton>(retry).variant,
+            canScan
+                ? KalinkaButtonVariant.neutral
+                : KalinkaButtonVariant.accent,
+          );
+          await tester.tap(retry);
+          expect(connection.retries, 1);
+          expect(box.runs, isEmpty);
+        },
+      );
+    }
   });
 }

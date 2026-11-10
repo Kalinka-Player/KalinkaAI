@@ -179,6 +179,8 @@ Future<bool> runBoxAction(
   final api = ref.read(supervisorApiProvider);
   if (control == null || api == null) return false;
   final toast = ref.read(toastProvider.notifier);
+  final connection = ref.read(connectionStateProvider.notifier);
+  final timer = ref.read(scheduledPowerOffProvider.notifier);
   final confirmed = await showKalinkaDialog<Object>(
     context: context,
     builder: (_) => BoxActionDialog(
@@ -198,15 +200,26 @@ Future<bool> runBoxAction(
   try {
     if (confirmed is int && confirmed > 0) {
       await api.schedulePowerOff(confirmed, serverId: control.serverId);
+      timer.schedule(control.serverId, confirmed);
       accepted = 'Power off in $confirmed minutes.';
     } else if (confirmed == -1) {
       await api.cancelPowerOff(serverId: control.serverId);
+      timer.cancel();
       accepted = 'Power-off timer cancelled.';
     } else {
       await api.run(action, serverId: control.serverId);
+      if (action == BoxAction.powerOff) connection.poweredOff();
     }
   } on BoxActionException catch (e) {
     toast.show(e.message, isError: true, inPanel: inPanel);
+    // A timer or another device got there first.
+    if (e.code == 'shutting_down') {
+      final status = await api.powerStatus();
+      if (status?.state == 'powering_off' &&
+          status?.serverId == control.serverId) {
+        connection.poweredOff();
+      }
+    }
     return false;
   }
   if (context.mounted) ref.invalidate(powerOffStatusProvider);
