@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/presentation_schema.dart';
+import '../../providers/modules_state_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/app_theme.dart';
 import '../settings_controls/settings_card.dart';
 import '../settings_controls/settings_toggle.dart';
+import '../settings_renderer.dart' show schemaIcon;
 import 'onboarding_fields.dart';
 import 'onboarding_step_scaffold.dart';
 import '../module_artwork.dart';
@@ -51,7 +53,12 @@ class _SourceRow extends ConsumerWidget {
     final isLocalFiles = module.id == 'localfiles';
     final enabledField = moduleEnabledField(module);
     final enabled = inputModuleEnabled(state, module);
-    final (icon, iconColor) = _iconForModule(module.id);
+    // The module list first, as in Settings: an older server's schema has
+    // no artwork.
+    final snapshot = ref.watch(modulesStateProvider).value;
+    final live = snapshot == null
+        ? null
+        : lookupModule(snapshot, module.id, module.kind);
 
     final sublabel = isLocalFiles
         ? 'Your music folders on the server — always on.'
@@ -89,9 +96,13 @@ class _SourceRow extends ConsumerWidget {
             ),
             child: Center(
               child: ModuleArtwork(
-                icons: module.icons,
+                icons: live?.icons ?? module.icons,
                 size: 28,
-                fallback: Icon(icon, size: 18, color: iconColor),
+                fallback: Icon(
+                  schemaIcon(live?.icon ?? module.icon),
+                  size: 18,
+                  color: KalinkaColors.textSecondary,
+                ),
               ),
             ),
           ),
@@ -112,22 +123,4 @@ class _SourceRow extends ConsumerWidget {
       ),
     );
   }
-}
-
-/// A source's fallback glyph and tint, from its module name.
-(IconData, Color) _iconForModule(String moduleName) {
-  final name = moduleName.toLowerCase();
-  if (name.contains('local') || name.contains('file')) {
-    return (Icons.folder_outlined, KalinkaColors.textSecondary);
-  }
-  if (name.contains('qobuz')) {
-    return (Icons.music_note_outlined, KalinkaColors.gold);
-  }
-  if (name.contains('tidal')) {
-    return (Icons.waves_outlined, const Color(0xFF4AC4D0));
-  }
-  if (name.contains('spotify')) {
-    return (Icons.music_note_outlined, const Color(0xFF1DB954));
-  }
-  return (Icons.extension_outlined, KalinkaColors.textSecondary);
 }
