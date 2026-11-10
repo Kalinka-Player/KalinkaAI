@@ -526,4 +526,43 @@ void main() {
     expect(find.byType(CoachMarksOverlay), findsOneWidget);
     expect(find.text('Find music'), findsOneWidget);
   });
+
+  for (final (size, keepOff) in const [
+    // Upright there is room clear of the whole pulse around the entry.
+    (Size(360, 800), 38.0),
+    // Sideways the wide entry leaves room clear of its cutout only.
+    (Size(800, 360), 6.0),
+  ]) {
+    testWidgets('at $size the first tip keeps off the search entry', (
+      tester,
+    ) async {
+      await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(2)),
+        size: size,
+        coachMarksShown: false,
+      );
+      final entry = tester.getRect(
+        find.byKey(const ValueKey('search-entry-surface')),
+      );
+      final card = tester.getRect(
+        find
+            .ancestor(
+              of: find.text('Find music'),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+      expect(
+        card.overlaps(entry.inflate(keepOff)),
+        isFalse,
+        reason: 'card $card, entry $entry',
+      );
+      expect(card.bottom, lessThanOrEqualTo(size.height));
+      expect(
+        tester.getRect(find.text('Next')).bottom,
+        lessThanOrEqualTo(card.bottom),
+      );
+    });
+  }
 }
