@@ -117,7 +117,9 @@ class ScheduledPowerOffNotifier extends Notifier<PowerOffDue?> {
     // The supervisor may outlive the server for a moment while the box
     // shuts down. Silence is a box already off.
     final status = await ref.read(supervisorApiProvider)?.powerStatus();
-    if (!ref.mounted || state != due) return;
+    // A poll meanwhile re-reads the same timer with a new `at`; only a cancel
+    // or a server change calls this off.
+    if (!ref.mounted || state?.serverId != due.serverId) return;
     if (status != null &&
         status.serverId == due.serverId &&
         status.state != 'powering_off') {

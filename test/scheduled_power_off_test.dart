@@ -176,6 +176,22 @@ void main() {
     expect(connection.boxPoweredOff, isFalse);
   });
 
+  test('a poll landing while the box is asked still counts', () async {
+    timer().schedule('box-1', 30);
+    supervisor.reply = Completer<void>();
+    now = now.add(const Duration(minutes: 30));
+    await drop();
+
+    const off = BoxPowerStatus(serverId: 'box-1', state: 'powering_off');
+    now = now.add(const Duration(seconds: 1));
+    timer().follow(off);
+    supervisor.answer = off;
+    supervisor.reply!.complete();
+    await pumpEventQueue();
+    expect(status(), ConnectionStatus.offline);
+    expect(connection.boxPoweredOff, isTrue);
+  });
+
   test('follows what the box reports', () {
     timer().follow(
       const BoxPowerStatus(
