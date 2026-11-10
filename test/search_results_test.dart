@@ -10,13 +10,14 @@ BrowseItem _artist(
   String name,
   MatchTier tier, {
   double score = 100,
+  double? relevance,
 }) => BrowseItem(
   id: 'kalinka:$source:artist:$id',
   name: name,
   canBrowse: true,
   canAdd: false,
   artist: Artist(id: 'kalinka:$source:artist:$id', name: name),
-  match: NameMatch(tier: tier, score: score),
+  match: NameMatch(tier: tier, score: score, relevance: relevance),
 );
 
 BrowseItem _album(
@@ -25,6 +26,7 @@ BrowseItem _album(
   String title,
   MatchTier tier, {
   double score = 100,
+  double? relevance,
   String? artistId,
   List<String> genres = const [],
 }) => BrowseItem(
@@ -40,7 +42,7 @@ BrowseItem _album(
         : Artist(id: 'kalinka:$source:artist:$artistId', name: 'x'),
     genres: _genreList(genres),
   ),
-  match: NameMatch(tier: tier, score: score),
+  match: NameMatch(tier: tier, score: score, relevance: relevance),
 );
 
 BrowseItem _track(
@@ -50,6 +52,7 @@ BrowseItem _track(
   List<String> genres = const [],
   MatchTier? tier,
   double score = 100,
+  double? relevance,
 }) => BrowseItem(
   id: 'kalinka:$source:track:$id',
   name: title,
@@ -65,7 +68,9 @@ BrowseItem _track(
       genres: _genreList(genres),
     ),
   ),
-  match: tier == null ? null : NameMatch(tier: tier, score: score),
+  match: tier == null
+      ? null
+      : NameMatch(tier: tier, score: score, relevance: relevance),
 );
 
 List<Genre> _genreList(List<String> names) => [
@@ -97,20 +102,40 @@ List<String> _ids(List<BrowseItem> items) => [
 
 void main() {
   group('merging name matches', () {
-    test('tier leads, then kind, score and the source order', () {
-      final results = SearchResults.pending('the beatles', _sources)
+    test('relevance leads, then kind and the source order, not the tier', () {
+      final results = SearchResults.pending('pink floyd', _sources)
           .withLeg(
             ResultsLeg.matches,
             'qobuz',
             LegReady(
               _list([
-                _artist('qobuz', 'q-exact', 'The Beatles', MatchTier.exact),
+                _artist(
+                  'qobuz',
+                  'q-band',
+                  'Pink Floyd',
+                  MatchTier.exact,
+                  relevance: 1,
+                ),
                 _album(
                   'qobuz',
-                  'q-long',
-                  'The Beatles 1962',
-                  MatchTier.partial,
-                  score: 60,
+                  'q-wall',
+                  'The Wall',
+                  MatchTier.contextual,
+                  relevance: 1,
+                ),
+                _artist(
+                  'qobuz',
+                  'q-gilmour',
+                  'David Gilmour',
+                  MatchTier.weak,
+                  relevance: 0.5,
+                ),
+                _artist(
+                  'qobuz',
+                  'q-empty',
+                  'Pink Floyd',
+                  MatchTier.exact,
+                  relevance: 1 / 3,
                 ),
               ]),
             ),
@@ -120,32 +145,127 @@ void main() {
             'localfiles',
             LegReady(
               _list([
-                _artist(
-                  'localfiles',
-                  'l-exact',
-                  'The Beatles',
-                  MatchTier.exact,
-                ),
                 _album(
                   'localfiles',
-                  'l-close',
-                  'The Beatels',
-                  MatchTier.close,
-                  score: 80,
+                  'l-meddle',
+                  'Meddle',
+                  MatchTier.contextual,
+                  relevance: 1,
+                ),
+                _artist(
+                  'localfiles',
+                  'l-band',
+                  'Pink Floyd',
+                  MatchTier.exact,
+                  relevance: 1,
                 ),
               ]),
             ),
           );
 
       expect(_ids(results.rankedMatches), [
-        'l-exact',
-        'q-exact',
-        'l-close',
-        'q-long',
+        'l-band',
+        'q-band',
+        'l-meddle',
+        'q-wall',
+        'q-gilmour',
+        'q-empty',
       ]);
     });
 
-    test('within a tier the kind runs together, score inside it', () {
+    test('with relevance, a hit with no annotation still merges last', () {
+      final plain = BrowseItem(
+        id: 'kalinka:qobuz:artist:plain',
+        name: 'Plain',
+        canBrowse: true,
+        canAdd: false,
+      );
+      final results = SearchResults.pending('x', _sources)
+          .withLeg(ResultsLeg.matches, 'qobuz', LegReady(_list([plain])))
+          .withLeg(
+            ResultsLeg.matches,
+            'localfiles',
+            LegReady(
+              _list([
+                _artist(
+                  'localfiles',
+                  'last',
+                  'Y',
+                  MatchTier.weak,
+                  relevance: 0.02,
+                ),
+              ]),
+            ),
+          );
+      expect(_ids(results.rankedMatches), ['last', 'plain']);
+    });
+
+    test('relevance is read from the server and written back', () {
+      final match = NameMatch.tryFromJson({
+        'tier': 'exact',
+        'score': 100,
+        'relevance': 0.5,
+      })!;
+      expect(match.relevance, 0.5);
+      expect(match.toJson()['relevance'], 0.5);
+      expect(
+        NameMatch.tryFromJson({'tier': 'exact', 'score': 100})!.relevance,
+        isNull,
+      );
+    });
+
+    test(
+      'without relevance, tier leads, then kind, score and the source order',
+      () {
+        final results = SearchResults.pending('the beatles', _sources)
+            .withLeg(
+              ResultsLeg.matches,
+              'qobuz',
+              LegReady(
+                _list([
+                  _artist('qobuz', 'q-exact', 'The Beatles', MatchTier.exact),
+                  _album(
+                    'qobuz',
+                    'q-long',
+                    'The Beatles 1962',
+                    MatchTier.partial,
+                    score: 60,
+                  ),
+                ]),
+              ),
+            )
+            .withLeg(
+              ResultsLeg.matches,
+              'localfiles',
+              LegReady(
+                _list([
+                  _artist(
+                    'localfiles',
+                    'l-exact',
+                    'The Beatles',
+                    MatchTier.exact,
+                  ),
+                  _album(
+                    'localfiles',
+                    'l-close',
+                    'The Beatels',
+                    MatchTier.close,
+                    score: 80,
+                  ),
+                ]),
+              ),
+            );
+
+        expect(_ids(results.rankedMatches), [
+          'l-exact',
+          'q-exact',
+          'l-close',
+          'q-long',
+        ]);
+      },
+    );
+
+    test('without relevance, the kind runs together within a tier', () {
       final results = SearchResults.pending('come together', _sources)
           .withLeg(
             ResultsLeg.matches,
