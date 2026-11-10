@@ -56,8 +56,9 @@ class _BlePlatform extends UniversalBlePlatform {
   @override
   Future<List<BleService>> discoverServices(
     String id,
-    bool withDescriptors,
-  ) async {
+    bool withDescriptors, {
+    DiscoverServicesPlatformConfig? platformConfig,
+  }) async {
     discoveries.add(id);
     final gate = discoveryGate;
     discoveryGate = null;
@@ -109,7 +110,7 @@ void main() {
   });
   tearDown(() async {
     await transport.dispose();
-    UniversalBle.queueType = QueueType.global;
+    UniversalBle.queueType = QueueType.auto;
   });
 
   test(

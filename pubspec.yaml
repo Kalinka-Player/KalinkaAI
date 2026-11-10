@@ -46,8 +46,8 @@ dependencies:
   dio: ^5.11.1
   multicast_dns: ^0.3.3+1
   web_socket_channel: ^3.0.3
-  web: ^1.1.1
-  flutter_svg: ^2.3.0
+  web: ^1.1.2
+  flutter_svg: ^2.3.2
   http: ^1.6.0
   package_info_plus: ^10.2.2
   url_launcher: ^6.3.3
@@ -56,9 +56,9 @@ dependencies:
   fixnum: ^1.1.1
   file_selector: ^1.1.0
   share_plus: ^13.3.1
-  universal_ble: ^2.3.0
+  universal_ble: ^3.2.0
   nsd: ^5.0.1
-  crypto: ^3.0.7
+  crypto: ^3.0.8
   # Keep normalization on Unicode 16, matching the backend's Python tables.
   unorm_dart: 0.3.1+1
   # 1.11.0 with a small accent-picker hook; see the package README.
@@ -77,9 +77,9 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
-  build_runner: ^2.16.2
-  freezed: ^4.0.2
-  json_serializable: ^6.14.1
+  build_runner: ^2.17.1
+  freezed: ^4.0.3
+  json_serializable: ^6.15.2
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
