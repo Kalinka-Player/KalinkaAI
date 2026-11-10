@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RendererBinding;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -264,6 +266,14 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
         final ratio = item.image?.aspectRatio;
         final fills = fillsShape(ratio, shape);
         final byHeight = !fills && fitsByHeight(ratio, shape);
+        // Decode for this display, not a fixed density. Reuse a size bucket
+        // during window resizes instead of downloading and decoding at every
+        // intermediate pixel size (ResizeImage's size is part of its key).
+        final dpr = MediaQuery.devicePixelRatioOf(context);
+        final decode = math.max(
+          1,
+          (((byHeight ? height : size) * dpr) / 64).ceil() * 64,
+        );
         final url = path == null
             ? null
             : ref.read(urlResolverProvider).abs(path);
@@ -273,12 +283,8 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
                 url,
                 width: size,
                 height: height,
-                cacheWidth: wasmSafeCacheSize(
-                  byHeight ? null : (size * 2.5).round(),
-                ),
-                cacheHeight: wasmSafeCacheSize(
-                  byHeight ? (height * 2.5).round() : null,
-                ),
+                cacheWidth: wasmSafeCacheSize(byHeight ? null : decode),
+                cacheHeight: wasmSafeCacheSize(byHeight ? decode : null),
                 fit: fills ? BoxFit.cover : BoxFit.contain,
                 gaplessPlayback: true,
                 filterQuality: FilterQuality.medium,

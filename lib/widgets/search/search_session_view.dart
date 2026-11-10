@@ -47,6 +47,7 @@ import 'collections_edit_bar.dart' show leaveCollectionEditing;
 import '../home/home_layout.dart';
 import '../home/catalog_pin_button.dart';
 import '../home/home_source_list.dart';
+import '../cached_gradient.dart';
 import 'results_view.dart';
 import 'search_composer.dart';
 import 'search_zero_state.dart';
@@ -828,7 +829,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                               fit: StackFit.expand,
                               children: [
                                 DecoratedBox(
-                                  decoration: BoxDecoration(
+                                  decoration: CachedRadialGradientDecoration(
                                     gradient: _discoverBloom(
                                       MediaQuery.paddingOf(context).top,
                                       hasHeading: !ref.watch(
@@ -838,7 +839,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                                   ),
                                 ),
                                 DecoratedBox(
-                                  decoration: BoxDecoration(
+                                  decoration: CachedVerticalGradientDecoration(
                                     gradient: _kDiscoverFadeOut,
                                   ),
                                 ),

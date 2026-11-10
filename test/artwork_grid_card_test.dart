@@ -7,6 +7,7 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/url_resolver.dart';
 import 'package:kalinka/widgets/catalog_art.dart';
 import 'package:kalinka/widgets/fitted_art.dart';
+import 'package:kalinka/widgets/search_cards/artwork_grid.dart';
 import 'package:kalinka/widgets/search_cards/artwork_grid_card.dart';
 import 'package:kalinka/widgets/search_cards/browse_navigation_scope.dart';
 import 'package:kalinka/widgets/search_cards/row_play_button.dart';
@@ -56,6 +57,8 @@ Future<void> _mount(
   _Api? api,
   ValueChanged<BrowseItem>? onOpen,
   double shape = 1,
+  double width = 300,
+  double? dpr,
 }) => tester.pumpWidget(
   ProviderScope(
     overrides: [
@@ -64,13 +67,19 @@ Future<void> _mount(
       if (api != null) kalinkaProxyProvider.overrideWithValue(api),
     ],
     child: MaterialApp(
+      builder: (context, child) => dpr == null
+          ? child!
+          : MediaQuery(
+              data: MediaQuery.of(context).copyWith(devicePixelRatio: dpr),
+              child: child!,
+            ),
       home: Scaffold(
         body: BrowseNavigationScope(
           onOpen: onOpen ?? (_) {},
           child: Align(
             alignment: Alignment.topLeft,
             child: SizedBox(
-              width: 300 + 2 * ArtworkGridCard.inset,
+              width: width + 2 * ArtworkGridCard.inset,
               child: ArtworkGridCard(item: item, shape: shape),
             ),
           ),
@@ -81,6 +90,101 @@ Future<void> _mount(
 );
 
 void main() {
+  testWidgets('a reused grid updates metadata for unchanged item IDs', (
+    tester,
+  ) async {
+    Future<void> show(String title) => tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sourceModulesProvider.overrideWith((ref) => const <ModuleInfo>[]),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: CustomScrollView(
+              slivers: [
+                SliverArtworkGrid(
+                  items: [
+                    BrowseItem(
+                      id: 'kalinka:demo:album:same',
+                      canBrowse: true,
+                      canAdd: false,
+                      album: Album(id: 'same', title: title),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await show('Before metadata refresh');
+    await tester.pump();
+    expect(find.text('Before metadata refresh'), findsOneWidget);
+    await show('After metadata refresh');
+    await tester.pump();
+    expect(find.text('Before metadata refresh'), findsNothing);
+    expect(find.text('After metadata refresh'), findsOneWidget);
+  });
+
+  final albumWithArt = BrowseItem(
+    id: 'kalinka:demo:album:art',
+    canBrowse: true,
+    canAdd: false,
+    album: Album(
+      id: 'art',
+      title: 'Artwork',
+      image: AlbumImage(large: '/cover.jpg'),
+    ),
+  );
+
+  testWidgets('cover decoding follows screen density without undersizing', (
+    tester,
+  ) async {
+    for (final dpr in [1.0, 2.0, 3.0]) {
+      await _mount(tester, albumWithArt, width: 200, dpr: dpr);
+      final image = tester.widget<Image>(find.byType(Image));
+      final provider = image.image as ResizeImage;
+      // Enough pixels for this display, with less than one size bucket spare.
+      expect(provider.width, greaterThanOrEqualTo(200 * dpr));
+      expect(provider.width, lessThan(200 * dpr + 64));
+      expect(provider.height, isNull);
+      expect(image.fit, BoxFit.cover);
+    }
+  });
+
+  testWidgets('small resizes reuse the same decoded cover cache entry', (
+    tester,
+  ) async {
+    await _mount(tester, albumWithArt, width: 200, dpr: 1);
+    final before = await tester
+        .widget<Image>(find.byType(Image))
+        .image
+        .obtainKey(const ImageConfiguration());
+    await _mount(tester, albumWithArt, width: 201, dpr: 1);
+    final after = await tester
+        .widget<Image>(find.byType(Image))
+        .image
+        .obtainKey(const ImageConfiguration());
+    expect(after, before);
+  });
+
+  testWidgets('a contained square cover decodes by its displayed height', (
+    tester,
+  ) async {
+    await _mount(tester, albumWithArt, width: 300, shape: 2, dpr: 1);
+    final image = tester.widget<Image>(
+      find.byWidgetPredicate(
+        (widget) => widget is Image && widget.fit == BoxFit.contain,
+      ),
+    );
+    final provider = image.image as ResizeImage;
+    expect(provider.width, isNull);
+    expect(provider.height, greaterThanOrEqualTo(150));
+    expect(provider.height, lessThan(150 + 64));
+    expect(find.byType(SoftImageFill), findsOneWidget);
+  });
+
   testWidgets('a catalog is a 3:1 card with its name on it', (tester) async {
     await _mount(tester, _catalog(description: 'Made for you'));
     final card = tester.getRect(find.byType(CatalogCard));
