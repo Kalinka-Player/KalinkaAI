@@ -4,6 +4,21 @@
   "title": "My Library",
   "description": "Music on the server or a network share, indexed into a browsable library with artwork and metadata filled in online.",
   "icon": "folder_outlined",
+  "icons": {
+    "small": {
+      "url": "/plugins/localfiles/icons/small.svg",
+      "mime_type": "image/svg+xml",
+      "aspect_ratio": 1,
+      "min_height": 0
+    },
+    "standard": {
+      "url": "/plugins/localfiles/icons/standard.svg",
+      "mime_type": "image/svg+xml",
+      "aspect_ratio": 1,
+      "min_height": 0
+    },
+    "monochrome": true
+  },
   "preview_fields": [
     "music_folders",
     "scan_interval_minutes"
