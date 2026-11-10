@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import '../configuration_appearance.dart';
 import 'inline_markdown.dart';
 import 'settings_toggle.dart';
+import 'settings_help_button.dart';
 
 /// Collapsible section header with an integrated enable/disable switch.
 ///
@@ -32,6 +33,9 @@ import 'settings_toggle.dart';
 /// what they'd be enabling, but the rows render dimmed.
 class SettingsToggleableSection extends StatefulWidget {
   final String title;
+  final String? sublabel;
+  final String? helpLabel;
+  final String? helpDetails;
   final bool enabled;
   final ValueChanged<bool> onToggle;
   final String? statusMarkdown;
@@ -42,6 +46,9 @@ class SettingsToggleableSection extends StatefulWidget {
   const SettingsToggleableSection({
     super.key,
     required this.title,
+    this.sublabel,
+    this.helpLabel,
+    this.helpDetails,
     required this.enabled,
     required this.onToggle,
     this.statusMarkdown,
@@ -168,11 +175,24 @@ class _SettingsToggleableSectionState extends State<SettingsToggleableSection>
                                               : KalinkaColors.textSecondary,
                                         ),
                                   ),
+                                  if (widget.helpDetails?.trim().isNotEmpty ??
+                                      false)
+                                    SettingsHelpButton(
+                                      label: widget.helpLabel ?? widget.title,
+                                      details: widget.helpDetails!,
+                                    ),
                                   if (widget.isStaged &&
                                       ConfigurationAppearance.active(context))
                                     const ChangedSettingLabel(),
                                 ],
                               ),
+                              if (widget.sublabel?.isNotEmpty ?? false) ...[
+                                const SizedBox(height: 2),
+                                InlineMarkdown(
+                                  text: widget.sublabel!,
+                                  style: KalinkaTextStyles.trayRowSublabel,
+                                ),
+                              ],
                               if (hasStatus) ...[
                                 const SizedBox(height: 3),
                                 InlineMarkdown(

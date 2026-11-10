@@ -143,6 +143,7 @@ class RendererConfigField {
   final String path;
   final String title;
   final String description;
+  final String? helpDetails;
   final RendererFieldType type;
   final String value;
   final String defaultValue;
@@ -164,6 +165,7 @@ class RendererConfigField {
     required this.path,
     required this.title,
     this.description = '',
+    this.helpDetails,
     this.type = RendererFieldType.unknown,
     this.value = '',
     this.defaultValue = '',
@@ -181,6 +183,7 @@ class RendererConfigField {
         path: (j['path'] ?? '') as String,
         title: (j['title'] ?? '') as String,
         description: (j['description'] ?? '') as String,
+        helpDetails: j['help_details'] as String?,
         type: RendererFieldType.fromName(j['type'] as String?),
         value: (j['value'] ?? '') as String,
         defaultValue: (j['default'] ?? '') as String,

@@ -138,6 +138,7 @@ FieldSpec _toFieldSpec(RendererConfigField field) => FieldSpec(
   widget: _widgetFor(field),
   type: _typeNameFor(field.type),
   help: field.description.isEmpty ? null : field.description,
+  helpDetails: field.helpDetails,
   defaultValue: decodeRendererValue(field.type, field.defaultValue),
   readonly: field.readOnly,
   importance: switch (field.importance) {

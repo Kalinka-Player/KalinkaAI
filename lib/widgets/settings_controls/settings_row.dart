@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import 'inline_markdown.dart';
 import '../configuration_appearance.dart';
 import 'issue_notes.dart';
+import 'settings_help_button.dart';
 
 /// Space either side of a settings card's rows.
 const double kSettingsGutter = 16;
@@ -16,6 +17,7 @@ const double kSettingsGutter = 16;
 class SettingsRow extends StatelessWidget {
   final String label;
   final String? sublabel;
+  final String? helpDetails;
   final bool isStaged;
   final Widget control;
   final bool isVertical;
@@ -38,6 +40,7 @@ class SettingsRow extends StatelessWidget {
     super.key,
     required this.label,
     this.sublabel,
+    this.helpDetails,
     this.isStaged = false,
     required this.control,
     this.isVertical = false,
@@ -107,6 +110,8 @@ class SettingsRow extends StatelessWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(label, style: KalinkaTextStyles.trayRowLabel),
+            if (helpDetails?.trim().isNotEmpty ?? false)
+              SettingsHelpButton(label: label, details: helpDetails!),
             if (isStaged && ConfigurationAppearance.active(context))
               const ChangedSettingLabel(),
           ],

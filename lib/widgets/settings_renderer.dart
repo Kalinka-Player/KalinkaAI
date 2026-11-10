@@ -22,6 +22,7 @@ import 'settings_controls/settings_numeric_input.dart';
 import 'settings_controls/settings_password_input.dart';
 import 'settings_controls/settings_readonly_card.dart';
 import 'settings_controls/settings_row.dart';
+import 'settings_controls/settings_help_button.dart';
 import 'settings_controls/settings_section.dart';
 import 'settings_controls/settings_slider.dart';
 import 'settings_controls/settings_text_input.dart';
@@ -140,8 +141,14 @@ class SchemaFieldRenderer extends StatelessWidget {
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(label, style: KalinkaTextStyles.trayRowSublabel),
+                  if (field.helpDetails?.trim().isNotEmpty ?? false)
+                    SettingsHelpButton(
+                      label: label,
+                      details: field.helpDetails!,
+                    ),
                   Text(
                     (value ?? '').toString(),
                     style: KalinkaTextStyles.trayRowSublabel.copyWith(
@@ -164,6 +171,7 @@ class SchemaFieldRenderer extends StatelessWidget {
       return SettingsRow(
         label: label,
         sublabel: help,
+        helpDetails: field.helpDetails,
         isVertical: true,
         gutter: gutter,
         control: SettingsReadonlyCard(text: (value ?? '').toString()),
@@ -178,6 +186,7 @@ class SchemaFieldRenderer extends StatelessWidget {
         return SettingsRow(
           label: label,
           sublabel: help,
+          helpDetails: field.helpDetails,
           isStaged: isStaged,
           isVertical: true,
           gutter: gutter,
@@ -220,6 +229,7 @@ class SchemaFieldRenderer extends StatelessWidget {
     return SettingsRow(
       label: label,
       sublabel: help,
+      helpDetails: field.helpDetails,
       status: status == null || status.isEmpty ? null : status,
       isStaged: isStaged,
       isVertical: vertical,
@@ -256,6 +266,8 @@ Widget buildSliderControl({
   String fmt(num n) => '${n.toInt()}${unit.isEmpty ? '' : ' $unit'}';
   return SettingsSlider(
     label: dense ? '' : field.label,
+    sublabel: dense ? null : field.help,
+    helpDetails: dense ? null : field.helpDetails,
     value: (value as num? ?? 0).toDouble().clamp(min, max),
     min: min,
     max: max,
@@ -669,6 +681,9 @@ class SchemaSectionRenderer extends StatelessWidget {
 
     return SettingsToggleableSection(
       title: section.title,
+      sublabel: enabledField.help,
+      helpLabel: enabledField.label,
+      helpDetails: enabledField.helpDetails,
       enabled: enabledValue,
       onToggle: (v) => binding.stage(enabledField.path, v),
       statusMarkdown: statusMarkdown,
