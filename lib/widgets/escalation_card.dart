@@ -133,11 +133,9 @@ class _EscalationCardState extends ConsumerState<EscalationCard>
       size: KalinkaButtonSize.compact,
       onTap: () => ref.read(connectionStateProvider.notifier).retryNow(),
     );
-    final message = poweredOff && widget.canScan
-        ? 'The streamer is powered off. Turn it back on, then Retry, or scan '
-              'for another server.'
-        : poweredOff
-        ? 'The streamer is powered off. Turn it back on, then Retry.'
+    final message = poweredOff
+        ? 'The streamer is powered off. Turn it back on, then Retry'
+              '${widget.canScan ? ', or scan for another server' : ''}.'
         : boxAnswers
         ? 'The server hasn\'t responded for over 30 seconds, but its streamer '
               'is still on the network. Restarting the server may bring it '
