@@ -7,6 +7,7 @@ import '../utils/click_cursor.dart';
 class SectionTabButton extends StatelessWidget {
   static const spacing = 8.0;
   static const horizontalPadding = 8.0;
+  static const _badgeSize = 7.8;
 
   final String label;
   final String? semanticLabel;
@@ -14,6 +15,10 @@ class SectionTabButton extends StatelessWidget {
   final VoidCallback onTap;
   final Widget? leading;
   final AlignmentGeometry contentAlignment;
+  final TextOverflow? overflow;
+
+  /// A status dot at the title's top right. Describe it in [semanticLabel].
+  final bool showBadge;
 
   const SectionTabButton({
     super.key,
@@ -23,6 +28,8 @@ class SectionTabButton extends StatelessWidget {
     this.leading,
     this.semanticLabel,
     this.contentAlignment = Alignment.center,
+    this.overflow,
+    this.showBadge = false,
   });
 
   @override
@@ -49,6 +56,7 @@ class SectionTabButton extends StatelessWidget {
             hoverColor: KalinkaColors.surfaceInput,
             focusColor: KalinkaColors.surfaceOverlay,
             child: Stack(
+              fit: StackFit.passthrough,
               children: [
                 ConstrainedBox(
                   constraints: const BoxConstraints(
@@ -71,19 +79,46 @@ class SectionTabButton extends StatelessWidget {
                             leading!,
                             const SizedBox(width: 8),
                           ],
-                          AnimatedDefaultTextStyle(
-                            duration: duration,
-                            curve: Curves.easeOutCubic,
-                            style: KalinkaTextStyles.sectionLabel.copyWith(
-                              color: selected
-                                  ? KalinkaColors.textPrimary
-                                  : KalinkaColors.textSecondary,
-                            ),
-                            child: Text(
-                              label.toUpperCase(),
-                              maxLines: 1,
-                              softWrap: false,
-                              textAlign: TextAlign.center,
+                          Flexible(
+                            child: Stack(
+                              // The dot uses the tab's existing padding,
+                              // following the text even when it ellipsizes.
+                              clipBehavior: Clip.none,
+                              children: [
+                                AnimatedDefaultTextStyle(
+                                  duration: duration,
+                                  curve: Curves.easeOutCubic,
+                                  style: KalinkaTextStyles.sectionLabel
+                                      .copyWith(
+                                        color: selected
+                                            ? KalinkaColors.textPrimary
+                                            : KalinkaColors.textSecondary,
+                                      ),
+                                  child: Text(
+                                    label.toUpperCase(),
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    textAlign: TextAlign.center,
+                                    overflow: overflow,
+                                  ),
+                                ),
+                                if (showBadge)
+                                  const Positioned(
+                                    top: -5.2,
+                                    right: -_badgeSize,
+                                    child: DecoratedBox(
+                                      key: ValueKey('section-tab-badge'),
+                                      decoration: BoxDecoration(
+                                        color: KalinkaColors.accent,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: SizedBox(
+                                        width: _badgeSize,
+                                        height: _badgeSize,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         ],
