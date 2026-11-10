@@ -96,6 +96,9 @@ class PluginState {
 
   PluginOperation? get operation => inFlight?.operation;
 
+  /// Its operation waits its turn behind another on the server.
+  bool get queued => inFlight?.queued == true;
+
   /// How far the operation under way has got, 0 to 1; null while none is.
   double? get progress => inFlight?.progress;
 
@@ -158,7 +161,9 @@ class PluginState {
   /// a newer release.
   String? get detail {
     final live = this.live;
-    if (inFlight case final inFlight?) return stepLabel(inFlight.step);
+    if (inFlight case final inFlight?) {
+      return inFlight.queued ? 'Waiting its turn…' : stepLabel(inFlight.step);
+    }
     if (live == null) return null;
     if (staged) {
       if (module?.enabledField?.needsRestart == false) {

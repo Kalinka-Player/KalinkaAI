@@ -266,6 +266,15 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     }
   }
 
+  /// Updates every plugin in [plugins] not already busy; the server works
+  /// through them in turn.
+  Future<void> _updateAll(List<CatalogPlugin> plugins) async {
+    if (await refusedAsDemo(context, ref) || !mounted) return;
+    await ref.read(pluginOperationsProvider.notifier).updateAll({
+      for (final plugin in plugins) plugin.id: plugin.name,
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     // Home's gear asks for Music sources even while another tab is open.
@@ -629,6 +638,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     final operations = ref.watch(pluginOperationsProvider);
     final failures = ref.watch(pluginFailuresProvider);
     final canManage = ref.watch(pluginInstallationProvider);
+    final queues = ref.watch(pluginOperationQueueProvider);
     final playerName = ref.watch(
       connectionSettingsProvider.select((s) => s.name),
     );
@@ -721,6 +731,17 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
           outdated.length,
           gutter,
           first: true,
+          // One tap for them all where the server queues them.
+          action: canManage && queues && outdated.length > 1
+              ? KalinkaButton(
+                  key: const ValueKey('plugin-update-all'),
+                  label: 'Update all',
+                  size: KalinkaButtonSize.compact,
+                  variant: KalinkaButtonVariant.neutral,
+                  enabled: outdated.any((p) => states[p.id]!.operation == null),
+                  onTap: () => _updateAll(outdated),
+                )
+              : null,
         ),
         if (!canManage) note(manageNote),
         for (final plugin in outdated) row(plugin),
@@ -865,39 +886,54 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     int count,
     double gutter, {
     required bool first,
-  }) => SliverPadding(
-    padding: EdgeInsets.fromLTRB(gutter, first ? 24 : 36, gutter, 0),
-    sliver: SliverToBoxAdapter(
-      child: Semantics(
-        header: true,
-        label: '$title, $count',
-        excludeSemantics: true,
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          // Set as ShelfHeading sets tracks and albums; wraps rather than
-          // overflows at large text sizes.
-          child: Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: title.toUpperCase(),
-                  style: KalinkaTextStyles.sectionLabel.copyWith(
-                    color: KalinkaColors.textPrimary,
-                  ),
+    Widget? action,
+  }) {
+    final heading = Semantics(
+      header: true,
+      label: '$title, $count',
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        // Set as ShelfHeading sets tracks and albums; wraps rather than
+        // overflows at large text sizes.
+        child: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: title.toUpperCase(),
+                style: KalinkaTextStyles.sectionLabel.copyWith(
+                  color: KalinkaColors.textPrimary,
                 ),
-                TextSpan(
-                  text: ' · $count',
-                  style: KalinkaTextStyles.sectionLabel.copyWith(
-                    color: KalinkaColors.textMuted,
-                  ),
+              ),
+              TextSpan(
+                text: ' · $count',
+                style: KalinkaTextStyles.sectionLabel.copyWith(
+                  color: KalinkaColors.textMuted,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
-    ),
-  );
+    );
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(gutter, first ? 24 : 36, gutter, 0),
+      sliver: SliverToBoxAdapter(
+        child: action == null
+            ? heading
+            : Row(
+                children: [
+                  Expanded(child: heading),
+                  const SizedBox(width: 12),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: action,
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
 }
 
 class _Notice extends StatelessWidget {
