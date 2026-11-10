@@ -9,7 +9,8 @@ import 'box_actions.dart';
 import 'kalinka_button.dart';
 import 'kalinka_toast_overlay.dart';
 
-/// Card that appears above the mini-player after 30s of failed reconnection.
+/// Card that appears above the mini-player after 30s of failed reconnection,
+/// or as soon as the box is powered off from the app.
 ///
 /// Offers "Scan for servers" — or "Restart server" when the server's box still
 /// answers — and "Retry". Like the toasts that stack above it, it sits at the
@@ -20,10 +21,14 @@ class EscalationCard extends ConsumerStatefulWidget {
   /// Keeps the tablet toasts' wider right gutter, so their edges line up.
   final bool isTablet;
 
+  /// Web has no mDNS to scan with, so there it is Retry alone.
+  final bool canScan;
+
   const EscalationCard({
     super.key,
     required this.onScanForServers,
     this.isTablet = false,
+    this.canScan = !kIsWeb,
   });
 
   /// Marks the card itself, so placement tests can measure where it landed.
@@ -69,9 +74,12 @@ class _EscalationCardState extends ConsumerState<EscalationCard>
 
     if (!shouldShow) return const SizedBox.shrink();
 
+    final poweredOff = notifier.boxPoweredOff;
     // The box still answers at this address, so the server has not moved:
-    // restarting it is the remedy, not scanning for it.
-    final boxAnswers = ref.watch(canRestartServerThroughBoxProvider);
+    // restarting it is the remedy, not scanning for it. A box shutting down
+    // can still answer for a moment.
+    final boxAnswers =
+        !poweredOff && ref.watch(canRestartServerThroughBoxProvider);
 
     return AnimatedBuilder(
       animation: _entryController,
@@ -94,15 +102,14 @@ class _EscalationCardState extends ConsumerState<EscalationCard>
           heightFactor: 1,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: kToastMaxWidth),
-            child: _buildCard(name, boxAnswers),
+            child: _buildCard(name, boxAnswers, poweredOff),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildCard(String name, bool boxAnswers) {
-    // Web has no mDNS to scan with, so there it is Retry alone.
+  Widget _buildCard(String name, bool boxAnswers, bool poweredOff) {
     final primary = boxAnswers
         ? KalinkaButton(
             label: 'Restart server',
@@ -110,7 +117,7 @@ class _EscalationCardState extends ConsumerState<EscalationCard>
             size: KalinkaButtonSize.compact,
             onTap: () => restartServerThroughBox(context, ref),
           )
-        : kIsWeb
+        : !widget.canScan
         ? null
         : KalinkaButton(
             label: 'Scan for servers',
@@ -126,6 +133,17 @@ class _EscalationCardState extends ConsumerState<EscalationCard>
       size: KalinkaButtonSize.compact,
       onTap: () => ref.read(connectionStateProvider.notifier).retryNow(),
     );
+    final message = poweredOff && widget.canScan
+        ? 'The streamer is powered off. Turn it back on, then Retry, or scan '
+              'for another server.'
+        : poweredOff
+        ? 'The streamer is powered off. Turn it back on, then Retry.'
+        : boxAnswers
+        ? 'The server hasn\'t responded for over 30 seconds, but its streamer '
+              'is still on the network. Restarting the server may bring it '
+              'back.'
+        : 'The server hasn\'t responded for over 30 seconds. It may be '
+              'offline or unreachable on the network.';
     return Container(
       key: EscalationCard.cardKey,
       padding: const EdgeInsets.all(16),
@@ -171,12 +189,7 @@ class _EscalationCardState extends ConsumerState<EscalationCard>
           ),
           const SizedBox(height: 10),
           Text(
-            boxAnswers
-                ? 'The server hasn\'t responded for over 30 seconds, but '
-                      'its streamer is still on the network. Restarting the '
-                      'server may bring it back.'
-                : 'The server hasn\'t responded for over 30 seconds. '
-                      'It may be offline or unreachable on the network.',
+            message,
             style: KalinkaTextStyles.trayRowSublabel.copyWith(
               fontSize: KalinkaTypography.baseSize + 0,
               height: 1.5,

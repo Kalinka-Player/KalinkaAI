@@ -179,6 +179,7 @@ Future<bool> runBoxAction(
   final api = ref.read(supervisorApiProvider);
   if (control == null || api == null) return false;
   final toast = ref.read(toastProvider.notifier);
+  final connection = ref.read(connectionStateProvider.notifier);
   final confirmed = await showKalinkaDialog<Object>(
     context: context,
     builder: (_) => BoxActionDialog(
@@ -204,6 +205,7 @@ Future<bool> runBoxAction(
       accepted = 'Power-off timer cancelled.';
     } else {
       await api.run(action, serverId: control.serverId);
+      if (action == BoxAction.powerOff) connection.poweredOff();
     }
   } on BoxActionException catch (e) {
     toast.show(e.message, isError: true, inPanel: inPanel);
