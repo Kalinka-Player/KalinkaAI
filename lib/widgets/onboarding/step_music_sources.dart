@@ -5,9 +5,9 @@ import '../../data_model/presentation_schema.dart';
 import '../../providers/modules_state_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/schema_icons.dart';
 import '../settings_controls/settings_card.dart';
 import '../settings_controls/settings_toggle.dart';
-import '../settings_renderer.dart' show schemaIcon;
 import 'onboarding_fields.dart';
 import 'onboarding_step_scaffold.dart';
 import '../module_artwork.dart';
@@ -99,7 +99,9 @@ class _SourceRow extends ConsumerWidget {
                 icons: live?.icons ?? module.icons,
                 size: 28,
                 fallback: Icon(
-                  schemaIcon(live?.icon ?? module.icon),
+                  iconNamed(live?.icon) ??
+                      iconNamed(module.icon) ??
+                      Icons.library_music_outlined,
                   size: 18,
                   color: KalinkaColors.textSecondary,
                 ),

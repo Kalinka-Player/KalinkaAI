@@ -114,7 +114,15 @@ void main() {
     await _pump(tester, _source('radio', icon: 'waves_outlined'));
 
     expect(find.byIcon(Icons.waves_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.extension_outlined), findsNothing);
+    expect(find.byIcon(Icons.library_music_outlined), findsNothing);
+  });
+
+  testWidgets('draws the library glyph for one it cannot draw, as Home does', (
+    tester,
+  ) async {
+    await _pump(tester, _source('upnp', icon: 'cast'));
+
+    expect(find.byIcon(Icons.library_music_outlined), findsOneWidget);
   });
 
   testWidgets('takes artwork from the module list when the schema has none', (
@@ -135,6 +143,26 @@ void main() {
     );
 
     expect(_drawnIcons(tester), same(_liveIcons));
+  });
+
+  testWidgets('keeps the schema glyph when the list names one it lacks', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      _source('upnp', icon: 'lan_outlined'),
+      live: [
+        ModuleInfo(
+          name: 'upnp',
+          title: 'UPnP',
+          icon: 'no_such_icon',
+          enabled: true,
+          state: ModuleState.ready,
+        ),
+      ],
+    );
+
+    expect(find.byIcon(Icons.lan_outlined), findsOneWidget);
   });
 
   testWidgets('keeps the schema artwork for a source the list lacks', (
