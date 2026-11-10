@@ -22,34 +22,35 @@ class KalinkaOverlayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (KalinkaPopoverContentScope.contains(context)) {
-      return TextFieldTapRegion(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight ?? double.infinity),
-          child: child,
-        ),
-      );
-    }
+    final inPopover = KalinkaPopoverContentScope.contains(context);
+    // Keep the same wrappers in both presentations. Replacing the subtree on
+    // resize loses EditableText's input connection even with a retained focus
+    // node and controller.
     return TextFieldTapRegion(
       child: Material(
         type: MaterialType.transparency,
         child: Container(
-          constraints: maxHeight == null
-              ? null
-              : BoxConstraints(maxHeight: maxHeight!),
-          decoration: BoxDecoration(
-            color: KalinkaColors.surfaceDialog,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: KalinkaColors.borderDefault, width: 1),
-            // Elevation so the card lifts off the fading scrim.
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0xB3000000),
-                offset: Offset(0, 12),
-                blurRadius: 40,
-              ),
-            ],
-          ),
+          constraints: BoxConstraints(maxHeight: maxHeight ?? double.infinity),
+          // Keep Container's padding wrapper when the decorated border goes.
+          padding: EdgeInsets.zero,
+          decoration: inPopover
+              ? const BoxDecoration()
+              : BoxDecoration(
+                  color: KalinkaColors.surfaceDialog,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: KalinkaColors.borderDefault,
+                    width: 1,
+                  ),
+                  // Elevation so the card lifts off the fading scrim.
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0xB3000000),
+                      offset: Offset(0, 12),
+                      blurRadius: 40,
+                    ),
+                  ],
+                ),
           clipBehavior: Clip.antiAlias,
           child: child,
         ),

@@ -188,68 +188,79 @@ class _AdaptiveSheetState extends State<_AdaptiveSheet> {
               ),
       );
     }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final padding = SheetAnchor.paddingFor(
-          widget.anchor,
-          constraints.maxWidth,
-        );
-        return Padding(
-          padding: padding,
-          child: SafeArea(
-            top: widget.mayFillScreen,
-            bottom: false,
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0, 1),
-                  end: Offset.zero,
-                ).animate(widget.animation),
-                child: BottomSheet(
-                  animationController: widget.controller,
-                  onClosing: widget.onClosing,
-                  backgroundColor: KalinkaColors.surfaceDialog,
-                  elevation: 20,
-                  shadowColor: Colors.black,
-                  constraints: const BoxConstraints(maxWidth: kSheetMaxWidth),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(24),
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final padding = SheetAnchor.paddingFor(
+            widget.anchor,
+            constraints.maxWidth,
+          );
+          return Padding(
+            padding: padding,
+            child: SafeArea(
+              top: widget.mayFillScreen,
+              bottom: false,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 1),
+                    end: Offset.zero,
+                  ).animate(widget.animation),
+                  child: BottomSheet(
+                    animationController: widget.controller,
+                    onClosing: widget.onClosing,
+                    backgroundColor: KalinkaColors.surfaceDialog,
+                    elevation: 20,
+                    shadowColor: Colors.black,
+                    constraints: const BoxConstraints(maxWidth: kSheetMaxWidth),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(24),
+                      ),
+                      side: BorderSide(color: KalinkaColors.borderDefault),
                     ),
-                    side: BorderSide(color: KalinkaColors.borderDefault),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  builder: (_) => SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Center(
-                            child: Container(
-                              width: 36,
-                              height: 4,
-                              margin: const EdgeInsets.only(top: 12),
-                              decoration: BoxDecoration(
-                                color: KalinkaColors.surfaceOverlay,
-                                borderRadius: BorderRadius.circular(2),
+                    clipBehavior: Clip.antiAlias,
+                    builder: (_) => SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Center(
+                              child: Container(
+                                width: 36,
+                                height: 4,
+                                margin: const EdgeInsets.only(top: 12),
+                                decoration: BoxDecoration(
+                                  color: KalinkaColors.surfaceOverlay,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
                               ),
                             ),
-                          ),
-                          Flexible(child: body),
-                        ],
+                            Flexible(
+                              // The sheet already clears the keyboard above;
+                              // editors must not add the same inset again.
+                              child: MediaQuery.removeViewInsets(
+                                context: context,
+                                removeBottom: true,
+                                child: body,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

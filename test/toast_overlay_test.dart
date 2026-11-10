@@ -78,6 +78,28 @@ Future<int> _pixelAt(WidgetTester tester, Offset at) async {
 }
 
 void main() {
+  testWidgets('window notifications stay above a floating keyboard inset', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final toasts = await _pumpApp(tester);
+    toasts
+        .read(toastProvider.notifier)
+        .show('Service unavailable', isError: true);
+    for (final size in [const Size(1024, 600), const Size(1440, 900)]) {
+      tester.view.physicalSize = size;
+      tester.view.viewInsets = FakeViewPadding(bottom: size.height / 3);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(_card('Service unavailable')).bottom,
+        lessThanOrEqualTo(size.height * 2 / 3),
+      );
+    }
+    expect(tester.takeException(), isNull);
+    await _retireToast(tester);
+  });
+
   testWidgets('notifications stay capped and right-aligned as panes resize', (
     tester,
   ) async {

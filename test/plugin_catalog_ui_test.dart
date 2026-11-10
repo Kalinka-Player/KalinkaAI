@@ -20,6 +20,7 @@ import 'package:kalinka/widgets/settings_controls/settings_toggle.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/display_settings_provider.dart';
+import 'package:kalinka/providers/on_screen_keyboard_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
@@ -748,6 +749,35 @@ void main() {
           .load();
     }
   });
+
+  testWidgets(
+    'keyboard preference is client-local even without server display',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        settings: _serverSettings(),
+      );
+      await _screen(tester, container);
+      await _tapTab(tester, PluginTab.server);
+      expect(find.text('DISPLAY'), findsNothing);
+      final toggle = find.byKey(const ValueKey('on-screen-keyboard-setting'));
+      await tester.ensureVisible(toggle);
+      await tester.pumpAndSettle();
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(container.read(onScreenKeyboardProvider), isTrue);
+      expect(
+        container
+            .read(sharedPrefsProvider)
+            .getBool(OnScreenKeyboardNotifier.preferenceKey),
+        isTrue,
+      );
+      expect(container.read(settingsProvider).hasPendingChanges, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   group('Display settings', () {
     for (final enabled in [false, true]) {
       testWidgets('section follows the saved display setting: $enabled', (

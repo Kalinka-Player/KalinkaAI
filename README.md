@@ -73,6 +73,49 @@ Everything is also on the [releases page](https://github.com/Kalinka-Player/Kali
 
 The [installation guide](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md) covers images for a Raspberry Pi or PC, virtual machines, the one-command install, adding music and outputs in other rooms, and troubleshooting.
 
+### Touchscreen keyboard
+
+Kalinka's packaged Flutter Pi display enables the keyboard by default. On other
+devices, enable **Settings → Streamer →
+This device → On-screen keyboard** (turn Expert settings off to see the grouped
+settings). An explicit choice, including turning it off, takes precedence over
+the default. It saves immediately in this device's SharedPreferences and survives
+app restarts and server changes. It does not change the server or other clients.
+
+Tap an editable field to show the keyboard. Letters, symbols, numeric input,
+passwords, selection replacement and the field's Done/Search/Next actions work
+through Flutter's normal text-input pipeline. Hold a letter for accents in a
+horizontal picker (wrapping on narrow screens). Tap the outlined globe beside
+Space to choose a layout. All 16 languages appear in a grid with four columns on
+smaller panes and five on wider panes, with no scrolling or background dimming.
+Narrow panes use short language codes; enlarged text can reduce the column count.
+The current layout has a check mark; choosing another keeps the field's text and
+selection. Holding Space opens the same picker. Outside tap, its close button or
+Escape cancels the picker and leaves the keyboard open.
+With no picker open, Hide or Escape closes the keyboard; tapping the field opens
+it again. The keyboard slides up without dimming the background. It waits for the
+mini-player to hide, including when using catalogue text filters, and restores
+the bar after closing. Reduced motion skips these transitions. Dialogs and
+sheets resize above the keyboard. The panel floats over the content, so the
+space beside it remains visible and interactive. Its width follows the letter-key
+height, allowing character keys up to twice as wide as they are tall, with a
+900dp panel maximum. Height stays within 37% of the window (260dp at most): the
+English layout is 900×222 on a 1024×600 screen, with 48dp-tall letter keys and
+clearly visible 6dp row gaps. Hide/Search/Done controls sit
+above the keys in portrait windows and at the side in landscape windows.
+
+The implementation uses [`virtual_keypad`](https://pub.dev/packages/virtual_keypad)
+for layouts and keys, with a small Flutter `TextInputControl` adapter for
+grapheme-aware deletion, signed decimal input and existing form validation. The
+locally pinned package adds custom accent and language pickers and the globe key; see
+[`packages/virtual_keypad/README.md`](packages/virtual_keypad/README.md).
+Flutter-rendered keys suit Flutter Pi, which runs without X11/Wayland. Emoji UI
+and sound/haptic feedback are disabled; the package still brings its transitive
+emoji-picker dependency. All keyboard labels use Kalinka's existing IBM Plex
+Sans; the package's unused emoji font is omitted. It is a touch keyboard, without word
+prediction or autocorrect. Physical Flutter Pi hardware still needs a deployment
+smoke test.
+
 ## License
 
 Source code is **Apache-2.0** — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
