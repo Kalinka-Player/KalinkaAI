@@ -147,6 +147,9 @@ class InfiniteListView<T> extends StatefulWidget {
   /// when short ([AlwaysScrollableScrollPhysics]) to be pulled.
   final bool pullToRefresh;
 
+  /// Keeps the refresh indicator below an overlaid toolbar.
+  final double refreshEdgeOffset;
+
   /// Anything else a pull reloads, alongside the list.
   final Future<void> Function()? onPullToRefresh;
 
@@ -184,6 +187,7 @@ class InfiniteListView<T> extends StatefulWidget {
     this.fastScrollLabel,
     this.fastScrollPadding = EdgeInsets.zero,
     this.pullToRefresh = false,
+    this.refreshEdgeOffset = 0,
     this.onPullToRefresh,
     this.shrinkWrap = false,
   }) : assert(sideHeader == null || sideHeaderWidth > 0),
@@ -531,7 +535,11 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
       );
     }
     if (!widget.pullToRefresh) return list;
-    return PullToRefresh(onRefresh: _pulled, child: list);
+    return PullToRefresh(
+      onRefresh: _pulled,
+      edgeOffset: widget.refreshEdgeOffset,
+      child: list,
+    );
   }
 
   Widget _buildList(BuildContext context) {

@@ -93,8 +93,9 @@ class CatalogPageView extends ConsumerStatefulWidget {
   final ValueChanged<AlbumHeaderInsets>? onAlbumInsets;
   final ValueChanged<bool>? onHeaderCollapsed;
 
-  /// How far a catalog's header scrolls before it is fully collapsed.
-  final ValueChanged<double>? onHeaderCollapseExtent;
+  /// Space reserved inside non-album scroll views for the host's transparent
+  /// toolbar, including the system inset. Its controls stay outside the fade.
+  final double topBarInset;
 
   /// Both wide album columns scroll behind the host's pinned top bar.
   /// Initial content clears the bar and system inset; narrow pages ignore it.
@@ -110,7 +111,7 @@ class CatalogPageView extends ConsumerStatefulWidget {
     this.onAlbumHeaderHeight,
     this.onAlbumInsets,
     this.onHeaderCollapsed,
-    this.onHeaderCollapseExtent,
+    this.topBarInset = 0,
     this.wideAlbumBehindTopBar = false,
   });
 
@@ -314,7 +315,13 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   @override
   Widget build(BuildContext context) => BrowseNavigationScope(
     onOpen: ref.read(searchSessionProvider.notifier).openBrowseItem,
-    child: _buildPage(context),
+    child: widget.page.isAlbum
+        ? _buildPage(context)
+        : TopBarContentFade(
+            key: const ValueKey('catalog-content-fade'),
+            extent: widget.topBarInset,
+            child: _buildPage(context),
+          ),
   );
 
   Widget _buildPage(BuildContext context) {
@@ -439,7 +446,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             page: listing,
             query: query,
             onCollapsed: widget.onHeaderCollapsed,
-            onCollapseExtent: widget.onHeaderCollapseExtent,
+            topInset: widget.topBarInset,
             actions: page.folderLayout && _FolderActions.anyFor(page, listing)
                 ? _FolderActions(
                     page: page,
@@ -448,6 +455,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                   )
                 : null,
           )
+        : !isAlbum && widget.topBarInset > 0
+        ? PinnedHeaderSliver(child: SizedBox(height: widget.topBarInset))
         : null;
     final Widget header = isAlbum
         ? MeasureSize(
@@ -518,6 +527,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         revision: revision + libraryRevision,
         header: header,
         sliverHeader: sliverHeader,
+        topInset: widget.topBarInset,
         empty: _emptyState(page, filter, onReset: setQuery),
         onViewAll: notifier.expandShelf,
       );
@@ -548,6 +558,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           ? (place) => _keepPlace(places, listing.id!, place)
           : null,
       pullToRefresh: true,
+      refreshEdgeOffset: isAlbum ? 0 : widget.topBarInset,
       // The shelves its header holds reload with it.
       onPullToRefresh: identical(listing, page) && page.sections.isNotEmpty
           ? () => SectionShelves.refresh(ref, page.sections, query)
@@ -558,6 +569,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         // Without the chrome, the actions are held over the list instead.
         top:
             topInset +
+            (isAlbum ? 0 : widget.topBarInset) +
             CatalogSliverHeader.pinnedExtent(
               context,
               actions:
@@ -879,7 +891,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
         ),
         if (_actionsHeld && _FolderActions.anyFor(page, listing))
           Positioned(
-            top: 0,
+            top: widget.topBarInset,
             left: 0,
             right: 0,
             child: DecoratedBox(
@@ -1035,7 +1047,12 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     // Whether it lists releases or tracks is not known yet, so not how they
     // will look either. Pulled to reload, it keeps what it knew meanwhile.
     if (!relations.hasValue && !relations.hasError) {
-      return ListView(children: [header, const LoadingSpinner()]);
+      return CustomScrollView(
+        slivers: [
+          PinnedHeaderSliver(child: SizedBox(height: widget.topBarInset)),
+          SliverList.list(children: [header, const LoadingSpinner()]),
+        ],
+      );
     }
     final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
     final trackIdsMemo = _TrackIdsMemo();
@@ -1052,6 +1069,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           key: ValueKey('${page.id}|$shown'),
           padding: const EdgeInsets.only(bottom: 24),
           header: header,
+          sliverHeader: widget.topBarInset > 0
+              ? PinnedHeaderSliver(child: SizedBox(height: widget.topBarInset))
+              : null,
           columns: columns,
           rowPadding: EdgeInsets.symmetric(
             horizontal: grid ? 16 - ArtworkGridCard.inset : 16,
@@ -1060,10 +1080,14 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           rowGap: grid ? 0 : 6,
           fetchChunk: _relationFetch(page.id!, shown),
           pullToRefresh: true,
+          refreshEdgeOffset: widget.topBarInset,
           onPullToRefresh: () =>
               ref.refresh(artistRelationsProvider(page.id!).future),
           fastScroll: true,
-          fastScrollPadding: const EdgeInsets.only(bottom: 8),
+          fastScrollPadding: EdgeInsets.only(
+            top: widget.topBarInset,
+            bottom: 8,
+          ),
           rowsDependOn: (loaded) => (
             trackIdsMemo.details(loaded),
             trackIdsMemo.artists(loaded),
@@ -1120,16 +1144,18 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                   child: BrowseRowsShimmer(count: 3, leadingDivider: true),
                 ),
           emptyBuilder: (context) => const _CatalogEmpty(),
-          errorBuilder: (context, _) => CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(child: header),
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _CatalogError(onReturn: widget.onBackToCatalogs),
-              ),
-            ],
-          ),
+          errorBuilder: (context, _) => widget.topBarInset > 0
+              ? _CatalogError(onReturn: widget.onBackToCatalogs)
+              : CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(child: header),
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _CatalogError(onReturn: widget.onBackToCatalogs),
+                    ),
+                  ],
+                ),
         );
       },
     );
