@@ -222,6 +222,11 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
 
   // Whether the bar's search has unrolled its field under the bar.
   bool _barSearchOpen = false;
+  bool _catalogSearchInBar = false;
+  final _catalogSearchFocus = FocusNode();
+  // Move the same editable field between the toolbar and its narrow-screen
+  // row. Replacing it would discard drafts, selection and the input connection.
+  GlobalKey _catalogSearchFieldKey = GlobalKey();
   // A catalog's bar takes on its collapsing header's surface at the same
   // pace, so once collapsed the two read as one over the art.
   final _catalogSurface = ValueNotifier<double>(0);
@@ -370,6 +375,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     _pageReveal.dispose();
     _composerController.dispose();
     _composerFocus.dispose();
+    _catalogSearchFocus.dispose();
     // Torn down with the overlay still up (the server went away) would
     // otherwise leave the shared flag stuck true and the mini-player hidden.
     // Clear it after this frame — a synchronous write could land mid-build of
@@ -669,6 +675,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         session.catalogPage.isAlbum;
     ref.listen(searchSessionProvider.select((s) => s.visitId), (_, visit) {
       _barSearchOpen = false;
+      _catalogSearchFocus.unfocus();
+      // Drafts belong to one visit; resizing keeps this key, navigation doesn't.
+      _catalogSearchFieldKey = GlobalKey();
       _albumOffset.value = _albumOffsets[visit] ?? 0;
       _albumHeaderHeight.value = _albumHeaderHeights[visit] ?? 0;
       _albumInsets.value = _albumInsetsOf[visit];
@@ -727,6 +736,18 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
+          final searchInBar = CatalogSliverHeader.searchInBar(
+            constraints.maxWidth - MediaQuery.paddingOf(context).horizontal,
+            MediaQuery.textScalerOf(context).scale(16) / 16,
+          );
+          if (_catalogSearchInBar &&
+              !searchInBar &&
+              _catalogSearchFocus.hasFocus) {
+            // Carry an active toolbar edit into the unrolled row in this same
+            // frame, before the field's old parent is removed.
+            _barSearchOpen = true;
+          }
+          _catalogSearchInBar = searchInBar;
           final barFloats = MultiSelectBottomBar.floatsIn(constraints.maxWidth);
           // A wide album sets its cover beside the tracks, not behind them.
           final onAlbum =
@@ -924,7 +945,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                     bottom: 0,
                     child: MultiSelectBottomBar(),
                   ),
-                if (_barSearchOpen && _barSearchOf(session) != null)
+                if (_barSearchOpen &&
+                    !_catalogSearchInBar &&
+                    _barSearchOf(session) != null)
                   _buildUnrolledSearch(session),
                 // Only while there is something to narrow: a reconnect can reset
                 // the session under an open card.
@@ -1478,7 +1501,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     final search = _barSearchOf(session);
     if (search == null) return null;
     final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
-    if (!CatalogSliverHeader.searchInBar(width, scale)) {
+    if (!_catalogSearchInBar) {
       return CatalogSearchButton(
         key: const ValueKey('catalog-bar-search'),
         active: search.applied,
@@ -1494,12 +1517,11 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           CatalogSliverHeader.searchMaxWidth * scale,
           width * 0.4,
         ),
-        // A field of each visit's own, so text typed and not sent on one
-        // page is never sent on the next.
         child: KeyedSubtree(
-          key: ValueKey(session.visitId),
+          key: const ValueKey('catalog-bar-field'),
           child: FilterSearchField(
-            key: const ValueKey('catalog-bar-field'),
+            key: _catalogSearchFieldKey,
+            focusNode: _catalogSearchFocus,
             enabled: search.enabled,
             value: search.value,
             hint: search.hint,
@@ -1563,41 +1585,37 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// scroll or on Back.
   Widget _buildUnrolledSearch(SearchSessionState session) {
     final search = _barSearchOf(session)!;
-    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
     return Positioned(
       top: MediaQuery.paddingOf(context).top + _barHeight(session),
       left: 0,
       right: 0,
-      // Widened to room in the bar, the field is there instead.
-      child: LayoutBuilder(
-        builder: (context, constraints) =>
-            CatalogSliverHeader.searchInBar(constraints.maxWidth, scale)
-            ? const SizedBox.shrink()
-            : _Unroll(
-                child: DecoratedBox(
-                  decoration: const BoxDecoration(
-                    color: KalinkaColors.background,
-                    border: Border(
-                      bottom: BorderSide(color: KalinkaColors.borderDefault),
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: FilterSearchField(
-                      key: const ValueKey('catalog-unrolled-search'),
-                      enabled: search.enabled,
-                      value: search.value,
-                      hint: search.hint,
-                      neutral: true,
-                      autofocus: true,
-                      submitOnly: true,
-                      onChanged: search.onSearch,
-                      onSubmitted: (_) =>
-                          setState(() => _barSearchOpen = false),
-                    ),
-                  ),
-                ),
+      child: _Unroll(
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            color: KalinkaColors.background,
+            border: Border(
+              bottom: BorderSide(color: KalinkaColors.borderDefault),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: KeyedSubtree(
+              key: const ValueKey('catalog-unrolled-search'),
+              child: FilterSearchField(
+                key: _catalogSearchFieldKey,
+                focusNode: _catalogSearchFocus,
+                enabled: search.enabled,
+                value: search.value,
+                hint: search.hint,
+                neutral: true,
+                autofocus: true,
+                submitOnly: true,
+                onChanged: search.onSearch,
+                onSubmitted: (_) => setState(() => _barSearchOpen = false),
               ),
+            ),
+          ),
+        ),
       ),
     );
   }

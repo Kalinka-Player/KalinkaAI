@@ -13,6 +13,7 @@ import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/indexer_status_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
+import 'package:kalinka/providers/on_screen_keyboard_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/providers/receiver_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
@@ -21,6 +22,7 @@ import 'package:kalinka/providers/websocket_provider.dart';
 import 'package:kalinka/screens/music_player_screen.dart';
 import 'package:kalinka/widgets/home/home_section_plan.dart';
 import 'package:kalinka/widgets/home/planned_home_sections.dart';
+import 'package:kalinka/widgets/keyboard/on_screen_keyboard_host.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -128,6 +130,7 @@ Future<ProviderContainer> pumpHomeShell(
   CollectionsShelf? collections,
   TextScaler? textScaler,
   bool? reducedMotion,
+  bool onScreenKeyboard = false,
   bool themed = false,
   Key? captureKey,
   Widget? screen,
@@ -138,6 +141,7 @@ Future<ProviderContainer> pumpHomeShell(
     'Kalinka.name': 'Test',
     OnboardingStatusNotifier.sharedPrefOobeComplete: true,
     OnboardingStatusNotifier.sharedPrefCoachMarksShown: coachMarksShown,
+    OnScreenKeyboardNotifier.preferenceKey: onScreenKeyboard,
   });
   final prefs = await SharedPreferences.getInstance();
   tester.view.physicalSize = size;
@@ -189,7 +193,9 @@ Future<ProviderContainer> pumpHomeShell(
               textScaler: textScaler,
               disableAnimations: reducedMotion,
             ),
-            child: child!,
+            child: onScreenKeyboard
+                ? OnScreenKeyboardHost(child: child!)
+                : child!,
           ),
           home: screen ?? const MusicPlayerScreen(),
         ),

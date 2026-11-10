@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -167,7 +169,10 @@ class KalinkaToastHost extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final inset = ref.watch(toastBottomInsetProvider);
+    final inset = math.max(
+      ref.watch(toastBottomInsetProvider),
+      MediaQuery.viewInsetsOf(context).bottom,
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         // The shell keeps clear of side insets; so do its panes.

@@ -20,6 +20,7 @@ import 'widgets/kalinka_toast_overlay.dart';
 import 'widgets/foreground_volume_overlay.dart';
 import 'widgets/receiver_approval.dart';
 import 'widgets/kiosk/local_kiosk_host.dart';
+import 'widgets/keyboard/on_screen_keyboard_host.dart';
 
 bool get networkActivation =>
     kIsWeb && Uri.base.queryParameters['setup'] == 'network';
@@ -100,6 +101,7 @@ class KalinkaApp extends ConsumerWidget {
         title: 'Kalinka setup',
         theme: AppTheme.dark(),
         debugShowCheckedModeBanner: false,
+        builder: (_, child) => OnScreenKeyboardHost(child: child!),
         home: NetworkSetupScreen(endpoint: endpoint),
       );
     }
@@ -112,8 +114,10 @@ class KalinkaApp extends ConsumerWidget {
       theme: AppTheme.dark(),
       debugShowCheckedModeBanner: false,
       builder: (_, child) {
-        final app = ForegroundVolumeOverlay(
-          child: KalinkaToastHost(child: child!),
+        final app = OnScreenKeyboardHost(
+          child: ForegroundVolumeOverlay(
+            child: KalinkaToastHost(child: child!),
+          ),
         );
         return localDisplay ? LocalKioskHost(child: app) : app;
       },

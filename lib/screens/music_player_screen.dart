@@ -37,6 +37,7 @@ import '../widgets/kalinka_button.dart';
 import '../widgets/kalinka_top_bar.dart';
 import '../widgets/kalinka_bottom_sheet.dart';
 import '../widgets/kalinka_dialog.dart';
+import '../widgets/keyboard/keyboard_presentation_scope.dart';
 import '../widgets/measure_size.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/now_playing_content.dart';
@@ -71,7 +72,7 @@ class MusicPlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _searchEntryKey = GlobalKey();
   final _connectionDotKey = GlobalKey();
   // The output switcher moves house across the breakpoint — mini-player on
@@ -103,6 +104,14 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   late final AnimationController _miniPlayerHide;
   late final Animation<double> _miniPlayerReveal;
   late final Animation<Offset> _miniPlayerSlide;
+
+  // All editable fields, including inline catalogue filters, can bring up
+  // the device keyboard. Keep this independent of the main search overlay.
+  KeyboardPresentationController? _keyboardPresentation;
+  bool _keyboardActive = false;
+  late final AnimationController _keyboardHide;
+  late final Animation<double> _keyboardReveal;
+  late final Animation<Offset> _keyboardSlide;
 
   // In-screen management overlays; menus use adaptive popup routes.
   bool _pluginsOpen = false;
@@ -178,6 +187,19 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       end: const Offset(0, 1),
     ).animate(curved);
 
+    _keyboardHide = AnimationController(
+      vsync: this,
+      duration: kMiniPlayerHideDuration,
+    );
+    final keyboardCurve = _keyboardHide.drive(
+      CurveTween(curve: Curves.easeOutCubic),
+    );
+    _keyboardReveal = Tween<double>(begin: 1, end: 0).animate(keyboardCurve);
+    _keyboardSlide = Tween<Offset>(
+      begin: Offset.zero,
+      end: const Offset(0, 1),
+    ).animate(keyboardCurve);
+
     // Every connection — at launch, via discovery, or seeded from the
     // serving origin on web — checks whether the server itself still needs
     // setup (see _checkServerNeedsSetup). On web it is the only route in.
@@ -206,11 +228,70 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final presentation = KeyboardPresentationScope.maybeOf(context);
+    if (presentation == _keyboardPresentation) return;
+    _keyboardPresentation?.detach(_setKeyboardVisible);
+    _keyboardPresentation = presentation;
+    presentation?.attach(_setKeyboardVisible);
+    _keyboardActive = presentation?.active ?? false;
+    // A shell first mounted under an open keyboard starts with its bar hidden.
+    _keyboardHide.value = _keyboardActive ? 1 : 0;
+  }
+
+  Future<void> _setKeyboardVisible(bool visible) async {
+    if (!mounted) return;
+    final media = MediaQuery.of(context);
+    final tablet = kalinkaSplitLayout(
+      media.size.width - media.padding.horizontal,
+      textScaler: media.textScaler,
+    );
+    final barShowing =
+        ref.read(connectionStateProvider) != ConnectionStatus.none &&
+        (tablet
+            ? ref.read(playerViewProvider) == PlayerView.queue
+            : !ref.read(_serverBusyProvider) &&
+                  !_sheetOpen &&
+                  (!_settingsCovering || _pluginsOpen) &&
+                  (_pluginsOpen || !_miniPlayerHide.isCompleted));
+    setState(() => _keyboardActive = visible);
+    if (media.disableAnimations ||
+        !TickerMode.valuesOf(context).enabled ||
+        (visible && !barShowing)) {
+      _keyboardHide.value = visible ? 1 : 0;
+    } else if (visible) {
+      await _keyboardHide.forward().orCancel;
+    } else {
+      await _keyboardHide.reverse().orCancel;
+    }
+  }
+
+  Widget _keyboardAwareMiniPlayer(Widget child, {bool collapse = false}) {
+    final sliding = IgnorePointer(
+      ignoring: _keyboardActive,
+      child: ExcludeSemantics(
+        excluding: _keyboardActive,
+        child: SlideTransition(position: _keyboardSlide, child: child),
+      ),
+    );
+    return collapse
+        ? SizeTransition(
+            sizeFactor: _keyboardReveal,
+            alignment: Alignment.bottomCenter,
+            child: sliding,
+          )
+        : sliding;
+  }
+
+  @override
   void dispose() {
     // The kiosk display replaces this screen once a server is picked. No
     // provider may change while the tree is being torn down.
     final pause = _reconnectPause;
     if (pause != null) Future.microtask(pause.release);
+    _keyboardPresentation?.detach(_setKeyboardVisible);
+    _keyboardHide.dispose();
     _miniPlayerHide.dispose();
     _miniPlayerExtent.dispose();
     super.dispose();
@@ -747,6 +828,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
             final barShowing =
                 isTablet &&
                 connected &&
+                !_keyboardActive &&
                 ref.watch(playerViewProvider) == PlayerView.queue;
             final barHeight =
                 kalinkaMiniPlayerHeight(context) +
@@ -810,7 +892,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                       right: 0,
                       top: 0,
                       // Clear of the phone's mini-player, while it shows.
-                      bottom: connected && !_serverBusy ? barHeight : 0,
+                      bottom: connected && !_serverBusy && !_keyboardActive
+                          ? barHeight
+                          : 0,
                       child: customise,
                     ),
                 ],
@@ -827,6 +911,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                 : null;
             return Scaffold(
               backgroundColor: KalinkaColors.background,
+              // The device keyboard floats over just its own rectangle. Keep
+              // the catalogue and rail painted beside it; editors and dialogs
+              // use the keyboard's MediaQuery inset to avoid the keys.
+              resizeToAvoidBottomInset: !_keyboardActive,
               // Only the foot animates, as the browsing pane's does.
               body: TweenAnimationBuilder<double>(
                 tween: Tween(end: barShowing ? barHeight : 0),
@@ -867,8 +955,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                         // pane.
                         child: SheetAnchor(
                           target: _playerPaneKey,
-                          child: QueueMiniPlayer(
-                            outputSwitcherKey: _outputSwitcherKey,
+                          child: _keyboardAwareMiniPlayer(
+                            QueueMiniPlayer(
+                              outputSwitcherKey: _outputSwitcherKey,
+                            ),
                           ),
                         ),
                       ),
@@ -954,7 +1044,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         !_serverBusy;
     // Clear the mini-player, and the escalation card when it is up.
     _publishToastInset(
-      (miniPlayer ? kalinkaMiniPlayerHeight(context) : 0) + _escalationHeight,
+      (miniPlayer && !_keyboardActive ? kalinkaMiniPlayerHeight(context) : 0) +
+          _escalationHeight,
     );
 
     // Configuration and renderer panels handle their own layered Back
@@ -981,12 +1072,17 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           // The mini-player takes the inset under it while
                           // it is there, as it does for the rail.
                           child: AnimatedBuilder(
-                            animation: _miniPlayerReveal,
+                            animation: Listenable.merge([
+                              _miniPlayerReveal,
+                              _keyboardReveal,
+                            ]),
                             builder: (context, child) =>
                                 MediaQuery.removePadding(
                                   context: context,
                                   removeBottom:
-                                      miniPlayer && _miniPlayerReveal.value > 0,
+                                      miniPlayer &&
+                                      _miniPlayerReveal.value > 0 &&
+                                      _keyboardReveal.value > 0,
                                   child: child!,
                                 ),
                             child: _buildHome(
@@ -1001,7 +1097,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                         if (_pluginsOpen)
                           MediaQuery.removePadding(
                             context: context,
-                            removeBottom: miniPlayer,
+                            removeBottom: miniPlayer && !_keyboardActive,
                             child: ClipRect(
                               child: Stack(
                                 fit: StackFit.expand,
@@ -1027,21 +1123,24 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   maintainState: true,
                   maintainAnimation: true,
                   maintainSize: true,
-                  child: SizeTransition(
-                    sizeFactor: _pluginsOpen
-                        ? const AlwaysStoppedAnimation(1.0)
-                        : _miniPlayerReveal,
-                    alignment: AlignmentDirectional.bottomStart,
-                    child: SlideTransition(
-                      position: _pluginsOpen
-                          ? const AlwaysStoppedAnimation(Offset.zero)
-                          : _miniPlayerSlide,
-                      child: MeasureSize(
-                        onChange: (size) =>
-                            _miniPlayerExtent.value = size.height,
-                        child: MiniPlayer(
-                          onTap: _showExpandedPlayer,
-                          outputSwitcherKey: _outputSwitcherKey,
+                  child: _keyboardAwareMiniPlayer(
+                    collapse: true,
+                    SizeTransition(
+                      sizeFactor: _pluginsOpen
+                          ? const AlwaysStoppedAnimation(1.0)
+                          : _miniPlayerReveal,
+                      alignment: AlignmentDirectional.bottomStart,
+                      child: SlideTransition(
+                        position: _pluginsOpen
+                            ? const AlwaysStoppedAnimation(Offset.zero)
+                            : _miniPlayerSlide,
+                        child: MeasureSize(
+                          onChange: (size) =>
+                              _miniPlayerExtent.value = size.height,
+                          child: MiniPlayer(
+                            onTap: _showExpandedPlayer,
+                            outputSwitcherKey: _outputSwitcherKey,
+                          ),
                         ),
                       ),
                     ),
@@ -1094,12 +1193,18 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }) {
     final estimate = _miniPlayerSlot();
     return AnimatedBuilder(
-      animation: Listenable.merge([_miniPlayerReveal, _miniPlayerExtent]),
+      animation: Listenable.merge([
+        _miniPlayerReveal,
+        _miniPlayerExtent,
+        _keyboardReveal,
+      ]),
       builder: (context, child) {
         final slot = _miniPlayerExtent.value ?? estimate;
         final above = !miniPlayer || miniCovered
             ? 0.0
-            : slot * (_pluginsOpen ? 1 : _miniPlayerReveal.value);
+            : slot *
+                  (_pluginsOpen ? 1 : _miniPlayerReveal.value) *
+                  _keyboardReveal.value;
         return Positioned(
           left: 0,
           top: 0,
@@ -1324,6 +1429,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           // it while it shows.
           final barShowing =
               !disconnected &&
+              !_keyboardActive &&
               ref.watch(playerViewProvider) == PlayerView.queue;
           final barHeight =
               kalinkaMiniPlayerHeight(context) +
