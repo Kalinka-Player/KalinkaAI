@@ -19,6 +19,10 @@ class ServerInfo {
   /// The server checks installed plugins for newer catalog releases.
   final bool pluginUpdateChecks;
 
+  /// The server queues an operation asked for while another runs, and
+  /// updates several plugins at once (API 0.23).
+  final bool pluginOperationQueue;
+
   /// The server lists its volumes and the folders on them (API 0.21).
   final bool storage;
 
@@ -32,6 +36,7 @@ class ServerInfo {
     this.pluginCatalogOff = false,
     this.pluginInstallation = false,
     this.pluginUpdateChecks = false,
+    this.pluginOperationQueue = false,
     this.storage = false,
     this.storageDevices = false,
   });
@@ -59,6 +64,7 @@ final serverInfoProvider = FutureProvider.autoDispose<ServerInfo>((ref) async {
     pluginCatalogOff: !can('enabled') && can('catalog_browsing'),
     pluginInstallation: browsing && can('installation'),
     pluginUpdateChecks: browsing && can('update_checks'),
+    pluginOperationQueue: browsing && can('operation_queue'),
     storage: storage is Map && storage['folders'] == true,
     storageDevices: storage is Map && storage['devices'] == true,
   );
@@ -102,4 +108,12 @@ final pluginUpdateChecksProvider = Provider<bool>(
   (ref) =>
       ref.watch(pluginCatalogAvailableProvider) &&
       ref.watch(serverInfoProvider).value?.pluginUpdateChecks == true,
+);
+
+/// Whether several plugins can be asked for at once, the server working
+/// through them in turn.
+final pluginOperationQueueProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(pluginInstallationProvider) &&
+      ref.watch(serverInfoProvider).value?.pluginOperationQueue == true,
 );
