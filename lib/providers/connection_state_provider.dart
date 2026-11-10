@@ -183,7 +183,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     state = ConnectionStatus.none;
   }
 
-  /// The box accepted a power-off, so its socket closing is not a drop to
+  /// The box is powering off, so its socket closing is not a drop to
   /// reconnect from.
   void poweredOff() {
     _cancelRetryTimer();

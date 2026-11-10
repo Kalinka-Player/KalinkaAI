@@ -10,7 +10,7 @@ import 'kalinka_button.dart';
 import 'kalinka_toast_overlay.dart';
 
 /// Card that appears above the mini-player after 30s of failed reconnection,
-/// or as soon as the box is powered off from the app.
+/// or as soon as the box is known to be powering off.
 ///
 /// Offers "Scan for servers" — or "Restart server" when the server's box still
 /// answers — and "Retry". Like the toasts that stack above it, it sits at the
