@@ -1134,11 +1134,12 @@ class EntityId {
   }
 }
 
-/// How closely a search hit's name answers the query, best first — the order
-/// hits from several sources merge in, without the app ranking anything.
+/// How closely a search hit's name answers the query, best first. A server
+/// before API 0.23 merged hits by it; newer ones merge by
+/// [NameMatch.relevance].
 enum MatchTier { exact, equivalent, close, partial, contextual, weak }
 
-/// Why a search hit stands where it does in its listing, as the server's name
+/// Why a search hit stands where it does in its listing, as the server's
 /// ranking decided it.
 class NameMatch {
   final MatchTier tier;
@@ -1147,7 +1148,11 @@ class NameMatch {
   /// and means nothing across tiers.
   final double score;
 
-  const NameMatch({required this.tier, required this.score});
+  /// The hit's standing among every hit of the search, higher first and
+  /// comparable across kinds and sources (API 0.23). Null from older servers.
+  final double? relevance;
+
+  const NameMatch({required this.tier, required this.score, this.relevance});
 
   /// Null for a tier this build does not know: such a hit merges last rather
   /// than somewhere made up.
@@ -1155,10 +1160,18 @@ class NameMatch {
     if (json == null) return null;
     final tier = MatchTier.values.asNameMap()[json["tier"]];
     if (tier == null) return null;
-    return NameMatch(tier: tier, score: (json["score"] as num).toDouble());
+    return NameMatch(
+      tier: tier,
+      score: (json["score"] as num).toDouble(),
+      relevance: (json["relevance"] as num?)?.toDouble(),
+    );
   }
 
-  Map<String, dynamic> toJson() => {"tier": tier.name, "score": score};
+  Map<String, dynamic> toJson() => {
+    "tier": tier.name,
+    "score": score,
+    if (relevance != null) "relevance": relevance,
+  };
 }
 
 class BrowseItem {

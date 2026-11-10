@@ -11,6 +11,7 @@ paragraph, however long; blank lines separate paragraphs.
 ## Unreleased
 
 ### Changed
+- Search results keep each streaming service's own order, with artists, albums, playlists and tracks taking turns instead of every artist coming first, and several services taking turns as well. A server speaking REST 0.23 puts this order on each result; against an older server, results are ordered by how closely their names match, as before.
 - Settings is the only settings screen. The server menu, the rail and Home's music sources always offer it, whatever the server's Plugin catalog preview setting says, and the older Server settings screen is gone. Where the server has its plugin catalog turned off, or is too old to list it, Settings still opens with the installed plugins and the Streamer tab, and says why the catalog is missing.
 - A device that the old Now-playing display switch kept on the full-screen display now opens the app as usual at start. Five taps on the display's logo no longer do anything; the player's Now-playing display button still opens it, and the server's own screen is unchanged.
 

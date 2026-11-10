@@ -47,13 +47,23 @@ class InspiredGroup {
   });
 }
 
+typedef _MatchEntry = ({
+  int tier,
+  int kind,
+  double score,
+  double? relevance,
+  int source,
+  int index,
+  BrowseItem item,
+});
+
 /// Everything a search has heard back, source by source.
 ///
 /// Each leg is asked of each source separately, so each can land, fail and be
 /// retried on its own — but only of a source that can answer it: one with no
 /// audio of its own to suggest is asked for names alone. The name matches of
-/// every source merge into one list by the tier and score the server put on
-/// each hit; the recommendations stay grouped by the source that made them.
+/// every source merge into one list by the relevance the server put on each
+/// hit; the recommendations stay grouped by the source that made them.
 class SearchResults {
   final String query;
 
@@ -114,8 +124,8 @@ class SearchResults {
       if (matches[source] is LegFailed) source,
   ];
 
-  /// The run each kind takes within a tier — the less granular first, as
-  /// the server orders one source's hits.
+  /// The run each kind takes among hits that otherwise tie — the less
+  /// granular first, as the server orders one source's hits.
   static const _kindOrder = <SearchType, int>{
     SearchType.artist: 0,
     SearchType.album: 1,
@@ -123,22 +133,12 @@ class SearchResults {
     SearchType.track: 3,
   };
 
-  /// The name matches of every answered source as one list: tier first, kind
-  /// within it so the list reads as runs rather than a shuffle, score within
-  /// the kind, then the source order — a stable merge that keeps each
-  /// source's own order among its ties, so nothing is ranked here.
+  /// The name matches of every answered source as one list, by the relevance
+  /// the server put on each hit, then kind, then the source order — so nothing
+  /// is ranked here. A server before API 0.23 puts no relevance on its hits;
+  /// those merge by tier, kind within it, then score.
   List<BrowseItem> get rankedMatches {
-    final entries =
-        <
-          ({
-            int tier,
-            int kind,
-            double score,
-            int source,
-            int index,
-            BrowseItem item,
-          })
-        >[];
+    final entries = <_MatchEntry>[];
     for (var rank = 0; rank < sources.length; rank++) {
       final state = matches[sources[rank].name];
       if (state is! LegReady) continue;
@@ -148,20 +148,34 @@ class SearchResults {
           tier: match?.tier.index ?? MatchTier.values.length,
           kind: _kindOrder[_typeOf(item)] ?? _kindOrder.length,
           score: match?.score ?? 0,
+          relevance: match?.relevance,
           source: rank,
           index: entries.length,
           item: item,
         ));
       }
     }
-    entries.sort((a, b) {
-      if (a.tier != b.tier) return a.tier.compareTo(b.tier);
-      if (a.kind != b.kind) return a.kind.compareTo(b.kind);
-      if (a.score != b.score) return b.score.compareTo(a.score);
-      if (a.source != b.source) return a.source.compareTo(b.source);
-      return a.index.compareTo(b.index);
-    });
+    final annotated = entries.where((e) => e.tier < MatchTier.values.length);
+    final byRelevance =
+        annotated.isNotEmpty && annotated.every((e) => e.relevance != null);
+    entries.sort(byRelevance ? _byRelevance : _byTier);
     return [for (final entry in entries) entry.item];
+  }
+
+  static int _byRelevance(_MatchEntry a, _MatchEntry b) {
+    final relevance = (b.relevance ?? -1).compareTo(a.relevance ?? -1);
+    if (relevance != 0) return relevance;
+    if (a.kind != b.kind) return a.kind.compareTo(b.kind);
+    if (a.source != b.source) return a.source.compareTo(b.source);
+    return a.index.compareTo(b.index);
+  }
+
+  static int _byTier(_MatchEntry a, _MatchEntry b) {
+    if (a.tier != b.tier) return a.tier.compareTo(b.tier);
+    if (a.kind != b.kind) return a.kind.compareTo(b.kind);
+    if (a.score != b.score) return b.score.compareTo(a.score);
+    if (a.source != b.source) return a.source.compareTo(b.source);
+    return a.index.compareTo(b.index);
   }
 
   /// One group per source that was asked, in display order, whatever its
