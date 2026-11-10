@@ -8,6 +8,7 @@ import '../data_model/presentation_schema.dart';
 import '../theme/app_theme.dart';
 import 'settings_controls/settings_binding.dart';
 import 'settings_renderer.dart' show buildFieldControl;
+import 'settings_controls/settings_help_button.dart';
 import 'configuration_appearance.dart';
 import 'settings_controls/issue_notes.dart';
 import 'settings_controls/settings_row.dart' show kSettingsGutter;
@@ -372,6 +373,11 @@ class _ExpertRow extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(field.label, style: KalinkaTextStyles.trayRowLabel),
+              if (field.helpDetails?.trim().isNotEmpty ?? false)
+                SettingsHelpButton(
+                  label: field.label,
+                  details: field.helpDetails!,
+                ),
               if (isStaged && ConfigurationAppearance.active(context))
                 const ChangedSettingLabel(),
             ],

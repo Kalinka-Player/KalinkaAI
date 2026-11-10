@@ -318,6 +318,7 @@ class OnboardingFieldRow extends ConsumerWidget {
     return SettingsRow(
       label: label ?? field.label,
       sublabel: help ?? field.help,
+      helpDetails: field.helpDetails,
       isStaged: state.isStaged(path),
       isVertical: vertical,
       control: buildFieldControl(

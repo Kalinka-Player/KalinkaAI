@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import 'inline_markdown.dart';
+import 'settings_help_button.dart';
 import '../../utils/haptics.dart';
 
 /// Slider control for bounded numeric ranges.
@@ -19,6 +21,8 @@ import '../../utils/haptics.dart';
 /// only ever reports a value the backend accepts.
 class SettingsSlider extends StatefulWidget {
   final String label;
+  final String? sublabel;
+  final String? helpDetails;
   final double value;
   final double min;
   final double max;
@@ -43,6 +47,8 @@ class SettingsSlider extends StatefulWidget {
   const SettingsSlider({
     super.key,
     required this.label,
+    this.sublabel,
+    this.helpDetails,
     required this.value,
     required this.min,
     required this.max,
@@ -156,12 +162,28 @@ class _SettingsSliderState extends State<SettingsSlider> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (hasLabel) ...[
-            Text(
-              widget.label,
-              style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                fontSize: KalinkaTypography.baseSize + 2,
-              ),
+            Wrap(
+              spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  widget.label,
+                  style: KalinkaTextStyles.trayRowSublabel.copyWith(
+                    fontSize: KalinkaTypography.baseSize + 2,
+                  ),
+                ),
+                if (widget.helpDetails?.trim().isNotEmpty ?? false)
+                  SettingsHelpButton(
+                    label: widget.label,
+                    details: widget.helpDetails!,
+                  ),
+              ],
             ),
+            if (widget.sublabel?.isNotEmpty ?? false)
+              InlineMarkdown(
+                text: widget.sublabel!,
+                style: KalinkaTextStyles.trayRowSublabel,
+              ),
             SizedBox(height: dense ? 2 : 6),
           ],
           // Value readout floating above the thumb. minHeight + invisible

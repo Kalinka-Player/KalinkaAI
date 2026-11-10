@@ -240,6 +240,7 @@ class FieldSpec {
   final WidgetKind widget;
   final String type;
   final String? help;
+  final String? helpDetails;
   final dynamic defaultValue;
   final bool readonly;
   // True when the value is resolved by the owning plugin at request time
@@ -252,6 +253,7 @@ class FieldSpec {
   final bool dynamicOptions;
   final Importance importance;
   final Setup setup;
+
   /// What the server says a save costs; null from one that does not say.
   final Apply? apply;
   final List<String>? enumValues;
@@ -268,6 +270,7 @@ class FieldSpec {
     required this.widget,
     required this.type,
     this.help,
+    this.helpDetails,
     this.defaultValue,
     this.readonly = false,
     this.dynamic_ = false,
@@ -291,6 +294,7 @@ class FieldSpec {
     widget: WidgetKind.fromName(j['widget'] as String?),
     type: j['type'] as String,
     help: j['help'] as String?,
+    helpDetails: j['help_details'] as String?,
     defaultValue: j['default'],
     readonly: j['readonly'] as bool? ?? false,
     dynamic_: j['dynamic'] as bool? ?? false,
