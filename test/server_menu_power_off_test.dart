@@ -11,6 +11,7 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
+import 'package:kalinka/providers/power_off_status_provider.dart';
 import 'package:kalinka/providers/server_info_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
@@ -329,6 +330,44 @@ void main() {
       expect(box.scheduled, [(minutes, 'server-1')]);
       expect(_status(tester), ConnectionStatus.connected);
       expect(find.byKey(EscalationCard.cardKey), findsNothing);
+      // Kept so the drop when it fires is taken for the power-off.
+      final due = ProviderScope.containerOf(
+        tester.element(find.byType(MaterialApp)),
+      ).read(scheduledPowerOffProvider);
+      expect(due?.serverId, 'server-1');
+      expect(
+        due!.at.difference(DateTime.now()).inSeconds,
+        closeTo(minutes * 60, 60),
+      );
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
+    });
+  }
+
+  for (final (power, off) in [('powering_off', true), ('restarting', false)]) {
+    testWidgets('a refusal from a box already ${power.replaceAll('_', ' ')} '
+        '${off ? 'shows it powered off' : 'leaves the connection alone'}', (
+      tester,
+    ) async {
+      const busy = 'The streamer is already restarting or powering off.';
+      final box = _Box()
+        ..refusal = const BoxActionException('shutting_down', busy)
+        ..power = BoxPowerStatus(serverId: 'server-1', state: power);
+      await _pumpPlayer(tester, size: const Size(375, 812), box: box);
+      await _askToPowerOff(tester);
+      await _confirmPowerOff(tester);
+
+      expect(box.runs, [(BoxAction.powerOff, 'server-1')]);
+      expect(find.text(busy), findsOneWidget);
+      expect(
+        _status(tester),
+        off ? ConnectionStatus.offline : ConnectionStatus.connected,
+      );
+      expect(
+        find.byKey(EscalationCard.cardKey),
+        off ? findsOneWidget : findsNothing,
+      );
+      await tester.pump(const Duration(seconds: 10));
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
     });
