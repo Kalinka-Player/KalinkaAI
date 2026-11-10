@@ -278,15 +278,44 @@ class _CatalogApi implements PluginCatalogApi {
   }
 
   @override
-  Future<PluginAccepted> run(String pluginId, PluginOperation operation) async {
+  Future<PluginAcceptance> run(
+    String pluginId,
+    PluginOperation operation,
+  ) async {
     runs.add((pluginId, operation));
     await running?.future;
     if (refusal case final refusal?) throw PluginCatalogException(refusal);
-    return restarts
-        ? PluginAccepted.restarting
-        : applies
-        ? PluginAccepted.applying
-        : PluginAccepted.done;
+    if (acceptances.isNotEmpty) return acceptances.removeAt(0);
+    return PluginAcceptance(
+      restarts
+          ? PluginAccepted.restarting
+          : applies
+          ? PluginAccepted.applying
+          : PluginAccepted.done,
+    );
+  }
+
+  /// A server that queues (API 0.23): what each run answers in turn, and its
+  /// reports, one per read while any is set, the last one standing after.
+  final acceptances = <PluginAcceptance>[];
+  final reports = <PluginOperationsReport>[];
+  int reportReads = 0;
+  final updatedAll = <List<String>>[];
+  PluginUpdatesAccepted bulk = const PluginUpdatesAccepted();
+
+  @override
+  Future<PluginUpdatesAccepted> updateAll(List<String> pluginIds) async {
+    updatedAll.add(pluginIds);
+    return bulk;
+  }
+
+  @override
+  Future<PluginOperationsReport> operations() async {
+    if (reports.isEmpty) {
+      return PluginOperationsReport(current: await operation());
+    }
+    reportReads++;
+    return reports.length > 1 ? reports.removeAt(0) : reports.first;
   }
 
   @override
@@ -5062,6 +5091,340 @@ void main() {
       await tester.pumpAndSettle();
       expect(install, findsNothing);
       expect(_badgeOf(tester, 'qobuz')!.label, 'READY');
+    },
+  );
+
+  PluginOperationRecord record(
+    String id,
+    String pluginId,
+    PluginOperation operation,
+    String status, {
+    String? step,
+    int index = 0,
+    int count = 5,
+    String? error,
+  }) => PluginOperationRecord(
+    id: id,
+    pluginId: pluginId,
+    operation: operation,
+    status: status,
+    step: step,
+    stepIndex: index,
+    stepCount: count,
+    error: error,
+  );
+  const queueing = {
+    'enabled': true,
+    'catalog_browsing': true,
+    'installation': true,
+    'update_checks': true,
+    'operation_queue': true,
+  };
+  const update = PluginOperation.update;
+  const install = PluginOperation.install;
+
+  testWidgets(
+    'a server that queues takes the next operation while one runs, and each ends in its own row',
+    (tester) async {
+      final api = _CatalogApi(_catalog())
+        ..available = const [
+          PluginUpdate(pluginId: 'spotify', version: '0.4.0'),
+        ];
+      final live = _Live(
+        ModulesAndDevices(
+          inputModules: [_module('localfiles'), _module('spotify')],
+          devices: [],
+        ),
+      );
+      final container = await _container(_Proxy(queueing), api, live: live);
+      await _screen(tester, container, size: const Size(900, 1400));
+      api.acceptances.addAll([
+        const PluginAcceptance(PluginAccepted.applying, id: 'a'),
+        const PluginAcceptance(PluginAccepted.queued, id: 'b'),
+      ]);
+      final failed = record(
+        'a',
+        'spotify',
+        update,
+        'failed',
+        step: 'installing_package',
+        index: 4,
+        count: 6,
+        error: 'apt-get did not complete.',
+      );
+      api.reports.addAll([
+        PluginOperationsReport(
+          queues: true,
+          current: record(
+            'a',
+            'spotify',
+            update,
+            'running',
+            step: 'checking',
+            index: 2,
+            count: 6,
+          ),
+          queued: const [
+            PluginQueuedOperation(
+              id: 'b',
+              pluginId: 'qobuz',
+              operation: install,
+            ),
+          ],
+        ),
+        PluginOperationsReport(
+          queues: true,
+          current: record(
+            'b',
+            'qobuz',
+            install,
+            'running',
+            step: 'downloading',
+            index: 1,
+          ),
+          results: [failed],
+        ),
+        PluginOperationsReport(
+          queues: true,
+          current: record(
+            'b',
+            'qobuz',
+            install,
+            'ok',
+            step: 'loading',
+            index: 5,
+          ),
+          results: [failed],
+        ),
+      ]);
+
+      final updating = find.byKey(const ValueKey('plugin-row-update-spotify'));
+      final installing = find.byKey(const ValueKey('plugin-install-qobuz'));
+      KalinkaButton button(Finder finder) =>
+          tester.widget<KalinkaButton>(finder);
+      await tester.tap(updating);
+      await tester.pump();
+      // Another plugin's button is not held back by this one.
+      expect(button(installing).onTap, isNotNull);
+      await tester.tap(installing);
+      await tester.pump();
+      expect(api.runs, [('spotify', update), ('qobuz', install)]);
+      expect(button(updating).label, 'Updating\u2026');
+      expect(button(installing).label, 'Queued');
+      expect(button(installing).onTap, isNull);
+      expect(_badgeOf(tester, 'qobuz')!.label, 'QUEUED');
+      expect(_statusOf(tester, 'qobuz'), 'Waiting its turn\u2026');
+
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(button(updating).progress, closeTo(2 / 6, 1e-9));
+      expect(button(installing).label, 'Queued');
+
+      // The update failed on its own; the install moves up.
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(button(updating).label, 'Failed\u2026');
+      expect(
+        container.read(pluginFailuresProvider)['spotify']!.message,
+        'apt-get did not complete.',
+      );
+      expect(button(installing).label, 'Installing\u2026');
+      expect(button(installing).progress, closeTo(0.2, 1e-9));
+      expect(_statusOf(tester, 'qobuz'), 'Downloading\u2026');
+
+      live.value = ModulesAndDevices(
+        inputModules: [..._liveInputs(live), _module('qobuz')],
+        devices: [],
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(installing, findsNothing);
+      expect(_badgeOf(tester, 'qobuz')!.label, 'READY');
+      expect(container.read(pluginOperationsProvider), isEmpty);
+      expect(api.reportReads, 3);
+    },
+  );
+
+  testWidgets(
+    'Update all asks for every update in one go, each row following its own',
+    (tester) async {
+      final api = _CatalogApi(_catalog())
+        ..available = const [
+          PluginUpdate(pluginId: 'spotify', version: '0.4.0'),
+          PluginUpdate(pluginId: 'jamendo', version: '2.0.0'),
+        ]
+        ..bulk = const PluginUpdatesAccepted(
+          accepted: {
+            'spotify': PluginAcceptance(PluginAccepted.applying, id: 's'),
+          },
+          refused: {'jamendo': 'Jamendo is part of the server bundle.'},
+        );
+      final container = await _container(
+        _Proxy(queueing),
+        api,
+        live: _Live(
+          ModulesAndDevices(
+            inputModules: [
+              _module('localfiles'),
+              _module('spotify'),
+              _module('jamendo'),
+            ],
+            devices: [],
+          ),
+        ),
+      );
+      await _screen(tester, container, size: const Size(900, 1400));
+      expect(find.text('UPDATES AVAILABLE · 2'), findsOneWidget);
+      final all = find.byKey(const ValueKey('plugin-update-all'));
+      expect(tester.widget<KalinkaButton>(all).label, 'Update all');
+      expect(
+        tester.widget<KalinkaButton>(all).variant,
+        KalinkaButtonVariant.neutral,
+      );
+      api.reports.add(
+        PluginOperationsReport(
+          queues: true,
+          current: record(
+            's',
+            'spotify',
+            update,
+            'ok',
+            step: 'loading',
+            index: 6,
+            count: 6,
+          ),
+        ),
+      );
+      api.available = const [
+        PluginUpdate(pluginId: 'jamendo', version: '2.0.0'),
+      ];
+
+      await tester.tap(all);
+      await tester.pump();
+      // As they are listed.
+      expect(api.updatedAll, [
+        ['jamendo', 'spotify'],
+      ]);
+      expect(api.runs, isEmpty);
+      expect(
+        tester
+            .widget<KalinkaButton>(
+              find.byKey(const ValueKey('plugin-row-update-spotify')),
+            )
+            .label,
+        'Updating\u2026',
+      );
+      expect(
+        container.read(pluginFailuresProvider)['jamendo']!.message,
+        'Jamendo is part of the server bundle.',
+      );
+
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('plugin-row-update-spotify')),
+        findsNothing,
+      );
+      // One left: nothing to update all of.
+      expect(find.text('UPDATE AVAILABLE · 1'), findsOneWidget);
+      expect(all, findsNothing);
+    },
+  );
+
+  testWidgets(
+    'what the server has under way and queued is picked up when the page opens',
+    (tester) async {
+      final api = _CatalogApi(_catalog())
+        ..available = const [
+          PluginUpdate(pluginId: 'spotify', version: '0.4.0'),
+        ];
+      final installed = record(
+        'a',
+        'qobuz',
+        install,
+        'ok',
+        step: 'loading',
+        index: 5,
+      );
+      api.reports.addAll([
+        PluginOperationsReport(
+          queues: true,
+          current: record(
+            'a',
+            'qobuz',
+            install,
+            'running',
+            step: 'installing_environment',
+            index: 4,
+          ),
+          queued: const [
+            PluginQueuedOperation(
+              id: 'b',
+              pluginId: 'spotify',
+              operation: update,
+            ),
+          ],
+        ),
+        PluginOperationsReport(
+          queues: true,
+          current: record(
+            'b',
+            'spotify',
+            update,
+            'running',
+            step: 'downloading',
+            index: 1,
+            count: 6,
+          ),
+          results: [installed],
+        ),
+        PluginOperationsReport(
+          queues: true,
+          current: record(
+            'b',
+            'spotify',
+            update,
+            'ok',
+            step: 'loading',
+            index: 6,
+            count: 6,
+          ),
+          results: [installed],
+        ),
+      ]);
+      final live = _Live(
+        ModulesAndDevices(
+          inputModules: [_module('localfiles'), _module('spotify')],
+          devices: [],
+        ),
+      );
+      final container = await _container(_Proxy(queueing), api, live: live);
+      await _screen(tester, container, size: const Size(900, 1400));
+      await tester.pump();
+
+      final installing = find.byKey(const ValueKey('plugin-install-qobuz'));
+      final updating = find.byKey(const ValueKey('plugin-row-update-spotify'));
+      KalinkaButton button(Finder finder) =>
+          tester.widget<KalinkaButton>(finder);
+      expect(button(installing).label, 'Installing\u2026');
+      expect(button(installing).progress, closeTo(0.8, 1e-9));
+      expect(button(updating).label, 'Queued');
+      expect(api.runs, isEmpty);
+
+      live.value = ModulesAndDevices(
+        inputModules: [..._liveInputs(live), _module('qobuz')],
+        devices: [],
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(button(updating).label, 'Updating\u2026');
+      api.available = const [];
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(installing, findsNothing);
+      expect(updating, findsNothing);
+      expect(_badgeOf(tester, 'qobuz')!.label, 'READY');
+      expect(container.read(pluginOperationsProvider), isEmpty);
     },
   );
 }

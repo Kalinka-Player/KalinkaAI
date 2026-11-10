@@ -21,9 +21,9 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
   /// Told when the identity hands over to the bar, and when it is back.
   final ValueChanged<bool>? onCollapsed;
 
-  /// Told how far the header scrolls before it is fully collapsed, so the
-  /// bar above can take on its surface at the same pace.
-  final ValueChanged<double>? onCollapseExtent;
+  /// The transparent toolbar's obstruction, kept inside this viewport so
+  /// content can paint behind it while keyboard focus clears it.
+  final double topInset;
   final Widget? actions;
 
   const CatalogSliverHeader({
@@ -31,7 +31,7 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
     required this.page,
     required this.query,
     this.onCollapsed,
-    this.onCollapseExtent,
+    this.topInset = 0,
     this.actions,
   });
 
@@ -87,16 +87,6 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
     super.reassemble();
     _measurement = null;
     _naturalMeasurement = null;
-  }
-
-  double? _extent;
-
-  void _reportExtent(double extent) {
-    if (_extent == extent) return;
-    _extent = extent;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.onCollapseExtent?.call(extent);
-    });
   }
 
   void _report(bool collapsed) {
@@ -248,15 +238,14 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
           ),
         );
         final collapseExtent = expandedHeight - pinnedHeight;
-        _reportExtent(collapseExtent);
         // Close under the bar. The identity slides under it with the page and
         // hands over once out of sight, Pin with it.
-        const headingTop = 0.0;
+        final headingTop = widget.topInset;
         return SliverPersistentHeader(
           pinned: true,
           delegate: _CatalogHeaderDelegate(
-            minHeight: pinnedHeight,
-            maxHeight: expandedHeight,
+            minHeight: widget.topInset + pinnedHeight,
+            maxHeight: widget.topInset + expandedHeight,
             builder: (context, offset) {
               final shrink = offset.clamp(0.0, collapseExtent);
               final settle = collapseExtent <= 0
@@ -274,27 +263,36 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
               // Attribution follows the title up, fading as it nears the edge.
               final subtitleTop = headingTop + _titleHeight + 4 - shrink;
               final subtitleOpacity = math.min(
-                (subtitleTop / 16).clamp(0.0, 1.0),
+                ((subtitleTop - widget.topInset) / 16).clamp(0.0, 1.0),
                 fade,
               );
               final left = wide ? 16 + available - controlsWidth : 16.0;
               final top = expandedTop - shrink;
               // Up to 8dp under the bar, across the pane, and held there.
-              final actionsTop = math.min(
-                math.max(top + 8, 8.0),
-                expandedHeight - shrink - rowHeight - 8,
-              );
+              final actionsTop =
+                  widget.topInset +
+                  math.min(
+                    math.max(top + 8, 8.0),
+                    expandedHeight - shrink - rowHeight - 8,
+                  );
               final actionsLeft = left + (16 - left) * spread;
               return ColoredBox(
                 key: const ValueKey('catalog-header-surface'),
-                color: KalinkaColors.background.withValues(
-                  alpha: collapseExtent <= 0
-                      ? (offset > 0 ? 1 : 0)
-                      : shrink / collapseExtent,
-                ),
+                color: Colors.transparent,
                 child: ClipRect(
                   child: Stack(
                     children: [
+                      // Only the held folder actions need a surface. Keep it
+                      // below the transparent toolbar and status area.
+                      if (widget.actions != null)
+                        Positioned.fill(
+                          top: widget.topInset,
+                          child: ColoredBox(
+                            color: KalinkaColors.background.withValues(
+                              alpha: settle,
+                            ),
+                          ),
+                        ),
                       if (!compact)
                         Positioned(
                           left: 16,

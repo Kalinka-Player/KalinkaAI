@@ -403,7 +403,7 @@ void main() {
   for (final operation in PluginOperation.values) {
     test('${operation.name} is a POST to the plugin\'s own route', () async {
       final (api, adapter) = _api(_json(200, {}));
-      expect(await api.run('qobuz', operation), PluginAccepted.done);
+      expect((await api.run('qobuz', operation)).status, PluginAccepted.done);
       final request = adapter.requests.single;
       expect(request.method, 'POST');
       expect(
@@ -425,7 +425,7 @@ void main() {
         }),
       );
       expect(
-        await api.run('qobuz', PluginOperation.install),
+        (await api.run('qobuz', PluginOperation.install)).status,
         PluginAccepted.restarting,
       );
       final (live, _) = _api(
@@ -436,12 +436,127 @@ void main() {
           'version': '5.0.1',
         }),
       );
-      expect(
-        await live.run('qobuz', PluginOperation.install),
-        PluginAccepted.applying,
+      final applying = await live.run('qobuz', PluginOperation.install);
+      expect(applying.status, PluginAccepted.applying);
+      // A server before 0.23 names none by id.
+      expect(applying.id, isNull);
+      final (queues, _) = _api(
+        _json(202, {
+          'status': 'queued',
+          'position': 2,
+          'id': 'a' * 32,
+          'operation': 'update',
+          'plugin_id': 'qobuz',
+        }),
       );
+      final queued = await queues.run('qobuz', PluginOperation.update);
+      expect(queued.status, PluginAccepted.queued);
+      expect(queued.id, 'a' * 32);
     },
   );
+
+  test('several updates go in one POST, each accepted or refused', () async {
+    final (api, adapter) = _api(
+      _json(202, {
+        'operations': [
+          {'status': 'applying', 'id': 'a' * 32, 'plugin_id': 'qobuz'},
+          {'status': 'queued', 'id': 'b' * 32, 'plugin_id': 'spotify'},
+        ],
+        'refused': [
+          {
+            'plugin_id': 'jamendo',
+            'code': 'bundle_managed',
+            'message': 'Jamendo is part of the server bundle.',
+          },
+        ],
+      }),
+    );
+    final answer = await api.updateAll(['qobuz', 'spotify', 'jamendo']);
+    final request = adapter.requests.single;
+    expect(request.method, 'POST');
+    expect(
+      request.uri.toString(),
+      'http://kalinka.local:8000/server/plugins/updates',
+    );
+    expect(request.data, {
+      'plugin_ids': ['qobuz', 'spotify', 'jamendo'],
+    });
+    expect(answer.accepted['qobuz']!.status, PluginAccepted.applying);
+    expect(answer.accepted['spotify']!.id, 'b' * 32);
+    expect(answer.refused, {
+      'jamendo': 'Jamendo is part of the server bundle.',
+    });
+
+    final (refused, _) = _api(
+      _json(503, {
+        'detail': {
+          'code': 'catalog_unavailable',
+          'message': 'The plugin catalog is not available yet.',
+        },
+      }),
+    );
+    await expectLater(
+      refused.updateAll(['qobuz']),
+      throwsA(
+        isA<PluginCatalogException>().having(
+          (e) => e.message,
+          'message',
+          'The plugin catalog is not available yet.',
+        ),
+      ),
+    );
+  });
+
+  test('a queueing server says what waits and how the latest ended', () async {
+    final (api, _) = _api(
+      _json(200, {
+        'id': 'a' * 32,
+        'action': 'install',
+        'plugin_id': 'qobuz',
+        'status': 'running',
+        'step': 'downloading',
+        'step_index': 1,
+        'step_count': 5,
+        'updated_at': 1762000000.5,
+        'queue': [
+          {'id': 'b' * 32, 'action': 'update', 'plugin_id': 'spotify'},
+        ],
+        'results': [
+          {
+            'id': 'c' * 32,
+            'action': 'uninstall',
+            'plugin_id': 'jamendo',
+            'status': 'failed',
+            'error': 'The package is still installed.',
+          },
+        ],
+      }),
+    );
+    final report = await api.operations();
+    expect(report.queues, isTrue);
+    expect(report.current!.id, 'a' * 32);
+    expect(report.current!.updatedAt, 1762000000.5);
+    expect(report.queued.single.pluginId, 'spotify');
+    expect(report.queued.single.operation, PluginOperation.update);
+    expect(report.results.single.failed, isTrue);
+    expect(report.results.single.error, 'The package is still installed.');
+
+    final (idle, _) = _api(
+      _json(200, {'status': 'idle', 'queue': [], 'results': []}),
+    );
+    final nothing = await idle.operations();
+    expect((nothing.current, nothing.queues), (null, true));
+    // Before 0.23 the record comes alone; before 0.22 there is no route.
+    final (older, _) = _api(
+      _json(200, {'id': 'x', 'plugin_id': 'qobuz', 'status': 'running'}),
+    );
+    final alone = await older.operations();
+    expect((alone.current!.pluginId, alone.queues), ('qobuz', false));
+    final (oldest, _) = _api(_json(404, {}));
+    expect((await oldest.operations()).queues, isFalse);
+    final (unreachable, _) = _api(null);
+    await expectLater(unreachable.operations(), throwsA(isA<DioException>()));
+  });
 
   test('the operation under way comes step by step', () async {
     final (api, adapter) = _api(

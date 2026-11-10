@@ -90,11 +90,13 @@ ModuleStatusBadge? pluginBadge(PluginState state, {bool notInstalled = false}) {
     return ModuleStatusBadge(
       key: key,
       inline: true,
-      label: switch (operation) {
-        PluginOperation.install => 'INSTALLING',
-        PluginOperation.uninstall => 'UNINSTALLING',
-        PluginOperation.update => 'UPDATING',
-      },
+      label: state.queued
+          ? 'QUEUED'
+          : switch (operation) {
+              PluginOperation.install => 'INSTALLING',
+              PluginOperation.uninstall => 'UNINSTALLING',
+              PluginOperation.update => 'UPDATING',
+            },
       color: KalinkaColors.statusPending,
     );
   }
@@ -521,7 +523,8 @@ class PluginNote extends StatelessWidget {
 }
 
 /// An action on a plugin as its button says it: under way, with how far it
-/// has got, failed until the failure is put away, or ready.
+/// has got, queued behind another, failed until the failure is put away, or
+/// ready.
 typedef _Action = ({
   PluginOperation operation,
   String label,
@@ -571,7 +574,9 @@ _Action _action(
   final failed = !busy && state.failure?.operation == operation;
   return (
     operation: operation,
-    label: busy
+    label: busy && state.queued
+        ? 'Queued'
+        : busy
         ? switch (operation) {
             PluginOperation.install => 'Installing…',
             PluginOperation.update => 'Updating…',
