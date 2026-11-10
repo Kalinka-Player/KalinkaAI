@@ -28,9 +28,8 @@ int artworkGridColumns(
   final grow = tracks ? 1.68 : 1.0;
   final wideFitsFloor = wide && compiledToWasm ? 300 : 220;
   final wanted = (width / ((wide ? 340 : 220) * grow * scale + frame)).ceil();
-  final fits =
-      (width / ((wide ? wideFitsFloor : 140) * grow * scale + frame))
-          .floor();
+  final fits = (width / ((wide ? wideFitsFloor : 140) * grow * scale + frame))
+      .floor();
   return wanted.clamp(1, fits < 1 ? 1 : fits).clamp(1, 10);
 }
 
@@ -144,6 +143,7 @@ class _SliverArtworkGridState extends State<SliverArtworkGrid> {
   late List<String> _ids;
   late Map<String, int> _indices;
   (double, TextScaler)? _layout;
+  Widget? _sliver;
   int _columns = 1;
   ScrollPosition? _position;
   _GridAnchor? _anchor;
@@ -164,6 +164,8 @@ class _SliverArtworkGridState extends State<SliverArtworkGrid> {
   @override
   void didUpdateWidget(SliverArtworkGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Captions and artwork can change even when the result IDs do not.
+    _sliver = null;
     final ids = [for (final item in widget.items) item.id];
     if (!listEquals(_ids, ids) || oldWidget.loading != widget.loading) {
       // A new query, filter or ranking is not a resize of the old results.
@@ -266,8 +268,9 @@ class _SliverArtworkGridState extends State<SliverArtworkGrid> {
       _position = Scrollable.of(context).position;
       final scale = MediaQuery.textScalerOf(context);
       final layout = (constraints.crossAxisExtent, scale);
-      if (_layout != null && _layout != layout) {
-        _restoring ??= _anchor;
+      if (_layout != layout) {
+        if (_layout != null) _restoring ??= _anchor;
+        _sliver = null;
       }
       _layout = layout;
       final columns = artworkGridColumns(
@@ -276,8 +279,11 @@ class _SliverArtworkGridState extends State<SliverArtworkGrid> {
       );
       _columns = columns;
       _afterLayout();
+      // Scroll offsets also change the sliver constraints. Keep the same
+      // child in that case so scrolling only lays out rows; rebuilding every
+      // visible card is needed only when its data or layout changes.
       if (widget.loading) {
-        return SliverToBoxAdapter(
+        return _sliver ??= SliverToBoxAdapter(
           child: ArtworkGridShimmer(
             columns: columns,
             rows: 2,
@@ -291,7 +297,7 @@ class _SliverArtworkGridState extends State<SliverArtworkGrid> {
           ),
         );
       }
-      return SliverList.builder(
+      return _sliver ??= SliverList.builder(
         itemCount: (widget.items.length / columns).ceil(),
         itemBuilder: (context, row) => Row(
           crossAxisAlignment: CrossAxisAlignment.start,
