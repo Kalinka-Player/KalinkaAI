@@ -522,7 +522,10 @@ void main() {
     final iconEnd =
         target.top -
         tester.getRect(list.first).top +
-        (target.height + CatalogPinButton.iconSize) / 2;
+        (target.height + CatalogPinButton.iconSize) / 2 -
+        tester
+            .widget<CatalogPageView>(find.byType(CatalogPageView))
+            .topBarInset;
     final back = tester.getRect(find.byTooltip('Back').first).center.dy;
     // Its icon in sight: still the page's.
     position.jumpTo(iconEnd - 1);

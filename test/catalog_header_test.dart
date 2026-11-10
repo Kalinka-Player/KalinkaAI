@@ -22,6 +22,7 @@ import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 import 'package:kalinka/widgets/search_cards/artwork_grid_card.dart';
 import 'package:kalinka/widgets/search_cards/row_columns.dart';
 import 'package:kalinka/widgets/column_separator.dart';
+import 'package:kalinka/widgets/top_bar_content_fade.dart';
 
 import 'support/home_shell.dart';
 
@@ -176,6 +177,7 @@ Future<ProviderContainer> _pump(
   _Api api, {
   Size size = const Size(1200, 800),
   double scale = 1,
+  double topInset = 0,
   CatalogPage? page,
   Key? captureKey,
   bool settle = true,
@@ -194,6 +196,7 @@ Future<ProviderContainer> _pump(
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(scale),
+            padding: EdgeInsets.only(top: topInset),
             disableAnimations: true,
           ),
           child: child!,
@@ -494,7 +497,11 @@ void main() {
       );
       // Measure the header's boundary directly: Back's circular visual is
       // smaller than its target and does not define the bar's lower edge.
-      final viewportTop = tester.getRect(_surface).top;
+      final viewportTop =
+          tester.getRect(_surface).top +
+          tester
+              .widget<CatalogPageView>(find.byType(CatalogPageView))
+              .topBarInset;
       final initialFootTop = _foot(tester).top;
       final identity = find.byKey(const ValueKey('catalog-identity'));
       // The title hands over once it has passed under the bar.
@@ -557,9 +564,7 @@ void main() {
             reason: 'Search is in the header or in the bar, once.',
           );
         }
-        if (offset > 0 && offset < extent) {
-          expect(tester.widget<ColoredBox>(_surface).color.a, lessThan(1));
-        }
+        expect(tester.widget<ColoredBox>(_surface).color.a, 0);
         expect(tester.takeException(), isNull);
         if ([0.0, 8.0, 16.0, 24.0, 48.0, 80.0, extent].contains(offset)) {
           await _capture(tester, key, 'motion-$name-${offset.round()}');
@@ -900,5 +905,133 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  }
+
+  for (final kind in [
+    'list',
+    'grid',
+    'sections',
+    'playlist',
+    'folder',
+    'artist',
+  ]) {
+    testWidgets('$kind fades beneath a transparent bar and status inset', (
+      tester,
+    ) async {
+      const url = 'https://example.test/catalog-backdrop.png';
+      final frame = (await tester.runAsync(() async {
+        final recorder = ui.PictureRecorder();
+        Canvas(recorder).drawColor(const Color(0xFF286496), BlendMode.src);
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(320, 160);
+        picture.dispose();
+        return image;
+      }))!;
+      final imageKey = await const ResizeImage(
+        NetworkImage(url),
+        width: 320,
+      ).obtainKey(ImageConfiguration.empty);
+      imageCache.putIfAbsent(
+        imageKey,
+        () => OneFrameImageStreamCompleter(
+          Future.value(ImageInfo(image: frame.clone())),
+        ),
+      );
+      addTearDown(() {
+        imageCache.clear();
+        imageCache.clearLiveImages();
+        frame.dispose();
+      });
+
+      final key = GlobalKey();
+      final entity = ['artist', 'playlist'].contains(kind) ? kind : 'catalog';
+      final page = CatalogPage.category(
+        id: 'kalinka:jamendo:$entity:fade',
+        title: 'Catalogue',
+        artPath: url,
+        folderLayout: kind == 'folder',
+        canAdd: kind == 'folder',
+        preview: kind == 'grid'
+            ? Preview(
+                type: PreviewType.imageText,
+                contentType: PreviewContentType.album,
+              )
+            : null,
+        filters: _catalog.filters,
+        sections: kind == 'sections'
+            ? [
+                for (var i = 0; i < 5; i++)
+                  BrowseItem(
+                    id: 'kalinka:jamendo:catalog:shelf-$i',
+                    name: 'Albums $i',
+                    canBrowse: true,
+                    canAdd: false,
+                    catalog: Catalog(id: 'shelf-$i', title: 'Albums $i'),
+                  ),
+              ]
+            : const [],
+      );
+      await _pump(
+        tester,
+        _Api(),
+        page: page,
+        size: const Size(375, 812),
+        topInset: 24,
+        captureKey: key,
+      );
+      final art = find.descendant(
+        of: find.byType(CatalogArtBackdrop),
+        matching: find.byType(RawImage),
+      );
+      // The backdrop is blurred once on the raster thread.
+      await tester.runAsync(() async {
+        for (var attempt = 0; attempt < 100; attempt++) {
+          await tester.pump();
+          if (art.evaluate().isNotEmpty) return;
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+      await tester.pumpAndSettle();
+      expect(art, findsOneWidget);
+
+      final fade = find.byKey(const ValueKey('catalog-content-fade'));
+      expect(tester.getRect(fade).top, 0);
+      expect(tester.widget<TopBarContentFade>(fade).extent, 76);
+      expect(tester.getRect(_scrollable).top, 0);
+      if (kind == 'grid') expect(find.byType(ArtworkGridCard), findsWidgets);
+      expect(find.byTooltip('Back').hitTestable(), findsOneWidget);
+      final scroll = tester.state<ScrollableState>(_scrollable).position;
+      expect(scroll.maxScrollExtent, greaterThan(300));
+      for (final offset in [0.0, 24.0, 300.0, 0.0]) {
+        scroll.jumpTo(offset);
+        await tester.pumpAndSettle();
+        if (kind == 'list' && offset == 300) {
+          await tester.tap(_barSearch);
+          await tester.pumpAndSettle();
+          expect(_unrolled, findsOneWidget);
+        }
+        final pixels = (await tester.runAsync(() async {
+          final boundary =
+              key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+          final image = await boundary.toImage();
+          final pixels = await image.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          );
+          image.dispose();
+          return pixels;
+        }))!;
+        // Empty space at the left edge reveals the same blue artwork at
+        // rest, mid-collapse and fully collapsed, with no black overlay.
+        for (final y in [0, 20, 50]) {
+          final index = (y * 375 + 1) * 4;
+          expect(pixels.getUint8(index), closeTo(22, 2));
+          expect(pixels.getUint8(index + 1), closeTo(49, 2));
+          expect(pixels.getUint8(index + 2), closeTo(72, 2));
+        }
+        expect(find.byTooltip('Back').hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await _capture(tester, key, 'transparent-$kind-${offset.round()}');
+      }
+    });
   }
 }
