@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
 import '../kalinka_button.dart';
 import '../kalinka_dialog.dart';
 import 'inline_markdown.dart';
 
-/// Opens a setting's detailed help and restores focus when it closes.
+/// Opens detailed help and restores focus after keyboard dismissal.
 class SettingsHelpButton extends StatefulWidget {
   final String label;
   final String details;
@@ -30,27 +31,45 @@ class _SettingsHelpButtonState extends State<SettingsHelpButton> {
   }
 
   Future<void> _showHelp() async {
+    var restoreKeyboardFocus = false;
+    _focusNode.unfocus();
     await showKalinkaDialog<void>(
       context: context,
-      builder: (context) => KalinkaDialog(
-        side: KalinkaDialogSide.full,
-        title: widget.label,
-        content: InlineMarkdown(
-          text: widget.details,
-          style: KalinkaTextStyles.dialogBody,
-        ),
-        actions: [
-          KalinkaButton(
-            label: 'Close',
-            variant: KalinkaButtonVariant.neutral,
-            fullWidth: true,
-            autofocus: true,
-            onTap: () => Navigator.of(context).pop(),
+      builder: (context) => PopScope<void>(
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) {
+            restoreKeyboardFocus =
+                HardwareKeyboard.instance.logicalKeysPressed.isNotEmpty;
+          }
+        },
+        child: KalinkaDialog(
+          side: KalinkaDialogSide.full,
+          title: widget.label,
+          content: InlineMarkdown(
+            text: widget.details,
+            style: KalinkaTextStyles.dialogBody,
           ),
-        ],
+          actions: [
+            KalinkaButton(
+              label: 'Close',
+              variant: KalinkaButtonVariant.neutral,
+              fullWidth: true,
+              autofocus: true,
+              onTap: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
       ),
     );
-    if (mounted) _focusNode.requestFocus();
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (restoreKeyboardFocus) {
+        _focusNode.requestFocus();
+      } else {
+        _focusNode.unfocus();
+      }
+    });
   }
 
   @override
@@ -60,18 +79,34 @@ class _SettingsHelpButtonState extends State<SettingsHelpButton> {
     icon: const Icon(Icons.info_outline, size: 18),
     style: ButtonStyle(
       minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
-      foregroundColor: const WidgetStatePropertyAll(
-        KalinkaColors.textSecondary,
+      foregroundColor: WidgetStateProperty.resolveWith(
+        (states) =>
+            states.any(
+              {
+                WidgetState.hovered,
+                WidgetState.pressed,
+                WidgetState.focused,
+              }.contains,
+            )
+            ? KalinkaColors.textPrimary
+            : KalinkaColors.textSecondary,
       ),
-      overlayColor: const WidgetStatePropertyAll(KalinkaColors.surfaceOverlay),
-      side: WidgetStateProperty.resolveWith(
-        (states) => BorderSide(
-          color: states.contains(WidgetState.focused)
-              ? KalinkaColors.textPrimary
-              : Colors.transparent,
-          width: 2,
+      backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+      shape: const WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(8)),
         ),
       ),
+      side: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.focused)
+            ? const BorderSide(color: KalinkaColors.textPrimary, width: 2)
+            : BorderSide.none,
+      ),
+      animationDuration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 130),
     ),
     onPressed: _showHelp,
   );

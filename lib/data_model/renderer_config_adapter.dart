@@ -77,9 +77,7 @@ RendererSchemaView adaptRendererConfig(RendererConfigSnapshot snapshot) {
         id: section.path,
         title: section.title.isEmpty ? section.path : section.title,
         fields: simpleFields,
-        banners: section.description.isEmpty
-            ? const []
-            : [BannerSpec(text: section.description, severity: Severity.info)],
+        help: section.description.trim().isEmpty ? null : section.description,
       ),
     );
   }
