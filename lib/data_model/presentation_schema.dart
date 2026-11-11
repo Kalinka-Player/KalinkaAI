@@ -468,6 +468,7 @@ class CollectionSpec {
 class SectionSpec {
   final String id;
   final String title;
+  final String? help;
   final String? icon;
   final Importance importance;
   final List<BannerSpec> banners;
@@ -482,6 +483,7 @@ class SectionSpec {
   const SectionSpec({
     required this.id,
     required this.title,
+    this.help,
     this.icon,
     this.importance = Importance.simple,
     this.banners = const [],
@@ -494,6 +496,7 @@ class SectionSpec {
   factory SectionSpec.fromJson(Map<String, dynamic> j) => SectionSpec(
     id: j['id'] as String,
     title: j['title'] as String,
+    help: j['help'] as String?,
     icon: j['icon'] as String?,
     importance: Importance.fromName(j['importance'] as String?),
     banners: _listOf(j['banners'], BannerSpec.fromJson),

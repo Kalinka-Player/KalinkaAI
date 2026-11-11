@@ -619,6 +619,7 @@ class SchemaSectionRenderer extends StatelessWidget {
           _sectionLabel(
             context,
             section.title,
+            caption: section.help,
             subtitle:
                 section.id == 'base_config.server' &&
                     !ConfigurationAppearance.active(context)
@@ -698,6 +699,7 @@ class SchemaSectionRenderer extends StatelessWidget {
   static Widget _sectionLabel(
     BuildContext context,
     String label, {
+    String? caption,
     Widget? subtitle,
   }) {
     return Padding(
@@ -709,6 +711,13 @@ class SchemaSectionRenderer extends StatelessWidget {
             label.toUpperCase(),
             style: KalinkaTextStyles.sectionHeaderMuted,
           ),
+          if (caption?.trim().isNotEmpty ?? false) ...[
+            const SizedBox(height: 4),
+            InlineMarkdown(
+              text: caption!,
+              style: KalinkaTextStyles.trayRowSublabel,
+            ),
+          ],
           if (subtitle != null) ...[const SizedBox(height: 4), subtitle],
         ],
       ),
@@ -793,7 +802,7 @@ class SchemaModuleGroups extends StatelessWidget {
         case _Section(:final spec):
           run = null;
           groups.add(
-            _Group(spec.title)
+            _Group(spec.title, caption: spec.help)
               ..rows.addAll(_cardRows(binding, spec, replaced, titled: false)),
           );
       }

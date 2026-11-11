@@ -22,7 +22,9 @@ This is the settings specification. The branded player/search bars and editorial
 
 Use sentence case: **Download server logs**, **Check your changes**. A renderer's page is titled with the renderer's name alone. Plugin titles include their subject: **Qobuz settings**, **About Qobuz**. Do not add breadcrumbs, a second large title, a logo in place of the title, or a decorative heading icon.
 
-Keep setting descriptions short, with requirements and special values beside the control. Optional `help_details` appears behind an info button beside the setting label. Use `SettingsHelpButton` in regular, expert and setup views, including read-only fields. It opens the shared dialog with the setting name, detailed text and a Close button, then returns focus to the info button. Missing or blank details show no button.
+Keep setting descriptions short, with requirements and special values beside the control. Optional `help_details` appears behind an info button beside the setting label. Use `SettingsHelpButton` in regular, expert and setup views, including read-only fields. It opens the shared dialog with the setting name, detailed text and a Close button. Keyboard dismissal returns focus to the info button; pointer dismissal leaves it idle. Hover and press brighten the icon without a filled background or ripple. Keyboard focus uses a 2dp primary outline. Missing or blank details show no button.
+
+Omit section descriptions that repeat the heading or visible controls. When a section needs a caption, place it 4dp below the heading and leave 10dp before the card, matching collection captions.
 
 Back closes the current panel through `SlideInPanel.closeOf(context)`. System Back does the same. Returning preserves the parent tab, scroll position and staged edits. Only the uppermost panel owns Back. The header remains outside the content scroll.
 

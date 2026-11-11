@@ -15,6 +15,7 @@ import 'package:kalinka/widgets/configuration_appearance.dart';
 import 'package:kalinka/widgets/expert_field_list.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/settings_controls/settings_binding.dart';
+import 'package:kalinka/widgets/settings_controls/settings_card.dart';
 import 'package:kalinka/widgets/settings_controls/settings_help_button.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
 import 'package:kalinka/widgets/settings_renderer.dart';
@@ -180,6 +181,166 @@ void main() {
     expect(button.focusNode!.hasFocus, isTrue);
   });
 
+  for (final reducedMotion in [false, true]) {
+    testWidgets(
+      'pointer dismissal clears focus (reduced motion: $reducedMotion)',
+      (tester) async {
+        await tester.pumpWidget(
+          _app(
+            const SettingsRow(
+              label: 'Network buffer',
+              helpDetails: _details,
+              control: SizedBox(),
+            ),
+            reducedMotion: reducedMotion,
+          ),
+        );
+        final info = find.byTooltip('About Network buffer');
+        final button = tester.widget<IconButton>(find.byType(IconButton));
+        final mouse = await tester.createGesture(
+          kind: ui.PointerDeviceKind.mouse,
+        );
+        await mouse.addPointer();
+        addTearDown(mouse.removePointer);
+        Future<void> click(Finder target) async {
+          await mouse.moveTo(tester.getCenter(target));
+          await mouse.down(tester.getCenter(target));
+          await mouse.up();
+          await tester.pumpAndSettle();
+        }
+
+        await click(info);
+        expect(button.focusNode!.hasFocus, isFalse);
+        await click(find.text('Close'));
+        expect(button.focusNode!.hasFocus, isFalse);
+
+        await click(info);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(button.focusNode!.hasFocus, isTrue);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        await mouse.down(const Offset(2, 2));
+        await mouse.up();
+        await tester.pumpAndSettle();
+        expect(find.byType(KalinkaDialog), findsNothing);
+        expect(button.focusNode!.hasFocus, isFalse);
+      },
+    );
+  }
+
+  testWidgets(
+    'hover and press do not paint a background around the info icon',
+    (tester) async {
+      final surface = GlobalKey();
+      await tester.pumpWidget(
+        _app(
+          Center(
+            child: RepaintBoundary(
+              key: surface,
+              child: const ColoredBox(
+                color: KalinkaColors.surfaceRaised,
+                child: SettingsHelpButton(
+                  label: 'Network buffer',
+                  details: _details,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final info = find.byType(SettingsHelpButton);
+      final mouse = await tester.createGesture(
+        kind: ui.PointerDeviceKind.mouse,
+      );
+      await mouse.addPointer();
+      addTearDown(mouse.removePointer);
+      Future<void> expectNoFill() async {
+        await tester.pumpAndSettle();
+        await tester.runAsync(() async {
+          final image =
+              await (surface.currentContext!.findRenderObject()
+                      as RenderRepaintBoundary)
+                  .toImage();
+          final bytes = (await image.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          ))!;
+          final offset = (24 * image.width + 6) * 4;
+          final pixel = Color.fromARGB(
+            bytes.getUint8(offset + 3),
+            bytes.getUint8(offset),
+            bytes.getUint8(offset + 1),
+            bytes.getUint8(offset + 2),
+          );
+          image.dispose();
+          expect(pixel, KalinkaColors.surfaceRaised);
+        });
+      }
+
+      await mouse.moveTo(tester.getCenter(info));
+      await expectNoFill();
+      await mouse.down(tester.getCenter(info));
+      await expectNoFill();
+      await mouse.cancel();
+    },
+  );
+
+  testWidgets('section captions stay with the heading and clear the card', (
+    tester,
+  ) async {
+    final view = adaptRendererConfig(
+      RendererConfigSnapshot.fromJson({
+        'sections': [
+          {
+            'path': 'buffers',
+            'title': 'Buffering',
+            'description': 'Audio held in memory during playback.',
+            'fields': [
+              {
+                'path': 'buffers.network_stream',
+                'title': 'Network buffer',
+                'type': 'int',
+                'value': '64000',
+                'help_details': _details,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(view.sections.single.banners, isEmpty);
+    await tester.pumpWidget(
+      _app(
+        ConfigurationAppearance(
+          child: SettingsScope(
+            binding: _Binding(),
+            child: SchemaSectionRenderer(
+              section: view.sections.single,
+              isTopLevel: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    final label = tester.getRect(find.text('BUFFERING'));
+    final caption = tester.getRect(
+      find.text('Audio held in memory during playback.', findRichText: true),
+    );
+    final card = tester.getRect(
+      find
+          .descendant(
+            of: find.byType(SettingsCard),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
+    );
+    expect(caption.top - label.bottom, 4);
+    expect(card.top - caption.bottom, 10);
+    expect(caption.left, label.left);
+    expect(card.left, label.left);
+  });
+
   testWidgets('nested feature keeps requirements beside its switch', (
     tester,
   ) async {
@@ -276,7 +437,15 @@ void main() {
             child: SettingsScope(
               binding: binding,
               child: const SingleChildScrollView(
-                child: SchemaFieldRenderer(field: _field),
+                child: SchemaSectionRenderer(
+                  isTopLevel: true,
+                  section: SectionSpec(
+                    id: 'buffers',
+                    title: 'Buffering',
+                    help: 'Audio held in memory during playback.',
+                    fields: [_field],
+                  ),
+                ),
               ),
             ),
           ),
@@ -302,6 +471,14 @@ void main() {
       }
 
       await capture('row');
+      final mouse = await tester.createGesture(
+        kind: ui.PointerDeviceKind.mouse,
+      );
+      await mouse.addPointer();
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.byType(SettingsHelpButton)));
+      await tester.pumpAndSettle();
+      await capture('hover');
       await tester.tap(find.byType(SettingsHelpButton));
       await tester.pumpAndSettle();
       expect(find.text(_details, findRichText: true), findsOneWidget);
@@ -313,6 +490,9 @@ void main() {
       expect(find.byType(KalinkaDialog), findsNothing);
       expect(binding.staged, isEmpty);
       expect(tester.takeException(), isNull);
+      await mouse.moveTo(const Offset(2, 2));
+      await tester.pumpAndSettle();
+      await capture('closed');
     });
   }
 }
