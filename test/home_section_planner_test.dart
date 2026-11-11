@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/widgets/home/home_section_plan.dart';
+import 'package:kalinka/widgets/home/home_pins_shimmer.dart';
 import 'package:kalinka/widgets/home/planned_home_sections.dart';
 
 HomeSectionRequest request(double width, {int folders = 4}) =>
@@ -115,6 +116,39 @@ void main() {
     },
   );
 
+  testWidgets('a failed layout reveals the usable stacked fallback', (
+    tester,
+  ) async {
+    final input = request(1248);
+    HomeSectionLayout? displayed;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          homeSectionPlannerProvider.overrideWithValue(
+            HomeSectionPlanner(
+              calculate: (_) => Future.error(StateError('Worker failed')),
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          home: PlannedHomeSections(
+            request: input,
+            builder: (plan) {
+              displayed = plan;
+              return const Text('Pins');
+            },
+          ),
+        ),
+      ),
+    );
+    expect(tester.takeException(), isStateError);
+    await tester.pumpAndSettle();
+    expect(find.byType(HomePinsShimmer), findsNothing);
+    expect(find.text('Pins'), findsOneWidget);
+    expect(displayed!.rows, hasLength(2));
+    expect(displayed!.rows.first.columns.single.width, input.width);
+  });
+
   testWidgets(
     'resize is coalesced and a stale worker cannot overwrite the latest pane',
     (tester) async {
@@ -148,7 +182,9 @@ void main() {
           ),
         ),
       );
-      expect(calls, isEmpty); // No optimiser executes during build/layout.
+      expect(calls.length, 1); // The initial job starts after layout.
+      expect(displayed, isNull);
+      expect(find.byType(HomePinsShimmer), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 50));
       expect(calls.length, 1);
       input.value = request(1100);
@@ -158,15 +194,19 @@ void main() {
       input.value = request(592);
       await tester.pump(const Duration(milliseconds: 50));
       expect(calls.length, 1); // No second worker while the first is busy.
-      expect(displayed!.wide, isFalse);
-      expect(displayed!.rows.first.columns.single.width, 592);
+      expect(displayed, isNull);
+      expect(find.byType(HomePinsShimmer), findsOneWidget);
       jobs.first.complete(planHomeSections(calls.first));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
       expect(calls.map((r) => r.width), [1248, 592]);
-      expect(displayed!.wide, isFalse);
+      expect(displayed, isNull);
+      expect(find.byType(HomePinsShimmer), findsOneWidget);
       jobs.last.complete(planHomeSections(calls.last));
       await tester.pumpAndSettle();
+      expect(displayed!.wide, isFalse);
+      expect(displayed!.rows.first.columns.single.width, 592);
+      expect(find.byType(HomePinsShimmer), findsNothing);
       final settled = displayed;
       for (var frame = 0; frame < 10; frame++) {
         await tester.pump();
@@ -179,12 +219,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(calls.length, 2);
       expect(displayed!.wide, isTrue);
+      final previous = displayed;
       input.value = request(1248, folders: 6);
       await tester.pump();
-      expect(
-        displayed!.rows.length,
-        2,
-      ); // Last plan retained while data changes.
+      expect(displayed, same(previous)); // No build with provisional geometry.
+      expect(find.byType(HomePinsShimmer), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 50));
       await tester.pumpWidget(const SizedBox());
       jobs.last.complete(planHomeSections(calls.last));

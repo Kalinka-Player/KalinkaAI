@@ -14,8 +14,8 @@ import '../../providers/search_session_provider.dart';
 import '../../providers/shell_nav_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
-import '../browse_rows_shimmer.dart' show LoadingSpinner;
 import '../home/home_layout.dart';
+import '../home/home_pins_shimmer.dart';
 import '../home/pinned_catalogs_section.dart';
 import '../measure_size.dart';
 import '../modifier_click.dart';
@@ -177,7 +177,7 @@ class SearchZeroState extends ConsumerWidget {
                   if (!empty && showCollections)
                     CollectionsSection(onOpenCatalog: onOpenCatalog),
                   if (pins == null)
-                    const LoadingSpinner()
+                    const HomePinsShimmer()
                   else if (pins.isNotEmpty && !centredShortcuts) ...[
                     PinnedCatalogsSection(pins: pins),
                     // After the pins, quietly: where to change them.

@@ -329,11 +329,10 @@ void main() {
         expect(albumTile, findsOneWidget);
         expect(tester.getSize(albumTile).width, lessThanOrEqualTo(198));
         if (scenario == 'folders') {
-          expect(find.byType(SearchTrackRow), findsNWidgets(4));
-          expect(
-            find.text('A fourth track stays in the folder'),
-            findsOneWidget,
-          );
+          // The finished plan fits three rows beside the small album cover.
+          // Home no longer exposes the provisional four-row arrangement.
+          expect(find.byType(SearchTrackRow), findsNWidgets(3));
+          expect(find.text('A fourth track stays in the folder'), findsNothing);
           expect(
             tester
                 .getTopLeft(

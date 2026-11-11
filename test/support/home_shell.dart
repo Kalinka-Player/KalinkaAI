@@ -134,6 +134,7 @@ Future<ProviderContainer> pumpHomeShell(
   bool themed = false,
   Key? captureKey,
   Widget? screen,
+  HomeSectionPlanner? planner,
 }) async {
   SharedPreferences.setMockInitialValues({
     'Kalinka.host': 'localhost',
@@ -151,9 +152,11 @@ Future<ProviderContainer> pumpHomeShell(
   final container = ProviderContainer(
     overrides: [
       homeSectionPlannerProvider.overrideWith(
-        (ref) => HomeSectionPlanner(
-          calculate: (request) async => planHomeSections(request),
-        ),
+        (ref) =>
+            planner ??
+            HomeSectionPlanner(
+              calculate: (request) async => planHomeSections(request),
+            ),
       ),
       if (receivers == null)
         noReceivers

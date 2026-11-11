@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,7 +7,10 @@ import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/providers/pinned_catalogs_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/widgets/home/home_list_preview.dart';
+import 'package:kalinka/widgets/home/home_pins_shimmer.dart';
+import 'package:kalinka/widgets/home/home_section_plan.dart';
 import 'package:kalinka/widgets/home/pinned_catalogs_section.dart';
+import 'package:kalinka/widgets/home/planned_home_sections.dart';
 import 'package:kalinka/widgets/search_cards/row_enqueue_button.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 
@@ -43,8 +48,10 @@ Finder _enqueue(BrowseItem item) => find.byWidgetPredicate(
 
 Future<List<BrowseItem>> _pumpTracks(
   WidgetTester tester,
-  _EnqueueApi api,
-) async {
+  _EnqueueApi api, {
+  HomeSectionPlanner? planner,
+  FocusNode? outsideFocus,
+}) async {
   final items = [
     for (var i = 1; i <= 7; i++) demoTrack('resize-$i', 'Track $i', 'Artist'),
   ];
@@ -60,14 +67,175 @@ Future<List<BrowseItem>> _pumpTracks(
     api: api,
     sources: demoSources,
     size: const Size(2400, 1000),
+    planner: planner,
     screen: Scaffold(
-      body: SingleChildScrollView(child: PinnedCatalogsSection(pins: [pin])),
+      body: Column(
+        children: [
+          if (outsideFocus != null)
+            TextButton(
+              focusNode: outsideFocus,
+              onPressed: () {},
+              child: const Text('Outside pins'),
+            ),
+          Expanded(
+            child: SingleChildScrollView(
+              child: PinnedCatalogsSection(pins: [pin]),
+            ),
+          ),
+        ],
+      ),
     ),
   );
   return items;
 }
 
 void main() {
+  testWidgets(
+    'hidden pins block activation and retain focus after replanning',
+    (tester) async {
+      Completer<HomeSectionLayout>? layout;
+      HomeSectionRequest? pending;
+      final api = _EnqueueApi();
+      final items = await _pumpTracks(
+        tester,
+        api,
+        planner: HomeSectionPlanner(
+          calculate: (request) {
+            pending = request;
+            return layout?.future ?? Future.value(planHomeSections(request));
+          },
+        ),
+      );
+      await _focusTrack(tester, items[2].id);
+      layout = Completer();
+      tester.view.physicalSize = const Size(2430, 1000);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byType(HomePinsShimmer), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+      expect(api.added, isEmpty);
+      expect(_focusedTrack(), items[2].id);
+
+      layout.complete(planHomeSections(pending!));
+      await tester.pumpAndSettle();
+      expect(_focusedTrack(), items[2].id);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(api.added, [
+        [items[2].id],
+      ]);
+      await tester.pump(const Duration(seconds: 3));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('Tab leaves hidden pins and cannot traverse back into them', (
+    tester,
+  ) async {
+    final outside = FocusNode();
+    addTearDown(outside.dispose);
+    Completer<HomeSectionLayout>? layout;
+    HomeSectionRequest? pending;
+    final api = _EnqueueApi();
+    final items = await _pumpTracks(
+      tester,
+      api,
+      outsideFocus: outside,
+      planner: HomeSectionPlanner(
+        calculate: (request) {
+          pending = request;
+          return layout?.future ?? Future.value(planHomeSections(request));
+        },
+      ),
+    );
+    await _focusTrack(tester, items[2].id);
+    layout = Completer();
+    tester.view.physicalSize = const Size(2430, 1000);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byType(HomePinsShimmer), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(outside.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(outside.hasPrimaryFocus, isTrue);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(outside.hasPrimaryFocus, isTrue);
+
+    layout.complete(planHomeSections(pending!));
+    await tester.pumpAndSettle();
+    expect(outside.hasPrimaryFocus, isTrue); // Revealing must not steal focus.
+    expect(api.added, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('replanning long pinned lists preserves the scroll offset', (
+    tester,
+  ) async {
+    final api = _EnqueueApi();
+    final pins = [
+      for (var i = 0; i < 7; i++)
+        PinnedCatalog(
+          page: CatalogPage.category(
+            id: 'kalinka:localfiles:catalog:long-$i',
+            title: 'List $i',
+          ),
+          filter: awardsPin.filter,
+          preview: HomePreviewType.list,
+        ),
+    ];
+    for (final pin in pins) {
+      api.listings[pin.page.id!] = [
+        for (var i = 0; i < 5; i++)
+          demoTrack('${pin.key}-$i', 'Track $i', 'Artist'),
+      ];
+    }
+    final scroll = ScrollController();
+    addTearDown(scroll.dispose);
+    Completer<HomeSectionLayout>? layout;
+    HomeSectionRequest? pending;
+    await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(0)),
+      api: api,
+      sources: demoSources,
+      size: const Size(700, 800),
+      planner: HomeSectionPlanner(
+        calculate: (request) {
+          pending = request;
+          return layout?.future ?? Future.value(planHomeSections(request));
+        },
+      ),
+      screen: Scaffold(
+        body: SingleChildScrollView(
+          controller: scroll,
+          child: PinnedCatalogsSection(pins: pins),
+        ),
+      ),
+    );
+    scroll.jumpTo(1000);
+    await tester.pumpAndSettle();
+    final extent = scroll.position.maxScrollExtent;
+    layout = Completer();
+    tester.view.physicalSize = const Size(710, 800);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byType(HomePinsShimmer), findsOneWidget);
+    expect(scroll.offset, 1000);
+    expect(scroll.position.maxScrollExtent, extent);
+    layout.complete(planHomeSections(pending!));
+    await tester.pumpAndSettle();
+    expect(scroll.offset, 1000);
+    expect(scroll.position.maxScrollExtent, extent);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('rebalancing columns cannot enqueue a different focused track', (
     tester,
   ) async {
