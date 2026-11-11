@@ -21,6 +21,7 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_rows_shimmer.dart';
 import 'package:kalinka/widgets/home/catalog_tile.dart';
+import 'package:kalinka/widgets/home/home_list_preview.dart';
 import 'package:kalinka/widgets/home/preview_shelf.dart';
 import 'package:kalinka/widgets/loading_shimmer.dart';
 import 'package:kalinka/widgets/search/catalog_cards_section.dart';
@@ -194,7 +195,8 @@ void main() {
         ),
         findsNothing,
       );
-      expect(find.byType(PreviewShelfShimmer), findsNWidgets(2));
+      expect(find.byType(PreviewShelfShimmer), findsOneWidget);
+      expect(find.byType(HomeListPreviewShimmer), findsOneWidget);
       expect(
         tester
             .widgetList<BrowseRowsShimmer>(find.byType(BrowseRowsShimmer))
@@ -236,7 +238,8 @@ void main() {
         find.byKey(const ValueKey('customise-home-button')),
         findsOneWidget,
       );
-      expect(find.byType(PreviewShelfShimmer), findsNWidgets(2));
+      expect(find.byType(PreviewShelfShimmer), findsOneWidget);
+      expect(find.byType(HomeListPreviewShimmer), findsOneWidget);
 
       api.preview.complete(BrowseItemsList(0, 8, 0, const []));
       await tester.pumpAndSettle();

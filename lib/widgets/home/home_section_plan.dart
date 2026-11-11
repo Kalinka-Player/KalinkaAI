@@ -8,10 +8,21 @@ enum HomePreviewBlockKind {
   shortcut,
   standalone,
   ordinary,
+  // Ordinary artwork that may grow into spare space beside a Large preview.
+  automatic,
   collage,
   folders,
   largeFolders,
   tracks,
+  shortTracks,
+  longTracks;
+
+  int? get listRowsPerColumn => switch (this) {
+    tracks => homePreviewRowCount(wide: true),
+    shortTracks => homePreviewRowCount(wide: true, small: true),
+    longTracks => homePreviewRowCount(wide: true, large: true),
+    _ => null,
+  };
 }
 
 /// Only dimensions and counts cross the isolate boundary. No library records,
@@ -61,8 +72,19 @@ class HomePreviewColumn {
 class HomePreviewRow {
   final bool shortcuts;
   final List<HomePreviewColumn> columns;
-  HomePreviewRow(List<HomePreviewColumn> columns, {this.shortcuts = false})
-    : columns = List.unmodifiable(columns);
+  // Single/pair Large previews share a neighbouring collage's lead size.
+  final double largeCover;
+  final Set<int> promotedBlocks;
+  // Automatic lists fit three or four rows against neighbouring content.
+  final Map<int, int> automaticListRows;
+  HomePreviewRow(
+    List<HomePreviewColumn> columns, {
+    this.shortcuts = false,
+    this.largeCover = homeAlbumLargeCover,
+    this.promotedBlocks = const {},
+    Map<int, int> automaticListRows = const {},
+  }) : columns = List.unmodifiable(columns),
+       automaticListRows = Map.unmodifiable(automaticListRows);
 }
 
 class HomeSectionLayout {
@@ -110,12 +132,12 @@ HomeSectionLayout planHomeSections(HomeSectionRequest request) {
   final caption = request.captionExtent;
   final header =
       60 * request.textScale + 24; // Heading, subtitle and section gaps.
-  final collageFixed = caption + 6 * homeAlbumInset + homeCollageGap;
+  final collageFixed = caption + 6 * homeAlbumInset;
   final maxColumns = math.min(
     6,
     math.max(2, ((width + 32) / (520 * request.textScale + 32)).floor()),
   );
-  final extents = <(int, double), _Extent>{};
+  final extents = <(int, double, double, bool, int?), _Extent>{};
 
   bool adaptive(int i) =>
       i < blocks.length &&
@@ -126,7 +148,9 @@ HomeSectionLayout planHomeSections(HomeSectionRequest request) {
   bool folderCards(int i) =>
       blocks[i].kind == HomePreviewBlockKind.folders ||
       blocks[i].kind == HomePreviewBlockKind.largeFolders;
-  double minimum(int i) => blocks[i].kind == HomePreviewBlockKind.largeFolders
+  double minimum(int i) => blocks[i].kind.listRowsPerColumn != null
+      ? homeListMinimumColumnWidth * request.textScale
+      : blocks[i].kind == HomePreviewBlockKind.largeFolders
       ? homeAlbumLargeCover + 2 * homeAlbumInset
       : blocks[i].kind == HomePreviewBlockKind.collage && blocks[i].count <= 2
       ? math.max(1, blocks[i].count) *
@@ -134,19 +158,42 @@ HomeSectionLayout planHomeSections(HomeSectionRequest request) {
       : large(i)
       ? (blocks[i].count >= 4 ? 4 : 3) * homeAlbumMinimumCover +
             caption +
-            (blocks[i].count >= 4 ? 6 : 4) * homeAlbumInset +
-            homeCollageGap
+            (blocks[i].count >= 4 ? 6 : 4) * homeAlbumInset
       : math.min(2, math.max(1, blocks[i].count)) *
             (homeAlbumMinimumCover + 2 * homeAlbumInset);
 
-  _Extent extent(int i, double w) => extents.putIfAbsent((i, w), () {
+  _Extent extent(
+    int i,
+    double w,
+    double largeCover, {
+    bool promote = false,
+    int? listRows,
+  }) => extents.putIfAbsent((i, w, largeCover, promote, listRows), () {
     final block = blocks[i];
     final count = block.count;
-    if (block.kind == HomePreviewBlockKind.tracks || count == 0) {
-      final height =
-          header +
-          (count == 0 ? 24 : math.min(3, count) * 64 * request.textScale);
+    if (count == 0) {
+      final height = header + 24;
       return (height: height, occupied: height * w, utility: 0);
+    }
+    if (block.kind.listRowsPerColumn case final int rowsPerColumn) {
+      final list = homeListLayout(
+        width: w,
+        count: count,
+        rowsPerColumn: listRows ?? rowsPerColumn,
+        textScale: request.textScale,
+      );
+      // Track artwork (44), vertical padding (16), and inter-row divider (14).
+      // Include the separators when comparing a list with album-card height.
+      final rowHeight = 74 * request.textScale;
+      final trailingGap = 14 * request.textScale;
+      return (
+        height: header + list.rows * rowHeight - trailingGap,
+        occupied:
+            header * w +
+            (list.count * rowHeight - list.columns * trailingGap) *
+                list.columnWidth,
+        utility: 0,
+      );
     }
     if (folderCards(i)) {
       // Match HomeAlbumFolderCards' selected-size Wrap, including optional
@@ -173,7 +220,8 @@ HomeSectionLayout planHomeSections(HomeSectionRequest request) {
       captionExtent: caption,
       count: count,
       wide: true,
-      large: block.kind == HomePreviewBlockKind.collage,
+      large: promote || block.kind == HomePreviewBlockKind.collage,
+      largeCover: largeCover,
     );
     final collage = album.arrangement == HomeAlbumArrangement.collage;
     final height = collage ? album.leadCover + caption : album.cover + caption;
@@ -246,13 +294,88 @@ HomeSectionLayout planHomeSections(HomeSectionRequest request) {
   }
 
   _Candidate candidate(List<List<int>> columns, List<double> sizes, int next) {
+    double? leadCover;
+    for (var c = 0; c < columns.length; c++) {
+      for (final i in columns[c].where(large)) {
+        final album = homeAlbumLayout(
+          width: sizes[c],
+          captionExtent: caption,
+          count: blocks[i].count,
+          wide: true,
+          large: true,
+        );
+        if (album.arrangement == HomeAlbumArrangement.collage) {
+          leadCover = math.max(leadCover ?? 0, album.leadCover);
+        }
+      }
+    }
+    final largeCover = leadCover ?? homeAlbumLargeCover;
+    double columnHeight(int c, Map<int, int> listRows) => columns[c].fold(
+      0.0,
+      (height, i) =>
+          height +
+          extent(i, sizes[c], largeCover, listRows: listRows[i]).height,
+    );
+    final automaticLists = [
+      for (var c = 0; c < columns.length; c++)
+        columns[c]
+            .where(
+              (i) =>
+                  blocks[i].kind == HomePreviewBlockKind.tracks &&
+                  blocks[i].count >
+                      homeListCapacity(
+                        sizes[c],
+                        rowsPerColumn: homePreviewRowCount(
+                          wide: true,
+                          small: true,
+                        ),
+                        textScale: request.textScale,
+                      ),
+            )
+            .toList(),
+    ];
+    // Use columns with a fixed content height as the reference, including
+    // lists too short for a fourth row. Without a reference, Automatic lists
+    // keep the four-row default rather than causing each other to shrink.
+    final neighbours = [
+      for (var c = 0; c < columns.length; c++)
+        if (automaticLists[c].isEmpty) columnHeight(c, const {}),
+    ];
+    final listRows = <int, int>{};
+    if (neighbours.isNotEmpty) {
+      final target = neighbours.reduce(math.max);
+      for (var c = 0; c < columns.length; c++) {
+        final indices = automaticLists[c];
+        if (indices.isEmpty) continue;
+        var distance = double.infinity;
+        var best = <int, int>{};
+        // Templates stack at most two sections per column: at most four
+        // combinations, evaluated together so stacked lists share the space.
+        for (var mask = 0; mask < (1 << indices.length); mask++) {
+          final option = {
+            for (var j = 0; j < indices.length; j++)
+              indices[j]: homePreviewRowCount(
+                wide: true,
+                small: mask & (1 << j) != 0,
+              ),
+          };
+          final gap = (columnHeight(c, option) - target).abs();
+          // Try four first to retain more items when either length fits equally.
+          if (gap < distance - .001) {
+            distance = gap;
+            best = option;
+          }
+        }
+        listRows.addAll(best);
+      }
+    }
     var height = 0.0;
     var occupied = 0.0;
     var utility = 0.0;
     for (var c = 0; c < columns.length; c++) {
       var columnHeight = 0.0;
       for (final i in columns[c]) {
-        final e = extent(i, sizes[c]);
+        final e = extent(i, sizes[c], largeCover, listRows: listRows[i]);
         columnHeight += e.height;
         occupied += e.occupied;
         utility += e.utility;
@@ -261,10 +384,14 @@ HomeSectionLayout planHomeSections(HomeSectionRequest request) {
     }
     final empty = math.max(0.0, width * height - occupied) / width;
     return (
-      row: HomePreviewRow([
-        for (var c = 0; c < columns.length; c++)
-          HomePreviewColumn(sizes[c], columns[c]),
-      ]),
+      row: HomePreviewRow(
+        [
+          for (var c = 0; c < columns.length; c++)
+            HomePreviewColumn(sizes[c], columns[c]),
+        ],
+        largeCover: largeCover,
+        automaticListRows: listRows,
+      ),
       next: next,
       // Minimise scrolling and blank area while rewarding additional readable
       // catalogue covers. The reward is bounded by the actual preview capacity.
@@ -334,10 +461,71 @@ HomeSectionLayout planHomeSections(HomeSectionRequest request) {
     }
     costs[i] = best;
   }
+  // Fill spare height only after choosing rows. This adds a linear pass over
+  // the selected blocks, not another set of alternatives to the row search.
+  HomePreviewRow fillSpareSpace(HomePreviewRow row) {
+    if (row.columns.length < 2 ||
+        !row.columns
+            .expand((c) => c.blocks)
+            .any((i) => blocks[i].kind == HomePreviewBlockKind.collage)) {
+      return row;
+    }
+    final heights = [
+      for (final column in row.columns)
+        column.blocks.fold<double>(
+          0,
+          (height, i) =>
+              height +
+              extent(
+                i,
+                column.width,
+                row.largeCover,
+                listRows: row.automaticListRows[i],
+              ).height,
+        ),
+    ];
+    final height = heights.reduce(math.max);
+    final promoted = <int>{};
+    for (var c = 0; c < row.columns.length; c++) {
+      final column = row.columns[c];
+      for (final i in column.blocks) {
+        if (blocks[i].kind != HomePreviewBlockKind.automatic ||
+            blocks[i].count == 0) {
+          continue;
+        }
+        HomeAlbumLayout artwork(bool large) => homeAlbumLayout(
+          width: column.width,
+          captionExtent: caption,
+          count: blocks[i].count,
+          wide: true,
+          large: large,
+          largeCover: row.largeCover,
+        );
+        // Never trade visible items for a larger cover in Automatic mode.
+        if (artwork(true).count < artwork(false).count) continue;
+        final ordinary = extent(i, column.width, row.largeCover);
+        final enlarged = extent(i, column.width, row.largeCover, promote: true);
+        final growth = enlarged.height - ordinary.height;
+        if (enlarged.occupied > ordinary.occupied &&
+            heights[c] + growth <= height + .001) {
+          promoted.add(i);
+          heights[c] += growth;
+        }
+      }
+    }
+    if (promoted.isEmpty) return row;
+    return HomePreviewRow(
+      row.columns,
+      largeCover: row.largeCover,
+      promotedBlocks: Set.unmodifiable(promoted),
+      automaticListRows: row.automaticListRows,
+    );
+  }
+
   final rows = <HomePreviewRow>[];
   for (var i = 0; i < blocks.length;) {
     final choice = choices[i]!;
-    rows.add(choice.row);
+    rows.add(fillSpareSpace(choice.row));
     i = choice.next;
   }
   return HomeSectionLayout(true, rows);

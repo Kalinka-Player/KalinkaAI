@@ -97,22 +97,11 @@ class HomeAlbumFolderCards extends StatelessWidget {
 /// A bounded album shelf for adaptive Home pins. [wide] describes the Home
 /// pane, not the window: a split kiosk can still need the swipeable row.
 class AdaptiveAlbumPreview extends StatelessWidget {
-  static int capacityFor(
-    double width, {
-    required bool large,
-    required double captionExtent,
-  }) => homeAlbumLayout(
-    width: width,
-    captionExtent: captionExtent,
-    count: 64,
-    wide: true,
-    large: large,
-  ).count;
-
   final List<BrowseItem> items;
   final bool wide;
   final bool large;
   final bool single;
+  final double largeCover;
   final String storageId;
   final ValueChanged<BrowseItem> onOpen;
 
@@ -124,6 +113,7 @@ class AdaptiveAlbumPreview extends StatelessWidget {
     required this.onOpen,
     this.large = false,
     this.single = false,
+    this.largeCover = homeAlbumLargeCover,
   });
 
   @override
@@ -145,6 +135,7 @@ class AdaptiveAlbumPreview extends StatelessWidget {
         wide: wide,
         large: large,
         single: single,
+        largeCover: largeCover,
       );
       if (plan.arrangement == HomeAlbumArrangement.single) {
         return Align(
@@ -158,7 +149,7 @@ class AdaptiveAlbumPreview extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             tile(0, plan.leadCover),
-            const SizedBox(width: homeCollageGap),
+            // Highlight frames meet; the card insets supply the artwork gap.
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -480,6 +471,7 @@ class _TileState extends ConsumerState<_Tile> {
       item.album?.title ??
       item.track?.title ??
       item.artist?.name ??
+      item.playlist?.name ??
       item.name ??
       'Unknown';
 

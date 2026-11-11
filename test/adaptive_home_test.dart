@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/playqueue_events.dart';
@@ -11,9 +12,11 @@ import 'package:kalinka/providers/pinned_catalogs_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/widgets/home/pinned_catalogs_section.dart';
 import 'package:kalinka/widgets/home/preview_shelf.dart';
+import 'package:kalinka/widgets/home/home_preview_switch.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 import 'package:kalinka/widgets/search_cards/search_album_row.dart';
 import 'package:kalinka/widgets/search_cards/search_folder_row.dart';
+import 'package:kalinka/widgets/search_cards/search_playlist_row.dart';
 import 'package:kalinka/widgets/shelf_heading.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
@@ -326,8 +329,11 @@ void main() {
         expect(albumTile, findsOneWidget);
         expect(tester.getSize(albumTile).width, lessThanOrEqualTo(198));
         if (scenario == 'folders') {
-          expect(find.byType(SearchTrackRow), findsNWidgets(3));
-          expect(find.text('A fourth track stays in the folder'), findsNothing);
+          expect(find.byType(SearchTrackRow), findsNWidgets(4));
+          expect(
+            find.text('A fourth track stays in the folder'),
+            findsOneWidget,
+          );
           expect(
             tester
                 .getTopLeft(
@@ -709,6 +715,485 @@ void main() {
     });
   }
 
+  testWidgets('adjacent Large previews keep album and playlist artwork', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final api = AdaptiveHomeApi();
+      const libraryId = 'kalinka:localfiles:catalog:albums';
+      const playlistId = 'kalinka:localfiles:playlist:loose';
+      final playlist = BrowseItem(
+        id: playlistId,
+        canBrowse: true,
+        canAdd: true,
+        playlist: Playlist(id: playlistId, name: 'Singles & loose tracks'),
+      );
+      api.listings[awardsId] = [...api.awards, ...api.albums];
+      api.listings[libraryId] = [playlist, ...api.albums];
+      final pins = [
+        awardsPin.withPreview(HomePreviewType.large),
+        PinnedCatalog(
+          page: CatalogPage.category(id: libraryId, title: 'Albums'),
+          filter: awardsPin.filter,
+          preview: HomePreviewType.large,
+        ),
+      ];
+      final key = GlobalKey();
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(0)),
+        api: api,
+        sources: demoSources,
+        size: const Size(1600, 1000),
+        themed: true,
+        captureKey: key,
+        screen: Scaffold(
+          body: SingleChildScrollView(child: PinnedCatalogsSection(pins: pins)),
+        ),
+      );
+      expect(
+        find.byKey(const ValueKey('home-album-collage')),
+        findsNWidgets(2),
+      );
+      final shelves = tester
+          .widgetList<AdaptiveAlbumPreview>(find.byType(AdaptiveAlbumPreview))
+          .toList();
+      expect(shelves.last.items.map((item) => item.id), [
+        playlistId,
+        ...api.albums.map((album) => album.id),
+      ]);
+      final first = tester.getRect(find.byKey(ValueKey(pins.first.key)));
+      final second = tester.getRect(find.byKey(ValueKey(pins.last.key)));
+      expect(second.top, first.top);
+      expect(second.left, greaterThan(first.right));
+      // The top-level name is optional; the typed playlist names both the
+      // visible card and its accessibility node.
+      expect(find.text('Singles & loose tracks'), findsOneWidget);
+      expect(find.bySemanticsLabel('Singles & loose tracks'), findsOneWidget);
+      await capture(tester, key, 'adjacent-large-mixed-library');
+      await tester.tap(find.byKey(const ValueKey('home-album-$playlistId')));
+      expect(container.read(searchSessionProvider).catalogPage.id, playlistId);
+      expect(api.replaced, isEmpty);
+      expect(tester.takeException(), isNull);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('Automatic list length follows the neighbouring artwork', (
+    tester,
+  ) async {
+    final api = AdaptiveHomeApi();
+    api.listings[awardsId] = [...api.awards, ...api.albums];
+    final artworkSize = ValueNotifier(HomePreviewType.preview);
+    addTearDown(artworkSize.dispose);
+    final key = GlobalKey();
+    await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(0)),
+      api: api,
+      sources: demoSources,
+      size: const Size(1248, 1000),
+      themed: true,
+      reducedMotion: true,
+      captureKey: key,
+      screen: Scaffold(
+        body: ValueListenableBuilder(
+          valueListenable: artworkSize,
+          builder: (context, choice, _) => SingleChildScrollView(
+            child: PinnedCatalogsSection(
+              pins: [
+                PinnedCatalog(
+                  page: awardsPin.page,
+                  filter: awardsPin.filter,
+                  preview: choice,
+                ),
+                folderPin(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    for (final (choice, rows) in [
+      (HomePreviewType.preview, 3),
+      (HomePreviewType.large, 4),
+      (HomePreviewType.preview, 3),
+    ]) {
+      artworkSize.value = choice;
+      await tester.pumpAndSettle();
+      final artwork = tester.getRect(find.byKey(ValueKey(awardsPin.key)));
+      final list = tester.getRect(find.byKey(ValueKey(folderPin().key)));
+      expect(list.top, artwork.top);
+      expect(list.left, greaterThan(artwork.right));
+      expect(find.byType(SearchTrackRow), findsNWidgets(rows));
+      await capture(tester, key, 'automatic-list-beside-${choice.name}');
+    }
+    // Changing only the neighbouring preview reuses the same fetched tracks.
+    expect(api.calls.where((call) => call.id == folderId), hasLength(1));
+    await tester.tap(find.text(api.looseTracks[2].track!.title));
+    await tester.pumpAndSettle();
+    expect(api.replaced, [
+      [api.looseTracks[2].id],
+    ]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('wide row previews show four playable items beside a collage', (
+    tester,
+  ) async {
+    final api = AdaptiveHomeApi();
+    api.listings[awardsId] = [...api.awards, ...api.albums];
+    final pins = [awardsPin, folderPin()];
+    await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(0)),
+      api: api,
+      sources: demoSources,
+      size: const Size(1248, 1000),
+      screen: Scaffold(
+        body: SingleChildScrollView(child: PinnedCatalogsSection(pins: pins)),
+      ),
+    );
+    final first = tester.getRect(find.byKey(ValueKey(pins.first.key)));
+    final second = tester.getRect(find.byKey(ValueKey(pins.last.key)));
+    expect(second.top, first.top);
+    expect(find.byType(SearchTrackRow), findsNWidgets(4));
+    await tester.tap(find.text(api.looseTracks.last.track!.title));
+    await tester.pumpAndSettle();
+    expect(api.replaced, [
+      [api.looseTracks.last.id],
+    ]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Home lists add columns and read down before moving right', (
+    tester,
+  ) async {
+    final api = AdaptiveHomeApi();
+    const id = 'kalinka:localfiles:catalog:all-tracks';
+    api.listings[id] = [
+      for (var i = 0; i < 24; i++)
+        demoTrack('column-$i', 'Column track $i', 'Artist'),
+    ];
+    final pin = PinnedCatalog(
+      page: CatalogPage.category(id: id, title: 'Tracks'),
+      filter: awardsPin.filter,
+      preview: HomePreviewType.automatic,
+    );
+    final key = GlobalKey();
+    await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(0)),
+      api: api,
+      sources: demoSources,
+      size: const Size(1520, 1000),
+      themed: true,
+      reducedMotion: true,
+      captureKey: key,
+      screen: Scaffold(
+        body: SingleChildScrollView(child: PinnedCatalogsSection(pins: [pin])),
+      ),
+    );
+    Rect row(int i) =>
+        tester.getRect(find.widgetWithText(SearchTrackRow, 'Column track $i'));
+    expect(find.byType(SearchTrackRow), findsNWidgets(12));
+    for (var c = 0; c < 3; c++) {
+      expect(row(c * 4).top, row(0).top);
+      expect(row(c * 4 + 3).left, row(c * 4).left);
+      expect(row(c * 4 + 3).top, greaterThan(row(c * 4).top));
+      expect(row(c * 4).width, greaterThanOrEqualTo(480));
+      if (c > 0) expect(row(c * 4).left, greaterThan(row(c * 4 - 1).right));
+    }
+    expect(api.calls.where((call) => call.id == id).single.limit, 16);
+    await capture(tester, key, 'home-list-three-columns');
+    await tester.tap(find.text('Column track 4'));
+    await tester.pumpAndSettle();
+    expect(api.replaced, [
+      [api.listings[id]![4].id],
+    ]);
+    tester.view.physicalSize = const Size(1000, 1000);
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchTrackRow), findsNWidgets(8));
+    expect(row(4).top, row(0).top);
+    expect(row(4).left, greaterThan(row(0).right));
+    tester.view.physicalSize = const Size(375, 1000);
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchTrackRow), findsNWidgets(3));
+    expect(row(2).left, row(0).left);
+    expect(row(2).top, greaterThan(row(1).top));
+    tester.view.physicalSize = const Size(1520, 1000);
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchTrackRow), findsNWidgets(12));
+    expect(api.calls.where((call) => call.id == id), hasLength(2));
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchTrackRow), findsNWidgets(3));
+    expect(row(2).left, row(0).left);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final width in [375.0, 1520.0]) {
+    testWidgets(
+      'Small and Large choose short and longer track lists at $width',
+      (tester) async {
+        final api = AdaptiveHomeApi();
+        const id = 'kalinka:localfiles:catalog:track-preview';
+        api.listings[id] = [
+          for (var i = 0; i < 24; i++)
+            demoTrack('size-$i', 'Track $i', 'Artist'),
+        ];
+        final key = GlobalKey();
+        final container = await pumpHomeShell(
+          tester,
+          queue: SettableQueue(queueOf(0)),
+          api: api,
+          sources: demoSources,
+          size: Size(width, 1000),
+          themed: true,
+          reducedMotion: true,
+          captureKey: key,
+          screen: Scaffold(
+            body: Consumer(
+              builder: (context, ref, _) {
+                final pins = ref.watch(pinnedCatalogsProvider) ?? [];
+                if (pins.isEmpty) return const SizedBox();
+                return Column(
+                  children: [
+                    HomePreviewSwitch(pin: pins.single, onMenuChanged: (_) {}),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: PinnedCatalogsSection(pins: pins),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+        await container
+            .read(pinnedCatalogsProvider.notifier)
+            .pin(
+              PinnedCatalog(
+                page: CatalogPage.category(
+                  id: id,
+                  title: 'Track collection',
+                  preview: Preview(
+                    type: PreviewType.tile,
+                    cardSize: CardSize.large,
+                  ),
+                ),
+                filter: awardsPin.filter,
+                preview: HomePreviewType.automatic,
+              ),
+            );
+        await tester.pumpAndSettle();
+        final columns = width == 375 ? 1 : 3;
+        final automaticRows = width == 375 ? 3 : 4;
+        expect(
+          find.byType(SearchTrackRow),
+          findsNWidgets(columns * automaticRows),
+        );
+        for (final (choice, rows) in [
+          (HomePreviewType.large, 6),
+          (HomePreviewType.preview, 3),
+          (HomePreviewType.automatic, automaticRows),
+        ]) {
+          await tester.tap(find.byTooltip('Preview for Track collection'));
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(ValueKey('home-preview-option-${choice.name}')),
+          );
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pumpAndSettle();
+          expect(
+            container.read(pinnedCatalogsProvider)!.single.preview,
+            choice,
+          );
+          expect(find.byType(SearchTrackRow), findsNWidgets(columns * rows));
+          if (columns > 1) {
+            final first = tester.getRect(
+              find.widgetWithText(SearchTrackRow, 'Track 0'),
+            );
+            final next = tester.getRect(
+              find.widgetWithText(SearchTrackRow, 'Track $rows'),
+            );
+            expect(next.top, first.top);
+            expect(next.left, greaterThan(first.right));
+          }
+          await capture(
+            tester,
+            key,
+            'track-list-${choice.name}-${width.toInt()}',
+          );
+        }
+        // A return to Small/Automatic reuses its existing request bucket.
+        expect(
+          api.calls.where((call) => call.id == id).map((call) => call.limit),
+          width == 375 ? [8] : [16, 32],
+        );
+        expect(api.replaced, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('short saved List previews balance mixed items across columns', (
+    tester,
+  ) async {
+    final api = AdaptiveHomeApi();
+    const id = 'kalinka:localfiles:catalog:short-list';
+    const playlistId = 'kalinka:localfiles:playlist:singles';
+    api.listings[id] = [
+      BrowseItem(
+        id: playlistId,
+        canBrowse: true,
+        canAdd: true,
+        playlist: Playlist(id: playlistId, name: 'Singles & loose tracks'),
+      ),
+      ...api.albums.take(2),
+    ];
+    final pin = PinnedCatalog(
+      page: CatalogPage.category(id: id, title: 'Albums'),
+      filter: awardsPin.filter,
+      preview: HomePreviewType.list,
+    );
+    final key = GlobalKey();
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(0)),
+      api: api,
+      sources: demoSources,
+      size: const Size(1248, 1000),
+      themed: true,
+      captureKey: key,
+      screen: Scaffold(
+        body: SingleChildScrollView(child: PinnedCatalogsSection(pins: [pin])),
+      ),
+    );
+    final first = tester.getTopLeft(find.text('Singles & loose tracks'));
+    final second = tester.getTopLeft(find.text(api.albums[0].album!.title));
+    final third = tester.getTopLeft(find.text(api.albums[1].album!.title));
+    expect(second.dx, closeTo(first.dx, 8));
+    expect(second.dy, greaterThan(first.dy));
+    expect(third.dx, greaterThan(second.dx + 480));
+    expect(third.dy, closeTo(first.dy, 8));
+    expect(find.text('Name'), findsNothing);
+    final focusedRows = <String>[];
+    for (var step = 0; step < 40 && focusedRows.length < 3; step++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      final context = FocusManager.instance.primaryFocus?.context;
+      final item =
+          context?.findAncestorWidgetOfExactType<SearchAlbumRow>()?.item ??
+          context?.findAncestorWidgetOfExactType<SearchPlaylistRow>()?.item;
+      if (item != null && !focusedRows.contains(item.id)) {
+        focusedRows.add(item.id);
+      }
+    }
+    expect(focusedRows, api.listings[id]!.map((item) => item.id));
+    await capture(tester, key, 'home-list-two-columns-mixed');
+    await tester.tap(find.text(api.albums[1].album!.title));
+    expect(
+      container.read(searchSessionProvider).catalogPage.id,
+      api.albums[1].id,
+    );
+    expect(api.replaced, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final preference in [HomePreviewType.large, HomePreviewType.automatic]) {
+    testWidgets(
+      'renamed $preference folder matches its neighbouring lead cover',
+      (tester) async {
+        final api = AdaptiveHomeApi();
+        api.listings[awardsId] = [...api.awards, ...api.albums];
+        final original = folderPin(album: true);
+        final folder = ValueNotifier(
+          PinnedCatalog(
+            page: CatalogPage.fromJson({
+              ...original.page.toJson(),
+              'title':
+                  '1976 (2021) Jean-Michel Jarre - Oxygene '
+                  '(2011 Remastered Version) [24B-96kHz] flac',
+            }),
+            filter: original.filter,
+            preview: preference,
+            homeName: 'Sunday listening',
+          ),
+        );
+        addTearDown(folder.dispose);
+        final key = GlobalKey();
+        final container = await pumpHomeShell(
+          tester,
+          queue: SettableQueue(queueOf(0)),
+          api: api,
+          sources: demoSources,
+          size: const Size(1248, 1000),
+          themed: true,
+          captureKey: key,
+          screen: Scaffold(
+            body: SingleChildScrollView(
+              child: ValueListenableBuilder<PinnedCatalog>(
+                valueListenable: folder,
+                builder: (_, pin, _) =>
+                    PinnedCatalogsSection(pins: [awardsPin, pin]),
+              ),
+            ),
+          ),
+        );
+        final lead = find.byKey(ValueKey('home-album-${api.awards.first.id}'));
+        final cover = find.descendant(
+          of: find.byKey(ValueKey(folder.value.key)),
+          matching: find.byKey(ValueKey('home-album-${api.albums.first.id}')),
+        );
+        final initial = tester.getRect(cover);
+        expect(initial.width, closeTo(tester.getSize(lead).width, .01));
+        expect(initial.top, closeTo(tester.getTopLeft(lead).dy, .01));
+        expect(initial.bottom, closeTo(tester.getBottomLeft(lead).dy, .01));
+        expect(find.text(folder.value.page.title!.toUpperCase()), findsNothing);
+        await capture(
+          tester,
+          key,
+          'renamed-folder-matching-${preference.name}-cover',
+        );
+        final calls = api.calls.length;
+        if (preference == HomePreviewType.automatic) {
+          expect(folder.value.preview, HomePreviewType.automatic);
+          folder.value = folder.value.withPreview(HomePreviewType.preview);
+          await tester.pumpAndSettle();
+          expect(tester.getSize(cover).width, lessThanOrEqualTo(198));
+          folder.value = folder.value.withPreview(HomePreviewType.automatic);
+          await tester.pumpAndSettle();
+          expect(tester.getRect(cover), initial);
+          expect(api.calls.length, calls);
+          tester.view.physicalSize = const Size(375, 1000);
+          await tester.pumpAndSettle();
+          expect(tester.getSize(cover).width, lessThanOrEqualTo(198));
+          final resizedCalls = api.calls.length;
+          tester.view.physicalSize = const Size(1248, 1000);
+          await tester.pumpAndSettle();
+          expect(tester.getRect(cover), initial);
+          expect(api.calls.length, resizedCalls);
+        }
+        folder.value = folder.value.withHomeName('Oxygene');
+        await tester.pumpAndSettle();
+        expect(tester.getRect(cover), initial);
+        expect(find.text('OXYGENE'), findsOneWidget);
+        await tester.tap(cover);
+        expect(
+          container.read(searchSessionProvider).catalogPage.id,
+          albumFolderId,
+        );
+        expect(api.replaced, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets(
     'album groups follow reordering, stop at other pins and tolerate duplicate albums',
     (tester) async {
@@ -734,6 +1219,7 @@ void main() {
       await notifier.setPreview(folderPin().key, HomePreviewType.automatic);
       await tester.pumpAndSettle();
       expect(find.byType(HomeAlbumFolderGroup), findsNothing);
+      // The track list fits the ordinary album-folder covers beside it.
       expect(find.byType(SearchTrackRow), findsNWidgets(3));
       await notifier.reorder(1, 3);
       await tester.pumpAndSettle();
@@ -1056,6 +1542,8 @@ void main() {
           final collage = find.byKey(const ValueKey('home-album-collage'));
           if (collage.evaluate().isNotEmpty) {
             expect(rects.first.width, greaterThan(rects[1].width));
+            // The highlight frames meet; their insets supply the artwork gap.
+            expect(rects.first.right, closeTo(rects[1].left, 0.01));
             expect(rects[1].width, inInclusiveRange(142, 222.01));
             expect(rects.last.top, greaterThan(rects.first.top));
             // Captions and frame spacing now count towards the lead cover:

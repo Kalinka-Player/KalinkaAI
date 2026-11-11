@@ -13,11 +13,11 @@ import '../../providers/search_session_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
 import '../search_cards/browse_navigation_scope.dart';
-import '../search_cards/browse_item_rows.dart';
 import '../shelf_heading.dart';
 import 'catalog_tile.dart';
 import 'catalog_artwork.dart';
 import 'home_layout.dart';
+import 'home_list_preview.dart';
 import 'home_preview_layout.dart';
 import 'home_section_plan.dart';
 import 'planned_home_sections.dart';
@@ -121,10 +121,12 @@ class PinnedCatalogsSection extends ConsumerWidget {
                   ? artistProbe
                   : homePreviewFetchLimit(
                       wide
-                          ? AdaptiveAlbumPreview.capacityFor(
+                          ? homePreviewCapacity(
                               width,
                               large: pin.largePreview,
                               captionExtent: caption,
+                              textScale: textScale,
+                              listRowsPerColumn: _listRowsFor(pin, wide: wide),
                             )
                           : 8,
                     );
@@ -177,14 +179,23 @@ class PinnedCatalogsSection extends ConsumerWidget {
                       ? (pin.preview == HomePreviewType.large
                             ? HomePreviewBlockKind.collage
                             : HomePreviewBlockKind.ordinary)
-                      : items.isNotEmpty &&
-                            items.every((item) => item.album != null)
+                      : _usesArtworkPreview(items)
                       ? (pin.largePreview
                             ? HomePreviewBlockKind.collage
                             : HomePreviewBlockKind.ordinary)
-                      : HomePreviewBlockKind.tracks;
+                      : switch (pin.preview) {
+                          HomePreviewType.preview =>
+                            HomePreviewBlockKind.shortTracks,
+                          HomePreviewType.large =>
+                            HomePreviewBlockKind.longTracks,
+                          _ => HomePreviewBlockKind.tracks,
+                        };
                 }
               }
+            }
+            if (kind == HomePreviewBlockKind.ordinary &&
+                pin.preview == HomePreviewType.automatic) {
+              kind = HomePreviewBlockKind.automatic;
             }
             shapes.add((
               kind: kind,
@@ -203,7 +214,12 @@ class PinnedCatalogsSection extends ConsumerWidget {
               blocks: shapes,
             ),
             builder: (plan) {
-              Widget preview(int index) {
+              Widget preview(
+                int index, {
+                double largeCover = homeAlbumLargeCover,
+                bool promoteToLarge = false,
+                int? automaticListRows,
+              }) {
                 final block = blocks[index];
                 return block.length == 1
                     ? PinnedCatalogPreview(
@@ -211,6 +227,9 @@ class PinnedCatalogsSection extends ConsumerWidget {
                         pin: block.first,
                         wide: plan.wide,
                         requestLimit: limits[block.first.key],
+                        largeCover: largeCover,
+                        promoteToLarge: promoteToLarge,
+                        automaticListRows: automaticListRows,
                       )
                     : HomeAlbumFolderGroup(
                         key: ValueKey('album-folders:${block.first.key}'),
@@ -245,7 +264,16 @@ class PinnedCatalogsSection extends ConsumerWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: row.columns[i].blocks
-                                    .map(preview)
+                                    .map(
+                                      (index) => preview(
+                                        index,
+                                        largeCover: row.largeCover,
+                                        promoteToLarge: row.promotedBlocks
+                                            .contains(index),
+                                        automaticListRows:
+                                            row.automaticListRows[index],
+                                      ),
+                                    )
                                     .toList(),
                               ),
                             ),
@@ -315,11 +343,17 @@ class PinnedCatalogPreview extends StatelessWidget {
   final PinnedCatalog pin;
   final bool wide;
   final int? requestLimit;
+  final double largeCover;
+  final bool promoteToLarge;
+  final int? automaticListRows;
   const PinnedCatalogPreview({
     super.key,
     required this.pin,
     this.wide = false,
     this.requestLimit,
+    this.largeCover = homeAlbumLargeCover,
+    this.promoteToLarge = false,
+    this.automaticListRows,
   });
 
   @override
@@ -459,14 +493,20 @@ class PinnedCatalogPreview extends StatelessWidget {
       );
     }
     if (pin.preview.adaptive) {
+      final rowsPerColumn =
+          pin.preview == HomePreviewType.automatic && automaticListRows != null
+          ? automaticListRows!
+          : _listRowsFor(pin, wide: wide);
       final limit =
           requestLimit ??
           homePreviewFetchLimit(
             wide
-                ? AdaptiveAlbumPreview.capacityFor(
+                ? homePreviewCapacity(
                     width,
                     large: pin.largePreview,
                     captionExtent: homeAlbumCaptionExtent(context),
+                    textScale: MediaQuery.textScalerOf(context).scale(14) / 14,
+                    listRowsPerColumn: rowsPerColumn,
                   )
                 : 8,
           );
@@ -482,19 +522,14 @@ class PinnedCatalogPreview extends StatelessWidget {
             heading,
             const SizedBox(height: kHomeHeadingGap),
             loadingSources
-                ? PreviewShelfShimmer(
-                    preview: Preview(type: PreviewType.tile, itemsCount: 3),
-                  )
+                ? HomeListPreviewShimmer(rowsPerColumn: rowsPerColumn)
                 : ref
                       .watch(homePinContentProvider(request))
                       .when(
                         skipLoadingOnReload: false,
                         skipLoadingOnRefresh: false,
-                        loading: () => PreviewShelfShimmer(
-                          preview: Preview(
-                            type: PreviewType.tile,
-                            itemsCount: 3,
-                          ),
+                        loading: () => HomeListPreviewShimmer(
+                          rowsPerColumn: rowsPerColumn,
                         ),
                         error: (_, _) => TextButton.icon(
                           onPressed: () {
@@ -515,27 +550,32 @@ class PinnedCatalogPreview extends StatelessWidget {
                               style: KalinkaTextStyles.trackRowSubtitle,
                             );
                           }
-                          final albums = items.every(
-                            (item) => item.album != null,
-                          );
+                          final artwork = _usesArtworkPreview(items);
                           return BrowseNavigationScope(
                             onOpen: notifier.openBrowseItem,
-                            child: album != null || albums
+                            child: album != null || artwork
                                 ? AdaptiveAlbumPreview(
                                     items: album == null ? items : [album],
                                     wide: wide,
                                     single: album != null,
-                                    large: album != null
-                                        ? pin.preview == HomePreviewType.large
-                                        : pin.largePreview,
+                                    largeCover: largeCover,
+                                    large:
+                                        (promoteToLarge &&
+                                            pin.preview ==
+                                                HomePreviewType.automatic) ||
+                                        (album != null
+                                            ? pin.preview ==
+                                                  HomePreviewType.large
+                                            : pin.largePreview),
                                     storageId: pin.key,
                                     // The album-folder remains a folder destination.
                                     onOpen: album != null
                                         ? (_) => open()
                                         : notifier.openBrowseItem,
                                   )
-                                : BrowseItemRows(
-                                    items: items.take(3).toList(),
+                                : HomeListPreview(
+                                    items: items,
+                                    rowsPerColumn: rowsPerColumn,
                                     labelled: !items.every(
                                       (item) => item.track != null,
                                     ),
@@ -548,7 +588,13 @@ class PinnedCatalogPreview extends StatelessWidget {
         ),
       );
     }
-    final limit = pin.preview == HomePreviewType.cards ? 8 : 5;
+    final limit = pin.preview == HomePreviewType.cards
+        ? 8
+        : homeListCapacity(
+            width,
+            rowsPerColumn: 5,
+            textScale: MediaQuery.textScalerOf(context).scale(14) / 14,
+          );
     final request = requestOf(limit);
     final preview = Preview(
       type: pin.preview == HomePreviewType.cards
@@ -559,6 +605,9 @@ class PinnedCatalogPreview extends StatelessWidget {
       aspectRatio: pin.page.preview?.aspectRatio,
       cardSize: pin.page.preview?.cardSize,
     );
+    Widget placeholder() => pin.preview == HomePreviewType.list
+        ? const HomeListPreviewShimmer(rowsPerColumn: 5)
+        : PreviewShelfShimmer(preview: preview);
     return Padding(
       padding: const EdgeInsets.only(bottom: kHomePinGap),
       child: Column(
@@ -567,7 +616,7 @@ class PinnedCatalogPreview extends StatelessWidget {
           heading,
           const SizedBox(height: kHomeHeadingGap),
           loadingSources
-              ? PreviewShelfShimmer(preview: preview)
+              ? placeholder()
               : ref
                     .watch(pinnedPreviewProvider(request))
                     .when(
@@ -575,7 +624,7 @@ class PinnedCatalogPreview extends StatelessWidget {
                       // the previous items.
                       skipLoadingOnReload: false,
                       skipLoadingOnRefresh: false,
-                      loading: () => PreviewShelfShimmer(preview: preview),
+                      loading: placeholder,
                       error: (_, _) => TextButton.icon(
                         onPressed: () =>
                             ref.invalidate(pinnedPreviewProvider(request)),
@@ -589,13 +638,19 @@ class PinnedCatalogPreview extends StatelessWidget {
                             )
                           : BrowseNavigationScope(
                               onOpen: notifier.openBrowseItem,
-                              child: PreviewShelf(
-                                items: list.items.take(limit).toList(),
-                                preview: preview,
-                                storageId: pin.key,
-                                onOpenItem: notifier.openBrowseItem,
-                                inFolder: pin.page.folderLayout,
-                              ),
+                              child: pin.preview == HomePreviewType.list
+                                  ? HomeListPreview(
+                                      items: list.items,
+                                      rowsPerColumn: 5,
+                                      inFolder: pin.page.folderLayout,
+                                    )
+                                  : PreviewShelf(
+                                      items: list.items.take(limit).toList(),
+                                      preview: preview,
+                                      storageId: pin.key,
+                                      onOpenItem: notifier.openBrowseItem,
+                                      inFolder: pin.page.folderLayout,
+                                    ),
                             ),
                     ),
         ],
@@ -603,6 +658,19 @@ class PinnedCatalogPreview extends StatelessWidget {
     );
   }
 }
+
+int _listRowsFor(PinnedCatalog pin, {required bool wide}) =>
+    homePreviewRowCount(
+      wide: wide,
+      small: pin.preview == HomePreviewType.preview,
+      large: pin.preview == HomePreviewType.large,
+    );
+
+// Library album catalogues can begin with the loose-tracks playlist. Keep
+// those browsable covers together, preserving order and their destinations.
+bool _usesArtworkPreview(List<BrowseItem> items) =>
+    items.isNotEmpty &&
+    items.every((item) => item.album != null || item.playlist != null);
 
 String _countLabel(int count, PreviewContentType? kind) {
   final (one, many) = switch (kind) {
