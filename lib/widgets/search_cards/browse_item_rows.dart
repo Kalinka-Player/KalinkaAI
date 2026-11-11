@@ -43,6 +43,9 @@ class BrowseItemRows extends StatelessWidget {
   /// The rows are a folder's, which draws the folders it holds as such.
   final bool inFolder;
 
+  /// Whether wide rows may move their metadata into table columns.
+  final bool table;
+
   const BrowseItemRows({
     super.key,
     required this.items,
@@ -52,6 +55,7 @@ class BrowseItemRows extends StatelessWidget {
     this.queueContextIds,
     this.labelled = true,
     this.inFolder = false,
+    this.table = true,
   });
 
   @override
@@ -71,15 +75,25 @@ class BrowseItemRows extends StatelessWidget {
         titleInset: textInsetOf(displayed.first, inFolder: inFolder),
       ),
     ];
+    final occurrences = <String, int>{};
     for (int i = 0; i < displayed.length; i++) {
+      final item = displayed[i];
+      final occurrence = occurrences.update(
+        item.id,
+        (count) => count + 1,
+        ifAbsent: () => 0,
+      );
       // Per-row RepaintBoundary: each row becomes its own composited layer
       // so scroll just shifts layers instead of re-rasterising the whole
       // section. Matters most for sections that pack many rows into a single
       // outer ListView child.
       children.add(
         RepaintBoundary(
+          // Keep focus and action state with the item when rows are reordered
+          // or Home columns rebalance. Repeated items remain separate rows.
+          key: ValueKey((item.id, occurrence)),
           child: buildRow(
-            displayed[i],
+            item,
             queueContextIds: queueContextIds,
             labelled: labelled,
             inFolder: inFolder,
@@ -112,7 +126,7 @@ class BrowseItemRows extends StatelessWidget {
       details: RowColumnsListing.anyDetails(displayed),
       artists: RowColumnsListing.anyArtists(displayed),
       tracks: displayed.every((item) => item.browseType == BrowseType.track),
-      table: RowColumnsListing.oneKind(displayed),
+      table: table && RowColumnsListing.oneKind(displayed),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,

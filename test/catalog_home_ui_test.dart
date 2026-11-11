@@ -26,6 +26,7 @@ import 'package:kalinka/widgets/home/home_source_list.dart';
 import 'package:kalinka/widgets/home/catalog_artwork.dart';
 import 'package:kalinka/widgets/home/catalog_tile.dart';
 import 'package:kalinka/widgets/home/preview_shelf.dart';
+import 'package:kalinka/widgets/home/home_list_preview.dart';
 import 'package:kalinka/widgets/home/home_preview_choices.dart';
 import 'package:kalinka/widgets/home/home_preview_illustration.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
@@ -1196,7 +1197,7 @@ void main() {
       await tester.pumpAndSettle();
 
       for (final viaChevron in [true, false]) {
-        final preview = find.byType(PreviewShelf);
+        final preview = find.byType(HomeListPreview);
         expect(
           find.descendant(of: preview, matching: find.byTooltip('Expand')),
           findsNothing,
@@ -1217,7 +1218,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(container.read(searchSessionProvider).catalogPage.id, id);
-        expect(find.byType(PreviewShelf), findsNothing);
+        expect(find.byType(HomeListPreview), findsNothing);
 
         await tester.tap(find.byTooltip('Back').first);
         await tester.pumpAndSettle();
@@ -1225,7 +1226,7 @@ void main() {
           container.read(searchSessionProvider).catalogPage.isRoot,
           isTrue,
         );
-        expect(find.byType(PreviewShelf), findsOneWidget);
+        expect(find.byType(HomeListPreview), findsOneWidget);
         expect(tester.takeException(), isNull);
       }
     });

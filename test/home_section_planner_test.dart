@@ -18,6 +18,50 @@ HomeSectionRequest request(double width, {int folders = 4}) =>
     );
 
 void main() {
+  test('real worker preserves and caches neighbouring list lengths', () async {
+    final planner = HomeSectionPlanner();
+    HomeSectionRequest beside(HomePreviewBlockKind kind) => HomeSectionRequest(
+      width: 1248,
+      textScale: 1,
+      captionExtent: 60,
+      blocks: [
+        (kind: kind, count: 8, extraCaption: 0),
+        (kind: HomePreviewBlockKind.tracks, count: 8, extraCaption: 0),
+      ],
+    );
+    final ordinary = beside(HomePreviewBlockKind.ordinary);
+    final plan = await planner.resolve(ordinary);
+    expect(plan.rows.single.automaticListRows, {1: 3});
+    final collage = await planner.resolve(beside(HomePreviewBlockKind.collage));
+    expect(collage.rows.single.automaticListRows, {1: 4});
+    expect(await planner.resolve(ordinary), same(plan));
+  });
+
+  test(
+    'real worker caches Automatic promotion separately from Small',
+    () async {
+      final planner = HomeSectionPlanner();
+      HomeSectionRequest besideCollage(HomePreviewBlockKind kind) =>
+          HomeSectionRequest(
+            width: 1248,
+            textScale: 1,
+            captionExtent: 60,
+            blocks: [
+              (kind: HomePreviewBlockKind.collage, count: 8, extraCaption: 0),
+              (kind: kind, count: 1, extraCaption: 0),
+            ],
+          );
+      final automatic = besideCollage(HomePreviewBlockKind.automatic);
+      final plan = await planner.resolve(automatic);
+      expect(plan.rows.single.promotedBlocks, {1});
+      final small = await planner.resolve(
+        besideCollage(HomePreviewBlockKind.ordinary),
+      );
+      expect(small.rows.single.promotedBlocks, isEmpty);
+      expect(await planner.resolve(automatic), same(plan));
+    },
+  );
+
   test(
     'real worker accepts geometry and returns the full-width folder plan',
     () async {

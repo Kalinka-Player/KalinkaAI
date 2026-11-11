@@ -32,8 +32,86 @@ const homeAlbumOrdinaryCover = 176.0;
 const homeAlbumLargeCover = 320.0;
 const homeAlbumMinimumLargeCover = 240.0;
 const homeAlbumMaximumSmallCover = 200.0;
-const homeCollageGap = 16.0;
 const homePreviewColumnGap = 32.0;
+const homeListMinimumColumnWidth = 480.0;
+
+int homePreviewRowCount({
+  required bool wide,
+  bool small = false,
+  bool large = false,
+}) => small
+    ? 3
+    : large
+    ? 6
+    : wide
+    ? 4
+    : 3;
+
+int homeListColumnCount(double width, {double textScale = 1}) => math.max(
+  1,
+  ((width + homePreviewColumnGap) /
+          (homeListMinimumColumnWidth * textScale + homePreviewColumnGap))
+      .floor(),
+);
+
+int homeListCapacity(
+  double width, {
+  required int rowsPerColumn,
+  double textScale = 1,
+}) => math.min(
+  64,
+  homeListColumnCount(width, textScale: textScale) * rowsPerColumn,
+);
+
+class HomeListLayout {
+  final int count;
+  final int columns;
+  final double columnWidth;
+  const HomeListLayout(this.count, this.columns, this.columnWidth);
+
+  int get rows => (count / columns).ceil();
+
+  // Balanced, consecutive slices: finish the left column before the right.
+  int startOf(int column) =>
+      column * (count ~/ columns) + math.min(column, count % columns);
+}
+
+HomeListLayout homeListLayout({
+  required double width,
+  required int count,
+  required int rowsPerColumn,
+  double textScale = 1,
+}) {
+  final slots = homeListColumnCount(width, textScale: textScale);
+  final visible = math.min(count, math.min(64, slots * rowsPerColumn));
+  return HomeListLayout(
+    visible,
+    math.min(slots, math.max(1, visible)),
+    math.max(0, (width - (slots - 1) * homePreviewColumnGap) / slots),
+  );
+}
+
+/// Fetch for either possible content shape before the listing has loaded.
+int homePreviewCapacity(
+  double width, {
+  required bool large,
+  required double captionExtent,
+  required double textScale,
+  required int listRowsPerColumn,
+}) => math.max(
+  homeAlbumLayout(
+    width: width,
+    captionExtent: captionExtent,
+    count: 64,
+    wide: true,
+    large: large,
+  ).count,
+  homeListCapacity(
+    width,
+    rowsPerColumn: listRowsPerColumn,
+    textScale: textScale,
+  ),
+);
 
 /// Shared by the folder renderer and background planner so wrapping uses the
 /// same card dimensions. Large phone cards leave a glimpse of the next cover.
@@ -129,6 +207,7 @@ typedef _AlbumLayoutKey = ({
   bool wide,
   bool large,
   bool single,
+  double largeCover,
 });
 final _albumLayouts = HomeLayoutMemo<_AlbumLayoutKey, HomeAlbumLayout>();
 
@@ -139,6 +218,7 @@ HomeAlbumLayout homeAlbumLayout({
   required bool wide,
   required bool large,
   bool single = false,
+  double largeCover = homeAlbumLargeCover,
 }) => _albumLayouts.resolve(
   (
     width: width,
@@ -147,6 +227,7 @@ HomeAlbumLayout homeAlbumLayout({
     wide: wide,
     large: large,
     single: single,
+    largeCover: largeCover,
   ),
   () {
     HomeAlbumLayout layout(
@@ -168,7 +249,7 @@ HomeAlbumLayout homeAlbumLayout({
         HomeAlbumArrangement.single,
         count,
         math.min(
-          large ? homeAlbumLargeCover : homeAlbumOrdinaryCover,
+          large ? largeCover : homeAlbumOrdinaryCover,
           width - 2 * homeAlbumInset,
         ),
       );
@@ -193,7 +274,7 @@ HomeAlbumLayout homeAlbumLayout({
       return layout(
         HomeAlbumArrangement.row,
         visible,
-        math.min(homeAlbumLargeCover, width / visible - 2 * homeAlbumInset),
+        math.min(largeCover, width / visible - 2 * homeAlbumInset),
       );
     }
     if (large && count >= 3) {
@@ -202,16 +283,12 @@ HomeAlbumLayout homeAlbumLayout({
       final preferredColumns =
           count >= 4 &&
               width >=
-                  4 * homeAlbumMinimumCover +
-                      captionExtent +
-                      6 * homeAlbumInset +
-                      homeCollageGap
+                  4 * homeAlbumMinimumCover + captionExtent + 6 * homeAlbumInset
           ? 2
           : 1;
       final desiredColumns = math.max(
         preferredColumns,
         ((width -
-                    homeCollageGap -
                     captionExtent -
                     2 * homeAlbumInset -
                     2 * homeAlbumMaximumSmallCover) /
@@ -221,10 +298,7 @@ HomeAlbumLayout homeAlbumLayout({
       var columns = math.min(desiredColumns, ((count - 1) / 2).ceil());
       double coverFor(int columns) => math.min(
         homeAlbumMaximumSmallCover,
-        (width -
-                homeCollageGap -
-                captionExtent -
-                (columns + 1) * 2 * homeAlbumInset) /
+        (width - captionExtent - (columns + 1) * 2 * homeAlbumInset) /
             (columns + 2),
       );
       while (columns > 1 && coverFor(columns) < homeAlbumMinimumCover) {
