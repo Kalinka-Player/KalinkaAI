@@ -32,6 +32,8 @@ class PinnedCatalogsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final modules = ref.watch(sourceModulesProvider);
+    var loading = modules.isLoading && !modules.hasValue;
     final albums = <String, BrowseItem>{};
     bool candidate(PinnedCatalog pin) =>
         pin.preview.adaptive &&
@@ -47,34 +49,20 @@ class PinnedCatalogsSection extends ConsumerWidget {
               (i + 1 < pins.length && candidate(pins[i + 1])))) {
         continue;
       }
-      final available =
-          ref
-              .watch(sourceModulesProvider)
-              .value
-              ?.any(
-                (source) =>
-                    source.name == 'localfiles' &&
-                    source.enabled &&
-                    source.can(ModuleCapability.catalogs),
-              ) ??
-          false;
+      final available = _sourceAvailable(modules.value, pin);
       if (!available) continue;
-      final album = ref
-          .watch(
-            homeFolderAlbumProvider((
-              id: pin.page.id!,
-              revision:
-                  ref.watch(collectionsRevisionProvider) +
-                  ref.watch(
-                    indexerStatusProvider.select(
-                      (state) => state.libraryRevision,
-                    ),
-                  ),
-            )),
-          )
-          .asData
-          ?.value;
-      if (album != null) albums[pin.key] = album;
+      final album = ref.watch(
+        homeFolderAlbumProvider((
+          id: pin.page.id!,
+          revision:
+              ref.watch(collectionsRevisionProvider) +
+              ref.watch(
+                indexerStatusProvider.select((state) => state.libraryRevision),
+              ),
+        )),
+      );
+      loading = loading || album.isLoading;
+      if (album.asData?.value case final value?) albums[pin.key] = value;
     }
     final blocks = <List<PinnedCatalog>>[];
     for (final pin in pins) {
@@ -97,6 +85,7 @@ class PinnedCatalogsSection extends ConsumerWidget {
           final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
           final caption = homeAlbumCaptionExtent(context);
           final wide = width >= 800 * textScale;
+          var pending = loading;
           final limits = <String, int>{};
           final shapes = <HomePreviewBlock>[];
           for (final block in blocks) {
@@ -131,44 +120,16 @@ class PinnedCatalogsSection extends ConsumerWidget {
                           : 8,
                     );
               limits[pin.key] = limit;
-              final source = sourceOfId(pin.page.id!);
-              final available =
-                  ref
-                      .watch(sourceModulesProvider)
-                      .value
-                      ?.any(
-                        (module) =>
-                            module.enabled &&
-                            module.name == source &&
-                            (pin.page.isArtist ||
-                                module.can(ModuleCapability.catalogs)),
-                      ) ??
-                  false;
+              final available = _sourceAvailable(modules.value, pin);
               if (available) {
-                final content = ref
-                    .watch(
-                      homePinContentProvider((
-                        listing: (
-                          id: pin.page.id!,
-                          filter: pin.filter.encoded(
-                            pin.page.filterCapabilities,
-                          ),
-                          limit: limit,
-                          revision:
-                              ref.watch(collectionsRevisionProvider) +
-                              (source == 'localfiles'
-                                  ? ref.watch(
-                                      indexerStatusProvider.select(
-                                        (s) => s.libraryRevision,
-                                      ),
-                                    )
-                                  : 0),
-                        ),
-                        folder: pin.page.folderLayout,
-                      )),
-                    )
-                    .asData
-                    ?.value;
+                final state = ref.watch(
+                  homePinContentProvider((
+                    listing: _previewRequest(ref, pin, limit),
+                    folder: pin.page.folderLayout,
+                  )),
+                );
+                pending = pending || state.isLoading;
+                final content = state.asData?.value;
                 if (content != null) {
                   final items = _previewItems(pin, content);
                   // Use loaded, displayable items, never an optimistic total from
@@ -192,6 +153,26 @@ class PinnedCatalogsSection extends ConsumerWidget {
                         };
                 }
               }
+            } else if (block.length == 1 &&
+                pin.preview != HomePreviewType.artwork &&
+                _sourceAvailable(modules.value, pin) &&
+                (!pin.shortcut || pin.page.sections.isEmpty)) {
+              // Legacy previews and shortcut counts must settle too: a late
+              // count can wrap a shortcut's footer and move the whole row.
+              final limit = pin.shortcut
+                  ? 1
+                  : pin.preview == HomePreviewType.cards
+                  ? 8
+                  : homeListCapacity(
+                      width,
+                      rowsPerColumn: 5,
+                      textScale: textScale,
+                    );
+              limits[pin.key] = limit;
+              final state = ref.watch(
+                pinnedPreviewProvider(_previewRequest(ref, pin, limit)),
+              );
+              pending = pending || state.isLoading;
             }
             if (kind == HomePreviewBlockKind.ordinary &&
                 pin.preview == HomePreviewType.automatic) {
@@ -207,6 +188,7 @@ class PinnedCatalogsSection extends ConsumerWidget {
             ));
           }
           return PlannedHomeSections(
+            ready: !pending,
             request: HomeSectionRequest(
               width: width,
               textScale: textScale,
@@ -369,30 +351,11 @@ class PinnedCatalogPreview extends StatelessWidget {
     final source = sourceOfId(pin.page.id!)!;
     final info = ref.watch(sourceDisplayInfoProvider)[source];
     final sourceTitle = info?.title ?? source;
-    final available =
-        modules.value?.any(
-          (module) =>
-              module.enabled &&
-              module.name == source &&
-              // An artist opens by id, without the source's catalogs.
-              (pin.page.isArtist || module.can(ModuleCapability.catalogs)),
-        ) ??
-        false;
+    final available = _sourceAvailable(modules.value, pin);
     final notifier = ref.read(searchSessionProvider.notifier);
     void open() => notifier.openPage(pin.page, filter: pin.filter);
-    CatalogSectionRequest requestOf(int limit) {
-      // A finished scan may have changed what a library catalog holds.
-      final libraryRevision = source == 'localfiles'
-          ? ref.watch(indexerStatusProvider.select((s) => s.libraryRevision))
-          : 0;
-      return (
-        id: pin.page.id!,
-        filter: pin.filter.encoded(pin.page.filterCapabilities),
-        // An artist's preview is read off one probe, whatever it shows.
-        limit: pin.page.isArtist ? artistProbe : limit,
-        revision: ref.watch(collectionsRevisionProvider) + libraryRevision,
-      );
-    }
+    CatalogSectionRequest requestOf(int limit) =>
+        _previewRequest(ref, pin, limit);
 
     if (pin.shortcut) {
       if (loadingSources) {
@@ -588,13 +551,15 @@ class PinnedCatalogPreview extends StatelessWidget {
         ),
       );
     }
-    final limit = pin.preview == HomePreviewType.cards
-        ? 8
-        : homeListCapacity(
-            width,
-            rowsPerColumn: 5,
-            textScale: MediaQuery.textScalerOf(context).scale(14) / 14,
-          );
+    final limit =
+        requestLimit ??
+        (pin.preview == HomePreviewType.cards
+            ? 8
+            : homeListCapacity(
+                width,
+                rowsPerColumn: 5,
+                textScale: MediaQuery.textScalerOf(context).scale(14) / 14,
+              ));
     final request = requestOf(limit);
     final preview = Preview(
       type: pin.preview == HomePreviewType.cards
@@ -658,6 +623,31 @@ class PinnedCatalogPreview extends StatelessWidget {
     );
   }
 }
+
+bool _sourceAvailable(List<ModuleInfo>? modules, PinnedCatalog pin) =>
+    modules?.any(
+      (module) =>
+          module.enabled &&
+          module.name == sourceOfId(pin.page.id!) &&
+          // An artist opens by id, without the source's catalogs.
+          (pin.page.isArtist || module.can(ModuleCapability.catalogs)),
+    ) ??
+    false;
+
+CatalogSectionRequest _previewRequest(
+  WidgetRef ref,
+  PinnedCatalog pin,
+  int limit,
+) => (
+  id: pin.page.id!,
+  filter: pin.filter.encoded(pin.page.filterCapabilities),
+  limit: pin.page.isArtist ? artistProbe : limit,
+  revision:
+      ref.watch(collectionsRevisionProvider) +
+      (sourceOfId(pin.page.id!) == 'localfiles'
+          ? ref.watch(indexerStatusProvider.select((s) => s.libraryRevision))
+          : 0),
+);
 
 int _listRowsFor(PinnedCatalog pin, {required bool wide}) =>
     homePreviewRowCount(

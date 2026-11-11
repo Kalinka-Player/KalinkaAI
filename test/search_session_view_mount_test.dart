@@ -24,6 +24,8 @@ import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_button.dart';
 import 'package:kalinka/widgets/home/home_layout.dart';
+import 'package:kalinka/widgets/home/home_section_plan.dart';
+import 'package:kalinka/widgets/home/planned_home_sections.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
 import 'package:kalinka/widgets/top_bar_content_fade.dart';
 import 'package:kalinka/widgets/kalinka_back_button.dart';
@@ -214,6 +216,12 @@ void main() {
         serverAnswering('box-1'),
         playerStateProvider.overrideWithValue(PlaybackState.empty),
         indexerStatusProvider.overrideWith(_IdleIndexer.new),
+        // Home now waits for its finished geometry; run it on the test clock.
+        homeSectionPlannerProvider.overrideWithValue(
+          HomeSectionPlanner(
+            calculate: (request) async => planHomeSections(request),
+          ),
+        ),
       ],
     );
     addTearDown(container.dispose);

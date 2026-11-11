@@ -15,6 +15,7 @@ import 'package:kalinka/providers/collections_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/catalog_section_provider.dart';
 import 'package:kalinka/providers/pinned_catalogs_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
@@ -22,6 +23,10 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_rows_shimmer.dart';
 import 'package:kalinka/widgets/home/catalog_tile.dart';
 import 'package:kalinka/widgets/home/home_list_preview.dart';
+import 'package:kalinka/widgets/home/home_pins_shimmer.dart';
+import 'package:kalinka/widgets/home/home_section_plan.dart';
+import 'package:kalinka/widgets/home/pinned_catalogs_section.dart';
+import 'package:kalinka/widgets/home/planned_home_sections.dart';
 import 'package:kalinka/widgets/home/preview_shelf.dart';
 import 'package:kalinka/widgets/loading_shimmer.dart';
 import 'package:kalinka/widgets/search/catalog_cards_section.dart';
@@ -30,6 +35,7 @@ import 'package:kalinka/widgets/search/search_zero_state.dart';
 
 import 'support/home_shell.dart' show SettableConnection;
 import 'support/server_answer.dart';
+import 'support/adaptive_home_fixtures.dart' show demoAlbum, demoTrack;
 
 class _Connected extends ConnectionStateNotifier {
   @override
@@ -66,6 +72,8 @@ String _savedPin(String title) => jsonEncode([
 class _DelayedApi implements KalinkaPlayerProxy {
   final roots = Completer<BrowseItemsList>();
   final preview = Completer<BrowseItemsList>();
+  final previews = <String, Completer<BrowseItemsList>>{};
+  final metadata = <String, Completer<BrowseItem>>{};
   final calls = <String>[];
 
   @override
@@ -76,8 +84,11 @@ class _DelayedApi implements KalinkaPlayerProxy {
     String? filter,
   }) {
     calls.add(id);
-    return id.isEmpty ? roots.future : preview.future;
+    return id.isEmpty ? roots.future : (previews[id] ?? preview).future;
   }
+
+  @override
+  Future<BrowseItem> getMetadata(String id) => metadata[id]!.future;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
@@ -93,6 +104,8 @@ Future<ProviderContainer> _mount(
   bool reducedMotion = false,
   ServersByHost? servers,
   Map<String, Object> saved = const {},
+  List<PinnedCatalog> catalogs = const [],
+  HomeSectionPlanner? planner,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -117,6 +130,12 @@ Future<ProviderContainer> _mount(
       ],
       sourceModulesProvider.overrideWith((ref) => modules),
       collectionsShelfProvider.overrideWith((ref) async => null),
+      homeSectionPlannerProvider.overrideWithValue(
+        planner ??
+            HomeSectionPlanner(
+              calculate: (input) async => planHomeSections(input),
+            ),
+      ),
     ],
   );
   addTearDown(container.dispose);
@@ -134,6 +153,9 @@ Future<ProviderContainer> _mount(
             preview: type,
           ),
         );
+  }
+  for (final pin in catalogs) {
+    await container.read(pinnedCatalogsProvider.notifier).pin(pin);
   }
   await tester.pumpWidget(
     UncontrolledProviderScope(
@@ -163,8 +185,181 @@ Future<ProviderContainer> _mount(
 }
 
 void main() {
+  for (final width in [375.0, 1248.0]) {
+    testWidgets('pins reveal together after data and layout at $width', (
+      tester,
+    ) async {
+      const types = [
+        HomePreviewType.automatic,
+        HomePreviewType.large,
+        HomePreviewType.cards,
+        HomePreviewType.list,
+        HomePreviewType.compact,
+      ];
+      final api = _DelayedApi()
+        ..roots.complete(BrowseItemsList(0, 100, 0, const []));
+      for (final type in types) {
+        api.previews['kalinka:Alpha:catalog:${type.name}'] = Completer();
+      }
+      final jobs = <HomeSectionRequest>[];
+      final layout = Completer<HomeSectionLayout>();
+      final container = await _mount(
+        tester,
+        api: api,
+        modules: Future.value([_module('Alpha')]),
+        pins: types,
+        size: Size(width, 900),
+        reducedMotion: true,
+        textScale: width == 375 ? 2 : 1,
+        planner: HomeSectionPlanner(
+          calculate: (request) {
+            jobs.add(request);
+            return layout.future;
+          },
+        ),
+      );
+      final shimmer = find.byType(HomePinsShimmer);
+      final before = tester.getRect(shimmer);
+      final element = tester.element(shimmer);
+      for (final type in types) {
+        api.previews['kalinka:Alpha:catalog:${type.name}']!.complete(
+          BrowseItemsList(0, 8, 1, [_root('Alpha')]),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(shimmer, findsOneWidget);
+        expect(tester.element(shimmer), same(element));
+        expect(tester.getRect(shimmer), before);
+        expect(find.byType(PinnedCatalogPreview), findsNothing);
+        if (type != types.last) expect(jobs, isEmpty);
+      }
+      expect(jobs, hasLength(1));
+      layout.complete(planHomeSections(jobs.single));
+      await tester.pumpAndSettle();
+      expect(shimmer, findsNothing);
+      expect(find.byType(PinnedCatalogPreview), findsNWidgets(types.length));
+      expect(find.byType(HomeListPreviewShimmer), findsNothing);
+      expect(find.byType(PreviewShelfShimmer), findsNothing);
+      final calls = api.calls.length;
+      await tester.pump(const Duration(seconds: 1));
+      expect(api.calls, hasLength(calls));
+      expect(jobs, hasLength(1));
+
+      // Refresh holds all pins again, even though the unchanged geometry is
+      // cached. Once the last response arrives it can reveal without a worker.
+      for (final id in api.previews.keys.toList()) {
+        api.previews[id] = Completer();
+      }
+      container.invalidate(pinnedPreviewProvider);
+      await tester.pump();
+      expect(shimmer, findsOneWidget);
+      expect(find.byType(PinnedCatalogPreview), findsNothing);
+      for (final response in api.previews.values) {
+        response.complete(BrowseItemsList(0, 8, 1, [_root('Alpha')]));
+      }
+      await tester.pumpAndSettle();
+      expect(shimmer, findsNothing);
+      expect(jobs, hasLength(1));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('folder verification finishes before any pins are revealed', (
+    tester,
+  ) async {
+    final album = demoAlbum('verified', 'Verified album', 'Artist');
+    final track = demoTrack(
+      'one',
+      'Folder track',
+      'Artist',
+      album: album.album,
+    );
+    final api = _DelayedApi()
+      ..roots.complete(BrowseItemsList(0, 100, 0, const []));
+    final pins = [
+      for (final id in ['first', 'second'])
+        PinnedCatalog(
+          page: CatalogPage.category(
+            id: 'kalinka:localfiles:catalog:$id',
+            title: id,
+            folderLayout: true,
+          ),
+          filter: const BrowseFilterQuery(),
+          preview: HomePreviewType.automatic,
+        ),
+    ];
+    for (final pin in pins) {
+      api.previews[pin.page.id!] = Completer();
+    }
+    api.previews[album.id] = Completer()
+      ..complete(BrowseItemsList(0, 200, 1, [track]));
+    api.metadata[album.id] = Completer();
+    final jobs = <HomeSectionRequest>[];
+    await _mount(
+      tester,
+      api: api,
+      modules: Future.value([_module('localfiles')]),
+      catalogs: pins,
+      reducedMotion: true,
+      planner: HomeSectionPlanner(
+        calculate: (request) async {
+          jobs.add(request);
+          return planHomeSections(request);
+        },
+      ),
+    );
+    final shimmer = find.byType(HomePinsShimmer);
+    final before = tester.getRect(shimmer);
+    for (final pin in pins) {
+      api.previews[pin.page.id!]!.complete(BrowseItemsList(0, 8, 1, [track]));
+      await tester.pumpAndSettle();
+      expect(shimmer, findsOneWidget);
+      expect(tester.getRect(shimmer), before);
+      expect(find.text('Folder track'), findsNothing);
+      expect(find.byType(HomeAlbumFolderGroup), findsNothing);
+      expect(jobs, isEmpty);
+    }
+    api.metadata[album.id]!.complete(album);
+    await tester.pumpAndSettle();
+    expect(shimmer, findsNothing);
+    expect(find.byType(HomeAlbumFolderGroup), findsOneWidget);
+    expect(jobs, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a failed preview reveals Retry and can load again', (
+    tester,
+  ) async {
+    final api = _DelayedApi()
+      ..roots.complete(BrowseItemsList(0, 100, 0, const []));
+    const id = 'kalinka:Alpha:catalog:automatic';
+    api.previews[id] = Completer();
+    await _mount(
+      tester,
+      api: api,
+      modules: Future.value([_module('Alpha')]),
+      pins: [HomePreviewType.automatic],
+      reducedMotion: true,
+    );
+    api.previews[id]!.completeError(StateError('Offline'));
+    await tester.pumpAndSettle();
+    expect(find.byType(HomePinsShimmer), findsNothing);
+    final retry = find.text('Could not load preview. Retry');
+    expect(retry, findsOneWidget);
+    api.previews[id] = Completer();
+    await tester.tap(retry);
+    await tester.pump();
+    expect(find.byType(HomePinsShimmer), findsOneWidget);
+    api.previews[id]!.complete(BrowseItemsList(0, 8, 0, const []));
+    await tester.pumpAndSettle();
+    expect(find.byType(HomePinsShimmer), findsNothing);
+    expect(retry, findsNothing);
+    expect(find.text('No items match this catalog.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
-    'slow Home loading keeps section-shaped placeholders until data arrives',
+    'slow Home loading keeps one pin placeholder until all data arrives',
     (tester) async {
       final modules = Completer<List<ModuleInfo>>();
       final api = _DelayedApi();
@@ -195,14 +390,9 @@ void main() {
         ),
         findsNothing,
       );
-      expect(find.byType(PreviewShelfShimmer), findsOneWidget);
-      expect(find.byType(HomeListPreviewShimmer), findsOneWidget);
-      expect(
-        tester
-            .widgetList<BrowseRowsShimmer>(find.byType(BrowseRowsShimmer))
-            .map((s) => s.count),
-        contains(5),
-      );
+      expect(find.byType(HomePinsShimmer), findsOneWidget);
+      expect(find.byType(PinnedCatalogPreview), findsNothing);
+      final placeholderRect = tester.getRect(find.byType(HomePinsShimmer));
       expect(api.calls, isEmpty);
 
       modules.complete([
@@ -238,8 +428,12 @@ void main() {
         find.byKey(const ValueKey('customise-home-button')),
         findsOneWidget,
       );
-      expect(find.byType(PreviewShelfShimmer), findsOneWidget);
-      expect(find.byType(HomeListPreviewShimmer), findsOneWidget);
+      expect(find.byType(HomePinsShimmer), findsOneWidget);
+      expect(
+        tester.getRect(find.byType(HomePinsShimmer)).size,
+        placeholderRect.size,
+      );
+      expect(find.byType(PinnedCatalogPreview), findsNothing);
 
       api.preview.complete(BrowseItemsList(0, 8, 0, const []));
       await tester.pumpAndSettle();
@@ -259,7 +453,8 @@ void main() {
         ..silent.add('localhost');
       final container = await _mount(
         tester,
-        api: _DelayedApi(),
+        api: _DelayedApi()
+          ..preview.complete(BrowseItemsList(0, 1, 0, const [])),
         modules: Future.value([_module('Alpha')]),
         servers: servers,
         saved: {
@@ -270,14 +465,14 @@ void main() {
         },
       );
       void expectLoading() {
-        expect(find.byType(LoadingSpinner), findsOneWidget);
+        expect(find.byType(HomePinsShimmer), findsOneWidget);
         expect(find.byKey(const ValueKey('home-pin-hint')), findsNothing);
         expect(find.text('Box pick'), findsNothing);
         expect(find.text('Address pick'), findsNothing);
       }
 
       void expectPins() {
-        expect(find.byType(LoadingSpinner), findsNothing);
+        expect(find.byType(HomePinsShimmer), findsNothing);
         expect(find.text('Box pick'), findsOneWidget);
         expect(find.text('Address pick'), findsNothing);
       }
@@ -293,6 +488,8 @@ void main() {
       // A failed call is asked again, first after two seconds.
       servers.silent.clear();
       await settle(const Duration(seconds: 2));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
       expect(servers.asked, 2);
       expectPins();
 
@@ -314,6 +511,8 @@ void main() {
       await settle();
       connection.set(ConnectionStatus.connected);
       await settle();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
       expect(servers.asked, 4);
       expectPins();
     },
@@ -326,7 +525,8 @@ void main() {
       final servers = ServersByHost()..silent.add('localhost');
       final container = await _mount(
         tester,
-        api: _DelayedApi(),
+        api: _DelayedApi()
+          ..preview.complete(BrowseItemsList(0, 1, 0, const [])),
         modules: Future.value([_module('Alpha')]),
         servers: servers,
         saved: {
@@ -337,7 +537,9 @@ void main() {
       (container.read(connectionStateProvider.notifier) as SettableConnection)
           .set(ConnectionStatus.reconnecting);
       await tester.pump(const Duration(milliseconds: 1));
-      expect(find.byType(LoadingSpinner), findsNothing);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
+      expect(find.byType(HomePinsShimmer), findsNothing);
       expect(find.text('Box pick'), findsOneWidget);
     },
   );
