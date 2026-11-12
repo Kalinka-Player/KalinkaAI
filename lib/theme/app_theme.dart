@@ -34,6 +34,10 @@ const double kKalinkaTabletBreakpoint = 900;
 const double kKalinkaRailWidth = 88;
 const double kKalinkaWideRailWidth = 200;
 
+/// What the narrow rail leaves a label at standard text size: all of it but
+/// its rule, and each side's inset and padding.
+const double kKalinkaRailLabelWidth = kKalinkaRailWidth - 17;
+
 /// The rail names each destination beside its icon from here.
 const double kKalinkaWideRailBreakpoint = 1280;
 
@@ -54,11 +58,21 @@ double kalinkaNavigationRailWidth(
   }
   final text = textScaler.scale(14) / 14;
   if (windowWidth < kKalinkaWideRailBreakpoint || text > 1.3) {
-    return kKalinkaRailWidth;
+    return kalinkaCompactRailWidth(textScaler);
   }
   // Grows with the text so the names keep their room.
   return kKalinkaWideRailWidth * text.clamp(1.0, 1.3);
 }
+
+/// The narrow rail at this text size: wider by what its 12sp labels grow, so
+/// a name that keeps to one line at standard size keeps to it at any, and the
+/// device's settings split none mid-word. To a whole pixel, the hair over
+/// going to the labels.
+double kalinkaCompactRailWidth(TextScaler textScaler) =>
+    (kKalinkaRailWidth +
+            kKalinkaRailLabelWidth *
+                ((textScaler.scale(12) / 12).clamp(1.0, 1.5) - 1))
+        .ceilToDouble();
 
 /// The shell's width, for what is laid over the whole window: the shell
 /// keeps clear of side insets, and its rail and split are judged on what is

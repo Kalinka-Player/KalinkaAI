@@ -551,6 +551,8 @@ class _OverflowShelfState extends State<_OverflowShelf>
       info.childPaintTransform,
       Offset.zero & info.childSize,
     );
+    final itemWidth =
+        kalinkaCompactRailWidth(MediaQuery.textScalerOf(context)) - 1;
     return Positioned.fill(
       child: CustomSingleChildLayout(
         delegate: _ShelfLayout(more),
@@ -574,8 +576,9 @@ class _OverflowShelfState extends State<_OverflowShelf>
                   padding: const EdgeInsets.all(_railInset),
                   child: Wrap(
                     children: [
+                      // As wide as in the narrow rail, less its rule.
                       for (final item in widget.items(_close))
-                        SizedBox(width: kKalinkaRailWidth - 1, child: item),
+                        SizedBox(width: itemWidth, child: item),
                     ],
                   ),
                 ),

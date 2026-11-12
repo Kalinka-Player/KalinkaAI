@@ -24,6 +24,7 @@ import 'package:kalinka/providers/server_info_provider.dart';
 import 'package:kalinka/providers/server_update_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/screens/plugin_catalog_screen.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/theme/kalinka_icons.dart';
 import 'package:kalinka/widgets/home/home_source_list.dart';
 import 'package:kalinka/widgets/mini_player.dart';
@@ -638,6 +639,7 @@ void main() {
     ('tablet', const Size(900, 900), 1.0),
     ('desktop', const Size(1440, 900), 1.0),
     ('wide', const Size(1920, 1080), 1.0),
+    ('tablet-larger-text', const Size(1143, 714), 1.4),
     ('large-text', const Size(1200, 900), 3.0),
   ]) {
     testWidgets('$name navigation remains usable with reduced motion', (
@@ -791,6 +793,37 @@ void main() {
       findsNothing,
     );
   });
+
+  // Larger system text in a rail still 88 wide split "Collections" mid-word.
+  for (final (scale, width) in [(1.0, 88.0), (1.25, 106.0), (1.5, 124.0)]) {
+    testWidgets('the narrow rail keeps its names their room at ${scale}x', (
+      tester,
+    ) async {
+      final textScaler = TextScaler.linear(scale);
+      await _pump(tester, size: const Size(1143, 714), textScaler: textScaler);
+      final rail = tester.getSize(
+        find.byKey(const ValueKey('navigation-rail')),
+      );
+      // Stated, not asked of the rule under test.
+      expect(rail.width, width);
+      expect(kalinkaCompactRailWidth(textScaler), width);
+      // Icons still over their labels, however wide it has grown.
+      expect(
+        tester.getCenter(find.byIcon(Icons.home_outlined)).dy,
+        lessThan(tester.getCenter(find.text('Home')).dy),
+      );
+      // As many of the enlarged letters to a line as of the standard ones.
+      final label = tester.renderObject<RenderParagraph>(
+        find.descendant(of: _nav('home'), matching: find.text('Home')),
+      );
+      expect(
+        label.constraints.maxWidth,
+        scale == 1.0
+            ? kKalinkaRailLabelWidth
+            : greaterThanOrEqualTo(kKalinkaRailLabelWidth * scale),
+      );
+    });
+  }
 
   testWidgets('a short rail folds what does not fit behind More', (
     tester,
