@@ -73,6 +73,14 @@ BrowseItem _track(
       : NameMatch(tier: tier, score: score, relevance: relevance),
 );
 
+BrowseItem _playlist(String source, String id, String name) => BrowseItem(
+  id: 'kalinka:$source:playlist:$id',
+  name: name,
+  canBrowse: true,
+  canAdd: true,
+  playlist: Playlist(id: 'kalinka:$source:playlist:$id', name: name),
+);
+
 List<Genre> _genreList(List<String> names) => [
   for (final name in names) Genre(id: name.toLowerCase(), name: name),
 ];
@@ -361,7 +369,84 @@ void main() {
       final groups = results.inspiredGroups;
       expect([for (final g in groups) g.source], ['localfiles', 'qobuz']);
       expect(groups.first.state, isA<LegFailed>());
-      expect(_ids(groups.last.tracks), ['q1']);
+      expect(_ids(groups.last.items), ['q1']);
+    });
+
+    test('hold every kind a source suggests, a shelf per kind', () {
+      final results = SearchResults.pending('x', _sources).withLeg(
+        ResultsLeg.inspired,
+        'qobuz',
+        LegReady(
+          _card('qobuz', [
+            _playlist('qobuz', 'p1', 'Rainy Day Chill'),
+            _track('qobuz', 't1', 'One'),
+            _playlist('qobuz', 'p2', 'Autumn Sounds'),
+          ]),
+        ),
+      );
+
+      final group = results.inspiredGroups.last;
+      expect(_ids(group.items), ['p1', 't1', 'p2']);
+      expect(_ids(group.tracks), ['t1']);
+      expect(
+        [for (final (type, _) in group.shelves) type],
+        [SearchType.track, SearchType.playlist],
+      );
+      expect(_ids(group.shelves.last.$2), ['p1', 'p2']);
+      expect(results.typesPresent, [SearchType.track, SearchType.playlist]);
+    });
+  });
+
+  group('narrowing suggestions of more than one kind', () {
+    final results = SearchResults.pending('rain', _sources)
+        .withLeg(
+          ResultsLeg.inspired,
+          'localfiles',
+          LegReady(_card('localfiles', [_track('localfiles', 't1', 'One')])),
+        )
+        .withLeg(
+          ResultsLeg.inspired,
+          'qobuz',
+          LegReady(
+            _card('qobuz', [_playlist('qobuz', 'p1', 'Rainy Day Chill')]),
+          ),
+        );
+
+    test('by type, each source shows its suggestions of that kind', () {
+      List<List<String>> idsUnder(SearchType type) => [
+        for (final group
+            in results.narrow(BrowseFilterQuery(type: type)).groups)
+          _ids(group.items),
+      ];
+
+      expect(idsUnder(SearchType.playlist), [
+        <String>[],
+        ['p1'],
+      ]);
+      expect(idsUnder(SearchType.track), [
+        ['t1'],
+        <String>[],
+      ]);
+      expect(
+        results
+            .narrow(const BrowseFilterQuery(type: SearchType.album))
+            .recommendationCount,
+        0,
+      );
+    });
+
+    test('a source still searching or failed shows under every kind', () {
+      final results = SearchResults.pending(
+        'rain',
+        _sources,
+      ).withLeg(ResultsLeg.inspired, 'localfiles', const LegFailed('down'));
+      for (final type in [null, SearchType.track, SearchType.album]) {
+        final groups = results.narrow(BrowseFilterQuery(type: type)).groups;
+        expect(
+          [for (final g in groups) g.state.runtimeType],
+          [LegFailed, LegLoading],
+        );
+      }
     });
   });
 
@@ -458,7 +543,7 @@ void main() {
     test('by genre, with an artist inheriting its albums\' genres', () {
       final rock = results.narrow(const BrowseFilterQuery(genreIds: ['rock']));
       expect(_ids(rock.matches), ['beatles', 'abbey']);
-      expect(_ids(rock.groups.last.tracks), ['t-rock']);
+      expect(_ids(rock.groups.last.items), ['t-rock']);
     });
 
     test('A–Z with recommendations alone has nothing to sort', () {
@@ -482,7 +567,7 @@ void main() {
         const BrowseFilterQuery(order: NameMatchOrder.alphabetical),
       );
       expect(_ids(sorted.matches), ['abbey', 'jazz', 'beatles']);
-      expect(_ids(sorted.groups.last.tracks), ['t-rock', 't-jazz']);
+      expect(_ids(sorted.groups.last.items), ['t-rock', 't-jazz']);
     });
   });
 }

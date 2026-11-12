@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/browse_filters.dart';
+import '../../data_model/data_model.dart';
 import '../../data_model/search_results.dart';
 import '../../providers/search_session_provider.dart';
 import '../../theme/app_theme.dart';
@@ -13,10 +14,11 @@ import 'inspired_block.dart';
 import 'results_tabs.dart';
 import 'track_group_actions.dart';
 
-/// A single browse visit over the overview's filtered result snapshot.
-/// Source switches replace its selection, so Back always restores the overview.
-class InspiredTracksView extends ConsumerWidget {
-  const InspiredTracksView({super.key});
+/// A single browse visit over the overview's filtered result snapshot: one
+/// source's suggestions, a shelf per kind. Source switches replace its
+/// selection, so Back always restores the overview.
+class InspiredSuggestionsView extends ConsumerWidget {
+  const InspiredSuggestionsView({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -26,12 +28,12 @@ class InspiredTracksView extends ConsumerWidget {
     final groups = results
         .narrow(session.resultsFilter)
         .groups
-        .where((g) => g.tracks.isNotEmpty)
+        .where((g) => g.items.isNotEmpty)
         .toList();
     if (groups.isEmpty) {
       return Center(
         child: Text(
-          'No matching tracks',
+          'No matching suggestions',
           style: KalinkaTextStyles.trackRowSubtitle,
         ),
       );
@@ -41,7 +43,7 @@ class InspiredTracksView extends ConsumerWidget {
     );
     final index = selected < 0 ? 0 : selected;
     final group = groups[index];
-    final ids = [for (final item in group.tracks) item.id];
+    final trackIds = [for (final item in group.tracks) item.id];
     String label(InspiredGroup g) => results.sources.titleOf(g.source);
     return SourceAttributionScope(
       source: group.source,
@@ -104,37 +106,44 @@ class InspiredTracksView extends ConsumerWidget {
                             ],
                           ),
                         ),
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: TrackGroupActions(
-                          key: ValueKey(group.source),
-                          trackIds: ids,
-                          addLabel: 'Add to queue',
-                        ),
-                      ),
+                      if (trackIds.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: TrackGroupActions(
+                            key: ValueKey(group.source),
+                            trackIds: trackIds,
+                            addLabel: 'Add to queue',
+                          ),
+                        )
+                      else
+                        const SizedBox(height: 16),
                     ],
                   ),
                 ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                    child: Semantics(
-                      header: true,
-                      child: ShelfHeading(
-                        title: 'TRACKS',
-                        count: group.tracks.length,
+                for (final (i, (type, items)) in group.shelves.indexed) ...[
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(16, i == 0 ? 0 : 24, 16, 10),
+                      child: Semantics(
+                        header: true,
+                        child: ShelfHeading(
+                          title: _shelfTitle(type),
+                          count: items.length,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverBrowseItemRows(
-                    items: group.tracks,
-                    queueContextIds: ids,
-                    labelled: false,
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    sliver: SliverBrowseItemRows(
+                      items: items,
+                      queueContextIds: type == SearchType.track
+                          ? trackIds
+                          : null,
+                      labelled: false,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -142,6 +151,14 @@ class InspiredTracksView extends ConsumerWidget {
       ),
     );
   }
+
+  static String _shelfTitle(SearchType type) => switch (type) {
+    SearchType.artist => 'ARTISTS',
+    SearchType.album => 'ALBUMS',
+    SearchType.playlist => 'PLAYLISTS',
+    SearchType.track => 'TRACKS',
+    SearchType.invalid => '',
+  };
 
   Widget _sourceBadge(
     BuildContext context,

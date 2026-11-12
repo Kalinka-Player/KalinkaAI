@@ -51,14 +51,18 @@ class NameMatchesBlock extends StatelessWidget {
   });
 
   /// Whether the block has anything to say under [filter]: rows, rows still
-  /// coming, or a source that could not answer.
+  /// coming, or a source that could not answer. A kind with a presentation
+  /// switch keeps the block, empty, unless [suggestionsShown]: beside
+  /// suggestions, "nothing matches" would be untrue.
   static bool visible(
     SearchResults results,
     NarrowedResults narrowed,
-    BrowseFilterQuery filter,
-  ) {
+    BrowseFilterQuery filter, {
+    bool suggestionsShown = false,
+  }) {
     if (filter.kind == ResultKind.recommendations) return false;
-    return ListingLayout.forSearch(filter.type) != null ||
+    return (ListingLayout.forSearch(filter.type) != null &&
+            !suggestionsShown) ||
         !results.matchesSettled ||
         narrowed.matches.isNotEmpty ||
         _unavailable(results, filter).isNotEmpty;

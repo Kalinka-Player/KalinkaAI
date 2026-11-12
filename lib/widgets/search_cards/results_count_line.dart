@@ -3,6 +3,22 @@ import 'package:flutter/material.dart';
 import '../../data_model/data_model.dart';
 import '../../theme/app_theme.dart';
 
+/// Result counts as one line: "3 artists · 8 albums · 12 tracks". Kinds with
+/// none are left out.
+String resultCounts(Map<SearchType, int> counts) {
+  const nouns = {
+    SearchType.artist: ('artist', 'artists'),
+    SearchType.album: ('album', 'albums'),
+    SearchType.track: ('track', 'tracks'),
+    SearchType.playlist: ('playlist', 'playlists'),
+  };
+  return [
+    for (final MapEntry(key: type, value: (one, many)) in nouns.entries)
+      if (counts[type] case final count? when count > 0)
+        '$count ${count == 1 ? one : many}',
+  ].join(' · ');
+}
+
 /// Monospace line showing result counts: "3 artists · 8 albums · 12 tracks".
 class ResultsCountLine extends StatelessWidget {
   final Map<SearchType, int> counts;
@@ -11,35 +27,12 @@ class ResultsCountLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final parts = <String>[];
-    final artistCount = counts[SearchType.artist] ?? 0;
-    final albumCount = counts[SearchType.album] ?? 0;
-    final trackCount = counts[SearchType.track] ?? 0;
-    final playlistCount = counts[SearchType.playlist] ?? 0;
-
-    if (artistCount > 0) {
-      parts.add('$artistCount ${artistCount == 1 ? 'artist' : 'artists'}');
-    }
-    if (albumCount > 0) {
-      parts.add('$albumCount ${albumCount == 1 ? 'album' : 'albums'}');
-    }
-    if (trackCount > 0) {
-      parts.add('$trackCount ${trackCount == 1 ? 'track' : 'tracks'}');
-    }
-    if (playlistCount > 0) {
-      parts.add(
-        '$playlistCount ${playlistCount == 1 ? 'playlist' : 'playlists'}',
-      );
-    }
-
-    if (parts.isEmpty) return const SizedBox.shrink();
+    final line = resultCounts(counts);
+    if (line.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 8),
-      child: Text(
-        parts.join(' \u00B7 '),
-        style: KalinkaTextStyles.resultCountHint,
-      ),
+      child: Text(line, style: KalinkaTextStyles.resultCountHint),
     );
   }
 }

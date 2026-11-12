@@ -1744,7 +1744,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     if (state.expandedBlock?.kind != ResultKind.recommendations) return;
     final groups = state.results?.narrow(state.resultsFilter).groups;
     if (groups == null ||
-        !groups.any((g) => g.source == source && g.tracks.isNotEmpty)) {
+        !groups.any((g) => g.source == source && g.items.isNotEmpty)) {
       return;
     }
     state = state.copyWith(
