@@ -8,9 +8,11 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## Unreleased
+
 ## 0.27.0
 
-Works with server 5.19.0 or later; plugin install queuing and the search order it also enables need a server speaking REST API 0.23 — against an older server, plugins update one at a time as before and search results fall back to ordering by name match.
+Home's pinned catalogs previewed at the size they are given, update badges on Settings' tabs, plugins updated all at once, and search results in each streaming service's own order. Works with server 5.19.0 or later; plugin install queuing and the search order it also enables need a server speaking REST API 0.23 — against an older server, plugins update one at a time as before and search results fall back to ordering by name match.
 
 ### Added
 - Home's pinned catalogs show previews sized to fit the space they're given, with per-pin layout controls in Customise Home.
@@ -19,7 +21,10 @@ Works with server 5.19.0 or later; plugin install queuing and the search order i
 - Plugins can be updated all at once with one tap. Where the server speaks API 0.23, installs and updates queue behind each other instead of each needing its own request.
 
 ### Changed
-- Catalogue top bars stay transparent while scrolling instead of turning opaque.
+- Search results keep each streaming service's own order, with artists, albums, playlists and tracks taking turns instead of every artist coming first, and several services taking turns as well. A server speaking REST 0.23 puts this order on each result; against an older server, results are ordered by how closely their names match, as before.
+- Settings is the only settings screen. The server menu, the rail and Home's music sources always offer it, whatever the server's Plugin catalog preview setting says, and the older Server settings screen is gone. Where the server has its plugin catalog turned off, or is too old to list it, Settings still opens with the installed plugins and the Streamer tab, and says why the catalog is missing.
+- A device that the old Now-playing display switch kept on the full-screen display now opens the app as usual at start. Five taps on the display's logo no longer do anything; the player's Now-playing display button still opens it, and the server's own screen is unchanged.
+- Catalog top bars stay transparent while scrolling instead of turning opaque.
 - The setup wizard's source list draws a source's own declared icon, with live artwork from the server where available, matching how Home draws it.
 - The first-run tip card no longer sits over the control it is pointing at.
 - Desktop artwork and Home's scrolling are smoother.
@@ -30,13 +35,6 @@ Works with server 5.19.0 or later; plugin install queuing and the search order i
 - A plugin install or update kept behind a proxy's 5xx response keeps following the server's progress instead of stalling, and any row left by an error frees up rather than staying stuck.
 - Home's pins no longer flash between layouts while loading, and keep their actions in place once previews settle.
 - Settings' help popup keeps focus and caption spacing correct when a section has no help of its own.
-
-## Unreleased
-
-### Changed
-- Search results keep each streaming service's own order, with artists, albums, playlists and tracks taking turns instead of every artist coming first, and several services taking turns as well. A server speaking REST 0.23 puts this order on each result; against an older server, results are ordered by how closely their names match, as before.
-- Settings is the only settings screen. The server menu, the rail and Home's music sources always offer it, whatever the server's Plugin catalog preview setting says, and the older Server settings screen is gone. Where the server has its plugin catalog turned off, or is too old to list it, Settings still opens with the installed plugins and the Streamer tab, and says why the catalog is missing.
-- A device that the old Now-playing display switch kept on the full-screen display now opens the app as usual at start. Five taps on the display's logo no longer do anything; the player's Now-playing display button still opens it, and the server's own screen is unchanged.
 
 ## 0.26.0
 

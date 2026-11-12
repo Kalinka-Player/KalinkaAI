@@ -1,4 +1,4 @@
-- Home's pinned catalogues show previews sized to fit, with layout controls for each pin in Customise Home
+- Home's pinned catalogs show previews sized to fit, with layout controls for each pin in Customise Home
 - Update all plugins with one tap; updates queue up (server 5.19.0)
 - Badges on Settings' Plugins and Streamer tabs count waiting updates
 - Search results mix artists, albums, playlists and tracks instead of listing every artist first (server 5.19.0)
