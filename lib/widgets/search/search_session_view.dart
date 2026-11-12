@@ -41,6 +41,7 @@ import 'album_page_header.dart';
 import 'browse_visit_scope.dart';
 import 'catalog_page_view.dart';
 import 'catalog_sliver_header.dart';
+import '../../utils/compact_pane_layout.dart';
 import 'folder_trail.dart';
 import 'library_activity.dart';
 import 'collections_edit_bar.dart' show leaveCollectionEditing;
@@ -218,12 +219,16 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// Whether lists here stretch when pulled past an end, as on Android.
   bool _albumStretches = false;
 
-  final _visitPages = <int, (SearchSessionState, Widget)>{};
+  final _visitPages = <int, (SearchSessionState, bool, Widget)>{};
   final _catalogHeadersCollapsed = <int, bool>{};
 
   // Whether the bar's search has unrolled its field under the bar.
   bool _barSearchOpen = false;
   bool _catalogSearchInBar = false;
+  bool _compactPane = false;
+
+  bool _compactCatalogHeader(CatalogPage page) =>
+      _compactPane && page.isCatalog && !page.folderLayout;
   final _catalogSearchFocus = FocusNode();
   // Move the same editable field between the toolbar and its narrow-screen
   // row. Replacing it would discard drafts, selection and the input connection.
@@ -728,6 +733,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
+          _compactPane = compactPaneLayout(
+            constraints.maxWidth,
+            MediaQuery.textScalerOf(context),
+          );
           final searchInBar = CatalogSliverHeader.searchInBar(
             constraints.maxWidth - MediaQuery.paddingOf(context).horizontal,
             MediaQuery.textScalerOf(context).scale(16) / 16,
@@ -918,21 +927,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                       const MultiSelectBottomBar(),
                   ],
                 ),
-                if (wideAlbum)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: AnnotatedRegion<SystemUiOverlayStyle>(
-                      value: const SystemUiOverlayStyle(
-                        statusBarColor: Colors.transparent,
-                        statusBarIconBrightness: Brightness.light,
-                        statusBarBrightness: Brightness.dark,
-                        systemStatusBarContrastEnforced: false,
-                      ),
-                      child: _buildHeader(session, wideAlbum: true),
-                    ),
-                  ),
                 if (catalogBehindBar)
                   Positioned(
                     top: 0,
@@ -1017,13 +1011,19 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     );
   }
 
-  /// A visit's page, reused while its visit is unchanged, so a kept visit is
-  /// not rebuilt each time the shown one changes.
+  /// A visit's page, reused while its visit and header mode are unchanged.
+  /// Crossing the width/text-size breakpoint updates the cached widget, but
+  /// retains its keyed element, listing state and scroll position.
   Widget _visitPage(SearchSessionState visit) {
     final cached = _visitPages[visit.visitId];
-    if (cached != null && identical(cached.$1, visit)) return cached.$2;
+    final compactHeader = _compactCatalogHeader(visit.catalogPage);
+    if (cached != null &&
+        identical(cached.$1, visit) &&
+        cached.$2 == compactHeader) {
+      return cached.$3;
+    }
     final page = BrowseVisitScope(visit: visit, child: _buildVisit(visit));
-    _visitPages[visit.visitId] = (visit, page);
+    _visitPages[visit.visitId] = (visit, compactHeader, page);
     return page;
   }
 
@@ -1158,10 +1158,12 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       child: Builder(
         builder: (context) => CatalogPageView(
           page: page,
+          titleInBar: _compactCatalogHeader(page),
           topBarInset: page.isAlbum || page.isRoot
               ? 0
               : MediaQuery.paddingOf(context).top + _barHeight(context, visit),
-          wideAlbumBehindTopBar: true,
+          onAlbumBack: _handleBack,
+          onServerTap: widget.onServerTap,
           onHeaderCollapsed: (collapsed) {
             if (_catalogHeadersCollapsed[id] == collapsed) return;
             _catalogHeadersCollapsed[id] = collapsed;
@@ -1190,9 +1192,15 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// Catalog Search, Filters and Grid/List stay in the bar; title and Pin
   /// join Back on collapse. Results retain their search-and-filters control.
   double _barHeight(BuildContext context, SearchSessionState session) =>
-      session.activeView == FindMusicView.results ||
-          (session.activeView == FindMusicView.catalogs &&
-              CatalogSliverHeader.appliesTo(session.catalogPage))
+      session.activeView == FindMusicView.catalogs &&
+          _compactCatalogHeader(session.catalogPage)
+      ? math.max(
+          kKalinkaTopBarHeight,
+          MediaQuery.textScalerOf(context).scale(30) * 1.1 + 4,
+        )
+      : session.activeView == FindMusicView.results ||
+            (session.activeView == FindMusicView.catalogs &&
+                CatalogSliverHeader.appliesTo(session.catalogPage))
       ? math.max(
           kKalinkaTopBarHeight,
           MediaQuery.textScalerOf(context)
@@ -1261,11 +1269,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     );
   }
 
-  Widget _buildHeader(
-    SearchSessionState session, {
-    bool overAlbum = false,
-    bool wideAlbum = false,
-  }) {
+  Widget _buildHeader(SearchSessionState session, {bool overAlbum = false}) {
     final onResults = session.activeView == FindMusicView.results;
     final catalogChrome =
         !onResults && CatalogSliverHeader.appliesTo(session.catalogPage);
@@ -1337,53 +1341,30 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           child: LayoutBuilder(
             builder: (context, constraints) => Row(
               children: [
-                if (wideAlbum)
+                _onDisc(
+                  overAlbum,
                   IconButton(
                     tooltip: 'Back',
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
                     onPressed: _handleBack,
-                    style: IconButton.styleFrom(
-                      fixedSize: const Size.square(kKalinkaPillHeight),
-                      minimumSize: const Size.square(kKalinkaPillHeight),
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.standard,
-                      tapTargetSize: MaterialTapTargetSize.padded,
-                      backgroundColor: KalinkaColors.surfaceElevated,
-                      foregroundColor: KalinkaColors.textPrimary,
-                      side: const BorderSide(
-                        color: KalinkaColors.borderDefault,
-                      ),
-                      shape: const CircleBorder(),
-                    ).copyWith(overlayColor: kalinkaOverlay),
-                    icon: const Icon(Icons.arrow_back, size: 20),
-                  )
-                else
-                  _onDisc(
-                    overAlbum,
-                    IconButton(
-                      tooltip: 'Back',
-                      constraints: const BoxConstraints(
-                        minWidth: 48,
-                        minHeight: 48,
-                      ),
-                      onPressed: _handleBack,
-                      icon: const Icon(
-                        Icons.arrow_back,
-                        size: 22,
-                        color: KalinkaColors.textPrimary,
-                      ),
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      size: 22,
+                      color: KalinkaColors.textPrimary,
                     ),
                   ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: wideAlbum
-                      ? const SizedBox.shrink()
-                      : _buildTitle(session, overAlbum: overAlbum),
                 ),
+                const SizedBox(width: 8),
+                Expanded(child: _buildTitle(session, overAlbum: overAlbum)),
                 // What joins the bar on scroll comes in before what is always
                 // there, so Search and Grid/List never move under a finger.
                 if ((catalogChrome ||
                         (!onResults && session.catalogPage.isArtist)) &&
-                    _catalogHeadersCollapsed[session.visitId] == true)
+                    _catalogHeadersCollapsed[session.visitId] == true &&
+                    !_compactCatalogHeader(session.catalogPage))
                   CatalogPinButton(
                     page: session.shownListing,
                     // As the artist header's Pin saves it.
@@ -1494,7 +1475,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       padding: const EdgeInsetsDirectional.only(start: 8, end: 4),
       child: SizedBox(
         width: math.min(
-          CatalogSliverHeader.searchMaxWidth * scale,
+          (_compactCatalogHeader(session.catalogPage)
+                  ? 260.0
+                  : CatalogSliverHeader.searchMaxWidth) *
+              scale,
           width * 0.4,
         ),
         child: KeyedSubtree(
@@ -1611,6 +1595,37 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     if (session.activeView == FindMusicView.catalogs &&
         session.catalogPage.folderLayout) {
       return const FolderTrail();
+    }
+    if (catalogChrome && _compactCatalogHeader(session.catalogPage)) {
+      final page = session.shownListing;
+      return Row(
+        children: [
+          Flexible(
+            child: Tooltip(
+              message: page.title ?? '',
+              child: Semantics(
+                header: true,
+                child: Text(
+                  page.title ?? '',
+                  key: const ValueKey('catalog-compact-title'),
+                  style: KalinkaFonts.display(
+                    fontSize: 30,
+                    height: 1.1,
+                    fontWeight: FontWeight.w600,
+                    color: KalinkaColors.frost,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+          CatalogPinButton(
+            page: page,
+            filter: session.catalogFilter.copyWith(type: session.expandedShelf),
+          ),
+        ],
+      );
     }
     if (catalogChrome) {
       if (_catalogHeadersCollapsed[session.visitId] != true) {

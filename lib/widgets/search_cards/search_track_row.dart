@@ -42,6 +42,7 @@ class SearchTrackRow extends ConsumerStatefulWidget {
   /// the performer when it differs from the album's artist.
   final int? albumTrackNumber;
   final String? albumArtist;
+  final bool compact;
 
   /// Folder pages show a position before the cover, and keep the rest of the
   /// row.
@@ -69,6 +70,7 @@ class SearchTrackRow extends ConsumerStatefulWidget {
     this.labelled = true,
     this.albumTrackNumber,
     this.albumArtist,
+    this.compact = false,
     this.folderTrackNumber,
     this.containerId,
     this.containerIndex,
@@ -84,6 +86,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
   late final AnimationController _flashController;
   late final Animation<Color?> _flashColorAnim;
   bool _tappedToPlay = false;
+  bool _hasKeyboardFocus = false;
 
   @override
   void initState() {
@@ -338,11 +341,11 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
         // Match the album/artist rows' 3px artwork inset — the default
         // TrackTileLayout left padding (12) pushed track artwork out of line.
         // Right 8 lands the duration on the chevrons'/chips' right edge.
-        padding: const EdgeInsets.fromLTRB(
+        padding: EdgeInsets.fromLTRB(
           3,
-          kTrackTileVerticalPadding,
+          widget.compact && inAlbum ? 4 : kTrackTileVerticalPadding,
           8,
-          kTrackTileVerticalPadding,
+          widget.compact && inAlbum ? 4 : kTrackTileVerticalPadding,
         ),
         leadingStartSpacing: 0,
         leading: Stack(
@@ -565,6 +568,24 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
     return HoverHighlight(
       child: FocusableActionDetector(
         mouseCursor: SystemMouseCursors.click,
+        onFocusChange: (focused) {
+          _hasKeyboardFocus = focused;
+          if (!focused) return;
+          // A trailing action can be shorter than the row. Reveal the whole
+          // track after native traversal reveals that action, respecting the
+          // pinned toolbar's obstruction as well as the mini-player.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !_hasKeyboardFocus) return;
+            Scrollable.ensureVisible(
+              context,
+              alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+            );
+            Scrollable.ensureVisible(
+              context,
+              alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+            );
+          });
+        },
         actions: {
           ActivateIntent: CallbackAction<ActivateIntent>(
             onInvoke: (_) {

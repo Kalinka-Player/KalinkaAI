@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart';
@@ -14,6 +14,8 @@ import '../../utils/web_build_target.dart';
 import '../browse_metadata_link.dart';
 import '../fitted_title.dart';
 import '../measure_size.dart';
+import '../kalinka_back_button.dart';
+import '../server_chip.dart';
 import '../procedural_album_art.dart';
 import '../search_cards/action_pill_button.dart';
 import '../search_cards/track_row_support.dart';
@@ -21,11 +23,8 @@ import '../source_badge.dart';
 import 'track_group_actions.dart';
 
 /// A pane narrower than this stacks an album's cover over its tracks; from
-/// here the cover and what it says stand in a column beside them.
+/// here a fixed identity header sits over the cover and track columns.
 const double kAlbumSideLayoutWidth = 528;
-
-/// Where the cover starts below the navigation.
-const double _sideTop = 8;
 
 /// The artist an album page can open: only one its listing named by a full
 /// id, so the link keeps the album's source and never looks a name up.
@@ -60,7 +59,9 @@ class _ArtistLine extends ConsumerWidget {
 class _SourceLine extends ConsumerWidget {
   final CatalogPage page;
 
-  const _SourceLine({required this.page});
+  final bool compact;
+
+  const _SourceLine({required this.page, this.compact = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -69,14 +70,19 @@ class _SourceLine extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SourceBadge(entityId: page.id!),
+        SourceBadge(
+          entityId: page.id!,
+          size: compact ? SourceBadgeSize.small : SourceBadgeSize.standard,
+        ),
         if (sourceBadgeVisible(ref, page.id!)) const SizedBox(width: 7),
         Flexible(
           child: Text(
             provider,
-            style: KalinkaTextStyles.trackRowSubtitle.copyWith(fontSize: 14),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+              fontSize: compact ? 12 : 14,
+            ),
+            maxLines: compact ? null : 1,
+            overflow: compact ? TextOverflow.clip : TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -84,271 +90,236 @@ class _SourceLine extends ConsumerWidget {
   }
 }
 
-/// What an album is, beside its tracks on a wide pane: the square cover,
-/// title, artist, source, year and extent, above always-visible actions.
-/// Only an identity too tall to fit needs its own independent scroll.
-class AlbumIdentityColumn extends StatelessWidget {
+/// Album details wrap as complete groups instead of being hidden sideways.
+/// The same content can head the tracks on very short, enlarged-text panes.
+class WideAlbumMetadata extends ConsumerWidget {
   final CatalogPage page;
   final int? year;
   final int? trackCount;
   final int? totalDurationSeconds;
-  final double topInset;
-  final bool showActions;
+  final bool compact;
 
-  const AlbumIdentityColumn({
+  const WideAlbumMetadata({
     super.key,
     required this.page,
     this.year,
     this.trackCount,
     this.totalDurationSeconds,
-    this.topInset = 0,
-    this.showActions = true,
+    this.compact = false,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    final title = page.title ?? '';
-    final artist = page.description?.trim() ?? '';
-    final summary = _summary(
-      year,
-      trackCount,
-      totalDurationSeconds ?? page.totalDurationSeconds,
-    );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final metadata = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'ALBUM',
-              style: KalinkaFonts.mono(
-                fontSize: 12,
-                letterSpacing: 2,
-                color: KalinkaColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Semantics(
-              header: true,
-              child: Text(
-                title,
-                style: KalinkaFonts.display(
-                  fontSize: constraints.maxWidth < 300 ? 20 : 26,
-                  height: 1.15,
-                  letterSpacing: -0.5,
-                  fontWeight: FontWeight.w500,
-                  color: KalinkaColors.frost,
-                ),
-              ),
-            ),
-            if (artist.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              _ArtistLine(page: page, name: artist),
-            ],
-            const SizedBox(height: 8),
-            _SourceLine(page: page),
-            if (summary.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                summary,
-                style: KalinkaTextStyles.trackRowSubtitle.copyWith(
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ],
-        );
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Flexible(
-              child: LayoutBuilder(
-                builder: (context, space) => SingleChildScrollView(
-                  primary: false,
-                  padding: EdgeInsets.fromLTRB(16, topInset + _sideTop, 16, 16),
-                  child: _AlbumIdentityLayout(
-                    availableHeight: math.max(
-                      0,
-                      space.maxHeight - topInset - _sideTop - 16,
-                    ),
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: AlbumArtwork(page: page),
-                      ),
-                      metadata,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            if (showActions)
-              AlbumTrackActions(page: page, trackCount: trackCount),
-          ],
-        );
-      },
-    );
-  }
-}
+  String get _artist => page.description?.trim() ?? '';
+  String get _provider => page.provider?.trim() ?? '';
+  String get _extent => _summary(
+    year,
+    trackCount,
+    totalDurationSeconds ?? page.totalDurationSeconds,
+  );
+  bool get isEmpty => _artist.isEmpty && _provider.isEmpty && _extent.isEmpty;
 
-/// Keeps the cover at its pane's full width. Details sit below it when there
-/// is room, otherwise over its lower portion on a shade. The scroll view
-/// accommodates tall artwork or enlarged text without moving the actions.
-class _AlbumIdentityLayout extends MultiChildRenderObjectWidget {
-  final double availableHeight;
+  TextStyle get _style => KalinkaFonts.sans(
+    fontSize: compact ? 12 : 14,
+    height: 1.3,
+    color: KalinkaColors.textSecondary,
+  );
 
-  const _AlbumIdentityLayout({
-    required this.availableHeight,
-    required super.children,
-  });
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderAlbumIdentity(availableHeight);
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    _RenderAlbumIdentity renderObject,
-  ) {
-    renderObject
-      ..availableHeight = availableHeight
-      ..markNeedsLayout();
-  }
-}
-
-class _RenderAlbumIdentity extends RenderBox
-    with
-        ContainerRenderObjectMixin<
-          RenderBox,
-          ContainerBoxParentData<RenderBox>
-        >,
-        RenderBoxContainerDefaultsMixin<
-          RenderBox,
-          ContainerBoxParentData<RenderBox>
-        > {
-  _RenderAlbumIdentity(this.availableHeight);
-
-  double availableHeight;
-  bool _overlay = false;
-
-  @override
-  void setupParentData(RenderBox child) {
-    if (child.parentData is! ContainerBoxParentData<RenderBox>) {
-      child.parentData = _AlbumIdentityParentData();
-    }
+  /// Natural line width used to decide whether details fit under the title
+  /// or need the full row below the navigation and playback controls.
+  double lineWidth(BuildContext context, WidgetRef ref) {
+    final widths = <double>[
+      if (_artist.isNotEmpty)
+        _albumTextWidth(context, _artist, _style) +
+            (albumArtistLink(page) == null
+                ? 0
+                : BrowseMetadataLink.chevronWidth),
+      if (_provider.isNotEmpty)
+        _albumTextWidth(
+              context,
+              _provider,
+              KalinkaTextStyles.trackRowSubtitle.copyWith(fontSize: 12),
+            ) +
+            (sourceBadgeVisible(ref, page.id!)
+                ? MediaQuery.textScalerOf(context).scale(14) + 17
+                : 0),
+      if (_extent.isNotEmpty) _albumTextWidth(context, _extent, _style),
+    ];
+    return widths.fold(0.0, (sum, width) => sum + width) +
+        math.max(0, widths.length - 1) * 12;
   }
 
   @override
-  void performLayout() {
-    final cover = firstChild!;
-    final metadata = lastChild!;
-    final width = constraints.maxWidth;
-    metadata.layout(
-      BoxConstraints.tightFor(width: width),
-      parentUsesSize: true,
-    );
-    _overlay = width + 20 + metadata.size.height > availableHeight;
-    cover.layout(BoxConstraints.tight(Size.square(width)));
-    final coverData = cover.parentData! as ContainerBoxParentData<RenderBox>;
-    final textData = metadata.parentData! as ContainerBoxParentData<RenderBox>;
-    coverData.offset = Offset.zero;
-    if (_overlay) {
-      metadata.layout(
-        BoxConstraints.tightFor(width: width - 32),
-        parentUsesSize: true,
-      );
-      size = constraints.constrain(
-        Size(width, math.max(width, metadata.size.height + 64)),
-      );
-      textData.offset = Offset(16, size.height - metadata.size.height);
-    } else {
-      textData.offset = Offset(0, width + 20);
-      size = constraints.constrain(
-        Size(width, width + 20 + metadata.size.height),
-      );
-    }
-  }
-
-  @override
-  void paint(PaintingContext context, Offset offset) {
-    final metadata = lastChild!;
-    final textData = metadata.parentData! as ContainerBoxParentData<RenderBox>;
-    context.paintChild(firstChild!, offset);
-    if (_overlay) {
-      final textTop = textData.offset.dy;
-      final shadeTop = math.max(0.0, textTop - 64);
-      final bounds = Rect.fromLTWH(
-        offset.dx,
-        offset.dy + shadeTop,
-        size.width,
-        size.height - shadeTop,
-      );
-      context.canvas.drawRect(
-        bounds,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              KalinkaColors.background.withValues(alpha: 0),
-              KalinkaColors.background.withValues(alpha: 0.76),
-              KalinkaColors.background,
-            ],
-            stops: [0, (textTop - shadeTop) / bounds.height, 1],
-          ).createShader(bounds),
-      );
-    }
-    context.paintChild(metadata, offset + textData.offset);
-  }
-
-  @override
-  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
-      defaultHitTestChildren(result, position: position);
-}
-
-class _AlbumIdentityParentData extends ContainerBoxParentData<RenderBox> {}
-
-/// Play all and Enqueue stay just below the identity, outside its scroll.
-class AlbumTrackActions extends StatelessWidget {
-  final CatalogPage page;
-  final int? trackCount;
-
-  static const _padding = EdgeInsets.fromLTRB(16, 8, 16, 16);
-  static const _gap = 8.0;
-
-  const AlbumTrackActions({super.key, required this.page, this.trackCount});
-
-  /// Include the gutters and run spacing used below. The column must fit
-  /// either label at the user's text size, and reserve the real target height.
-  static ({double minWidth, double rowWidth, double columnHeight}) measure(
-    BuildContext context,
-  ) {
-    final play = ActionPillButton.widthOf(context, 'Play all');
-    final enqueue = ActionPillButton.widthOf(context, 'Enqueue');
-    final height = ActionPillButton.heightOf(context);
-    return (
-      minWidth: _padding.horizontal + math.max(play, enqueue),
-      rowWidth: _padding.horizontal + play + _gap + enqueue,
-      columnHeight: _padding.vertical + height * 2 + _gap,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: _padding,
-    child: Wrap(
-      spacing: _gap,
-      runSpacing: _gap,
-      children: [
-        PlayAllChip(trackIds: [page.id!], trackCount: trackCount),
-        AddAllChip(
-          trackIds: [page.id!],
-          trackCount: trackCount,
-          name: page.title ?? '',
+  Widget build(BuildContext context, WidgetRef ref) => Wrap(
+    spacing: 12,
+    runSpacing: 4,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      if (_artist.isNotEmpty)
+        BrowseMetadataLink(
+          label: _artist,
+          style: _style.copyWith(color: KalinkaColors.textPrimary),
+          item: albumArtistLink(page),
+          onOpen: ref.read(searchSessionProvider.notifier).openBrowseItem,
         ),
-      ],
+      if (_provider.isNotEmpty) _SourceLine(page: page, compact: true),
+      if (_extent.isNotEmpty) Text(_extent, style: _style),
+    ],
+  );
+}
+
+double _albumTextWidth(BuildContext context, String text, TextStyle style) {
+  final painter = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: DefaultTextStyle.of(context).style.merge(style),
+    ),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final width = painter.width.ceilToDouble();
+  painter.dispose();
+  return width;
+}
+
+/// A transparent, fixed header. Both playback actions show labels when they
+/// fit alongside a readable title, and both use accessible icons otherwise.
+class WideAlbumHeader extends ConsumerWidget {
+  final CatalogPage page;
+  final WideAlbumMetadata metadata;
+  final bool metadataInTracks;
+  final int? trackCount;
+  final bool shortPane;
+  final VoidCallback onBack;
+  final VoidCallback? onServerTap;
+
+  const WideAlbumHeader({
+    super.key,
+    required this.page,
+    required this.metadata,
+    required this.onBack,
+    this.onServerTap,
+    this.trackCount,
+    this.shortPane = false,
+    this.metadataInTracks = false,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+    WidgetRef ref,
+  ) => AnnotatedRegion<SystemUiOverlayStyle>(
+    value: const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+      systemStatusBarContrastEnforced: false,
+    ),
+    child: SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+        child: LayoutBuilder(
+          builder: (context, space) {
+            final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+            final titleStyle = KalinkaFonts.display(
+              fontSize: shortPane
+                  ? 20
+                  : space.maxWidth >= 1100
+                  ? 34
+                  : 28,
+              height: 1.15,
+              letterSpacing: -0.5,
+              fontWeight: FontWeight.w500,
+              color: KalinkaColors.frost,
+            );
+            // Back, gaps, and connection status keep their normal targets.
+            const fixedWidth = 48 + 12 + 16 + 8 + 42;
+            final labelledActions =
+                ActionPillButton.widthOf(context, 'Play all') +
+                ActionPillButton.widthOf(context, 'Enqueue');
+            final availableTitle =
+                space.maxWidth - fixedWidth - labelledActions;
+            // Most wide panes can reserve the title's full minimum without
+            // shaping it a second time solely to choose the action labels.
+            final iconActions =
+                availableTitle < 220 * scale &&
+                availableTitle <
+                    _albumTextWidth(context, page.title ?? '', titleStyle);
+            final titleWidth =
+                space.maxWidth -
+                fixedWidth -
+                (iconActions ? 2 * kKalinkaPillTarget : labelledActions);
+            final inlineMetadata =
+                !metadataInTracks &&
+                metadata.lineWidth(context, ref) <= titleWidth;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    KalinkaBackButton(onPressed: onBack),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Tooltip(
+                            message: page.title ?? '',
+                            child: Semantics(
+                              header: true,
+                              child: Text(
+                                page.title ?? '',
+                                key: const ValueKey('album-bar-title'),
+                                style: titleStyle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          if (inlineMetadata && !metadata.isEmpty) ...[
+                            const SizedBox(height: 4),
+                            metadata,
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    PlayAllChip(
+                      trackIds: [page.id!],
+                      trackCount: trackCount,
+                      enabled: trackCount != 0,
+                      iconOnly: iconActions,
+                    ),
+                    const SizedBox(width: 8),
+                    AddAllChip(
+                      trackIds: [page.id!],
+                      trackCount: trackCount,
+                      name: page.title ?? '',
+                      enabled: trackCount != 0,
+                      iconOnly: iconActions,
+                    ),
+                    SizedBox(
+                      width: 42,
+                      height: 48,
+                      child: Center(
+                        child: ServerChip(compact: true, onTap: onServerTap),
+                      ),
+                    ),
+                  ],
+                ),
+                if (!metadataInTracks && !inlineMetadata && !metadata.isEmpty)
+                  Padding(
+                    key: const ValueKey('album-metadata-full-row'),
+                    padding: const EdgeInsets.only(left: 60, top: 4),
+                    child: metadata,
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
     ),
   );
 }

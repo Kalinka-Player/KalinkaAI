@@ -11,8 +11,8 @@ import '../kalinka_popover.dart';
 /// the choices beside them, 40dp tall in a 48dp target.
 ///
 /// [accent] marks the default action with the subtle crimson idiom
-/// (accentSubtle fill, accentBorder edge, berry-tint label) — never a solid
-/// crimson fill; the neutral variant is a plain surface.
+/// (accentSubtle fill, accentBorder edge, berry-tint label). [primary] gives
+/// Play all a solid crimson fill; the neutral variant is a plain surface.
 class ActionPillButton extends StatelessWidget {
   /// What the button says, or null for an icon-only one — the same chrome and
   /// height as the pills beside it, for an action its glyph already names.
@@ -26,6 +26,13 @@ class ActionPillButton extends StatelessWidget {
   /// Crimson-highlighted rather than grey: the one a set leads with, or the
   /// one being read. See the palette's outline treatment.
   final bool accent;
+
+  /// A primary playback action, with a crimson face and warm-white label.
+  final bool primary;
+
+  /// A centered icon in a 40dp circle, inside a 48dp square touch target.
+  /// Unlike a labelled pill, its face does not depend on text metrics.
+  final bool circular;
 
   static const _vertical = 8.0;
 
@@ -60,23 +67,35 @@ class ActionPillButton extends StatelessWidget {
     this.icon,
     this.leading,
     this.accent = false,
+    this.primary = false,
+    this.circular = false,
     this.selected,
     this.enabled = true,
     this.onTap,
     this.foregroundOverride,
     this.borderOverride,
     this.semanticsLabel,
-  });
+  }) : assert(!circular || (label == null && icon != null && leading == null));
 
   @override
   Widget build(BuildContext context) {
     final fg =
         foregroundOverride ??
-        (accent ? KalinkaColors.accentTint : KalinkaColors.textPrimary);
-    final bg = accent ? accentFill : KalinkaColors.surfaceElevated;
+        (accent && !primary
+            ? KalinkaColors.accentTint
+            : KalinkaColors.textPrimary);
+    final bg = primary
+        ? KalinkaColors.accent
+        : accent
+        ? accentFill
+        : KalinkaColors.surfaceElevated;
     final border =
         borderOverride ??
-        (accent ? KalinkaColors.accentBorder : KalinkaColors.borderDefault);
+        (primary
+            ? KalinkaColors.accent
+            : accent
+            ? KalinkaColors.accentBorder
+            : KalinkaColors.borderDefault);
     final labelStyle = _labelStyle(fg);
     final mark = icon != null || leading != null;
     // A glyph alone sits in a circle; one ahead of a label takes some of
@@ -94,37 +113,54 @@ class ActionPillButton extends StatelessWidget {
         ? () => KalinkaPopupOrigin.run(context, onTap!)
         : null;
 
-    Widget button = PillTarget(
-      onTap: activate,
-      child: Material(
-        color: bg,
-        shape: StadiumBorder(side: BorderSide(color: border, width: 1)),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: activate,
-          mouseCursor: clickCursor(interactive: interactive),
-          child: Padding(
-            padding: padding,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: math.max(
-                  kKalinkaPillHeight - 2 * _vertical,
-                  _lineHeightOf(context, labelStyle),
+    final OutlinedBorder shape = circular
+        ? CircleBorder(side: BorderSide(color: border))
+        : StadiumBorder(side: BorderSide(color: border));
+    final face = Material(
+      color: bg,
+      shape: shape,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: activate,
+        mouseCursor: clickCursor(interactive: interactive),
+        customBorder: shape,
+        child: circular
+            ? SizedBox.square(
+                dimension: kKalinkaPillHeight,
+                child: Center(child: Icon(icon, size: 20, color: fg)),
+              )
+            : Padding(
+                padding: padding,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: math.max(
+                      kKalinkaPillHeight - 2 * _vertical,
+                      _lineHeightOf(context, labelStyle),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ?leading,
+                      if (icon != null) Icon(icon, size: _iconSize, color: fg),
+                      if (mark && label != null)
+                        const SizedBox(width: _markGap),
+                      if (label != null) Text(label!, style: labelStyle),
+                    ],
+                  ),
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ?leading,
-                  if (icon != null) Icon(icon, size: _iconSize, color: fg),
-                  if (mark && label != null) const SizedBox(width: _markGap),
-                  if (label != null) Text(label!, style: labelStyle),
-                ],
-              ),
-            ),
-          ),
-        ),
       ),
+    );
+    Widget button = PillTarget(
+      onTap: activate,
+      child: circular
+          ? SizedBox(
+              width: kKalinkaPillTarget,
+              height: kKalinkaPillHeight,
+              child: Center(child: face),
+            )
+          : face,
     );
     if (!enabled) {
       button = Opacity(opacity: 0.6, child: button);

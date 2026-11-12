@@ -80,6 +80,7 @@ Finder get _scrollable => find
 class _Api extends HomeApi {
   final bool catalogs;
   final bool tracks;
+  final bool artists;
   final int count;
   final bool fail;
   final Completer<void>? gate;
@@ -92,6 +93,7 @@ class _Api extends HomeApi {
     this.gate,
     this.catalogs = false,
     this.tracks = false,
+    this.artists = false,
   });
 
   @override
@@ -132,6 +134,18 @@ class _Api extends HomeApi {
               performer: tracks && i > 0
                   ? Artist(id: 'p', name: 'Night traveller')
                   : null,
+            ),
+          )
+        else if (artists)
+          BrowseItem(
+            id: 'kalinka:jamendo:artist:$i',
+            name: 'Artist $i',
+            canBrowse: true,
+            canAdd: false,
+            artist: Artist(
+              id: '$i',
+              name: 'Artist $i',
+              albumCount: i.isEven ? 3 : null,
             ),
           )
         else
@@ -258,6 +272,143 @@ void main() {
     }
   });
 
+  testWidgets('cached catalog headers follow width changes without reloading', (
+    tester,
+  ) async {
+    final api = _Api();
+    final container = await _pump(tester, api, size: const Size(936, 600));
+    final nav = container.read(searchSessionProvider.notifier);
+    final pageState = tester.state(find.byType(CatalogPageView));
+    final scroll = tester.state<ScrollableState>(_scrollable);
+    final requests = api.calls.where((call) => call.id == _catalog.id).length;
+    final compactTitle = find.byKey(const ValueKey('catalog-compact-title'));
+
+    for (final width in [600.0, 936.0]) {
+      tester.view.physicalSize = Size(width, 600);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<CatalogPageView>(find.byType(CatalogPageView)).titleInBar,
+        width >= 720,
+      );
+      expect(
+        (width >= 720 ? compactTitle : _expanded).hitTestable(),
+        findsOneWidget,
+      );
+      expect(find.byType(CatalogPinButton).hitTestable(), findsOneWidget);
+      expect(tester.state(find.byType(CatalogPageView)), same(pageState));
+      expect(tester.state<ScrollableState>(_scrollable), same(scroll));
+    }
+
+    scroll.position.jumpTo(240);
+    await tester.pumpAndSettle();
+    for (final width in [600.0, 936.0]) {
+      tester.view.physicalSize = Size(width, 600);
+      await tester.pumpAndSettle();
+      expect(scroll.position.pixels, closeTo(240, .01));
+      expect(find.byType(CatalogPinButton).hitTestable(), findsOneWidget);
+    }
+
+    // A page retained behind another visit must also adopt the new mode.
+    nav.openCatalog(id: 'kalinka:jamendo:catalog:other', title: 'Other');
+    await tester.pumpAndSettle();
+    tester.view.physicalSize = const Size(600, 600);
+    await tester.pumpAndSettle();
+    nav.goBack();
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<CatalogPageView>(find.byType(CatalogPageView)).titleInBar,
+      isFalse,
+    );
+    expect(tester.state(find.byType(CatalogPageView)), same(pageState));
+    expect(tester.state<ScrollableState>(_scrollable), same(scroll));
+    expect(scroll.position.pixels, closeTo(240, .01));
+    expect(find.byType(CatalogPinButton).hitTestable(), findsOneWidget);
+    expect(api.calls.where((call) => call.id == _catalog.id).length, requests);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final artists in [false, true]) {
+    testWidgets(
+      'wide ${artists ? 'artists' : 'albums'} keeps a compact header across heights',
+      (tester) async {
+        final key = GlobalKey();
+        final api = _Api(count: 20, artists: artists);
+        final page = CatalogPage.category(
+          id: 'kalinka:jamendo:catalog:${artists ? 'artists' : 'albums'}',
+          title: artists ? 'Artists' : 'Albums',
+          provider: 'Jamendo',
+          preview: Preview(
+            type: PreviewType.imageText,
+            contentType: artists
+                ? PreviewContentType.artist
+                : PreviewContentType.album,
+          ),
+          filters: _catalog.filters,
+        );
+        // The browsing area of a 1024×600 shell, above its 72dp mini-player.
+        final container = await _pump(
+          tester,
+          api,
+          size: const Size(936, 528),
+          page: page,
+          captureKey: key,
+        );
+        final title = find.byKey(const ValueKey('catalog-compact-title'));
+        expect(title, findsOneWidget);
+        expect(_expanded, findsNothing);
+        expect(find.byType(CatalogPinButton), findsOneWidget);
+        expect(
+          find.text('Jamendo · 20 ${artists ? 'artists' : 'albums'}'),
+          findsOneWidget,
+        );
+        final titleBounds = tester.getRect(title);
+        expect(
+          tester.getRect(_barField).center.dy,
+          closeTo(titleBounds.center.dy, 1),
+        );
+        expect(
+          tester.getRect(find.byType(CatalogPinButton)).left -
+              titleBounds.right,
+          lessThanOrEqualTo(8),
+        );
+        final cards = find.byType(ArtworkGridCard);
+        final first = tester.getRect(cards.first);
+        expect(first.top, lessThan(95));
+        expect(
+          first.width - 2 * ArtworkGridCard.inset,
+          inInclusiveRange(160, 170),
+        );
+        expect(tester.getRect(cards.at(4)).top, first.top);
+        expect(tester.getRect(cards.at(5)).top, greaterThan(first.top));
+        await _capture(
+          tester,
+          key,
+          artists ? 'artists-compact' : 'albums-compact',
+        );
+        final visit = container.read(searchSessionProvider).visitId;
+        final calls = api.calls.length;
+        tester.state<ScrollableState>(_scrollable).position.jumpTo(250);
+        await tester.pumpAndSettle();
+        expect(tester.getRect(title), titleBounds);
+        expect(find.byType(CatalogPinButton), findsOneWidget);
+        tester.view.physicalSize = const Size(936, 800);
+        await tester.pumpAndSettle();
+        expect(title, findsOneWidget);
+        expect(tester.getRect(title), titleBounds);
+        await _capture(tester, key, artists ? 'artists-tall' : 'albums-tall');
+        tester.view.physicalSize = const Size(600, 800);
+        await tester.pumpAndSettle();
+        expect(title, findsNothing);
+        expect(container.read(searchSessionProvider).visitId, visit);
+        expect(api.calls.length, calls);
+        tester.view.physicalSize = const Size(936, 528);
+        await tester.pumpAndSettle();
+        expect(title, findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   for (final (width, scale, inline) in [
     (516.0, 1.0, true),
     (375.0, 1.0, true),
@@ -343,8 +494,13 @@ void main() {
             );
         await tester.pumpAndSettle();
         final pin = tester.getRect(find.byType(CatalogPinButton));
-        final title = tester.getRect(_expanded);
-        expect(pin.left, closeTo(title.right + 8, 0.1));
+        final compact = width >= 720 * scale;
+        final title = tester.getRect(
+          compact
+              ? find.byKey(const ValueKey('catalog-compact-title'))
+              : _expanded,
+        );
+        expect(pin.left - title.right, inInclusiveRange(0, 8.1));
         expect(pin.center.dy, closeTo(title.center.dy, 0.1));
         final inBar = CatalogSliverHeader.searchInBar(width, scale);
         if (inBar) {
@@ -462,7 +618,7 @@ void main() {
   for (final (name, size, scale, page) in [
     (
       'pin-only',
-      const Size(805, 450),
+      const Size(700, 700),
       1.0,
       const CatalogPage.category(
         id: 'kalinka:tidal:catalog:home',
@@ -470,7 +626,7 @@ void main() {
         provider: 'TIDAL',
       ),
     ),
-    ('wide-filters', const Size(1200, 800), 1.0, _catalog),
+    ('filters', const Size(700, 800), 1.0, _catalog),
     ('wrapped-filters', const Size(375, 812), 2.0, _catalog),
     (
       'wrapped-search',
@@ -576,6 +732,7 @@ void main() {
   for (final (size, scale) in [
     (const Size(1200, 800), 1.0),
     (const Size(812, 375), 1.0),
+    (const Size(1600, 1000), 2.0),
     (const Size(375, 812), 1.0),
     (const Size(320, 600), 1.0),
     (const Size(375, 812), 2.0),
@@ -587,6 +744,22 @@ void main() {
       (tester) async {
         final key = GlobalKey();
         await _pump(tester, _Api(), size: size, scale: scale, captureKey: key);
+        if (size.width >= 720 * scale) {
+          final title = find.byKey(const ValueKey('catalog-compact-title'));
+          final bounds = tester.getRect(title);
+          for (final offset in [0.0, 8.0, 80.0, 400.0, 700.0, 0.0]) {
+            tester.state<ScrollableState>(_scrollable).position.jumpTo(offset);
+            await tester.pumpAndSettle();
+            expect(tester.getRect(title), bounds);
+            expect(find.byType(CatalogPinButton).hitTestable(), findsOneWidget);
+            expect(_barFilters.hitTestable(), findsOneWidget);
+            expect(_barField.hitTestable(), findsOneWidget);
+            expect(_expanded, findsNothing);
+            expect(tester.takeException(), isNull);
+          }
+          await _capture(tester, key, '${size.width}-$scale-toolbar');
+          return;
+        }
         expect(_expanded, findsOneWidget);
         expect(_collapsed, findsNothing);
         expect(
@@ -746,6 +919,7 @@ void main() {
     await _pump(
       tester,
       _Api(),
+      size: const Size(600, 800),
       page: const CatalogPage.category(
         id: 'kalinka:jamendo:catalog:other',
         title: 'Other catalog',
@@ -824,7 +998,7 @@ void main() {
   testWidgets('Back restores the collapsed catalog title and controls', (
     tester,
   ) async {
-    final container = await _pump(tester, _Api());
+    final container = await _pump(tester, _Api(), size: const Size(600, 800));
     final scroll = tester.state<ScrollableState>(_scrollable);
     scroll.position.jumpTo(500);
     await tester.pumpAndSettle();
@@ -894,7 +1068,10 @@ void main() {
           settle: false,
         );
         expect(_barFilters, findsOneWidget);
-        expect(_expanded, findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('catalog-compact-title')),
+          findsOneWidget,
+        );
         gate.complete();
         await tester.pumpAndSettle();
         expect(

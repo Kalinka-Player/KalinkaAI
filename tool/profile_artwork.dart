@@ -1,6 +1,8 @@
 // Native profiling entry point. No playback or server settings are changed.
 // KALINKA_SERVER=http://host:8000 flutter run --profile -d linux \
 //   -t tool/profile_artwork.dart
+// Set KALINKA_PROFILE_SCENARIO=album to open and scroll The Best Of Michael Jackson.
+// KALINKA_PROFILE_ALBUM may specify another album id from the catalog.
 // Set KALINKA_PROFILE_SCENARIO=grid to isolate the search artwork grid.
 // Set KALINKA_PROFILE_SCENARIO=home to profile the saved Home pins. Adding
 // KALINKA_KIOSK=1 makes the Linux window fullscreen, retaining the normal Home.
@@ -33,6 +35,7 @@ import 'package:kalinka/widgets/search_cards/artwork_grid.dart';
 import 'package:kalinka/widgets/search_cards/browse_navigation_scope.dart';
 
 import 'profile_home_support.dart';
+import 'profile_album_support.dart';
 
 class _ProfileCache extends ImageCache {
   int loads = 0;
@@ -123,6 +126,16 @@ Future<void> _profile() async {
     if (items.isEmpty) throw StateError('The catalog must contain albums');
   }
 
+  final album = scenario == 'album'
+      ? AlbumProfile(
+          items.firstWhere(
+            (item) =>
+                item.id == Platform.environment['KALINKA_PROFILE_ALBUM'] ||
+                (Platform.environment['KALINKA_PROFILE_ALBUM'] == null &&
+                    item.name?.toLowerCase() == 'the best of michael jackson'),
+          ),
+        )
+      : null;
   final frames = <FrameTiming>[];
   final reports = <Map<String, Object?>>[];
   binding.addTimingsCallback(frames.addAll);
@@ -236,6 +249,12 @@ Future<void> _profile() async {
   if (home != null) {
     await home.run(measure);
     await finish(home.details);
+    return;
+  }
+
+  if (album != null) {
+    await album.run(measure);
+    await finish(album.details);
     return;
   }
 
