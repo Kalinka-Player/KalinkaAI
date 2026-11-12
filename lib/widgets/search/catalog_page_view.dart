@@ -847,6 +847,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                 ? (context, metadataInTracks) => WideAlbumHeader(
                     page: page,
                     metadata: metadata,
+                    compactToolbar: compact,
                     metadataInTracks: metadataInTracks,
                     onBack: widget.onAlbumBack ?? widget.onBackToCatalogs,
                     onServerTap: widget.onServerTap,
