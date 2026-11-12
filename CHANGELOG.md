@@ -8,6 +8,29 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
+## 0.27.0
+
+Works with server 5.19.0 or later; plugin install queuing and the search order it also enables need a server speaking REST API 0.23 — against an older server, plugins update one at a time as before and search results fall back to ordering by name match.
+
+### Added
+- Home's pinned catalogs show previews sized to fit the space they're given, with per-pin layout controls in Customise Home.
+- Settings' Plugins and Streamer tabs carry a badge counting the updates waiting on each.
+- Settings gained an on-screen keyboard switch, under This device, for touch displays that need one; it is saved on that device only and takes effect immediately.
+- Plugins can be updated all at once with one tap. Where the server speaks API 0.23, installs and updates queue behind each other instead of each needing its own request.
+
+### Changed
+- Catalogue top bars stay transparent while scrolling instead of turning opaque.
+- The setup wizard's source list draws a source's own declared icon, with live artwork from the server where available, matching how Home draws it.
+- The first-run tip card no longer sits over the control it is pointing at.
+- Desktop artwork and Home's scrolling are smoother.
+- Settings' help popups show a field's own optional-setting note where the schema has one.
+
+### Fixed
+- Streamer goes straight to offline when the device is powered off, instead of sitting on a stale status first.
+- A plugin install or update kept behind a proxy's 5xx response keeps following the server's progress instead of stalling, and any row left by an error frees up rather than staying stuck.
+- Home's pins no longer flash between layouts while loading, and keep their actions in place once previews settle.
+- Settings' help popup keeps focus and caption spacing correct when a section has no help of its own.
+
 ## Unreleased
 
 ### Changed
