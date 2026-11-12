@@ -853,7 +853,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                         child: Padding(
                           padding: const EdgeInsets.only(right: 1),
                           child: _navigation(
-                            extended: railWidth > kKalinkaRailWidth,
+                            // The narrow rail widens with the text, though
+                            // never this far.
+                            extended: railWidth >= kKalinkaWideRailWidth,
                           ),
                         ),
                       ),
