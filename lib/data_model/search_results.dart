@@ -33,18 +33,31 @@ class LegFailed extends LegState {
   const LegFailed(this.reason);
 }
 
-/// One source's recommendations: its standing, and the tracks it suggested
-/// once it answered.
+/// One source's recommendations: its standing, and what it suggested once it
+/// answered — tracks, playlists or any other kind, in the source's order.
 class InspiredGroup {
   final String source;
   final LegState state;
-  final List<BrowseItem> tracks;
+  final List<BrowseItem> items;
 
   const InspiredGroup({
     required this.source,
     required this.state,
-    required this.tracks,
+    required this.items,
   });
+
+  /// [items] by kind in the canonical order, leaving out kinds it has none of.
+  List<(SearchType, List<BrowseItem>)> get shelves => [
+    for (final type in BrowseFilterCapabilities.allTypes)
+      if (items.where((item) => SearchResults._typeOf(item) == type).toList()
+          case final ofType when ofType.isNotEmpty)
+        (type, ofType),
+  ];
+
+  List<BrowseItem> get tracks => [
+    for (final item in items)
+      if (item.track != null) item,
+  ];
 }
 
 typedef _MatchEntry = ({
@@ -183,23 +196,28 @@ class SearchResults {
   List<InspiredGroup> get inspiredGroups => [
     for (final source in sourceNames)
       if (inspired[source] case final state?)
-        InspiredGroup(source: source, state: state, tracks: _tracksOf(state)),
+        InspiredGroup(
+          source: source,
+          state: state,
+          items: _suggestionsOf(state),
+        ),
   ];
 
-  static List<BrowseItem> _tracksOf(LegState? state) {
+  static List<BrowseItem> _suggestionsOf(LegState? state) {
     if (state is! LegReady) return const [];
     return [
       for (final card in state.list.items)
         for (final item in card.sections ?? const <BrowseItem>[])
-          if (item.track != null) item,
+          if (_typeOf(item) != SearchType.invalid) item,
     ];
   }
 
-  /// The entity kinds the name matches hold, in the canonical order.
+  /// The entity kinds the results hold, in the canonical order.
   List<SearchType> get typesPresent {
     final present = {
       for (final item in rankedMatches) _typeOf(item),
-      if (inspiredGroups.any((g) => g.tracks.isNotEmpty)) SearchType.track,
+      for (final group in inspiredGroups)
+        for (final item in group.items) _typeOf(item),
     };
     return [
       for (final type in BrowseFilterCapabilities.allTypes)
@@ -221,7 +239,7 @@ class SearchResults {
 
     rankedMatches.forEach(count);
     for (final group in inspiredGroups) {
-      group.tracks.forEach(count);
+      group.items.forEach(count);
     }
     final ids = counts.keys.toList()
       ..sort((a, b) {
@@ -256,9 +274,7 @@ class SearchResults {
       );
     }
 
-    final groups =
-        filter.kind == ResultKind.nameMatches ||
-            (filter.type != null && filter.type != SearchType.track)
+    final groups = filter.kind == ResultKind.nameMatches
         ? const <InspiredGroup>[]
         : [
             for (final group in inspiredGroups)
@@ -267,7 +283,7 @@ class SearchResults {
                 InspiredGroup(
                   source: group.source,
                   state: group.state,
-                  tracks: group.tracks.where(keep).toList(),
+                  items: group.items.where(keep).toList(),
                 ),
           ];
     return NarrowedResults(matches: matches, groups: groups);
@@ -339,5 +355,5 @@ class NarrowedResults {
   const NarrowedResults({required this.matches, required this.groups});
 
   int get recommendationCount =>
-      groups.fold(0, (sum, group) => sum + group.tracks.length);
+      groups.fold(0, (sum, group) => sum + group.items.length);
 }

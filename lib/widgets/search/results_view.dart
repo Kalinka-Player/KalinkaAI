@@ -11,7 +11,7 @@ import '../fast_scroller.dart';
 import '../search_cards/artwork_grid_card.dart';
 import 'browse_visit_scope.dart';
 import 'inspired_block.dart';
-import 'inspired_tracks_view.dart';
+import 'inspired_suggestions_view.dart';
 import 'results_filters.dart';
 import 'name_matches_block.dart';
 import 'search_loading_indicator.dart';
@@ -43,7 +43,7 @@ class _ResultsViewState extends ConsumerState<ResultsView> {
   Widget build(BuildContext context) {
     final session = visitOf(context, ref);
     if (session.expandedBlock?.kind == ResultKind.recommendations) {
-      return const InspiredTracksView();
+      return const InspiredSuggestionsView();
     }
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -145,8 +145,13 @@ class _ResultsViewState extends ConsumerState<ResultsView> {
     required bool grid,
   }) {
     final narrowed = results.narrow(filter);
-    final matches = NameMatchesBlock.visible(results, narrowed, filter);
     final inspired = InspiredBlock.visible(results, narrowed, filter);
+    final matches = NameMatchesBlock.visible(
+      results,
+      narrowed,
+      filter,
+      suggestionsShown: inspired,
+    );
     if (!matches && !inspired) {
       // Sorting alone cannot cause an empty result.
       final filtered =

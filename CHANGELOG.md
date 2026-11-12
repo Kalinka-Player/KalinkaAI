@@ -10,6 +10,12 @@ paragraph, however long; blank lines separate paragraphs.
 
 ## Unreleased
 
+### Added
+- AI search shows the playlists a service suggests, not only tracks. A service that suggests playlists, as the Qobuz plugin does for a mood or description, gets a card under Inspired by your request that counts and names them; opening it lists them on a Playlists shelf, and the Playlists tab shows them too.
+
+### Changed
+- Under the Artists, Albums and Playlists tabs, a service's AI suggestions keep their placeholder while it is still searching, and its Retry if it failed, as under Tracks: what kinds it suggests is only known once it answers. An empty list of name matches is no longer shown beside suggestions as if nothing matched.
+
 ## 0.27.0
 
 Home's pinned catalogs previewed at the size they are given, update badges on Settings' tabs, plugins updated all at once, and search results in each streaming service's own order. Works with server 5.19.0 or later; plugin install queuing and the search order it also enables need a server speaking REST API 0.23 — against an older server, plugins update one at a time as before and search results fall back to ordering by name match.

@@ -535,7 +535,7 @@ void main() {
         expect(state.searchLoading, isFalse);
         expect(results.matchesSettled, isTrue);
         expect(results.rankedMatches, hasLength(1));
-        expect(results.inspiredGroups.single.tracks, hasLength(2));
+        expect(results.inspiredGroups.single.items, hasLength(2));
         expect(api.matchCalls, 1);
         expect(api.aiSearchCalls, 1);
       },

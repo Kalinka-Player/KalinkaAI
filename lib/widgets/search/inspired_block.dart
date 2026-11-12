@@ -5,12 +5,13 @@ import '../../data_model/data_model.dart';
 import '../../data_model/search_results.dart';
 import '../../theme/app_theme.dart';
 import '../loading_shimmer.dart';
+import '../search_cards/results_count_line.dart';
 import '../search_cards/track_row_support.dart';
 import '../source_badge.dart';
 import 'source_unavailable_row.dart';
 
 /// Recommendations keep each backend's order and identity. Opening a card
-/// browses the source's answer; playback belongs to the track-list page.
+/// browses the source's answer; playback belongs to the suggestions page.
 class InspiredBlock extends StatelessWidget {
   final SearchResults results;
   final NarrowedResults narrowed;
@@ -35,8 +36,7 @@ class InspiredBlock extends StatelessWidget {
     BrowseFilterQuery filter,
   ) =>
       filter.kind != ResultKind.nameMatches &&
-      (filter.type == null || filter.type == SearchType.track) &&
-      narrowed.groups.any((g) => g.state is! LegReady || g.tracks.isNotEmpty);
+      narrowed.groups.any((g) => g.state is! LegReady || g.items.isNotEmpty);
 
   @override
   Widget build(BuildContext context) => SliverMainAxisGroup(
@@ -58,7 +58,7 @@ class InspiredBlock extends StatelessWidget {
               title: results.sources.titleOf(group.source),
             ),
           )
-        else if (group.tracks.isNotEmpty)
+        else if (group.items.isNotEmpty)
           SliverToBoxAdapter(
             child: InspiredSourceCard(
               group: group,
@@ -140,9 +140,10 @@ class InspiredHeading extends StatelessWidget {
   );
 }
 
-/// Read the first three distinct names from the returned tracks, in backend
-/// order. No artist lookups or extra requests are needed for this preview.
-List<String> _performersOf(List<BrowseItem> tracks) {
+/// Read the first three distinct names from the suggestions, in backend
+/// order: a track's performer, any other item's own name. No artist lookups
+/// or extra requests are needed for this preview.
+List<String> _namesOf(List<BrowseItem> items) {
   final names = <String>[];
   final seen = <String>{};
   String? known(String? value) {
@@ -159,10 +160,16 @@ List<String> _performersOf(List<BrowseItem> tracks) {
     return name;
   }
 
-  for (final item in tracks) {
+  for (final item in items) {
     final track = item.track;
-    final name =
-        known(track?.performer?.name) ?? known(track?.album?.artist?.name);
+    final name = track == null
+        ? known(
+            item.album?.title ??
+                item.artist?.name ??
+                item.playlist?.name ??
+                item.name,
+          )
+        : known(track.performer?.name) ?? known(track.album?.artist?.name);
     if (name != null && seen.add(name.toLowerCase())) names.add(name);
     if (names.length == 3) break;
   }
@@ -170,18 +177,18 @@ List<String> _performersOf(List<BrowseItem> tracks) {
 }
 
 /// Pick distinct artwork paths from the existing answer without changing
-/// its playback order or looking up more albums. Prefer actual covers; when
-/// none are supplied, keep the normal per-track artwork fallbacks.
-List<BrowseItem> _collageTracks(List<BrowseItem> tracks) {
+/// its order or looking up more albums. Prefer actual covers; when none are
+/// supplied, keep the normal per-item artwork fallbacks.
+List<BrowseItem> _collageItems(List<BrowseItem> items) {
   final covers = <BrowseItem>[];
   final seen = <String>{};
-  for (final item in tracks) {
+  for (final item in items) {
     final path = item.image?.smallest;
     if (path == null || path.isEmpty || !seen.add(path)) continue;
     covers.add(item);
     if (covers.length == 4) break;
   }
-  return covers.isEmpty ? tracks.take(4).toList() : covers;
+  return covers.isEmpty ? items.take(4).toList() : covers;
 }
 
 class InspiredSourceCard extends StatelessWidget {
@@ -197,8 +204,8 @@ class InspiredSourceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final performers = _performersOf(group.tracks);
-    final covers = _collageTracks(group.tracks);
+    final names = _namesOf(group.items);
+    final covers = _collageItems(group.items);
     return Semantics(
       button: true,
       child: Material(
@@ -219,8 +226,10 @@ class InspiredSourceCard extends StatelessWidget {
               source: group.source,
               title: title,
               compact: compact,
-              trackCount: group.tracks.length,
-              performers: performers,
+              count: resultCounts({
+                for (final (type, items) in group.shelves) type: items.length,
+              }),
+              names: names,
             ),
             trailing: const Icon(
               Icons.chevron_right,
@@ -233,7 +242,8 @@ class InspiredSourceCard extends StatelessWidget {
   }
 }
 
-/// The same responsive collage and source details while tracks are pending.
+/// The same responsive collage and source details while suggestions are
+/// pending.
 class InspiredSourceCardShimmer extends StatelessWidget {
   final String source;
   final String title;
@@ -272,25 +282,25 @@ class InspiredSourceCardShimmer extends StatelessWidget {
 }
 
 /// Shared text layout for the loaded card and its shimmer. A missing count
-/// means the source's tracks have not arrived yet.
+/// means the source's suggestions have not arrived yet.
 class _SourceDetails extends StatelessWidget {
   final String source;
   final String title;
   final bool compact;
-  final int? trackCount;
-  final List<String> performers;
+  final String? count;
+  final List<String> names;
   const _SourceDetails({
     required this.source,
     required this.title,
     required this.compact,
-    this.trackCount,
-    this.performers = const [],
+    this.count,
+    this.names = const [],
   });
 
   @override
   Widget build(BuildContext context) {
-    final loading = trackCount == null;
-    final performerStyle = KalinkaTextStyles.trackRowTitle.copyWith(
+    final loading = count == null;
+    final nameStyle = KalinkaTextStyles.trackRowTitle.copyWith(
       color: KalinkaColors.textSecondary,
     );
     final badge = ExcludeSemantics(
@@ -301,10 +311,9 @@ class _SourceDetails extends StatelessWidget {
         foreground: KalinkaColors.textPrimary,
       ),
     );
-    final names = loading
+    final shownNames = loading
         ? const ['Performer name', 'Performer name', 'Performer name']
-        : performers;
-    final count = trackCount ?? 20;
+        : names;
     Widget text(String value, TextStyle style, {bool singleLine = false}) =>
         loading
         ? _textPlaceholder(context, value, style, singleLine: singleLine)
@@ -333,11 +342,8 @@ class _SourceDetails extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        text(
-          '$count track${count == 1 ? '' : 's'}',
-          KalinkaTextStyles.trackRowSubtitle,
-        ),
-        if (names.isNotEmpty) ...[
+        text(count ?? '20 tracks', KalinkaTextStyles.trackRowSubtitle),
+        if (shownNames.isNotEmpty) ...[
           const SizedBox(height: 8),
           if (compact)
             Padding(
@@ -346,28 +352,26 @@ class _SourceDetails extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 spacing: 2,
                 children: [
-                  for (final name in names)
+                  for (final name in shownNames)
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ExcludeSemantics(
-                          child: Text('•', style: performerStyle),
-                        ),
+                        ExcludeSemantics(child: Text('•', style: nameStyle)),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: text(name, performerStyle, singleLine: true),
+                          child: text(name, nameStyle, singleLine: true),
                         ),
                       ],
                     ),
                   // Keep the preview's three-line footprint when fewer
                   // distinct names are available, including after loading.
-                  for (var i = names.length; i < 3; i++)
-                    ExcludeSemantics(child: Text(' ', style: performerStyle)),
+                  for (var i = shownNames.length; i < 3; i++)
+                    ExcludeSemantics(child: Text(' ', style: nameStyle)),
                 ],
               ),
             )
           else
-            text(names.join(' · '), performerStyle, singleLine: true),
+            text(shownNames.join(' · '), nameStyle, singleLine: true),
         ],
       ],
     );

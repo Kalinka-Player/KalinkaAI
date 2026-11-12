@@ -42,7 +42,7 @@ import 'support/receivers.dart';
 
 import 'package:kalinka/providers/indexer_status_provider.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
-import 'package:kalinka/widgets/search/inspired_tracks_view.dart';
+import 'package:kalinka/widgets/search/inspired_suggestions_view.dart';
 import 'package:kalinka/widgets/search/results_tabs.dart';
 import 'package:kalinka/widgets/search/track_group_actions.dart';
 import 'package:kalinka/widgets/search/catalog_sliver_header.dart';
@@ -813,6 +813,160 @@ void main() {
       }
     },
   );
+
+  testWidgets('a source suggesting playlists shows a card of its playlists', (
+    tester,
+  ) async {
+    _size(tester, 1100);
+    final key = GlobalKey();
+    await _pump(
+      tester,
+      _ScriptedApi(
+        inspired: {
+          'jamendo': [_playlist('jamendo', '1'), _playlist('jamendo', '2')],
+        },
+      ),
+      captureKey: key,
+    );
+    await tester.pumpAndSettle();
+    await _capture(tester, key, 'search-playlist-suggestions');
+
+    final card = find.byType(InspiredSourceCard);
+    expect(card, findsOneWidget);
+    for (final text in ['2 playlists', 'Playlist 1 · Playlist 2']) {
+      expect(
+        find.descendant(of: card, matching: find.text(text)),
+        findsOneWidget,
+      );
+    }
+  });
+
+  testWidgets('each kind tab shows the sources that suggested that kind', (
+    tester,
+  ) async {
+    _size(tester, 1100);
+    await _pump(
+      tester,
+      _ScriptedApi(
+        inspired: {
+          'jamendo': [_playlist('jamendo', '1')],
+          'localfiles': [_track('localfiles', '1', 'Streetlights')],
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(InspiredSourceCard), findsNWidgets(2));
+
+    Future<List<String>> cardsUnder(String tab) async {
+      await tester.tap(find.text(tab));
+      await tester.pumpAndSettle();
+      return [
+        for (final title in ['Jamendo', 'My Library'])
+          if (find
+              .widgetWithText(InspiredSourceCard, title)
+              .evaluate()
+              .isNotEmpty)
+            title,
+      ];
+    }
+
+    expect(await cardsUnder('PLAYLISTS'), ['Jamendo']);
+    expect(find.text('Nothing matches these filters'), findsNothing);
+    expect(await cardsUnder('TRACKS'), ['My Library']);
+    expect(await cardsUnder('ALBUMS'), isEmpty);
+    expect(find.text('Nothing matches these filters'), findsOneWidget);
+    expect(await cardsUnder('ALL'), ['Jamendo', 'My Library']);
+  });
+
+  testWidgets('a kind tab keeps a source\'s placeholder until it answers', (
+    tester,
+  ) async {
+    _size(tester, 1100);
+    final gate = Completer<void>();
+    final container = await _pump(
+      tester,
+      _ScriptedApi(
+        inspired: {
+          'localfiles': [_track('localfiles', '1', 'Blue Hour')],
+        },
+        inspiredGates: {'localfiles': gate},
+      ),
+    );
+    container
+        .read(searchSessionProvider.notifier)
+        .setResultsFilter(const BrowseFilterQuery(type: SearchType.track));
+    await tester.pump(_settle);
+
+    expect(find.byType(InspiredSourceCardShimmer), findsOneWidget);
+    expect(find.text('Nothing matches these filters'), findsNothing);
+
+    gate.complete();
+    await tester.pump(_settle);
+    await tester.pump(_settle);
+    expect(
+      find.widgetWithText(InspiredSourceCard, 'My Library'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'a source\'s suggestions open as a shelf per kind, track actions on tracks',
+    (tester) async {
+      _size(tester, 1100);
+      final api = _ScriptedApi(
+        inspired: {
+          'jamendo': [
+            _playlist('jamendo', '1'),
+            _track('jamendo', '1', 'Streetlights'),
+          ],
+        },
+      );
+      final key = GlobalKey();
+      await _pump(tester, api, shell: true, captureKey: key);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(InspiredSourceCard));
+      await tester.pumpAndSettle();
+      await _capture(tester, key, 'search-suggestions-by-kind');
+
+      expect(find.byType(InspiredSuggestionsView), findsOneWidget);
+      final shelves = find.byType(ShelfHeading);
+      expect(
+        [
+          for (final heading in tester.widgetList<ShelfHeading>(shelves))
+            (heading.title, heading.count),
+        ],
+        [('TRACKS', 1), ('PLAYLISTS', 1)],
+      );
+      expect(find.text('Playlist 1'), findsOneWidget);
+      await tester.tap(find.text('Add to queue'));
+      await tester.pumpAndSettle();
+      expect(api.additions, [
+        ['kalinka:jamendo:track:1'],
+      ]);
+      await tester.pump(const Duration(seconds: 4));
+    },
+  );
+
+  testWidgets('a source suggesting playlists alone offers no track actions', (
+    tester,
+  ) async {
+    _size(tester, 1100);
+    await _pump(
+      tester,
+      _ScriptedApi(
+        inspired: {
+          'jamendo': [_playlist('jamendo', '1')],
+        },
+      ),
+      shell: true,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(InspiredSourceCard));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(ShelfHeading, 'PLAYLISTS'), findsOneWidget);
+    expect(find.byType(TrackGroupActions), findsNothing);
+  });
 
   testWidgets('name matches use full width when no inspired results remain', (
     tester,
@@ -1591,7 +1745,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('My Library'));
       await tester.pumpAndSettle();
-      expect(find.byType(InspiredTracksView), findsOneWidget);
+      expect(find.byType(InspiredSuggestionsView), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
