@@ -46,7 +46,7 @@ class TrackGroupActions extends ConsumerWidget {
 }
 
 /// Play these ids now: they become the queue, starting from the first. The
-/// berry tint marks it as the default action; the additive enqueue chip
+/// crimson fill marks it as the primary action; the additive enqueue chip
 /// beside it stays neutral.
 ///
 /// The ids are whatever the caller wants queued — a section's tracks, or the
@@ -56,12 +56,14 @@ class PlayAllChip extends ConsumerStatefulWidget {
   final List<String> trackIds;
   final int? trackCount;
   final bool enabled;
+  final bool iconOnly;
 
   const PlayAllChip({
     super.key,
     required this.trackIds,
     this.trackCount,
     this.enabled = true,
+    this.iconOnly = false,
   });
 
   @override
@@ -94,14 +96,18 @@ class _PlayAllChipState extends ConsumerState<PlayAllChip> {
 
   @override
   Widget build(BuildContext context) {
-    return ActionPillButton(
-      label: 'Play all',
+    final button = ActionPillButton(
+      label: widget.iconOnly ? null : 'Play all',
+      circular: widget.iconOnly,
       icon: Icons.play_arrow_rounded,
-      accent: true,
+      primary: true,
       enabled: widget.enabled && !_busy,
       onTap: _playAll,
       semanticsLabel: 'Play all tracks',
     );
+    return widget.iconOnly
+        ? Tooltip(message: 'Play all', child: button)
+        : button;
   }
 }
 
@@ -121,6 +127,7 @@ class AddAllChip extends ConsumerStatefulWidget {
   final String? name;
   final bool enabled;
   final String label;
+  final bool iconOnly;
 
   const AddAllChip({
     super.key,
@@ -129,6 +136,7 @@ class AddAllChip extends ConsumerStatefulWidget {
     this.name,
     this.enabled = true,
     this.label = 'Enqueue',
+    this.iconOnly = false,
   });
 
   @override
@@ -179,8 +187,13 @@ class _AddAllChipState extends ConsumerState<AddAllChip> {
   @override
   Widget build(BuildContext context) {
     final added = _status == _AddStatus.added;
-    return ActionPillButton(
-      label: added ? 'Added' : widget.label,
+    final button = ActionPillButton(
+      label: widget.iconOnly
+          ? null
+          : added
+          ? 'Added'
+          : widget.label,
+      circular: widget.iconOnly,
       icon: added ? Icons.check_rounded : Icons.playlist_add_rounded,
       // Enabled only when idle — no re-add while adding or confirming.
       enabled: widget.enabled && _status == _AddStatus.idle,
@@ -193,6 +206,12 @@ class _AddAllChipState extends ConsumerState<AddAllChip> {
           ? 'Adding to queue'
           : 'Add ${widget.name ?? 'all'} to queue',
     );
+    return widget.iconOnly
+        ? Tooltip(
+            message: added ? 'Added to queue' : widget.label,
+            child: button,
+          )
+        : button;
   }
 }
 

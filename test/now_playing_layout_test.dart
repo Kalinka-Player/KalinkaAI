@@ -21,6 +21,7 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/player_header.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
+import 'package:kalinka/widgets/playback_progress_slider.dart';
 
 import 'support/home_shell.dart';
 
@@ -458,6 +459,117 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final empty in [true, false]) {
+    testWidgets('short wide player fits artwork with empty queue: $empty', (
+      tester,
+    ) async {
+      final container = await _pump(
+        tester,
+        queue: SettableQueue(empty ? PlayQueueState.empty : _queue(count: 1)),
+        size: const Size(936, 360),
+      );
+      final original = container.read(playQueueStateStoreProvider);
+      for (final height in [360.0, 420.0, 340.0]) {
+        tester.view.physicalSize = Size(936, height);
+        await tester.pumpAndSettle();
+        final art = tester.getRect(_art);
+        expect(art.height, greaterThan(0));
+        expect(art.bottom, lessThanOrEqualTo(height));
+        expect(
+          find.byType(RendererSwitcherDropdown).hitTestable(),
+          findsOneWidget,
+        );
+        expect(
+          tester.getRect(find.byType(PlaybackProgressSlider)).bottom,
+          lessThanOrEqualTo(height),
+        );
+        final scroll = tester.state<ScrollableState>(
+          find.descendant(
+            of: find.byType(NowPlayingContent),
+            matching: find.byType(Scrollable),
+          ),
+        );
+        expect(scroll.position.maxScrollExtent, 0);
+        expect(container.read(playQueueStateStoreProvider), same(original));
+        expect((container.read(kalinkaWsApiProvider) as _Api).sent, isEmpty);
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
+
+  for (final (size, scale) in [
+    (const Size(936, 600), 1.0),
+    (const Size(1200, 800), 1.0),
+    (const Size(936, 1200), 1.0),
+    (const Size(1600, 1200), 2.0),
+  ]) {
+    testWidgets(
+      'wide player groups controls beside the cover at $size / $scale',
+      (tester) async {
+        final key = GlobalKey();
+        final container = await _pump(
+          tester,
+          queue: SettableQueue(_queue()),
+          size: size,
+          scale: scale,
+          captureKey: key,
+        );
+        final original = container.read(playQueueStateStoreProvider);
+        final cover = tester.getRect(_art);
+        final controls = find.byKey(
+          const ValueKey('now-playing-landscape-controls'),
+        );
+        expect(controls, findsOneWidget);
+        expect(cover.size, const Size(320, 320));
+        final progress = tester.getRect(find.byType(PlaybackProgressSlider));
+        expect(progress.left, greaterThan(cover.right));
+        expect(progress.width, lessThanOrEqualTo(560));
+        expect(
+          tester.widget<Text>(find.text('Evening track 0')).style!.fontSize,
+          32,
+        );
+        expect(_rows.evaluate().length, inInclusiveRange(1, 5));
+        expect(tester.getRect(_preview).bottom, lessThanOrEqualTo(size.height));
+        expect(
+          find.byType(RendererSwitcherDropdown).hitTestable(),
+          findsOneWidget,
+        );
+        final scroll = tester.state<ScrollableState>(
+          find.descendant(
+            of: find.byType(NowPlayingContent),
+            matching: find.byType(Scrollable),
+          ),
+        );
+        expect(scroll.position.maxScrollExtent, 0);
+        if (captures != null) {
+          await tester.runAsync(() async {
+            final boundary =
+                key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+            final image = await boundary.toImage();
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            final file = File(
+              '$captures/playing-${size.width}-${size.height}-$scale.png',
+            );
+            await file.parent.create(recursive: true);
+            await file.writeAsBytes(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
+        tester.view.physicalSize = const Size(432, 900);
+        await tester.pumpAndSettle();
+        expect(controls, findsNothing);
+        tester.view.physicalSize = size;
+        await tester.pumpAndSettle();
+        expect(controls, findsOneWidget);
+        expect(container.read(playQueueStateStoreProvider), same(original));
+        expect((container.read(kalinkaWsApiProvider) as _Api).sent, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   for (final (name, size, scale, sideBySide) in [
     ('short', const Size(432, 720), 1.0, false),
     ('desktop', const Size(432, 1080), 1.0, false),
@@ -468,6 +580,7 @@ void main() {
     ('square', const Size(800, 800), 1.0, true),
     ('square-long-text', const Size(640, 640), 2.0, true),
     ('square-large-text', const Size(432, 500), 2.0, false),
+    ('touch-display-large-text', const Size(936, 600), 2.0, true),
     ('narrow-square', const Size(320, 400), 1.0, false),
   ]) {
     testWidgets('$name fits artwork, details and controls without scrolling', (
@@ -495,7 +608,14 @@ void main() {
       final artBounds = tester.getRect(_art);
       final output = find.byType(RendererSwitcherDropdown);
       expect(output, findsOneWidget);
-      if (sideBySide) {
+      if (name == 'square') {
+        expect(titleBounds.left, greaterThan(artBounds.right));
+        expect(
+          tester.getRect(find.byType(PlaybackProgressSlider)).left,
+          greaterThan(artBounds.right),
+        );
+        expect(artBounds.width, 320);
+      } else if (sideBySide) {
         expect(titleBounds.left, greaterThan(artBounds.right));
         expect(
           tester.getCenter(_metadata).dy,

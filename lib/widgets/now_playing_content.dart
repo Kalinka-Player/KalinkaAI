@@ -32,6 +32,7 @@ import 'procedural_album_art.dart';
 import 'source_badge.dart';
 import 'stream_info_dialog.dart';
 import 'up_next_preview.dart';
+import '../utils/compact_pane_layout.dart';
 
 /// Core now-playing UI: album art, track info, transport controls, volume.
 /// Used embedded in tablet layout and wrapped with animation in phone overlay.
@@ -227,12 +228,15 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                 constraints.maxHeight < 440 ||
                 textScaler.scale(KalinkaTypography.baseSize) >
                     KalinkaTypography.baseSize * 1.3;
+            final sideArtSize = (constraints.maxWidth * 0.42).clamp(
+              0.0,
+              (constraints.maxWidth - metadataGap - metadataMinWidth).clamp(
+                0.0,
+                320.0,
+              ),
+            );
             final artSize = sideBySide
-                ? (constraints.maxWidth * 0.42).clamp(
-                    0.0,
-                    (constraints.maxWidth - metadataGap - metadataMinWidth)
-                        .clamp(0.0, 320.0),
-                  )
+                ? sideArtSize
                 : compact
                 ? (constraints.maxWidth * 0.72).clamp(0.0, 240.0)
                 : (constraints.maxWidth * 0.88).clamp(
@@ -256,6 +260,115 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                 maxNameWidth: 220,
               ),
             );
+            final compactWidth = math.min(
+              560.0,
+              constraints.maxWidth - sideArtSize - metadataGap,
+            );
+            final scale = textScaler.scale(16) / 16;
+            final failed = ref.watch(
+              playerStateProvider.select(
+                (s) => s.state == PlayerStateType.error,
+              ),
+            );
+            final exclusive = ref.watch(
+              playbackControlProvider.select((c) => c.isExclusive),
+            );
+            // Reserve progress, transport, output and their gaps, including
+            // room for playback notices. The cover can be taller than the
+            // controls, especially with an empty queue; both must fit.
+            final compactDetailsHeight =
+                _metadataHeight(
+                  currentTrack,
+                  compactWidth,
+                  grow: 32 / KalinkaTextStyles.expandedTitle.fontSize!,
+                ) +
+                (200 + (failed ? 28 : 0) + (exclusive ? 52 : 0)) * scale;
+            if (compactPaneLayout(constraints.maxWidth, textScaler) &&
+                math.max(sideArtSize, compactDetailsHeight) <=
+                    constraints.maxHeight - 24) {
+              return Align(
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: sideArtSize + metadataGap + compactWidth,
+                  child: CustomScrollView(
+                    primary: false,
+                    physics: const NeverScrollableScrollPhysics(),
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: AwayDim(
+                          away: away,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 8, bottom: 16),
+                            child: Row(
+                              key: const ValueKey('now-playing-presentation'),
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                _AlbumArtSection(
+                                  size: sideArtSize,
+                                  trackId: currentTrack?.id,
+                                  resolvedImageUrl: resolvedImageUrl,
+                                ),
+                                const SizedBox(width: metadataGap),
+                                Expanded(
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: ConstrainedBox(
+                                      key: const ValueKey(
+                                        'now-playing-landscape-controls',
+                                      ),
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 560,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          _buildTrackMetadataSection(
+                                            currentTrack: currentTrack,
+                                            sourceInfo: sourceInfo,
+                                            mimeLabel: mimeLabel,
+                                            qualityLabel: qualityLabel,
+                                            leftAligned: true,
+                                            compact: true,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          PlaybackProgressSlider(
+                                            durationMs: durationMs,
+                                            enabled: currentTrack != null,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                              maxWidth: 360,
+                                            ),
+                                            child: AwayLock(
+                                              away: away,
+                                              child: const _TransportControls(
+                                                compact: true,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          output(),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      SliverUpNextPreview(
+                        canOpenQueue:
+                            widget.showOverlayHeader || widget.isTablet,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
             final content = AwayDim(
               away: away,
               child: Column(
@@ -530,6 +643,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     required String qualityLabel,
     bool leftAligned = false,
     double grow = 1,
+    bool compact = false,
   }) {
     final textAlign = leftAligned ? TextAlign.left : TextAlign.center;
     return Column(
@@ -541,7 +655,9 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
       children: [
         Text(
           currentTrack?.title ?? 'No track',
-          style: _grown(KalinkaTextStyles.expandedTitle, grow),
+          style: compact
+              ? KalinkaTextStyles.expandedTitle.copyWith(fontSize: 32)
+              : _grown(KalinkaTextStyles.expandedTitle, grow),
           textAlign: textAlign,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
@@ -551,11 +667,13 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           label: currentTrack?.performer?.name ?? '\u2014',
           item: ref.read(nowPlayingMetadataLinksProvider).artist,
           onOpen: _openItem,
-          style: _grown(
-            KalinkaTextStyles.expandedArtist,
-            grow,
-            maxFontSize: _maxArtistFontSize,
-          ),
+          style: compact
+              ? KalinkaTextStyles.expandedArtist.copyWith(fontSize: 18)
+              : _grown(
+                  KalinkaTextStyles.expandedArtist,
+                  grow,
+                  maxFontSize: _maxArtistFontSize,
+                ),
           textAlign: textAlign,
           maxLines: 2,
         ),
@@ -565,11 +683,13 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
             label: _albumLine(album),
             item: ref.read(nowPlayingMetadataLinksProvider).album,
             onOpen: _openItem,
-            style: _grown(
-              KalinkaTextStyles.expandedAlbum,
-              grow,
-              maxFontSize: _maxAlbumFontSize,
-            ),
+            style: compact
+                ? KalinkaTextStyles.expandedAlbum.copyWith(fontSize: 16)
+                : _grown(
+                    KalinkaTextStyles.expandedAlbum,
+                    grow,
+                    maxFontSize: _maxAlbumFontSize,
+                  ),
             textAlign: textAlign,
             maxLines: 1,
           ),
@@ -756,7 +876,8 @@ class _ExclusivePlaybackNote extends ConsumerWidget {
 /// Extracted so only this widget rebuilds on playerState / playbackMode changes,
 /// leaving the rest of NowPlayingContent (album art, metadata) untouched.
 class _TransportControls extends ConsumerWidget {
-  const _TransportControls();
+  final bool compact;
+  const _TransportControls({this.compact = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -777,7 +898,7 @@ class _TransportControls extends ConsumerWidget {
           Opacity(
             opacity: transport.hasTrack ? 1.0 : 0.4,
             child: TransportButton(
-              hitDiameter: 68,
+              hitDiameter: compact ? 60 : 68,
               background: Colors.white,
               // Ripple has to read against the white face of the play/pause
               // disc, so use a dark tint instead of the default white-on-dark.
@@ -792,7 +913,7 @@ class _TransportControls extends ConsumerWidget {
                     ),
               child: PlayPauseGlyph(
                 playerState: playerState,
-                iconSize: 38,
+                iconSize: compact ? 32 : 38,
                 spinnerSize: 30,
                 spinnerStrokeWidth: 3,
               ),

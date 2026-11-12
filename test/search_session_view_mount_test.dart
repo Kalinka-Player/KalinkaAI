@@ -703,9 +703,7 @@ void main() {
   );
 
   for (final width in [375.0, 1200.0]) {
-    testWidgets('album Back keeps its separate control at $width', (
-      tester,
-    ) async {
+    testWidgets('album Back follows pane layout at $width', (tester) async {
       tester.view.physicalSize = Size(width, 812);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -723,7 +721,10 @@ void main() {
         title: 'Abbey Road',
       );
       await tester.pumpAndSettle();
-      expect(find.byType(KalinkaBackButton), findsNothing);
+      expect(
+        find.byType(KalinkaBackButton),
+        width < kAlbumSideLayoutWidth ? findsNothing : findsOneWidget,
+      );
       expect(find.byTooltip('Back').hitTestable(), findsOneWidget);
 
       await tester.tap(find.byTooltip('Back'));

@@ -22,7 +22,9 @@ import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search/track_group_actions.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 import 'package:kalinka/widgets/shelf_heading.dart';
+import 'package:kalinka/widgets/server_chip.dart';
 import 'package:kalinka/widgets/top_bar_content_fade.dart';
+import 'package:kalinka/widgets/search_cards/action_pill_button.dart';
 
 import 'support/queue_api.dart';
 import 'support/home_shell.dart';
@@ -30,10 +32,6 @@ import 'support/focus.dart';
 
 final _trackScroll = find.descendant(
   of: find.byKey(const ValueKey('album-tracks')),
-  matching: find.byType(Scrollable),
-);
-final _identityScroll = find.descendant(
-  of: find.byType(AlbumIdentityColumn),
   matching: find.byType(Scrollable),
 );
 
@@ -166,6 +164,8 @@ void main() {
     CatalogPage page = _page,
     Size size = const Size(390, 900),
     double textScale = 1,
+    GlobalKey? captureKey,
+    bool settle = true,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -183,7 +183,7 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
-          theme: ThemeData.dark(),
+          theme: captureKey == null ? ThemeData.dark() : AppTheme.dark(),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(textScale),
@@ -193,18 +193,131 @@ void main() {
           ),
           home: Scaffold(
             backgroundColor: KalinkaColors.background,
-            body: CatalogPageView(page: page, onBackToCatalogs: () {}),
+            body: RepaintBoundary(
+              key: captureKey,
+              child: ColoredBox(
+                color: KalinkaColors.background,
+                child: CatalogPageView(page: page, onBackToCatalogs: () {}),
+              ),
+            ),
           ),
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    if (settle) await tester.pumpAndSettle();
     return container;
   }
 
-  for (final scale in [1.0, 2.0]) {
+  testWidgets(
+    'long album metadata leaves tracks usable at enlarged text sizes',
+    (tester) async {
+      const page = CatalogPage.category(
+        id: 'kalinka:demo:album:orchestra',
+        title: 'Symphonies',
+        description:
+            'Royal Philharmonic Orchestra and London Philharmonic Choir',
+        provider: 'My Library',
+        totalDurationSeconds: 8000,
+      );
+      final api = _AlbumApi([
+        for (var i = 1; i <= 44; i++)
+          _track(i, artist: page.description, disc: i <= 22 ? 1 : 2),
+      ]);
+      final captureKey = GlobalKey();
+      await pumpPage(
+        tester,
+        api,
+        page: page,
+        size: const Size(600, 400),
+        textScale: 3,
+        captureKey: captureKey,
+        settle: false,
+      );
+      final firstHeader = tester.getRect(find.byType(WideAlbumHeader));
+      expect(firstHeader.bottom, lessThanOrEqualTo(400 - 120));
+      expect(
+        tester.getRect(find.byType(AlbumArtwork)).top,
+        closeTo(firstHeader.bottom + 12, .01),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<WideAlbumHeader>(find.byType(WideAlbumHeader))
+            .metadataInTracks,
+        isTrue,
+      );
+      expect(tester.getSize(find.byType(AlbumArtwork)).height, greaterThan(0));
+      expect(find.byType(PlayAllChip).hitTestable(), findsOneWidget);
+      expect(find.byType(AddAllChip).hitTestable(), findsOneWidget);
+      await _capture(tester, captureKey, 'album-long-metadata-600x400-3');
+
+      await tester.scrollUntilVisible(
+        find.text('Song 1'),
+        80,
+        scrollable: _trackScroll,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Song 1').hitTestable(), findsOneWidget);
+      final firstRow = find.ancestor(
+        of: find.text('Song 1'),
+        matching: find.byType(SearchTrackRow),
+      );
+      expect(await tabTo(tester, firstRow), isTrue);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(firstRow).top,
+        greaterThanOrEqualTo(
+          tester.getRect(find.byType(WideAlbumHeader)).bottom,
+        ),
+      );
+      final scroll = tester.state<ScrollableState>(_trackScroll);
+      for (var i = 0; i < 4; i++) {
+        scroll.position.jumpTo(scroll.position.maxScrollExtent);
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('Song 44').hitTestable(), findsOneWidget);
+      expect(api.offsets, [0, 30]);
+
+      for (final height in [900.0, 400.0, 550.0]) {
+        tester.view.physicalSize = Size(600, height);
+        // The placement decision and fade must be correct within this frame.
+        await tester.pump();
+        final bar = tester.getRect(find.byType(WideAlbumHeader));
+        expect(bar.bottom, lessThanOrEqualTo(height - 120));
+        expect(
+          tester
+              .widget<WideAlbumHeader>(find.byType(WideAlbumHeader))
+              .metadataInTracks,
+          height != 900,
+        );
+        expect(
+          tester
+              .widget<TopBarContentFade>(
+                find.byKey(const ValueKey('album-content-fade')),
+              )
+              .extent,
+          bar.height,
+        );
+        await tester.pumpAndSettle();
+        expect(tester.state<ScrollableState>(_trackScroll), same(scroll));
+        expect(api.offsets, [0, 30]);
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
+  for (final (size, scale) in [
+    (const Size(1024, 600), 1.0),
+    (const Size(1024, 600), 2.0),
+    (const Size(1600, 900), 1.0),
+    (const Size(760, 680), 1.0),
+    (const Size(616, 600), 1.0),
+    (const Size(812, 375), 3.0),
+    (const Size(616, 375), 3.0),
+    (const Size(616, 600), 3.0),
+  ]) {
     testWidgets(
-      '1024x600 album keeps actions and last track above mini-player at ${scale}x',
+      'wide album fits artwork and keeps header fixed at $size / $scale',
       (tester) async {
         final api = _AlbumApi([
           for (var i = 1; i <= 40; i++)
@@ -215,7 +328,7 @@ void main() {
           tester,
           queue: SettableQueue(queueOf(1)),
           api: _HomeAlbumApi(api),
-          size: const Size(1024, 600),
+          size: size,
           textScaler: TextScaler.linear(scale),
           themed: true,
           reducedMotion: true,
@@ -230,333 +343,390 @@ void main() {
               provider: 'My Library',
               totalDurationSeconds: 7200,
             );
-        await tester.pumpAndSettle();
-        expect(find.byType(MiniPlayer), findsOneWidget);
-        expect(find.text(_longTitlePage.title!), findsOneWidget);
-        expect(find.text(_longTitlePage.title!.toUpperCase()), findsNothing);
-        final back = find.widgetWithIcon(IconButton, Icons.arrow_back);
-        final backSurface = tester.widget<Material>(
-          find.descendant(of: back, matching: find.byType(Material)).first,
+        // The very first frame must already reserve the measured toolbar.
+        // A post-frame size callback used to show the cover behind it first,
+        // then rebuild the entire page to correct the columns next frame.
+        await tester.pump();
+        final firstHeader = tester.getRect(find.byType(WideAlbumHeader));
+        final firstCover = tester.getRect(find.byType(AlbumArtwork));
+        expect(firstCover.top, closeTo(firstHeader.bottom + 12, 0.01));
+        expect(
+          tester
+              .widget<TopBarContentFade>(
+                find.byKey(const ValueKey('album-content-fade')),
+              )
+              .extent,
+          firstHeader.height,
         );
-        expect(backSurface.shape, isA<CircleBorder>());
-        expect(tester.getSize(back), const Size(48, 48));
-        final dock = tester.getRect(find.byType(MiniPlayer));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final header = tester.getRect(find.byType(WideAlbumHeader));
+        final pane = tester.getRect(find.byType(CatalogPageView));
+        final dockTop = find.byType(MiniPlayer).evaluate().isEmpty
+            ? pane.bottom
+            : tester.getRect(find.byType(MiniPlayer)).top;
         final play = tester.getRect(find.byType(PlayAllChip));
         final enqueue = tester.getRect(find.byType(AddAllChip));
         final cover = tester.getRect(find.byType(AlbumArtwork));
+        final tracks = tester.getRect(_trackScroll);
+        final status = tester.getRect(
+          find.descendant(
+            of: find.byType(WideAlbumHeader),
+            matching: find.byType(ServerChip),
+          ),
+        );
+        expect(play.right, lessThan(enqueue.left));
+        expect(enqueue.right, lessThan(status.left));
+        expect(
+          tester.getRect(find.text(_longTitlePage.title!)).bottom,
+          lessThan(cover.top),
+        );
+        expect(
+          find.byKey(const ValueKey('album-tracks-heading')),
+          findsNothing,
+        );
+        expect(find.text('DISC 1'), findsOneWidget);
         for (final button in [
           find.byType(PlayAllChip),
           find.byType(AddAllChip),
         ]) {
           final bounds = tester.getRect(button);
           expect(bounds.height, greaterThanOrEqualTo(48));
-          expect(bounds.bottom, lessThan(dock.top));
-          expect(bounds.top, greaterThan(tester.getRect(back).bottom));
+          expect(bounds.width, greaterThanOrEqualTo(48));
+          expect(header.contains(bounds.center), isTrue);
+          expect(bounds.bottom, lessThan(cover.top));
           expect(button.hitTestable(), findsOneWidget);
         }
-        expect(cover.width, cover.height);
-        expect(
-          cover.width,
-          tester.getSize(find.byType(AlbumIdentityColumn)).width - 32,
-        );
-        expect(
-          cover.contains(tester.getTopLeft(find.text(_longTitlePage.title!))),
-          isTrue,
-        );
-        expect(tester.getRect(_trackScroll).top, 0);
-        expect(
-          tester.getRect(find.text('DISC 1')).top,
-          greaterThanOrEqualTo(tester.getRect(back).bottom),
-        );
-        expect(find.text('DISC 1'), findsOneWidget);
-        await _capture(tester, captureKey, 'album-1024x600-${scale}x-entry');
-
-        if (scale == 1) {
-          expect(
-            tester
-                .state<ScrollableState>(_identityScroll)
-                .position
-                .maxScrollExtent,
-            0,
-          );
-          expect(
-            play.top -
-                tester.getRect(find.text('2013 · 40 tracks · 2 hr')).bottom,
-            closeTo(24, 0.01),
-          );
-          expect(enqueue.bottom, lessThan(dock.top - 24));
-        } else {
-          final tracksOffset = tester
-              .state<ScrollableState>(_trackScroll)
-              .position
-              .pixels;
-          await tester.drag(_identityScroll, const Offset(0, -120));
-          await tester.pumpAndSettle();
-          expect(
-            tester.state<ScrollableState>(_identityScroll).position.pixels,
-            greaterThan(0),
-          );
-          expect(
-            tester.getRect(find.text(_longTitlePage.title!)).top,
-            lessThan(tester.getRect(back).bottom),
-          );
-          expect(
-            tester.state<ScrollableState>(_trackScroll).position.pixels,
-            tracksOffset,
-          );
-          expect(tester.getRect(find.byType(PlayAllChip)), play);
-          expect(tester.getRect(find.byType(AddAllChip)), enqueue);
-          await _capture(
-            tester,
-            captureKey,
-            'album-1024x600-${scale}x-identity-scroll',
-          );
-        }
-
-        await tester.scrollUntilVisible(
-          find.text('DISC 2'),
-          300,
-          scrollable: _trackScroll,
-        );
-        await tester.pumpAndSettle();
-        expect(find.text('DISC 2'), findsOneWidget);
-        await tester.scrollUntilVisible(
-          find.text('Song 40'),
-          300,
-          scrollable: _trackScroll,
-        );
-        await tester.pumpAndSettle();
-        final tracks = tester.state<ScrollableState>(_trackScroll).position;
-        tracks.jumpTo(tracks.maxScrollExtent);
-        await tester.pumpAndSettle();
-        final last = tester.getRect(
-          find.ancestor(
-            of: find.text('Song 40'),
-            matching: find.byType(SearchTrackRow),
+        final primary = tester.widget<ActionPillButton>(
+          find.descendant(
+            of: find.byType(PlayAllChip),
+            matching: find.byType(ActionPillButton),
           ),
         );
-        expect(last.bottom, lessThan(dock.top));
+        expect(primary.primary, isTrue);
+        expect(cover.width, closeTo(cover.height, .01));
+        expect(cover.bottom, lessThanOrEqualTo(dockTop - 12));
+        expect(cover.right + 16, closeTo(tracks.left, .01));
+        expect(tracks.top, pane.top);
+        expect(cover.top, closeTo(header.bottom + 12, .01));
+        final fade = tester.widget<TopBarContentFade>(
+          find.byKey(const ValueKey('album-content-fade')),
+        );
+        expect(fade.extent, closeTo(header.height, .01));
+        final playWidget = tester.widget<PlayAllChip>(find.byType(PlayAllChip));
+        final enqueueWidget = tester.widget<AddAllChip>(
+          find.byType(AddAllChip),
+        );
+        expect(playWidget.iconOnly, enqueueWidget.iconOnly);
+        if (playWidget.iconOnly) {
+          for (final control in [
+            find.byType(PlayAllChip),
+            find.byType(AddAllChip),
+          ]) {
+            final face = find.descendant(
+              of: control,
+              matching: find.byType(Material),
+            );
+            final glyph = find.descendant(
+              of: control,
+              matching: find.byType(Icon),
+            );
+            final bounds = tester.getRect(face);
+            expect(bounds.size, const Size.square(kKalinkaPillHeight));
+            expect(
+              tester.getSize(control),
+              const Size.square(kKalinkaPillTarget),
+            );
+            expect(tester.getCenter(glyph), bounds.center);
+            expect(tester.getCenter(control), bounds.center);
+          }
+        }
+        if (scale == 1 && size.width >= 760) {
+          expect(playWidget.iconOnly, isFalse);
+          expect(find.text('Play all').hitTestable(), findsOneWidget);
+          expect(find.text('Enqueue').hitTestable(), findsOneWidget);
+        }
+        // The cover reaches a height or width limit, rather than a fixed cap.
+        final reservedTracks = (552 * scale).clamp(0.0, pane.width * .69);
+        expect(
+          cover.width,
+          closeTo(
+            (pane.width - reservedTracks - 32).clamp(
+              0.0,
+              tracks.height - header.height - 24,
+            ),
+            .01,
+          ),
+        );
+        expect(tracks.width, greaterThanOrEqualTo(reservedTracks));
+        if (scale == 1 && size.width >= 1024) {
+          expect(cover.width, greaterThan(280));
+        }
+        await _capture(
+          tester,
+          captureKey,
+          'album-header-${size.width}-${size.height}-$scale',
+        );
+
+        final metadata = find.byKey(const ValueKey('album-metadata'));
+        expect(
+          find.descendant(of: metadata, matching: find.byType(Scrollable)),
+          findsNothing,
+        );
+        final summary = find.text('2013 · 40 tracks · 2 hr');
+        if (tester
+            .widget<WideAlbumHeader>(find.byType(WideAlbumHeader))
+            .metadataInTracks) {
+          await tester.scrollUntilVisible(
+            summary,
+            60,
+            scrollable: _trackScroll,
+          );
+          await tester.pumpAndSettle();
+        } else {
+          final bounds = tester.getRect(metadata);
+          expect(bounds.bottom, lessThanOrEqualTo(header.bottom));
+          expect(bounds.right, lessThanOrEqualTo(header.right));
+          expect(
+            tester.getRect(summary).right,
+            lessThanOrEqualTo(bounds.right + .01),
+          );
+        }
+        expect(summary.hitTestable(at: const Alignment(.9, 0)), findsOneWidget);
+        expect(tester.getRect(find.byType(PlayAllChip)), play);
+
+        // The scroll viewport now includes the toolbar. Drag in the usable
+        // area below it, even when enlarged text takes over half the pane.
+        final dragStart = Offset(
+          tracks.center.dx,
+          (header.bottom + tracks.bottom) / 2,
+        );
+        for (
+          var i = 0;
+          find.text('Song 40').evaluate().isEmpty && i < 220;
+          i++
+        ) {
+          await tester.dragFrom(
+            dragStart,
+            Offset(
+              0,
+              -((tracks.height - header.height) * .6).clamp(40.0, 160.0),
+            ),
+          );
+          await tester.pumpAndSettle();
+        }
+        expect(find.text('Song 40'), findsOneWidget);
+        await tester.ensureVisible(find.text('Song 40'));
+        await tester.pumpAndSettle();
+        final position = tester.state<ScrollableState>(_trackScroll).position;
+        position.jumpTo(position.maxScrollExtent);
+        await tester.pumpAndSettle();
         expect(find.text('Song 40').hitTestable(), findsOneWidget);
+        expect(tester.getRect(find.byType(AlbumArtwork)), cover);
         expect(tester.getRect(find.byType(PlayAllChip)), play);
         expect(tester.getRect(find.byType(AddAllChip)), enqueue);
         expect(api.offsets, [0, 30]);
         expect(tester.takeException(), isNull);
-        await _capture(
-          tester,
-          captureKey,
-          'album-1024x600-${scale}x-last-track',
-        );
 
-        // A retained visit follows changing system insets after rotation.
-        final trackTop = tester.getTopLeft(_trackScroll).dy;
+        // Insets, larger panes, and phone/wide changes retain the loaded visit.
         tester.view.padding = const FakeViewPadding(top: 24);
         await tester.pumpAndSettle();
-        expect(tester.getTopLeft(_trackScroll).dy, trackTop);
         expect(
-          tester
-              .widget<TopBarContentFade>(find.byType(TopBarContentFade))
-              .extent,
-          24 + kKalinkaTopBarHeight,
+          tester.getRect(find.byType(PlayAllChip)).top,
+          greaterThanOrEqualTo(24),
         );
-        expect(
-          tester.getRect(find.byType(TopBarContentFade)),
-          tester.getRect(find.byType(CatalogPageView)),
-        );
-        final insetPlay = tester.getRect(find.byType(PlayAllChip));
-        final insetEnqueue = tester.getRect(find.byType(AddAllChip));
-        expect(insetEnqueue.bottom, lessThan(dock.top));
-        tracks.jumpTo(0);
-        await tester.pumpAndSettle();
-        expect(
-          tester.getRect(find.text('DISC 1')).top,
-          greaterThanOrEqualTo(24 + kKalinkaTopBarHeight),
-        );
-        tracks.jumpTo(tester.getTopLeft(find.text('Song 1')).dy - 44);
-        await tester.pumpAndSettle();
-        expect(tester.getTopLeft(find.text('Song 1')).dy, closeTo(44, 0.01));
-        expect(tester.getRect(find.byType(PlayAllChip)), insetPlay);
-        expect(tester.getRect(find.byType(AddAllChip)), insetEnqueue);
-        await _capture(
-          tester,
-          captureKey,
-          'album-1024x600-${scale}x-android-fade',
-        );
-        expect(tester.takeException(), isNull);
-        tester.view.resetPadding();
-        await tester.pumpAndSettle();
-
-        if (scale == 1) {
-          // More height moves the details below the same full-size cover;
-          // the actions follow those details instead of the viewport bottom.
-          tester.view.physicalSize = const Size(1024, 900);
+        for (final resized in [
+          const Size(1024, 900),
+          const Size(390, 900),
+          size,
+        ]) {
+          tester.view.physicalSize = resized;
           await tester.pumpAndSettle();
-          final tallCover = tester.getRect(find.byType(AlbumArtwork));
-          expect(tallCover.size, cover.size);
-          expect(
-            tester.getTopLeft(find.text(_longTitlePage.title!)).dy,
-            greaterThan(tallCover.bottom),
-          );
-          expect(
-            tester.getRect(find.byType(PlayAllChip)).top -
-                tester.getRect(find.text('2013 · 40 tracks · 2 hr')).bottom,
-            closeTo(24, 0.01),
-          );
-          expect(
-            tester.getRect(find.byType(AddAllChip)).bottom,
-            lessThan(tester.getRect(find.byType(MiniPlayer)).top - 100),
-          );
-          await _capture(tester, captureKey, 'album-1024x900-entry');
-          tester.view.physicalSize = const Size(1024, 600);
-          await tester.pumpAndSettle();
-          expect(tester.getSize(find.byType(AlbumArtwork)), cover.size);
-          expect(tester.getRect(find.byType(PlayAllChip)), play);
+          expect(api.offsets, [0, 30], reason: 'After resizing to $resized');
+          expect(_trackScroll, findsOneWidget);
           expect(tester.takeException(), isNull);
         }
-
-        // The circular Back control keeps the existing navigation behaviour.
-        await tester.tap(back);
+        await tester.tap(find.widgetWithIcon(IconButton, Icons.arrow_back));
         await tester.pumpAndSettle();
         expect(container.read(searchSessionProvider).atHome, isTrue);
       },
     );
   }
 
-  for (final size in [
-    const Size(812, 375),
-    const Size(616, 375),
-    const Size(616, 600),
-  ]) {
-    testWidgets('wide album remains usable at $size with 3x text and dock', (
-      tester,
-    ) async {
-      final api = _AlbumApi([
-        for (var i = 1; i <= 40; i++)
-          _track(i, disc: i <= 20 ? 1 : 2, year: 2013),
-      ]);
+  testWidgets(
+    'full wide pane grows artwork to the bottom and retains artist navigation',
+    (tester) async {
+      const artistId = 'kalinka:demo:artist:beatles';
       final captureKey = GlobalKey();
+      final page = CatalogPage.fromItem(
+        BrowseItem(
+          id: _page.id!,
+          name: 'Abbey Road',
+          canBrowse: true,
+          canAdd: true,
+          album: Album(
+            id: _page.id!,
+            title: 'Abbey Road',
+            year: 1969,
+            artist: Artist(id: artistId, name: 'The Beatles'),
+          ),
+        ),
+      );
+      final container = await pumpPage(
+        tester,
+        _AlbumApi([for (var i = 1; i <= 17; i++) _track(i)]),
+        page: page,
+        size: const Size(1600, 700),
+        captureKey: captureKey,
+      );
+      final cover = tester.getRect(find.byType(AlbumArtwork));
+      final tracks = tester.getRect(_trackScroll);
+      expect(cover.bottom, closeTo(688, .01));
+      expect(cover.width, closeTo(cover.height, .01));
+      expect(cover.width, greaterThan(550));
+      expect(tracks.width, greaterThanOrEqualTo(552));
+      expect(
+        tester.getRect(find.text('Song 1')).top,
+        greaterThanOrEqualTo(cover.top),
+      );
+      expect(find.text('1969 · 17 tracks · 51 min'), findsOneWidget);
+      await _capture(tester, captureKey, 'album-full-pane-1600-700');
+      await tester.tap(find.text('The Beatles'));
+      await tester.pumpAndSettle();
+      expect(container.read(searchSessionProvider).catalogPage.id, artistId);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'album actions switch together and metadata reflows without clipping',
+    (tester) async {
+      const page = CatalogPage.category(
+        id: 'kalinka:demo:album:back-to-black',
+        title: 'Back To Black (20th Anniversary Edition)',
+        description: 'Amy Winehouse',
+        provider: 'Qobuz',
+        totalDurationSeconds: 7800,
+      );
+      final api = _AlbumApi([
+        for (var i = 1; i <= 42; i++) _track(i, year: 2006),
+      ]);
+      final key = GlobalKey();
+      await pumpPage(
+        tester,
+        api,
+        page: page,
+        size: const Size(1200, 750),
+        captureKey: key,
+      );
+      for (final width in [1200.0, 760.0, 616.0, 560.0, 528.0, 1000.0]) {
+        tester.view.physicalSize = Size(width, 750);
+        await tester.pumpAndSettle();
+        final play = tester.widget<PlayAllChip>(find.byType(PlayAllChip));
+        final enqueue = tester.widget<AddAllChip>(find.byType(AddAllChip));
+        expect(play.iconOnly, width <= 560);
+        expect(enqueue.iconOnly, play.iconOnly);
+        for (final (control, label) in [
+          (find.byType(PlayAllChip), 'Play all'),
+          (find.byType(AddAllChip), 'Enqueue'),
+        ]) {
+          expect(control.hitTestable(), findsOneWidget);
+          expect(
+            find.descendant(of: control, matching: find.text(label)),
+            play.iconOnly ? findsNothing : findsOneWidget,
+          );
+          if (play.iconOnly) expect(find.byTooltip(label), findsOneWidget);
+        }
+        final header = tester.getRect(find.byType(WideAlbumHeader));
+        for (final text in [
+          'Amy Winehouse',
+          'Qobuz',
+          '2006 · 42 tracks · 2 hr 10 min',
+        ]) {
+          final bounds = tester.getRect(find.text(text));
+          expect(bounds.left, greaterThanOrEqualTo(header.left));
+          expect(bounds.right, lessThanOrEqualTo(header.right));
+          expect(bounds.bottom, lessThanOrEqualTo(header.bottom));
+          expect(find.text(text).hitTestable(), findsOneWidget);
+        }
+        if (width == 616) {
+          expect(
+            find.byKey(const ValueKey('album-metadata-full-row')),
+            findsOneWidget,
+          );
+          expect(
+            tester.getRect(find.byType(WideAlbumMetadata)).top,
+            greaterThanOrEqualTo(
+              tester.getRect(find.byType(PlayAllChip)).bottom,
+            ),
+          );
+        }
+        expect(api.offsets, [0]);
+        expect(tester.takeException(), isNull);
+        await _capture(tester, key, 'album-actions-${width.round()}');
+      }
+      // Both compact controls still perform the original queue actions.
+      tester.view.physicalSize = const Size(528, 750);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PlayAllChip));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(AddAllChip));
+      await tester.pumpAndSettle();
+      expect(api.replaced.single, [page.id]);
+      expect(api.played.single, 0);
+      expect(api.added.single.$1, [page.id]);
+      expect(find.byTooltip('Added to queue'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 30));
+    },
+  );
+
+  testWidgets(
+    'tracks move behind the transparent album bar and fade through its system inset',
+    (tester) async {
+      final key = GlobalKey();
       final container = await pumpHomeShell(
         tester,
         queue: SettableQueue(queueOf(1)),
-        api: _HomeAlbumApi(api),
-        size: size,
-        textScaler: const TextScaler.linear(3),
+        api: _HomeAlbumApi(
+          _AlbumApi([for (var i = 1; i <= 40; i++) _track(i)]),
+        ),
+        size: const Size(1024, 600),
         themed: true,
         reducedMotion: true,
-        captureKey: captureKey,
+        captureKey: key,
       );
+      tester.view.padding = const FakeViewPadding(top: 24);
       container
           .read(searchSessionProvider.notifier)
           .openCatalog(
-            id: _longTitlePage.id!,
-            title: _longTitlePage.title!,
-            description: _longTitlePage.description,
-            totalDurationSeconds: 7200,
+            id: _page.id!,
+            title: _page.title!,
+            description: _page.description,
           );
       await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      final dock = tester.getRect(find.byType(MiniPlayer));
-      final play = tester.getRect(find.byType(PlayAllChip));
-      final enqueue = tester.getRect(find.byType(AddAllChip));
-      for (final button in [
-        find.byType(PlayAllChip),
-        find.byType(AddAllChip),
-      ]) {
-        final bounds = tester.getRect(button);
-        expect(bounds.height, greaterThanOrEqualTo(48));
-        expect(bounds.top, greaterThanOrEqualTo(kKalinkaTopBarHeight));
-        expect(bounds.bottom, lessThan(dock.top));
-        expect(bounds.right, lessThanOrEqualTo(size.width));
-        expect(button.hitTestable(), findsOneWidget);
-        final label = find.descendant(of: button, matching: find.byType(Text));
-        expect(bounds.contains(tester.getTopLeft(label)), isTrue);
-        expect(bounds.contains(tester.getBottomRight(label)), isTrue);
-      }
-      final viewport = tester.getRect(_identityScroll);
-      expect(viewport.bottom - kKalinkaTopBarHeight, greaterThanOrEqualTo(48));
-      final dragStart = Offset(viewport.center.dx, viewport.bottom - 8);
-      await tester.dragFrom(dragStart, const Offset(0, -70));
-      await tester.pumpAndSettle();
-      final identity = tester.state<ScrollableState>(_identityScroll).position;
-      expect(identity.pixels, greaterThan(0));
-      expect(tester.state<ScrollableState>(_trackScroll).position.pixels, 0);
-      identity.jumpTo(identity.maxScrollExtent);
-      await tester.pumpAndSettle();
-      // The summary can span more than the viewport at 3x; its final line
-      // must still be reachable below the mask at the end of the scroll.
-      expect(
-        find
-            .text('2013 · 40 tracks · 2 hr')
-            .hitTestable(at: const Alignment(0, 0.9)),
-        findsOneWidget,
-      );
-      expect(tester.getRect(find.byType(PlayAllChip)), play);
-      expect(tester.getRect(find.byType(AddAllChip)), enqueue);
-      await _capture(
-        tester,
-        captureKey,
-        'album-${size.width}x${size.height}-3x',
-      );
-
-      await tester.scrollUntilVisible(
-        find.text('Song 40'),
-        250,
-        scrollable: _trackScroll,
-        maxScrolls: 50,
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Song 40').hitTestable(), findsOneWidget);
-      final tracks = tester.state<ScrollableState>(_trackScroll).position;
-      tracks.jumpTo(tracks.maxScrollExtent);
-      await tester.pumpAndSettle();
-      final last = find.ancestor(
-        of: find.text('Song 40'),
-        matching: find.byType(SearchTrackRow),
-      );
-      expect(tester.getRect(last).bottom, lessThan(dock.top));
-      expect(
-        tester.getRect(last).bottom,
-        lessThanOrEqualTo(tester.getRect(_trackScroll).bottom),
-      );
-      expect(tester.getRect(find.byType(PlayAllChip)), play);
-      expect(tester.getRect(find.byType(AddAllChip)), enqueue);
-      expect(api.offsets, [0, 30]);
-      expect(tester.takeException(), isNull);
-
-      tester.view.padding = const FakeViewPadding(top: 24);
-      await tester.pumpAndSettle();
-      final insetViewport = tester.getRect(_identityScroll);
-      expect(
-        insetViewport.bottom - 24 - kKalinkaTopBarHeight,
-        greaterThanOrEqualTo(48),
-      );
-      identity.jumpTo(0);
-      await tester.pumpAndSettle();
-      await tester.dragFrom(
-        Offset(insetViewport.center.dx, insetViewport.bottom - 8),
-        const Offset(0, -70),
-      );
-      await tester.pumpAndSettle();
-      expect(identity.pixels, greaterThan(0));
-      expect(find.byType(PlayAllChip).hitTestable(), findsOneWidget);
-      expect(find.byType(AddAllChip).hitTestable(), findsOneWidget);
-
-      // Reflow, then cross the phone breakpoint, without fetching again.
-      for (final resized in [
-        const Size(616, 600),
-        const Size(390, 900),
-        size,
-      ]) {
-        tester.view.physicalSize = resized;
+      final bar = tester.getRect(find.byType(WideAlbumHeader));
+      final fade = find.byKey(const ValueKey('album-content-fade'));
+      final cover = tester.getRect(find.byType(AlbumArtwork));
+      expect(tester.getRect(fade).top, 0);
+      expect(tester.getRect(_trackScroll).top, 0);
+      expect(tester.widget<TopBarContentFade>(fade).extent, bar.bottom);
+      final scroll = tester.state<ScrollableState>(_trackScroll).position;
+      for (final fraction in [.75, .4, .1]) {
+        final song = find.text('Song 3');
+        scroll.jumpTo(
+          scroll.pixels + tester.getCenter(song).dy - bar.height * fraction,
+        );
         await tester.pumpAndSettle();
-        expect(api.offsets, [
-          0,
-          30,
-        ], reason: 'After resizing $size to $resized');
-        expect(_trackScroll, findsOneWidget);
-        expect(tester.takeException(), isNull);
+        expect(tester.getCenter(song).dy, closeTo(bar.height * fraction, .01));
+        expect(song.hitTestable(), findsNothing);
+        expect(find.byType(PlayAllChip).hitTestable(), findsOneWidget);
+        expect(find.byType(AddAllChip).hitTestable(), findsOneWidget);
+        expect(tester.getRect(find.byType(AlbumArtwork)), cover);
+        await _capture(tester, key, 'album-fade-$fraction');
       }
-    });
-  }
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('backward keyboard traversal reveals tracks below the toolbar', (
     tester,
@@ -585,7 +755,7 @@ void main() {
     Focus.of(tester.element(find.text('Song 6'))).requestFocus();
     await tester.pumpAndSettle();
     final tracks = tester.state<ScrollableState>(_trackScroll).position;
-    const barBottom = 24 + kKalinkaTopBarHeight;
+    final barBottom = tester.getRect(find.byType(WideAlbumHeader)).bottom + 12;
     tracks.jumpTo(tracks.pixels + tester.getRect(song6).top - barBottom);
     await tester.pumpAndSettle();
     expect(tester.getRect(song5).top, lessThan(barBottom));
@@ -965,47 +1135,6 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
-  }
-
-  for (final scale in [1.0, 2.0, 3.0]) {
-    testWidgets(
-      'wide actions follow the identity without a bottom gap at ${scale}x',
-      (tester) async {
-        await pumpPage(
-          tester,
-          _AlbumApi([_track(1)]),
-          size: const Size(1024, 768),
-          textScale: scale,
-          page: _longTitlePage,
-        );
-        final pane = tester.getRect(find.byType(AlbumIdentityColumn));
-        for (final chip in [
-          find.byType(PlayAllChip),
-          find.byType(AddAllChip),
-        ]) {
-          final target = tester.getRect(chip);
-          expect(target.height, greaterThanOrEqualTo(48));
-          expect(target.left, greaterThanOrEqualTo(pane.left));
-          expect(target.right, lessThanOrEqualTo(pane.right));
-          expect(target.bottom, lessThanOrEqualTo(pane.bottom - 16));
-          expect(chip.hitTestable(), findsOneWidget);
-        }
-        final identity = tester.state<ScrollableState>(_identityScroll);
-        if (identity.position.maxScrollExtent == 0) {
-          expect(
-            tester.getRect(find.byType(PlayAllChip)).top -
-                tester.getRect(find.text('1 track · 3 min')).bottom,
-            closeTo(24, 0.01),
-          );
-        } else {
-          expect(
-            tester.getRect(find.byType(AddAllChip)).bottom,
-            pane.bottom - 16,
-          );
-        }
-        expect(tester.takeException(), isNull);
-      },
-    );
   }
 
   for (final size in [const Size(375, 400), const Size(812, 375)]) {
