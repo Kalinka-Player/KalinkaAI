@@ -7,31 +7,63 @@ description: Build, launch, drive, and screenshot the Kalinka Flutter app on Lin
 
 ## Launch
 
-A Kalinka server is usually already running on port 8000 (check
+The app keeps its saved connection settings and connects on its own, to the
+server that `flutter.Kalinka.host` and `flutter.Kalinka.port` name in
+`~/.local/share/com.example.kalinka/shared_preferences.json`. Where that is a
+streamer on the network and it is up, nothing else is needed. Where it is this
+machine, a server is usually already running on port 8000 (check
 `ss -tlnp | grep 8000`); otherwise start one from the RpiPlayer repo with
-`make dev-run KALINKA_PREFIX=$HOME/kalinka`. The app keeps its saved
-connection settings, so it connects on its own.
+`make dev-run KALINKA_PREFIX=$HOME/kalinka`.
+
+Run from the checkout under test, as a background task with its output in a
+file:
 
 ```bash
-cd ~/Source/KalinkaAI-1
-GDK_BACKEND=x11 flutter run -d linux --no-pub   # background task
+GDK_BACKEND=x11 flutter run -d linux --no-pub > run.log 2>&1
 # wait for: "A Dart VM Service on Linux is available at: http://127.0.0.1:PORT/TOKEN=/"
 ```
 
-`GDK_BACKEND=x11` puts the window on XWayland so XTEST input works.
+`GDK_BACKEND=x11` puts the window on XWayland so XTEST input works. The
+scripts below take that address as `ws://127.0.0.1:PORT/TOKEN=/ws`, and need a
+python with `websockets`: `~/Source/RpiPlayer/.venv/bin/python` has it.
 
-## Screenshot — VM service, not X grabs
+## Screenshot — widget inspector, not X grabs
 
 `import`/`gnome-screenshot`/`grim` are unavailable or hang on this Wayland
-session. `flutter screenshot --type=skia` emits an SKP binary, not a PNG.
-What works: the engine's `_flutter.screenshot` RPC over the VM-service
-websocket (returns base64 PNG of the Flutter frame):
+session. `flutter screenshot --type=skia` emits an SKP binary, not a PNG. The
+engine's `_flutter.screenshot` RPC no longer works either: the Linux build
+renders with Impeller, and the call fails with "Could not capture image
+screenshot" ("Compressed screenshots not supported for Impeller" in the run
+log).
 
-```python
-# python with `websockets` (RpiPlayer venv has it): ws://127.0.0.1:PORT/TOKEN=/ws
-await ws.send(json.dumps({'jsonrpc':'2.0','id':1,'method':'_flutter.screenshot','params':{}}))
-# response: result.screenshot = base64 PNG
+What works is the widget inspector's own screenshot, over the VM-service
+websocket; `screenshot.py`, beside this file, does it:
+
+```bash
+~/Source/RpiPlayer/.venv/bin/python .claude/skills/verify/screenshot.py \
+  ws://127.0.0.1:PORT/TOKEN=/ws out.png
 ```
+
+It asks `ext.flutter.inspector.getRootWidgetTree` for the root and passes its
+`valueId` to `ext.flutter.inspector.screenshot`. The PNG is in physical
+pixels, and the script prints the device pixel ratio to divide by: 2048x1274
+at a ratio of 2 is a 1024x637 window, narrow enough for the rail's icons to
+stand over their labels and short enough for some of them to fold behind More.
+
+## Text size — in the app's process, not the desktop's
+
+`text_scale.py`, beside this file, gives the running app a system text scale
+without touching the desktop's settings:
+
+```bash
+~/Source/RpiPlayer/.venv/bin/python .claude/skills/verify/text_scale.py \
+  ws://127.0.0.1:PORT/TOKEN=/ws 1.4
+```
+
+It evaluates `PlatformDispatcher.instance._updateUserSettingsData(...)` inside
+`dart:ui`, which is what the engine calls when the platform's settings change.
+Only that process sees it, until it quits; pass 1 to put it back. Let a frame
+or two pass before the screenshot.
 
 ## Drive — XTEST via python-xlib
 
@@ -48,7 +80,7 @@ Gotchas:
 - GTK CSD: the X window is bigger than the visible frame by invisible shadow
   extents — read the `_GTK_FRAME_EXTENTS` property and subtract before
   mapping fractions. Even then the client height can disagree with the
-  engine frame; map fractions against the engine screenshot's pixel size
+  engine frame; map fractions against the screenshot's pixel size
   (e.g. 2560x1440), anchored at the client origin.
 - Programmatic window resize fails: mutter ignores both XConfigureWindow and
   _NET_MOVERESIZE_WINDOW for this (tiled/maximized) XWayland window. Don't
