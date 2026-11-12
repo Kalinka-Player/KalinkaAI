@@ -7,121 +7,77 @@
 
 ### The Kalinka remote control
 
-Cross-platform app for the self-hosted Kalinka music system — Android, Windows, Linux desktop and the browser. Ask for a mood, get a queue.
+The app for Kalinka, a self-hosted music system. It runs on Android, Windows, macOS, Linux and in the browser. Ask for a mood, get a queue.
 
-[![Release](https://github.com/Kalinka-Player/KalinkaAI/actions/workflows/release.yml/badge.svg)](https://github.com/Kalinka-Player/KalinkaAI/actions/workflows/release.yml)
 [![Latest release](https://img.shields.io/github/v/release/Kalinka-Player/KalinkaAI?label=release&color=2ea043)](https://github.com/Kalinka-Player/KalinkaAI/releases/latest)
 [![License](https://img.shields.io/badge/code-Apache--2.0-2ea043)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-2ea043)](#-install)
 
-**[▶️ Google Play](https://play.google.com/store/apps/details?id=org.kalinka.kalinka) · [📱 Download](https://github.com/Kalinka-Player/KalinkaAI/releases/latest) · [🖥️ Music server](https://github.com/Kalinka-Player/KalinkaPlayer) · [💿 Flash an image](https://github.com/Kalinka-Player/KalinkaPlayer/releases?q=kalinka-image-v&expanded=true) · [🌐 kalinkaplayer.com](https://kalinkaplayer.com)**
+**[Google Play](https://play.google.com/store/apps/details?id=org.kalinka.kalinka) · [Downloads](https://github.com/Kalinka-Player/KalinkaAI/releases/latest) · [Kalinka server](https://github.com/Kalinka-Player/KalinkaPlayer) · [kalinkaplayer.com](https://kalinkaplayer.com)**
 
 <img src="docs/images/demo.gif" alt="Semantic search demo: searching for 'something melancholic for tonight'" width="280">
 
 </div>
 
----
-
 ## What is it
 
-> **Kalinka needs a server.** This app is the remote: it plays nothing without a Kalinka server on your network. Install the server first — **[installation steps](https://github.com/Kalinka-Player/KalinkaPlayer#installation)**.
+This app is the remote. The music lives on a [Kalinka server](https://github.com/Kalinka-Player/KalinkaPlayer), which runs on a Raspberry Pi or a Linux computer on your network. The app plays nothing without one, so [install the server](https://github.com/Kalinka-Player/KalinkaPlayer#installation) first. The app then finds it by itself, or takes its address by hand.
 
-This repository is the **app** — the remote control. The music is served by the separate [Kalinka Music Server](https://github.com/Kalinka-Player/KalinkaPlayer): a lightweight backend with a C++/ALSA audio engine, the library indexer and metadata-enrichment pipeline, and the CLAP semantic-search engine.
+Search takes descriptions as well as names. Ask for *"something melancholic for tonight"* and it finds tracks that fit, all on your own hardware. No cloud, no subscription, no account.
 
-You need both. The app finds a server on your network over mDNS, or takes an address by hand. If you would rather not install anything at all, the server also serves a browser player — open `http://<server-ip>:8000` and it plays there.
+<a id="-install"></a>
 
-Semantic search turns a phrase like *"something melancholic for tonight"* into matching tracks, running on your own hardware. No cloud, no subscription, no account.
-
-## 📱 Install
+## Install
 
 ### Android
 
-**From Google Play (recommended).** Install Kalinka from the [Play Store](https://play.google.com/store/apps/details?id=org.kalinka.kalinka); Play keeps it up to date.
+Install Kalinka from [Google Play](https://play.google.com/store/apps/details?id=org.kalinka.kalinka), which keeps it up to date.
 
 <a href="https://play.google.com/store/apps/details?id=org.kalinka.kalinka"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="54"></a>
 
-**With Obtainium.** [Obtainium](https://github.com/ImranR98/Obtainium) installs the app straight from GitHub Releases and keeps it up to date. Install Obtainium, then tap this badge on your phone; it fills in this repository for you:
+Without Google Play, [Obtainium](https://github.com/ImranR98/Obtainium) installs the app from GitHub Releases and keeps it up to date. Install Obtainium, then tap this badge on your phone:
 
 <a href="https://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/Kalinka-Player/KalinkaAI"><img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="54"></a>
 
-**Or download the APK yourself.** On the phone, download [`kalinka-android-universal.apk`](https://github.com/Kalinka-Player/KalinkaAI/releases/latest/download/kalinka-android-universal.apk) from the latest release and open it. Android asks once to allow installs from your browser. To update later, download and open the new APK the same way.
+Or download [`kalinka-android-universal.apk`](https://github.com/Kalinka-Player/KalinkaAI/releases/latest/download/kalinka-android-universal.apk) on the phone and open it. Android asks once to allow installs from your browser. To update, download and open the newer APK the same way.
 
-The APKs on GitHub Releases are signed with the Kalinka release key. Certificate SHA-256, which Obtainium can pin:
+The APKs on GitHub Releases are signed with the Kalinka release key. Its certificate SHA-256, which Obtainium can pin:
 
 ```
 79e0051195d444fd531637202870223455fb436b80b75d55ce2c133aa33e11fb
 ```
 
-### Other platforms
+### Windows
 
-| Platform | What to do |
-|---|---|
-| 🪟 **Windows (x64)** | Download and run [`kalinka-windows-x64-setup.exe`](https://github.com/Kalinka-Player/KalinkaAI/releases/latest/download/kalinka-windows-x64-setup.exe). The installer is not code-signed, so Windows may warn about it: choose **More info → Run anyway**. |
-| 🐧 **Linux desktop (x64)** | Download [`kalinka-linux-x64.tar.gz`](https://github.com/Kalinka-Player/KalinkaAI/releases/latest/download/kalinka-linux-x64.tar.gz), extract it and run `./install.sh` to add a launcher icon (`--uninstall` reverses it), or just run the `kalinka` binary. |
-| 🍎 **macOS (Intel + Apple Silicon)** | Download [`kalinka-macos-beta.dmg`](https://github.com/Kalinka-Player/KalinkaAI/releases/latest/download/kalinka-macos-beta.dmg), open it and drag Kalinka to Applications. It's not notarized, so the first launch needs an approval: right-click the app → **Open**, or allow it in **System Settings → Privacy & Security**. |
-| 🌐 **Browser** | Nothing to install: open `http://<server-address>:8000`. The server serves the web player itself, and the browser can play the music too. |
+Download and run [`kalinka-windows-x64-setup.exe`](https://github.com/Kalinka-Player/KalinkaAI/releases/latest/download/kalinka-windows-x64-setup.exe). The installer is not code-signed, so Windows may warn about it: choose **More info → Run anyway**.
 
-Everything is also on the [releases page](https://github.com/Kalinka-Player/KalinkaAI/releases).
+### Linux
 
-## 🚀 Getting started
+Download [`kalinka-linux-x64.tar.gz`](https://github.com/Kalinka-Player/KalinkaAI/releases/latest/download/kalinka-linux-x64.tar.gz), extract it and run the `kalinka` binary. `./install.sh` adds a launcher icon, and `./install.sh --uninstall` removes it.
 
-1. **[Install the server](https://github.com/Kalinka-Player/KalinkaPlayer#installation)** — required. The quickest route is a ready-made image for a Raspberry Pi or any x86-64 box; it starts straight into a working player.
-2. **Install the app** as described [above](#-install), or use a browser.
-3. **Follow the setup** the app shows the first time you connect.
+### macOS
 
-**Box not on your network yet?** The app can set it up over Bluetooth or the box's temporary Wi-Fi. From a laptop without the app, join **`Kalinka-Setup-XXXX`** with password **`kalinka-setup`**, stay connected without internet, and open **`http://192.168.4.1`**. [The full steps](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md#connect-your-box-to-the-network) are in the installation guide.
+Download [`kalinka-macos-beta.dmg`](https://github.com/Kalinka-Player/KalinkaAI/releases/latest/download/kalinka-macos-beta.dmg), open it and drag Kalinka to Applications. It runs on Intel and Apple Silicon. The build is a beta and is not notarized, so the first launch needs your approval: right-click the app and choose **Open**, or allow it in **System Settings → Privacy & Security**.
 
-The [installation guide](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md) covers images for a Raspberry Pi or PC, virtual machines, the one-command install, adding music and outputs in other rooms, and troubleshooting.
+### Browser
 
-### Touchscreen keyboard
+Nothing to install: open `http://<server-address>:8000`. The server serves the web player itself, and the browser can play the music too.
 
-Kalinka's packaged Flutter Pi display enables the keyboard by default. On other
-devices, enable **Settings → Streamer →
-This device → On-screen keyboard** (turn Expert settings off to see the grouped
-settings). An explicit choice, including turning it off, takes precedence over
-the default. It saves immediately in this device's SharedPreferences and survives
-app restarts and server changes. It does not change the server or other clients.
+## Getting started
 
-Tap an editable field to show the keyboard. Letters, symbols, numeric input,
-passwords, selection replacement and the field's Done/Search/Next actions work
-through Flutter's normal text-input pipeline. Hold a letter for accents in a
-horizontal picker (wrapping on narrow screens). Tap the outlined globe beside
-Space to choose a layout. All 16 languages appear in a grid with four columns on
-smaller panes and five on wider panes, with no scrolling or background dimming.
-Narrow panes use short language codes; enlarged text can reduce the column count.
-The current layout has a check mark; choosing another keeps the field's text and
-selection. Holding Space opens the same picker. Outside tap, its close button or
-Escape cancels the picker and leaves the keyboard open.
-With no picker open, Hide or Escape closes the keyboard; tapping the field opens
-it again. The keyboard slides up without dimming the background. It waits for the
-mini-player to hide, including when using catalogue text filters, and restores
-the bar after closing. Reduced motion skips these transitions. Dialogs and
-sheets resize above the keyboard. The panel floats over the content, so the
-space beside it remains visible and interactive. Its width follows the letter-key
-height, allowing character keys up to twice as wide as they are tall, with a
-900dp panel maximum. Height stays within 37% of the window (260dp at most): the
-English layout is 900×222 on a 1024×600 screen, with 48dp-tall letter keys and
-clearly visible 6dp row gaps. Hide/Search/Done controls sit
-above the keys in portrait windows and at the side in landscape windows.
+1. [Install the server](https://github.com/Kalinka-Player/KalinkaPlayer#installation). The quickest way is a ready-made image for a Raspberry Pi or a PC, which starts straight into a working player.
+2. Install the app, or open the browser player.
+3. Follow the setup the app shows the first time it connects.
 
-The implementation uses [`virtual_keypad`](https://pub.dev/packages/virtual_keypad)
-for layouts and keys, with a small Flutter `TextInputControl` adapter for
-grapheme-aware deletion, signed decimal input and existing form validation. The
-locally pinned package adds custom accent and language pickers and the globe key; see
-[`packages/virtual_keypad/README.md`](packages/virtual_keypad/README.md).
-Flutter-rendered keys suit Flutter Pi, which runs without X11/Wayland. Emoji UI
-and sound/haptic feedback are disabled; the package still brings its transitive
-emoji-picker dependency. All keyboard labels use Kalinka's existing IBM Plex
-Sans; the package's unused emoji font is omitted. It is a touch keyboard, without word
-prediction or autocorrect. Physical Flutter Pi hardware still needs a deployment
-smoke test.
+A streamer that is not on your network yet can be set up from the app, over Bluetooth or the streamer's own temporary Wi-Fi. [Connect your streamer to the network](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md#connect-your-streamer-to-the-network) has the steps, including how to do it from a laptop without the app.
+
+The [installation guide](https://github.com/Kalinka-Player/KalinkaPlayer/blob/main/docs/installation.md) covers the rest: the images, virtual machines, the one-command install, adding music and outputs in other rooms, and troubleshooting.
 
 ## License
 
-Source code is **Apache-2.0** — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+The source code is under **Apache-2.0**: see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 The visual assets are not. Icons, logos, images and related artwork are covered by the [Kalinka Asset License](LICENSE-ASSETS) and require the author's permission to use or redistribute. You may distribute the code under Apache-2.0, but replace the branding with your own unless you have that permission.
 
-Bundled IBM Plex fonts are under the SIL Open Font License 1.1 — see [`assets/fonts/OFL-IBMPlex.txt`](assets/fonts/OFL-IBMPlex.txt).
+Bundled IBM Plex fonts are under the SIL Open Font License 1.1: see [`assets/fonts/OFL-IBMPlex.txt`](assets/fonts/OFL-IBMPlex.txt).
 
 Permission contact: MadEnvel &lt;support@kalinkaplayer.com&gt;
