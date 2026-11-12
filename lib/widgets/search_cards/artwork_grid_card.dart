@@ -31,12 +31,18 @@ class ArtworkGridCard extends ConsumerStatefulWidget {
   /// The shape its shelf lays covers out in, width over height. An artist's
   /// portrait stays round, and a catalog's card 3:1.
   final double shape;
+  final bool compact;
 
   /// Between the card's frame and its cover and caption: half the room
   /// between two covers, so frames abut and two outlines side by side meet.
   static const inset = kKalinkaFrameInset;
 
-  const ArtworkGridCard({super.key, required this.item, this.shape = 1});
+  const ArtworkGridCard({
+    super.key,
+    required this.item,
+    this.shape = 1,
+    this.compact = false,
+  });
 
   /// What [item] is called on its card, and the detail under it.
   static (String, String) captionOf(BrowseItem item) {
@@ -147,7 +153,10 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(_inset),
+                padding: EdgeInsets.symmetric(
+                  horizontal: _inset,
+                  vertical: widget.compact ? 6 : _inset,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -161,7 +170,7 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
                       showSource: showSource,
                     ),
                     if (!catalog) ...[
-                      const SizedBox(height: 8),
+                      SizedBox(height: widget.compact ? 6 : 8),
                       ExcludeSemantics(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

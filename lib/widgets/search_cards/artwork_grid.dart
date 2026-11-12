@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 
 import '../../data_model/data_model.dart';
 import '../../utils/web_build_target.dart';
+import '../../utils/compact_pane_layout.dart';
 import '../loading_shimmer.dart';
 import 'artwork_grid_card.dart';
 
@@ -22,12 +23,18 @@ int artworkGridColumns(
   double scale, {
   bool wide = false,
   bool tracks = false,
+  bool compact = false,
 }) {
   // Each card is its cover with a frame inset either side.
   const frame = 2 * ArtworkGridCard.inset;
   final grow = tracks ? 1.68 : 1.0;
   final wideFitsFloor = wide && compiledToWasm ? 300 : 220;
-  final wanted = (width / ((wide ? 340 : 220) * grow * scale + frame)).ceil();
+  final target = wide
+      ? 340
+      : compact && !tracks
+      ? 176
+      : 220;
+  final wanted = (width / (target * grow * scale + frame)).ceil();
   final fits = (width / ((wide ? wideFitsFloor : 140) * grow * scale + frame))
       .floor();
   return wanted.clamp(1, fits < 1 ? 1 : fits).clamp(1, 10);
@@ -142,7 +149,7 @@ class _SliverArtworkGridState extends State<SliverArtworkGrid> {
   final _keys = <String, GlobalKey>{};
   late List<String> _ids;
   late Map<String, int> _indices;
-  (double, TextScaler)? _layout;
+  (double, TextScaler, bool)? _layout;
   Widget? _sliver;
   int _columns = 1;
   ScrollPosition? _position;
@@ -267,7 +274,8 @@ class _SliverArtworkGridState extends State<SliverArtworkGrid> {
     builder: (context, constraints) {
       _position = Scrollable.of(context).position;
       final scale = MediaQuery.textScalerOf(context);
-      final layout = (constraints.crossAxisExtent, scale);
+      final compact = compactPaneLayout(constraints.crossAxisExtent, scale);
+      final layout = (constraints.crossAxisExtent, scale, compact);
       if (_layout != layout) {
         if (_layout != null) _restoring ??= _anchor;
         _sliver = null;
@@ -276,6 +284,7 @@ class _SliverArtworkGridState extends State<SliverArtworkGrid> {
       final columns = artworkGridColumns(
         constraints.crossAxisExtent,
         scale.scale(16) / 16,
+        compact: compact,
       );
       _columns = columns;
       _afterLayout();
@@ -312,6 +321,7 @@ class _SliverArtworkGridState extends State<SliverArtworkGrid> {
                         ),
                         child: ArtworkGridCard(
                           item: widget.items[row * columns + col],
+                          compact: compact,
                         ),
                       )
                     : const SizedBox.shrink(),

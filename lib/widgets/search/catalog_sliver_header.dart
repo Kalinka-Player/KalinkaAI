@@ -25,6 +25,8 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
   /// content can paint behind it while keyboard focus clears it.
   final double topInset;
   final Widget? actions;
+  final bool titleInBar;
+  final String? itemSummary;
 
   const CatalogSliverHeader({
     super.key,
@@ -33,6 +35,8 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
     this.onCollapsed,
     this.topInset = 0,
     this.actions,
+    this.titleInBar = false,
+    this.itemSummary,
   });
 
   static bool appliesTo(CatalogPage page) => page.isCatalog || page.isPlaylist;
@@ -106,7 +110,12 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
     final scaler = MediaQuery.textScalerOf(context);
     final scale = scaler.scale(16) / 16;
     final rowHeight = FilterSearchField.heightFor(context);
-    final subtitle = page.description?.trim().isNotEmpty == true
+    final subtitle = widget.titleInBar
+        ? [
+            if (page.provider?.trim().isNotEmpty == true) page.provider!.trim(),
+            if (widget.itemSummary != null) widget.itemSummary!,
+          ].join(' · ')
+        : page.description?.trim().isNotEmpty == true
         ? page.description!.trim()
         : page.provider ?? '';
     final showSource = sourceBadgeVisible(ref, page.id!);
@@ -114,6 +123,56 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
     return SliverLayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.crossAxisExtent;
+        if (widget.titleInBar) {
+          // The title and Pin are already in the toolbar. Only attribution
+          // scrolls away; reserve the toolbar's clearance inside the scroll.
+          final summaryStyle = KalinkaTextStyles.trackRowSubtitle;
+          final metrics = TextPainter(
+            text: TextSpan(text: subtitle, style: summaryStyle),
+            textDirection: Directionality.of(context),
+            textScaler: scaler,
+            maxLines: 2,
+          )..layout(maxWidth: math.max(1, width - 32 - (showSource ? 24 : 0)));
+          final summaryHeight = subtitle.isEmpty ? 0.0 : metrics.height;
+          metrics.dispose();
+          return SliverPersistentHeader(
+            pinned: true,
+            delegate: _CatalogHeaderDelegate(
+              minHeight: widget.topInset,
+              maxHeight: widget.topInset + summaryHeight + 12,
+              builder: (context, offset) => ClipRect(
+                child: Stack(
+                  children: [
+                    if (subtitle.isNotEmpty)
+                      Positioned(
+                        key: const ValueKey('catalog-compact-summary'),
+                        left: 16,
+                        right: 16,
+                        top: widget.topInset + 4 - offset,
+                        child: Row(
+                          children: [
+                            SourceBadge(
+                              entityId: page.id!,
+                              size: SourceBadgeSize.small,
+                            ),
+                            if (showSource) const SizedBox(width: 7),
+                            Expanded(
+                              child: Text(
+                                subtitle,
+                                style: summaryStyle,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
         final titleFontSize = (width * 0.038).clamp(29.0, 41.0);
         final titleStyle = KalinkaFonts.display(
           fontSize: titleFontSize,

@@ -121,7 +121,7 @@ void main() {
           phone || !album ? findsOneWidget : findsNothing,
         );
         if (album && !phone) {
-          expect(find.byType(AlbumIdentityColumn), findsOneWidget);
+          expect(find.byType(WideAlbumHeader), findsOneWidget);
         }
         expect(container.read(playQueueStateStoreProvider), same(queue));
 
