@@ -20,6 +20,7 @@ import '../procedural_album_art.dart';
 import '../search_cards/action_pill_button.dart';
 import '../search_cards/track_row_support.dart';
 import '../source_badge.dart';
+import 'browse_toolbar_metrics.dart';
 import 'track_group_actions.dart';
 
 /// A pane narrower than this stacks an album's cover over its tracks; from
@@ -186,6 +187,7 @@ double _albumTextWidth(BuildContext context, String text, TextStyle style) {
 class WideAlbumHeader extends ConsumerWidget {
   final CatalogPage page;
   final WideAlbumMetadata metadata;
+  final bool compactToolbar;
   final bool metadataInTracks;
   final int? trackCount;
   final bool shortPane;
@@ -196,6 +198,7 @@ class WideAlbumHeader extends ConsumerWidget {
     super.key,
     required this.page,
     required this.metadata,
+    required this.compactToolbar,
     required this.onBack,
     this.onServerTap,
     this.trackCount,
@@ -217,10 +220,17 @@ class WideAlbumHeader extends ConsumerWidget {
     child: SafeArea(
       bottom: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+        padding: browseToolbarPadding,
         child: LayoutBuilder(
           builder: (context, space) {
             final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+            final controlsHeight =
+                browseToolbarHeight(context, compactTitle: compactToolbar) -
+                browseToolbarPadding.vertical;
+            Widget control(Widget child) => SizedBox(
+              height: controlsHeight,
+              child: Center(child: child),
+            );
             final titleStyle = KalinkaFonts.display(
               fontSize: shortPane
                   ? 20
@@ -233,7 +243,12 @@ class WideAlbumHeader extends ConsumerWidget {
               color: KalinkaColors.frost,
             );
             // Back, gaps, and connection status keep their normal targets.
-            const fixedWidth = 48 + 12 + 16 + 8 + 42;
+            const fixedWidth =
+                kKalinkaPillTarget +
+                browseToolbarTitleGap +
+                16 +
+                8 +
+                browseToolbarStatusWidth;
             final labelledActions =
                 ActionPillButton.widthOf(context, 'Play all') +
                 ActionPillButton.widthOf(context, 'Enqueue');
@@ -242,9 +257,10 @@ class WideAlbumHeader extends ConsumerWidget {
             // Most wide panes can reserve the title's full minimum without
             // shaping it a second time solely to choose the action labels.
             final iconActions =
-                availableTitle < 220 * scale &&
-                availableTitle <
-                    _albumTextWidth(context, page.title ?? '', titleStyle);
+                ActionPillButton.heightOf(context) > controlsHeight ||
+                (availableTitle < 220 * scale &&
+                    availableTitle <
+                        _albumTextWidth(context, page.title ?? '', titleStyle));
             final titleWidth =
                 space.maxWidth -
                 fixedWidth -
@@ -257,24 +273,34 @@ class WideAlbumHeader extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    KalinkaBackButton(onPressed: onBack),
-                    const SizedBox(width: 12),
+                    control(KalinkaBackButton(onPressed: onBack)),
+                    const SizedBox(width: browseToolbarTitleGap),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Tooltip(
-                            message: page.title ?? '',
-                            child: Semantics(
-                              header: true,
-                              child: Text(
-                                page.title ?? '',
-                                key: const ValueKey('album-bar-title'),
-                                style: titleStyle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: controlsHeight,
+                            ),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              heightFactor: 1,
+                              child: Tooltip(
+                                message: page.title ?? '',
+                                child: Semantics(
+                                  header: true,
+                                  child: Text(
+                                    page.title ?? '',
+                                    key: const ValueKey('album-bar-title'),
+                                    style: titleStyle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -286,25 +312,30 @@ class WideAlbumHeader extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    PlayAllChip(
-                      trackIds: [page.id!],
-                      trackCount: trackCount,
-                      enabled: trackCount != 0,
-                      iconOnly: iconActions,
+                    control(
+                      PlayAllChip(
+                        trackIds: [page.id!],
+                        trackCount: trackCount,
+                        enabled: trackCount != 0,
+                        iconOnly: iconActions,
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    AddAllChip(
-                      trackIds: [page.id!],
-                      trackCount: trackCount,
-                      name: page.title ?? '',
-                      enabled: trackCount != 0,
-                      iconOnly: iconActions,
+                    control(
+                      AddAllChip(
+                        trackIds: [page.id!],
+                        trackCount: trackCount,
+                        name: page.title ?? '',
+                        enabled: trackCount != 0,
+                        iconOnly: iconActions,
+                      ),
                     ),
-                    SizedBox(
-                      width: 42,
-                      height: 48,
-                      child: Center(
-                        child: ServerChip(compact: true, onTap: onServerTap),
+                    control(
+                      SizedBox(
+                        width: browseToolbarStatusWidth,
+                        child: Center(
+                          child: ServerChip(compact: true, onTap: onServerTap),
+                        ),
                       ),
                     ),
                   ],
@@ -312,7 +343,10 @@ class WideAlbumHeader extends ConsumerWidget {
                 if (!metadataInTracks && !inlineMetadata && !metadata.isEmpty)
                   Padding(
                     key: const ValueKey('album-metadata-full-row'),
-                    padding: const EdgeInsets.only(left: 60, top: 4),
+                    padding: const EdgeInsets.only(
+                      left: kKalinkaPillTarget + browseToolbarTitleGap,
+                      top: 4,
+                    ),
                     child: metadata,
                   ),
               ],

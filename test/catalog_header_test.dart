@@ -15,9 +15,13 @@ import 'package:kalinka/widgets/browse_filters/search_filter_overlay.dart';
 import 'package:kalinka/widgets/browse_filters/presentation_toggle.dart';
 import 'package:kalinka/widgets/browse_filters/active_filter_chips.dart';
 import 'package:kalinka/widgets/home/catalog_pin_button.dart';
+import 'package:kalinka/widgets/kalinka_back_button.dart';
+import 'package:kalinka/widgets/server_chip.dart';
+import 'package:kalinka/widgets/search/album_page_header.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search/catalog_sliver_header.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
+import 'package:kalinka/widgets/search/track_group_actions.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 import 'package:kalinka/widgets/search_cards/artwork_grid_card.dart';
 import 'package:kalinka/widgets/search_cards/row_columns.dart';
@@ -121,7 +125,7 @@ class _Api extends HomeApi {
             canAdd: false,
             catalog: Catalog(id: '$i', title: 'Category $i'),
           )
-        else if (playlist || tracks)
+        else if (playlist || tracks || id.contains(':album:'))
           BrowseItem(
             id: 'kalinka:jamendo:track:$i',
             canAdd: true,
@@ -271,6 +275,104 @@ void main() {
           .load();
     }
   });
+
+  for (final (width, scale, topInset) in [
+    (528.0, 1.0, 0.0),
+    (760.0, 1.0, 0.0),
+    (936.0, 1.0, 24.0),
+    (1600.0, 1.0, 0.0),
+    (936.0, 2.0, 24.0),
+    (1600.0, 2.0, 0.0),
+    (936.0, 3.0, 24.0),
+    (2400.0, 3.0, 0.0),
+  ]) {
+    testWidgets(
+      'catalogue and album controls stay aligned at $width and ${scale}x text',
+      (tester) async {
+        final key = GlobalKey();
+        final container = await _pump(
+          tester,
+          _Api(count: 44),
+          size: Size(width, 800),
+          scale: scale,
+          topInset: topInset,
+          captureKey: key,
+        );
+        final back = tester.getRect(find.byType(KalinkaBackButton));
+        final status = tester.getRect(find.byType(ServerChip));
+        final lastAction = tester.getRect(_barPresentation);
+        final catalogTitle = find.byKey(
+          const ValueKey('catalog-compact-title'),
+        );
+        final titleLeft = catalogTitle.evaluate().isEmpty
+            ? null
+            : tester.getRect(catalogTitle).left;
+        await _capture(tester, key, 'toolbar-catalogue-$width-$scale');
+
+        for (final (title, artist) in [
+          ('Abbey Road', 'The Beatles'),
+          (
+            'The Best Of Michael Jackson (Anniversary Edition)',
+            'Michael Jackson and the Royal Philharmonic Orchestra',
+          ),
+        ]) {
+          container
+              .read(searchSessionProvider.notifier)
+              .openPage(
+                CatalogPage.category(
+                  id: 'kalinka:jamendo:album:comparison',
+                  title: title,
+                  description: artist,
+                  provider: 'Jamendo',
+                  totalDurationSeconds: 7800,
+                ),
+              );
+          await tester.pumpAndSettle();
+          expect(find.byType(WideAlbumHeader), findsOneWidget);
+          expect(tester.getRect(find.byType(KalinkaBackButton)), back);
+          expect(tester.getRect(find.byType(ServerChip)), status);
+          if (titleLeft != null) {
+            expect(
+              tester
+                  .getRect(find.byKey(const ValueKey('album-bar-title')))
+                  .left,
+              titleLeft,
+            );
+          }
+          for (final action in [PlayAllChip, AddAllChip]) {
+            final bounds = tester.getRect(find.byType(action));
+            expect(bounds.center.dy, closeTo(back.center.dy, .01));
+            expect(find.byType(action).hitTestable(), findsOneWidget);
+          }
+          expect(
+            tester.getRect(find.byType(AddAllChip)).right,
+            lastAction.right,
+          );
+          final metadata = tester.getRect(find.byType(WideAlbumMetadata));
+          expect(metadata.top, greaterThanOrEqualTo(back.bottom));
+          expect(metadata.right, lessThanOrEqualTo(width));
+          await _capture(tester, key, 'toolbar-album-$width-$scale-$title');
+
+          final play = tester.getRect(find.byType(PlayAllChip));
+          final enqueue = tester.getRect(find.byType(AddAllChip));
+          tester.state<ScrollableState>(_scrollable).position.jumpTo(400);
+          await tester.pumpAndSettle();
+          expect(tester.getRect(find.byType(KalinkaBackButton)), back);
+          expect(tester.getRect(find.byType(ServerChip)), status);
+          expect(tester.getRect(find.byType(PlayAllChip)), play);
+          expect(tester.getRect(find.byType(AddAllChip)), enqueue);
+          await tester.tap(find.byType(KalinkaBackButton));
+          await tester.pumpAndSettle();
+          expect(
+            container.read(searchSessionProvider).catalogPage.id,
+            _catalog.id,
+          );
+          expect(tester.getRect(find.byType(KalinkaBackButton)), back);
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
+  }
 
   testWidgets('cached catalog headers follow width changes without reloading', (
     tester,

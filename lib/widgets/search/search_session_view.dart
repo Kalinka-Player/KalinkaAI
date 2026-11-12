@@ -39,6 +39,7 @@ import '../server_chip.dart';
 import '../tap_highlight.dart' show kalinkaIconButtonStyle, kalinkaOverlay;
 import 'album_page_header.dart';
 import 'browse_visit_scope.dart';
+import 'browse_toolbar_metrics.dart';
 import 'catalog_page_view.dart';
 import 'catalog_sliver_header.dart';
 import '../../utils/compact_pane_layout.dart';
@@ -1194,20 +1195,11 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   double _barHeight(BuildContext context, SearchSessionState session) =>
       session.activeView == FindMusicView.catalogs &&
           _compactCatalogHeader(session.catalogPage)
-      ? math.max(
-          kKalinkaTopBarHeight,
-          MediaQuery.textScalerOf(context).scale(30) * 1.1 + 4,
-        )
+      ? browseToolbarHeight(context, compactTitle: true)
       : session.activeView == FindMusicView.results ||
             (session.activeView == FindMusicView.catalogs &&
                 CatalogSliverHeader.appliesTo(session.catalogPage))
-      ? math.max(
-          kKalinkaTopBarHeight,
-          MediaQuery.textScalerOf(context)
-                      .scale(KalinkaTextStyles.trayTitle.fontSize!) *
-                  1.5 +
-              4,
-        )
+      ? browseToolbarHeight(context, compactTitle: false)
       : kKalinkaTopBarHeight;
 
   /// How far the album's title has gone under the bar, over the last
@@ -1337,7 +1329,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       child: SizedBox(
         height: _barHeight(context, session),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(6, 2, 6, 2),
+          padding: browseToolbarPadding,
           child: LayoutBuilder(
             builder: (context, constraints) => Row(
               children: [
@@ -1357,7 +1349,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: browseToolbarTitleGap),
                 Expanded(child: _buildTitle(session, overAlbum: overAlbum)),
                 // What joins the bar on scroll comes in before what is always
                 // there, so Search and Grid/List never move under a finger.
@@ -1374,12 +1366,17 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                             type: session.expandedShelf,
                           ),
                   ),
-                ?_barSearch(session, width: constraints.maxWidth + 12),
+                ?_barSearch(
+                  session,
+                  width: constraints.maxWidth + browseToolbarPadding.horizontal,
+                ),
                 ?_barFilters(session),
                 if (catalogChrome)
                   if (_barPresentation(
                         session,
-                        width: constraints.maxWidth + 12,
+                        width:
+                            constraints.maxWidth +
+                            browseToolbarPadding.horizontal,
                       )
                       case final presentation?) ...[
                     // Set apart from what narrows the listing: it only
@@ -1403,7 +1400,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                   ),
                 SizedBox(
                   height: _kBarMinHeight,
-                  width: 42,
+                  width: browseToolbarStatusWidth,
                   child: Center(
                     child: ServerChip(compact: true, onTap: widget.onServerTap),
                   ),
