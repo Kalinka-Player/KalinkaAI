@@ -55,6 +55,7 @@ enum DeviceAccess {
 
 /// What the output device runs at, against the stream decoded for it.
 class OutputInfo {
+  final String sampleFormat;
   final int sampleRate;
   final int bitsPerSample;
   final int channels;
@@ -65,6 +66,7 @@ class OutputInfo {
   final bool losslessPath;
 
   const OutputInfo({
+    this.sampleFormat = '',
     this.sampleRate = 0,
     this.bitsPerSample = 0,
     this.channels = 0,
@@ -73,6 +75,7 @@ class OutputInfo {
   });
 
   factory OutputInfo.fromJson(Map<String, dynamic> json) => OutputInfo(
+    sampleFormat: json["sample_format"] ?? '',
     sampleRate: json["sample_rate"] ?? 0,
     bitsPerSample: json["bits_per_sample"] ?? 0,
     channels: json["channels"] ?? 0,
@@ -81,6 +84,7 @@ class OutputInfo {
   );
 
   Map<String, dynamic> toJson() => {
+    "sample_format": sampleFormat,
     "sample_rate": sampleRate,
     "bits_per_sample": bitsPerSample,
     "channels": channels,
@@ -90,6 +94,7 @@ class OutputInfo {
 }
 
 class AudioInfo {
+  final String sampleFormat;
   int sampleRate;
   int bitsPerSample;
   int channels;
@@ -100,6 +105,7 @@ class AudioInfo {
   OutputInfo? output;
 
   AudioInfo({
+    this.sampleFormat = '',
     this.sampleRate = 0,
     this.bitsPerSample = 0,
     this.channels = 0,
@@ -108,6 +114,7 @@ class AudioInfo {
   });
 
   factory AudioInfo.fromJson(Map<String, dynamic> json) => AudioInfo(
+    sampleFormat: json["sample_format"] ?? '',
     sampleRate: json["sample_rate"],
     bitsPerSample: json["bits_per_sample"],
     channels: json["channels"],
@@ -116,6 +123,7 @@ class AudioInfo {
   );
 
   Map<String, dynamic> toJson() => {
+    "sample_format": sampleFormat,
     "sample_rate": sampleRate,
     "bits_per_sample": bitsPerSample,
     "channels": channels,
