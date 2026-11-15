@@ -578,7 +578,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     if (track != null) {
       // The stream's line keeps its size.
       height +=
-          12 + line('Stream info', KalinkaTextStyles.expandedAttribution, 1);
+          12 + line('Signal path', KalinkaTextStyles.expandedAttribution, 1);
     }
     return height;
   }
@@ -727,7 +727,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     // The line that names the stream is also the way into its details.
     return Builder(
       builder: (triggerContext) => Semantics(
-        label: 'Stream info',
+        label: 'Signal path',
         button: true,
         child: Material(
           type: MaterialType.transparency,

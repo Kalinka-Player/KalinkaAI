@@ -8,6 +8,9 @@ import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/bit_perfect_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/widgets/stream_info_dialog.dart';
+import 'package:kalinka/providers/renderer_provider.dart';
+import 'package:kalinka/providers/source_modules_provider.dart';
+import 'package:kalinka/widgets/audio_signal_path.dart';
 
 // The dialog is a debug read-out of /queue/state, so what it must get right is
 // which fields it takes from the state and how it renders a value the server
@@ -59,6 +62,11 @@ class _FakePlaybackTimeNotifier extends PlaybackTimeMsNotifier {
   int build() => 83000;
 }
 
+class _Renderers extends RendererListNotifier {
+  @override
+  RendererListState build() => const RendererListState();
+}
+
 List<Override> _overrides(PlaybackState state) => [
   playQueueStateStoreProvider.overrideWith(
     () => _SettableQueueNotifier(
@@ -74,6 +82,9 @@ List<Override> _overrides(PlaybackState state) => [
   // Stands in for the device store the real verdict reads, which would open a
   // wire connection.
   bitPerfectProvider.overrideWithValue(true),
+  volumeStateProvider.overrideWithValue(DeviceVolume.empty),
+  sourceDisplayInfoProvider.overrideWithValue(const {}),
+  rendererListProvider.overrideWith(_Renderers.new),
 ];
 
 void main() {
@@ -246,6 +257,67 @@ void main() {
     });
   });
 
+  group('signalStages', () {
+    List<SignalStage> dsdPath(String transport, int rate) {
+      final state = _playing()
+        ..mimeType = 'audio/dsf'
+        ..audioInfo = AudioInfo.fromJson({
+          'sample_format': 'DSD',
+          'sample_rate': 2822400,
+          'bits_per_sample': 1,
+          'channels': 2,
+          'duration_ms': 1000,
+          'output': {
+            'sample_format': transport,
+            'sample_rate': rate,
+            'bits_per_sample': 24,
+            'channels': 2,
+          },
+        });
+      return signalStages(state, DeviceVolume.empty);
+    }
+
+    test('DoP identifies the carrier without claiming PCM conversion', () {
+      final stages = dsdPath('DoP_S24_LE', 176400);
+      expect(stages.map((s) => s.label), [
+        'Source',
+        'Decoded stream',
+        'DSD over PCM',
+        'Output',
+      ]);
+      expect(stages[1].detail, contains('DSD64 · 2.8224 MHz'));
+      expect(stages[2].detail, contains('176.4 kHz carrier'));
+    });
+    test('native, converted and unknown transport remain distinct', () {
+      expect(dsdPath('DSD_U32_LE', 88200)[2].label, 'Native DSD');
+      expect(dsdPath('PCM24_LE', 88200)[2].label, 'DSD to PCM');
+      expect(dsdPath('', 88200).map((s) => s.label), [
+        'Source',
+        'Decoded stream',
+        'Output',
+      ]);
+    });
+    test('software gain appears only below unity', () {
+      final state = _playing()
+        ..audioInfo!.output = const OutputInfo(sampleRate: 44100);
+      DeviceVolume volume(int level) => DeviceVolume(
+        currentVolume: level,
+        maxVolume: 100,
+        volumeGain: 0,
+        supported: true,
+        backend: VolumeBackend.software,
+      );
+      expect(
+        signalStages(state, volume(40)).map((s) => s.label),
+        contains('Software volume'),
+      );
+      expect(
+        signalStages(state, volume(100)).map((s) => s.label),
+        isNot(contains('Software volume')),
+      );
+    });
+  });
+
   group('StreamInfoDialog', () {
     testWidgets('lists the stream fields', (tester) async {
       await tester.pumpWidget(
@@ -258,7 +330,11 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('Stream info'), findsOneWidget);
+      expect(find.text('Signal path'), findsOneWidget);
+      expect(find.text('Decoded stream'), findsOneWidget);
+      await tester.ensureVisible(find.text('Stream details'));
+      await tester.tap(find.text('Stream details'));
+      await tester.pumpAndSettle();
       expect(find.text('URL'), findsOneWidget);
       expect(find.text('https://cdn.test/42.flac'), findsOneWidget);
       expect(find.text('Copy'), findsOneWidget);

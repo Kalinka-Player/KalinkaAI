@@ -221,6 +221,6 @@ void main() {
     expect(find.byIcon(Icons.info_outline), findsNothing);
     await tester.tap(find.textContaining('96 kHz'));
     await tester.pumpAndSettle();
-    expect(find.text('Stream info'), findsOneWidget);
+    expect(find.text('Signal path'), findsOneWidget);
   });
 }

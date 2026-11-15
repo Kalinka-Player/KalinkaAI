@@ -6,9 +6,12 @@ import '../data_model/data_model.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/bit_perfect_provider.dart';
 import '../providers/playback_time_provider.dart';
+import '../providers/renderer_provider.dart';
+import '../providers/source_modules_provider.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/playback_utils.dart';
+import 'audio_signal_path.dart';
 import 'kalinka_button.dart';
 import 'kalinka_dialog.dart';
 
@@ -96,30 +99,50 @@ class StreamInfoDialog extends ConsumerWidget {
   const StreamInfoDialog({super.key});
 
   /// Past this the fields scroll rather than growing the card.
-  static const double _maxFieldsHeight = 300;
+  static const double _maxFieldsHeight = 440;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(playerStateProvider);
+    final bitPerfect = ref.watch(bitPerfectProvider);
     final fields = streamInfoFields(
-      ref.watch(playerStateProvider),
+      state,
       positionMs: ref.watch(playbackTimeMsProvider),
       queueLength: ref.watch(
         playQueueStateStoreProvider.select((s) => s.trackList.length),
       ),
-      bitPerfect: ref.watch(bitPerfectProvider),
+      bitPerfect: bitPerfect,
       exclusive: ref.watch(
         playbackControlProvider.select((c) => c.isExclusive),
       ),
     );
 
+    final sourceId = sourceOfId(state.currentTrack?.id ?? '');
+    final stages = fields.isEmpty
+        ? const <SignalStage>[]
+        : signalStages(
+            state,
+            ref.watch(volumeStateProvider),
+            bitPerfect: bitPerfect,
+            source: ref.watch(
+              sourceDisplayInfoProvider.select((m) => m[sourceId]?.title),
+            ),
+            renderer: ref.watch(
+              rendererListProvider.select((s) => s.active?.friendlyName),
+            ),
+          );
+
     return KalinkaDialog(
       side: KalinkaDialogSide.player,
       // Greyscale, not accent — this reports, it isn't a CTA.
-      icon: Icons.info_outline,
+      icon: Icons.route_outlined,
+      iconBeside: true,
       iconColor: KalinkaColors.textMuted,
-      title: 'Stream info',
-      message: fields.isEmpty ? 'Nothing is playing.' : null,
-      content: fields.isEmpty ? null : _buildFields(context, fields),
+      title: 'Signal path',
+      message: fields.isEmpty
+          ? 'Nothing is playing.'
+          : state.currentTrack?.title,
+      content: fields.isEmpty ? null : _buildFields(context, fields, stages),
       actions: [
         if (fields.isNotEmpty)
           KalinkaButton(
@@ -131,11 +154,16 @@ class StreamInfoDialog extends ConsumerWidget {
               final toast = ref.read(toastProvider.notifier);
               Clipboard.setData(
                 ClipboardData(
-                  text: fields.map((f) => '${f.label}: ${f.value}').join('\n'),
+                  text: [
+                    for (final stage in stages)
+                      '${stage.label}: ${stage.detail}',
+                    for (final field in fields)
+                      '${field.label}: ${field.value}',
+                  ].join('\n'),
                 ),
               );
               Navigator.pop(context);
-              toast.show('Stream info copied', inPanel: true);
+              toast.show('Signal path copied', inPanel: true);
             },
           ),
         KalinkaButton(
@@ -147,10 +175,14 @@ class StreamInfoDialog extends ConsumerWidget {
     );
   }
 
-  Widget _buildFields(BuildContext context, List<StreamInfoField> fields) {
+  Widget _buildFields(
+    BuildContext context,
+    List<StreamInfoField> fields,
+    List<SignalStage> stages,
+  ) {
     // A share of the window as well as a fixed cap, or a phone held landscape
     // has no room left for the title and the actions.
-    final height = MediaQuery.sizeOf(context).height * 0.4;
+    final height = MediaQuery.sizeOf(context).height * 0.52;
     return ConstrainedBox(
       constraints: BoxConstraints(
         maxHeight: height < _maxFieldsHeight ? height : _maxFieldsHeight,
@@ -158,7 +190,26 @@ class StreamInfoDialog extends ConsumerWidget {
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [for (final field in fields) _FieldRow(field)],
+          children: [
+            if (stages.isNotEmpty) ...[
+              AudioSignalPath(stages),
+              const SizedBox(height: 12),
+            ],
+            Material(
+              type: MaterialType.transparency,
+              child: ExpansionTile(
+                title: const Text('Stream details'),
+                initiallyExpanded: stages.isEmpty,
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                textColor: KalinkaColors.textPrimary,
+                collapsedTextColor: KalinkaColors.textSecondary,
+                iconColor: KalinkaColors.textSecondary,
+                collapsedIconColor: KalinkaColors.textSecondary,
+                children: [for (final field in fields) _FieldRow(field)],
+              ),
+            ),
+          ],
         ),
       ),
     );
