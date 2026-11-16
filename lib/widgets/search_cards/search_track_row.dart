@@ -562,8 +562,6 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
         ),
       ),
     );
-    if (number == null) return HoverHighlight(child: row);
-
     // Wrap the focus target so keyboard focus highlights the whole row.
     return HoverHighlight(
       child: FocusableActionDetector(
@@ -597,7 +595,7 @@ class _SearchTrackRowState extends ConsumerState<SearchTrackRow>
         child: Semantics(
           button: true,
           selected: selectionMode ? isSelected : null,
-          label: 'Track $number',
+          label: number == null ? title : 'Track $number',
           customSemanticsActions: selectionMode
               ? null
               : {

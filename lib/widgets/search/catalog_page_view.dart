@@ -683,9 +683,11 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                 : card,
           );
         }
-        // Track rows play the whole loaded list as a queue from the
-        // tapped row; as more chunks scroll in, the context grows.
-        final trackIds = trackIdsMemo.of(loaded);
+        // Most listings play their loaded tracks from the tapped row.
+        // Station listings ask to play only the chosen track.
+        final trackIds = listing.playIndividually
+            ? const <String>[]
+            : trackIdsMemo.of(loaded);
         if (grid && columns > 1) {
           return attributed(
             _GridTrack(
