@@ -142,6 +142,9 @@ class CatalogPage {
   /// ([Catalog.onStorage]).
   final bool onStorage;
 
+  /// Track activation plays only that track ([Catalog.playIndividually]).
+  final bool playIndividually;
+
   /// The item the page was opened from, when it was one: an album, artist,
   /// playlist or collection keeps the metadata its listing already supplied.
   final BrowseItem? item;
@@ -162,6 +165,7 @@ class CatalogPage {
       preview = null,
       live = false,
       onStorage = false,
+      playIndividually = false,
       item = null;
 
   const CatalogPage.category({
@@ -180,6 +184,7 @@ class CatalogPage {
     this.preview,
     this.live = false,
     this.onStorage = false,
+    this.playIndividually = false,
     this.item,
   });
 
@@ -205,6 +210,7 @@ class CatalogPage {
     'preview': preview?.toJson(),
     if (live) 'live': live,
     if (onStorage) 'onStorage': onStorage,
+    if (playIndividually) 'playIndividually': playIndividually,
   };
 
   factory CatalogPage.fromJson(Map<String, dynamic> json) =>
@@ -224,6 +230,7 @@ class CatalogPage {
         canAdd: json['canAdd'] == true,
         live: json['live'] == true,
         onStorage: json['onStorage'] == true,
+        playIndividually: json['playIndividually'] == true,
         preview: json['preview'] == null
             ? null
             : Preview.fromJson(
@@ -273,6 +280,7 @@ class CatalogPage {
         preview: item.catalog?.previewConfig,
         live: item.catalog?.live ?? false,
         onStorage: item.catalog?.onStorage ?? false,
+        playIndividually: item.catalog?.playIndividually ?? false,
         item: item,
       );
 
@@ -290,6 +298,7 @@ class CatalogPage {
     canAdd: json['canAdd'] == true,
     live: json['live'] == true,
     onStorage: json['onStorage'] == true,
+    playIndividually: json['playIndividually'] == true,
   );
 
   /// What of a folder outlives the app: enough to show it again before its
@@ -302,6 +311,7 @@ class CatalogPage {
     'canAdd': canAdd,
     if (live) 'live': live,
     if (onStorage) 'onStorage': onStorage,
+    if (playIndividually) 'playIndividually': playIndividually,
   };
 
   bool get isRoot => id == null;
@@ -327,6 +337,7 @@ class CatalogPage {
       preview: preview,
       live: live,
       onStorage: onStorage,
+      playIndividually: playIndividually,
       item: item?.copyWith(
         name: title,
         playlist: playlist == null
@@ -1212,6 +1223,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
     Preview? preview,
     bool live = false,
     bool onStorage = false,
+    bool playIndividually = false,
     BrowseFilterQuery? initialFilter,
     bool restoreFolder = true,
     BrowseItem? item,
@@ -1247,6 +1259,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       preview: preview,
       live: live,
       onStorage: onStorage,
+      playIndividually: playIndividually,
       item: item,
     );
     _visit(
@@ -1299,6 +1312,7 @@ class SearchSessionNotifier extends Notifier<SearchSessionState> {
       preview: page.preview,
       live: page.live,
       onStorage: page.onStorage,
+      playIndividually: page.playIndividually,
       initialFilter: filter,
       restoreFolder: restoreFolder,
       item: page.item,

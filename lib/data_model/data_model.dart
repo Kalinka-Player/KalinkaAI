@@ -951,6 +951,10 @@ class Catalog {
   /// that went away held.
   final bool onStorage;
 
+  /// Activating a track plays it alone instead of its listing's neighbours.
+  /// Explicit queue actions are unaffected (e.g. for radio station lists).
+  final bool playIndividually;
+
   Catalog({
     required this.id,
     required this.title,
@@ -962,6 +966,7 @@ class Catalog {
     this.sources = const [],
     this.live = false,
     this.onStorage = false,
+    this.playIndividually = false,
   });
 
   static final empty = Catalog(
@@ -990,6 +995,7 @@ class Catalog {
         : List<String>.from(json["sources"]),
     live: json["live"] == true,
     onStorage: json["on_storage"] == true,
+    playIndividually: json["play_individually"] == true,
   );
 
   Map<String, dynamic> toJson() => {
@@ -1003,6 +1009,7 @@ class Catalog {
     "sources": sources,
     if (live) "live": live,
     if (onStorage) "on_storage": onStorage,
+    if (playIndividually) "play_individually": playIndividually,
   };
 
   Catalog copyWith({
@@ -1016,6 +1023,7 @@ class Catalog {
     List<String>? sources,
     bool? live,
     bool? onStorage,
+    bool? playIndividually,
   }) {
     return Catalog(
       id: id ?? this.id,
@@ -1028,6 +1036,7 @@ class Catalog {
       sources: sources ?? this.sources,
       live: live ?? this.live,
       onStorage: onStorage ?? this.onStorage,
+      playIndividually: playIndividually ?? this.playIndividually,
     );
   }
 }

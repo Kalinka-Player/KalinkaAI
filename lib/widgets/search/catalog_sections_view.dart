@@ -403,8 +403,9 @@ class _SectionShelf extends ConsumerWidget {
             ? list.items
             : list.items.take(_rowLimit(catalog, list.items)).toList();
         final trackIds = <String>[
-          for (final item in shown)
-            if (item.track != null) item.id,
+          if (!catalog.playIndividually)
+            for (final item in shown)
+              if (item.track != null) item.id,
         ];
         return _Shelf(
           title: title,
