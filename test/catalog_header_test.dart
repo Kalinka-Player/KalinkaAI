@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/data_model/storage.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_overlay.dart';
@@ -20,6 +21,9 @@ import 'package:kalinka/widgets/server_chip.dart';
 import 'package:kalinka/widgets/search/album_page_header.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search/catalog_sliver_header.dart';
+import 'package:kalinka/widgets/search/folder_page_actions.dart';
+import 'package:kalinka/widgets/search/folder_trail.dart';
+import 'package:kalinka/widgets/breadcrumb_crumb.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 import 'package:kalinka/widgets/search/track_group_actions.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
@@ -90,6 +94,7 @@ class _Api extends HomeApi {
   final Completer<void>? gate;
   final calls = <({String id, int offset, String? filter})>[];
   final replaced = <List<String>>[];
+  final enqueued = <List<String>>[];
   final played = <int?>[];
   _Api({
     this.count = 80,
@@ -176,6 +181,12 @@ class _Api extends HomeApi {
     String query = '',
   }) async => const FilterValueList(offset: 0, limit: 50, total: 0, items: []);
   @override
+  Future<StatusMessage> add(List<String> items, {int? index}) async {
+    enqueued.add(items);
+    return StatusMessage(count: count);
+  }
+
+  @override
   Future<StatusMessage> replace(List<String> items) async {
     replaced.add(items);
     return StatusMessage(count: count);
@@ -186,6 +197,35 @@ class _Api extends HomeApi {
     played.add(index);
     return StatusMessage();
   }
+}
+
+class _DriveApi extends _Api {
+  _DriveApi() : super(tracks: true);
+
+  @override
+  Future<List<StorageVolume>> listStorageVolumes() async => const [
+    StorageVolume(
+      id: 'music',
+      kind: VolumeKind.removable,
+      label: 'Music',
+      mountPoint: '/media/music',
+    ),
+  ];
+
+  @override
+  Future<StorageLocation> storageLocation(String id) async => StorageLocation(
+    volumeId: 'music',
+    subpath: id.endsWith(':root') ? '' : 'Albums',
+    path: '/media/music/Albums',
+    library: const LocationLibrary(
+      module: 'localfiles',
+      title: 'My Library',
+      holds: true,
+      libraryEmpty: false,
+      removable: false,
+      restartRequired: false,
+    ),
+  );
 }
 
 final _barPresentation = find.byKey(const ValueKey('catalog-bar-presentation'));
@@ -385,15 +425,15 @@ void main() {
     final requests = api.calls.where((call) => call.id == _catalog.id).length;
     final compactTitle = find.byKey(const ValueKey('catalog-compact-title'));
 
-    for (final width in [600.0, 936.0]) {
+    for (final width in [540.0, 685.0, 936.0]) {
       tester.view.physicalSize = Size(width, 600);
       await tester.pumpAndSettle();
       expect(
         tester.widget<CatalogPageView>(find.byType(CatalogPageView)).titleInBar,
-        width >= 720,
+        width >= 600,
       );
       expect(
-        (width >= 720 ? compactTitle : _expanded).hitTestable(),
+        (width >= 600 ? compactTitle : _expanded).hitTestable(),
         findsOneWidget,
       );
       expect(find.byType(CatalogPinButton).hitTestable(), findsOneWidget);
@@ -403,7 +443,7 @@ void main() {
 
     scroll.position.jumpTo(240);
     await tester.pumpAndSettle();
-    for (final width in [600.0, 936.0]) {
+    for (final width in [540.0, 685.0, 936.0]) {
       tester.view.physicalSize = Size(width, 600);
       await tester.pumpAndSettle();
       expect(scroll.position.pixels, closeTo(240, .01));
@@ -413,7 +453,7 @@ void main() {
     // A page retained behind another visit must also adopt the new mode.
     nav.openCatalog(id: 'kalinka:jamendo:catalog:other', title: 'Other');
     await tester.pumpAndSettle();
-    tester.view.physicalSize = const Size(600, 600);
+    tester.view.physicalSize = const Size(540, 600);
     await tester.pumpAndSettle();
     nav.goBack();
     await tester.pumpAndSettle();
@@ -427,6 +467,77 @@ void main() {
     expect(find.byType(CatalogPinButton).hitTestable(), findsOneWidget);
     expect(api.calls.where((call) => call.id == _catalog.id).length, requests);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Albums uses the toolbar space and bounds its opened search', (
+    tester,
+  ) async {
+    final key = GlobalKey();
+    final container = await _pump(
+      tester,
+      _Api(count: 20),
+      size: const Size(685, 640),
+      captureKey: key,
+      page: CatalogPage.category(
+        id: 'kalinka:localfiles:catalog:albums',
+        title: 'Albums',
+        description: 'All your albums',
+        provider: 'My Library',
+        preview: Preview(
+          type: PreviewType.imageText,
+          contentType: PreviewContentType.album,
+        ),
+        filters: _catalog.filters,
+      ),
+    );
+    final title = find.byKey(const ValueKey('catalog-compact-title'));
+    final subtitle = find.byKey(const ValueKey('catalog-toolbar-subtitle'));
+    expect(_expanded, findsNothing);
+    expect(title, findsOneWidget);
+    expect(subtitle, findsOneWidget);
+    expect(_inPage(subtitle), findsNothing);
+    expect(find.text('All your albums · 20 albums'), findsOneWidget);
+    expect(_barSearch, findsOneWidget);
+    expect(
+      tester.getRect(title).center.dy,
+      closeTo(tester.getRect(find.byType(KalinkaBackButton)).center.dy, 1),
+    );
+    expect(
+      tester.getRect(title).right,
+      lessThan(tester.getRect(_barSearch).left),
+    );
+    expect(
+      tester.getRect(find.byType(ArtworkGridCard).first).top,
+      lessThan(95),
+    );
+    await _capture(tester, key, 'albums-medium-toolbar');
+
+    await tester.tap(_barSearch);
+    await tester.pumpAndSettle();
+    final bounds = tester.getRect(_unrolled);
+    expect(bounds.width, 360);
+    expect(bounds.right, 685 - 16);
+    expect(bounds.top, greaterThanOrEqualTo(tester.getRect(subtitle).bottom));
+    await _capture(tester, key, 'albums-medium-search-open');
+    await tester.enterText(find.byType(TextField), 'blue');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(_unrolled, findsNothing);
+    expect(find.text('“blue”'), findsOneWidget);
+    final calls = container.read(searchSessionProvider).visitId;
+
+    // Even just above this width the field fits beside the title and controls.
+    // Resizing keeps the current query, and shows it only once.
+    for (final width in [700.0, 936.0, 600.0]) {
+      tester.view.physicalSize = Size(width, 640);
+      await tester.pumpAndSettle();
+      expect(title, findsOneWidget);
+      expect(_expanded, findsNothing);
+      expect(width >= 700 ? _barField : _barSearch, findsOneWidget);
+      expect(find.text('“blue”'), width >= 700 ? findsNothing : findsOneWidget);
+      expect(container.read(searchSessionProvider).visitId, calls);
+      expect(tester.takeException(), isNull);
+    }
   });
 
   for (final artists in [false, true]) {
@@ -500,7 +611,9 @@ void main() {
         await _capture(tester, key, artists ? 'artists-tall' : 'albums-tall');
         tester.view.physicalSize = const Size(600, 800);
         await tester.pumpAndSettle();
-        expect(title, findsNothing);
+        expect(title, findsOneWidget);
+        expect(_barSearch, findsOneWidget);
+        expect(_barField, findsNothing);
         expect(container.read(searchSessionProvider).visitId, visit);
         expect(api.calls.length, calls);
         tester.view.physicalSize = const Size(936, 528);
@@ -596,7 +709,7 @@ void main() {
             );
         await tester.pumpAndSettle();
         final pin = tester.getRect(find.byType(CatalogPinButton));
-        final compact = width >= 720 * scale;
+        final compact = width >= 600 * scale;
         final title = tester.getRect(
           compact
               ? find.byKey(const ValueKey('catalog-compact-title'))
@@ -604,7 +717,7 @@ void main() {
         );
         expect(pin.left - title.right, inInclusiveRange(0, 8.1));
         expect(pin.center.dy, closeTo(title.center.dy, 0.1));
-        final inBar = CatalogSliverHeader.searchInBar(width, scale);
+        final inBar = width >= 700 * scale;
         if (inBar) {
           final field = tester.getRect(_barField);
           final filters = tester.getRect(find.byTooltip('Filters, 2 active'));
@@ -720,7 +833,7 @@ void main() {
   for (final (name, size, scale, page) in [
     (
       'pin-only',
-      const Size(700, 700),
+      const Size(540, 700),
       1.0,
       const CatalogPage.category(
         id: 'kalinka:tidal:catalog:home',
@@ -728,7 +841,7 @@ void main() {
         provider: 'TIDAL',
       ),
     ),
-    ('filters', const Size(700, 800), 1.0, _catalog),
+    ('filters', const Size(540, 800), 1.0, _catalog),
     ('wrapped-filters', const Size(375, 812), 2.0, _catalog),
     (
       'wrapped-search',
@@ -1021,7 +1134,7 @@ void main() {
     await _pump(
       tester,
       _Api(),
-      size: const Size(600, 800),
+      size: const Size(540, 800),
       page: const CatalogPage.category(
         id: 'kalinka:jamendo:catalog:other',
         title: 'Other catalog',
@@ -1100,7 +1213,7 @@ void main() {
   testWidgets('Back restores the collapsed catalog title and controls', (
     tester,
   ) async {
-    final container = await _pump(tester, _Api(), size: const Size(600, 800));
+    final container = await _pump(tester, _Api(), size: const Size(540, 800));
     final scroll = tester.state<ScrollableState>(_scrollable);
     scroll.position.jumpTo(500);
     await tester.pumpAndSettle();
@@ -1184,6 +1297,385 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  }
+
+  for (final (width, scale, filtered) in [
+    (820.0, 1.0, false),
+    (1440.0, 1.0, false),
+    (1920.0, 1.0, false),
+    (720.0, 1.0, false),
+    (375.0, 1.0, false),
+    (320.0, 2.0, false),
+    (375.0, 3.0, false),
+  ]) {
+    testWidgets('folder toolbar at $width / $scale, filters $filtered', (
+      tester,
+    ) async {
+      final api = _DriveApi();
+      final key = GlobalKey();
+      final container = await _pump(
+        tester,
+        api,
+        size: Size(width, width == 720 ? 375 : 812),
+        scale: scale,
+        topInset: 24,
+        captureKey: key,
+        page: CatalogPage.category(
+          id: 'kalinka:drives:catalog:root',
+          title: 'Drives',
+          folderLayout: true,
+          onStorage: true,
+          canAdd: true,
+          filters: filtered ? _catalog.filters : const [],
+        ),
+      );
+      final session = container.read(searchSessionProvider.notifier);
+      session.openFolder(
+        BrowseItem(
+          id: 'kalinka:drives:catalog:albums',
+          name: 'Music albums and live recordings',
+          canBrowse: true,
+          canAdd: true,
+          catalog: Catalog(
+            id: 'albums',
+            title: 'Music albums and live recordings',
+            onStorage: true,
+            previewConfig: Preview(type: PreviewType.folder),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final actions = find.byType(FolderPageActions);
+      final play = find.byType(PlayAllChip);
+      final up = find.byIcon(Icons.drive_folder_upload_outlined);
+      final inline = !filtered && width >= 820;
+      expect(actions, findsOneWidget);
+      expect(_inPage(actions), findsNothing);
+      expect(
+        find.byKey(const ValueKey('folder-toolbar-second-row')),
+        inline ? findsNothing : findsOneWidget,
+      );
+      expect(play.hitTestable(), findsOneWidget);
+      expect(up.hitTestable(), findsOneWidget);
+      final backRect = tester.getRect(find.byType(KalinkaBackButton));
+      final actionRect = tester.getRect(actions);
+      if (inline) {
+        expect(actionRect.center.dy, closeTo(backRect.center.dy, .1));
+        expect(find.text('In library'), findsOneWidget);
+        expect(
+          tester.getRect(find.byType(FolderTrail)).width,
+          greaterThan(150),
+        );
+      } else {
+        expect(actionRect.top, greaterThanOrEqualTo(backRect.bottom));
+      }
+      if (filtered) expect(_barFilters, findsOneWidget);
+      final fade = tester.widget<TopBarContentFade>(
+        find.byKey(const ValueKey('catalog-content-fade')),
+      );
+      expect(fade.extent, greaterThanOrEqualTo(actionRect.bottom));
+      final scroll = tester.state<ScrollableState>(_scrollable).position;
+      for (final offset in [40.0, 300.0, 0.0]) {
+        scroll.jumpTo(offset);
+        await tester.pumpAndSettle();
+        expect(tester.getRect(actions), actionRect);
+        expect(play.hitTestable(), findsOneWidget);
+        expect(up.hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+      await _capture(tester, key, 'folder-toolbar-$width-$scale-$filtered');
+      if (filtered) {
+        session.setCatalogFilter(const BrowseFilterQuery(text: 'night'));
+        await tester.pumpAndSettle();
+        expect(tester.widget<PlayAllChip>(play).enabled, isFalse);
+        expect(
+          tester.widget<AddAllChip>(find.byType(AddAllChip)).enabled,
+          isFalse,
+        );
+        session.setCatalogFilter(const BrowseFilterQuery());
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(play);
+      await tester.pumpAndSettle();
+      expect(api.replaced.single, ['kalinka:drives:catalog:albums']);
+      await tester.tap(find.byType(AddAllChip));
+      await tester.pumpAndSettle();
+      expect(api.enqueued.single, ['kalinka:drives:catalog:albums']);
+      // Crossing the layout boundary keeps the active enqueue receipt and
+      // the existing listing, including its scroll position.
+      if (width == 820) {
+        scroll.jumpTo(300);
+        await tester.pump();
+        final requests = api.calls.length;
+        tester.view.physicalSize = const Size(375, 812);
+        await tester.pumpAndSettle();
+        expect(find.text('Added'), findsOneWidget);
+        expect(scroll.pixels, 300);
+        expect(api.calls.length, requests);
+        tester.view.physicalSize = const Size(820, 812);
+        await tester.pumpAndSettle();
+        expect(find.text('Added'), findsOneWidget);
+        expect(tester.getRect(actions), actionRect);
+      }
+      await tester.pump(kEnqueuedHold);
+      await tester.pumpAndSettle();
+      await tester.tap(up);
+      await tester.pumpAndSettle();
+      expect(container.read(searchSessionProvider).folderPath, isEmpty);
+      expect(up, findsNothing);
+      final more = find.byKey(const ValueKey('drive-more'));
+      if (more.evaluate().isNotEmpty) {
+        await tester.tap(more);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('drive-menu-eject')), findsOneWidget);
+      } else {
+        expect(find.byKey(const ValueKey('drive-eject')), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final scale in [1.0, 2.0]) {
+    testWidgets(
+      'folder Pin stays available while actions migrate at ${scale}x text',
+      (tester) async {
+        final container = await _pump(
+          tester,
+          _Api(tracks: true),
+          size: const Size(375, 900),
+          scale: scale,
+          page: CatalogPage.category(
+            id: 'kalinka:localfiles:catalog:music',
+            title: 'Music',
+            description: '23 tracks · In My Library',
+            canAdd: true,
+            folderLayout: true,
+            filters: _catalog.filters,
+          ),
+        );
+        final pin = find.byType(CatalogPinButton);
+        final actions = find.byType(FolderPageActions);
+        final inset = tester
+            .widget<CatalogPageView>(find.byType(CatalogPageView))
+            .topBarInset;
+        final identityEnd =
+            tester
+                .getRect(find.byKey(const ValueKey('catalog-identity')))
+                .bottom -
+            inset;
+        final actionsStart = tester.getRect(actions).top - inset;
+        expect(actionsStart, greaterThan(identityEnd));
+        final scroll = tester.state<ScrollableState>(_scrollable).position;
+        final offsets = [
+          for (var offset = 0.0; offset <= actionsStart + 30; offset += 5)
+            offset,
+        ];
+        for (final offset in [...offsets, ...offsets.reversed]) {
+          scroll.jumpTo(offset);
+          await tester.pumpAndSettle();
+          expect(pin, findsOneWidget, reason: 'Pin at offset $offset');
+          expect(actions, findsOneWidget);
+          expect(
+            _inPage(pin),
+            offset < identityEnd ? findsOneWidget : findsNothing,
+            reason: 'Pin follows the title at offset $offset',
+          );
+          if (offset >= identityEnd) {
+            expect(pin.hitTestable(), findsOneWidget);
+          }
+          expect(
+            _inPage(actions),
+            offset < actionsStart ? findsOneWidget : findsNothing,
+            reason: 'Actions keep their own handover at offset $offset',
+          );
+          expect(tester.takeException(), isNull);
+        }
+
+        // Returning midway through collapse restores the two independent states.
+        final midway = (identityEnd + actionsStart) / 2;
+        scroll.jumpTo(midway);
+        await tester.pumpAndSettle();
+        final nav = container.read(searchSessionProvider.notifier);
+        nav.openCatalog(id: 'kalinka:localfiles:catalog:other', title: 'Other');
+        await tester.pumpAndSettle();
+        nav.goBack();
+        await tester.pumpAndSettle();
+        expect(scroll.pixels, closeTo(midway, .01));
+        expect(_inPage(pin), findsNothing);
+        expect(pin.hitTestable(), findsOneWidget);
+        expect(_inPage(actions), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final (width, scale) in [
+    (1440.0, 1.0),
+    (936.0, 1.0),
+    (820.0, 1.0),
+    (720.0, 1.0),
+    (375.0, 1.0),
+    (320.0, 2.0),
+  ]) {
+    testWidgets('library folder actions migrate on scroll at $width / $scale', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      final api = _Api(tracks: true);
+      final container = await _pump(
+        tester,
+        api,
+        size: Size(width, 900),
+        scale: scale,
+        topInset: 24,
+        captureKey: key,
+        page: CatalogPage.category(
+          id: 'kalinka:localfiles:catalog:files',
+          title: 'Folders',
+          folderLayout: true,
+          filters: _catalog.filters,
+        ),
+      );
+      final session = container.read(searchSessionProvider.notifier);
+      session.openFolder(
+        BrowseItem(
+          id: 'kalinka:localfiles:catalog:folder.music',
+          name: 'GrayMic - Jazz Ballads - 478781 --- Jamendo - MP3',
+          canBrowse: true,
+          canAdd: true,
+          catalog: Catalog(
+            id: 'music',
+            title: 'GrayMic - Jazz Ballads - 478781 --- Jamendo - MP3',
+            previewConfig: Preview(type: PreviewType.folder),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final actions = find.byType(FolderPageActions);
+      final play = find.byType(PlayAllChip);
+      final enqueue = find.byType(AddAllChip);
+      final up = find.byTooltip('Up one folder');
+      final back = find.byType(KalinkaBackButton);
+      final title = find.byKey(const ValueKey('catalog-expanded-title'));
+      final pageRect = tester.getRect(find.byType(CatalogPageView));
+      expect(_inPage(actions), findsOneWidget);
+      expect(
+        tester.getRect(actions).top,
+        greaterThanOrEqualTo(tester.getRect(back).bottom),
+      );
+      expect(tester.getRect(up).right, closeTo(pageRect.right - 16, .1));
+      if (width >= 820) {
+        expect(
+          tester.getRect(play).left,
+          greaterThan(tester.getRect(title).right),
+        );
+        expect(
+          tester.getRect(play).top,
+          lessThan(tester.getRect(title).bottom),
+        );
+      }
+      final expandedRect = tester.getRect(actions);
+      expect(width >= 936 ? _barField : _barSearch, findsOneWidget);
+      await _capture(tester, key, 'library-folder-$width-$scale-expanded');
+      await tester.tap(enqueue);
+      await tester.pumpAndSettle();
+      final requests = api.calls.length;
+      final scroll = tester.state<ScrollableState>(_scrollable).position;
+      scroll.jumpTo(300);
+      await tester.pumpAndSettle();
+      expect(_inPage(actions), findsNothing);
+      expect(play.hitTestable(), findsOneWidget);
+      expect(up.hitTestable(), findsOneWidget);
+      final compact = width <= 820;
+      expect(tester.widget<PlayAllChip>(play).iconOnly, compact);
+      expect(tester.widget<AddAllChip>(enqueue).iconOnly, compact);
+      expect(
+        find.byTooltip('Added to queue'),
+        compact ? findsOneWidget : findsNothing,
+      );
+      expect(api.calls.length, requests);
+      if (width >= 720) {
+        expect(
+          tester.getRect(actions).center.dy,
+          closeTo(tester.getRect(back).center.dy, .1),
+        );
+        expect(
+          tester.getRect(actions).right,
+          lessThanOrEqualTo(
+            tester.getRect(width >= 1200 ? _barField : _barSearch).left,
+          ),
+        );
+        expect(
+          find.byKey(const ValueKey('folder-toolbar-second-row')),
+          findsNothing,
+        );
+        expect(
+          tester.getSize(find.byType(FolderTrail)).width,
+          greaterThanOrEqualTo(width == 720 ? 292 : 300),
+        );
+        final current = find.descendant(
+          of: find.byType(FolderTrail),
+          matching: find.widgetWithText(
+            BreadcrumbCrumb,
+            'GrayMic - Jazz Ballads - 478781 --- Jamendo - MP3',
+          ),
+        );
+        expect(tester.getSize(current).width, greaterThan(160));
+        expect(width >= 1200 ? _barField : _barSearch, findsOneWidget);
+      }
+      await _capture(tester, key, 'library-folder-$width-$scale-collapsed');
+      scroll.jumpTo(0);
+      await tester.pumpAndSettle();
+      expect(_inPage(actions), findsOneWidget);
+      expect(tester.getRect(actions), expandedRect);
+      expect(api.enqueued, [
+        ['kalinka:localfiles:catalog:folder.music'],
+      ]);
+      expect(
+        tester.widget<AddAllChip>(enqueue).iconOnly
+            ? find.byTooltip('Added to queue')
+            : find.text('Added'),
+        findsOneWidget,
+      );
+      await tester.pump(kEnqueuedHold);
+      await tester.pumpAndSettle();
+      if (_barSearch.evaluate().isNotEmpty) {
+        await tester.tap(_barSearch);
+        await tester.pumpAndSettle();
+        final field = find.descendant(
+          of: _unrolled,
+          matching: find.byType(TextField),
+        );
+        await tester.enterText(field, 'night');
+        expect(
+          container.read(searchSessionProvider).catalogFilter.text,
+          isEmpty,
+        );
+        await tester.testTextInput.receiveAction(TextInputAction.search);
+        await tester.pumpAndSettle();
+        expect(_unrolled, findsNothing);
+        expect(
+          container.read(searchSessionProvider).catalogFilter.text,
+          'night',
+        );
+        expect(tester.widget<CatalogSearchButton>(_barSearch).active, isTrue);
+      } else {
+        session.setCatalogFilter(const BrowseFilterQuery(text: 'night'));
+        await tester.pumpAndSettle();
+      }
+      expect(
+        find.text('“night”'),
+        width >= 936 ? findsNothing : findsOneWidget,
+      );
+      scroll.jumpTo(300);
+      await tester.pumpAndSettle();
+      expect(tester.widget<PlayAllChip>(play).enabled, isFalse);
+      expect(tester.widget<AddAllChip>(enqueue).enabled, isFalse);
+      await tester.tap(up);
+      await tester.pumpAndSettle();
+      expect(container.read(searchSessionProvider).folderPath, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
   }
 
   for (final kind in [
@@ -1281,6 +1773,7 @@ void main() {
       expect(find.byTooltip('Back').hitTestable(), findsOneWidget);
       final scroll = tester.state<ScrollableState>(_scrollable).position;
       expect(scroll.maxScrollExtent, greaterThan(300));
+      final backdropSamples = <int, List<int>>{};
       for (final offset in [0.0, 24.0, 300.0, 0.0]) {
         scroll.jumpTo(offset);
         await tester.pumpAndSettle();
@@ -1301,11 +1794,27 @@ void main() {
         }))!;
         // Empty space at the left edge reveals the same blue artwork at
         // rest, mid-collapse and fully collapsed, with no black overlay.
-        for (final y in [0, 20, 50]) {
+        for (final y in [
+          0,
+          20,
+          50,
+          if (kind == 'folder') ...[90, 120],
+        ]) {
           final index = (y * 375 + 1) * 4;
-          expect(pixels.getUint8(index), closeTo(22, 2));
-          expect(pixels.getUint8(index + 1), closeTo(49, 2));
-          expect(pixels.getUint8(index + 2), closeTo(72, 2));
+          final rgb = [
+            for (var channel = 0; channel < 3; channel++)
+              pixels.getUint8(index + channel),
+          ];
+          if (y <= 50) {
+            expect(rgb[0], closeTo(22, 2));
+            expect(rgb[1], closeTo(49, 2));
+            expect(rgb[2], closeTo(72, 2));
+          } else {
+            // The art itself darkens down the page, but scrolling must not
+            // introduce a black strip behind the second row of controls.
+            expect(rgb[2] - rgb[0], greaterThan(25));
+            expect(rgb, backdropSamples.putIfAbsent(y, () => rgb));
+          }
         }
         expect(find.byTooltip('Back').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);

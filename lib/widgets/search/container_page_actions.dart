@@ -46,14 +46,21 @@ class ContainerPageActions extends ConsumerWidget {
     String? name,
     int? trackCount,
     bool narrowed = false,
+    bool iconOnly = false,
   }) => [
     for (final chip in [
-      PlayAllChip(trackIds: [id], trackCount: trackCount, enabled: !narrowed),
+      PlayAllChip(
+        trackIds: [id],
+        trackCount: trackCount,
+        enabled: !narrowed,
+        iconOnly: iconOnly,
+      ),
       AddAllChip(
         trackIds: [id],
         trackCount: trackCount,
         name: name,
         enabled: !narrowed,
+        iconOnly: iconOnly,
       ),
     ])
       narrowed

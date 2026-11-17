@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
@@ -11,18 +13,141 @@ class PlayerHeader extends StatelessWidget {
   final bool isTablet;
   final bool showingQueue;
   final VoidCallback? onClose;
+  final Widget? output;
 
-  /// The output switch is the player's, under its transport, not the
-  /// header's.
+  /// Wide Now Playing places its output beside fullscreen. Other layouts
+  /// keep it with the playback controls.
   const PlayerHeader({
     super.key,
     required this.isTablet,
     required this.showingQueue,
     this.onClose,
+    this.output,
   });
+
+  static double _outputWidth(BuildContext context, double width, bool tablet) =>
+      math.min(
+        280,
+        (width -
+                    (tablet ? 40 : 32) -
+                    PlayerViewSwitch.preferredWidth(context)) /
+                2 -
+            52,
+      );
+
+  /// Leave readable device text and space between the centred tabs and the
+  /// output/fullscreen group. The same budget sizes the actual header.
+  static bool outputFits(
+    BuildContext context,
+    double width, {
+    required bool tablet,
+  }) => _outputWidth(context, width, tablet) >= 144;
+
+  static double _outputRowHeight(BuildContext context) {
+    double textHeight(TextStyle style) {
+      final painter = TextPainter(
+        text: TextSpan(text: 'Output', style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    return math.max(
+      kKalinkaTopBarHeight,
+      math.max(
+        textHeight(KalinkaTextStyles.sectionLabel) + 24,
+        textHeight(KalinkaTextStyles.trayRowSublabel) + 20,
+      ),
+    );
+  }
+
+  /// Used by Now Playing to check that its artwork and controls fit below
+  /// this header before moving the output out of the body.
+  static double heightWithOutput(
+    BuildContext context, {
+    required bool tablet,
+  }) => _outputRowHeight(context) + (tablet ? 0 : 22);
+
+  Widget _withOutput(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: isTablet ? 20 : 16,
+        vertical: isTablet ? 0 : 8,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!isTablet) ...[_handle(), const SizedBox(height: 2)],
+          SizedBox(
+            height: _outputRowHeight(context),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                const Center(child: PlayerViewSwitch()),
+                if (!isTablet)
+                  Align(alignment: Alignment.centerLeft, child: _closeButton()),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: _outputWidth(
+                            context,
+                            constraints.maxWidth,
+                            isTablet,
+                          ),
+                          minHeight: 48,
+                        ),
+                        child: output!,
+                      ),
+                      const SizedBox(width: 8),
+                      const KioskEnterButton(),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _closeButton() => IconButton(
+    tooltip: 'Minimise player',
+    onPressed: onClose,
+    style: IconButton.styleFrom(
+      minimumSize: const Size(48, 48),
+      padding: const EdgeInsets.all(10),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    ),
+    icon: const Icon(
+      Icons.keyboard_arrow_down,
+      size: 28,
+      color: KalinkaColors.textSecondary,
+    ),
+  );
+
+  Widget _handle() => Center(
+    child: Container(
+      width: 40,
+      height: 4,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(2),
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
+    if (output != null && !showingQueue) return _withOutput(context);
     if (isTablet) {
       // The docked player's half of the bar it shares with browsing: the
       // same height and inset as the top bar beside it, so the two read as
@@ -69,20 +194,7 @@ class PlayerHeader extends StatelessWidget {
       );
     }
 
-    final leading = IconButton(
-      tooltip: 'Minimise player',
-      onPressed: onClose,
-      style: IconButton.styleFrom(
-        minimumSize: const Size(48, 48),
-        padding: const EdgeInsets.all(10),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      icon: const Icon(
-        Icons.keyboard_arrow_down,
-        size: 28,
-        color: KalinkaColors.textSecondary,
-      ),
-    );
+    final leading = _closeButton();
     // Fullscreen stays on the same right edge as the docked player, even
     // when the tabs need their own row. Queue options use that same slot.
     final trailing = showingQueue
@@ -94,16 +206,7 @@ class PlayerHeader extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          _handle(),
           // The chevron's own padding already sets it off from the handle.
           const SizedBox(height: 2),
           LayoutBuilder(

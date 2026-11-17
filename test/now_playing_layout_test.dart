@@ -20,8 +20,12 @@ import 'package:kalinka/providers/shell_nav_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/player_header.dart';
+import 'package:kalinka/widgets/player_view_switch.dart';
+import 'package:kalinka/widgets/play_pause_glyph.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/playback_progress_slider.dart';
+import 'package:kalinka/widgets/transport_button.dart';
+import 'package:kalinka/widgets/transport_controls.dart';
 
 import 'support/home_shell.dart';
 
@@ -34,18 +38,24 @@ class _Api extends KalinkaWsApi {
 }
 
 class _Renderers extends RendererListNotifier {
+  _Renderers([this.name = 'Living room']);
+  final String name;
+
   @override
-  RendererListState build() => const RendererListState(
+  RendererListState build() => RendererListState(
     loaded: true,
     renderers: [
       RendererInfo(
         rendererId: 'amp',
-        friendlyName: 'Living room',
+        friendlyName: name,
         status: 'connected',
         active: true,
       ),
     ],
   );
+
+  @override
+  Future<void> refresh() async {}
 }
 
 final _preview = find.byKey(const ValueKey('now-playing-up-next'));
@@ -101,6 +111,9 @@ Future<ProviderContainer> _pump(
   Size size = const Size(432, 1280),
   double scale = 1,
   Key? captureKey,
+  bool overlay = false,
+  Key? outputKey,
+  String outputName = 'Living room',
 }) async {
   final container = await pumpHomeShell(
     tester,
@@ -108,7 +121,7 @@ Future<ProviderContainer> _pump(
     size: size,
     overrides: [
       kalinkaWsApiProvider.overrideWith((ref) => _Api(ref)),
-      rendererListProvider.overrideWith(_Renderers.new),
+      rendererListProvider.overrideWith(() => _Renderers(outputName)),
       rendererIdentityProvider.overrideWith(
         (ref) async => const RendererIdentity(
           rendererId: 'this-device',
@@ -133,7 +146,14 @@ Future<ProviderContainer> _pump(
           ),
           child: RepaintBoundary(
             key: captureKey,
-            child: const Scaffold(body: NowPlayingContent(isTablet: true)),
+            child: Scaffold(
+              body: NowPlayingContent(
+                isTablet: !overlay,
+                showOverlayHeader: overlay,
+                onClose: () {},
+                outputSwitcherKey: outputKey,
+              ),
+            ),
           ),
         ),
       ),
@@ -497,22 +517,31 @@ void main() {
     });
   }
 
-  for (final (size, scale) in [
-    (const Size(936, 600), 1.0),
-    (const Size(1200, 800), 1.0),
-    (const Size(936, 1200), 1.0),
-    (const Size(1600, 1200), 2.0),
+  for (final (size, scale, overlay) in [
+    (const Size(936, 600), 1.0, false),
+    (const Size(1200, 800), 1.0, false),
+    (const Size(936, 1200), 1.0, false),
+    (const Size(1600, 1200), 2.0, false),
+    (const Size(908, 636), 1.0, true),
+    (const Size(1600, 1200), 2.0, true),
+    (const Size(2400, 1600), 3.2, true),
   ]) {
     testWidgets(
-      'wide player groups controls beside the cover at $size / $scale',
+      'wide player groups controls beside the cover at $size / $scale / overlay $overlay',
       (tester) async {
         final key = GlobalKey();
+        final outputKey = GlobalKey();
         final container = await _pump(
           tester,
           queue: SettableQueue(_queue()),
           size: size,
           scale: scale,
           captureKey: key,
+          overlay: overlay,
+          outputKey: outputKey,
+          outputName: scale > 1
+              ? 'Living room amplifier with a very long device name'
+              : 'SMSL-SU1',
         );
         final original = container.read(playQueueStateStoreProvider);
         final cover = tester.getRect(_art);
@@ -520,7 +549,8 @@ void main() {
           const ValueKey('now-playing-landscape-controls'),
         );
         expect(controls, findsOneWidget);
-        expect(cover.size, const Size(320, 320));
+        expect(cover.width, closeTo(320, .01));
+        expect(cover.height, closeTo(320, .01));
         final progress = tester.getRect(find.byType(PlaybackProgressSlider));
         expect(progress.left, greaterThan(cover.right));
         expect(progress.width, lessThanOrEqualTo(560));
@@ -534,6 +564,32 @@ void main() {
           find.byType(RendererSwitcherDropdown).hitTestable(),
           findsOneWidget,
         );
+        final headerOutput = find.descendant(
+          of: find.byType(PlayerHeader),
+          matching: find.byKey(outputKey),
+        );
+        expect(headerOutput, findsOneWidget);
+        final output = tester.getRect(headerOutput);
+        final fullscreen = tester.getRect(
+          find.byTooltip('Now-playing display'),
+        );
+        final tabs = tester.getRect(find.byType(PlayerViewSwitch));
+        expect(output.height, greaterThanOrEqualTo(48));
+        expect(output.width, lessThanOrEqualTo(280));
+        expect(output.right + 8, closeTo(fullscreen.left, .01));
+        expect(output.center.dy, closeTo(fullscreen.center.dy, .01));
+        expect(output.left, greaterThanOrEqualTo(tabs.right + 8));
+        expect(tabs.center.dx, closeTo(size.width / 2, .01));
+        final play = tester.getRect(
+          find.ancestor(
+            of: find.byType(PlayPauseGlyph),
+            matching: find.byType(TransportButton),
+          ),
+        );
+        expect(play.width, 68);
+        expect(play.center.dx, closeTo(progress.center.dx, .01));
+        expect(tester.getRect(find.byType(ShuffleButton)).left, progress.left);
+        expect(tester.getRect(find.byType(RepeatButton)).right, progress.right);
         final scroll = tester.state<ScrollableState>(
           find.descendant(
             of: find.byType(NowPlayingContent),
@@ -550,7 +606,7 @@ void main() {
               format: ui.ImageByteFormat.png,
             );
             final file = File(
-              '$captures/playing-${size.width}-${size.height}-$scale.png',
+              '$captures/playing-${size.width}-${size.height}-$scale-$overlay.png',
             );
             await file.parent.create(recursive: true);
             await file.writeAsBytes(bytes!.buffer.asUint8List());
@@ -560,11 +616,22 @@ void main() {
         tester.view.physicalSize = const Size(432, 900);
         await tester.pumpAndSettle();
         expect(controls, findsNothing);
+        expect(headerOutput, findsNothing);
+        expect(find.byKey(outputKey), findsOneWidget);
         tester.view.physicalSize = size;
         await tester.pumpAndSettle();
         expect(controls, findsOneWidget);
+        expect(headerOutput, findsOneWidget);
         expect(container.read(playQueueStateStoreProvider), same(original));
         expect((container.read(kalinkaWsApiProvider) as _Api).sent, isEmpty);
+        if (overlay && scale == 1) {
+          await tester.tap(headerOutput);
+          await tester.pumpAndSettle();
+          expect(find.byType(RendererPickerContent), findsOneWidget);
+          await tester.tap(find.byTooltip('Close output picker'));
+          await tester.pumpAndSettle();
+          expect(find.byType(RendererPickerContent), findsNothing);
+        }
         expect(tester.takeException(), isNull);
       },
     );

@@ -9,6 +9,10 @@ const browseToolbarPadding = EdgeInsets.fromLTRB(6, 2, 6, 2);
 const browseToolbarTitleGap = 8.0;
 const browseToolbarStatusWidth = 42.0;
 
+/// Folder identity takes priority over an inline search field or action labels.
+/// Grow this target with system text size; very narrow panes can fold further.
+const browseFolderTrailMinWidth = 300.0;
+
 /// Catalogues and wide albums share a control row, independently of any
 /// metadata below it. Compact catalogues put their larger title in this row.
 double browseToolbarHeight(

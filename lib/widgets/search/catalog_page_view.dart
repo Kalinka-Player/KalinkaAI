@@ -19,7 +19,6 @@ import '../../providers/indexer_status_provider.dart';
 import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/listing_presentation_provider.dart';
 import '../../providers/search_session_provider.dart';
-import 'drive_folder_actions.dart';
 import '../../providers/playback_time_provider.dart' show appLifecycleProvider;
 import '../../providers/source_modules_provider.dart';
 import '../../providers/storage_volumes_provider.dart';
@@ -36,7 +35,6 @@ import '../home/catalog_pin_button.dart';
 import '../infinite_list_view.dart';
 import '../measure_size.dart';
 import '../page_banner.dart';
-import '../search_cards/action_pill_button.dart';
 import '../search_cards/artwork_grid_card.dart';
 import '../search_cards/artwork_grid.dart';
 import '../search_cards/browse_item_rows.dart';
@@ -57,6 +55,7 @@ import 'catalog_sliver_header.dart';
 import 'collections_edit_bar.dart';
 import 'collections_section.dart';
 import 'container_page_actions.dart';
+import 'folder_page_actions.dart';
 import 'library_rescan_control.dart';
 
 /// Where each folder was left, so that walking back into it finds the same
@@ -93,15 +92,26 @@ class CatalogPageView extends ConsumerStatefulWidget {
   final ValueChanged<AlbumHeaderInsets>? onAlbumInsets;
 
   final ValueChanged<bool>? onHeaderCollapsed;
+  final ValueChanged<bool>? onFolderActionsCollapsed;
+  final ValueChanged<String?>? onCatalogSummary;
 
   /// Space reserved inside non-album scroll views for the host's transparent
   /// toolbar, including the system inset. Its controls stay outside the fade.
   final double topBarInset;
 
+  /// The host draws folder actions with its transparent toolbar, outside the
+  /// scrolling content's opacity mask. Standalone pages keep their own actions.
+  final bool folderActionsInHeader;
+
+  /// Searchable folders hand these actions to the toolbar on collapse. Keep
+  /// their expanded geometry even while the host supplies a placeholder.
+  final Widget? folderHeaderActions;
+
   /// The wide album owns its header so it can use the listing's live metadata.
   final VoidCallback? onAlbumBack;
   final VoidCallback? onServerTap;
   final bool titleInBar;
+  final bool? searchInBar;
 
   /// Returns to the Catalogs root — used by the error state's action.
   final VoidCallback onBackToCatalogs;
@@ -113,10 +123,15 @@ class CatalogPageView extends ConsumerStatefulWidget {
     this.onAlbumHeaderHeight,
     this.onAlbumInsets,
     this.onHeaderCollapsed,
+    this.onFolderActionsCollapsed,
+    this.onCatalogSummary,
     this.topBarInset = 0,
+    this.folderActionsInHeader = false,
+    this.folderHeaderActions,
     this.onAlbumBack,
     this.onServerTap,
     this.titleInBar = false,
+    this.searchInBar,
   });
 
   /// The Grid/List choice a visit's listing offers, if any. Folders, albums
@@ -154,6 +169,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
   /// The listing's size as the server last said, -1 before it has. The head
   /// shows it, and its actions have nothing to act on when it is 0.
   int _total = -1;
+  String? _reportedItemSummary;
 
   /// Bumped each time a live listing is shown or the app resumes, so it is
   /// read again behind the rows it had.
@@ -445,28 +461,45 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
       }
     }
 
+    final itemSummary = _total < 0
+        ? null
+        : '$_total ${switch (gridKind) {
+            BrowseType.album => _total == 1 ? 'album' : 'albums',
+            BrowseType.artist => _total == 1 ? 'artist' : 'artists',
+            BrowseType.track => _total == 1 ? 'track' : 'tracks',
+            _ => _total == 1 ? 'item' : 'items',
+          }}';
+    if (_reportedItemSummary != itemSummary) {
+      _reportedItemSummary = itemSummary;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onCatalogSummary?.call(itemSummary);
+      });
+    }
     final sliverHeader = catalogChrome
         ? CatalogSliverHeader(
             page: listing,
             query: query,
             onCollapsed: widget.onHeaderCollapsed,
+            onActionsCollapsed: widget.onFolderActionsCollapsed,
             topInset: widget.topBarInset,
             titleInBar: widget.titleInBar,
-            itemSummary: _total < 0
+            summaryInBar: widget.titleInBar && widget.onCatalogSummary != null,
+            actionsScrollAway: widget.folderHeaderActions != null,
+            actionsWidth: widget.folderHeaderActions == null
                 ? null
-                : '$_total ${switch (gridKind) {
-                    BrowseType.album => _total == 1 ? 'album' : 'albums',
-                    BrowseType.artist => _total == 1 ? 'artist' : 'artists',
-                    BrowseType.track => _total == 1 ? 'track' : 'tracks',
-                    _ => _total == 1 ? 'item' : 'items',
-                  }}',
-            actions: page.folderLayout && _FolderActions.anyFor(page, listing)
-                ? _FolderActions(
-                    page: page,
-                    listing: listing,
-                    narrowed: !filter.isEmpty,
-                  )
-                : null,
+                : FolderPageActions.widthFor(context, page, listing),
+            itemSummary: itemSummary,
+            actions:
+                widget.folderHeaderActions ??
+                (!widget.folderActionsInHeader &&
+                        page.folderLayout &&
+                        FolderPageActions.anyFor(page, listing)
+                    ? FolderPageActions(
+                        page: page,
+                        listing: listing,
+                        narrowed: !filter.isEmpty,
+                      )
+                    : null),
           )
         : !isAlbum && widget.topBarInset > 0
         ? PinnedHeaderSliver(child: SizedBox(height: widget.topBarInset))
@@ -492,6 +525,8 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             onQueryChanged: setQuery,
             actionsKey: _actionsKey,
             showIdentity: !catalogChrome,
+            showActions: !widget.folderActionsInHeader,
+            searchInBar: widget.searchInBar,
           )
         : _CatalogHeader(
             page: page,
@@ -503,6 +538,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             total: _total < 0 ? null : _total,
             layout: catalogChrome ? null : layout,
             showBanner: !catalogChrome,
+            searchInBar: widget.searchInBar,
           );
 
     // A collection being edited lists its tracks to be moved and dropped
@@ -587,7 +623,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             CatalogSliverHeader.pinnedExtent(
               context,
               actions:
-                  page.folderLayout && _FolderActions.anyFor(page, listing),
+                  !widget.folderActionsInHeader &&
+                  page.folderLayout &&
+                  FolderPageActions.anyFor(page, listing),
             ),
         bottom: 8,
       ),
@@ -951,7 +989,9 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           : listOf(header),
     );
     // A folder's trail is the bar's, in place of its title.
-    if (!page.folderLayout || catalogChrome) return listView;
+    if (!page.folderLayout || catalogChrome || widget.folderActionsInHeader) {
+      return listView;
+    }
 
     return Stack(
       fit: StackFit.expand,
@@ -960,7 +1000,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
           onNotification: _holdActions,
           child: listView,
         ),
-        if (_actionsHeld && _FolderActions.anyFor(page, listing))
+        if (_actionsHeld && FolderPageActions.anyFor(page, listing))
           Positioned(
             top: widget.topBarInset,
             left: 0,
@@ -977,7 +1017,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                   horizontal: 16,
                   vertical: _heldInset,
                 ),
-                child: _FolderActions(
+                child: FolderPageActions(
                   page: page,
                   listing: listing,
                   narrowed: !filter.isEmpty,
@@ -1383,6 +1423,7 @@ class _CatalogHeader extends StatelessWidget {
   /// has only rows.
   final ListingLayout? layout;
   final bool showBanner;
+  final bool? searchInBar;
 
   const _CatalogHeader({
     required this.page,
@@ -1394,6 +1435,7 @@ class _CatalogHeader extends StatelessWidget {
     required this.total,
     this.layout,
     this.showBanner = true,
+    this.searchInBar,
   });
 
   @override
@@ -1429,6 +1471,7 @@ class _CatalogHeader extends StatelessWidget {
           query: query,
           onChanged: onQueryChanged,
           inChrome: !showBanner,
+          searchInBar: searchInBar,
           leading: [
             if (expandedShelf case final type?)
               ActiveFilterChip(
@@ -1452,6 +1495,7 @@ class _AppliedFilters extends StatelessWidget {
   /// The page is under the catalog chrome, whose bar holds the search field
   /// where it has room.
   final bool inChrome;
+  final bool? searchInBar;
   final List<Widget> leading;
 
   const _AppliedFilters({
@@ -1459,6 +1503,7 @@ class _AppliedFilters extends StatelessWidget {
     required this.query,
     required this.onChanged,
     required this.inChrome,
+    this.searchInBar,
     this.leading = const [],
   });
 
@@ -1471,10 +1516,11 @@ class _AppliedFilters extends StatelessWidget {
         showText:
             capabilities.text == FacetSupport.hidden ||
             (inChrome &&
-                !CatalogSliverHeader.searchInBar(
-                  constraints.maxWidth,
-                  MediaQuery.textScalerOf(context).scale(16) / 16,
-                )),
+                !(searchInBar ??
+                    CatalogSliverHeader.searchInBar(
+                      constraints.maxWidth,
+                      MediaQuery.textScalerOf(context).scale(16) / 16,
+                    ))),
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
         onChanged: onChanged,
         leading: leading,
@@ -1522,6 +1568,8 @@ class _FolderHeader extends StatelessWidget {
   /// Marks the actions, which are held under the trail once scrolled to it.
   final GlobalKey actionsKey;
   final bool showIdentity;
+  final bool showActions;
+  final bool? searchInBar;
 
   const _FolderHeader({
     super.key,
@@ -1531,6 +1579,8 @@ class _FolderHeader extends StatelessWidget {
     required this.onQueryChanged,
     required this.actionsKey,
     this.showIdentity = true,
+    this.showActions = true,
+    this.searchInBar,
   });
 
   @override
@@ -1548,11 +1598,13 @@ class _FolderHeader extends StatelessWidget {
         else if (identical(listing, page) &&
             LibraryRescanControl.isLibraryPage(page.id))
           const LibraryRescanControl(),
-        if (showIdentity && _FolderActions.anyFor(page, listing))
+        if (showIdentity &&
+            showActions &&
+            FolderPageActions.anyFor(page, listing))
           Padding(
             key: actionsKey,
             padding: kKalinkaActionRowPadding,
-            child: _FolderActions(
+            child: FolderPageActions(
               page: page,
               listing: listing,
               narrowed: !query.isEmpty,
@@ -1563,70 +1615,13 @@ class _FolderHeader extends StatelessWidget {
           query: query,
           onChanged: onQueryChanged,
           inChrome: !showIdentity,
+          searchInBar: searchInBar,
         ),
         if (identical(listing, page) && page.sections.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: SectionShelves(sections: page.sections, query: query),
           ),
-      ],
-    );
-  }
-}
-
-/// What can be done from the folder shown: play or enqueue everything in it,
-/// and, at the far end, go up to the folder enclosing it — away from Play
-/// all, which replaces the queue.
-class _FolderActions extends ConsumerWidget {
-  final CatalogPage page;
-  final CatalogPage listing;
-
-  /// A filter narrows the listing; see [ContainerPageActions.narrowed].
-  final bool narrowed;
-
-  const _FolderActions({
-    required this.page,
-    required this.listing,
-    required this.narrowed,
-  });
-
-  static bool anyFor(CatalogPage page, CatalogPage listing) =>
-      !identical(listing, page) || listing.canAdd || listing.onStorage;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Row(
-      children: [
-        if (listing.canAdd)
-          Wrap(
-            spacing: 8,
-            children: ContainerPageActions.queueChips(
-              id: listing.id!,
-              name: listing.title,
-              narrowed: narrowed,
-            ),
-          ),
-        if (listing.onStorage && listing.id != null) ...[
-          if (listing.canAdd) const SizedBox(width: 8),
-          // Given the room left, to fold its pills into one where it is short.
-          Expanded(
-            child: DriveFolderActions(
-              entityId: listing.id!,
-              title: listing.title ?? 'this folder',
-            ),
-          ),
-        ] else
-          const Spacer(),
-        if (!identical(listing, page)) ...[
-          const SizedBox(width: 8),
-          ActionPillButton(
-            icon: Icons.drive_folder_upload_outlined,
-            semanticsLabel: 'Up one folder',
-            onTap: () {
-              ref.read(searchSessionProvider.notifier).showEnclosingFolder();
-            },
-          ),
-        ],
       ],
     );
   }

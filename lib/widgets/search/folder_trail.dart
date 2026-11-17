@@ -25,6 +25,7 @@ class FolderTrail extends ConsumerWidget {
     return CrumbTrail(
       names: [top ?? 'Home', for (final folder in path) folder.title ?? ''],
       icon: Icons.folder_outlined,
+      expandCurrent: true,
       onNavigate: notifier.showFolderAt,
     );
   }
