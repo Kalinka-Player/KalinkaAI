@@ -63,7 +63,7 @@ class DriveFolderActions extends ConsumerWidget {
         final widths = [
           if (library != null)
             ActionPillButton.widthOf(context, _libraryLabel(library)),
-          if (eject != null) ActionPillButton.iconOnlyWidth,
+          if (eject != null) kKalinkaPillTarget,
         ];
         final needed =
             widths.fold(0.0, (sum, w) => sum + w) + 8 * (widths.length - 1);
@@ -79,6 +79,7 @@ class DriveFolderActions extends ConsumerWidget {
             : ActionPillButton(
                 key: const ValueKey('drive-more'),
                 icon: Icons.more_horiz_rounded,
+                circular: true,
                 semanticsLabel: 'More for $title',
                 onTap: () =>
                     _showMenu(context, ref, library, eject, libraryIcon),
@@ -129,6 +130,7 @@ class DriveFolderActions extends ConsumerWidget {
     child: ActionPillButton(
       key: const ValueKey('drive-eject'),
       icon: Icons.eject_rounded,
+      circular: true,
       semanticsLabel: 'Eject ${volume.label}',
       onTap: () => _eject(context, ref, volume),
     ),

@@ -32,12 +32,16 @@ class CrumbTrail extends StatelessWidget {
   /// The widest any one crumb grows; a short trail can lift it.
   final double maxCrumbWidth;
 
+  /// Let the current location use the room left by its bounded ancestors.
+  final bool expandCurrent;
+
   const CrumbTrail({
     super.key,
     required this.names,
     required this.onNavigate,
     this.icon,
     this.maxCrumbWidth = crumbWidth,
+    this.expandCurrent = false,
   });
 
   @override
@@ -65,16 +69,22 @@ class CrumbTrail extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        double widthOf(String label, {bool withIcon = false}) =>
-            BreadcrumbCrumb.widthOf(
-              label,
-              style,
-              scaler,
-              withIcon: withIcon,
-            ).clamp(0, maxCrumbWidth);
+        double widthOf(
+          String label, {
+          bool withIcon = false,
+          bool current = false,
+        }) => BreadcrumbCrumb.widthOf(label, style, scaler, withIcon: withIcon)
+            .clamp(
+              0,
+              current && expandCurrent ? constraints.maxWidth : maxCrumbWidth,
+            );
         final widths = [
           for (var depth = 0; depth <= last; depth++)
-            widthOf(names[depth], withIcon: depth == 0 && icon != null),
+            widthOf(
+              names[depth],
+              withIcon: depth == 0 && icon != null,
+              current: depth == last,
+            ),
         ];
         final separatorWidth =
             BreadcrumbCrumb.labelWidth('›', style, scaler) +
@@ -101,14 +111,28 @@ class CrumbTrail extends StatelessWidget {
         return Row(
           children: [
             if (last == 0)
-              Flexible(child: crumb(0))
+              Flexible(
+                child: crumb(
+                  0,
+                  maxWidth: expandCurrent
+                      ? constraints.maxWidth
+                      : maxCrumbWidth,
+                ),
+              )
             else
               crumb(0, maxWidth: firstWidth),
             if (start > 1) ...[separator, crumb(start - 1, label: _ellipsis)],
             for (var depth = start; depth <= last; depth++) ...[
               separator,
               if (depth == last)
-                Flexible(child: crumb(depth))
+                Flexible(
+                  child: crumb(
+                    depth,
+                    maxWidth: expandCurrent
+                        ? constraints.maxWidth
+                        : maxCrumbWidth,
+                  ),
+                )
               else
                 crumb(depth),
             ],

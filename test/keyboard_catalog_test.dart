@@ -50,91 +50,134 @@ Future<void> _focusFilter(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('catalogue input and keyboard survive window resizing', (
-    tester,
-  ) async {
-    final container = await pumpHomeShell(
-      tester,
-      queue: SettableQueue(queueOf(2)),
-      api: _CatalogApi(),
-      size: const Size(1440, 900),
-      onScreenKeyboard: true,
-      reducedMotion: false,
-    );
-    container.read(playerViewProvider.notifier).show(PlayerView.queue);
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(
-          id: 'kalinka:localfiles:catalog:albums',
-          title: 'Albums',
-          filters: const [
-            FilterSpec(id: 'q', kind: FilterKind.text, label: 'Search albums'),
-          ],
+  for (final folder in [false, true]) {
+    testWidgets(
+      '${folder ? 'folder' : 'catalogue'} input and keyboard survive window resizing',
+      (tester) async {
+        final container = await pumpHomeShell(
+          tester,
+          queue: SettableQueue(queueOf(2)),
+          api: _CatalogApi(),
+          size: Size(folder ? 1920 : 1440, 900),
+          onScreenKeyboard: true,
+          reducedMotion: false,
         );
-    await tester.pumpAndSettle();
-    await _focusFilter(tester);
-    await tester.pumpAndSettle();
-    await tester.enterText(_field, 'Mozart');
-    final controller = tester.widget<TextField>(_field).controller!;
-    controller.selection = const TextSelection(baseOffset: 1, extentOffset: 4);
+        container.read(playerViewProvider.notifier).show(PlayerView.queue);
+        container
+            .read(searchSessionProvider.notifier)
+            .openCatalog(
+              id: 'kalinka:localfiles:catalog:albums',
+              title: folder ? 'Folders' : 'Albums',
+              folderLayout: folder,
+              canAdd: folder,
+              filters: const [
+                FilterSpec(
+                  id: 'q',
+                  kind: FilterKind.text,
+                  label: 'Search albums',
+                ),
+              ],
+            );
+        await tester.pumpAndSettle();
+        if (folder) {
+          expect(
+            find.byKey(const ValueKey('catalog-bar-field')),
+            findsOneWidget,
+          );
+        }
+        await _focusFilter(tester);
+        await tester.pumpAndSettle();
+        await tester.enterText(_field, 'Mozart');
+        final controller = tester.widget<TextField>(_field).controller!;
+        controller.selection = const TextSelection(
+          baseOffset: 1,
+          extentOffset: 4,
+        );
 
-    for (final size in [
-      const Size(1380, 800),
-      const Size(1320, 800),
-      const Size(1340, 800),
-      const Size(1200, 800),
-      const Size(800, 480),
-      const Size(400, 800),
-      const Size(1440, 900),
-    ]) {
-      tester.view.physicalSize = size;
-      await tester.pumpAndSettle();
-      expect(_keyboard.hitTestable(), findsOneWidget, reason: '$size');
-      expect(_mini.hitTestable(), findsNothing, reason: '$size');
-      expect(tester.widget<TextField>(_field).controller, same(controller));
-      expect(controller.text, 'Mozart');
-      expect(
-        controller.selection,
-        const TextSelection(baseOffset: 1, extentOffset: 4),
-      );
-      expect(
-        tester
-            .widget<EditableText>(find.byType(EditableText))
-            .focusNode
-            .hasFocus,
-        isTrue,
-      );
-      expect(container.read(searchSessionProvider).catalogFilter.text, isEmpty);
-    }
-    // Keys must still reach the original client and replace its selection.
-    await tester.tap(
-      find.descendant(
-        of: find.byType(VirtualKeypad),
-        matching: find.byWidgetPredicate(
-          (w) => w is Semantics && w.properties.label == 'a',
-        ),
-      ),
+        var sawInlineSearch = false;
+        var sawCollapsedSearch = false;
+        for (final size in [
+          const Size(1380, 800),
+          const Size(1320, 800),
+          const Size(1340, 800),
+          const Size(1200, 800),
+          const Size(800, 480),
+          const Size(400, 800),
+          const Size(1440, 900),
+          if (folder) const Size(1920, 900),
+        ]) {
+          tester.view.physicalSize = size;
+          await tester.pumpAndSettle();
+          expect(_keyboard.hitTestable(), findsOneWidget, reason: '$size');
+          expect(_mini.hitTestable(), findsNothing, reason: '$size');
+          expect(tester.widget<TextField>(_field).controller, same(controller));
+          expect(controller.text, 'Mozart');
+          expect(
+            controller.selection,
+            const TextSelection(baseOffset: 1, extentOffset: 4),
+          );
+          expect(
+            tester
+                .widget<EditableText>(find.byType(EditableText))
+                .focusNode
+                .hasFocus,
+            isTrue,
+          );
+          expect(
+            container.read(searchSessionProvider).catalogFilter.text,
+            isEmpty,
+          );
+          if (folder && size.width == 1920) {
+            expect(
+              find.byKey(const ValueKey('catalog-bar-field')),
+              findsOneWidget,
+            );
+          }
+          sawInlineSearch |= find
+              .byKey(const ValueKey('catalog-bar-field'))
+              .evaluate()
+              .isNotEmpty;
+          sawCollapsedSearch |= find
+              .byKey(const ValueKey('catalog-bar-search'))
+              .evaluate()
+              .isNotEmpty;
+        }
+        expect(sawInlineSearch, isTrue);
+        expect(sawCollapsedSearch, isTrue);
+        // Keys must still reach the original client and replace its selection.
+        await tester.tap(
+          find.descendant(
+            of: find.byType(VirtualKeypad),
+            matching: find.byWidgetPredicate(
+              (w) => w is Semantics && w.properties.label == 'a',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(controller.text, 'Mart');
+        await tester.tap(find.byKey(const ValueKey('keyboard-submit')));
+        await tester.pumpAndSettle();
+        expect(
+          container.read(searchSessionProvider).catalogFilter.text,
+          'Mart',
+        );
+        expect(_keyboard, findsNothing);
+        await _focusFilter(tester);
+        await tester.pumpAndSettle();
+        expect(_keyboard.hitTestable(), findsOneWidget);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        tester.view.physicalSize = const Size(400, 800);
+        await tester.pumpAndSettle();
+        expect(_keyboard, findsNothing);
+        expect(_mini.hitTestable(), findsOneWidget);
+        await tester.tap(_field);
+        await tester.pumpAndSettle();
+        expect(_keyboard.hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
     );
-    await tester.pumpAndSettle();
-    expect(controller.text, 'Mart');
-    await tester.tap(find.byKey(const ValueKey('keyboard-submit')));
-    await tester.pumpAndSettle();
-    expect(container.read(searchSessionProvider).catalogFilter.text, 'Mart');
-    expect(_keyboard, findsNothing);
-    await _focusFilter(tester);
-    await tester.pumpAndSettle();
-    expect(_keyboard.hitTestable(), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    tester.view.physicalSize = const Size(400, 800);
-    await tester.pumpAndSettle();
-    expect(_keyboard, findsNothing);
-    expect(_mini.hitTestable(), findsOneWidget);
-    await tester.tap(_field);
-    await tester.pumpAndSettle();
-    expect(_keyboard.hitTestable(), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+  }
 
   testWidgets('main search keyboard survives phone and tablet layout changes', (
     tester,

@@ -10,6 +10,7 @@ import '../../theme/app_theme.dart';
 import '../browse_filters/browse_filter_form.dart';
 import '../home/catalog_pin_button.dart';
 import '../source_badge.dart';
+import '../search_cards/action_pill_button.dart';
 
 /// A catalog's identity, which scrolls away with the page and slides under
 /// the bar, handing over to it with Pin once out of sight; a folder's own
@@ -21,11 +22,18 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
   /// Told when the identity hands over to the bar, and when it is back.
   final ValueChanged<bool>? onCollapsed;
 
+  /// Folder actions can follow a description below the title, reaching the
+  /// toolbar later than the title and Pin.
+  final ValueChanged<bool>? onActionsCollapsed;
+
   /// The transparent toolbar's obstruction, kept inside this viewport so
   /// content can paint behind it while keyboard focus clears it.
   final double topInset;
   final Widget? actions;
+  final bool actionsScrollAway;
+  final double? actionsWidth;
   final bool titleInBar;
+  final bool summaryInBar;
   final String? itemSummary;
 
   const CatalogSliverHeader({
@@ -33,9 +41,13 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
     required this.page,
     required this.query,
     this.onCollapsed,
+    this.onActionsCollapsed,
     this.topInset = 0,
     this.actions,
+    this.actionsScrollAway = false,
+    this.actionsWidth,
     this.titleInBar = false,
+    this.summaryInBar = false,
     this.itemSummary,
   });
 
@@ -72,6 +84,7 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
 
 class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
   bool? _collapsed;
+  bool? _actionsCollapsed;
   ({
     String title,
     String subtitle,
@@ -101,6 +114,14 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
     });
   }
 
+  void _reportActions(bool collapsed) {
+    if (_actionsCollapsed == collapsed) return;
+    _actionsCollapsed = collapsed;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onActionsCollapsed?.call(collapsed);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final page = widget.page;
@@ -109,8 +130,12 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
         !ref.watch(builtinSourcesProvider).contains(sourceOfId(page.id!));
     final scaler = MediaQuery.textScalerOf(context);
     final scale = scaler.scale(16) / 16;
-    final rowHeight = FilterSearchField.heightFor(context);
-    final subtitle = widget.titleInBar
+    final rowHeight = widget.actionsScrollAway
+        ? ActionPillButton.heightOf(context)
+        : FilterSearchField.heightFor(context);
+    final subtitle = widget.summaryInBar
+        ? ''
+        : widget.titleInBar
         ? [
             if (page.provider?.trim().isNotEmpty == true) page.provider!.trim(),
             if (widget.itemSummary != null) widget.itemSummary!,
@@ -124,8 +149,8 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
       builder: (context, constraints) {
         final width = constraints.crossAxisExtent;
         if (widget.titleInBar) {
-          // The title and Pin are already in the toolbar. Only attribution
-          // scrolls away; reserve the toolbar's clearance inside the scroll.
+          // The host owns the title and Pin, and can also keep the summary
+          // in its toolbar. Reserve that clearance inside the scroll.
           final summaryStyle = KalinkaTextStyles.trackRowSubtitle;
           final metrics = TextPainter(
             text: TextSpan(text: subtitle, style: summaryStyle),
@@ -212,7 +237,7 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
         // and eject pills.
         final folderActions = widget.actions == null
             ? 0.0
-            : (page.onStorage ? 560 : 400) * scale;
+            : widget.actionsWidth ?? (page.onStorage ? 560 : 400) * scale;
         // The title keeps its line where it can, and wraps to two before
         // a folder's actions give up the identity's row.
         const identityGap = 24.0;
@@ -229,7 +254,7 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
         // trail is.
         final pinnedHeight = CatalogSliverHeader.pinnedExtent(
           context,
-          actions: widget.actions != null,
+          actions: widget.actions != null && !widget.actionsScrollAway,
         );
         final headingWidth = wide
             ? available - controlsWidth - identityGap
@@ -312,13 +337,27 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
                   : (shrink / collapseExtent).clamp(0.0, 1.0);
               // Beside a folder's actions, the identity fades over the first
               // half of the collapse, and they cross its column in the second.
-              final fade = wide ? (1 - settle * 2).clamp(0.0, 1.0) : 1.0;
+              final fade = wide && !widget.actionsScrollAway
+                  ? (1 - settle * 2).clamp(0.0, 1.0)
+                  : 1.0;
               final spread = wide ? (settle * 2 - 1).clamp(0.0, 1.0) : settle;
               final compact =
                   fade == 0 ||
                   (shrink > 0 &&
                       shrink >= math.min(_titleHeight, collapseExtent));
+              // The toolbar's Pin replaces the expanded Pin at the same
+              // point the identity is removed, independently of the actions.
               _report(compact);
+              if (widget.actionsScrollAway) {
+                _reportActions(
+                  shrink > 0 &&
+                      shrink >=
+                          math.max(
+                            expandedTop + 8,
+                            math.min(_titleHeight, collapseExtent),
+                          ),
+                );
+              }
               // Attribution follows the title up, fading as it nears the edge.
               final subtitleTop = headingTop + _titleHeight + 4 - shrink;
               final subtitleOpacity = math.min(
@@ -330,11 +369,15 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
               // Up to 8dp under the bar, across the pane, and held there.
               final actionsTop =
                   widget.topInset +
-                  math.min(
-                    math.max(top + 8, 8.0),
-                    expandedHeight - shrink - rowHeight - 8,
-                  );
-              final actionsLeft = left + (16 - left) * spread;
+                  (widget.actionsScrollAway
+                      ? top + 8
+                      : math.min(
+                          math.max(top + 8, 8.0),
+                          expandedHeight - shrink - rowHeight - 8,
+                        ));
+              final actionsLeft = widget.actionsScrollAway
+                  ? left
+                  : left + (16 - left) * spread;
               return ColoredBox(
                 key: const ValueKey('catalog-header-surface'),
                 color: Colors.transparent,
@@ -343,7 +386,7 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
                     children: [
                       // Only the held folder actions need a surface. Keep it
                       // below the transparent toolbar and status area.
-                      if (widget.actions != null)
+                      if (widget.actions != null && !widget.actionsScrollAway)
                         Positioned.fill(
                           top: widget.topInset,
                           child: ColoredBox(

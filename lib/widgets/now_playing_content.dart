@@ -91,6 +91,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           audioCodec: s.audioCodec,
           bitsPerSample: s.audioInfo?.bitsPerSample,
           sampleRate: s.audioInfo?.sampleRate,
+          failed: s.state == PlayerStateType.error,
         ),
       ),
     );
@@ -176,21 +177,49 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
       child: Container(
         color: KalinkaColors.background,
         child: SafeArea(
-          child: Column(
-            children: [
-              // Header
-              _buildHeader(showingQueue: false, away: away),
-              // Content starts below the header; spare space can show Up Next.
-              _buildBodyContent(
-                currentTrack: currentTrack,
-                resolvedImageUrl: resolvedImageUrl,
-                sourceInfo: sourceInfo,
-                mimeLabel: mimeLabel,
-                qualityLabel: qualityLabel,
-                durationMs: durationMs,
-                away: away,
-              ),
-            ],
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final tabletHeader = widget.isTablet && !widget.showOverlayHeader;
+              final outputInHeader =
+                  (widget.showOverlayHeader || widget.isTablet) &&
+                  PlayerHeader.outputFits(
+                    context,
+                    constraints.maxWidth,
+                    tablet: tabletHeader,
+                  ) &&
+                  _widePlayerFits(
+                    currentTrack,
+                    width: constraints.maxWidth - 32,
+                    height:
+                        constraints.maxHeight -
+                        PlayerHeader.heightWithOutput(
+                          context,
+                          tablet: tabletHeader,
+                        ),
+                    outputInHeader: true,
+                  );
+              return Column(
+                children: [
+                  _buildHeader(
+                    showingQueue: false,
+                    away: away,
+                    output: outputInHeader
+                        ? AwayDim(away: away, child: _output(away))
+                        : null,
+                  ),
+                  _buildBodyContent(
+                    currentTrack: currentTrack,
+                    resolvedImageUrl: resolvedImageUrl,
+                    sourceInfo: sourceInfo,
+                    mimeLabel: mimeLabel,
+                    qualityLabel: qualityLabel,
+                    durationMs: durationMs,
+                    away: away,
+                    outputInHeader: outputInHeader,
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -207,6 +236,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     required String qualityLabel,
     required int durationMs,
     required bool away,
+    required bool outputInHeader,
   }) {
     return Expanded(
       child: Padding(
@@ -228,13 +258,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                 constraints.maxHeight < 440 ||
                 textScaler.scale(KalinkaTypography.baseSize) >
                     KalinkaTypography.baseSize * 1.3;
-            final sideArtSize = (constraints.maxWidth * 0.42).clamp(
-              0.0,
-              (constraints.maxWidth - metadataGap - metadataMinWidth).clamp(
-                0.0,
-                320.0,
-              ),
-            );
+            final sideArtSize = _sideArtSize(constraints.maxWidth);
             final artSize = sideBySide
                 ? sideArtSize
                 : compact
@@ -252,40 +276,16 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
               grow: grow,
             );
             final short = constraints.maxHeight < 400;
-            Widget output() => AwayLock(
-              away: away,
-              child: RendererSwitcherDropdown(
-                key: widget.outputSwitcherKey,
-                framed: true,
-                maxNameWidth: 220,
-              ),
-            );
             final compactWidth = math.min(
               560.0,
               constraints.maxWidth - sideArtSize - metadataGap,
             );
-            final scale = textScaler.scale(16) / 16;
-            final failed = ref.watch(
-              playerStateProvider.select(
-                (s) => s.state == PlayerStateType.error,
-              ),
-            );
-            final exclusive = ref.watch(
-              playbackControlProvider.select((c) => c.isExclusive),
-            );
-            // Reserve progress, transport, output and their gaps, including
-            // room for playback notices. The cover can be taller than the
-            // controls, especially with an empty queue; both must fit.
-            final compactDetailsHeight =
-                _metadataHeight(
-                  currentTrack,
-                  compactWidth,
-                  grow: 32 / KalinkaTextStyles.expandedTitle.fontSize!,
-                ) +
-                (200 + (failed ? 28 : 0) + (exclusive ? 52 : 0)) * scale;
-            if (compactPaneLayout(constraints.maxWidth, textScaler) &&
-                math.max(sideArtSize, compactDetailsHeight) <=
-                    constraints.maxHeight - 24) {
+            if (_widePlayerFits(
+              currentTrack,
+              width: constraints.maxWidth,
+              height: constraints.maxHeight,
+              outputInHeader: outputInHeader,
+            )) {
               return Align(
                 alignment: Alignment.topCenter,
                 child: SizedBox(
@@ -338,18 +338,23 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                                           ),
                                           const SizedBox(height: 8),
                                           ConstrainedBox(
-                                            constraints: const BoxConstraints(
-                                              maxWidth: 360,
+                                            constraints: BoxConstraints(
+                                              maxWidth: outputInHeader
+                                                  ? double.infinity
+                                                  : 360,
                                             ),
                                             child: AwayLock(
                                               away: away,
-                                              child: const _TransportControls(
-                                                compact: true,
+                                              child: _TransportControls(
+                                                compact: !outputInHeader,
+                                                spread: outputInHeader,
                                               ),
                                             ),
                                           ),
-                                          const SizedBox(height: 12),
-                                          output(),
+                                          if (!outputInHeader) ...[
+                                            const SizedBox(height: 12),
+                                            _output(away),
+                                          ],
                                         ],
                                       ),
                                     ),
@@ -451,7 +456,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                                                 ),
                                               ),
                                               const SizedBox(height: 16),
-                                              output(),
+                                              _output(away),
                                             ],
                                           ),
                                         ),
@@ -481,7 +486,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                   AwayLock(away: away, child: const _TransportControls()),
                   if (!sideBySide) ...[
                     SizedBox(height: short ? 12 : 24),
-                    Center(child: output()),
+                    Center(child: _output(away)),
                   ],
                   SizedBox(height: short ? 12 : 24),
                 ],
@@ -511,6 +516,51 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
         ),
       ),
     );
+  }
+
+  Widget _output(bool away) => AwayLock(
+    away: away,
+    child: RendererSwitcherDropdown(
+      key: widget.outputSwitcherKey,
+      framed: true,
+      maxNameWidth: 220,
+    ),
+  );
+
+  double _sideArtSize(double width) => (width * .42).clamp(
+    0.0,
+    (width - 24 - MediaQuery.textScalerOf(context).scale(200)).clamp(
+      0.0,
+      320.0,
+    ),
+  );
+
+  /// Header and body choose the same arrangement in the same frame. Account
+  /// for the larger transport and for the output moving out of the column.
+  bool _widePlayerFits(
+    Track? track, {
+    required double width,
+    required double height,
+    required bool outputInHeader,
+  }) {
+    final scaler = MediaQuery.textScalerOf(context);
+    if (!compactPaneLayout(width, scaler)) return false;
+    final art = _sideArtSize(width);
+    final detailsWidth = math.min(560.0, width - art - 24);
+    final failed = ref.read(playerStateProvider).state == PlayerStateType.error;
+    final exclusive = ref.read(playbackControlProvider).isExclusive;
+    final detailsHeight =
+        _metadataHeight(
+          track,
+          detailsWidth,
+          grow: 32 / KalinkaTextStyles.expandedTitle.fontSize!,
+        ) +
+        ((outputInHeader ? 156 : 200) +
+                (failed ? 28 : 0) +
+                (exclusive ? 52 : 0)) *
+            scaler.scale(16) /
+            16;
+    return math.max(art, detailsHeight) <= height - 24;
   }
 
   /// Space reserved for stacked metadata before sizing the cover. Measuring
@@ -768,12 +818,17 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     );
   }
 
-  Widget _buildHeader({required bool showingQueue, required bool away}) {
+  Widget _buildHeader({
+    required bool showingQueue,
+    required bool away,
+    Widget? output,
+  }) {
     if (widget.showOverlayHeader || widget.isTablet) {
       return PlayerHeader(
         isTablet: widget.isTablet && !widget.showOverlayHeader,
         showingQueue: showingQueue,
         onClose: widget.onClose,
+        output: output,
       );
     }
 
@@ -877,7 +932,8 @@ class _ExclusivePlaybackNote extends ConsumerWidget {
 /// leaving the rest of NowPlayingContent (album art, metadata) untouched.
 class _TransportControls extends ConsumerWidget {
   final bool compact;
-  const _TransportControls({this.compact = false});
+  final bool spread;
+  const _TransportControls({this.compact = false, this.spread = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -891,9 +947,11 @@ class _TransportControls extends ConsumerWidget {
     // a plugin's playback takes neither.
     return RepaintBoundary(
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        mainAxisAlignment: spread
+            ? MainAxisAlignment.spaceBetween
+            : MainAxisAlignment.spaceEvenly,
         children: [
-          if (!exclusive) const ShuffleButton(),
+          if (!exclusive) ShuffleButton(hitDiameter: spread ? 48 : 44),
           const SkipButton(next: false),
           Opacity(
             opacity: transport.hasTrack ? 1.0 : 0.4,
@@ -920,7 +978,7 @@ class _TransportControls extends ConsumerWidget {
             ),
           ),
           const SkipButton(next: true),
-          if (!exclusive) const RepeatButton(),
+          if (!exclusive) RepeatButton(hitDiameter: spread ? 48 : 44),
         ],
       ),
     );

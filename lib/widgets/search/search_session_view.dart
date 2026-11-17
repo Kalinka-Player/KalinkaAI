@@ -36,6 +36,7 @@ import '../kalinka_centered_surface.dart';
 import '../kalinka_back_button.dart';
 import '../selection_overlay.dart';
 import '../server_chip.dart';
+import '../source_badge.dart';
 import '../tap_highlight.dart' show kalinkaIconButtonStyle, kalinkaOverlay;
 import 'album_page_header.dart';
 import 'browse_visit_scope.dart';
@@ -44,6 +45,8 @@ import 'catalog_page_view.dart';
 import 'catalog_sliver_header.dart';
 import '../../utils/compact_pane_layout.dart';
 import 'folder_trail.dart';
+import 'folder_page_actions.dart';
+import '../search_cards/action_pill_button.dart';
 import 'library_activity.dart';
 import 'collections_edit_bar.dart' show leaveCollectionEditing;
 import '../home/home_layout.dart';
@@ -220,16 +223,84 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// Whether lists here stretch when pulled past an end, as on Android.
   bool _albumStretches = false;
 
-  final _visitPages = <int, (SearchSessionState, bool, Widget)>{};
+  final _visitPages =
+      <int, (SearchSessionState, bool, bool, bool, bool, Widget)>{};
   final _catalogHeadersCollapsed = <int, bool>{};
+  final _folderActionsCollapsed = <int, bool>{};
+  final _catalogSummaries = <int, String?>{};
 
   // Whether the bar's search has unrolled its field under the bar.
   bool _barSearchOpen = false;
   bool _catalogSearchInBar = false;
   bool _compactPane = false;
+  double _paneWidth = 0;
+  final _folderActionKeys = <int, GlobalKey>{};
 
-  bool _compactCatalogHeader(CatalogPage page) =>
-      _compactPane && page.isCatalog && !page.folderLayout;
+  bool _compactCatalogHeader(SearchSessionState visit) {
+    final page = visit.catalogPage;
+    if (visit.activeView != FindMusicView.catalogs ||
+        !page.isCatalog ||
+        page.folderLayout) {
+      return false;
+    }
+    if (_compactPane) return true;
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    final width = _paneWidth - MediaQuery.paddingOf(context).horizontal;
+    if (width < 600 * scale) return false;
+    return width >=
+        browseToolbarPadding.horizontal +
+            48 +
+            browseToolbarTitleGap +
+            _catalogIdentityWidth(visit) +
+            _catalogTrailingWidth(
+              context,
+              visit,
+              searchWidth: CatalogSliverHeader.searches(page.filterCapabilities)
+                  ? 48
+                  : 0,
+            );
+  }
+
+  double _catalogIdentityWidth(SearchSessionState visit) {
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    final title = TextPainter(
+      text: TextSpan(
+        text: visit.shownListing.title ?? '',
+        style: KalinkaFonts.display(
+          fontSize: 30,
+          height: 1.1,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final identity = math.min(title.width + 56, 320 * scale);
+    title.dispose();
+    return identity;
+  }
+
+  /// Space after the identity, excluding its own Pin. Shared with the compact
+  /// subtitle so it ends before the toolbar's controls.
+  double _catalogTrailingWidth(
+    BuildContext context,
+    SearchSessionState visit, {
+    required double searchWidth,
+  }) {
+    final caps = visit.catalogPage.filterCapabilities;
+    final filters = CatalogSliverHeader.filters(caps);
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    final presentation = CatalogPageView.presentationLayoutOf(visit) != null;
+    return searchWidth +
+        (filters ? 48 : 0) +
+        browseToolbarStatusWidth +
+        (presentation
+            ? (_paneWidth < 600 * scale ? 48 : PresentationToggle.width) +
+                  (searchWidth > 0 || filters ? 12 : 0)
+            : 0);
+  }
+
   final _catalogSearchFocus = FocusNode();
   // Move the same editable field between the toolbar and its narrow-screen
   // row. Replacing it would discard drafts, selection and the input connection.
@@ -734,13 +805,15 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
+          _paneWidth = constraints.maxWidth;
           _compactPane = compactPaneLayout(
             constraints.maxWidth,
             MediaQuery.textScalerOf(context),
           );
-          final searchInBar = CatalogSliverHeader.searchInBar(
+          final searchInBar = _searchFitsInToolbar(
+            context,
+            session,
             constraints.maxWidth - MediaQuery.paddingOf(context).horizontal,
-            MediaQuery.textScalerOf(context).scale(16) / 16,
           );
           if (_catalogSearchInBar &&
               !searchInBar &&
@@ -990,7 +1063,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     ];
     final kept = {for (final visit in retained) visit.visitId};
     _visitPages.removeWhere((id, _) => !kept.contains(id));
+    _folderActionKeys.removeWhere((id, _) => !kept.contains(id));
     _catalogHeadersCollapsed.removeWhere((id, _) => !kept.contains(id));
+    _folderActionsCollapsed.removeWhere((id, _) => !kept.contains(id));
+    _catalogSummaries.removeWhere((id, _) => !kept.contains(id));
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -1017,14 +1093,33 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// retains its keyed element, listing state and scroll position.
   Widget _visitPage(SearchSessionState visit) {
     final cached = _visitPages[visit.visitId];
-    final compactHeader = _compactCatalogHeader(visit.catalogPage);
+    final compactHeader = _compactCatalogHeader(visit);
+    final searchInBar = _searchFitsInToolbar(
+      context,
+      visit,
+      _paneWidth - MediaQuery.paddingOf(context).horizontal,
+    );
+    final folderInline = _folderActionsInline(context, visit);
+    final folderCollapsed =
+        _migratingFolderActions(visit) &&
+        _folderActionsCollapsed[visit.visitId] == true;
     if (cached != null &&
         identical(cached.$1, visit) &&
-        cached.$2 == compactHeader) {
-      return cached.$3;
+        cached.$2 == compactHeader &&
+        cached.$3 == folderInline &&
+        cached.$4 == folderCollapsed &&
+        cached.$5 == searchInBar) {
+      return cached.$6;
     }
     final page = BrowseVisitScope(visit: visit, child: _buildVisit(visit));
-    _visitPages[visit.visitId] = (visit, compactHeader, page);
+    _visitPages[visit.visitId] = (
+      visit,
+      compactHeader,
+      folderInline,
+      folderCollapsed,
+      searchInBar,
+      page,
+    );
     return page;
   }
 
@@ -1159,15 +1254,38 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       child: Builder(
         builder: (context) => CatalogPageView(
           page: page,
-          titleInBar: _compactCatalogHeader(page),
+          titleInBar: _compactCatalogHeader(visit),
+          searchInBar: _searchFitsInToolbar(
+            context,
+            visit,
+            _paneWidth - MediaQuery.paddingOf(context).horizontal,
+          ),
+          folderActionsInHeader: page.folderLayout,
+          folderHeaderActions: _migratingFolderActions(visit)
+              ? _folderActionsCollapsed[id] == true
+                    ? const SizedBox.shrink()
+                    : _folderActions(visit)
+              : null,
           topBarInset: page.isAlbum || page.isRoot
               ? 0
               : MediaQuery.paddingOf(context).top + _barHeight(context, visit),
           onAlbumBack: _handleBack,
           onServerTap: widget.onServerTap,
+          onCatalogSummary: page.isCatalog && !page.folderLayout
+              ? (summary) {
+                  if (_catalogSummaries[id] == summary) return;
+                  _catalogSummaries[id] = summary;
+                  if (mounted && _isShown(id)) setState(() {});
+                }
+              : null,
           onHeaderCollapsed: (collapsed) {
             if (_catalogHeadersCollapsed[id] == collapsed) return;
             _catalogHeadersCollapsed[id] = collapsed;
+            if (mounted && _isShown(id)) setState(() {});
+          },
+          onFolderActionsCollapsed: (collapsed) {
+            if (_folderActionsCollapsed[id] == collapsed) return;
+            _folderActionsCollapsed[id] = collapsed;
             if (mounted && _isShown(id)) setState(() {});
           },
           onAlbumHeaderHeight: page.isAlbum
@@ -1192,15 +1310,256 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// The top level's bar is the app's own: wordmark and connection chip.
   /// Catalog Search, Filters and Grid/List stay in the bar; title and Pin
   /// join Back on collapse. Results retain their search-and-filters control.
-  double _barHeight(BuildContext context, SearchSessionState session) =>
+  double _barRowHeight(BuildContext context, SearchSessionState session) =>
       session.activeView == FindMusicView.catalogs &&
-          _compactCatalogHeader(session.catalogPage)
+          _compactCatalogHeader(session)
       ? browseToolbarHeight(context, compactTitle: true)
       : session.activeView == FindMusicView.results ||
             (session.activeView == FindMusicView.catalogs &&
                 CatalogSliverHeader.appliesTo(session.catalogPage))
       ? browseToolbarHeight(context, compactTitle: false)
       : kKalinkaTopBarHeight;
+
+  bool _hasFolderActions(SearchSessionState session) =>
+      session.activeView == FindMusicView.catalogs &&
+      session.catalogPage.folderLayout &&
+      FolderPageActions.anyFor(session.catalogPage, session.shownListing);
+
+  // Searchable folders start their controls beside the expanded identity.
+  // Drives keep the existing fixed toolbar treatment.
+  bool _migratingFolderActions(SearchSessionState session) =>
+      _hasFolderActions(session) &&
+      (CatalogSliverHeader.searches(session.catalogPage.filterCapabilities) ||
+          CatalogSliverHeader.filters(session.catalogPage.filterCapabilities));
+
+  bool _folderActionsInToolbar(SearchSessionState session) =>
+      _hasFolderActions(session) &&
+      (!_migratingFolderActions(session) ||
+          _folderActionsCollapsed[session.visitId] == true);
+
+  double _catalogBarSearchWidth(
+    BuildContext context,
+    SearchSessionState session,
+    double width,
+  ) {
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    return math.min(
+      (_compactCatalogHeader(session)
+              ? 260.0
+              : CatalogSliverHeader.searchMaxWidth) *
+          scale,
+      width * .4,
+    );
+  }
+
+  bool _searchFitsInToolbar(
+    BuildContext context,
+    SearchSessionState session,
+    double width,
+  ) {
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    if (_compactCatalogHeader(session)) {
+      return width >=
+          browseToolbarPadding.horizontal +
+              48 +
+              browseToolbarTitleGap +
+              _catalogIdentityWidth(session) +
+              _catalogTrailingWidth(
+                context,
+                session,
+                searchWidth:
+                    _catalogBarSearchWidth(context, session, width) + 12,
+              );
+    }
+    if (!CatalogSliverHeader.searchInBar(width, scale)) return false;
+    if (!session.catalogPage.folderLayout) return true;
+    // The field can use spare room while the actions are beside the page
+    // title. On collapse it yields to those actions and a readable breadcrumb.
+    final needed =
+        browseToolbarPadding.horizontal +
+        48 +
+        browseToolbarTitleGap +
+        browseFolderTrailMinWidth * scale +
+        48 +
+        browseToolbarStatusWidth +
+        12 +
+        _catalogBarSearchWidth(context, session, width) +
+        (CatalogSliverHeader.filters(session.catalogPage.filterCapabilities)
+            ? kKalinkaPillTarget
+            : 0) +
+        (_folderActionsInToolbar(session)
+            ? 8 +
+                  FolderPageActions.widthFor(
+                    context,
+                    session.catalogPage,
+                    session.shownListing,
+                  )
+            : 0);
+    return width >= needed;
+  }
+
+  double _folderToolbarAvailable(
+    BuildContext context,
+    SearchSessionState session,
+  ) {
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    final width = _paneWidth - MediaQuery.paddingOf(context).horizontal;
+    final caps = session.catalogPage.filterCapabilities;
+    final search = !CatalogSliverHeader.searches(caps)
+        ? 0.0
+        : _catalogSearchInBar
+        ? _catalogBarSearchWidth(context, session, width) + 12
+        : kKalinkaPillTarget;
+    // The breadcrumb can fold to its current folder, but retains a readable
+    // label. Keep space for Pin so the controls do not shift on handover.
+    return width -
+        browseToolbarPadding.horizontal -
+        48 -
+        browseToolbarTitleGap -
+        browseFolderTrailMinWidth * scale -
+        48 -
+        8 -
+        browseToolbarStatusWidth -
+        search -
+        (CatalogSliverHeader.filters(caps) ? kKalinkaPillTarget : 0);
+  }
+
+  bool _folderToolbarCompact(
+    BuildContext context,
+    SearchSessionState session,
+  ) =>
+      _migratingFolderActions(session) &&
+      (FolderPageActions.widthFor(
+                context,
+                session.catalogPage,
+                session.shownListing,
+              ) >
+              _folderToolbarAvailable(context, session) ||
+          ActionPillButton.heightOf(context) >
+              _barRowHeight(context, session) - browseToolbarPadding.vertical);
+
+  bool _folderActionsInline(BuildContext context, SearchSessionState session) {
+    if (!_folderActionsInToolbar(session)) return false;
+    if (_migratingFolderActions(session)) {
+      // The breadcrumb target can yield one spacing step before another row
+      // is necessary, while all controls keep their full interaction targets.
+      return _folderToolbarAvailable(context, session) +
+              browseToolbarTitleGap >=
+          FolderPageActions.widthFor(
+            context,
+            session.catalogPage,
+            session.shownListing,
+            iconOnly: _folderToolbarCompact(context, session),
+          );
+    }
+    final page = session.catalogPage;
+    if (CatalogSliverHeader.searches(page.filterCapabilities) ||
+        CatalogSliverHeader.filters(page.filterCapabilities)) {
+      return false;
+    }
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    // Leave a readable trail, Back, status and room for Pin after collapse.
+    final chrome =
+        browseToolbarPadding.horizontal +
+        48 +
+        browseToolbarTitleGap +
+        160 * scale +
+        48 +
+        8 +
+        browseToolbarStatusWidth;
+    return _paneWidth - MediaQuery.paddingOf(context).horizontal >=
+        chrome +
+            FolderPageActions.widthFor(context, page, session.shownListing);
+  }
+
+  double _folderControlHeight(
+    BuildContext context,
+    SearchSessionState session,
+  ) => _folderToolbarCompact(context, session)
+      ? kKalinkaPillTarget
+      : ActionPillButton.heightOf(context);
+
+  double _barHeight(BuildContext context, SearchSessionState session) {
+    final row = _barRowHeight(context, session);
+    if (_compactCatalogHeader(session)) {
+      return row + _catalogSubtitleHeight(context);
+    }
+    if (!_folderActionsInToolbar(session)) return row;
+    return _folderActionsInline(context, session)
+        ? math.max(
+            row,
+            _folderControlHeight(context, session) +
+                browseToolbarPadding.vertical,
+          )
+        : row + _folderControlHeight(context, session) + 16;
+  }
+
+  double _catalogSubtitleHeight(BuildContext context) =>
+      math.max(18.0, MediaQuery.textScalerOf(context).scale(13) * 1.2) + 4;
+
+  Widget _catalogSubtitle(SearchSessionState session) {
+    final page = session.shownListing;
+    final description = page.description?.trim();
+    final subtitle = [
+      if (description?.isNotEmpty == true)
+        description!
+      else if (page.provider?.trim().isNotEmpty == true)
+        page.provider!.trim(),
+      ?_catalogSummaries[session.visitId],
+    ].join(' · ');
+    final width = _paneWidth - MediaQuery.paddingOf(context).horizontal;
+    final searchWidth = !CatalogSliverHeader.searches(page.filterCapabilities)
+        ? 0.0
+        : _catalogSearchInBar
+        ? _catalogBarSearchWidth(context, session, width) + 12
+        : 48.0;
+    return Padding(
+      key: const ValueKey('catalog-toolbar-subtitle'),
+      padding: EdgeInsets.only(
+        left: browseToolbarPadding.left + 48 + browseToolbarTitleGap,
+        right:
+            browseToolbarPadding.right +
+            _catalogTrailingWidth(context, session, searchWidth: searchWidth),
+        bottom: 4,
+      ),
+      child: SizedBox(
+        height: _catalogSubtitleHeight(context) - 4,
+        child: Row(
+          children: [
+            SourceBadge(entityId: page.id!, size: SourceBadgeSize.small),
+            if (sourceBadgeVisible(ref, page.id!)) const SizedBox(width: 7),
+            Expanded(
+              child: Tooltip(
+                message: subtitle,
+                child: Text(
+                  subtitle,
+                  style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+                    fontSize: 13,
+                    height: 1.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _folderActions(SearchSessionState session, {bool toolbar = false}) =>
+      KeyedSubtree(
+        key: _folderActionKeys.putIfAbsent(session.visitId, GlobalKey.new),
+        child: FolderPageActions(
+          key: ValueKey(('folder-toolbar-actions', session.shownListing.id)),
+          page: session.catalogPage,
+          listing: session.shownListing,
+          narrowed: !session.catalogFilter.isEmpty,
+          alignRight: _migratingFolderActions(session),
+          iconOnly: toolbar && _folderToolbarCompact(context, session),
+        ),
+      );
 
   /// How far the album's title has gone under the bar, over the last
   /// stretch before it is out of sight.
@@ -1324,91 +1683,128 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     // No opaque fill and no bottom rule — the bar and the content below it
     // read as one surface. Catalog content fades underneath while its art
     // and these controls retain their own colours.
+    final folderActions = _folderActionsInToolbar(session);
+    final inline = _folderActionsInline(context, session);
     return SafeArea(
       bottom: false,
-      child: SizedBox(
-        height: _barHeight(context, session),
-        child: Padding(
-          padding: browseToolbarPadding,
-          child: LayoutBuilder(
-            builder: (context, constraints) => Row(
-              children: [
-                _onDisc(
-                  overAlbum,
-                  IconButton(
-                    tooltip: 'Back',
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: inline
+                ? _barHeight(context, session)
+                : _barRowHeight(context, session),
+            child: Padding(
+              padding: browseToolbarPadding,
+              child: LayoutBuilder(
+                builder: (context, constraints) => Row(
+                  children: [
+                    _onDisc(
+                      overAlbum,
+                      IconButton(
+                        tooltip: 'Back',
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        onPressed: _handleBack,
+                        icon: const Icon(
+                          Icons.arrow_back,
+                          size: 22,
+                          color: KalinkaColors.textPrimary,
+                        ),
+                      ),
                     ),
-                    onPressed: _handleBack,
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      size: 22,
-                      color: KalinkaColors.textPrimary,
+                    const SizedBox(width: browseToolbarTitleGap),
+                    Expanded(child: _buildTitle(session, overAlbum: overAlbum)),
+                    // What joins the bar on scroll comes in before what is always
+                    // there, so Search and Grid/List never move under a finger.
+                    if ((catalogChrome ||
+                            (!onResults && session.catalogPage.isArtist)) &&
+                        _catalogHeadersCollapsed[session.visitId] == true &&
+                        !_compactCatalogHeader(session))
+                      CatalogPinButton(
+                        page: session.shownListing,
+                        // As the artist header's Pin saves it.
+                        filter: session.catalogPage.isArtist
+                            ? const BrowseFilterQuery()
+                            : session.catalogFilter.copyWith(
+                                type: session.expandedShelf,
+                              ),
+                      ),
+                    if (inline) ...[
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: FolderPageActions.widthFor(
+                          context,
+                          session.catalogPage,
+                          session.shownListing,
+                          iconOnly: _folderToolbarCompact(context, session),
+                        ),
+                        child: _folderActions(session, toolbar: true),
+                      ),
+                    ],
+                    ?_barSearch(
+                      session,
+                      width:
+                          constraints.maxWidth +
+                          browseToolbarPadding.horizontal,
                     ),
-                  ),
-                ),
-                const SizedBox(width: browseToolbarTitleGap),
-                Expanded(child: _buildTitle(session, overAlbum: overAlbum)),
-                // What joins the bar on scroll comes in before what is always
-                // there, so Search and Grid/List never move under a finger.
-                if ((catalogChrome ||
-                        (!onResults && session.catalogPage.isArtist)) &&
-                    _catalogHeadersCollapsed[session.visitId] == true &&
-                    !_compactCatalogHeader(session.catalogPage))
-                  CatalogPinButton(
-                    page: session.shownListing,
-                    // As the artist header's Pin saves it.
-                    filter: session.catalogPage.isArtist
-                        ? const BrowseFilterQuery()
-                        : session.catalogFilter.copyWith(
-                            type: session.expandedShelf,
-                          ),
-                  ),
-                ?_barSearch(
-                  session,
-                  width: constraints.maxWidth + browseToolbarPadding.horizontal,
-                ),
-                ?_barFilters(session),
-                if (catalogChrome)
-                  if (_barPresentation(
-                        session,
-                        width:
-                            constraints.maxWidth +
-                            browseToolbarPadding.horizontal,
-                      )
-                      case final presentation?) ...[
-                    // Set apart from what narrows the listing: it only
-                    // changes how it is shown.
-                    if (_barSearchOf(session) != null ||
-                        _barFilters(session) != null)
-                      const SizedBox(width: 12),
-                    presentation,
+                    ?_barFilters(session),
+                    if (catalogChrome)
+                      if (_barPresentation(
+                            session,
+                            width:
+                                constraints.maxWidth +
+                                browseToolbarPadding.horizontal,
+                          )
+                          case final presentation?) ...[
+                        // Set apart from what narrows the listing: it only
+                        // changes how it is shown.
+                        if (_barSearchOf(session) != null ||
+                            _barFilters(session) != null)
+                          const SizedBox(width: 12),
+                        presentation,
+                      ],
+                    // Only where there is something to narrow: the Catalogs root
+                    // has no listing of its own.
+                    if (!catalogChrome &&
+                        !onResults &&
+                        !_filterCapabilities(session).isEmpty)
+                      Builder(
+                        builder: (buttonContext) => SearchFilterButton(
+                          activeCount: _appliedFilter(session).activeCount,
+                          open: _filtersOpen,
+                          onTap: () => _openFilters(from: buttonContext),
+                        ),
+                      ),
+                    SizedBox(
+                      height: _kBarMinHeight,
+                      width: browseToolbarStatusWidth,
+                      child: Center(
+                        child: ServerChip(
+                          compact: true,
+                          onTap: widget.onServerTap,
+                        ),
+                      ),
+                    ),
                   ],
-                // Only where there is something to narrow: the Catalogs root
-                // has no listing of its own.
-                if (!catalogChrome &&
-                    !onResults &&
-                    !_filterCapabilities(session).isEmpty)
-                  Builder(
-                    builder: (buttonContext) => SearchFilterButton(
-                      activeCount: _appliedFilter(session).activeCount,
-                      open: _filtersOpen,
-                      onTap: () => _openFilters(from: buttonContext),
-                    ),
-                  ),
-                SizedBox(
-                  height: _kBarMinHeight,
-                  width: browseToolbarStatusWidth,
-                  child: Center(
-                    child: ServerChip(compact: true, onTap: widget.onServerTap),
-                  ),
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+          if (catalogChrome && _compactCatalogHeader(session))
+            _catalogSubtitle(session),
+          if (folderActions && !inline)
+            Padding(
+              key: const ValueKey('folder-toolbar-second-row'),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: SizedBox(
+                height: _folderControlHeight(context, session),
+                child: _folderActions(session, toolbar: true),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1458,7 +1854,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   Widget? _barSearch(SearchSessionState session, {required double width}) {
     final search = _barSearchOf(session);
     if (search == null) return null;
-    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
     if (!_catalogSearchInBar) {
       return CatalogSearchButton(
         key: const ValueKey('catalog-bar-search'),
@@ -1471,13 +1866,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     return Padding(
       padding: const EdgeInsetsDirectional.only(start: 8, end: 4),
       child: SizedBox(
-        width: math.min(
-          (_compactCatalogHeader(session.catalogPage)
-                  ? 260.0
-                  : CatalogSliverHeader.searchMaxWidth) *
-              scale,
-          width * 0.4,
-        ),
+        width: _catalogBarSearchWidth(context, session, width),
         child: KeyedSubtree(
           key: const ValueKey('catalog-bar-field'),
           child: FilterSearchField(
@@ -1541,38 +1930,37 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     );
   }
 
-  /// The bar's search, unrolled under it across the pane where the bar has
-  /// no room for it: focused, searching on Enter, and gone again then, on
-  /// scroll or on Back.
+  /// The bar's search opens below it, bounded to the inline field's maximum
+  /// width. The same field and focus survive moves between the two positions.
   Widget _buildUnrolledSearch(SearchSessionState session) {
     final search = _barSearchOf(session)!;
     return Positioned(
       top: MediaQuery.paddingOf(context).top + _barHeight(context, session),
-      left: 0,
-      right: 0,
+      left: 16,
+      right: 16,
       child: _Unroll(
-        child: DecoratedBox(
-          decoration: const BoxDecoration(
-            color: KalinkaColors.background,
-            border: Border(
-              bottom: BorderSide(color: KalinkaColors.borderDefault),
+        child: Align(
+          alignment: Alignment.topRight,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: CatalogSliverHeader.searchMaxWidth,
             ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: KeyedSubtree(
-              key: const ValueKey('catalog-unrolled-search'),
-              child: FilterSearchField(
-                key: _catalogSearchFieldKey,
-                focusNode: _catalogSearchFocus,
-                enabled: search.enabled,
-                value: search.value,
-                hint: search.hint,
-                neutral: true,
-                autofocus: true,
-                submitOnly: true,
-                onChanged: search.onSearch,
-                onSubmitted: (_) => setState(() => _barSearchOpen = false),
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: KeyedSubtree(
+                key: const ValueKey('catalog-unrolled-search'),
+                child: FilterSearchField(
+                  key: _catalogSearchFieldKey,
+                  focusNode: _catalogSearchFocus,
+                  enabled: search.enabled,
+                  value: search.value,
+                  hint: search.hint,
+                  neutral: true,
+                  autofocus: true,
+                  submitOnly: true,
+                  onChanged: search.onSearch,
+                  onSubmitted: (_) => setState(() => _barSearchOpen = false),
+                ),
               ),
             ),
           ),
@@ -1593,7 +1981,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         session.catalogPage.folderLayout) {
       return const FolderTrail();
     }
-    if (catalogChrome && _compactCatalogHeader(session.catalogPage)) {
+    if (catalogChrome && _compactCatalogHeader(session)) {
       final page = session.shownListing;
       return Row(
         children: [
