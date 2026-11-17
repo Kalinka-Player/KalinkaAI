@@ -135,31 +135,37 @@ Future<ValueNotifier<List<Rect?>>> _pumpTour(
         child: child!,
       ),
       home: Scaffold(
-        body: ValueListenableBuilder(
-          valueListenable: placed,
-          builder: (context, targets, _) => Stack(
-            children: [
-              for (final (i, rect) in targets.indexed)
-                if (rect != null)
-                  Positioned.fromRect(
-                    rect: rect,
-                    child: SizedBox(key: keys[i]),
-                  ),
-              Positioned.fill(
-                child: CoachMarksOverlay(
-                  stops: [
-                    for (final (i, key) in keys.indexed)
-                      CoachMarkStop(
-                        targetKey: key,
-                        title: 'Stop ${i + 1}',
-                        body: body,
-                      ),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: ValueListenableBuilder(
+                valueListenable: placed,
+                builder: (context, targets, _) => Stack(
+                  children: [
+                    for (final (i, rect) in targets.indexed)
+                      if (rect != null)
+                        Positioned.fromRect(
+                          rect: rect,
+                          child: SizedBox(key: keys[i]),
+                        ),
                   ],
-                  onDismiss: onDismiss ?? () {},
                 ),
               ),
-            ],
-          ),
+            ),
+            Positioned.fill(
+              child: CoachMarksOverlay(
+                stops: [
+                  for (final (i, key) in keys.indexed)
+                    CoachMarkStop(
+                      targetKey: key,
+                      title: 'Stop ${i + 1}',
+                      body: body,
+                    ),
+                ],
+                onDismiss: onDismiss ?? () {},
+              ),
+            ),
+          ],
         ),
       ),
     ),
@@ -227,6 +233,39 @@ Future<void> _next(WidgetTester tester) async {
 }
 
 void main() {
+  for (final reducedMotion in [false, true]) {
+    testWidgets('the spotlight follows independent target layout changes '
+        '(reduced motion: $reducedMotion)', (tester) async {
+      final targets = await _pumpTour(tester, [
+        _searchEntry,
+      ], reducedMotion: reducedMotion);
+      final overlay = tester.widget(find.byType(CoachMarksOverlay));
+      for (final dy in [20.0, 60.0, 100.0]) {
+        final target = _searchEntry.shift(Offset(0, dy));
+        targets.value = [target];
+        await tester.pump(const Duration(milliseconds: 16));
+        await tester.pump();
+
+        // Only the target's subtree rebuilt, as with Home's centring animation.
+        expect(tester.widget(find.byType(CoachMarksOverlay)), same(overlay));
+        final paint = tester.widget<CustomPaint>(
+          find.descendant(
+            of: find.byType(CoachMarksOverlay),
+            matching: find.byWidgetPredicate(
+              (widget) => widget is CustomPaint && widget.painter != null,
+            ),
+          ),
+        );
+        final dynamic spotlight = paint.painter;
+        expect(spotlight.cutout, target);
+        expect(_card(tester, 'Stop 1').overlaps(_hole(target)), isFalse);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('a stop that disappears mid-tour leaves the index in range', (
     tester,
   ) async {

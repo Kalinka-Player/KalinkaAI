@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
+import 'package:kalinka/providers/pinned_catalogs_provider.dart';
 import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/soundcard_provider.dart';
@@ -45,6 +46,13 @@ class _Renderers extends RendererListNotifier {
 
   @override
   Future<void> refresh() async {}
+}
+
+class _PendingPins extends PinnedCatalogsNotifier {
+  @override
+  List<PinnedCatalog>? build() => null;
+
+  void loaded() => state = const [];
 }
 
 /// Records whether the system back left the app.
@@ -525,6 +533,27 @@ void main() {
     );
     expect(find.byType(CoachMarksOverlay), findsOneWidget);
     expect(find.text('Find music'), findsOneWidget);
+  });
+
+  testWidgets('the tour waits until Home can place its search entry', (
+    tester,
+  ) async {
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(2)),
+      coachMarksShown: false,
+      overrides: [pinnedCatalogsProvider.overrideWith(_PendingPins.new)],
+    );
+    expect(find.byType(CoachMarksOverlay), findsNothing);
+    expect(find.byKey(const ValueKey('search-entry-surface')), findsNothing);
+
+    (container.read(pinnedCatalogsProvider.notifier) as _PendingPins).loaded();
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(CoachMarksOverlay), findsOneWidget);
+    expect(find.text('Find music'), findsOneWidget);
+    expect(find.byKey(const ValueKey('search-entry-surface')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   for (final (size, keepOff) in const [

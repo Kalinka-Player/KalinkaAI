@@ -88,10 +88,9 @@ class SearchZeroState extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final pins = ref.watch(pinnedCatalogsProvider);
     // Nothing of the listener's own on Home yet: no pins and no collections
-    // shown here (the rail carries them where it shows). Still loading counts
-    // as none, so a new listener's Home never jumps. Pins wait for the server
-    // to be known, and count as some meanwhile, so Home does not move when
-    // they arrive.
+    // shown here (the rail carries them where it shows). Until the server's
+    // pins are known, show the placeholder alone: mounting the introduction
+    // now would place it at the top, then slide it down when no pins arrive.
     final collections = showCollections
         ? ref.watch(collectionsShelfProvider).value
         : null;
@@ -131,50 +130,51 @@ class SearchZeroState extends ConsumerWidget {
               ),
               sliver: SliverList.list(
                 children: [
-                  ValueListenableBuilder<double>(
-                    valueListenable:
-                        roomLent ?? const AlwaysStoppedAnimation(0.0),
-                    builder: (context, lent, child) => _Centring(
-                      centred: empty || centredShortcuts,
-                      room:
-                          constraints.maxHeight -
-                          headerExtent -
-                          top -
-                          kHomeSectionGap -
-                          lent,
-                      onShift: onCentringShift,
-                      child: child!,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        ...leading,
-                        // Close under the prompts and over what follows, as one
-                        // line of ways in; without it, the search's full gap.
-                        if (sources != null && (showSources || empty)) ...[
-                          sources!,
-                          const SizedBox(height: 16),
-                        ] else
-                          const SizedBox(height: 12),
-                        ?activity,
-                        if (centredShortcuts) ...[
-                          PinnedCatalogsSection(pins: pins),
-                          _CustomiseLine(
-                            onCustomise: () => ref
-                                .read(homeCustomisationProvider.notifier)
-                                .open(),
-                          ),
+                  if (pins != null)
+                    ValueListenableBuilder<double>(
+                      valueListenable:
+                          roomLent ?? const AlwaysStoppedAnimation(0.0),
+                      builder: (context, lent, child) => _Centring(
+                        centred: empty || centredShortcuts,
+                        room:
+                            constraints.maxHeight -
+                            headerExtent -
+                            top -
+                            kHomeSectionGap -
+                            lent,
+                        onShift: onCentringShift,
+                        child: child!,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          ...leading,
+                          // Close under the prompts and over what follows, as one
+                          // line of ways in; without it, the search's full gap.
+                          if (sources != null && (showSources || empty)) ...[
+                            sources!,
+                            const SizedBox(height: 16),
+                          ] else
+                            const SizedBox(height: 12),
+                          ?activity,
+                          if (centredShortcuts) ...[
+                            PinnedCatalogsSection(pins: pins),
+                            _CustomiseLine(
+                              onCustomise: () => ref
+                                  .read(homeCustomisationProvider.notifier)
+                                  .open(),
+                            ),
+                          ],
+                          if (empty)
+                            _PinHint(
+                              onCustomise: () => ref
+                                  .read(homeCustomisationProvider.notifier)
+                                  .open(),
+                            ),
                         ],
-                        if (empty)
-                          _PinHint(
-                            onCustomise: () => ref
-                                .read(homeCustomisationProvider.notifier)
-                                .open(),
-                          ),
-                      ],
+                      ),
                     ),
-                  ),
-                  if (!empty && showCollections)
+                  if (pins != null && !empty && showCollections)
                     CollectionsSection(onOpenCatalog: onOpenCatalog),
                   if (pins == null)
                     const HomePinsShimmer()
