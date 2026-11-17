@@ -106,6 +106,7 @@ Future<ProviderContainer> _mount(
   Map<String, Object> saved = const {},
   List<PinnedCatalog> catalogs = const [],
   HomeSectionPlanner? planner,
+  List<Widget> leading = const [CatalogCardsSection()],
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -174,7 +175,7 @@ Future<ProviderContainer> _mount(
           // here beside Home's own sections.
           body: SearchZeroState(
             onOpenCatalog: (_, _, {focusItemId}) {},
-            leading: const [CatalogCardsSection()],
+            leading: leading,
           ),
         ),
       ),
@@ -185,6 +186,46 @@ Future<ProviderContainer> _mount(
 }
 
 void main() {
+  for (final size in [const Size(375, 812), const Size(1024, 640)]) {
+    testWidgets('empty Home first appears centred after identifying pins at '
+        '$size', (tester) async {
+      const entryKey = ValueKey('test-search-entry');
+      final servers = ServersByHost()
+        ..ids['localhost'] = 'empty-box'
+        ..silent.add('localhost');
+      final container = await _mount(
+        tester,
+        api: _DelayedApi(),
+        modules: Future.value([]),
+        servers: servers,
+        size: size,
+        leading: const [SizedBox(key: entryKey, height: 60)],
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.byKey(entryKey), findsNothing);
+      expect(find.byType(HomePinsShimmer), findsOneWidget);
+
+      servers.silent.clear();
+      container.invalidate(serverAnswerProvider);
+      for (
+        var frame = 0;
+        frame < 10 && find.byKey(entryKey).evaluate().isEmpty;
+        frame++
+      ) {
+        await tester.pump(const Duration(milliseconds: 1));
+      }
+      expect(find.byKey(entryKey), findsOneWidget);
+      expect(find.byType(HomePinsShimmer), findsNothing);
+      final first = tester.getRect(find.byKey(entryKey));
+      expect(first.top, greaterThan(100));
+      for (var frame = 0; frame < 10; frame++) {
+        await tester.pump(const Duration(milliseconds: 60));
+        expect(tester.getRect(find.byKey(entryKey)), first);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final width in [375.0, 1248.0]) {
     testWidgets('pins reveal together after data and layout at $width', (
       tester,
@@ -471,7 +512,12 @@ void main() {
         expect(find.text('Address pick'), findsNothing);
       }
 
-      void expectPins() {
+      Future<void> expectPins() async {
+        // The introduction now mounts after identity is known. Its source
+        // metadata and pin layout each settle on a following frame.
+        for (var frame = 0; frame < 6; frame++) {
+          await tester.pump();
+        }
         expect(find.byType(HomePinsShimmer), findsNothing);
         expect(find.text('Box pick'), findsOneWidget);
         expect(find.text('Address pick'), findsNothing);
@@ -491,14 +537,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       await tester.pump();
       expect(servers.asked, 2);
-      expectPins();
+      await expectPins();
 
       final connection = container.read(
         connectionStateProvider.notifier,
       ) as SettableConnection;
       connection.set(ConnectionStatus.reconnecting);
       await settle();
-      expectPins();
+      await expectPins();
       // Back, whoever is at the address now has to say so first.
       servers.silent.add('localhost');
       connection.set(ConnectionStatus.connected);
@@ -514,7 +560,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       await tester.pump();
       expect(servers.asked, 4);
-      expectPins();
+      await expectPins();
     },
   );
 
@@ -538,7 +584,9 @@ void main() {
           .set(ConnectionStatus.reconnecting);
       await tester.pump(const Duration(milliseconds: 1));
       await tester.pump(const Duration(milliseconds: 50));
-      await tester.pump();
+      for (var frame = 0; frame < 6; frame++) {
+        await tester.pump();
+      }
       expect(find.byType(HomePinsShimmer), findsNothing);
       expect(find.text('Box pick'), findsOneWidget);
     },

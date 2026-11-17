@@ -11,6 +11,7 @@ import '../providers/connection_state_provider.dart';
 import '../providers/demo_mode.dart';
 import '../providers/networked_boxes_provider.dart';
 import '../providers/onboarding_provider.dart';
+import '../providers/pinned_catalogs_provider.dart';
 import '../providers/playback_failure_provider.dart';
 import '../providers/renderer_host_provider.dart' show rendererIdentityProvider;
 import '../providers/renderer_provider.dart';
@@ -1235,6 +1236,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     return onboarding.oobeComplete &&
         !onboarding.coachMarksShown &&
         ref.watch(connectionStateProvider) == ConnectionStatus.connected &&
+        // Home places its search entry once this server's pins are known.
+        ref.watch(pinnedCatalogsProvider) != null &&
         !ref.watch(searchEntryModeProvider) &&
         ref.watch(
           searchSessionProvider.select(

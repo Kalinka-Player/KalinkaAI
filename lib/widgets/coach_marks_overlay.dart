@@ -119,7 +119,12 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
     _resolvePending = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _resolvePending = false;
+      if (!mounted) return;
       _resolveRect();
+      // A sibling can move the target without rebuilding this overlay (Home
+      // centring, late content, scrolling). Observe every rendered frame, but
+      // don't request frames merely to measure an unchanged target.
+      _scheduleResolve();
     });
   }
 
@@ -192,10 +197,9 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
     final safeArea = MediaQuery.paddingOf(context);
 
     // The spotlight is a screen-space rectangle, so anything that moves the
-    // target invalidates it. Resizing across the tablet breakpoint moves this
-    // tour's targets furthest — the output switcher changes which widget it
-    // even is — so re-measure whenever our own size changes, after the frame
-    // that laid the new tree out.
+    // target invalidates it. Resizing across the tablet breakpoint can even
+    // change which widget the output switcher is. Resolution follows layout,
+    // including frames where only the target's subtree changed.
     return LayoutBuilder(
       builder: (context, constraints) {
         _scheduleResolve();
