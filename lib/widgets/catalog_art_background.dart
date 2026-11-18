@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
@@ -8,70 +7,33 @@ import 'package:flutter/material.dart';
 import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 import '../utils/catalog_casefold.dart';
-import '../utils/web_build_target.dart';
 
-/// Geometry around the artwork side, independent of the caption and overlays.
-@immutable
-class CatalogGeometryTransform {
-  final double rotation;
-  final double offsetX;
-  final double offsetY;
-  final double scaleX;
-  final double scaleY;
-
-  CatalogGeometryTransform.fromHash(List<int> bytes)
-    : rotation = (bytes[24] % 61 - 30).toDouble(),
-      offsetX = (bytes[25] / 255 - 0.5) * 0.14,
-      offsetY = (bytes[26] / 255 - 0.5) * 0.50,
-      scaleX = 0.82 + bytes[27] / 255 * 0.36,
-      scaleY = 0.80 + bytes[28] / 255 * 0.40;
-
-  Float64List matrix(double width, double height) {
-    final radians = rotation * math.pi / 180;
-    final cosine = math.cos(radians), sine = math.sin(radians);
-    final a = cosine * scaleX, b = -sine * scaleY;
-    final c = sine * scaleX, d = cosine * scaleY;
-    final px = 0.82 * width, py = 0.5 * height;
-    return Float64List.fromList([
-      a,
-      c,
-      0,
-      0,
-      b,
-      d,
-      0,
-      0,
-      0,
-      0,
-      1,
-      0,
-      px + offsetX * width - a * px - b * py,
-      py + offsetY * height - c * px - d * py,
-      0,
-      1,
-    ]);
-  }
-}
-
-/// The title identity and colour mapping from catalog_art_render.py, style 11.
+/// The title identity and tint mapping from catalog_art_render.py, style 12.
 @immutable
 class CatalogArtSeed {
   final String textKey;
+
+  /// Arcs, folds or rings: the banner geometry the title selects.
   final int geometry;
   final int palette;
-  final Color key;
-  final Color highlight;
-  final Color shadow;
-  final CatalogGeometryTransform transform;
+  final Color tint;
+
+  /// The tint over the base for the left surface, the right surface, the
+  /// geometry and its fine line.
+  final Color left;
+  final Color right;
+  final Color shape;
+  final Color line;
 
   const CatalogArtSeed._(
     this.textKey,
     this.geometry,
     this.palette,
-    this.key,
-    this.highlight,
-    this.shadow,
-    this.transform,
+    this.tint,
+    this.left,
+    this.right,
+    this.shape,
+    this.line,
   );
 
   factory CatalogArtSeed.of(
@@ -89,43 +51,47 @@ class CatalogArtSeed {
         .skip(start)
         .take(8)
         .fold(0, (value, byte) => (value * 256 + byte) % modulus);
-    final palette = part(8, _palettes.length);
-    final (accent, light) = _palettes[palette];
-    final strength = [0.90, 1.0, 1.10][part(16, 3)];
-    Color scaled(int rgb, double scale, int ceiling) => Color.fromARGB(
-      255,
-      math.min(ceiling, _roundEven(((rgb >> 16) & 255) * scale)),
-      math.min(ceiling, _roundEven(((rgb >> 8) & 255) * scale)),
-      math.min(ceiling, _roundEven((rgb & 255) * scale)),
-    );
+    final palette = part(8, _tints.length);
+    final tint = _tints[palette];
+    Color over(double weight) {
+      int channel(int shift) {
+        final base = (_base >> shift) & 255;
+        final value = (tint >> shift) & 255;
+        return _roundEven(base * (1 - weight) + value * weight);
+      }
+
+      return Color.fromARGB(255, channel(16), channel(8), channel(0));
+    }
+
     return CatalogArtSeed._(
       digest.toString(),
-      part(0, 6),
+      part(0, 3),
       palette,
-      Color(0xFF000000 | accent),
-      scaled(light, strength, 240),
-      scaled(accent, 0.35, 255),
-      CatalogGeometryTransform.fromHash(digest.bytes),
+      Color(0xFF000000 | tint),
+      over(0.12),
+      over(0.34),
+      over(0.48),
+      over(0.68),
     );
   }
 
-  static const _palettes = [
-    (0xA13B50, 0xCE8291),
-    (0xAF563D, 0xDFA080),
-    (0x94702F, 0xCFB66B),
-    (0x687B38, 0xA8BB77),
-    (0x2F7958, 0x82B499),
-    (0x28836D, 0x82C4AE),
-    (0x277B84, 0x81B7C4),
-    (0x367F9E, 0x8BC4D9),
-    (0x32669B, 0x82A9D4),
-    (0x4E5CA6, 0xA1A8DC),
-    (0x6A4E9B, 0xB59FD5),
-    (0x834D91, 0xC59CCB),
-    (0xA34479, 0xD894BA),
-    (0xA54F67, 0xDF9BA8),
-    (0x896456, 0xC3AA90),
-    (0x526F7D, 0xADC3C9),
+  static const _base = 0x1B1B1E;
+
+  static const _tints = [
+    0x814354,
+    0x7E4D3E,
+    0x7D653B,
+    0x696C3D,
+    0x4F6543,
+    0x3A644C,
+    0x386762,
+    0x44617E,
+    0x566174,
+    0x4F5482,
+    0x60507C,
+    0x6C4A73,
+    0x774668,
+    0x6E5F53,
   ];
 
   // Python str.split() whitespace, including U+0085 and excluding U+FEFF.
@@ -138,21 +104,6 @@ class CatalogArtSeed {
           .split(_space)
           .where((part) => part.isNotEmpty)
           .join(' ');
-
-  /// Pillow's three-point grayscale lookup, with its integer interpolation.
-  Color tone(int gray) {
-    final low = (gray < 160 ? shadow : key).toARGB32();
-    final high = (gray < 160 ? key : highlight).toARGB32();
-    final position = gray < 160 ? gray : gray - 160;
-    final span = gray < 160 ? 160 : 95;
-    int channel(int shift) {
-      final a = (low >> shift) & 255;
-      final b = (high >> shift) & 255;
-      return a + ((b - a) * position / span).floor();
-    }
-
-    return Color.fromARGB(255, channel(16), channel(8), channel(0));
-  }
 
   static int _roundEven(double value) {
     final floor = value.floor();
@@ -180,8 +131,9 @@ class CatalogArtPainter extends CustomPainter {
     this.questionMark = true,
   });
 
-  static const _width = 2400.0;
-  static const _height = 800.0;
+  // The banner designs' viewBox.
+  static const _width = 600.0;
+  static const _height = 200.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -202,7 +154,18 @@ class CatalogArtPainter extends CustomPainter {
     }
     canvas.drawRect(
       const Rect.fromLTWH(0, 0, _width, _height),
-      Paint()..color = seed.tone(48),
+      Paint()..color = seed.left,
+    );
+    // Firefox/skwasm_heavy has dropped gradient fills; the flat left surface
+    // then stands in for the wash.
+    canvas.drawRect(
+      const Rect.fromLTRB(0.4 * _width, 0, _width, _height),
+      Paint()
+        ..shader = ui.Gradient.linear(
+          const Offset(0.4 * _width, 0),
+          const Offset(_width, 0),
+          [seed.left, seed.right],
+        ),
     );
     _shapes(canvas);
     canvas.restore();
@@ -210,148 +173,79 @@ class CatalogArtPainter extends CustomPainter {
     canvas.restore();
   }
 
-  Paint _fill(int gray) {
-    if (!captioned) return Paint()..color = seed.tone(gray);
-    // DIAGNOSTIC: the shapes below are invisible on Firefox/skwasm_heavy;
-    // testing whether the Gradient.linear shader is why, by skipping it.
-    if (compiledToWasm) return Paint()..color = seed.tone(gray);
-    // Fade in grayscale before applying the LUT, just like the backend.
-    final colors = <Color>[seed.tone(48)];
-    final stops = <double>[0];
-    for (var i = 0; i <= 128; i++) {
-      final t = i / 128;
-      final alpha = (t * t * (3 - 2 * t) * 255).floor();
-      colors.add(seed.tone((48 + (gray - 48) * alpha / 255).round()));
-      stops.add(0.58 + 0.14 * t);
-    }
-    colors.add(seed.tone(gray));
-    stops.add(1);
-    return Paint()
-      ..shader = ui.Gradient.linear(
-        Offset.zero,
-        const Offset(_width, 0),
-        colors,
-        stops,
-      );
-  }
-
   void _shapes(Canvas canvas) {
-    const w = _width, h = _height;
-    final matrix = seed.transform.matrix(w, h);
-    void draw(Path path, int gray) =>
-        canvas.drawPath(path.transform(matrix), _fill(gray));
+    final fill = Paint()..color = seed.shape;
+    Paint stroke(Color color, double width) => Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
 
     switch (seed.geometry) {
-      case 0: // sweep
-        draw(
+      case 0: // arcs
+        canvas.drawPath(
           Path()
-            ..addOval(Rect.fromLTRB(0.54 * w, -0.85 * h, 1.32 * w, 1.3 * h)),
-          176,
-        );
-        draw(
-          Path()
-            ..addOval(Rect.fromLTRB(0.64 * w, -0.94 * h, 1.34 * w, 0.97 * h)),
-          92,
-        );
-      case 1: // arch
-        draw(
-          Path()..addRRect(
-            RRect.fromRectAndRadius(
-              Rect.fromLTRB(0.59 * w, 0.08 * h, 1.04 * w, 1.8 * h),
-              const Radius.circular(0.225 * w),
-            ),
-          ),
-          192,
-        );
-        draw(
-          Path()..addRRect(
-            RRect.fromRectAndRadius(
-              Rect.fromLTRB(0.68 * w, 0.36 * h, 0.95 * w, 1.8 * h),
-              const Radius.circular(0.135 * w),
-            ),
-          ),
-          92,
-        );
-      case 2: // diagonal
-        draw(
-          Path()
-            ..moveTo(0.53 * w, h)
-            ..lineTo(0.80 * w, 0)
-            ..lineTo(w, 0)
-            ..lineTo(0.73 * w, h)
+            ..moveTo(291, 220)
+            ..cubicTo(360, 73, 458, -12, 602, -37)
+            ..lineTo(638, -23)
+            ..cubicTo(510, -8, 391, 83, 326, 220)
             ..close(),
-          184,
+          fill,
         );
-      case 3: // circles
-        draw(
-          Path()..addOval(
-            Rect.fromCircle(
-              center: Offset(0.82 * w, 0.36 * h),
-              radius: 0.62 * h,
-            ),
-          ),
-          184,
+        canvas.drawPath(
+          Path()
+            ..moveTo(347, 220)
+            ..cubicTo(406, 103, 496, 31, 608, -9),
+          stroke(seed.line, 1.05),
         );
-        draw(
-          Path()..addOval(
-            Rect.fromCircle(
-              center: Offset(0.96 * w, 0.92 * h),
-              radius: 0.24 * h,
-            ),
-          ),
-          112,
+        canvas.drawPath(
+          Path()
+            ..moveTo(365, 220)
+            ..cubicTo(426, 111, 506, 49, 612, 7),
+          stroke(seed.shape, 1.25),
         );
-      case 4: // wave
-        final wave = Path();
-        for (var i = 0; i < 240; i++) {
-          final x = 0.45 + 0.55 * i / 239;
-          final y = h * (0.52 + 0.22 * math.sin((x - 0.45) * 3 * math.pi));
-          if (i == 0) {
-            wave.moveTo(x * w, y);
-          } else {
-            wave.lineTo(x * w, y);
-          }
+      case 1: // folds
+        canvas.drawPath(
+          Path()..addPolygon(const [
+            Offset(289, 213),
+            Offset(452, -12),
+            Offset(500, -12),
+            Offset(337, 213),
+          ], true),
+          fill,
+        );
+        canvas.drawLine(
+          const Offset(359, 213),
+          const Offset(522, -12),
+          stroke(seed.line, 1.05),
+        );
+        canvas.drawLine(
+          const Offset(379, 214),
+          const Offset(542, -12),
+          stroke(seed.shape, 1.2),
+        );
+        canvas.drawPath(
+          Path()..addPolygon(const [
+            Offset(480, 213),
+            Offset(640, -9),
+            Offset(640, 50),
+            Offset(523, 213),
+          ], true),
+          fill,
+        );
+      case 2: // rings
+        // Their lower halves fall below the card, as the design's arcs end.
+        const centre = Offset(480, 201);
+        for (final (radius, width) in const [
+          (114.0, 1.2),
+          (128.0, 1.2),
+          (143.0, 1.2),
+          (167.0, 21.0),
+        ]) {
+          canvas.drawCircle(centre, radius, stroke(seed.shape, width));
         }
-        wave
-          ..lineTo(w, h)
-          ..lineTo(0.45 * w, h)
-          ..close();
-        draw(wave, 184);
-      case 5: // block
-        final tile = Path()
-          ..addRRect(
-            RRect.fromRectAndRadius(
-              const Rect.fromLTRB(-480, -580, 479, 579),
-              const Radius.circular(0.13 * h),
-            ),
-          );
-        final c = math.cos(24 * math.pi / 180);
-        final s = math.sin(24 * math.pi / 180);
-        // Preserve the original block's tilt and expanded-tile centre;
-        // draw() adds the title transform without rotating the caption fade.
-        draw(
-          tile.transform(
-            Float64List.fromList([
-              c,
-              -s,
-              0,
-              0,
-              s,
-              c,
-              0,
-              0,
-              0,
-              0,
-              1,
-              0,
-              2091,
-              406,
-              0,
-              1,
-            ]),
-          ),
-          176,
-        );
+        canvas.drawCircle(centre, 190, stroke(seed.line, 1.0));
     }
   }
 

@@ -42,57 +42,22 @@ void main() {
     entityId: entry['entityId'] as String,
   );
 
-  test('title identity, colours and transforms match backend style 11', () {
-    expect(reference['style'], 11);
+  test('title identity, geometry and tints match backend style 12', () {
+    expect(reference['style'], 12);
+    Color color(String hex) =>
+        Color(int.parse(hex.substring(1), radix: 16) | 0xFF000000);
     for (final entry in cases) {
       final actual = seed(entry);
       final label = entry['title'] as String;
       expect(actual.textKey, entry['textKey'], reason: label);
       expect(actual.geometry, entry['geometry'], reason: label);
       expect(actual.palette, entry['palette'], reason: label);
-      final transform = entry['transform'] as Map<String, dynamic>;
+      expect(actual.tint, color(entry['tint'] as String), reason: label);
       expect(
-        actual.transform.rotation,
-        closeTo(transform['rotation'] as num, 1e-12),
-      );
-      expect(
-        actual.transform.offsetX,
-        closeTo(transform['offset_x'] as num, 1e-12),
-      );
-      expect(
-        actual.transform.offsetY,
-        closeTo(transform['offset_y'] as num, 1e-12),
-      );
-      expect(
-        actual.transform.scaleX,
-        closeTo(transform['scale_x'] as num, 1e-12),
-      );
-      expect(
-        actual.transform.scaleY,
-        closeTo(transform['scale_y'] as num, 1e-12),
-      );
-      final matrix = actual.transform.matrix(2400, 800);
-      final affine = entry['affine'] as List;
-      for (final (i, j) in [(0, 0), (4, 1), (1, 2), (5, 3), (12, 4), (13, 5)]) {
-        expect(matrix[i], closeTo(affine[j] as num, 1e-9), reason: label);
-      }
-      Color color(String hex) =>
-          Color(int.parse(hex.substring(1), radix: 16) | 0xFF000000);
-      expect(actual.key, color(entry['accent'] as String), reason: label);
-      expect(
-        actual.highlight,
-        color(entry['highlight'] as String),
+        [actual.left, actual.right, actual.shape, actual.line],
+        (entry['swatches'] as List).cast<String>().map(color).toList(),
         reason: label,
       );
-      final tones = entry['tones'] as List;
-      for (var gray = 0; gray < 256; gray++) {
-        final rgb = tones[gray] as List;
-        expect(
-          actual.tone(gray),
-          Color.fromARGB(255, rgb[0] as int, rgb[1] as int, rgb[2] as int),
-          reason: '$label, gray $gray',
-        );
-      }
     }
   });
 

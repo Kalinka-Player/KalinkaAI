@@ -51,7 +51,7 @@ void main() {
   test('a title keeps its background whatever describes it', () {
     final jazz = CatalogArtSeed.of('Jazz', null);
     final described = CatalogArtSeed.of('  JAZZ ', 'From bebop on');
-    expect(described.key, jazz.key);
+    expect(described.tint, jazz.tint);
     expect(described, jazz);
     expect(CatalogArtSeed.of('jazz', ''), jazz);
   });
