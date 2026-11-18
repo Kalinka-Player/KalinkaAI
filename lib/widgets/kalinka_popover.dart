@@ -52,7 +52,11 @@ class KalinkaPopupOrigin {
     if (active) {
       final box = context.findRenderObject();
       if (box is RenderBox && box.attached && box.hasSize) {
-        final rect = box.localToGlobal(Offset.zero) & box.size;
+        final overlay = Overlay.maybeOf(context, rootOverlay: true);
+        final rect = MatrixUtils.transformRect(
+          box.getTransformTo(overlay?.context.findRenderObject()),
+          Offset.zero & box.size,
+        );
         if (rect.isFinite && !rect.isEmpty) _lastRect = rect;
       }
     }
@@ -118,8 +122,12 @@ class _KalinkaAnchoredSurfaceState extends State<KalinkaAnchoredSurface> {
     // requesting another unless the trigger or the host actually moved.
     final anchor = widget.origin.resolve();
     final box = context.findRenderObject();
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
     final offset = box is RenderBox && box.attached && box.hasSize
-        ? box.localToGlobal(Offset.zero)
+        ? box.localToGlobal(
+            Offset.zero,
+            ancestor: overlay?.context.findRenderObject(),
+          )
         : _offset;
     if (anchor != _anchor || offset != _offset) {
       setState(() {

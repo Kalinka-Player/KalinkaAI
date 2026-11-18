@@ -322,10 +322,8 @@ class _KeyboardRegionState extends State<_KeyboardRegion> {
         final box = context.findRenderObject();
         final scroll = Scrollable.maybeOf(node.context!, axis: Axis.vertical);
         if (box is! RenderBox || scroll == null) return;
-        final bottom =
-            box.localToGlobal(Offset(0, box.size.height)).dy -
-            widget.bottomInset;
-        final overlap = node.rect.bottom - bottom;
+        final targetBottom = box.globalToLocal(node.rect.bottomCenter).dy;
+        final overlap = targetBottom - (box.size.height - widget.bottomInset);
         if (overlap <= 0) return;
         final position = scroll.position;
         final offset =
@@ -352,16 +350,18 @@ class _KeyboardRegionState extends State<_KeyboardRegion> {
         direction == TraversalDirection.down ||
         direction == TraversalDirection.right;
     final axis = vertical ? Axis.vertical : Axis.horizontal;
-    // Sibling controls share the viewport's transform to screen coordinates.
+    // Keep distances in the same logical units as the scroll position.
+    final host = widget.host.context.findRenderObject();
+    // Sibling controls share the viewport's transform to the host.
     // Recompute it on the next keypress so scrolling and resizing stay exact.
     final transforms = <RenderAbstractViewport, Matrix4>{};
     Rect boundsOf(FocusNode node) {
       final render = node.context!.findRenderObject()!;
       final viewport = RenderAbstractViewport.maybeOf(render);
       final transform = viewport == null
-          ? render.getTransformTo(null)
+          ? render.getTransformTo(host)
           : transforms
-                .putIfAbsent(viewport, () => viewport.getTransformTo(null))
+                .putIfAbsent(viewport, () => viewport.getTransformTo(host))
                 .multiplied(render.getTransformTo(viewport));
       return MatrixUtils.transformRect(transform, render.semanticBounds);
     }

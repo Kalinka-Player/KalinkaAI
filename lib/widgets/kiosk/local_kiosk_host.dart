@@ -13,8 +13,14 @@ import '../../providers/kiosk_provider.dart';
 import '../../providers/onboarding_provider.dart';
 import '../../screens/kiosk_screen.dart';
 import '../../utils/display_power.dart';
+import '../../utils/local_platform.dart';
+import 'kiosk_home_layout.dart';
 
 typedef _DisplayState = ({bool enabled, bool kiosk, bool waiting});
+
+final _displayDiagonalInches = double.tryParse(
+  environmentValue('KALINKA_DISPLAY_DIAGONAL_INCHES') ?? '',
+);
 
 final _playbackPreventsBlankingProvider = Provider<bool>((ref) {
   final playback = ref.watch(playerStateProvider.select((s) => s.state));
@@ -199,7 +205,10 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
                 enabled: !kiosk && !_blanked,
                 child: ExcludeFocus(
                   excluding: kiosk || _blanked,
-                  child: widget.child,
+                  child: KioskHomeLayout(
+                    diagonalInches: _displayDiagonalInches,
+                    child: widget.child,
+                  ),
                 ),
               ),
             ),

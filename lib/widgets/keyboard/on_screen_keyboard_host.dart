@@ -68,7 +68,8 @@ class _OnScreenKeyboardHostState extends ConsumerState<OnScreenKeyboardHost>
           ?KeyboardLayoutProvider.instance.getLanguage(code),
       ];
       _selectedLanguage = selected;
-      _languageOrigin = origin;
+      final host = this.context.findRenderObject()! as RenderBox;
+      _languageOrigin = host.globalToLocal(origin);
     });
     return choice.future;
   }

@@ -1,4 +1,4 @@
-"""Exercise panel permission and restore handling without touching real hardware."""
+"""Exercise the display launcher without touching real hardware."""
 import json
 from pathlib import Path
 import runpy
@@ -14,12 +14,57 @@ class KioskLauncherTest(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.backlights = self.root / "backlights"
         self.backlights.mkdir()
+        self.drm = self.root / "drm"
+        self.drm.mkdir()
         self.module = runpy.run_path(
             str(Path(__file__).resolve().parents[1] / "packaging/kiosk/kalinka-kiosk-ctl")
         )
         self.state = self.module["prepare"].__globals__
         self.state["RUN_DIR"] = str(self.root)
         self.state["BACKLIGHT_DIR"] = self.backlights
+        self.state["DRM_DIR"] = self.drm
+
+    def connector(self, name, size_cm=None, status="connected"):
+        connector = self.drm / name
+        connector.mkdir()
+        (connector / "status").write_text(status + "\n")
+        if size_cm is not None:
+            edid = bytearray(128)
+            edid[:8] = bytes.fromhex("00 ff ff ff ff ff ff 00")
+            edid[21:23] = bytes(size_cm)
+            edid[-1] = -sum(edid) % 256
+            (connector / "edid").write_bytes(edid)
+        return connector
+
+    def test_reports_tv_size_without_overriding_flutter_display_metrics(self):
+        self.connector("card1-HDMI-A-1", (121, 68))
+        self.connector("card1-HDMI-A-2", status="disconnected")
+        self.state["_overrides"] = lambda: {
+            "base_config.display.enabled": True, "base_config.display.rotation": "90",
+        }
+        self.module["prepare"]()
+        with patch.object(self.module["os"], "execve") as launch:
+            self.module["run"]()
+        binary, args, env = launch.call_args.args
+        self.assertEqual(args, [binary, "--release", "--rotation", "90", self.state["BUNDLE"]])
+        self.assertAlmostEqual(float(env["KALINKA_DISPLAY_DIAGONAL_INCHES"]), 54.64, delta=0.1)
+
+    def test_missing_invalid_or_ambiguous_edid_uses_flutter_density(self):
+        panel = self.connector("card1-DSI-1")
+        diagonal = self.module["_display_diagonal_inches"]
+        self.assertIsNone(diagonal())
+        tv = self.connector("card1-HDMI-A-1", (121, 68))
+        self.assertIsNone(diagonal())
+        (panel / "status").write_text("disconnected\n")
+        edid = tv / "edid"
+        data = bytearray(edid.read_bytes())
+        data[22] = 0
+        data[-1] = -sum(data[:-1]) % 256
+        edid.write_bytes(data)
+        self.assertIsNone(diagonal())
+        data[22] = 68  # The dimensions now disagree with the checksum.
+        edid.write_bytes(data)
+        self.assertIsNone(diagonal())
 
     def panel(self, name="panel", kind="raw"):
         directory = self.backlights / name

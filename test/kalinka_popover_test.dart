@@ -12,6 +12,7 @@ import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/kalinka_centered_surface.dart';
 import 'package:kalinka/widgets/kalinka_popover.dart';
+import 'package:kalinka/widgets/kiosk/kiosk_home_layout.dart';
 
 const triggerKey = ValueKey('popup-trigger');
 final reviewKey = GlobalKey();
@@ -62,11 +63,13 @@ Widget host({
   Alignment alignment = Alignment.topLeft,
   bool dialog = false,
   bool useBeak = true,
+  TransitionBuilder? builder,
   List<LocalizationsDelegate<dynamic>> localizationsDelegates = const [],
   ValueChanged<String?>? onResult,
 }) => RepaintBoundary(
   key: reviewKey,
   child: MaterialApp(
+    builder: builder,
     localizationsDelegates: localizationsDelegates,
     theme: AppTheme.dark(),
     home: Scaffold(
@@ -137,6 +140,35 @@ void main() {
           .load();
     }
   });
+  testWidgets(
+    'a popup on the scaled TV Home stays beside its button and accepts input',
+    (tester) async {
+      size(tester, const Size(3840, 2160));
+      addTearDown(tester.view.reset);
+      String? result;
+      await tester.pumpWidget(
+        host(
+          alignment: Alignment.topRight,
+          builder: (_, child) =>
+              KioskHomeLayout(diagonalInches: 55, child: child!),
+          onResult: (value) => result = value,
+        ),
+      );
+      final trigger = find.byKey(triggerKey);
+      final pixelsPerDp = MediaQuery.devicePixelRatioOf(
+        tester.element(trigger),
+      );
+      await tester.tap(trigger);
+      await tester.pumpAndSettle();
+      final popup = find.byKey(KalinkaAnchoredSurface.surfaceKey);
+      final gap = tester.getTopLeft(trigger).dx - tester.getTopRight(popup).dx;
+      expect(gap, closeTo(4 * pixelsPerDp, 0.01));
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(result, 'saved');
+    },
+  );
+
   for (final useBeak in [false, true]) {
     testWidgets(
       '${useBeak ? 'beaked picker' : 'settings dialog'} announces a localized route across resizing',
