@@ -8,7 +8,7 @@ import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 import '../utils/catalog_casefold.dart';
 
-/// The title identity and tint mapping from catalog_art_render.py, style 12.
+/// The title identity and tint mapping from catalog_art_render.py, style 13.
 @immutable
 class CatalogArtSeed {
   final String textKey;
@@ -119,8 +119,8 @@ class CatalogArtSeed {
 }
 
 /// Draws the backend's bare background, with the catalogue icon for
-/// unavailable artwork. The icon is omitted underneath a successfully loaded
-/// inset cover.
+/// unavailable artwork where the backend draws it for a catalog of catalogs.
+/// The icon is omitted underneath a successfully loaded inset cover.
 class CatalogArtPainter extends CustomPainter {
   final CatalogArtSeed seed;
   final bool captioned;
@@ -295,7 +295,7 @@ class CatalogArtPainter extends CustomPainter {
     canvas.save();
     // The drawing sits 5 units low in its square.
     canvas.translate(
-      size.width * (captioned ? 0.82 : 0.66) - side / 2,
+      size.width * (captioned ? 0.82 : 0.5) - side / 2,
       size.height / 2 - side * 0.55,
     );
     canvas.scale(side / 100);
