@@ -308,7 +308,8 @@ class CatalogArtPainter extends CustomPainter {
 
   void _icon(Canvas canvas, Size size) {
     var side = math.min(size.height, size.width) * 0.65;
-    // A card taller than 3:1 would push it into the caption and off the edge.
+    // A card narrower than about 2.2:1 caps it by width, clear of the caption
+    // and the card's edge.
     if (captioned) side = math.min(side, size.width * 0.3);
     canvas.save();
     canvas.translate(

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -12,16 +13,18 @@ const _fixtures = 'test/fixtures/catalog_art';
 Future<ui.Image> _render(
   CatalogArtSeed seed, {
   required bool card,
+  double width = 360,
   bool icon = false,
 }) async {
   final recorder = ui.PictureRecorder();
+  final size = Size(card ? width : 120, 120);
   CatalogArtPainter(
     seed,
     captioned: card,
     icon: icon,
-  ).paint(Canvas(recorder), Size(card ? 360 : 120, 120));
+  ).paint(Canvas(recorder), size);
   final picture = recorder.endRecording();
-  final image = await picture.toImage(card ? 360 : 120, 120);
+  final image = await picture.toImage(size.width.round(), 120);
   picture.dispose();
   return image;
 }
@@ -113,34 +116,57 @@ void main() {
     }
   }
 
-  test('the icon leaves the caption and background alone', () async {
-    final seed = CatalogArtSeed.of('Jazz', null);
-    for (final card in [true, false]) {
-      final bare = await _render(seed, card: card);
-      final marked = await _render(seed, card: card, icon: true);
-      final a = await _pixels(bare);
-      final b = await _pixels(marked);
-      var changed = 0;
-      for (var y = 0; y < bare.height; y++) {
-        for (var x = 0; x < bare.width; x++) {
-          final i = (y * bare.width + x) * 4;
-          final differs =
-              a[i] != b[i] || a[i + 1] != b[i + 1] || a[i + 2] != b[i + 2];
-          if (differs) {
-            changed++;
-            expect(
-              x,
-              greaterThan(
-                bare.width * (card ? CatalogCard.captionShare : 0.15),
-              ),
-            );
-            expect(y, inInclusiveRange(25, 95));
+  test(
+    'the icon sits where the server draws it, clear of the caption',
+    () async {
+      final seed = CatalogArtSeed.of('Jazz', null);
+      // A 3:1 card, a square, and a card tall enough for its width to cap the
+      // icon.
+      for (final (card, width) in [
+        (true, 360.0),
+        (false, 120.0),
+        (true, 180.0),
+      ]) {
+        final bare = await _render(seed, card: card, width: width);
+        final marked = await _render(
+          seed,
+          card: card,
+          width: width,
+          icon: true,
+        );
+        final a = await _pixels(bare);
+        final b = await _pixels(marked);
+        var left = bare.width, right = 0, top = bare.height, bottom = 0;
+        for (var y = 0; y < bare.height; y++) {
+          for (var x = 0; x < bare.width; x++) {
+            final i = (y * bare.width + x) * 4;
+            if (a[i] != b[i] || a[i + 1] != b[i + 1] || a[i + 2] != b[i + 2]) {
+              left = math.min(left, x);
+              right = math.max(right, x);
+              top = math.min(top, y);
+              bottom = math.max(bottom, y);
+            }
           }
         }
+        final side = card ? math.min(78.0, width * 0.3) : 78.0;
+        final centre = width * (card ? 0.82 : 0.5);
+        final reason = '${card ? 'card' : 'square'} $width wide';
+        if (card) {
+          expect(
+            left,
+            greaterThan(width * CatalogCard.captionShare),
+            reason: reason,
+          );
+        }
+        // The tilted design spans 1.6 to 97.4 of its 100 units across and 12.7
+        // to 91.4 down.
+        expect(left, closeTo(centre - side * 0.484, 2), reason: reason);
+        expect(right, closeTo(centre + side * 0.474, 2), reason: reason);
+        expect(top, closeTo(60 - side * 0.373, 2), reason: reason);
+        expect(bottom, closeTo(60 + side * 0.414, 2), reason: reason);
+        bare.dispose();
+        marked.dispose();
       }
-      expect(changed, greaterThan(100));
-      bare.dispose();
-      marked.dispose();
-    }
-  });
+    },
+  );
 }
