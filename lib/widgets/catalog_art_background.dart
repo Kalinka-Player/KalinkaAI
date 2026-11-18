@@ -9,7 +9,7 @@ import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 import '../utils/catalog_casefold.dart';
 
-/// The title identity and tint mapping from catalog_art_render.py, style 14.
+/// The title identity and tint mapping from catalog_art_render.py, style 15.
 @immutable
 class CatalogArtSeed {
   final String textKey;
@@ -307,7 +307,9 @@ class CatalogArtPainter extends CustomPainter {
   ]);
 
   void _icon(Canvas canvas, Size size) {
-    final side = math.min(size.height, size.width) * 0.5;
+    var side = math.min(size.height, size.width) * 0.65;
+    // A card taller than 3:1 would push it into the caption and off the edge.
+    if (captioned) side = math.min(side, size.width * 0.3);
     canvas.save();
     canvas.translate(
       size.width * (captioned ? 0.82 : 0.5) - side / 2,

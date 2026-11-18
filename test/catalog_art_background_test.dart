@@ -42,8 +42,8 @@ void main() {
     entityId: entry['entityId'] as String,
   );
 
-  test('title identity, geometry and tints match backend style 14', () {
-    expect(reference['style'], 14);
+  test('title identity, geometry and tints match backend style 15', () {
+    expect(reference['style'], 15);
     Color color(String hex) =>
         Color(int.parse(hex.substring(1), radix: 16) | 0xFF000000);
     for (final entry in cases) {
@@ -131,10 +131,10 @@ void main() {
             expect(
               x,
               greaterThan(
-                bare.width * (card ? CatalogCard.captionShare : 0.25),
+                bare.width * (card ? CatalogCard.captionShare : 0.15),
               ),
             );
-            expect(y, inInclusiveRange(30, 90));
+            expect(y, inInclusiveRange(25, 95));
           }
         }
       }
