@@ -129,6 +129,7 @@ class _RendererSettingsScreenState
         // The renderer is what the page is for, so it is the title.
         SettingsTopBar(
           title: widget.rendererName,
+          autofocusBack: true,
           action: const ExpertModeToggle(),
         ),
         const ConnectionBanner(),

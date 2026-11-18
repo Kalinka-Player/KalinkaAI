@@ -8,15 +8,18 @@ import 'kalinka_popover.dart';
 class KalinkaBackButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final String label;
+  final bool autofocus;
 
   const KalinkaBackButton({
     super.key,
     required this.onPressed,
     this.label = 'Back',
+    this.autofocus = false,
   });
 
   @override
   Widget build(BuildContext context) => IconButton(
+    autofocus: autofocus,
     tooltip: label,
     onPressed: onPressed == null
         ? null

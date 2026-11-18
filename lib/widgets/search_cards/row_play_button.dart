@@ -14,8 +14,9 @@ import '../modifier_click.dart';
 /// control rather than as part of the row it sits on.
 class RowPlayButton extends ConsumerStatefulWidget {
   final BrowseItem item;
+  final FocusNode? focusNode;
 
-  const RowPlayButton({super.key, required this.item});
+  const RowPlayButton({super.key, required this.item, this.focusNode});
 
   /// The name a container goes by in the row's label and its toasts.
   static String nameOf(BrowseItem item) =>
@@ -71,6 +72,7 @@ class _RowPlayButtonState extends ConsumerState<RowPlayButton> {
               child: Material(
                 type: MaterialType.transparency,
                 child: InkWell(
+                  focusNode: widget.focusNode,
                   mouseCursor: WidgetStateMouseCursor.clickable,
                   customBorder: const CircleBorder(),
                   // Kept while starting, so the click never falls through

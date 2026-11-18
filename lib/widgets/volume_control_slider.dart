@@ -11,6 +11,7 @@ import '../providers/kalinka_ws_api_provider.dart';
 import '../providers/volume_activity_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 class NowPlayingVolumeControl extends ConsumerStatefulWidget {
   /// Greys the control out rather than hiding it while nothing plays, at the
@@ -250,15 +251,18 @@ class _NowPlayingVolumeControlState
             ),
             // Never a null onChanged: greyed out, the control is shut by
             // the IgnorePointer below instead, keeping its semantics' shape.
-            child: Slider(
-              value: progress,
-              semanticFormatterCallback: (value) => '${(value * 100).round()}%',
-              onChanged: (value) {
-                if (live) adjustVolume(value);
-              },
-              onChangeEnd: (value) {
-                if (live) commitVolume(value);
-              },
+            child: AppKeyboardSlider(
+              child: Slider(
+                value: progress,
+                semanticFormatterCallback: (value) =>
+                    '${(value * 100).round()}%',
+                onChanged: (value) {
+                  if (live) adjustVolume(value);
+                },
+                onChangeEnd: (value) {
+                  if (live) commitVolume(value);
+                },
+              ),
             ),
           ),
         ),

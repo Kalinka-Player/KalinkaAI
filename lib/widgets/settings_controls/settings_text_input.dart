@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// Text input field for settings.
 ///
@@ -92,29 +94,34 @@ class _SettingsTextInputState extends State<SettingsTextInput> {
 
   @override
   Widget build(BuildContext context) {
-    final field = TextField(
-      controller: _controller,
-      focusNode: _focusNode,
-      autofocus: widget.autofocus,
-      obscureText: widget.obscureText,
-      style: KalinkaTextStyles.textFieldInput,
-      textInputAction: TextInputAction.done,
-      decoration: InputDecoration(
-        hintText: widget.hintText,
-        hintStyle: KalinkaTextStyles.searchPlaceholder.copyWith(
-          fontSize: KalinkaTypography.baseSize + 2,
-          color: KalinkaColors.textSecondary,
+    final field = AppKeyboardTextEntry(
+      child: TextField(
+        controller: _controller,
+        focusNode: _focusNode,
+        autofocus: widget.autofocus,
+        obscureText: widget.obscureText,
+        style: KalinkaTextStyles.textFieldInput,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          hintText: widget.hintText,
+          hintStyle: KalinkaTextStyles.searchPlaceholder.copyWith(
+            fontSize: KalinkaTypography.baseSize + 2,
+            color: KalinkaColors.textSecondary,
+          ),
+          border: InputBorder.none,
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(7),
+            borderSide: const BorderSide(color: Color(0x55FFFFFF)),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 7,
+          ),
+          isDense: true,
         ),
-        border: InputBorder.none,
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(7),
-          borderSide: const BorderSide(color: Color(0x55FFFFFF)),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        isDense: true,
+        onChanged: (_) => _commitIfChanged(),
+        onSubmitted: (_) => _commitIfChanged(),
       ),
-      onChanged: (_) => _commitIfChanged(),
-      onSubmitted: (_) => _commitIfChanged(),
     );
     final trailing = widget.trailingBuilder?.call(context, _replaceWith);
 

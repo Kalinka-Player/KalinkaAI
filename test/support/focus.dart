@@ -2,6 +2,25 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// Available keyboard targets, including controls reached with arrow keys.
+Iterable<FocusNode> traversableFocusNodesIn(Finder target) {
+  final targets = target.evaluate().toSet();
+  return FocusManager.instance.rootScope.descendants.where((node) {
+    if (!node.canRequestFocus || node.skipTraversal || node is FocusScopeNode) {
+      return false;
+    }
+    final context = node.context;
+    if (context == null) return false;
+    if (targets.contains(context)) return true;
+    var found = false;
+    context.visitAncestorElements((element) {
+      found = targets.contains(element);
+      return !found;
+    });
+    return found;
+  });
+}
+
 /// Whether keyboard focus is on what [target] finds, or inside it.
 bool focusIsOn(Finder target) {
   final focused = FocusManager.instance.primaryFocus?.context;

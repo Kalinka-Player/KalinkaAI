@@ -24,9 +24,14 @@ Use sentence case: **Download server logs**, **Check your changes**. A renderer'
 
 Keep setting descriptions short, with requirements and special values beside the control. Optional `help_details` appears behind an info button beside the setting label. Use `SettingsHelpButton` in regular, expert and setup views, including read-only fields. It opens the shared dialog with the setting name, detailed text and a Close button. Keyboard dismissal returns focus to the info button; pointer dismissal leaves it idle. Hover and press brighten the icon without a filled background or ripple. Keyboard focus uses a 2dp primary outline. Missing or blank details show no button.
 
+Wrap text, numeric and password entries in `AppKeyboardTextEntry` and sliders in `AppKeyboardSlider`, including in dialogs and setup forms. Enter starts text editing. Enter or Space starts slider adjustment. Until then, arrow keys move focus past either control. Escape returns to navigation and preserves normal staging and validation. Enter also finishes slider adjustment. Show a neutral focus outline and a short keyboard hint during keyboard navigation. Pointer editing and intentional autofocus stay direct. [Keyboard navigation](browsing-design-guide.md#keyboard-navigation)
+
 Omit section descriptions that repeat the heading or visible controls. When a section needs a caption, place it 4dp below the heading and leave 10dp before the card, matching collection captions.
 
 Back closes the current panel through `SlideInPanel.closeOf(context)`. System Back does the same. Returning preserves the parent tab, scroll position and staged edits. Only the uppermost panel owns Back. The header remains outside the content scroll.
+Opening renderer settings moves keyboard focus to its Back button. Tab enters
+the renderer controls. Covered Streamer controls leave keyboard traversal
+until the renderer panel closes.
 
 Use the shared `KalinkaBackButton`: a 40dp outlined circle in a 48dp target, matching filter controls, with neutral hover/press and a primary keyboard focus ring. This also applies to browsing, search and setup; the album view retains its separate treatment. See [Back buttons](../PALETTE.md#back-buttons) for exact states.
 

@@ -121,6 +121,7 @@ Future<ProviderContainer> pumpHomeShell(
   WidgetTester tester, {
   required SettableQueue queue,
   HomeApi? api,
+  IndexerStatusNotifier Function() indexer = _IdleIndexer.new,
   ConnectionStateNotifier Function() connection = SettableConnection.new,
   Size size = const Size(400, 800),
   bool coachMarksShown = true,
@@ -167,7 +168,7 @@ Future<ProviderContainer> pumpHomeShell(
       playQueueStateStoreProvider.overrideWith(() => queue),
       connectionStateProvider.overrideWith(connection),
       playbackTimeMsProvider.overrideWith(_StillClock.new),
-      indexerStatusProvider.overrideWith(_IdleIndexer.new),
+      indexerStatusProvider.overrideWith(indexer),
       sourceModulesProvider.overrideWith((ref) => sources),
       sourceCountProvider.overrideWithValue(1),
       collectionsShelfProvider.overrideWith((ref) async => collections),

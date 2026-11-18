@@ -10,6 +10,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/field_decoration.dart';
 import '../kalinka_bottom_sheet.dart';
 import '../kalinka_button.dart';
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// Asks for a name and makes the collection, reporting through the shared
 /// toast. Returns the new collection's browse id, or null if it was dismissed
@@ -168,16 +169,18 @@ class _NameFormState extends State<_NameForm> {
               Text(widget.note, style: KalinkaTextStyles.trackRowSubtitle),
             ],
             const SizedBox(height: 18),
-            TextField(
-              controller: _controller,
-              // The sheet exists to be typed into.
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              textCapitalization: TextCapitalization.sentences,
-              maxLength: 200,
-              onSubmitted: (_) => _submit(),
-              style: kalinkaFieldText(KalinkaTextStyles.cardTitle),
-              decoration: kalinkaFieldDecoration(hint: 'Name it'),
+            AppKeyboardTextEntry(
+              child: TextField(
+                controller: _controller,
+                // The sheet exists to be typed into.
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                textCapitalization: TextCapitalization.sentences,
+                maxLength: 200,
+                onSubmitted: (_) => _submit(),
+                style: kalinkaFieldText(KalinkaTextStyles.cardTitle),
+                decoration: kalinkaFieldDecoration(hint: 'Name it'),
+              ),
             ),
             const SizedBox(height: 18),
             OverflowBar(

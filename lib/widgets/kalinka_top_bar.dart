@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import 'home/home_layout.dart';
 import 'server_chip.dart';
 import 'tap_highlight.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 /// Slim top app bar for the main screen: Kalinka wordmark on the left,
 /// connection chip (via [ServerChip], which carries the green status dot) on
@@ -41,7 +42,12 @@ class KalinkaTopBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AppKeyboardRegion(
+    area: AppKeyboardArea.toolbar,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     return Container(
       decoration: transparent ? null : kKalinkaTopBarDecoration,
       child: SafeArea(

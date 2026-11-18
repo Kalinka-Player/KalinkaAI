@@ -30,6 +30,7 @@ import 'log_export_screen.dart';
 import 'configuration_review_screen.dart';
 import '../widgets/plugin_catalog_entry.dart';
 import '../widgets/settings_top_bar.dart';
+import '../widgets/keyboard/app_keyboard_navigation.dart';
 import '../widgets/section_tab_button.dart';
 import '../widgets/restart_overlay.dart';
 import '../widgets/restart_confirm_dialog.dart';
@@ -795,55 +796,58 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     double gutter,
     Map<PluginTab, int> updateCounts,
   ) => PinnedHeaderSliver(
-    child: ColoredBox(
-      key: const ValueKey('catalog-tabs'),
-      color: KalinkaColors.background,
-      // All three destinations stay visible, including their update badges.
-      // Longer labels receive proportionally more room and ellipsize as needed.
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: gutter - SectionTabButton.horizontalPadding,
-          right: gutter,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Row(
-                spacing: SectionTabButton.spacing,
-                children: [
-                  for (final (option, label) in [
-                    (PluginTab.sources, 'Music sources'),
-                    (PluginTab.devices, 'HiFi control'),
-                    (PluginTab.server, 'Streamer'),
-                  ])
-                    Expanded(
-                      flex: label.length,
-                      child: SectionTabButton(
-                        key: ValueKey('catalog-tab-${option.name}'),
-                        label: label,
-                        overflow: TextOverflow.ellipsis,
-                        showBadge: updateCounts[option]! > 0,
-                        semanticLabel: updateCounts[option]! > 0
-                            ? option == PluginTab.server
-                                  ? '$label, system update available'
-                                  : '$label, ${updateCounts[option]} '
-                                        '${updateCounts[option] == 1 ? 'update' : 'updates'} available'
-                            : label,
-                        selected: tab == option,
-                        onTap: () {
-                          setState(() => _tab = option);
-                          _scroll.jumpTo(0);
-                        },
+    child: AppKeyboardRegion(
+      area: AppKeyboardArea.toolbar,
+      child: ColoredBox(
+        key: const ValueKey('catalog-tabs'),
+        color: KalinkaColors.background,
+        // All three destinations stay visible, including their update badges.
+        // Longer labels receive proportionally more room and ellipsize as needed.
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: gutter - SectionTabButton.horizontalPadding,
+            right: gutter,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Row(
+                  spacing: SectionTabButton.spacing,
+                  children: [
+                    for (final (option, label) in [
+                      (PluginTab.sources, 'Music sources'),
+                      (PluginTab.devices, 'HiFi control'),
+                      (PluginTab.server, 'Streamer'),
+                    ])
+                      Expanded(
+                        flex: label.length,
+                        child: SectionTabButton(
+                          key: ValueKey('catalog-tab-${option.name}'),
+                          label: label,
+                          overflow: TextOverflow.ellipsis,
+                          showBadge: updateCounts[option]! > 0,
+                          semanticLabel: updateCounts[option]! > 0
+                              ? option == PluginTab.server
+                                    ? '$label, system update available'
+                                    : '$label, ${updateCounts[option]} '
+                                          '${updateCounts[option] == 1 ? 'update' : 'updates'} available'
+                              : label,
+                          selected: tab == option,
+                          onTap: () {
+                            setState(() => _tab = option);
+                            _scroll.jumpTo(0);
+                          },
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            if (tab == PluginTab.server && !widget.showBack) ...[
-              const SizedBox(width: 8),
-              const ExpertModeToggle(),
+              if (tab == PluginTab.server && !widget.showBack) ...[
+                const SizedBox(width: 8),
+                const ExpertModeToggle(),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     ),

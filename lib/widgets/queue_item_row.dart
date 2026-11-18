@@ -19,6 +19,7 @@ import 'queue_columns.dart';
 import 'source_badge.dart';
 import 'swipe_to_delete_row.dart';
 import 'track_tile_layout.dart';
+import 'keyboard/keyboard_activation.dart';
 
 /// A single queue item row with thumbnail, title, artist, and trailing slot.
 ///
@@ -417,7 +418,12 @@ class QueueItemRow extends ConsumerWidget {
           toast.show('Failed to remove: $e', isError: true);
         }
       },
-      child: MouseRegion(cursor: SystemMouseCursors.click, child: rowContent),
+      child: KeyboardActivation(
+        onActivate: connected && !isDragging
+            ? () => api.sendQueueCommand(QueueCommand.play(index: index))
+            : null,
+        child: MouseRegion(cursor: SystemMouseCursors.click, child: rowContent),
+      ),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// Numeric input with optional constraints. 80px wide, right-aligned.
 /// Shows accent-colored border on focus.
@@ -37,6 +38,7 @@ class SettingsNumericInput extends StatefulWidget {
 class _SettingsNumericInputState extends State<SettingsNumericInput> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
+  bool _hadFocus = false;
 
   // Track the value we last reported to the parent so we don't re-emit
   // an unchanged value on a focus-blur after the user typed and then
@@ -100,7 +102,10 @@ class _SettingsNumericInputState extends State<SettingsNumericInput> {
   }
 
   void _onFocusChange() {
-    if (_focusNode.hasFocus) {
+    final focused = _focusNode.hasFocus;
+    if (focused == _hadFocus) return;
+    _hadFocus = focused;
+    if (focused) {
       _valueAtFocus = _committedValue;
     } else {
       _commitIfChanged();
@@ -141,29 +146,31 @@ class _SettingsNumericInputState extends State<SettingsNumericInput> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: KalinkaColors.borderDefault),
       ),
-      child: TextField(
-        controller: _controller,
-        focusNode: _focusNode,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        textAlign: TextAlign.right,
-        textInputAction: TextInputAction.done,
-        style: KalinkaTextStyles.searchBarInput.copyWith(
-          fontSize: KalinkaTypography.baseSize + 2,
-        ),
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(7),
-            borderSide: const BorderSide(color: Color(0x55FFFFFF)),
+      child: AppKeyboardTextEntry(
+        child: TextField(
+          controller: _controller,
+          focusNode: _focusNode,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          textAlign: TextAlign.right,
+          textInputAction: TextInputAction.done,
+          style: KalinkaTextStyles.searchBarInput.copyWith(
+            fontSize: KalinkaTypography.baseSize + 2,
           ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 7,
+          decoration: InputDecoration(
+            border: InputBorder.none,
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(7),
+              borderSide: const BorderSide(color: Color(0x55FFFFFF)),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 7,
+            ),
+            isDense: true,
           ),
-          isDense: true,
+          // Done closes the keyboard, and leaving the field commits it.
+          onChanged: (_) => _stageTyped(),
         ),
-        // Done closes the keyboard, and leaving the field commits it.
-        onChanged: (_) => _stageTyped(),
       ),
     );
 

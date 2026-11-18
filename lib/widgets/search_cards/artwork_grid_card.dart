@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RendererBinding;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart';
@@ -82,13 +83,27 @@ class ArtworkGridCard extends ConsumerStatefulWidget {
 
 class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
   static const _inset = ArtworkGridCard.inset;
+  static const _playShortcut = SingleActivator(
+    LogicalKeyboardKey.enter,
+    shift: true,
+    includeRepeats: false,
+  );
 
   /// Concentric with the cover's corners, a frame's inset out.
   static final _frame = BorderRadius.circular(10 + _inset);
 
-  bool _hovered = false;
-  bool _focused = false;
-  bool _pressed = false;
+  final _interaction = WidgetStatesController();
+  final _playButton = FocusNode(
+    debugLabel: 'Grid card Play',
+    skipTraversal: true,
+  );
+
+  @override
+  void dispose() {
+    _interaction.dispose();
+    _playButton.dispose();
+    super.dispose();
+  }
 
   BrowseItem get item => widget.item;
 
@@ -130,6 +145,7 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
         button: true,
         selected: selecting ? selected : null,
         label: [title, if (detail.isNotEmpty) detail].join(', '),
+        hint: playable && !selecting ? 'Shift+Enter to play' : null,
         explicitChildNodes: true,
         onTap: activate,
         child: Material(
@@ -139,18 +155,23 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
             mouseCursor: WidgetStateMouseCursor.clickable,
             onTap: activate,
             onLongPress: playable && !selecting ? select : null,
-            onHighlightChanged: (value) => setState(() => _pressed = value),
+            onHighlightChanged: (value) =>
+                _interaction.update(WidgetState.pressed, value),
             overlayColor: kalinkaOverlay,
             borderRadius: _frame,
-            child: DecoratedBox(
-              position: DecorationPosition.foreground,
-              decoration: BoxDecoration(
-                borderRadius: _frame,
-                border: Border.all(
-                  color: _hovered || _focused || _pressed
-                      ? KalinkaColors.borderDefault
-                      : Colors.transparent,
+            child: ValueListenableBuilder<Set<WidgetState>>(
+              valueListenable: _interaction,
+              builder: (context, states, child) => DecoratedBox(
+                position: DecorationPosition.foreground,
+                decoration: BoxDecoration(
+                  borderRadius: _frame,
+                  border: Border.all(
+                    color: states.isNotEmpty
+                        ? KalinkaColors.borderDefault
+                        : Colors.transparent,
+                  ),
                 ),
+                child: child,
               ),
               child: Padding(
                 padding: EdgeInsets.symmetric(
@@ -222,14 +243,27 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
         ),
       ),
     );
-    // Around Play too, so moving onto it or tabbing to it keeps the card lit.
+    // One arrow stop per card. The shortcut invokes the same Play button
+    // as a click, including its guard against starting playback twice.
     Widget highlighted(Widget child) => MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onEnter: (_) => _interaction.update(WidgetState.hovered, true),
+      onExit: (_) => _interaction.update(WidgetState.hovered, false),
       child: Focus(
         canRequestFocus: false,
         skipTraversal: true,
-        onFocusChange: (value) => setState(() => _focused = value),
+        onFocusChange: (value) =>
+            _interaction.update(WidgetState.focused, value),
+        onKeyEvent: (_, event) {
+          final play = _playButton.context;
+          if (playable &&
+              !selecting &&
+              play != null &&
+              _playShortcut.accepts(event, HardwareKeyboard.instance)) {
+            Actions.invoke(play, const ActivateIntent());
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
         child: child,
       ),
     );
@@ -315,13 +349,15 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
       final mouse = RendererBinding.instance.mouseTracker;
       return Stack(
         children: [
-          ExcludeSemantics(
-            child: round
-                ? ClipOval(child: cover)
-                : ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: cover,
-                  ),
+          RepaintBoundary(
+            child: ExcludeSemantics(
+              child: round
+                  ? ClipOval(child: cover)
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: cover,
+                    ),
+            ),
           ),
           if (selected)
             Positioned.fill(
@@ -338,13 +374,10 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
               right: 2,
               bottom: 2,
               child: ListenableBuilder(
-                listenable: mouse,
+                listenable: Listenable.merge([_interaction, mouse]),
                 builder: (context, child) {
                   final shown =
-                      _hovered ||
-                      _focused ||
-                      _pressed ||
-                      !mouse.mouseIsConnected;
+                      _interaction.value.isNotEmpty || !mouse.mouseIsConnected;
                   return IgnorePointer(
                     ignoring: !shown,
                     child: AnimatedOpacity(
@@ -356,7 +389,11 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
                     ),
                   );
                 },
-                child: RowPlayButton(item: item),
+                child: Tooltip(
+                  message: 'Play (Shift+Enter)',
+                  excludeFromSemantics: true,
+                  child: RowPlayButton(item: item, focusNode: _playButton),
+                ),
               ),
             ),
         ],

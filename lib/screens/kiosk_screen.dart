@@ -156,6 +156,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   Timer? _outputsTimer;
   Timer? _dimTimer;
   final _pillLink = LayerLink();
+  final _outputFocus = FocusNode(debugLabel: 'Kiosk output');
   Timer? _shiftTimer;
   int _shift = 0;
 
@@ -203,6 +204,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     _volumeTimer?.cancel();
     _outputsTimer?.cancel();
     _shiftTimer?.cancel();
+    _outputFocus.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -228,7 +230,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
   void _armRest() {
     _restTimer?.cancel();
     _restTimer = Timer(_restAfter, () {
-      if (!mounted) return;
+      if (!mounted || _outputsOpen) return;
       // Only rest over music: paused or stopped, play is what a passer-by
       // reaches for.
       if (ref.read(playerStateProvider).state == PlayerStateType.playing) {
@@ -272,18 +274,55 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       _outputsOpen = true;
       _volumeVisible = false;
     });
-    _touchOutputs();
+    _recordActivity();
   }
 
-  /// Something was done in the output panel: it stays open a while longer.
-  void _touchOutputs() {
+  /// Keep the visible controls and any open picker awake during interaction.
+  void _recordActivity() {
+    _wake();
+    if (!_outputsOpen) return;
     _outputsTimer?.cancel();
     _outputsTimer = Timer(_outputsFor, _closeOutputs);
   }
 
   void _closeOutputs() {
     _outputsTimer?.cancel();
-    if (mounted && _outputsOpen) setState(() => _outputsOpen = false);
+    if (!mounted || !_outputsOpen) return;
+    setState(() => _outputsOpen = false);
+    _armRest();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          !_outputsOpen &&
+          _outputFocus.context?.mounted == true &&
+          _outputFocus.canRequestFocus) {
+        _outputFocus.requestFocus();
+      }
+    });
+  }
+
+  KeyEventResult _onKeyEvent(
+    KeyEvent event, {
+    required bool controlsUp,
+    required bool canExit,
+  }) {
+    if (event.synthesized) return KeyEventResult.ignored;
+    if (_dimmed || !controlsUp) {
+      if (event is KeyDownEvent) _wake();
+      return KeyEventResult.handled;
+    }
+    _recordActivity();
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      if (_outputsOpen) {
+        _closeOutputs();
+        return KeyEventResult.handled;
+      }
+      if (canExit) {
+        _exit();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
   }
 
   // The way the viewer last skipped, kept for the track change it causes.
@@ -388,26 +427,23 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
           _exit();
         }
       },
-      child: Focus(
-        autofocus: true,
-        onKeyEvent: (_, event) {
-          if (event is! KeyDownEvent ||
-              event.logicalKey != LogicalKeyboardKey.escape) {
-            return KeyEventResult.ignored;
-          }
-          if (_outputsOpen) {
-            _closeOutputs();
-            return KeyEventResult.handled;
-          }
-          if (canExit) {
-            _exit();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
+      child: Shortcuts(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(
+            TraversalDirection.up,
+          ),
+          SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(
+            TraversalDirection.down,
+          ),
+          SingleActivator(LogicalKeyboardKey.arrowLeft): DirectionalFocusIntent(
+            TraversalDirection.left,
+          ),
+          SingleActivator(LogicalKeyboardKey.arrowRight):
+              DirectionalFocusIntent(TraversalDirection.right),
         },
         child: Listener(
           behavior: HitTestBehavior.translucent,
-          onPointerDown: (_) => _wake(),
+          onPointerDown: (_) => _recordActivity(),
           child: Material(
             color: KalinkaColors.background,
             child: LayoutBuilder(
@@ -431,7 +467,15 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                 final panelScale = layout == _Layout.fill
                     ? scale.clamp(0.8, 1.2)
                     : scale;
-                return Stack(
+                final panel = _outputsOpen
+                    ? KioskOutputPanel(
+                        scale: panelScale,
+                        fullScreen: panelFullScreen,
+                        onClose: _closeOutputs,
+                        onActivity: _recordActivity,
+                      )
+                    : null;
+                final display = Stack(
                   fit: StackFit.expand,
                   children: [
                     AnimatedSwitcher(
@@ -466,19 +510,24 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                     // acts on nothing else.
                     IgnorePointer(
                       ignoring: _dimmed || !controlsUp,
-                      child: SafeArea(
-                        child: _content(
-                          track: standby ? null : track,
-                          largeImage: track?.largeImage == null
-                              ? null
-                              : urls.abs(track!.largeImage!),
-                          layout: layout,
-                          scale: scale,
-                          showExit: canExit || showHome,
-                          showHome: showHome,
-                          controlsUp: controlsUp,
-                          away: away,
-                          onOutputTap: volume || outputs ? _openOutputs : null,
+                      child: ExcludeFocus(
+                        excluding: _dimmed || !controlsUp || _outputsOpen,
+                        child: SafeArea(
+                          child: _content(
+                            track: standby ? null : track,
+                            largeImage: track?.largeImage == null
+                                ? null
+                                : urls.abs(track!.largeImage!),
+                            layout: layout,
+                            scale: scale,
+                            showExit: canExit || showHome,
+                            showHome: showHome,
+                            controlsUp: controlsUp,
+                            away: away,
+                            onOutputTap: volume || outputs
+                                ? _openOutputs
+                                : null,
+                          ),
                         ),
                       ),
                     ),
@@ -506,24 +555,19 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                           ignoring: _dimmed,
                           child: KioskVolumePopup(
                             scale: _pillScale(layout, scale),
-                            visible: _volumeVisible,
+                            visible:
+                                _volumeVisible &&
+                                !_dimmed &&
+                                controlsUp &&
+                                !_outputsOpen,
                             onActivity: _showVolume,
                           ),
                         ),
                       ),
                     ),
-                    if (_outputsOpen)
+                    if (panel != null)
                       if (panelFullScreen)
-                        Positioned.fill(
-                          child: Listener(
-                            onPointerDown: (_) => _touchOutputs(),
-                            child: KioskOutputPanel(
-                              scale: panelScale,
-                              fullScreen: true,
-                              onClose: _closeOutputs,
-                            ),
-                          ),
-                        )
+                        Positioned.fill(child: panel)
                       else ...[
                         // Over the display, dimming it; a tap on it closes
                         // the panel.
@@ -558,14 +602,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                                     (panelAbove ? 120 : 100) * panelScale -
                                     insets.vertical,
                               ),
-                              child: Listener(
-                                onPointerDown: (_) => _touchOutputs(),
-                                child: KioskOutputPanel(
-                                  scale: panelScale,
-                                  fullScreen: false,
-                                  onClose: _closeOutputs,
-                                ),
-                              ),
+                              child: panel,
                             ),
                           ),
                         ),
@@ -585,6 +622,15 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                             .shown(),
                       ),
                   ],
+                );
+                return FocusScope(
+                  autofocus: true,
+                  onKeyEvent: (_, event) => _onKeyEvent(
+                    event,
+                    controlsUp: controlsUp,
+                    canExit: canExit,
+                  ),
+                  child: display,
                 );
               },
             ),
@@ -637,6 +683,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     final output = CompositedTransformTarget(
       link: _pillLink,
       child: KioskOutputPill(
+        focusNode: _outputFocus,
         scale: _pillScale(layout, scale),
         onTap: onOutputTap,
       ),

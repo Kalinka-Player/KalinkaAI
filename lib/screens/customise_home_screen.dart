@@ -17,6 +17,7 @@ import '../widgets/search/catalog_cards_section.dart';
 import '../widgets/settings_top_bar.dart';
 import '../widgets/slide_in_panel.dart';
 import '../widgets/tap_highlight.dart';
+import '../widgets/keyboard/app_keyboard_navigation.dart';
 
 /// Names and controls only: the preview content stays on Home.
 class CustomiseHomeScreen extends ConsumerStatefulWidget {
@@ -401,18 +402,20 @@ class _HomeNameDialogState extends State<_HomeNameDialog> {
   Widget build(BuildContext context) => KalinkaDialog(
     side: KalinkaDialogSide.browsing,
     title: 'Home name',
-    content: TextField(
-      controller: _name,
-      autofocus: true,
-      textCapitalization: TextCapitalization.sentences,
-      textInputAction: TextInputAction.done,
-      decoration: InputDecoration(
-        labelText: 'Home name (optional)',
-        hintText: widget.pin.page.title,
-        helperText: 'Leave empty to use the original name.',
-        helperMaxLines: 3,
+    content: AppKeyboardTextEntry(
+      child: TextField(
+        controller: _name,
+        autofocus: true,
+        textCapitalization: TextCapitalization.sentences,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          labelText: 'Home name (optional)',
+          hintText: widget.pin.page.title,
+          helperText: 'Leave empty to use the original name.',
+          helperMaxLines: 3,
+        ),
+        onSubmitted: (value) => Navigator.pop(context, value),
       ),
-      onSubmitted: (value) => Navigator.pop(context, value),
     ),
     actions: [
       KalinkaButton(

@@ -8,6 +8,7 @@ import '../../data_model/data_model.dart' show SearchType;
 import '../../providers/browse_genres_provider.dart';
 import '../../theme/app_theme.dart';
 import '../source_badge.dart';
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// Default idle time before a keystroke becomes a query — long enough that
 /// typing a word is one request, short enough to feel live. Staged surfaces
@@ -263,31 +264,33 @@ class _FilterSearchFieldState extends State<FilterSearchField> {
           Expanded(
             // The field stays in the tree when disabled so the placeholder
             // measures and aligns exactly like the live one.
-            child: TextField(
-              controller: _controller,
-              enabled: enabled,
-              autofocus: widget.autofocus,
-              focusNode: widget.focusNode,
-              onChanged: _onChanged,
-              onSubmitted: widget.onSubmitted == null && !widget.submitOnly
-                  ? null
-                  : (text) {
-                      if (widget.submitOnly) {
-                        widget.onChanged(text);
-                      } else if (_debounce?.isActive ?? false) {
-                        _debounce!.cancel();
-                        widget.onChanged(text);
-                      }
-                      widget.onSubmitted?.call(text);
-                    },
-              textInputAction: TextInputAction.search,
-              style: textStyle,
-              cursorColor: KalinkaColors.accent,
-              decoration: InputDecoration(
-                isCollapsed: true,
-                border: InputBorder.none,
-                hintText: widget.hint,
-                hintStyle: textStyle.copyWith(color: KalinkaColors.textMuted),
+            child: AppKeyboardTextEntry(
+              child: TextField(
+                controller: _controller,
+                enabled: enabled,
+                autofocus: widget.autofocus,
+                focusNode: widget.focusNode,
+                onChanged: _onChanged,
+                onSubmitted: widget.onSubmitted == null && !widget.submitOnly
+                    ? null
+                    : (text) {
+                        if (widget.submitOnly) {
+                          widget.onChanged(text);
+                        } else if (_debounce?.isActive ?? false) {
+                          _debounce!.cancel();
+                          widget.onChanged(text);
+                        }
+                        widget.onSubmitted?.call(text);
+                      },
+                textInputAction: TextInputAction.search,
+                style: textStyle,
+                cursorColor: KalinkaColors.accent,
+                decoration: InputDecoration(
+                  isCollapsed: true,
+                  border: InputBorder.none,
+                  hintText: widget.hint,
+                  hintStyle: textStyle.copyWith(color: KalinkaColors.textMuted),
+                ),
               ),
             ),
           ),

@@ -14,6 +14,7 @@ import '../search_cards/collection_identity.dart';
 import '../settings_controls/settings_toggle.dart';
 import '../tap_highlight.dart';
 import 'collection_name_sheet.dart';
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// What a sheet is about to save into a collection, and the words it asks
 /// with.
@@ -269,16 +270,18 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
                 kSheetGutter,
                 12,
               ),
-              child: TextField(
-                controller: _search,
-                style: kalinkaFieldText(KalinkaTextStyles.cardTitle),
-                textInputAction: TextInputAction.search,
-                decoration: kalinkaFieldDecoration(
-                  hint: 'Find a collection',
-                  prefixIcon: const Icon(
-                    Icons.search_rounded,
-                    size: 20,
-                    color: KalinkaColors.textMuted,
+              child: AppKeyboardTextEntry(
+                child: TextField(
+                  controller: _search,
+                  style: kalinkaFieldText(KalinkaTextStyles.cardTitle),
+                  textInputAction: TextInputAction.search,
+                  decoration: kalinkaFieldDecoration(
+                    hint: 'Find a collection',
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      size: 20,
+                      color: KalinkaColors.textMuted,
+                    ),
                   ),
                 ),
               ),

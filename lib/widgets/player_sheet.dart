@@ -5,15 +5,21 @@ import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
 import 'player_queue_view.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 /// The phone player: a full-height sheet whose content slides while the
 /// queue's mini-player stays put over its foot, where Home's own sits, so
 /// closing the queue leaves the bar in place. Beside a navigation rail it
 /// leaves the rail in view and in reach, all but the foot the bar spans.
 class PlayerSheetRoute extends PopupRoute<void> {
-  PlayerSheetRoute({required this.builder, required this.themes});
+  PlayerSheetRoute({
+    required this.builder,
+    required this.themes,
+    required this.keyboardNavigation,
+  });
 
   final WidgetBuilder builder;
+  final AppKeyboardNavigationController keyboardNavigation;
 
   /// Themes from where the sheet was opened, as showModalBottomSheet keeps.
   final CapturedThemes themes;
@@ -50,9 +56,12 @@ class PlayerSheetRoute extends PopupRoute<void> {
     Animation<double> secondaryAnimation,
   ) {
     return themes.wrap(
-      _PlayerSheetPage(
-        route: this,
-        child: Builder(builder: builder),
+      AppKeyboardNavigation(
+        controller: keyboardNavigation,
+        child: _PlayerSheetPage(
+          route: this,
+          child: Builder(builder: builder),
+        ),
       ),
     );
   }

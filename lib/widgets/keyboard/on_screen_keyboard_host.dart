@@ -12,6 +12,7 @@ import 'keyboard_accent_picker.dart';
 import 'keyboard_language_picker.dart';
 import 'keyboard_presentation_scope.dart';
 import 'on_screen_input_control.dart';
+import 'app_keyboard_navigation.dart';
 
 const _maxKeyboardWidth = 900.0;
 const _maxKeyboardHeightFraction = 0.37;
@@ -133,7 +134,7 @@ class _OnScreenKeyboardHostState extends ConsumerState<OnScreenKeyboardHost>
       if (navigator != null && navigator.canPop()) {
         navigator.pop();
       } else {
-        _input.dismiss();
+        if (!AppKeyboardTextEntry.finishEditing()) _input.dismiss();
       }
       return KeyEventResult.handled;
     }

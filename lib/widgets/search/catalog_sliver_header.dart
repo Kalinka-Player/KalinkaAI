@@ -9,6 +9,7 @@ import '../../providers/source_modules_provider.dart';
 import '../../theme/app_theme.dart';
 import '../browse_filters/browse_filter_form.dart';
 import '../home/catalog_pin_button.dart';
+import '../keyboard/app_keyboard_navigation.dart';
 import '../source_badge.dart';
 import '../search_cards/action_pill_button.dart';
 
@@ -624,7 +625,10 @@ class _CatalogHeaderDelegate extends SliverPersistentHeaderDelegate {
     BuildContext context,
     double shrinkOffset,
     bool overlapsContent,
-  ) => builder(context, shrinkOffset);
+  ) => AppKeyboardRegion(
+    area: AppKeyboardArea.toolbar,
+    child: builder(context, shrinkOffset),
+  );
   @override
   bool shouldRebuild(_CatalogHeaderDelegate oldDelegate) => true;
 }

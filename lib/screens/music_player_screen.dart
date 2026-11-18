@@ -55,6 +55,7 @@ import 'plugin_catalog_screen.dart';
 import '../widgets/kalinka_toast_overlay.dart';
 import '../widgets/sheet_anchor.dart';
 import '../widgets/shell_navigation.dart';
+import '../widgets/keyboard/app_keyboard_navigation.dart';
 
 /// Shared by navigation controls and their handlers so an operation cannot
 /// lose its progress panel through a different entry point.
@@ -75,6 +76,7 @@ class MusicPlayerScreen extends ConsumerStatefulWidget {
 class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     with TickerProviderStateMixin {
   final _searchEntryKey = GlobalKey();
+  final _keyboardNavigation = AppKeyboardNavigationController();
   final _connectionDotKey = GlobalKey();
   // The output switcher moves house across the breakpoint — mini-player on
   // phone, Now Playing header on tablet — and the two are different widgets.
@@ -269,11 +271,14 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }
 
   Widget _keyboardAwareMiniPlayer(Widget child, {bool collapse = false}) {
-    final sliding = IgnorePointer(
-      ignoring: _keyboardActive,
-      child: ExcludeSemantics(
-        excluding: _keyboardActive,
-        child: SlideTransition(position: _keyboardSlide, child: child),
+    final sliding = ExcludeFocus(
+      excluding: _keyboardActive,
+      child: IgnorePointer(
+        ignoring: _keyboardActive,
+        child: ExcludeSemantics(
+          excluding: _keyboardActive,
+          child: SlideTransition(position: _keyboardSlide, child: child),
+        ),
       ),
     );
     return collapse
@@ -410,19 +415,22 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// Beside the rail it is left by another destination, so it offers no
   /// Back of its own; the system back still returns where it came from.
   Widget _buildPlugins({
-    required bool handlesBack,
+    required bool covered,
     required bool navigationVisible,
-  }) => PluginCatalogScreen(
-    key: _pluginsKey,
-    handlesBack: handlesBack,
-    showBack: !navigationVisible,
-    slides: _pluginsSlide,
-    onClose: () => setState(() {
-      _pluginsOpen = false;
-      _settingsCovering = false;
-    }),
-    onCoverageChanged: (covering) =>
-        setState(() => _settingsCovering = covering),
+  }) => ExcludeFocus(
+    excluding: covered,
+    child: PluginCatalogScreen(
+      key: _pluginsKey,
+      handlesBack: !covered,
+      showBack: !navigationVisible,
+      slides: _pluginsSlide,
+      onClose: () => setState(() {
+        _pluginsOpen = false;
+        _settingsCovering = false;
+      }),
+      onCoverageChanged: (covering) =>
+          setState(() => _settingsCovering = covering),
+    ),
   );
 
   void _requestHomeSearch() {
@@ -531,6 +539,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     ref.read(playerViewProvider.notifier).show(PlayerView.nowPlaying);
     final navigator = Navigator.of(context);
     final sheet = PlayerSheetRoute(
+      keyboardNavigation: _keyboardNavigation,
       themes: InheritedTheme.capture(from: context, to: navigator.context),
       builder: (sheetContext) => _ExpandedPlayerSheet(
         onOpenItem: _openPlayerItem,
@@ -723,7 +732,15 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AppKeyboardNavigation(
+    controller: _keyboardNavigation,
+    child: AppKeyboardRegion(
+      area: AppKeyboardArea.content,
+      child: _buildScreen(context),
+    ),
+  );
+
+  Widget _buildScreen(BuildContext context) {
     ref.listen(
       musicSourcesSettingsRequestProvider,
       (_, _) => _openPlugins(slide: !ref.read(homeCustomisationProvider)),
@@ -870,37 +887,40 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                     child: railBody,
                   )
                 : null;
+            final showTour = _showCoachMarks;
             final panes = Expanded(
-              child: Stack(
-                // Tight constraints keep the layout root a relayout boundary.
-                fit: StackFit.expand,
-                children: [
-                  isTablet
-                      ? _buildTabletLayout(
-                          context,
-                          windowWidth,
-                          railWidth > 0,
-                          customise,
-                        )
-                      : _buildPhoneLayout(
-                          context,
-                          railWidth > 0,
-                          rail: railBody,
-                          railWidth: railWidth,
-                        ),
-                  // On tablet it lives in the browsing pane instead.
-                  if (!isTablet && customise != null)
-                    Positioned(
-                      left: railWidth,
-                      right: 0,
-                      top: 0,
-                      // Clear of the phone's mini-player, while it shows.
-                      bottom: connected && !_serverBusy && !_keyboardActive
-                          ? barHeight
-                          : 0,
-                      child: customise,
-                    ),
-                ],
+              child: ExcludeFocus(
+                excluding: _discoveryOpen || _sheetOpen,
+                child: Stack(
+                  // Tight constraints keep the layout root a relayout boundary.
+                  fit: StackFit.expand,
+                  children: [
+                    isTablet
+                        ? _buildTabletLayout(
+                            context,
+                            windowWidth,
+                            railWidth > 0,
+                            customise,
+                          )
+                        : _buildPhoneLayout(
+                            context,
+                            railWidth > 0,
+                            railWidth: railWidth,
+                          ),
+                    // On tablet it lives in the browsing pane instead.
+                    if (!isTablet && customise != null)
+                      Positioned(
+                        left: railWidth,
+                        right: 0,
+                        top: 0,
+                        // Clear of the phone's mini-player, while it shows.
+                        bottom: connected && !_serverBusy && !_keyboardActive
+                            ? barHeight
+                            : 0,
+                        child: customise,
+                      ),
+                  ],
+                ),
               ),
             );
             // Hosted above the phone/tablet switch so an in-progress scan (and
@@ -925,59 +945,78 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                     ? Duration.zero
                     : kMiniPlayerHideDuration,
                 curve: Curves.easeOutCubic,
-                builder: (context, inset, _) => Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (rail != null)
-                          Padding(
-                            padding: EdgeInsets.only(bottom: inset),
-                            child: rail,
-                          ),
-                        panes,
-                      ],
-                    ),
-                    if (discovery != null)
-                      Positioned(
-                        key: const ValueKey('discovery-overlay'),
-                        left: railWidth,
-                        top: 0,
-                        right: 0,
-                        bottom: inset,
-                        child: discovery,
+                builder: (context, inset, _) {
+                  final shell = Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (rail != null)
+                            Padding(
+                              padding: EdgeInsets.only(bottom: inset),
+                              child: rail,
+                            ),
+                          panes,
+                        ],
                       ),
-                    if (isTablet && connected)
-                      Positioned(
-                        key: const ValueKey('queue-bar'),
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        // The bar is the player's, so its sheets open over its
-                        // pane.
-                        child: SheetAnchor(
-                          target: _playerPaneKey,
-                          child: _keyboardAwareMiniPlayer(
-                            QueueMiniPlayer(
-                              outputSwitcherKey: _outputSwitcherKey,
+                      if (!isTablet && railBody != null)
+                        _phoneRail(
+                          railBody,
+                          width: railWidth,
+                          miniPlayer: connected && !_serverBusy,
+                          miniCovered:
+                              _sheetOpen ||
+                              _discoveryOpen ||
+                              (!_pluginsOpen && _settingsCovering),
+                        ),
+                      if (discovery != null)
+                        Positioned(
+                          key: const ValueKey('discovery-overlay'),
+                          left: railWidth,
+                          top: 0,
+                          right: 0,
+                          bottom: inset,
+                          child: discovery,
+                        ),
+                      if (isTablet && connected)
+                        Positioned(
+                          key: const ValueKey('queue-bar'),
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          // The bar is the player's, so its sheets open over its
+                          // pane.
+                          child: ExcludeFocus(
+                            excluding: _sheetOpen,
+                            child: SheetAnchor(
+                              target: _playerPaneKey,
+                              child: _keyboardAwareMiniPlayer(
+                                QueueMiniPlayer(
+                                  outputSwitcherKey: _outputSwitcherKey,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    // The same one-time tour as the phone, over the panes and the
-                    // bar alike.
-                    if (isTablet && _showCoachMarks)
-                      Positioned(
-                        key: const ValueKey('coach-marks'),
-                        left: railWidth,
-                        top: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: _buildCoachMarks(),
-                      ),
-                  ],
-                ),
+                    ],
+                  );
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ExcludeFocus(excluding: showTour, child: shell),
+                      if (showTour)
+                        Positioned(
+                          key: const ValueKey('coach-marks'),
+                          left: isTablet ? railWidth : 0,
+                          top: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: _buildCoachMarks(),
+                        ),
+                    ],
+                  );
+                },
               ),
             );
           },
@@ -1010,9 +1049,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     ),
   );
 
-  /// The renderer settings panel, wired to close through the same route
-  /// provider that opened it. Coverage rides on [_settingsCovering] — only one
-  /// settings panel is ever up, and both hide the same content behind them.
+  /// Closing renderer settings reveals the plugin settings panel if it is open.
   Widget _buildRendererSettings(RendererSettingsRoute route) {
     return RendererSettingsScreen(
       // Keyed by the open route: a resize re-homes the panel like
@@ -1030,16 +1067,13 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
   }
 
-  /// [rail] stands over the layout's side, so the mini-player runs under it
-  /// from edge to edge; the rail ends above it while it shows.
+  /// The mini-player spans the full width below the navigation rail.
   Widget _buildPhoneLayout(
     BuildContext context,
     bool navigationVisible, {
-    Widget? rail,
     double railWidth = 0,
   }) {
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
-    final showCoachMarks = _showCoachMarks;
     // Without a server there is no track for the mini-player to show, and
     // nothing to control while it restarts or updates.
     final miniPlayer =
@@ -1106,7 +1140,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                                 fit: StackFit.expand,
                                 children: [
                                   _buildPlugins(
-                                    handlesBack: rendererSettings == null,
+                                    covered: rendererSettings != null,
                                     navigationVisible: navigationVisible,
                                   ),
                                   if (rendererSettings != null)
@@ -1128,21 +1162,25 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                   maintainSize: true,
                   child: _keyboardAwareMiniPlayer(
                     collapse: true,
-                    SizeTransition(
-                      sizeFactor: _pluginsOpen
-                          ? const AlwaysStoppedAnimation(1.0)
-                          : _miniPlayerReveal,
-                      alignment: AlignmentDirectional.bottomStart,
-                      child: SlideTransition(
-                        position: _pluginsOpen
-                            ? const AlwaysStoppedAnimation(Offset.zero)
-                            : _miniPlayerSlide,
-                        child: MeasureSize(
-                          onChange: (size) =>
-                              _miniPlayerExtent.value = size.height,
-                          child: MiniPlayer(
-                            onTap: _showExpandedPlayer,
-                            outputSwitcherKey: _outputSwitcherKey,
+                    ExcludeFocus(
+                      excluding:
+                          !_pluginsOpen && ref.watch(searchEntryModeProvider),
+                      child: SizeTransition(
+                        sizeFactor: _pluginsOpen
+                            ? const AlwaysStoppedAnimation(1.0)
+                            : _miniPlayerReveal,
+                        alignment: AlignmentDirectional.bottomStart,
+                        child: SlideTransition(
+                          position: _pluginsOpen
+                              ? const AlwaysStoppedAnimation(Offset.zero)
+                              : _miniPlayerSlide,
+                          child: MeasureSize(
+                            onChange: (size) =>
+                                _miniPlayerExtent.value = size.height,
+                            child: MiniPlayer(
+                              onTap: _showExpandedPlayer,
+                              outputSwitcherKey: _outputSwitcherKey,
+                            ),
                           ),
                         ),
                       ),
@@ -1151,18 +1189,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                 ),
             ],
           ),
-          if (rail != null)
-            _phoneRail(
-              rail,
-              width: railWidth,
-              miniPlayer: miniPlayer,
-              // Whatever covers the mini-player, the player's sheet included,
-              // has the rail come down over the rest of it.
-              miniCovered:
-                  _sheetOpen ||
-                  _discoveryOpen ||
-                  (!_pluginsOpen && _settingsCovering),
-            ),
           // A renderer's own settings, full screen beside the rail.
           if (rendererSettings != null && !_pluginsOpen)
             Positioned(
@@ -1172,8 +1198,6 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
               bottom: 0,
               child: _buildRendererSettings(rendererSettings),
             ),
-          // One-time first-run tour
-          if (showCoachMarks) Positioned.fill(child: _buildCoachMarks()),
         ],
       ),
     );
@@ -1319,38 +1343,41 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         _pluginsOpen ||
         _discoveryOpen ||
         rendererSettings != null;
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 200),
-      layoutBuilder: _topmostScreenLayout,
-      transitionBuilder: _screenSwitcherTransition,
-      child: disconnected
-          ? KeyedSubtree(
-              key: const ValueKey('disconnected'),
-              child: Column(
-                children: [
-                  KalinkaTopBar(
-                    onServerChipTap: onServerTap,
-                    connectionKey: _connectionDotKey,
-                  ),
-                  Expanded(child: _buildDisconnectedState()),
-                ],
+    return ExcludeFocus(
+      excluding: covered,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        layoutBuilder: _topmostScreenLayout,
+        transitionBuilder: _screenSwitcherTransition,
+        child: disconnected
+            ? KeyedSubtree(
+                key: const ValueKey('disconnected'),
+                child: Column(
+                  children: [
+                    KalinkaTopBar(
+                      onServerChipTap: onServerTap,
+                      connectionKey: _connectionDotKey,
+                    ),
+                    Expanded(child: _buildDisconnectedState()),
+                  ],
+                ),
+              )
+            : SearchSessionView(
+                key: _homeKey,
+                onServerTap: onServerTap,
+                entryKey: _searchEntryKey,
+                connectionKey: _connectionDotKey,
+                handlesBack: !covered,
+                navigationVisible: navigationVisible,
+                // The mini-player's slot, while it slides away under a search.
+                roomLent: isTablet
+                    ? null
+                    : Tween<double>(
+                        begin: _miniPlayerSlot(),
+                        end: 0,
+                      ).animate(_miniPlayerReveal),
               ),
-            )
-          : SearchSessionView(
-              key: _homeKey,
-              onServerTap: onServerTap,
-              entryKey: _searchEntryKey,
-              connectionKey: _connectionDotKey,
-              handlesBack: !covered,
-              navigationVisible: navigationVisible,
-              // The mini-player's slot, while it slides away under a search.
-              roomLent: isTablet
-                  ? null
-                  : Tween<double>(
-                      begin: _miniPlayerSlot(),
-                      end: 0,
-                    ).animate(_miniPlayerReveal),
-            ),
+      ),
     );
   }
 
@@ -1484,7 +1511,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                             child: SheetAnchor(
                               child: ClipRect(
                                 child: _buildPlugins(
-                                  handlesBack: rendererSettings == null,
+                                  covered: rendererSettings != null,
                                   navigationVisible: navigationVisible,
                                 ),
                               ),

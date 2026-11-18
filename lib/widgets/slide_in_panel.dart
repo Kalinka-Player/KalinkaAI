@@ -132,11 +132,20 @@ class _SlideInPanelState extends State<SlideInPanel>
       close: _close,
       child: Stack(
         children: [
-          SlideTransition(position: _slide, child: widget.child),
+          ExcludeFocus(
+            excluding: widget.overlays.isNotEmpty,
+            child: SlideTransition(position: _slide, child: widget.child),
+          ),
           // Keyed by what they hold, so one closing beneath another leaves
           // the other's state, and its animation, alone.
-          for (final overlay in widget.overlays)
-            Positioned.fill(key: overlay.key, child: overlay),
+          for (final (index, overlay) in widget.overlays.indexed)
+            Positioned.fill(
+              key: overlay.key,
+              child: ExcludeFocus(
+                excluding: index != widget.overlays.length - 1,
+                child: overlay,
+              ),
+            ),
         ],
       ),
     );

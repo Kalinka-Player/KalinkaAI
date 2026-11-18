@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
@@ -122,6 +123,36 @@ Future<void> _seek(WidgetTester tester, double fraction) async {
 }
 
 void main() {
+  testWidgets('kiosk progress requires activation before keyboard seeking', (
+    tester,
+  ) async {
+    final h = await _pump(tester, kiosk: true);
+    Future<void> key(LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+      await tester.pump();
+    }
+
+    await key(LogicalKeyboardKey.tab);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Slider navigation');
+    await key(LogicalKeyboardKey.arrowRight);
+    expect(h.api.commands, isEmpty);
+    await key(LogicalKeyboardKey.enter);
+    await key(LogicalKeyboardKey.arrowRight);
+    expect(h.api.commands.single.positionMs, 26000);
+    await key(LogicalKeyboardKey.arrowRight);
+    expect(h.api.commands.last.positionMs, 32000);
+    await key(LogicalKeyboardKey.escape);
+    await key(LogicalKeyboardKey.arrowLeft);
+    expect(h.api.commands, hasLength(2));
+    h.connection.set(ConnectionStatus.offline);
+    await tester.pump();
+    await key(LogicalKeyboardKey.enter);
+    await key(LogicalKeyboardKey.arrowRight);
+    expect(h.api.commands, hasLength(2));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'playback and unrelated queue updates cannot interrupt a held drag',
     (tester) async {

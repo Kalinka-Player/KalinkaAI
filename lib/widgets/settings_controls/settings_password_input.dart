@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// Password/masked input with eye toggle button.
 ///
@@ -35,6 +36,7 @@ class _SettingsPasswordInputState extends State<SettingsPasswordInput> {
   static final _mask = _maskChar * 8;
 
   bool _obscured = true;
+  bool _hadFocus = false;
   late bool _masked;
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
@@ -94,7 +96,11 @@ class _SettingsPasswordInputState extends State<SettingsPasswordInput> {
   }
 
   void _onFocusChange() {
-    if (!_focusNode.hasFocus) _commitIfChanged();
+    // FocusNode also notifies when traversal eligibility changes. Commit only
+    // on an actual blur, before a following Apply/Discard action runs.
+    final focused = _focusNode.hasFocus;
+    if (_hadFocus && !focused) _commitIfChanged();
+    _hadFocus = focused;
   }
 
   void _commitIfChanged() {
@@ -117,25 +123,27 @@ class _SettingsPasswordInputState extends State<SettingsPasswordInput> {
         child: Row(
           children: [
             Expanded(
-              child: TextField(
-                controller: _controller,
-                focusNode: _focusNode,
-                obscureText: _obscured || _masked,
-                style: KalinkaTextStyles.searchBarInput.copyWith(
-                  fontSize: KalinkaTypography.baseSize + 2,
-                ),
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
+              child: AppKeyboardTextEntry(
+                child: TextField(
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  obscureText: _obscured || _masked,
+                  style: KalinkaTextStyles.searchBarInput.copyWith(
+                    fontSize: KalinkaTypography.baseSize + 2,
                   ),
-                  isDense: true,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    isDense: true,
+                  ),
+                  // Done closes the keyboard, and leaving the field commits it.
+                  onChanged: _onEdited,
                 ),
-                // Done closes the keyboard, and leaving the field commits it.
-                onChanged: _onEdited,
               ),
             ),
             GestureDetector(

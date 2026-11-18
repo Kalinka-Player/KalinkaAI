@@ -53,29 +53,34 @@ class _QueueMiniPlayerState extends ConsumerState<QueueMiniPlayer> {
   Widget build(BuildContext context) {
     final showing = ref.watch(playerViewProvider) == PlayerView.queue;
     if (showing) _gone = false;
-    return IgnorePointer(
-      ignoring: !showing,
-      child: ExcludeSemantics(
-        excluding: !showing,
-        child: AnimatedSlide(
-          offset: showing ? Offset.zero : const Offset(0, 1),
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : kMiniPlayerHideDuration,
-          curve: Curves.easeOutCubic,
-          onEnd: () {
-            if (mounted && ref.read(playerViewProvider) != PlayerView.queue) {
-              setState(() => _gone = true);
-            }
-          },
-          child: _gone
-              ? const SizedBox.shrink()
-              : MiniPlayer(
-                  onTap: () => ref
-                      .read(playerViewProvider.notifier)
-                      .show(PlayerView.nowPlaying),
-                  outputSwitcherKey: showing ? widget.outputSwitcherKey : null,
-                ),
+    return ExcludeFocus(
+      excluding: !showing,
+      child: IgnorePointer(
+        ignoring: !showing,
+        child: ExcludeSemantics(
+          excluding: !showing,
+          child: AnimatedSlide(
+            offset: showing ? Offset.zero : const Offset(0, 1),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : kMiniPlayerHideDuration,
+            curve: Curves.easeOutCubic,
+            onEnd: () {
+              if (mounted && ref.read(playerViewProvider) != PlayerView.queue) {
+                setState(() => _gone = true);
+              }
+            },
+            child: _gone
+                ? const SizedBox.shrink()
+                : MiniPlayer(
+                    onTap: () => ref
+                        .read(playerViewProvider.notifier)
+                        .show(PlayerView.nowPlaying),
+                    outputSwitcherKey: showing
+                        ? widget.outputSwitcherKey
+                        : null,
+                  ),
+          ),
         ),
       ),
     );

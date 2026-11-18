@@ -56,6 +56,7 @@ import '../cached_gradient.dart';
 import 'results_view.dart';
 import 'search_composer.dart';
 import 'search_zero_state.dart';
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// How far a backdrop fades out before browsing's right edge, where it meets
 /// the player's pane, so it does not end in a cut.
@@ -1620,7 +1621,16 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     );
   }
 
-  Widget _buildHeader(SearchSessionState session, {bool overAlbum = false}) {
+  Widget _buildHeader(SearchSessionState session, {bool overAlbum = false}) =>
+      AppKeyboardRegion(
+        area: AppKeyboardArea.toolbar,
+        child: _buildHeaderContent(session, overAlbum: overAlbum),
+      );
+
+  Widget _buildHeaderContent(
+    SearchSessionState session, {
+    bool overAlbum = false,
+  }) {
     final onResults = session.activeView == FindMusicView.results;
     final catalogChrome =
         !onResults && CatalogSliverHeader.appliesTo(session.catalogPage);
@@ -1949,17 +1959,20 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
               padding: const EdgeInsets.only(bottom: 8),
               child: KeyedSubtree(
                 key: const ValueKey('catalog-unrolled-search'),
-                child: FilterSearchField(
-                  key: _catalogSearchFieldKey,
-                  focusNode: _catalogSearchFocus,
-                  enabled: search.enabled,
-                  value: search.value,
-                  hint: search.hint,
-                  neutral: true,
-                  autofocus: true,
-                  submitOnly: true,
-                  onChanged: search.onSearch,
-                  onSubmitted: (_) => setState(() => _barSearchOpen = false),
+                child: AppKeyboardRegion(
+                  area: AppKeyboardArea.toolbar,
+                  child: FilterSearchField(
+                    key: _catalogSearchFieldKey,
+                    focusNode: _catalogSearchFocus,
+                    enabled: search.enabled,
+                    value: search.value,
+                    hint: search.hint,
+                    neutral: true,
+                    autofocus: true,
+                    submitOnly: true,
+                    onChanged: search.onSearch,
+                    onSubmitted: (_) => setState(() => _barSearchOpen = false),
+                  ),
                 ),
               ),
             ),
@@ -2305,7 +2318,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// origin measured in [_openSearch]) — on tablet the surface is only the
   /// right half, so the overlay stays inside it and unrolls exactly as on
   /// phone rather than sweeping across the whole screen.
-  Widget _buildSearchOverlay(SearchSessionState session) {
+  Widget _buildSearchOverlay(SearchSessionState session) =>
+      FocusScope(child: _buildSearchOverlayContent(session));
+
+  Widget _buildSearchOverlayContent(SearchSessionState session) {
     final smart = ref.watch(smartSearchAvailableProvider) ?? true;
     final topInset = MediaQuery.paddingOf(context).top;
     // Rest the card at the title-bar bottom rather than the screen top, so it

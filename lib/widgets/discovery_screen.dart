@@ -15,6 +15,7 @@ import '../theme/app_theme.dart';
 import 'kalinka_button.dart';
 import 'onboarding/onboarding_step_scaffold.dart' show kSetupColumnMaxWidth;
 import 'sonar_animation.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 /// Full-screen discovery overlay for finding and connecting to Kalinka servers.
 ///
@@ -742,23 +743,25 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: KalinkaColors.borderDefault),
             ),
-            child: TextField(
-              controller: _hostController,
-              style: KalinkaTextStyles.searchBarInput.copyWith(
-                fontSize: KalinkaTypography.baseSize + 2,
-              ),
-              decoration: InputDecoration(
-                hintText: '192.168.50.85:8000',
-                hintStyle: KalinkaTextStyles.searchPlaceholder.copyWith(
+            child: AppKeyboardTextEntry(
+              child: TextField(
+                controller: _hostController,
+                style: KalinkaTextStyles.searchBarInput.copyWith(
                   fontSize: KalinkaTypography.baseSize + 2,
-                  color: KalinkaColors.textSecondary,
                 ),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 11,
+                decoration: InputDecoration(
+                  hintText: '192.168.50.85:8000',
+                  hintStyle: KalinkaTextStyles.searchPlaceholder.copyWith(
+                    fontSize: KalinkaTypography.baseSize + 2,
+                    color: KalinkaColors.textSecondary,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 11,
+                  ),
+                  isDense: true,
                 ),
-                isDense: true,
               ),
             ),
           ),

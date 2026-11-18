@@ -30,6 +30,8 @@ import 'source_badge.dart';
 import 'transport_button.dart';
 import 'transport_controls.dart';
 import 'volume_control_slider.dart';
+import 'keyboard/app_keyboard_navigation.dart';
+import 'keyboard/keyboard_activation.dart';
 
 /// How long the mini-player takes to slide down out of view when the search
 /// entry overlay opens (and to slide back up on close). The search view holds
@@ -288,7 +290,12 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AppKeyboardRegion(
+    area: AppKeyboardArea.playback,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     ref.listen(playQueueStateStoreProvider, (_, next) {
       final pending = _pendingSwipeState;
       if (pending != null &&
@@ -469,40 +476,44 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
               // Only art + text take the tap-to-open / swipe gestures; the
               // play button stays outside so the swipe recognizer can't steal
               // its taps.
-              final track = MouseRegion(
-                cursor: clickCursor(interactive: widget.onTap != null),
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: widget.onTap,
-                  onHorizontalDragStart: canSwipe
-                      ? _onHorizontalDragStart
-                      : null,
-                  onHorizontalDragUpdate: canSwipe
-                      ? _onHorizontalDragUpdate
-                      : null,
-                  onHorizontalDragEnd: canSwipe ? _onHorizontalDragEnd : null,
-                  onHorizontalDragCancel: canSwipe
-                      ? _onHorizontalDragCancel
-                      : null,
-                  onVerticalDragEnd: (d) {
-                    // Swipe up → open now-playing
-                    if ((d.primaryVelocity ?? 0) < -200) {
-                      widget.onTap?.call();
-                    }
-                  },
-                  child: Row(
-                    children: [
-                      _buildAlbumArt(
-                        resolvedImageUrl: resolvedImageUrl,
-                        trackId: currentTrack?.id ?? '',
-                      ),
-                      const SizedBox(width: 10),
-                      _buildCarouselText(
-                        currentTrack: currentTrack,
-                        incomingTrack: incomingTrack,
-                        carouselOffset: carouselOffset,
-                      ),
-                    ],
+              final track = KeyboardActivation(
+                onActivate: widget.onTap,
+                borderRadius: BorderRadius.circular(6),
+                child: MouseRegion(
+                  cursor: clickCursor(interactive: widget.onTap != null),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: widget.onTap,
+                    onHorizontalDragStart: canSwipe
+                        ? _onHorizontalDragStart
+                        : null,
+                    onHorizontalDragUpdate: canSwipe
+                        ? _onHorizontalDragUpdate
+                        : null,
+                    onHorizontalDragEnd: canSwipe ? _onHorizontalDragEnd : null,
+                    onHorizontalDragCancel: canSwipe
+                        ? _onHorizontalDragCancel
+                        : null,
+                    onVerticalDragEnd: (d) {
+                      // Swipe up → open now-playing
+                      if ((d.primaryVelocity ?? 0) < -200) {
+                        widget.onTap?.call();
+                      }
+                    },
+                    child: Row(
+                      children: [
+                        _buildAlbumArt(
+                          resolvedImageUrl: resolvedImageUrl,
+                          trackId: currentTrack?.id ?? '',
+                        ),
+                        const SizedBox(width: 10),
+                        _buildCarouselText(
+                          currentTrack: currentTrack,
+                          incomingTrack: incomingTrack,
+                          carouselOffset: carouselOffset,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );

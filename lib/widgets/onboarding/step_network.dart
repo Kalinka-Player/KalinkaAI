@@ -10,6 +10,7 @@ import '../../theme/field_decoration.dart';
 import '../kalinka_button.dart';
 import '../kalinka_back_button.dart';
 import 'setup_discovery.dart';
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// Network review and Wi-Fi selection used in onboarding and hotspot activation.
 class NetworkSetupPanel extends StatefulWidget {
@@ -283,31 +284,34 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
     bool password = false,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 16),
-    child: TextFormField(
-      key: ValueKey(fieldKey),
-      controller: controller,
-      enabled: !_sending && _setup['state'] != 1,
-      style: kalinkaFieldText(),
-      decoration: kalinkaFieldDecoration(hint: label).copyWith(
-        labelText: label,
-        suffixIcon: password
-            ? IconButton(
-                tooltip: _showPassword ? 'Hide password' : 'Show password',
-                onPressed: () => setState(() => _showPassword = !_showPassword),
-                icon: Icon(
-                  _showPassword
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                ),
-              )
-            : null,
+    child: AppKeyboardTextEntry(
+      child: TextFormField(
+        key: ValueKey(fieldKey),
+        controller: controller,
+        enabled: !_sending && _setup['state'] != 1,
+        style: kalinkaFieldText(),
+        decoration: kalinkaFieldDecoration(hint: label).copyWith(
+          labelText: label,
+          suffixIcon: password
+              ? IconButton(
+                  tooltip: _showPassword ? 'Hide password' : 'Show password',
+                  onPressed: () =>
+                      setState(() => _showPassword = !_showPassword),
+                  icon: Icon(
+                    _showPassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                  ),
+                )
+              : null,
+        ),
+        obscureText: password && !_showPassword,
+        autocorrect: false,
+        enableSuggestions: false,
+        textCapitalization: TextCapitalization.none,
+        validator: validate,
+        autofillHints: password ? const [AutofillHints.password] : null,
       ),
-      obscureText: password && !_showPassword,
-      autocorrect: false,
-      enableSuggestions: false,
-      textCapitalization: TextCapitalization.none,
-      validator: validate,
-      autofillHints: password ? const [AutofillHints.password] : null,
     ),
   );
 

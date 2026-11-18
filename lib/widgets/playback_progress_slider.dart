@@ -15,6 +15,7 @@ import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
 import '../utils/playback_utils.dart';
 import 'gradient_progress_line.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 const _trackHeight = 3.0;
 const _overlayRadius = 14.0;
@@ -240,7 +241,7 @@ class _PlaybackProgressSliderState extends ConsumerState<PlaybackProgressSlider>
                 Visibility.maintain(
                   visible: !away,
                   child: ExcludeFocus(
-                    excluding: away,
+                    excluding: !interactive,
                     child: SliderTheme(
                       data: SliderThemeData(
                         mouseCursor: WidgetStateMouseCursor.clickable,
@@ -264,17 +265,19 @@ class _PlaybackProgressSliderState extends ConsumerState<PlaybackProgressSlider>
                       // onChanged: that restructures the Slider's semantics,
                       // which asserts in flushSemantics if a dialog pops the
                       // same frame (Clear all).
-                      child: Slider(
-                        value: progress,
-                        onChangeStart: (value) {
-                          if (interactive) beginSeek(value);
-                        },
-                        onChanged: (value) {
-                          if (interactive) seekTo(value);
-                        },
-                        onChangeEnd: (value) {
-                          if (interactive) commitSeek(value);
-                        },
+                      child: AppKeyboardSlider(
+                        child: Slider(
+                          value: progress,
+                          onChangeStart: (value) {
+                            if (interactive) beginSeek(value);
+                          },
+                          onChanged: (value) {
+                            if (interactive) seekTo(value);
+                          },
+                          onChangeEnd: (value) {
+                            if (interactive) commitSeek(value);
+                          },
+                        ),
                       ),
                     ),
                   ),

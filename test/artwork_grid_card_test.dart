@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
@@ -11,6 +12,8 @@ import 'package:kalinka/widgets/search_cards/artwork_grid.dart';
 import 'package:kalinka/widgets/search_cards/artwork_grid_card.dart';
 import 'package:kalinka/widgets/search_cards/browse_navigation_scope.dart';
 import 'package:kalinka/widgets/search_cards/row_play_button.dart';
+
+import 'support/focus.dart';
 
 class _Api implements KalinkaPlayerProxy {
   final replaced = <List<String>>[];
@@ -282,6 +285,41 @@ void main() {
     await tester.pumpAndSettle();
     expect(opened, [item]);
     expect(api.played, [0]);
+
+    final target = traversableFocusNodesIn(find.byType(ArtworkGridCard)).single;
+    target.requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    expect(opened, [item]);
+    expect(api.replaced, [
+      [item.id],
+      [item.id],
+    ]);
+    expect(api.played, [0, 0]);
+    expect(target.hasPrimaryFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(opened, [item, item]);
+    expect(api.played, [0, 0]);
+
+    await tester.longPress(find.text('Album'));
+    await tester.pumpAndSettle();
+    expect(find.byType(RowPlayButton), findsNothing);
+    target.requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+    expect(find.byType(RowPlayButton), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(find.byType(RowPlayButton), findsOneWidget);
+    expect(opened, [item, item]);
+    expect(api.played, [0, 0]);
     expect(tester.takeException(), isNull);
     semantics.dispose();
   });

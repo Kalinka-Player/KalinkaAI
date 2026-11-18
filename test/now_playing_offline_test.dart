@@ -120,42 +120,48 @@ void main() {
     });
   }
 
-  testWidgets('phone: while the server is away, Tab reaches no control that '
-      'would send', (tester) async {
-    late _RecordingWsApi ws;
-    final container = await pumpHomeShell(
-      tester,
-      queue: SettableQueue(queueOf(3)),
-      overrides: [
-        kalinkaWsApiProvider.overrideWith((ref) => ws = _RecordingWsApi(ref)),
-      ],
-    );
-    await tester.tap(find.byType(MiniPlayer));
-    await tester.pumpAndSettle();
-    Finder transport(IconData icon) => find.ancestor(
-      of: _inPlayer(find.byIcon(icon)),
-      matching: find.byType(TransportButton),
-    );
+  testWidgets(
+    'phone: while the server is away, keyboard reaches no control that '
+    'would send',
+    (tester) async {
+      late _RecordingWsApi ws;
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(3)),
+        overrides: [
+          kalinkaWsApiProvider.overrideWith((ref) => ws = _RecordingWsApi(ref)),
+        ],
+      );
+      await tester.tap(find.byType(MiniPlayer));
+      await tester.pumpAndSettle();
+      Finder transport(IconData icon) => find.ancestor(
+        of: _inPlayer(find.byIcon(icon)),
+        matching: find.byType(TransportButton),
+      );
 
-    expect(await tabTo(tester, transport(Icons.pause_rounded)), isTrue);
-    await tester.sendKeyEvent(LogicalKeyboardKey.space);
-    await tester.pump();
-    expect(ws.sent, [const QueueCommand.pause(paused: true)]);
+      traversableFocusNodesIn(transport(Icons.pause_rounded)).single
+          .requestFocus();
+      await tester.pump();
+      expect(focusIsOn(transport(Icons.pause_rounded)), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+      expect(ws.sent, [const QueueCommand.pause(paused: true)]);
 
-    (container.read(connectionStateProvider.notifier) as SettableConnection)
-        .set(ConnectionStatus.reconnecting);
-    await tester.pump();
-    for (final control in [
-      transport(Icons.pause_rounded),
-      transport(Icons.skip_next_rounded),
-      _inPlayer(find.byType(Slider)),
-    ]) {
-      expect(await tabTo(tester, control), isFalse);
-    }
-    await tester.sendKeyEvent(LogicalKeyboardKey.space);
-    await tester.pump();
-    expect(ws.sent, [const QueueCommand.pause(paused: true)]);
-  });
+      (container.read(connectionStateProvider.notifier) as SettableConnection)
+          .set(ConnectionStatus.reconnecting);
+      await tester.pump();
+      for (final control in [
+        transport(Icons.pause_rounded),
+        transport(Icons.skip_next_rounded),
+        _inPlayer(find.byType(Slider)),
+      ]) {
+        expect(traversableFocusNodesIn(control), isEmpty);
+      }
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+      expect(ws.sent, [const QueueCommand.pause(paused: true)]);
+    },
+  );
 
   testWidgets('phone: while the server is away, the queue\'s rows take no '
       'taps', (tester) async {
