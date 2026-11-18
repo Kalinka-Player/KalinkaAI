@@ -207,8 +207,7 @@ void main() {
     ) async {
       await mount(tester, path: '/square.jpg', ratio: ratio);
       expect(
-        (tester.widget<CustomPaint>(_drawn).painter! as CatalogArtPainter)
-            .questionMark,
+        (tester.widget<CustomPaint>(_drawn).painter! as CatalogArtPainter).icon,
         isTrue,
       );
       // The network placeholder fills the card. Supply a decoded frame before
@@ -242,23 +241,19 @@ void main() {
       expect(cardRect.contains(art.topLeft), isTrue);
       expect(_drawn, findsOneWidget);
       expect(
-        (tester.widget<CustomPaint>(_drawn).painter! as CatalogArtPainter)
-            .questionMark,
+        (tester.widget<CustomPaint>(_drawn).painter! as CatalogArtPainter).icon,
         isFalse,
       );
       expect(tester.takeException(), isNull);
     });
   }
 
-  testWidgets('failed inset artwork keeps the full card question mark', (
-    tester,
-  ) async {
+  testWidgets('failed inset artwork keeps the full card icon', (tester) async {
     await mount(tester, path: '/missing.jpg', ratio: 1);
     await tester.pumpAndSettle();
     expect(tester.getRect(_drawn), card(tester));
     expect(
-      (tester.widget<CustomPaint>(_drawn).painter! as CatalogArtPainter)
-          .questionMark,
+      (tester.widget<CustomPaint>(_drawn).painter! as CatalogArtPainter).icon,
       isTrue,
     );
     expect(tester.takeException(), isNull);

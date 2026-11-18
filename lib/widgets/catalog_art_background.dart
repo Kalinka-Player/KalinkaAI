@@ -118,17 +118,18 @@ class CatalogArtSeed {
   int get hashCode => textKey.hashCode;
 }
 
-/// Draws the backend's bare background, with a mark for unavailable artwork.
-/// The question mark is omitted underneath a successfully loaded inset cover.
+/// Draws the backend's bare background, with the catalogue icon for
+/// unavailable artwork. The icon is omitted underneath a successfully loaded
+/// inset cover.
 class CatalogArtPainter extends CustomPainter {
   final CatalogArtSeed seed;
   final bool captioned;
-  final bool questionMark;
+  final bool icon;
 
   const CatalogArtPainter(
     this.seed, {
     this.captioned = false,
-    this.questionMark = true,
+    this.icon = true,
   });
 
   // The banner designs' viewBox.
@@ -169,7 +170,7 @@ class CatalogArtPainter extends CustomPainter {
     );
     _shapes(canvas);
     canvas.restore();
-    if (questionMark) _question(canvas, size);
+    if (icon) _icon(canvas, size);
     canvas.restore();
   }
 
@@ -249,32 +250,61 @@ class CatalogArtPainter extends CustomPainter {
     }
   }
 
-  void _question(Canvas canvas, Size size) {
-    final height = math.min(size.height, size.width) * 0.40;
+  // The solid catalogue icon in a 100-unit square: its cover, then each page
+  // and its entries.
+  static const _iconShapes = [
+    (
+      Color(0xFF414044),
+      [
+        Offset(4, 25),
+        Offset(50, 40),
+        Offset(96, 25),
+        Offset(96, 80),
+        Offset(50, 95),
+        Offset(4, 80),
+      ],
+    ),
+    (
+      Color(0xFF9D9792),
+      [Offset(8, 15), Offset(47, 28), Offset(47, 86), Offset(8, 73)],
+    ),
+    (
+      Color(0xFF716D69),
+      [Offset(17, 31), Offset(38, 38), Offset(38, 50), Offset(17, 43)],
+    ),
+    (
+      Color(0xFF716D69),
+      [Offset(17, 51), Offset(38, 58), Offset(38, 70), Offset(17, 63)],
+    ),
+    (
+      Color(0xFF716D69),
+      [Offset(53, 28), Offset(92, 15), Offset(92, 73), Offset(53, 86)],
+    ),
+    (
+      Color(0xFF9D9792),
+      [Offset(62, 38), Offset(83, 31), Offset(83, 43), Offset(62, 50)],
+    ),
+    (
+      Color(0xFF9D9792),
+      [Offset(62, 58), Offset(83, 51), Offset(83, 63), Offset(62, 70)],
+    ),
+  ];
+
+  void _icon(Canvas canvas, Size size) {
+    final side = math.min(size.height, size.width) * 0.5;
     canvas.save();
+    // The drawing sits 5 units low in its square.
     canvas.translate(
-      size.width * (captioned ? 0.82 : 0.66),
-      size.height * 0.5 - height * 0.5,
+      size.width * (captioned ? 0.82 : 0.66) - side / 2,
+      size.height / 2 - side * 0.55,
     );
-    canvas.scale(height);
-    final paint = Paint()
-      ..color = const Color(0xCCFAF5F0)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.09
-      ..strokeCap = StrokeCap.round;
-    canvas.drawPath(
-      Path()
-        ..moveTo(-0.23, 0.20)
-        ..cubicTo(-0.20, -0.06, 0.23, -0.07, 0.23, 0.20)
-        ..cubicTo(0.23, 0.39, 0, 0.42, 0, 0.61)
-        ..lineTo(0, 0.66),
-      paint,
-    );
-    canvas.drawCircle(
-      const Offset(0, 0.94),
-      0.055,
-      paint..style = PaintingStyle.fill,
-    );
+    canvas.scale(side / 100);
+    for (final (colour, points) in _iconShapes) {
+      canvas.drawPath(
+        Path()..addPolygon(points, true),
+        Paint()..color = colour,
+      );
+    }
     canvas.restore();
   }
 
@@ -282,5 +312,5 @@ class CatalogArtPainter extends CustomPainter {
   bool shouldRepaint(CatalogArtPainter oldDelegate) =>
       oldDelegate.seed != seed ||
       oldDelegate.captioned != captioned ||
-      oldDelegate.questionMark != questionMark;
+      oldDelegate.icon != icon;
 }

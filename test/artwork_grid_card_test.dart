@@ -209,8 +209,7 @@ void main() {
       expect(card.size, const Size(300, 100));
       expect(tester.getRect(_drawn), card);
       expect(
-        (tester.widget<CustomPaint>(_drawn).painter! as CatalogArtPainter)
-            .questionMark,
+        (tester.widget<CustomPaint>(_drawn).painter! as CatalogArtPainter).icon,
         isTrue,
       );
       expect(tester.takeException(), isNull);
