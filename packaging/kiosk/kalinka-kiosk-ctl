@@ -12,6 +12,7 @@ The server's expert settings `base_config.display.*` decide whether it runs:
 import fcntl
 import grp
 import json
+import math
 import os
 from pathlib import Path
 import socket
@@ -25,6 +26,29 @@ RUN_DIR = os.environ.get("RUNTIME_DIRECTORY", "/run/kalinka-kiosk")
 BUNDLE = "/usr/lib/kalinka-kiosk/bundle"
 UNIT = "kalinka-kiosk.service"
 BACKLIGHT_DIR = Path("/sys/class/backlight")
+DRM_DIR = Path("/sys/class/drm")
+
+
+def _display_diagonal_inches():
+    """Report EDID's physical size to the app when the output is unambiguous."""
+    try:
+        connected = [
+            status.parent for status in DRM_DIR.glob("card*-*/status")
+            if status.read_text().strip() == "connected"
+        ]
+        if len(connected) != 1:
+            return None
+        edid = (connected[0] / "edid").read_bytes()[:128]
+    except OSError:
+        return None
+    if (len(edid) != 128 or not edid.startswith(bytes.fromhex("00 ff ff ff ff ff ff 00"))
+            or sum(edid) % 256 != 0):
+        return None
+    # When either byte is zero EDID gives an aspect ratio, not a size in cm.
+    width_cm, height_cm = edid[21:23]
+    if width_cm and height_cm:
+        return math.hypot(width_cm, height_cm) / 2.54
+    return None
 
 
 def _backlight_file():
@@ -180,6 +204,10 @@ def run():
     backlight = _backlight_state()
     if backlight is not None:
         env["KALINKA_DISPLAY_BACKLIGHT"] = str(backlight[0])
+    env.pop("KALINKA_DISPLAY_DIAGONAL_INCHES", None)
+    diagonal = _display_diagonal_inches()
+    if diagonal is not None:
+        env["KALINKA_DISPLAY_DIAGONAL_INCHES"] = str(diagonal)
     flutter_pi = os.path.join(BUNDLE, "flutter-pi")
     args = [flutter_pi, "--release", "--rotation", launch["rotation"], BUNDLE]
     os.execve(flutter_pi, args, env)

@@ -47,9 +47,15 @@ class SheetAnchor extends InheritedWidget {
     if (box is! RenderBox || !box.attached || !box.hasSize) {
       return EdgeInsets.zero;
     }
-    final left = box.localToGlobal(Offset.zero).dx;
-    final right = windowWidth - left - box.size.width;
-    return EdgeInsets.only(left: max(0, left), right: max(0, right));
+    final overlay = Overlay.maybeOf(anchor, rootOverlay: true);
+    final rect = MatrixUtils.transformRect(
+      box.getTransformTo(overlay?.context.findRenderObject()),
+      Offset.zero & box.size,
+    );
+    return EdgeInsets.only(
+      left: max(0, rect.left),
+      right: max(0, windowWidth - rect.right),
+    );
   }
 
   @override

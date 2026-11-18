@@ -32,6 +32,7 @@ import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_backdrop.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_cover_flow.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_header.dart';
+import 'package:kalinka/widgets/kiosk/kiosk_home_layout.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_output_panel.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_progress_bar.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_splash.dart';
@@ -425,6 +426,67 @@ void main() {
 
   group('server display idle mode', () {
     const mainInterface = Scaffold(body: Center(child: Text('Main interface')));
+
+    testWidgets(
+      'only the interface behind the local Home button gets a smaller viewport',
+      (tester) async {
+        const screen = Size(3840, 2160);
+        await _pump(
+          tester,
+          _queue(PlayerStateType.paused),
+          size: screen,
+          launched: true,
+          localDisplay: true,
+          idleHost: true,
+          home: mainInterface,
+        );
+        await tester.pumpAndSettle();
+        final home = find.byIcon(Icons.home_outlined);
+        expect(MediaQuery.sizeOf(tester.element(home)), screen);
+        await tester.tap(home);
+        await tester.pumpAndSettle();
+        final main = tester.element(find.text('Main interface'));
+        expect(MediaQuery.sizeOf(main).width, inExclusiveRange(1368, 3840));
+        await tester.pump(const Duration(seconds: 30));
+        expect(MediaQuery.sizeOf(tester.element(home)), screen);
+      },
+    );
+
+    testWidgets('Home adapts to panel size, resolution, density and rotation', (
+      tester,
+    ) async {
+      addTearDown(tester.view.reset);
+      const sample = SizedBox(key: ValueKey('Home sample'));
+      for (final (pixels, inches, dpr, expectedWidth) in [
+        (const Size(1024, 600), 7.0, 1.0, 1024.0),
+        (const Size(1024, 600), 7.0, 1.75, 1024 / 1.75),
+        (const Size(2560, 1440), 27.0, 1.0, 1981.2),
+        (const Size(2560, 1440), 55.0, 1.0, 1504.8),
+        (const Size(3840, 2160), 54.65, 1.0, 1511.5),
+        (const Size(3840, 2160), 55.0, 0.835, 1504.8),
+        (const Size(3840, 2160), 60.0, 1.0, 1436.4),
+        (const Size(3840, 2160), 65.0, 1.0, 1368.0),
+        (const Size(2160, 3840), 55.0, 1.0, 846.45),
+        (const Size(3840, 2160), 55.0, 3.0, 1280.0),
+      ]) {
+        tester.view.physicalSize = pixels;
+        tester.view.devicePixelRatio = dpr;
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (_, _) =>
+                KioskHomeLayout(diagonalInches: inches, child: sample),
+          ),
+        );
+        final element = tester.element(find.byWidget(sample));
+        final media = MediaQuery.of(element);
+        expect(media.size.width, closeTo(expectedWidth, 1));
+        expect(tester.getSize(find.byWidget(sample)), media.size);
+        expect(
+          media.devicePixelRatio * media.size.width,
+          closeTo(pixels.width, 0.01),
+        );
+      }
+    });
 
     Future<_Harness> pumpLocal(
       WidgetTester tester, {
