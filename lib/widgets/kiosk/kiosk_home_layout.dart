@@ -22,11 +22,9 @@ class KioskHomeLayout extends StatelessWidget {
     final inches =
         diagonalInches ??
         (media.size.bottomRight(Offset.zero).distance / (38 * 2.54));
-    // A 55-inch TV shows 10% more content along each axis than the 65-inch
-    // reference. Interpolate between them as the physical display grows.
-    const reference = Size(1368, 769.5);
-    final extraRoom = 0.10 * ((65 - inches) / (65 - 55)).clamp(0.0, 1.0);
-    final target = reference * (1 + extraRoom);
+    // Give all TVs 10% more room on both axes than the original 1368-wide
+    // calibration. Keep that target as the screen grows beyond 55 inches.
+    const target = Size(1368 * 1.1, 769.5 * 1.1);
     // The 7-inch panel keeps its native layout. Below 55 inches, introduce
     // the TV zoom gradually, and only when there is room on both axes.
     final tvWeight = ((inches - 7) / (55 - 7)).clamp(0.0, 1.0);
