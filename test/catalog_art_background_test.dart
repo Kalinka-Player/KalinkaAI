@@ -42,8 +42,8 @@ void main() {
     entityId: entry['entityId'] as String,
   );
 
-  test('title identity, geometry and tints match backend style 13', () {
-    expect(reference['style'], 13);
+  test('title identity, geometry and tints match backend style 14', () {
+    expect(reference['style'], 14);
     Color color(String hex) =>
         Color(int.parse(hex.substring(1), radix: 16) | 0xFF000000);
     for (final entry in cases) {

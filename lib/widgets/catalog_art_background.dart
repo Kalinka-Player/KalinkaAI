@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
@@ -8,7 +9,7 @@ import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 import '../utils/catalog_casefold.dart';
 
-/// The title identity and tint mapping from catalog_art_render.py, style 13.
+/// The title identity and tint mapping from catalog_art_render.py, style 14.
 @immutable
 class CatalogArtSeed {
   final String textKey;
@@ -250,11 +251,12 @@ class CatalogArtPainter extends CustomPainter {
     }
   }
 
-  // The solid catalogue icon in a 100-unit square: its cover, then each page
-  // and its entries.
+  // The outlined catalogue icon in a 100-unit square, before its tilt: its
+  // cover, its two outlined pages, then their entries.
   static const _iconShapes = [
     (
       Color(0xFF414044),
+      false,
       [
         Offset(4, 25),
         Offset(50, 40),
@@ -265,45 +267,63 @@ class CatalogArtPainter extends CustomPainter {
       ],
     ),
     (
-      Color(0xFF9D9792),
+      Color(0xFF242327),
+      true,
       [Offset(8, 15), Offset(47, 28), Offset(47, 86), Offset(8, 73)],
     ),
     (
-      Color(0xFF716D69),
-      [Offset(17, 31), Offset(38, 38), Offset(38, 50), Offset(17, 43)],
-    ),
-    (
-      Color(0xFF716D69),
-      [Offset(17, 51), Offset(38, 58), Offset(38, 70), Offset(17, 63)],
-    ),
-    (
-      Color(0xFF716D69),
+      Color(0xFF242327),
+      true,
       [Offset(53, 28), Offset(92, 15), Offset(92, 73), Offset(53, 86)],
     ),
     (
-      Color(0xFF9D9792),
+      Color(0xFFA83B4E),
+      false,
+      [Offset(17, 31), Offset(38, 38), Offset(38, 50), Offset(17, 43)],
+    ),
+    (
+      Color(0xFF817B77),
+      false,
+      [Offset(17, 51), Offset(38, 58), Offset(38, 70), Offset(17, 63)],
+    ),
+    (
+      Color(0xFF817B77),
+      false,
       [Offset(62, 38), Offset(83, 31), Offset(83, 43), Offset(62, 50)],
     ),
     (
-      Color(0xFF9D9792),
+      Color(0xFF817B77),
+      false,
       [Offset(62, 58), Offset(83, 51), Offset(83, 63), Offset(62, 70)],
     ),
   ];
 
+  // A 12.4 degree lean to the right and a 5.7 degree rise.
+  static final _iconTilt = Float64List.fromList([
+    0.92, -0.092, 0, 0, //
+    -0.2024, 0.92, 0, 0,
+    0, 0, 1, 0,
+    14.12, 8.6, 0, 1,
+  ]);
+
   void _icon(Canvas canvas, Size size) {
     final side = math.min(size.height, size.width) * 0.5;
     canvas.save();
-    // The drawing sits 5 units low in its square.
     canvas.translate(
       size.width * (captioned ? 0.82 : 0.5) - side / 2,
-      size.height / 2 - side * 0.55,
+      (size.height - side) / 2,
     );
     canvas.scale(side / 100);
-    for (final (colour, points) in _iconShapes) {
-      canvas.drawPath(
-        Path()..addPolygon(points, true),
-        Paint()..color = colour,
-      );
+    canvas.transform(_iconTilt);
+    final outline = Paint()
+      ..color = const Color(0xFFB9B0A8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.6
+      ..strokeJoin = StrokeJoin.round;
+    for (final (colour, outlined, points) in _iconShapes) {
+      final path = Path()..addPolygon(points, true);
+      canvas.drawPath(path, Paint()..color = colour);
+      if (outlined) canvas.drawPath(path, outline);
     }
     canvas.restore();
   }
