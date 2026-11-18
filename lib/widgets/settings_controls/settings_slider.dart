@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 import 'inline_markdown.dart';
 import 'settings_help_button.dart';
 import '../../utils/haptics.dart';
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// Slider control for bounded numeric ranges.
 ///
@@ -130,26 +131,28 @@ class _SettingsSliderState extends State<SettingsSlider> {
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
         overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
       ),
-      child: Slider(
-        value: liveValue,
-        min: widget.min,
-        max: widget.max,
-        onChangeStart: (value) => _lastHapticPosition = _snap(value),
-        onChanged: (value) {
-          final snapped = _snap(value);
-          final tickSize = (widget.max - widget.min) * 0.10;
-          if ((snapped - _lastHapticPosition).abs() >= tickSize) {
-            KalinkaHaptics.selectionClick();
-            _lastHapticPosition = snapped;
-          }
-          if (snapped == _dragValue) return;
-          setState(() => _dragValue = snapped);
-        },
-        onChangeEnd: (value) {
-          // Hold until the parent commits (cleared in didUpdateWidget).
-          _dragValue = _snap(value);
-          widget.onChanged(_dragValue!);
-        },
+      child: AppKeyboardSlider(
+        child: Slider(
+          value: liveValue,
+          min: widget.min,
+          max: widget.max,
+          onChangeStart: (value) => _lastHapticPosition = _snap(value),
+          onChanged: (value) {
+            final snapped = _snap(value);
+            final tickSize = (widget.max - widget.min) * 0.10;
+            if ((snapped - _lastHapticPosition).abs() >= tickSize) {
+              KalinkaHaptics.selectionClick();
+              _lastHapticPosition = snapped;
+            }
+            if (snapped == _dragValue) return;
+            setState(() => _dragValue = snapped);
+          },
+          onChangeEnd: (value) {
+            // Hold until the parent commits (cleared in didUpdateWidget).
+            _dragValue = _snap(value);
+            widget.onChanged(_dragValue!);
+          },
+        ),
       ),
     );
 

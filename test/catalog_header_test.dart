@@ -32,6 +32,7 @@ import 'package:kalinka/widgets/search_cards/row_columns.dart';
 import 'package:kalinka/widgets/column_separator.dart';
 import 'package:kalinka/widgets/top_bar_content_fade.dart';
 
+import 'support/focus.dart';
 import 'support/home_shell.dart';
 
 final _catalog = CatalogPage.category(
@@ -90,6 +91,7 @@ class _Api extends HomeApi {
   final bool tracks;
   final bool artists;
   final int count;
+  final String Function(int)? albumTitle;
   final bool fail;
   final Completer<void>? gate;
   final calls = <({String id, int offset, String? filter})>[];
@@ -98,6 +100,7 @@ class _Api extends HomeApi {
   final played = <int?>[];
   _Api({
     this.count = 80,
+    this.albumTitle,
     this.fail = false,
     this.gate,
     this.catalogs = false,
@@ -165,7 +168,7 @@ class _Api extends HomeApi {
             canBrowse: true,
             album: Album(
               id: '$i',
-              title: 'Album $i',
+              title: albumTitle?.call(i) ?? 'Album $i',
               artist: Artist(id: 'a', name: 'Northern Lights'),
             ),
           ),
@@ -315,6 +318,87 @@ void main() {
           .load();
     }
   });
+
+  testWidgets(
+    'one arrow moves one album card and hover and focus reuse the covers',
+    (tester) async {
+      final api = _Api(
+        count: 1000,
+        albumTitle: (i) => i == 1
+            ? 'An album with a long title that wraps across two lines'
+            : 'Album $i',
+      );
+      final container = await pumpHomeShell(
+        tester,
+        api: api,
+        queue: SettableQueue(queueOf(0)),
+        size: const Size(1440, 900),
+      );
+      container
+          .read(searchSessionProvider.notifier)
+          .openPage(
+            CatalogPage.category(
+              id: _catalog.id,
+              title: 'Albums',
+              preview: Preview(
+                type: PreviewType.imageText,
+                contentType: PreviewContentType.album,
+              ),
+            ),
+          );
+      await tester.pumpAndSettle();
+      final cards = find.byType(ArtworkGridCard);
+      final mouse = await tester.createGesture(
+        kind: ui.PointerDeviceKind.mouse,
+      );
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await tester.pumpAndSettle();
+      final first = cards.at(0), second = cards.at(1);
+      final center1 = tester.getCenter(first),
+          center2 = tester.getCenter(second);
+      final row = tester.getTopLeft(first).dy;
+      expect(tester.getTopLeft(second).dy, closeTo(row, 1));
+      expect(
+        tester.getSize(second).height,
+        greaterThan(tester.getSize(first).height),
+      );
+      final cover = find
+          .descendant(of: first, matching: find.byType(AspectRatio))
+          .first;
+      final before = tester.widget(cover);
+      await mouse.moveTo(center1);
+      await tester.pump();
+      final hovered = tester.widget(cover);
+      await mouse.moveTo(center2);
+      await tester.pump();
+      traversableFocusNodesIn(first).single.requestFocus();
+      await tester.pump();
+      final focused = tester.widget(cover);
+      final columns = List.generate(cards.evaluate().length, cards.at)
+          .takeWhile((card) => (tester.getTopLeft(card).dy - row).abs() < 1)
+          .length;
+      for (final (key, index) in [
+        (LogicalKeyboardKey.arrowDown, columns),
+        (LogicalKeyboardKey.arrowUp, 0),
+        (LogicalKeyboardKey.arrowRight, 1),
+        (LogicalKeyboardKey.arrowUp, 1),
+        (LogicalKeyboardKey.arrowDown, columns + 1),
+        (LogicalKeyboardKey.arrowLeft, columns),
+        (LogicalKeyboardKey.arrowUp, 0),
+      ]) {
+        await tester.sendKeyEvent(key);
+        await tester.pump();
+        expect(
+          focusIsOn(cards.at(index)),
+          isTrue,
+          reason: 'One ${key.keyLabel} to card $index',
+        );
+      }
+      expect(hovered, same(before));
+      expect(focused, same(before));
+    },
+  );
 
   for (final (width, scale, topInset) in [
     (528.0, 1.0, 0.0),

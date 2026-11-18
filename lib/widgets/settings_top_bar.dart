@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import 'configuration_appearance.dart';
 import 'slide_in_panel.dart';
 import 'kalinka_back_button.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 /// Back to the previous page, the current page title and a connection dot.
 /// Owns the top safe inset so the header background reaches the screen edge.
@@ -18,16 +19,23 @@ class SettingsTopBar extends ConsumerWidget {
 
   /// Off where the page is left another way, such as the navigation rail.
   final bool showBack;
+  final bool autofocusBack;
 
   const SettingsTopBar({
     super.key,
     required this.title,
     this.action,
     this.showBack = true,
+    this.autofocusBack = false,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context, WidgetRef ref) => AppKeyboardRegion(
+    area: AppKeyboardArea.toolbar,
+    child: _buildContent(context, ref),
+  );
+
+  Widget _buildContent(BuildContext context, WidgetRef ref) {
     final (color, label) = switch (ref.watch(connectionStateProvider)) {
       ConnectionStatus.connected => (
         KalinkaColors.statusOnline,
@@ -85,6 +93,7 @@ class SettingsTopBar extends ConsumerWidget {
                             if (showBack)
                               KalinkaBackButton(
                                 key: const ValueKey('settings-back'),
+                                autofocus: autofocusBack,
                                 onPressed: () => SlideInPanel.closeOf(context),
                               )
                             else

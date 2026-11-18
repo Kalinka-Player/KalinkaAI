@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/plugin_catalog.dart';
+import 'package:kalinka/data_model/renderer_config.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/catalog_cards_provider.dart';
 import 'package:kalinka/providers/catalog_sources_provider.dart';
@@ -18,17 +19,20 @@ import 'package:kalinka/providers/collections_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/modules_state_provider.dart';
 import 'package:kalinka/providers/plugin_catalog_provider.dart';
+import 'package:kalinka/providers/renderer_settings_provider.dart';
 import 'package:kalinka/providers/restart_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/server_info_provider.dart';
 import 'package:kalinka/providers/server_update_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/screens/plugin_catalog_screen.dart';
+import 'package:kalinka/screens/renderer_settings_screen.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/theme/kalinka_icons.dart';
 import 'package:kalinka/widgets/home/home_source_list.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
+import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/search/search_composer.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 import 'package:kalinka/widgets/search/catalog_cards_section.dart';
@@ -37,7 +41,9 @@ import 'package:kalinka/widgets/search/results_view.dart';
 import 'package:kalinka/widgets/shell_navigation.dart';
 import 'package:kalinka/widgets/server_chip.dart';
 import 'package:kalinka/widgets/server_sheet.dart';
+import 'package:kalinka/widgets/settings_renderer.dart';
 
+import 'support/focus.dart';
 import 'support/home_shell.dart';
 
 final _modules = [
@@ -109,6 +115,39 @@ class _Api extends HomeApi {
       items.skip(offset).take(limit).toList(),
     );
   }
+}
+
+class _RendererApi extends _Api {
+  @override
+  Future<List<RendererInfo>> listRenderers() async => const [
+    RendererInfo(
+      rendererId: 'living',
+      friendlyName: 'Living Room',
+      status: 'connected',
+      active: true,
+      selected: true,
+    ),
+  ];
+
+  @override
+  Future<RendererConfigSnapshot> getRendererConfig(String rendererId) async =>
+      RendererConfigSnapshot.fromJson({
+        'sections': [
+          {
+            'path': 'output',
+            'title': 'Output',
+            'fields': [
+              for (final name in ['Mono', 'Mute', 'Normalise'])
+                {
+                  'path': 'output.$name',
+                  'title': name,
+                  'type': 'bool',
+                  'value': 'false',
+                },
+            ],
+          },
+        ],
+      });
 }
 
 class _Settings extends SettingsNotifier {
@@ -366,6 +405,110 @@ void main() {
     },
   );
 
+  for (final width in [375.0, 1440.0]) {
+    testWidgets(
+      'renderer settings own toolbar and content over Streamer at $width',
+      (tester) async {
+        final container = await _pump(
+          tester,
+          api: _RendererApi(),
+          size: Size(width, 900),
+        );
+        if (width < 400) {
+          await tester.tap(find.byType(ServerChip));
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.descendant(
+              of: find.byType(ServerSheetContent),
+              matching: find.text('Settings'),
+            ),
+          );
+        } else {
+          await tester.tap(_nav('configuration'));
+        }
+        await tester.pumpAndSettle();
+        final streamer = find.byKey(const ValueKey('catalog-tab-server'));
+        await tester.tap(streamer);
+        await tester.pumpAndSettle();
+        traversableFocusNodesIn(streamer).first.requestFocus();
+        await tester.pump();
+        expect(
+          FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+          'toolbar',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+        expect(
+          FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+          'content',
+        );
+        expect(focusIsOn(find.byType(PluginCatalogScreen)), isTrue);
+        final output = find
+            .byWidgetPredicate(
+              (widget) =>
+                  widget is RendererSwitcherButton ||
+                  widget is RendererSwitcherDropdown,
+            )
+            .hitTestable()
+            .first;
+        traversableFocusNodesIn(output).single.requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        final gear = find.byTooltip('Output settings');
+        traversableFocusNodesIn(gear).first.requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        final panel = find.byType(RendererSettingsScreen);
+        final back = find.descendant(
+          of: panel,
+          matching: find.byKey(const ValueKey('settings-back')),
+        );
+        expect(focusIsOn(back), isTrue);
+        expect(
+          traversableFocusNodesIn(find.byType(PluginCatalogScreen)),
+          isEmpty,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+        expect(
+          FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+          'content',
+        );
+        Finder field(String label) => find.byWidgetPredicate(
+          (widget) =>
+              widget is SchemaFieldRenderer && widget.field.label == label,
+        );
+        expect(focusIsOn(field('Mono')), isTrue);
+        for (final (key, label) in [
+          (LogicalKeyboardKey.arrowDown, 'Mute'),
+          (LogicalKeyboardKey.arrowDown, 'Normalise'),
+          (LogicalKeyboardKey.arrowUp, 'Mute'),
+        ]) {
+          await tester.sendKeyEvent(key);
+          await tester.pumpAndSettle();
+          expect(focusIsOn(field(label)), isTrue);
+        }
+        final renderer = rendererSettingsProvider('living');
+        expect(container.read(renderer).staged, isEmpty);
+        await tester.sendKeyEvent(LogicalKeyboardKey.space);
+        await tester.pumpAndSettle();
+        expect(container.read(renderer).staged, {'output.Mute': true});
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(panel, findsNothing);
+        expect(traversableFocusNodesIn(streamer), isNotEmpty);
+        expect(
+          focusIsOn(output),
+          isTrue,
+          reason: 'Back returns to the output selector',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('Configuration navigation honours Cancel and Discard', (
     tester,
   ) async {
@@ -515,7 +658,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();

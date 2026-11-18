@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 
 import '../theme/app_theme.dart';
 import 'kalinka_button.dart';
+import 'keyboard/keyboard_activation.dart';
 
 /// How far the cutout sits outside its target.
 const double _kHoleInset = 6;
@@ -200,37 +201,40 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
     // target invalidates it. Resizing across the tablet breakpoint can even
     // change which widget the output switcher is. Resolution follows layout,
     // including frames where only the target's subtree changed.
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        _scheduleResolve();
-        return GestureDetector(
-          onTap: _next,
-          behavior: HitTestBehavior.opaque,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: RepaintBoundary(
-                  child: CustomPaint(
-                    painter: _SpotlightPainter(
-                      cutout: _targetRect,
-                      pulse: _pulse,
+    return FocusScope(
+      autofocus: true,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          _scheduleResolve();
+          return GestureDetector(
+            onTap: _next,
+            behavior: HitTestBehavior.opaque,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: _SpotlightPainter(
+                        cutout: _targetRect,
+                        pulse: _pulse,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              if (_placedKey != null)
-                Positioned.fill(
-                  child: _CardPlacement(
-                    target: _cardTarget,
-                    padding: safeArea + const EdgeInsets.all(24),
-                    move: _move,
-                    child: _buildTipCard(stop, isLast),
+                if (_placedKey != null)
+                  Positioned.fill(
+                    child: _CardPlacement(
+                      target: _cardTarget,
+                      padding: safeArea + const EdgeInsets.all(24),
+                      move: _move,
+                      child: _buildTipCard(stop, isLast),
+                    ),
                   ),
-                ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -278,20 +282,25 @@ class _CoachMarksOverlayState extends State<CoachMarksOverlay>
           const SizedBox(height: 14),
           Row(
             children: [
-              GestureDetector(
-                onTap: widget.onDismiss,
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 6,
+              KeyboardActivation(
+                onActivate: widget.onDismiss,
+                borderRadius: BorderRadius.circular(4),
+                child: GestureDetector(
+                  onTap: widget.onDismiss,
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 6,
+                    ),
+                    child: Text('Skip', style: KalinkaTextStyles.cancelButton),
                   ),
-                  child: Text('Skip', style: KalinkaTextStyles.cancelButton),
                 ),
               ),
               const Spacer(),
               KalinkaButton(
                 label: isLast ? 'Done' : 'Next',
+                autofocus: true,
                 variant: KalinkaButtonVariant.accent,
                 size: KalinkaButtonSize.compact,
                 onTap: _next,

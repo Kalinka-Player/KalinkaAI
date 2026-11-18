@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,9 +18,14 @@ import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/home/catalog_pin_button.dart';
 import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search/library_rescan_control.dart';
 
+import 'package:kalinka/widgets/search_cards/search_folder_row.dart';
+
+import 'support/focus.dart';
+import 'support/home_shell.dart';
 import 'support/server_answer.dart';
 
 IndexerStatus _status({
@@ -47,7 +53,7 @@ IndexerStatus _status({
   },
 });
 
-class _Api implements KalinkaPlayerProxy {
+class _Api extends HomeApi {
   IndexerStatus status = _status();
   int requests = 0;
   int polls = 0;
@@ -391,6 +397,84 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets(
+    'folder Pin and Rescan share the toolbar stop above the listing',
+    (tester) async {
+      final api = _Api()
+        ..items = [
+          BrowseItem(
+            id: 'kalinka:localfiles:catalog:subfolder',
+            name: 'My folder',
+            canBrowse: true,
+            canAdd: false,
+            catalog: Catalog(
+              id: 'kalinka:localfiles:catalog:subfolder',
+              title: 'My folder',
+              previewConfig: Preview(type: PreviewType.folder),
+            ),
+          ),
+        ];
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(1)),
+        api: api,
+        indexer: IndexerStatusNotifier.new,
+        size: const Size(375, 900),
+      );
+      container
+          .read(searchSessionProvider.notifier)
+          .openCatalog(
+            id: 'kalinka:localfiles:catalog:files',
+            title: 'Folders',
+            folderLayout: true,
+          );
+      await tester.pumpAndSettle();
+      final rescan = find.widgetWithText(TextButton, 'Rescan library');
+      final pin = find.byType(CatalogPinButton);
+      for (final control in [pin, rescan]) {
+        final target = traversableFocusNodesIn(control).first;
+        expect(target.nearestScope?.debugLabel, 'toolbar');
+      }
+      traversableFocusNodesIn(pin).first.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(focusIsOn(rescan), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      expect(
+        FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+        'content',
+      );
+      final folder = find.byType(SearchFolderRow);
+      expect(focusIsOn(folder), isTrue);
+      expect(
+        find.descendant(
+          of: folder,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is ColoredBox && widget.color == const Color(0x0DFFFFFF),
+          ),
+        ),
+        findsOneWidget,
+      );
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+      expect(focusIsOn(rescan), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(
+        container.read(searchSessionProvider).shownListing.id,
+        api.items.first.id,
+      );
+      expect(api.requests, 0);
+    },
+  );
 
   testWidgets('other catalogs have no rescan action', (tester) async {
     await pump(tester, _Api(), pageId: 'kalinka:jamendo:catalog:recent');

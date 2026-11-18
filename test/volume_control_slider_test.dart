@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
@@ -7,6 +8,7 @@ import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/widgets/volume_control_slider.dart';
+import 'package:kalinka/widgets/kiosk/kiosk_volume_control.dart';
 
 import 'support/haptic_recorder.dart';
 
@@ -97,6 +99,80 @@ Future<ProviderContainer> _pump(
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 void main() {
+  for (final vertical in [false, true]) {
+    testWidgets(
+      'kiosk ${vertical ? 'vertical' : 'horizontal'} volume requires activation and skips hidden controls',
+      (tester) async {
+        final container = await _pump(tester);
+        var visible = true;
+        late StateSetter rebuild;
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              home: Scaffold(
+                body: StatefulBuilder(
+                  builder: (context, setState) {
+                    rebuild = setState;
+                    return Column(
+                      children: [
+                        SizedBox(
+                          width: 400,
+                          height: 300,
+                          child: vertical
+                              ? KioskVolumeControl(
+                                  scale: 1,
+                                  visible: visible,
+                                  onActivity: () {},
+                                )
+                              : KioskVolumePopup(
+                                  visible: visible,
+                                  scale: 1,
+                                  onActivity: () {},
+                                ),
+                        ),
+                        TextButton(onPressed: () {}, child: const Text('Next')),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+        Future<void> key(LogicalKeyboardKey key) async {
+          await tester.sendKeyEvent(key);
+          await tester.pumpAndSettle();
+        }
+
+        await tester.pumpAndSettle(); // volume subscriptions attach post-frame
+        await key(LogicalKeyboardKey.tab);
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          'Slider navigation',
+        );
+        final commands =
+            (container.read(kalinkaWsApiProvider) as _FakeWsApi).sentCommands;
+        await key(LogicalKeyboardKey.arrowRight);
+        expect(commands, isEmpty);
+        await key(LogicalKeyboardKey.enter);
+        await key(LogicalKeyboardKey.arrowRight);
+        expect((commands.single as SetVolumeCommand).volume, 55);
+        final count = commands.length;
+        await key(LogicalKeyboardKey.escape);
+        await key(LogicalKeyboardKey.arrowLeft);
+        expect(commands, hasLength(count));
+        rebuild(() => visible = false);
+        await tester.pumpAndSettle();
+        await key(LogicalKeyboardKey.tab);
+        expect(
+          FocusManager.instance.primaryFocus?.debugLabel,
+          isNot('Slider navigation'),
+        );
+      },
+    );
+  }
+
   group('NowPlayingVolumeControl', () {
     // ── Visibility ────────────────────────────────────────────────────────────
 

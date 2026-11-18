@@ -14,6 +14,7 @@ import '../../providers/renderer_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/local_platform.dart';
 import '../../utils/click_cursor.dart';
+import '../keyboard/keyboard_activation.dart';
 import '../renderer_switcher.dart' show rendererDisplayName;
 import 'kiosk_track_text.dart' show kioskTextPolish;
 
@@ -143,8 +144,14 @@ class KioskOutputPill extends ConsumerWidget {
 
   /// Opens the output panel; null where there is nothing in it to use.
   final VoidCallback? onTap;
+  final FocusNode? focusNode;
 
-  const KioskOutputPill({super.key, required this.scale, this.onTap});
+  const KioskOutputPill({
+    super.key,
+    required this.scale,
+    this.onTap,
+    this.focusNode,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -155,7 +162,12 @@ class KioskOutputPill extends ConsumerWidget {
     );
 
     return connected
-        ? _Output(scale: scale, serverName: serverName, onTap: onTap)
+        ? _Output(
+            scale: scale,
+            serverName: serverName,
+            onTap: onTap,
+            focusNode: focusNode,
+          )
         : _Pill(
             scale: scale,
             child: _Reconnecting(scale: scale, serverName: serverName),
@@ -190,11 +202,13 @@ class _Output extends ConsumerWidget {
   final double scale;
   final String serverName;
   final VoidCallback? onTap;
+  final FocusNode? focusNode;
 
   const _Output({
     required this.scale,
     required this.serverName,
     required this.onTap,
+    required this.focusNode,
   });
 
   @override
@@ -276,13 +290,19 @@ class _Output extends ConsumerWidget {
     return Semantics(
       label: 'Output: ${here ? 'This device' : name}',
       button: onTap != null,
-      excludeSemantics: true,
-      child: MouseRegion(
-        cursor: clickCursor(interactive: onTap != null),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: _Pill(scale: scale, child: row),
+      child: KeyboardActivation(
+        focusNode: focusNode,
+        onActivate: onTap,
+        borderRadius: BorderRadius.circular(s(24)),
+        child: MouseRegion(
+          cursor: clickCursor(interactive: onTap != null),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: ExcludeSemantics(
+              child: _Pill(scale: scale, child: row),
+            ),
+          ),
         ),
       ),
     );

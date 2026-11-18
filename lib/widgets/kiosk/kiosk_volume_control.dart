@@ -7,6 +7,7 @@ import '../../data_model/data_model.dart' show DeviceVolume;
 import '../../providers/app_state_provider.dart' show volumeAvailableProvider;
 import '../../theme/app_theme.dart';
 import '../volume_control_slider.dart' show OptimisticVolume;
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// Tall volume bar for the display's right edge, the speaker above it. It
 /// comes up when the volume changes from elsewhere, and fades once left
@@ -62,84 +63,101 @@ class _KioskVolumeControlState extends ConsumerState<KioskVolumeControl>
     widget.onActivity();
   }
 
+  void _commit(double level) {
+    commitVolume(level);
+    widget.onActivity();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!volumeAvailable) return const SizedBox.shrink();
     double s(double v) => v * widget.scale;
     final level = volumeProgress;
 
-    return IgnorePointer(
-      ignoring: !widget.visible,
-      child: AnimatedOpacity(
-        opacity: widget.visible ? 1 : 0,
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeOut,
-        child: Semantics(
-          label: 'Volume',
-          value: '${(level * 100).round()}%',
-          slider: true,
-          child: Container(
-            width: s(76),
-            padding: EdgeInsets.symmetric(vertical: s(18)),
-            decoration: widget.opaque
-                ? BoxDecoration(
-                    color: KalinkaColors.surfaceElevated,
-                    borderRadius: BorderRadius.circular(s(38)),
-                    border: Border.all(color: KalinkaColors.borderDefault),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x80000000),
-                        offset: Offset(0, 4),
-                        blurRadius: 24,
-                      ),
-                    ],
-                  )
-                : BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(s(38)),
+    return ExcludeFocus(
+      excluding: !widget.visible,
+      child: IgnorePointer(
+        ignoring: !widget.visible,
+        child: AnimatedOpacity(
+          opacity: widget.visible ? 1 : 0,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut,
+          child: Semantics(
+            label: 'Volume',
+            value: '${(level * 100).round()}%',
+            increasedValue:
+                '${((level + 0.05).clamp(0.0, 1.0) * 100).round()}%',
+            decreasedValue:
+                '${((level - 0.05).clamp(0.0, 1.0) * 100).round()}%',
+            slider: true,
+            child: Container(
+              width: s(76),
+              padding: EdgeInsets.symmetric(vertical: s(18)),
+              decoration: widget.opaque
+                  ? BoxDecoration(
+                      color: KalinkaColors.surfaceElevated,
+                      borderRadius: BorderRadius.circular(s(38)),
+                      border: Border.all(color: KalinkaColors.borderDefault),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x80000000),
+                          offset: Offset(0, 4),
+                          blurRadius: 24,
+                        ),
+                      ],
+                    )
+                  : BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(s(38)),
+                    ),
+              child: Column(
+                children: [
+                  Icon(
+                    kioskVolumeIcon(level),
+                    size: s(30),
+                    color: KalinkaColors.textPrimary,
                   ),
-            child: Column(
-              children: [
-                Icon(
-                  kioskVolumeIcon(level),
-                  size: s(30),
-                  color: KalinkaColors.textPrimary,
-                ),
-                SizedBox(height: s(16)),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final height = constraints.maxHeight;
-                      final slider = GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTapUp: (d) {
-                          final l = _levelAt(d.localPosition, height);
-                          _adjust(l);
-                          commitVolume(l);
-                        },
-                        onVerticalDragStart: (d) =>
-                            _adjust(_levelAt(d.localPosition, height)),
-                        onVerticalDragUpdate: (d) =>
-                            _adjust(_levelAt(d.localPosition, height)),
-                        onVerticalDragEnd: (_) => commitVolume(_dragLevel),
-                        child: SizedBox(
-                          width: s(76),
-                          child: CustomPaint(
-                            painter: _VolumePainter(
-                              level: level,
-                              thickness: s(isAdjustingVolume ? 22 : 18),
+                  SizedBox(height: s(16)),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final height = constraints.maxHeight;
+                        final slider = GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTapUp: (d) =>
+                              _commit(_levelAt(d.localPosition, height)),
+                          onVerticalDragStart: (d) =>
+                              _adjust(_levelAt(d.localPosition, height)),
+                          onVerticalDragUpdate: (d) =>
+                              _adjust(_levelAt(d.localPosition, height)),
+                          onVerticalDragEnd: (_) => commitVolume(_dragLevel),
+                          child: SizedBox(
+                            width: s(76),
+                            child: CustomPaint(
+                              painter: _VolumePainter(
+                                level: level,
+                                thickness: s(isAdjustingVolume ? 22 : 18),
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                      return MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: slider,
-                      );
-                    },
+                        );
+                        return MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: AppKeyboardSlider.custom(
+                            onIncrease: () => _commit(
+                              (volumeProgress + 0.05).clamp(0.0, 1.0),
+                            ),
+                            onDecrease: () => _commit(
+                              (volumeProgress - 0.05).clamp(0.0, 1.0),
+                            ),
+                            child: slider,
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -157,7 +175,14 @@ class KioskVolumeSlider extends ConsumerStatefulWidget {
   /// nothing needs to know.
   final VoidCallback? onActivity;
 
-  const KioskVolumeSlider({super.key, required this.scale, this.onActivity});
+  final bool revealOnChange;
+
+  const KioskVolumeSlider({
+    super.key,
+    required this.scale,
+    this.onActivity,
+    this.revealOnChange = true,
+  });
 
   @override
   ConsumerState<KioskVolumeSlider> createState() => _KioskVolumeSliderState();
@@ -171,7 +196,9 @@ class _KioskVolumeSliderState extends ConsumerState<KioskVolumeSlider>
   void onVolumeChanged(DeviceVolume previous, DeviceVolume next) {
     // The first reading after (re)connecting replaces the placeholder — no
     // one turned anything.
-    if (previous.supported && previous.currentVolume != next.currentVolume) {
+    if (widget.revealOnChange &&
+        previous.supported &&
+        previous.currentVolume != next.currentVolume) {
       widget.onActivity?.call();
     }
   }
@@ -190,6 +217,11 @@ class _KioskVolumeSliderState extends ConsumerState<KioskVolumeSlider>
     widget.onActivity?.call();
   }
 
+  void _commit(double level) {
+    commitVolume(level);
+    widget.onActivity?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!volumeAvailable) return const SizedBox.shrink();
@@ -199,6 +231,8 @@ class _KioskVolumeSliderState extends ConsumerState<KioskVolumeSlider>
     return Semantics(
       label: 'Volume',
       value: '${(level * 100).round()}%',
+      increasedValue: '${((level + 0.05).clamp(0.0, 1.0) * 100).round()}%',
+      decreasedValue: '${((level - 0.05).clamp(0.0, 1.0) * 100).round()}%',
       slider: true,
       child: Row(
         children: [
@@ -214,11 +248,7 @@ class _KioskVolumeSliderState extends ConsumerState<KioskVolumeSlider>
                 final width = constraints.maxWidth;
                 final slider = GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTapUp: (d) {
-                    final l = _levelAt(d.localPosition, width);
-                    _adjust(l);
-                    commitVolume(l);
-                  },
+                  onTapUp: (d) => _commit(_levelAt(d.localPosition, width)),
                   onHorizontalDragStart: (d) =>
                       _adjust(_levelAt(d.localPosition, width)),
                   onHorizontalDragUpdate: (d) =>
@@ -237,7 +267,14 @@ class _KioskVolumeSliderState extends ConsumerState<KioskVolumeSlider>
                 );
                 return MouseRegion(
                   cursor: SystemMouseCursors.click,
-                  child: slider,
+                  child: AppKeyboardSlider.custom(
+                    inlineHint: true,
+                    onIncrease: () =>
+                        _commit((volumeProgress + 0.05).clamp(0.0, 1.0)),
+                    onDecrease: () =>
+                        _commit((volumeProgress - 0.05).clamp(0.0, 1.0)),
+                    child: slider,
+                  ),
                 );
               },
             ),
@@ -282,27 +319,30 @@ class KioskVolumePopup extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (!ref.watch(volumeAvailableProvider)) return const SizedBox.shrink();
     double s(double v) => v * scale;
-    return IgnorePointer(
-      ignoring: !visible,
-      child: AnimatedOpacity(
-        opacity: visible ? 1 : 0,
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeOut,
-        child: Container(
-          width: s(300),
-          height: s(54),
-          padding: EdgeInsets.symmetric(horizontal: s(20)),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(s(18)),
-            border: Border.all(
-              color: KalinkaColors.textPrimary.withValues(alpha: 0.16),
+    return ExcludeFocus(
+      excluding: !visible,
+      child: IgnorePointer(
+        ignoring: !visible,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut,
+          child: Container(
+            width: s(300),
+            constraints: BoxConstraints(minHeight: s(54)),
+            padding: EdgeInsets.symmetric(horizontal: s(20)),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(s(18)),
+              border: Border.all(
+                color: KalinkaColors.textPrimary.withValues(alpha: 0.16),
+              ),
             ),
-          ),
-          // Its figures stay legible on the smallest screens.
-          child: KioskVolumeSlider(
-            scale: math.max(s(0.8), 0.55),
-            onActivity: onActivity,
+            // Its figures stay legible on the smallest screens.
+            child: KioskVolumeSlider(
+              scale: math.max(s(0.8), 0.55),
+              onActivity: onActivity,
+            ),
           ),
         ),
       ),

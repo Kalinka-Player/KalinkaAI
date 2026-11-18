@@ -6,6 +6,7 @@ import '../providers/connection_state_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
 import 'kalinka_popover.dart';
+import 'keyboard/keyboard_activation.dart';
 
 /// Server status chip — top-right of the header.
 ///
@@ -84,10 +85,7 @@ class _ServerChipState extends ConsumerState<ServerChip>
           ),
         ),
       );
-      return MouseRegion(
-        cursor: clickCursor(interactive: widget.onTap != null),
-        child: chip,
-      );
+      return _keyboardControl(chip, onTap);
     }
 
     final chip = GestureDetector(
@@ -130,9 +128,20 @@ class _ServerChipState extends ConsumerState<ServerChip>
         ),
       ),
     );
-    return MouseRegion(
-      cursor: clickCursor(interactive: widget.onTap != null),
-      child: chip,
+    return _keyboardControl(
+      Semantics(button: onTap != null, child: chip),
+      onTap,
+    );
+  }
+
+  Widget _keyboardControl(Widget child, VoidCallback? onTap) {
+    return KeyboardActivation(
+      onActivate: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: MouseRegion(
+        cursor: clickCursor(interactive: onTap != null),
+        child: child,
+      ),
     );
   }
 

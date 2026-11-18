@@ -7,6 +7,7 @@ import '../data_model/receiver_control.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/receiver_provider.dart';
 import '../theme/app_theme.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 /// Mounted below the app Navigator, independently of the connection panel.
 /// The backend owns the request lifetime; closing a sheet changes no BT state.
@@ -192,15 +193,17 @@ class _ReceiverApprovalState extends ConsumerState<ReceiverApproval> {
         if (request.needsInput)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: TextField(
-              controller: _input,
-              autofocus: true,
-              keyboardType: request.method == 'passkey'
-                  ? TextInputType.number
-                  : TextInputType.text,
-              maxLength: request.method == 'passkey' ? 6 : 16,
-              decoration: InputDecoration(
-                labelText: request.method == 'passkey' ? 'Code' : 'PIN',
+            child: AppKeyboardTextEntry(
+              child: TextField(
+                controller: _input,
+                autofocus: true,
+                keyboardType: request.method == 'passkey'
+                    ? TextInputType.number
+                    : TextInputType.text,
+                maxLength: request.method == 'passkey' ? 6 : 16,
+                decoration: InputDecoration(
+                  labelText: request.method == 'passkey' ? 'Code' : 'PIN',
+                ),
               ),
             ),
           ),

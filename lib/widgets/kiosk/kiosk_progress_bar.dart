@@ -9,6 +9,7 @@ import '../../utils/click_cursor.dart';
 import '../../utils/playback_utils.dart';
 import '../gradient_progress_line.dart';
 import '../playback_progress_slider.dart' show OptimisticSeek;
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// Full-width progress for a screen read from across the room: the bar,
 /// elapsed and total time under it, and a touch zone taller than the bar so
@@ -91,6 +92,14 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
         value:
             '${formatClock(Duration(milliseconds: positionMs))} of '
             '${formatClock(Duration(milliseconds: durationMs))}',
+        increasedValue: canSeek
+            ? '${formatClock(Duration(milliseconds: ((progress + 0.05).clamp(0.0, 1.0) * durationMs).round()))} of '
+                  '${formatClock(Duration(milliseconds: durationMs))}'
+            : null,
+        decreasedValue: canSeek
+            ? '${formatClock(Duration(milliseconds: ((progress - 0.05).clamp(0.0, 1.0) * durationMs).round()))} of '
+                  '${formatClock(Duration(milliseconds: durationMs))}'
+            : null,
         slider: canSeek,
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -159,7 +168,33 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
             );
             return MouseRegion(
               cursor: clickCursor(interactive: canSeek),
-              child: slider,
+              child: AppKeyboardSlider.custom(
+                onIncrease: canSeek
+                    ? () {
+                        final next =
+                            (seekAwareProgress(
+                                      ref.read(playbackTimeMsProvider),
+                                    ) +
+                                    0.05)
+                                .clamp(0.0, 1.0);
+                        beginSeek(next);
+                        commitSeek(next);
+                      }
+                    : null,
+                onDecrease: canSeek
+                    ? () {
+                        final next =
+                            (seekAwareProgress(
+                                      ref.read(playbackTimeMsProvider),
+                                    ) -
+                                    0.05)
+                                .clamp(0.0, 1.0);
+                        beginSeek(next);
+                        commitSeek(next);
+                      }
+                    : null,
+                child: slider,
+              ),
             );
           },
         ),

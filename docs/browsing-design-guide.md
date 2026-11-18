@@ -81,6 +81,53 @@ Filtering, recommendation source tabs, artist tabs and presentation switches do 
 | Home pins | Preserve existing per-server storage, preview formats, filters and user ordering |
 | Queue and playback | Independent of browsing layout, filters, routes and view preference |
 
+## Keyboard navigation
+
+Tab moves from the navigation rail to the top bar, main content, playback bar
+and Now Playing/Queue in that order. Shift+Tab reverses the order. Both wrap
+and skip areas that are absent, disabled or empty. Returning
+to an area restores its last available focused control. Fixed and scrolling
+parts of a page header share the toolbar stop, including Pin, Rescan library,
+filters and page actions. The next Tab enters the listing or shelves.
+
+Arrow keys move spatially between controls within the current area. They stop
+at the area's boundary. Lists and shelves scroll to reveal the focused item,
+including newly built rows in long lists. Queue rows remain above the playback
+bar. Enter or Space activates the focused control. Queue rows, the server chip
+and the playback artwork are keyboard controls with neutral focus outlines.
+Each artwork grid card has one arrow stop. Enter or Space opens the card.
+Shift+Enter plays a playable card. In selection mode, activation toggles selection.
+
+Arrow keys navigate past text fields and sliders without starting an edit.
+Enter starts text editing. Escape finishes editing and restores the field's
+navigation target, keeping the field's normal staging/validation behavior.
+While typing, arrows, spaces and submission keys retain their normal meaning.
+Alt+Arrow explicitly moves focus within the shell area while editing.
+
+Enter or Space starts slider adjustment. Left/Right then changes its value,
+and Enter or Escape returns to navigation. Up/Down or Tab can also leave an
+adjusting slider. These rules apply to settings, output popups and kiosk sliders
+as well as the player. A neutral focus outline and keyboard hint identify each
+field or slider during keyboard navigation. Clicking or tapping a field hides
+the keyboard outline and hint while typing. Mouse/touch editing, autofocus
+and explicit field focus requests remain direct. When the on-screen keyboard
+is enabled, entering edit mode opens it. Escape closes it and returns focus to
+the field's navigation target.
+
+In the kiosk, Tab reaches the output selector. Enter or Space opens the picker.
+Tab and Shift+Tab cycle through Close, adjustable volume and available outputs.
+Choosing an output or closing the picker returns focus to the selector.
+
+Dialogs, menus with their own focus scope, the first-run walkthrough and the
+search composer retain local Tab traversal until dismissed. The player sheet
+and server picker keep an exposed navigation rail in the Tab cycle. The
+server picker also keeps the queue bar reachable when visible.
+
+`AppKeyboardNavigation` owns the shell traversal, and `AppKeyboardRegion`
+declares each area's boundary. These wrappers do not alter layout or control
+styling. `AppKeyboardTextEntry` and `AppKeyboardSlider` provide the same explicit
+editing behavior outside the shell, where Tab retains standard local traversal.
+
 ## Responsive application layout
 
 All measurements are Flutter logical pixels. A screenshot's physical resolution does not determine its layout mode. Use the window constraints for the shell and the actual available pane width, text scale and content for its children.

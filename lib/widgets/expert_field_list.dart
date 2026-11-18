@@ -12,6 +12,7 @@ import 'settings_controls/settings_help_button.dart';
 import 'configuration_appearance.dart';
 import 'settings_controls/issue_notes.dart';
 import 'settings_controls/settings_row.dart' show kSettingsGutter;
+import 'keyboard/app_keyboard_navigation.dart';
 
 /// About:config-style flat search across every settable field of one store.
 ///
@@ -221,21 +222,23 @@ class _SearchBar extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: TextField(
-                controller: controller,
-                focusNode: focusNode,
-                autocorrect: false,
-                enableSuggestions: false,
-                style: KalinkaTextStyles.textFieldInput,
-                decoration: InputDecoration(
-                  hintText: 'Search settings… (space = AND)',
-                  hintStyle: KalinkaTextStyles.searchPlaceholder.copyWith(
-                    fontSize: KalinkaTypography.baseSize + 2,
-                    color: KalinkaColors.textSecondary,
+              child: AppKeyboardTextEntry(
+                child: TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  style: KalinkaTextStyles.textFieldInput,
+                  decoration: InputDecoration(
+                    hintText: 'Search settings… (space = AND)',
+                    hintStyle: KalinkaTextStyles.searchPlaceholder.copyWith(
+                      fontSize: KalinkaTypography.baseSize + 2,
+                      color: KalinkaColors.textSecondary,
+                    ),
+                    isCollapsed: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    border: InputBorder.none,
                   ),
-                  isCollapsed: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                  border: InputBorder.none,
                 ),
               ),
             ),

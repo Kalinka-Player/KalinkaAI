@@ -18,6 +18,7 @@ import '../widgets/kalinka_button.dart';
 import '../widgets/kalinka_back_button.dart';
 import '../widgets/onboarding/onboarding_step_scaffold.dart';
 import '../widgets/onboarding/setup_discovery.dart';
+import '../widgets/keyboard/app_keyboard_navigation.dart';
 
 class ProvisioningScreen extends ConsumerStatefulWidget {
   final ProvisioningTransport? transport;
@@ -569,21 +570,23 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (_customSsid) ...[
-          TextFormField(
-            key: const ValueKey('custom-ssid'),
-            controller: _ssid,
-            autocorrect: false,
-            textInputAction: TextInputAction.next,
-            style: kalinkaFieldText(),
-            decoration: kalinkaFieldDecoration(hint: 'Exact network name')
-                .copyWith(labelText: 'Network name (SSID)'),
-            validator: (value) =>
-                value == null ||
-                    utf8.encode(value).isEmpty ||
-                    utf8.encode(value).length > 32 ||
-                    value.runes.any((c) => c < 32 || c == 127)
-                ? 'Enter the exact network name (up to 32 bytes).'
-                : null,
+          AppKeyboardTextEntry(
+            child: TextFormField(
+              key: const ValueKey('custom-ssid'),
+              controller: _ssid,
+              autocorrect: false,
+              textInputAction: TextInputAction.next,
+              style: kalinkaFieldText(),
+              decoration: kalinkaFieldDecoration(hint: 'Exact network name')
+                  .copyWith(labelText: 'Network name (SSID)'),
+              validator: (value) =>
+                  value == null ||
+                      utf8.encode(value).isEmpty ||
+                      utf8.encode(value).length > 32 ||
+                      value.runes.any((c) => c < 32 || c == 127)
+                  ? 'Enter the exact network name (up to 32 bytes).'
+                  : null,
+            ),
           ),
           Align(
             alignment: Alignment.centerRight,
@@ -636,34 +639,36 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
             ),
           ),
         const SizedBox(height: 24),
-        TextFormField(
-          key: const ValueKey('wifi-password'),
-          controller: _password,
-          obscureText: !_showPassword,
-          autocorrect: false,
-          enableSuggestions: false,
-          textInputAction: TextInputAction.done,
-          onFieldSubmitted: (_) => _submit(),
-          style: kalinkaFieldText(),
-          decoration: kalinkaFieldDecoration(hint: 'Wi-Fi password').copyWith(
-            labelText: 'Password',
-            suffixIcon: IconButton(
-              tooltip: _showPassword ? 'Hide password' : 'Show password',
-              icon: Icon(
-                _showPassword
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
+        AppKeyboardTextEntry(
+          child: TextFormField(
+            key: const ValueKey('wifi-password'),
+            controller: _password,
+            obscureText: !_showPassword,
+            autocorrect: false,
+            enableSuggestions: false,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _submit(),
+            style: kalinkaFieldText(),
+            decoration: kalinkaFieldDecoration(hint: 'Wi-Fi password').copyWith(
+              labelText: 'Password',
+              suffixIcon: IconButton(
+                tooltip: _showPassword ? 'Hide password' : 'Show password',
+                icon: Icon(
+                  _showPassword
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                ),
+                onPressed: () => setState(() => _showPassword = !_showPassword),
               ),
-              onPressed: () => setState(() => _showPassword = !_showPassword),
             ),
+            validator: (value) =>
+                value == null ||
+                    value.length < 8 ||
+                    value.length > 63 ||
+                    value.runes.any((c) => c < 32 || c > 126)
+                ? 'Enter a password with 8–63 characters.'
+                : null,
           ),
-          validator: (value) =>
-              value == null ||
-                  value.length < 8 ||
-                  value.length > 63 ||
-                  value.runes.any((c) => c < 32 || c > 126)
-              ? 'Enter a password with 8–63 characters.'
-              : null,
         ),
         const SizedBox(height: 12),
         Row(
@@ -697,21 +702,23 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
               style: _bodyStyle.copyWith(fontSize: 12),
             ),
             children: [
-              TextFormField(
-                controller: _country,
-                maxLength: 2,
-                autocorrect: false,
-                textCapitalization: TextCapitalization.characters,
-                style: kalinkaFieldText(),
-                decoration: kalinkaFieldDecoration(hint: 'GB').copyWith(
-                  labelText: 'Country code',
-                  helperText:
-                      'For example GB or US. Used for local Wi-Fi channels.',
+              AppKeyboardTextEntry(
+                child: TextFormField(
+                  controller: _country,
+                  maxLength: 2,
+                  autocorrect: false,
+                  textCapitalization: TextCapitalization.characters,
+                  style: kalinkaFieldText(),
+                  decoration: kalinkaFieldDecoration(hint: 'GB').copyWith(
+                    labelText: 'Country code',
+                    helperText:
+                        'For example GB or US. Used for local Wi-Fi channels.',
+                  ),
+                  validator: (value) =>
+                      RegExp(r'^[A-Z]{2}$').hasMatch(value?.toUpperCase() ?? '')
+                      ? null
+                      : 'Enter a two-letter country code.',
                 ),
-                validator: (value) =>
-                    RegExp(r'^[A-Z]{2}$').hasMatch(value?.toUpperCase() ?? '')
-                    ? null
-                    : 'Enter a two-letter country code.',
               ),
             ],
           ),

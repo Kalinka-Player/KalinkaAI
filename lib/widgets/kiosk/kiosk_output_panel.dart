@@ -23,12 +23,14 @@ class KioskOutputPanel extends ConsumerStatefulWidget {
   final bool fullScreen;
 
   final VoidCallback onClose;
+  final VoidCallback onActivity;
 
   const KioskOutputPanel({
     super.key,
     required this.scale,
     required this.fullScreen,
     required this.onClose,
+    required this.onActivity,
   });
 
   @override
@@ -131,7 +133,11 @@ class _KioskOutputPanelState extends ConsumerState<KioskOutputPanel> {
         ),
         if (volume) ...[
           SizedBox(height: s(14)),
-          KioskVolumeSlider(scale: widget.scale),
+          KioskVolumeSlider(
+            scale: widget.scale,
+            onActivity: widget.onActivity,
+            revealOnChange: false,
+          ),
         ],
         if (showOthers) ...[
           SizedBox(height: s(volume ? 14 : 22)),
@@ -144,6 +150,7 @@ class _KioskOutputPanelState extends ConsumerState<KioskOutputPanel> {
           SizedBox(height: s(8)),
           for (final r in others)
             _OtherOutput(
+              key: ValueKey(r.rendererId),
               renderer: r,
               isSelf: r.rendererId == ownId,
               scale: widget.scale,
@@ -168,42 +175,42 @@ class _KioskOutputPanelState extends ConsumerState<KioskOutputPanel> {
       ],
     );
 
-    if (widget.fullScreen) {
-      return Material(
-        color: Colors.black.withValues(alpha: 0.9),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(s(24)),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: s(560)),
+    final panel = widget.fullScreen
+        ? Material(
+            color: Colors.black.withValues(alpha: 0.9),
+            child: SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.all(s(24)),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: s(560)),
+                    child: content,
+                  ),
+                ),
+              ),
+            ),
+          )
+        : Container(
+            width: s(440),
+            decoration: BoxDecoration(
+              color: const Color(0xD9101010),
+              borderRadius: BorderRadius.circular(s(22)),
+              border: Border.all(
+                color: KalinkaColors.textPrimary.withValues(alpha: 0.14),
+              ),
+              boxShadow: const [
+                BoxShadow(color: Color(0x80000000), blurRadius: 40),
+              ],
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(s(24), s(20), s(16), s(20)),
                 child: content,
               ),
             ),
-          ),
-        ),
-      );
-    }
-    return Material(
-      type: MaterialType.transparency,
-      child: Container(
-        width: s(440),
-        decoration: BoxDecoration(
-          color: const Color(0xD9101010),
-          borderRadius: BorderRadius.circular(s(22)),
-          border: Border.all(
-            color: KalinkaColors.textPrimary.withValues(alpha: 0.14),
-          ),
-          boxShadow: const [
-            BoxShadow(color: Color(0x80000000), blurRadius: 40),
-          ],
-        ),
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(s(24), s(20), s(16), s(20)),
-          child: content,
-        ),
-      ),
-    );
+          );
+    return BlockSemantics(child: FocusScope(child: panel));
   }
 }
 
@@ -243,6 +250,7 @@ class _OtherOutput extends StatelessWidget {
   final VoidCallback? onTap;
 
   const _OtherOutput({
+    super.key,
     required this.renderer,
     required this.isSelf,
     required this.scale,
@@ -260,11 +268,12 @@ class _OtherOutput extends StatelessWidget {
 
     return Semantics(
       button: usable,
-      enabled: usable,
+      enabled: usable && onTap != null,
       child: Opacity(
         opacity: usable ? 1 : 0.45,
         child: InkWell(
           mouseCursor: WidgetStateMouseCursor.clickable,
+          focusColor: KalinkaColors.textPrimary.withValues(alpha: 0.18),
           onTap: usable ? onTap : null,
           borderRadius: BorderRadius.circular(s(12)),
           child: Padding(
@@ -326,8 +335,9 @@ class _CloseButton extends StatelessWidget {
     return Semantics(
       label: 'Close',
       button: true,
-      excludeSemantics: true,
       child: InkResponse(
+        autofocus: true,
+        focusColor: KalinkaColors.textPrimary.withValues(alpha: 0.18),
         mouseCursor: WidgetStateMouseCursor.clickable,
         onTap: onTap,
         radius: 26 * scale,

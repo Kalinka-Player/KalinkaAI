@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,6 +27,8 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/slide_in_panel.dart';
 import 'package:kalinka/widgets/volume_control_slider.dart';
+
+import 'support/focus.dart';
 
 /// A `/renderer/list` body shaped like the server's, so the wire format is
 /// pinned (ids vs names, status strings, the active/selected pair, and the
@@ -510,6 +513,72 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('picker volume supports navigation and explicit adjustment', (
+    tester,
+  ) async {
+    final api = _FakeApi();
+    final container = makeContainer(
+      api,
+      volume: DeviceVolume(
+        supported: true,
+        currentVolume: 50,
+        maxVolume: 100,
+        volumeGain: 0,
+      ),
+      holdsVolume: true,
+    );
+    await tester.pumpWidget(wrap(api, container: container));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.speaker_group_outlined));
+    await tester.pumpAndSettle();
+    Future<void> key(LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+    }
+
+    for (
+      var i = 0;
+      i < 20 &&
+          FocusManager.instance.primaryFocus?.debugLabel != 'Slider navigation';
+      i++
+    ) {
+      await key(LogicalKeyboardKey.tab);
+    }
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Slider navigation');
+    final commands = (container.read(kalinkaWsApiProvider) as _VolumeApi).sent;
+    await key(LogicalKeyboardKey.arrowDown);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      isNot('Slider navigation'),
+    );
+    expect(commands, isEmpty);
+    for (
+      var i = 0;
+      i < 20 &&
+          FocusManager.instance.primaryFocus?.debugLabel != 'Slider navigation';
+      i++
+    ) {
+      await key(LogicalKeyboardKey.tab);
+    }
+    await key(LogicalKeyboardKey.enter);
+    await key(LogicalKeyboardKey.arrowRight);
+    expect(commands, isNotEmpty);
+    expect((commands.last as SetVolumeCommand).volume, 55);
+    final adjustedCount = commands.length;
+    await key(LogicalKeyboardKey.escape);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Slider navigation');
+    expect(
+      find.byType(RendererPickerContent),
+      findsOneWidget,
+      reason: 'first Escape finishes adjustment',
+    );
+    await key(LogicalKeyboardKey.tab);
+    expect(focusIsOn(find.byType(RendererPickerContent)), isTrue);
+    expect(commands, hasLength(adjustedCount));
+    await key(LogicalKeyboardKey.escape);
+    expect(find.byType(RendererPickerContent), findsNothing);
   });
 
   testWidgets(

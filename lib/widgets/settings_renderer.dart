@@ -6,6 +6,7 @@ import '../providers/connection_settings_provider.dart';
 import '../providers/server_info_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
+import 'keyboard/keyboard_activation.dart';
 import 'server_update_banner.dart';
 import 'configuration_appearance.dart';
 import 'settings_controls/footer_note.dart';
@@ -316,14 +317,21 @@ Widget buildFieldControl({
 }) {
   switch (field.widget) {
     case WidgetKind.toggle:
+      final enabled = value == true;
+      final toggle = Semantics(
+        label: field.label,
+        toggled: enabled,
+        child: KeyboardActivation(
+          onActivate: () => onChanged(!enabled),
+          borderRadius: BorderRadius.circular(12),
+          child: SettingsToggle(value: enabled, onChanged: onChanged),
+        ),
+      );
       return compact
-          ? SettingsToggle(value: value == true, onChanged: onChanged)
+          ? toggle
           // Left-align a toggle in a full-width slot so it doesn't
           // sit alone in the middle of the row.
-          : Align(
-              alignment: Alignment.centerLeft,
-              child: SettingsToggle(value: value == true, onChanged: onChanged),
-            );
+          : Align(alignment: Alignment.centerLeft, child: toggle);
     case WidgetKind.numberInput:
       return SettingsNumericInput(
         value: value is num ? value : 0,

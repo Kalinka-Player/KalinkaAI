@@ -33,6 +33,7 @@ import 'source_badge.dart';
 import 'stream_info_dialog.dart';
 import 'up_next_preview.dart';
 import '../utils/compact_pane_layout.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 /// Core now-playing UI: album art, track info, transport controls, volume.
 /// Used embedded in tablet layout and wrapped with animation in phone overlay.
@@ -77,7 +78,19 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
   static const _maxAlbumFontSize = 18.0;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AppKeyboardRegion(
+    area: AppKeyboardArea.player,
+    bottomInset:
+        (widget.showOverlayHeader || widget.isTablet) &&
+            ref.watch(playerViewProvider) == PlayerView.queue
+        ? kalinkaMiniPlayerHeight(context) +
+              1 +
+              MediaQuery.paddingOf(context).bottom
+        : 0,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     // Use only primitive-typed selectors so Riverpod's == comparison works by
     // value. Object-typed selectors (Track, AudioInfo) fail because play/pause
     // events may produce new instances with identical content but different

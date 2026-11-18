@@ -102,7 +102,7 @@ class FolderPageActions extends ConsumerWidget {
             ] else
               const Spacer(),
             if (!identical(listing, page)) ...[
-              const SizedBox(width: 8),
+              if (listing.canAdd || listing.onStorage) const SizedBox(width: 8),
               Tooltip(
                 message: 'Up one folder',
                 child: ActionPillButton(

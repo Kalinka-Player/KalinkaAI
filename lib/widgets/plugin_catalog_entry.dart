@@ -17,6 +17,7 @@ import 'settings_controls/module_status_badge.dart';
 import 'kalinka_button.dart';
 import 'settings_controls/settings_toggle.dart';
 import 'settings_controls/inline_markdown.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 // Share settings typography; the catalog owns layout, not a separate type scale.
 InputDecoration catalogSearchDecoration(String hint) => InputDecoration(
@@ -1213,11 +1214,13 @@ class _ModelCoverageState extends State<_ModelCoverage> {
             style: KalinkaTextStyles.trayRowLabel,
           ),
           const SizedBox(height: 10),
-          TextField(
-            key: ValueKey('model-search-${widget.plugin.id}'),
-            style: KalinkaTextStyles.textFieldInput,
-            decoration: catalogSearchDecoration('Search a model or family'),
-            onChanged: (value) => setState(() => _query = value),
+          AppKeyboardTextEntry(
+            child: TextField(
+              key: ValueKey('model-search-${widget.plugin.id}'),
+              style: KalinkaTextStyles.textFieldInput,
+              decoration: catalogSearchDecoration('Search a model or family'),
+              onChanged: (value) => setState(() => _query = value),
+            ),
           ),
           const SizedBox(height: 10),
           Text(

@@ -728,9 +728,45 @@ void main() {
     },
   );
 
-  testWidgets('backward keyboard traversal reveals tracks below the toolbar', (
-    tester,
-  ) async {
+  for (final width in [390.0, 1024.0]) {
+    testWidgets('album toolbar leads straight to tracks at $width', (
+      tester,
+    ) async {
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(1)),
+        api: _HomeAlbumApi(
+          _AlbumApi([for (var i = 1; i <= 45; i++) _track(i)]),
+        ),
+        size: Size(width, 820),
+        themed: true,
+        reducedMotion: true,
+      );
+      container.read(searchSessionProvider.notifier).openPage(_page);
+      await tester.pumpAndSettle();
+      final play = traversableFocusNodesIn(find.byType(PlayAllChip)).first;
+      expect(play.nearestScope?.debugLabel, 'toolbar');
+      play.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      for (var i = 1; i <= 20; i++) {
+        final track = find.ancestor(
+          of: find.text('Song $i'),
+          matching: find.byType(SearchTrackRow),
+        );
+        expect(focusIsOn(track), isTrue, reason: 'track $i');
+        expect(
+          FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+          'content',
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+      }
+    });
+  }
+
+  testWidgets('Up arrow reveals tracks below the toolbar', (tester) async {
     final container = await pumpHomeShell(
       tester,
       queue: SettableQueue(queueOf(1)),
@@ -759,9 +795,7 @@ void main() {
     tracks.jumpTo(tracks.pixels + tester.getRect(song6).top - barBottom);
     await tester.pumpAndSettle();
     expect(tester.getRect(song5).top, lessThan(barBottom));
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     expect(focusIsOn(song5), isTrue);
     expect(tester.getRect(song5).top, greaterThanOrEqualTo(barBottom));

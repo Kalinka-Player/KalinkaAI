@@ -13,6 +13,7 @@ import 'kalinka_button.dart';
 import 'kalinka_dialog.dart';
 import 'settings_controls/option_picker.dart';
 import 'settings_controls/settings_action_row.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 /// "Time zone" on the connected server's box: the zone it is on, opening the
 /// picker. A box that cannot set its zone shows the row disabled, saying why,
@@ -215,11 +216,13 @@ class _TimezonePickerState extends State<TimezonePicker> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: TextField(
-                key: const ValueKey('timezone-search'),
-                style: kalinkaFieldText(KalinkaTextStyles.textFieldInput),
-                decoration: kalinkaFieldDecoration(hint: 'Search time zones'),
-                onChanged: (value) => setState(() => _query = value),
+              child: AppKeyboardTextEntry(
+                child: TextField(
+                  key: const ValueKey('timezone-search'),
+                  style: kalinkaFieldText(KalinkaTextStyles.textFieldInput),
+                  decoration: kalinkaFieldDecoration(hint: 'Search time zones'),
+                  onChanged: (value) => setState(() => _query = value),
+                ),
               ),
             ),
             Flexible(

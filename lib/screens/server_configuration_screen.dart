@@ -28,6 +28,7 @@ import '../widgets/settings_controls/issue_notes.dart';
 import '../widgets/settings_controls/settings_row.dart';
 import '../widgets/settings_controls/settings_toggle.dart';
 import '../widgets/settings_renderer.dart';
+import '../widgets/keyboard/app_keyboard_navigation.dart';
 
 /// The Streamer tab keeps server information and management beside its settings.
 class ServerSettingsBody extends ConsumerWidget {
@@ -482,18 +483,20 @@ class _ServerNameSheetState extends State<_ServerNameSheet> {
               Text(help, style: KalinkaTextStyles.trayRowSublabel),
             ],
             const SizedBox(height: 20),
-            TextField(
-              key: const ValueKey('server-name-input'),
-              controller: _controller,
-              focusNode: _focusNode,
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              textCapitalization: TextCapitalization.sentences,
-              maxLength: widget.field.constraints?.maxLength,
-              onSubmitted: (_) => _submit(),
-              style: kalinkaFieldText(KalinkaTextStyles.textFieldInput),
-              decoration: kalinkaFieldDecoration(hint: widget.field.label)
-                  .copyWith(labelText: widget.field.label),
+            AppKeyboardTextEntry(
+              child: TextField(
+                key: const ValueKey('server-name-input'),
+                controller: _controller,
+                focusNode: _focusNode,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                textCapitalization: TextCapitalization.sentences,
+                maxLength: widget.field.constraints?.maxLength,
+                onSubmitted: (_) => _submit(),
+                style: kalinkaFieldText(KalinkaTextStyles.textFieldInput),
+                decoration: kalinkaFieldDecoration(hint: widget.field.label)
+                    .copyWith(labelText: widget.field.label),
+              ),
             ),
             const SizedBox(height: 20),
             Row(

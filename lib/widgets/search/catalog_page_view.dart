@@ -57,6 +57,7 @@ import 'collections_section.dart';
 import 'container_page_actions.dart';
 import 'folder_page_actions.dart';
 import 'library_rescan_control.dart';
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// Where each folder was left, so that walking back into it finds the same
 /// place. Another server's folders are not these.
@@ -507,13 +508,16 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     final Widget header = isAlbum
         ? MeasureSize(
             onChange: (size) => widget.onAlbumHeaderHeight?.call(size.height),
-            child: AlbumPageHeader(
-              page: page,
-              year: _shownAlbumYear,
-              trackCount: _total < 0 ? null : _total,
-              totalDurationSeconds: _albumDuration,
-              showArtwork: widget.onAlbumHeaderHeight == null,
-              onInsets: widget.onAlbumInsets,
+            child: AppKeyboardRegion(
+              area: AppKeyboardArea.toolbar,
+              child: AlbumPageHeader(
+                page: page,
+                year: _shownAlbumYear,
+                trackCount: _total < 0 ? null : _total,
+                totalDurationSeconds: _albumDuration,
+                showArtwork: widget.onAlbumHeaderHeight == null,
+                onInsets: widget.onAlbumInsets,
+              ),
             ),
           )
         : page.folderLayout
@@ -528,17 +532,20 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             showActions: !widget.folderActionsInHeader,
             searchInBar: widget.searchInBar,
           )
-        : _CatalogHeader(
-            page: page,
-            capabilities: capabilities,
-            query: filter,
-            onQueryChanged: setQuery,
-            expandedShelf: expandedShelf,
-            onCollapse: () => notifier.expandShelf(null),
-            total: _total < 0 ? null : _total,
-            layout: catalogChrome ? null : layout,
-            showBanner: !catalogChrome,
-            searchInBar: widget.searchInBar,
+        : AppKeyboardRegion(
+            area: AppKeyboardArea.toolbar,
+            child: _CatalogHeader(
+              page: page,
+              capabilities: capabilities,
+              query: filter,
+              onQueryChanged: setQuery,
+              expandedShelf: expandedShelf,
+              onCollapse: () => notifier.expandShelf(null),
+              total: _total < 0 ? null : _total,
+              layout: catalogChrome ? null : layout,
+              showBanner: !catalogChrome,
+              searchInBar: widget.searchInBar,
+            ),
           );
 
     // A collection being edited lists its tracks to be moved and dropped
@@ -884,15 +891,18 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
               MediaQuery.textScalerOf(context).scale(52) + 24,
             ),
             headerBuilder: wide
-                ? (context, metadataInTracks) => WideAlbumHeader(
-                    page: page,
-                    metadata: metadata,
-                    compactToolbar: compact,
-                    metadataInTracks: metadataInTracks,
-                    onBack: widget.onAlbumBack ?? widget.onBackToCatalogs,
-                    onServerTap: widget.onServerTap,
-                    trackCount: _total < 0 ? null : _total,
-                    shortPane: shortPane,
+                ? (context, metadataInTracks) => AppKeyboardRegion(
+                    area: AppKeyboardArea.toolbar,
+                    child: WideAlbumHeader(
+                      page: page,
+                      metadata: metadata,
+                      compactToolbar: compact,
+                      metadataInTracks: metadataInTracks,
+                      onBack: widget.onAlbumBack ?? widget.onBackToCatalogs,
+                      onServerTap: widget.onServerTap,
+                      trackCount: _total < 0 ? null : _total,
+                      shortPane: shortPane,
+                    ),
                   )
                 : null,
             builder: (context, barHeight, metadataInTracks) {
@@ -1017,10 +1027,13 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
                   horizontal: 16,
                   vertical: _heldInset,
                 ),
-                child: FolderPageActions(
-                  page: page,
-                  listing: listing,
-                  narrowed: !filter.isEmpty,
+                child: AppKeyboardRegion(
+                  area: AppKeyboardArea.toolbar,
+                  child: FolderPageActions(
+                    page: page,
+                    listing: listing,
+                    narrowed: !filter.isEmpty,
+                  ),
                 ),
               ),
             ),
@@ -1138,22 +1151,25 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
     );
     final grid =
         releases && watchPresentation(ref, layout) == ListingPresentation.grid;
-    final header = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Offered once it is known the page lists releases.
-        ArtistPageHeader(
-          page: page,
-          presentation: releases && relations.hasValue ? layout : null,
-          pinKey: _artistPin,
-        ),
-        if (available.length > 1)
-          ArtistRelationTabs(
-            relations: available,
-            shown: shown,
-            onShow: notifier.setArtistTab,
+    final header = AppKeyboardRegion(
+      area: AppKeyboardArea.toolbar,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Offered once it is known the page lists releases.
+          ArtistPageHeader(
+            page: page,
+            presentation: releases && relations.hasValue ? layout : null,
+            pinKey: _artistPin,
           ),
-      ],
+          if (available.length > 1)
+            ArtistRelationTabs(
+              relations: available,
+              shown: shown,
+              onShow: notifier.setArtistTab,
+            ),
+        ],
+      ),
     );
     // Whether it lists releases or tracks is not known yet, so not how they
     // will look either. Pulled to reload, it keeps what it knew meanwhile.
@@ -1588,34 +1604,42 @@ class _FolderHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (showIdentity)
-          _CatalogBanner(
-            page: listing,
-            showLibraryRescan:
-                identical(page, listing) &&
-                LibraryRescanControl.isLibraryPage(page.id),
-          )
-        else if (identical(listing, page) &&
-            LibraryRescanControl.isLibraryPage(page.id))
-          const LibraryRescanControl(),
-        if (showIdentity &&
-            showActions &&
-            FolderPageActions.anyFor(page, listing))
-          Padding(
-            key: actionsKey,
-            padding: kKalinkaActionRowPadding,
-            child: FolderPageActions(
-              page: page,
-              listing: listing,
-              narrowed: !query.isEmpty,
-            ),
+        AppKeyboardRegion(
+          area: AppKeyboardArea.toolbar,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (showIdentity)
+                _CatalogBanner(
+                  page: listing,
+                  showLibraryRescan:
+                      identical(page, listing) &&
+                      LibraryRescanControl.isLibraryPage(page.id),
+                )
+              else if (identical(listing, page) &&
+                  LibraryRescanControl.isLibraryPage(page.id))
+                const LibraryRescanControl(),
+              if (showIdentity &&
+                  showActions &&
+                  FolderPageActions.anyFor(page, listing))
+                Padding(
+                  key: actionsKey,
+                  padding: kKalinkaActionRowPadding,
+                  child: FolderPageActions(
+                    page: page,
+                    listing: listing,
+                    narrowed: !query.isEmpty,
+                  ),
+                ),
+              _AppliedFilters(
+                capabilities: page.filterCapabilities,
+                query: query,
+                onChanged: onQueryChanged,
+                inChrome: !showIdentity,
+                searchInBar: searchInBar,
+              ),
+            ],
           ),
-        _AppliedFilters(
-          capabilities: page.filterCapabilities,
-          query: query,
-          onChanged: onQueryChanged,
-          inChrome: !showIdentity,
-          searchInBar: searchInBar,
         ),
         if (identical(listing, page) && page.sections.isNotEmpty)
           Padding(

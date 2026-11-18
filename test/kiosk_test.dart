@@ -927,6 +927,96 @@ void main() {
     );
   }
 
+  for (final size in [
+    const Size(1024, 600),
+    const Size(844, 390),
+    const Size(390, 844),
+  ]) {
+    testWidgets(
+      'keyboard selects a kiosk output and keeps focus inside the picker at $size',
+      (tester) async {
+        final h = await _pump(
+          tester,
+          _queue(PlayerStateType.paused, index: 1),
+          size: size,
+          volume: _adjustable,
+        );
+        await tester.pumpAndSettle();
+        final pill = find.byType(KioskOutputPill);
+        final targets = [
+          pill,
+          find.byType(KioskProgressBar),
+          for (final icon in [
+            Icons.shuffle_rounded,
+            Icons.skip_previous_rounded,
+            Icons.play_arrow_rounded,
+            Icons.skip_next_rounded,
+            Icons.repeat_rounded,
+            Icons.fullscreen_exit_rounded,
+          ])
+            find.ancestor(
+              of: find.byIcon(icon),
+              matching: find.byType(TransportButton),
+            ),
+        ];
+        for (final target in targets) {
+          expect(await tabTo(tester, target), isTrue, reason: '$target');
+        }
+        expect(await tabTo(tester, pill), isTrue);
+        Future<void> key(LogicalKeyboardKey key) async {
+          await tester.sendKeyEvent(key);
+          await tester.pumpAndSettle();
+        }
+
+        await key(LogicalKeyboardKey.enter);
+        final panel = openPanel();
+        final close = find.descendant(
+          of: panel,
+          matching: find.byType(InkResponse),
+        );
+        final den = find.ancestor(
+          of: find.text('Den'),
+          matching: find.byType(InkWell),
+        );
+        expect(focusIsOn(close), isTrue);
+        for (final target in targets) {
+          expect(traversableFocusNodesIn(target), isEmpty);
+        }
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await key(LogicalKeyboardKey.tab);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        expect(focusIsOn(den), isTrue);
+        await key(LogicalKeyboardKey.tab);
+        expect(focusIsOn(close), isTrue);
+        await key(LogicalKeyboardKey.tab);
+        expect(focusIsOn(panelSlider()), isTrue);
+        await key(LogicalKeyboardKey.enter);
+        await tester.pump(const Duration(seconds: 12));
+        await key(LogicalKeyboardKey.arrowRight);
+        expect(h.api.deviceSent, [const DeviceCommand.setVolume(volume: 45)]);
+        await tester.pump(const Duration(seconds: 4));
+        expect(panel, findsOneWidget);
+        await key(LogicalKeyboardKey.escape);
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(focusIsOn(den), isTrue);
+        await key(LogicalKeyboardKey.space);
+        expect(
+          (h.container.read(
+            rendererListProvider.notifier,
+          ) as _Renderers).selected,
+          ['r2'],
+        );
+        expect(panel, findsNothing);
+        expect(focusIsOn(pill), isTrue);
+        expect(h.api.sent, isEmpty);
+        await key(LogicalKeyboardKey.space);
+        await key(LogicalKeyboardKey.escape);
+        expect(panel, findsNothing);
+        expect(focusIsOn(pill), isTrue);
+      },
+    );
+  }
+
   testWidgets('locked, the output panel holds the volume and other '
       'outputs', (tester) async {
     await _pump(
@@ -994,6 +1084,7 @@ void main() {
     await _pump(tester, _queue(PlayerStateType.paused), aloneOutput: true);
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsNothing);
+    expect(traversableFocusNodesIn(find.byType(KioskOutputPill)), isEmpty);
     await tester.tap(find.byType(KioskOutputPill));
     await tester.pumpAndSettle();
     expect(openPanel(), findsNothing);
@@ -1482,6 +1573,29 @@ void main() {
   });
 
   const small = Size(300, 300);
+
+  testWidgets('a keyboard wakes the resting kiosk before choosing an output', (
+    tester,
+  ) async {
+    final h = await _pump(tester, _queue(PlayerStateType.playing), size: small);
+    final pill = find.byType(KioskOutputPill);
+    expect(await tabTo(tester, pill), isTrue);
+    await tester.pump(const Duration(seconds: 11));
+    await tester.pumpAndSettle();
+    expect(traversableFocusNodesIn(pill), isEmpty);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(openPanel(), findsNothing);
+    expect(await tabTo(tester, pill), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    expect(focusIsOn(openPanel()), isTrue);
+    await tester.pump(const Duration(seconds: 16));
+    await tester.pumpAndSettle();
+    expect(openPanel(), findsNothing);
+    expect(focusIsOn(pill), isTrue);
+    expect(h.api.sent, isEmpty);
+  });
 
   testWidgets('over a cover that fills a small screen, the controls rest '
       'while music plays; a touch only wakes them', (tester) async {

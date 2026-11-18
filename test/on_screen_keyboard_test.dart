@@ -19,6 +19,8 @@ import 'package:kalinka/widgets/keyboard/on_screen_keyboard_host.dart';
 import 'package:kalinka/widgets/settings_controls/settings_numeric_input.dart';
 import 'package:kalinka/widgets/settings_controls/settings_password_input.dart';
 
+import 'support/focus.dart';
+
 const keyboardKey = ValueKey('on-screen-keyboard');
 const submitKey = ValueKey('keyboard-submit');
 const captureKey = ValueKey('keyboard-capture');
@@ -80,6 +82,45 @@ Future<void> press(WidgetTester tester, String name) async {
 }
 
 void main() {
+  testWidgets(
+    'navigating a field leaves the keyboard closed; Enter opens and Escape returns focus',
+    (tester) async {
+      await pumpKeyboard(
+        tester,
+        Column(
+          children: [
+            SettingsNumericInput(value: 10, onChanged: (_) {}),
+            TextButton(onPressed: () {}, child: const Text('Next')),
+          ],
+        ),
+      );
+      Future<void> key(LogicalKeyboardKey key) async {
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+      }
+
+      await key(LogicalKeyboardKey.tab);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Text entry navigation',
+      );
+      expect(find.byKey(keyboardKey), findsNothing);
+      await key(LogicalKeyboardKey.arrowDown);
+      expect(focusIsOn(find.widgetWithText(TextButton, 'Next')), isTrue);
+      await key(LogicalKeyboardKey.arrowUp);
+      await key(LogicalKeyboardKey.enter);
+      expect(find.byKey(keyboardKey), findsOneWidget);
+      await key(LogicalKeyboardKey.escape);
+      expect(find.byKey(keyboardKey), findsNothing);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Text entry navigation',
+      );
+      await key(LogicalKeyboardKey.arrowDown);
+      expect(focusIsOn(find.widgetWithText(TextButton, 'Next')), isTrue);
+    },
+  );
+
   for (final (size, scale, columns) in [
     (const Size(1024, 600), 1.0, 5),
     (const Size(800, 480), 1.0, 4),

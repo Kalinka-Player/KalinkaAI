@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
 import '../kalinka_back_button.dart';
+import '../keyboard/app_keyboard_navigation.dart';
 
 /// The input row of the docked search surface. Chromeless — the parent
 /// container paints the surface and border — so the field and the suggestion
@@ -115,30 +116,32 @@ class _SearchComposerState extends State<SearchComposer> {
               padding: const EdgeInsets.symmetric(vertical: _fieldInset),
               child: Focus(
                 onKeyEvent: _onKeyEvent,
-                child: TextField(
-                  controller: widget.controller,
-                  focusNode: widget.focusNode,
-                  style: KalinkaTextStyles.searchBarInput,
-                  cursorColor: KalinkaColors.accent,
-                  minLines: 1,
-                  maxLines: 5,
-                  // Wraps as it grows, but to the keyboard it is a one-line
-                  // entry: its key is Go (→), not a newline, and submits.
-                  keyboardType: TextInputType.text,
-                  textInputAction: TextInputAction.go,
-                  inputFormatters: [_noNewlines],
-                  onSubmitted: (_) => _submit(),
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(
-                    hintText: widget.hint,
-                    hintStyle: KalinkaTextStyles.searchPlaceholder,
-                    // One line, like the entry: a wrapping hint stands the
-                    // field a line taller, and once typing starts, the hidden
-                    // hint wrapping beside the clear and send buttons too.
-                    hintMaxLines: 1,
-                    border: InputBorder.none,
-                    isCollapsed: true,
-                    contentPadding: EdgeInsets.zero,
+                child: AppKeyboardTextEntry(
+                  child: TextField(
+                    controller: widget.controller,
+                    focusNode: widget.focusNode,
+                    style: KalinkaTextStyles.searchBarInput,
+                    cursorColor: KalinkaColors.accent,
+                    minLines: 1,
+                    maxLines: 5,
+                    // Wraps as it grows, but to the keyboard it is a one-line
+                    // entry: its key is Go (→), not a newline, and submits.
+                    keyboardType: TextInputType.text,
+                    textInputAction: TextInputAction.go,
+                    inputFormatters: [_noNewlines],
+                    onSubmitted: (_) => _submit(),
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      hintText: widget.hint,
+                      hintStyle: KalinkaTextStyles.searchPlaceholder,
+                      // One line, like the entry: a wrapping hint stands the
+                      // field a line taller, and once typing starts, the hidden
+                      // hint wrapping beside the clear and send buttons too.
+                      hintMaxLines: 1,
+                      border: InputBorder.none,
+                      isCollapsed: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ),
                 ),
               ),

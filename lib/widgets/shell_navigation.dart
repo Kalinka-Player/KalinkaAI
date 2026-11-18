@@ -21,6 +21,7 @@ import 'measure_size.dart';
 import 'kalinka_popover.dart';
 import 'module_artwork.dart';
 import 'receiver_panel.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 enum ShellDestination { home, results, source, collections, configuration }
 
@@ -94,7 +95,12 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
       setState(() => _heights[id] = height);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AppKeyboardRegion(
+    area: AppKeyboardArea.navigation,
+    child: _buildContent(context),
+  );
+
+  Widget _buildContent(BuildContext context) {
     final extended = widget.extended;
     final enabled = widget.enabled;
     final connected =
