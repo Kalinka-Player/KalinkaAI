@@ -7,7 +7,6 @@ Then dart format lib/utils/catalog_casefold.dart.
 
 import importlib.util
 import json
-from dataclasses import asdict
 from pathlib import Path
 import sys
 import unicodedata
@@ -142,37 +141,30 @@ cases = []
 seen = {geometry: set() for geometry in range(len(art.BACKGROUND_DESIGNS))}
 for title, description, entity_id in inputs:
     key = art.background_text_key((title, description), entity_id)
-    geometry = int(key[:16], 16) % len(art.BACKGROUND_DESIGNS)
-    accent, highlight = art._background_colors(key)
-    transform = art.background_transform(key)
+    geometry = art.background_design(key)
+    tint = art.background_tint(key)
     case = dict(
         title=title,
         description=description,
         entityId=entity_id,
         textKey=key,
         geometry=geometry,
-        palette=int(key[16:32], 16) % len(art.BACKGROUND_PALETTES),
-        accent=accent,
-        highlight=highlight,
-        transform=asdict(transform),
-        affine=transform.affine(2400, 800),
-        tones=[
-            art._tint_background(art.Image.new("L", (1, 1), g), key).getpixel((0, 0))
-            for g in range(256)
-        ],
+        palette=art.BACKGROUND_TINTS.index(tint),
+        tint=tint,
+        swatches=list(art.background_swatches(tint)),
     )
-    if len(seen[geometry]) < 3 and transform not in seen[geometry]:
-        seen[geometry].add(transform)
+    if len(seen[geometry]) < 2 and tint not in seen[geometry]:
+        seen[geometry].add(tint)
         name = art.BACKGROUND_DESIGNS[geometry]
         if len(seen[geometry]) > 1:
             name += f"-{len(seen[geometry])}"
         case["image"] = name
         art._background(360, 120, key).save(fixtures / f"{name}-card.png")
-        art._background(120, 120, key, text_column=False).save(
+        art._background(120, 120, key, square=True).save(
             fixtures / f"{name}-thumb.png"
         )
     cases.append(case)
-assert all(len(transforms) >= 2 for transforms in seen.values())
+assert all(len(tints) == 2 for tints in seen.values())
 (fixtures / "reference.json").write_text(
     json.dumps(
         dict(style=art.STYLE_VERSION, unicode=unicodedata.unidata_version, cases=cases),
@@ -182,6 +174,6 @@ assert all(len(transforms) >= 2 for transforms in seen.values())
     + "\n"
 )
 print(
-    f"Wrote {len(cases)} seed/LUT/transform cases, "
+    f"Wrote {len(cases)} seed/tint cases, "
     f"{sum(map(len, seen.values()))} card/thumbnail pairs, and Unicode case folding."
 )
