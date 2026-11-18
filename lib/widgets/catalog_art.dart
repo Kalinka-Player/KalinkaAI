@@ -74,12 +74,8 @@ class CatalogArt extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final seed = CatalogArtSeed.of(title, description, entityId: entityId);
-    Widget background({bool questionMark = true}) => CustomPaint(
-      painter: CatalogArtPainter(
-        seed,
-        questionMark: questionMark,
-        captioned: !square,
-      ),
+    Widget background({bool icon = true}) => CustomPaint(
+      painter: CatalogArtPainter(seed, icon: icon, captioned: !square),
       child: const SizedBox.expand(),
     );
     final drawn = background();
@@ -137,7 +133,7 @@ class CatalogArt extends ConsumerWidget {
           loadedBuilder: (image) => Stack(
             fit: StackFit.expand,
             children: [
-              background(questionMark: false),
+              background(icon: false),
               Positioned(
                 right: margin,
                 top: (size.height - height) / 2,

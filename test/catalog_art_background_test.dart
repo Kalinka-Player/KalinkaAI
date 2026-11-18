@@ -12,13 +12,13 @@ const _fixtures = 'test/fixtures/catalog_art';
 Future<ui.Image> _render(
   CatalogArtSeed seed, {
   required bool card,
-  bool questionMark = false,
+  bool icon = false,
 }) async {
   final recorder = ui.PictureRecorder();
   CatalogArtPainter(
     seed,
     captioned: card,
-    questionMark: questionMark,
+    icon: icon,
   ).paint(Canvas(recorder), Size(card ? 360 : 120, 120));
   final picture = recorder.endRecording();
   final image = await picture.toImage(card ? 360 : 120, 120);
@@ -100,11 +100,7 @@ void main() {
             (await actual.toByteData(format: ui.ImageByteFormat.png))!.buffer
                 .asUint8List(),
           );
-          final marked = await _render(
-            seed(entry),
-            card: card,
-            questionMark: true,
-          );
+          final marked = await _render(seed(entry), card: card, icon: true);
           File('$preview/$name-marked.png').writeAsBytesSync(
             (await marked.toByteData(format: ui.ImageByteFormat.png))!.buffer
                 .asUint8List(),
@@ -117,11 +113,11 @@ void main() {
     }
   }
 
-  test('the question mark leaves the caption and background alone', () async {
+  test('the icon leaves the caption and background alone', () async {
     final seed = CatalogArtSeed.of('Jazz', null);
     for (final card in [true, false]) {
       final bare = await _render(seed, card: card);
-      final marked = await _render(seed, card: card, questionMark: true);
+      final marked = await _render(seed, card: card, icon: true);
       final a = await _pixels(bare);
       final b = await _pixels(marked);
       var changed = 0;
@@ -132,7 +128,10 @@ void main() {
               a[i] != b[i] || a[i + 1] != b[i + 1] || a[i + 2] != b[i + 2];
           if (differs) {
             changed++;
-            expect(x, greaterThan(bare.width * (card ? 0.75 : 0.5)));
+            expect(
+              x,
+              greaterThan(bare.width * (card ? CatalogCard.captionShare : 0.4)),
+            );
             expect(y, inInclusiveRange(30, 90));
           }
         }
