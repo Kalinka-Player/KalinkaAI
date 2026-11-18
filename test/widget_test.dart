@@ -73,9 +73,25 @@ class _Tracks extends PlayQueueStateStore {
 }
 
 void main() {
+  testWidgets(
+    'a standalone kiosk launch on desktop or web uses native sizing',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [kioskLaunchProvider.overrideWithValue(true)],
+      );
+      addTearDown(container.dispose);
+      expect(container.read(localDisplayKioskProvider), isFalse);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
+
   for (final localDisplay in [false, true]) {
     testWidgets('renderer host stays active under an opaque route '
         '(local display: $localDisplay)', (WidgetTester tester) async {
+      const screen = Size(3840, 2160);
+      tester.view.physicalSize = screen;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       SharedPreferences.setMockInitialValues({
         ConnectionSettingsNotifier.sharedPrefName: 'Test',
         ConnectionSettingsNotifier.sharedPrefHost: 'localhost',
@@ -90,7 +106,7 @@ void main() {
         overrides: [
           noReceivers,
           sharedPrefsProvider.overrideWithValue(prefs),
-          localDisplayKioskProvider.overrideWithValue(localDisplay),
+          if (localDisplay) localDisplayKioskProvider.overrideWithValue(true),
           playQueueStateStoreProvider.overrideWith(() => tracks),
           indexerStatusProvider.overrideWith(_FakeIndexerStatusNotifier.new),
           kalinkaProxyProvider.overrideWithValue(_NoServer()),
@@ -142,6 +158,15 @@ void main() {
         ),
       );
       await tester.pump();
+
+      final route = tester.element(find.byKey(const ValueKey('open-route')));
+      final viewport = MediaQuery.sizeOf(route);
+      if (localDisplay) {
+        expect(viewport.width, lessThan(screen.width));
+      } else {
+        expect(viewport, screen);
+        expect(MediaQuery.devicePixelRatioOf(route), 1);
+      }
 
       container.read(_epochProvider.notifier).increment();
       await tester.pump();
