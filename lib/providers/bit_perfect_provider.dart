@@ -7,9 +7,12 @@ import 'app_state_provider.dart';
 ///
 /// Takes both halves because they arrive apart: the path settles when a stream
 /// starts, the volume moves with the slider. Anything the renderer cannot
-/// describe is a no — an unknown backend is not a claim that it is harmless.
+/// describe is a no — an unknown backend is not a claim that it is harmless —
+/// and so is a signal path, whatever the lossless flag says.
 bool isBitPerfect(OutputInfo? output, DeviceVolume volume) {
-  if (output == null || !output.losslessPath) return false;
+  if (output == null || !output.losslessPath || output.signalPath != null) {
+    return false;
+  }
   return switch (volume.backend) {
     VolumeBackend.hardware || VolumeBackend.none => true,
     VolumeBackend.software => volume.currentVolume >= volume.maxVolume,

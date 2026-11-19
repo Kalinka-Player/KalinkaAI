@@ -121,7 +121,8 @@ class DspMeters {
   /// sound, above 0 once the signal went over full scale.
   final double truePeakDbfs;
 
-  /// Processing time as a fraction of one CPU core: 0.034 is 3.4 %.
+  /// Processing time over the length of the audio processed since the
+  /// previous report: 0.034 is 3.4 % of one core.
   final double load;
 
   static const double silence = -200;
