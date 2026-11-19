@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
+import 'package:kalinka/widgets/kalinka_scroll_behavior.dart';
 import 'package:kalinka/widgets/settings_controls/settings_binding.dart';
 import 'package:kalinka/widgets/settings_controls/settings_combo_input.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
@@ -94,6 +95,7 @@ class _RecordingBinding implements SettingsBinding {
 
 Widget _wrap(SettingsBinding binding) => ProviderScope(
   child: MaterialApp(
+    scrollBehavior: const KalinkaScrollBehavior(),
     home: Scaffold(
       body: SettingsScope(
         binding: binding,
@@ -168,11 +170,44 @@ void main() {
 
     await tester.tap(find.text('System default'));
     await tester.pumpAndSettle();
+    expect(find.byTooltip('Scroll down one page'), findsNothing);
     await tester.tap(find.text('HiFiBerry'));
     await tester.pumpAndSettle();
 
     expect(binding.staged, {'base_config.output.alsa.device': 'hw:CARD=x'});
   });
+
+  testWidgets(
+    'page through ALSA devices in the tablet dialog and choose the last',
+    (tester) async {
+      tester.view.physicalSize = const Size(1024, 768);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      const path = 'base_config.output.alsa.device';
+      final binding = _RecordingBinding(
+        {path: 'hw:0'},
+        {
+          path: [
+            for (var i = 0; i < 21; i++)
+              OptionSpec(value: 'hw:$i', label: 'Output $i'),
+          ],
+        },
+      );
+      await tester.pumpWidget(_wrap(binding));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Output 0'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
+      final page = find.byTooltip('Scroll down one page');
+      expect(page.hitTestable(), findsOneWidget);
+      await tester.tap(page);
+      await tester.pumpAndSettle();
+      expect(page, findsNothing);
+      await tester.tap(find.text('Output 20'));
+      await tester.pumpAndSettle();
+      expect(binding.staged, {path: 'hw:20'});
+    },
+  );
 
   testWidgets('ServerSettingsBinding still drives the server settings page', (
     tester,
