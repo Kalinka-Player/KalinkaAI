@@ -12,6 +12,7 @@ class SettingsActionRow extends StatelessWidget {
   final IconData? leading;
   final IconData? trailing;
   final VoidCallback? onTap;
+  final FocusNode? focusNode;
 
   const SettingsActionRow({
     super.key,
@@ -20,6 +21,7 @@ class SettingsActionRow extends StatelessWidget {
     this.leading,
     this.trailing = Icons.chevron_right,
     required this.onTap,
+    this.focusNode,
   });
 
   @override
@@ -31,6 +33,7 @@ class SettingsActionRow extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        focusNode: focusNode,
         mouseCursor: clickCursor(interactive: enabled),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

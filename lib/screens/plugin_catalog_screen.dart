@@ -22,6 +22,7 @@ import '../widgets/kalinka_dialog.dart';
 import '../widgets/configuration_appearance.dart';
 import '../widgets/pending_changes_banner.dart';
 import '../widgets/configuration_page.dart';
+import '../widgets/display_settings_section.dart';
 import '../widgets/expert_mode_toggle.dart';
 import '../widgets/expert_settings_screen.dart';
 import '../widgets/onboarding/step_network.dart';
@@ -74,6 +75,8 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   CatalogPlugin? _aboutFor;
   bool _logsOpen = false;
   bool _networkOpen = false;
+  bool _displayOpen = false;
+  final _displayFocus = FocusNode(debugLabel: 'Display settings');
   bool _drivesOpen = false;
   bool _restartOverlayOpen = false;
   List<String>? _reviewPaths;
@@ -102,6 +105,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
 
   @override
   void dispose() {
+    _displayFocus.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -286,6 +290,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         _aboutFor = null;
         _logsOpen = false;
         _networkOpen = false;
+        _displayOpen = false;
         _drivesOpen = false;
       });
       if (_scroll.hasClients) _scroll.jumpTo(0);
@@ -307,6 +312,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         _tab = PluginTab.sources;
         _logsOpen = false;
         _networkOpen = false;
+        _displayOpen = false;
         _drivesOpen = false;
         _reviewPaths = null;
       });
@@ -348,6 +354,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                       _aboutFor == null &&
                       !_logsOpen &&
                       !_networkOpen &&
+                      !_displayOpen &&
                       !_drivesOpen &&
                       _reviewPaths == null &&
                       !_restartOverlayOpen &&
@@ -378,6 +385,23 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                             !_restartOverlayOpen &&
                             !upgrading,
                         onClose: () => setState(() => _aboutFor = null),
+                      ),
+                    if (_displayOpen)
+                      ConfigurationPage(
+                        key: const ValueKey('device-display'),
+                        title: 'Display',
+                        description: 'Applies to this device.',
+                        autofocusBack: true,
+                        onClose: _closeDisplay,
+                        handlesBack:
+                            widget.handlesBack &&
+                            _reviewPaths == null &&
+                            !_restartOverlayOpen &&
+                            !upgrading,
+                        bodyBuilder: (heading) => ListView(
+                          padding: const EdgeInsets.only(bottom: 32),
+                          children: [heading, const DisplaySettingsSection()],
+                        ),
                       ),
                     if (_networkOpen)
                       ConfigurationPage(
@@ -872,10 +896,23 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     );
   }
 
+  void _closeDisplay() {
+    setState(() => _displayOpen = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          _displayFocus.context != null &&
+          _displayFocus.canRequestFocus) {
+        _displayFocus.requestFocus();
+      }
+    });
+  }
+
   List<Widget> _serverSlivers() => [
     SliverToBoxAdapter(
       child: ServerSettingsBody(
         onRestart: _onRestart,
+        onDisplay: () => setState(() => _displayOpen = true),
+        displayFocusNode: _displayFocus,
         onDownloadLogs: () => setState(() => _logsOpen = true),
         onNetwork: () => setState(() => _networkOpen = true),
         onDrivesAndShares: () => setState(() => _drivesOpen = true),

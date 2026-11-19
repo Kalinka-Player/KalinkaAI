@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/configuration_sections.dart';
 import '../data_model/presentation_schema.dart';
 import '../providers/connection_settings_provider.dart';
-import '../providers/kiosk_provider.dart';
 import '../providers/server_info_provider.dart';
 import '../providers/server_update_provider.dart';
 import '../providers/settings_provider.dart';
@@ -15,9 +14,7 @@ import '../theme/kalinka_icons.dart';
 import '../utils/wasm_renderer_preference.dart';
 import '../utils/web_build_target.dart';
 import '../widgets/box_section.dart';
-import '../widgets/client_settings_section.dart';
 import '../widgets/configuration_appearance.dart';
-import '../widgets/display_settings_section.dart';
 import '../widgets/kalinka_button.dart';
 import '../widgets/kalinka_bottom_sheet.dart';
 import '../widgets/server_update_banner.dart';
@@ -37,6 +34,8 @@ class ServerSettingsBody extends ConsumerWidget {
   final VoidCallback onRestart;
   final VoidCallback onDownloadLogs;
   final VoidCallback? onNetwork;
+  final VoidCallback onDisplay;
+  final FocusNode displayFocusNode;
 
   /// Opens Drives & shares, offered in the Storage section on a server that
   /// lists its drives and shares.
@@ -47,6 +46,8 @@ class ServerSettingsBody extends ConsumerWidget {
     required this.onRestart,
     required this.onDownloadLogs,
     this.onNetwork,
+    required this.onDisplay,
+    required this.displayFocusNode,
     this.onDrivesAndShares,
   });
 
@@ -120,10 +121,23 @@ class ServerSettingsBody extends ConsumerWidget {
                 ],
               ),
           ],
-          if (settings.values['base_config.display.enabled'] == true ||
-              ref.watch(kioskLaunchProvider))
-            const DisplaySettingsSection(),
-          const ClientSettingsSection(),
+          Padding(
+            padding: ConfigurationAppearance.sectionPadding(context),
+            child: Text(
+              'THIS DEVICE',
+              style: KalinkaTextStyles.sectionHeaderMuted,
+            ),
+          ),
+          SettingsCard(
+            children: [
+              SettingsActionRow(
+                label: 'Display',
+                leading: Icons.monitor_outlined,
+                focusNode: displayFocusNode,
+                onTap: onDisplay,
+              ),
+            ],
+          ),
           if (sections.updates.isNotEmpty || showUpdate) ...[
             Padding(
               padding: ConfigurationAppearance.sectionPadding(context),

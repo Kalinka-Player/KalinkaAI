@@ -10,6 +10,7 @@ import '../data_model/kalinka_ws_api.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
+import '../providers/display_settings_provider.dart';
 import '../providers/kalinka_ws_api_provider.dart';
 import '../providers/kiosk_provider.dart';
 import '../providers/now_playing_provider.dart';
@@ -141,12 +142,10 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
 
   /// How tall the track and its controls stand over a cover that fills the
   /// screen, for the shade to start where they do.
-  double? _infoHeight;
+  final _infoHeight = ValueNotifier<double?>(null);
 
   void _onInfoHeight(double height) {
-    if (mounted && height != _infoHeight) {
-      setState(() => _infoHeight = height);
-    }
+    if (mounted) _infoHeight.value = height;
   }
 
   Timer? _restTimer;
@@ -192,9 +191,16 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       }
     });
     _wake();
-    _shiftTimer = Timer.periodic(_shiftEvery, (_) {
-      if (mounted) setState(() => _shift = (_shift + 1) % _shifts.length);
-    });
+    ref.listenManual(kioskPixelShiftProvider, (_, enabled) {
+      _shiftTimer?.cancel();
+      if (enabled) {
+        _shiftTimer = Timer.periodic(_shiftEvery, (_) {
+          setState(() => _shift = (_shift + 1) % _shifts.length);
+        });
+      } else if (_shift != 0) {
+        setState(() => _shift = 0);
+      }
+    }, fireImmediately: true);
   }
 
   @override
@@ -205,6 +211,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     _outputsTimer?.cancel();
     _shiftTimer?.cancel();
     _outputFocus.dispose();
+    _infoHeight.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -375,8 +382,8 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                 artist: t.performer?.name,
                 album: t.album?.title,
                 year: t.album?.year,
-                largeImage: t.artwork?.large,
-                smallImage: t.artwork?.small,
+                largeImage: t.artwork?.largest,
+                smallImage: t.artwork?.smallest,
               ),
       ),
     );
@@ -392,10 +399,9 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     // Stopped is standby too: the queue ran out, or someone pressed stop.
     final standby = track == null || stopped;
     final urls = ref.read(urlResolverProvider);
-    final backdropPath = standby
-        ? null
-        : (track.smallImage ?? track.largeImage);
-    final imagePath = standby ? null : (track.largeImage ?? track.smallImage);
+    final backdropPath = standby ? null : track.smallImage;
+    final imagePath = standby ? null : track.largeImage;
+    final coverUrl = imagePath == null ? null : urls.abs(imagePath);
     // Opened from the player, the way out is in plain sight. Started by the
     // launch flag, there is none except on the server's local display, where
     // Home temporarily returns to the main interface.
@@ -475,37 +481,36 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                         onActivity: _recordActivity,
                       )
                     : null;
+                final background = fill
+                    ? KeyedSubtree(
+                        key: const ValueKey('fill'),
+                        child: AwayDim(
+                          away: away,
+                          child: _FillArt(
+                            trackId: track.id,
+                            imageUrl: coverUrl,
+                            infoHeight: _infoHeight,
+                            bottomInset:
+                                _fillPadding(scale).bottom + insets.bottom,
+                            screenHeight: constraints.maxHeight,
+                          ),
+                        ),
+                      )
+                    : KioskBackdrop(
+                        imageUrl: backdropPath == null
+                            ? null
+                            : urls.abs(backdropPath),
+                      );
                 final display = Stack(
                   fit: StackFit.expand,
                   children: [
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 900),
-                      child: fill
-                          ? KeyedSubtree(
-                              key: const ValueKey('fill'),
-                              child: AwayDim(
-                                away: away,
-                                child: _FillArt(
-                                  trackId: track.id,
-                                  imageUrl: imagePath == null
-                                      ? null
-                                      : urls.abs(imagePath),
-                                  infoTop: _infoHeight == null
-                                      ? null
-                                      : 1 -
-                                            (_infoHeight! +
-                                                    _fillPadding(scale).bottom +
-                                                    insets.bottom) /
-                                                constraints.maxHeight,
-                                ),
-                              ),
-                            )
-                          : KioskBackdrop(
-                              imageUrl: backdropPath == null
-                                  ? null
-                                  : urls.abs(backdropPath),
-                            ),
-                    ),
+                    if (showHome)
+                      background
+                    else
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 900),
+                        child: background,
+                      ),
                     // Dimmed or resting, the touch that wakes the display
                     // acts on nothing else.
                     IgnorePointer(
@@ -515,9 +520,7 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                         child: SafeArea(
                           child: _content(
                             track: standby ? null : track,
-                            largeImage: track?.largeImage == null
-                                ? null
-                                : urls.abs(track!.largeImage!),
+                            largeImage: coverUrl,
                             layout: layout,
                             scale: scale,
                             showExit: canExit || showHome,
@@ -688,26 +691,29 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
         onTap: onOutputTap,
       ),
     );
-    final view = AnimatedSwitcher(
-      duration: const Duration(milliseconds: 600),
-      child: track == null
-          ? _StandbyView(key: const ValueKey('standby'), scale: scale)
-          : AwayDim(
-              key: const ValueKey('playing'),
+    final content = track == null
+        ? _StandbyView(key: const ValueKey('standby'), scale: scale)
+        : AwayDim(
+            key: const ValueKey('playing'),
+            away: away,
+            child: _PlayingView(
+              track: track,
+              largeImage: largeImage,
+              direction: _direction,
+              layout: layout,
+              scale: scale,
+              controlsUp: controlsUp,
               away: away,
-              child: _PlayingView(
-                track: track,
-                largeImage: largeImage,
-                direction: _direction,
-                layout: layout,
-                scale: scale,
-                controlsUp: controlsUp,
-                away: away,
-                onSkip: _skip,
-                onInfoHeight: _onInfoHeight,
-              ),
+              onSkip: _skip,
+              onInfoHeight: _onInfoHeight,
             ),
-    );
+          );
+    final view = showHome
+        ? content
+        : AnimatedSwitcher(
+            duration: const Duration(milliseconds: 600),
+            child: content,
+          );
 
     final Widget body = switch (layout) {
       // The mark at the left, then where it plays and the time at the
@@ -817,14 +823,9 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
       ),
     };
 
-    return TweenAnimationBuilder<Offset>(
-      tween: Tween(end: _shifts[_shift] * scale),
-      duration: const Duration(seconds: 3),
-      curve: Curves.easeInOut,
-      builder: (context, offset, child) =>
-          Transform.translate(offset: offset, child: child),
-      child: body,
-    );
+    // A few pixels once per minute protect the panel without animating
+    // the entire foreground between positions.
+    return Transform.translate(offset: _shifts[_shift] * scale, child: body);
   }
 }
 
@@ -878,6 +879,13 @@ class _PlayingView extends ConsumerWidget {
       source: sourceBadgeVisible(ref, track.id) ? sourceId : null,
     );
     final durationMs = ref.watch(nowPlayingDurationMsProvider);
+    // On Pi 4 the 3D turn's median frame interval was 17 ms at 1080p and
+    // 33 ms at 1440p. Rotation and UI scaling don't change the pixel budget.
+    final pixels =
+        MediaQuery.sizeOf(context) * MediaQuery.devicePixelRatioOf(context);
+    final useWipe =
+        ref.watch(localDisplayKioskProvider) &&
+        pixels.width.round() * pixels.height.round() > 1920 * 1080;
     final fill = layout == _Layout.fill;
     // Over a cover that fills the screen, sized as drawn for a 600-wide
     // square, but never too small to read or press.
@@ -900,6 +908,7 @@ class _PlayingView extends ConsumerWidget {
       imageUrl: largeImage,
       size: size,
       direction: direction,
+      confined: useWipe,
     );
 
     switch (layout) {
@@ -918,7 +927,12 @@ class _PlayingView extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  KioskTrackText(lines: lines, scale: s(1.77), compact: true),
+                  KioskTrackText(
+                    lines: lines,
+                    scale: s(1.77),
+                    compact: true,
+                    slideTogether: useWipe,
+                  ),
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 500),
                     transitionBuilder: (child, animation) => SizeTransition(
@@ -960,7 +974,12 @@ class _PlayingView extends ConsumerWidget {
             SizedBox(height: s(24)),
             KioskEyebrow(scale: scale),
             SizedBox(height: s(12)),
-            KioskTrackText(lines: lines, scale: scale * 0.86, centred: true),
+            KioskTrackText(
+              lines: lines,
+              scale: scale * 0.86,
+              centred: true,
+              slideTogether: useWipe,
+            ),
             SizedBox(height: s(22)),
             progress,
             SizedBox(height: s(6)),
@@ -1010,6 +1029,7 @@ class _PlayingView extends ConsumerWidget {
                                       KioskTrackText(
                                         lines: lines,
                                         scale: scale,
+                                        slideTogether: useWipe,
                                       ),
                                     ],
                                   ),
@@ -1055,22 +1075,23 @@ class _PlayingView extends ConsumerWidget {
 
 /// The cover over the whole screen in three zones: shaded behind the header,
 /// left alone through the middle, then darkening steadily from just above
-/// the track down over the controls to the foot, with a broad soft oval
-/// behind the title for a cover that is pale where it lands. Fixed, not
+/// the track down over the controls to the foot. Fixed, not
 /// fitted to the cover: black over a dark cover changes little, and a pale
 /// one gets the contrast it needs.
 class _FillArt extends StatelessWidget {
   final String trackId;
   final String? imageUrl;
 
-  /// Where the track starts, as a fraction of the height; null until it has
-  /// been laid out.
-  final double? infoTop;
+  final ValueNotifier<double?> infoHeight;
+  final double bottomInset;
+  final double screenHeight;
 
   const _FillArt({
     required this.trackId,
     required this.imageUrl,
-    required this.infoTop,
+    required this.infoHeight,
+    required this.bottomInset,
+    required this.screenHeight,
   });
 
   @override
@@ -1079,83 +1100,48 @@ class _FillArt extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         KioskCoverFill(trackId: trackId, imageUrl: imageUrl),
-        // Follows the track as it moves — the controls folding away, a
-        // longer album name — rather than jumping.
-        TweenAnimationBuilder<double>(
-          tween: Tween(end: (infoTop ?? 0.42).clamp(0.24, 0.9)),
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeOutCubic,
-          builder: (context, top, _) {
+        // SizeTransition already moves the controls over several frames.
+        // Only the shade follows those measurements.
+        ValueListenableBuilder<double?>(
+          valueListenable: infoHeight,
+          builder: (context, height, _) {
+            final top =
+                (height == null
+                        ? 0.42
+                        : 1 - (height + bottomInset) / screenHeight)
+                    .clamp(0.24, 0.9);
             final start = top - 0.08;
             final headerEnd = math.min(0.26, start - 0.02);
-            final title = Alignment(-0.4, (top + 0.035) * 2 - 1);
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: const [
-                        Color(0x73080808),
-                        Color(0x4D080808),
-                        Color(0x00080808),
-                        Color(0x00080808),
-                        Color(0x73080808),
-                        Color(0xBF080808),
-                        Color(0xE6080808),
-                      ],
-                      stops: [
-                        0.0,
-                        0.11,
-                        headerEnd,
-                        start,
-                        top,
-                        top + (1 - top) * 0.45,
-                        1.0,
-                      ],
-                    ),
-                  ),
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: const [
+                    Color(0xBB080808),
+                    Color(0xAA080808),
+                    Color(0x00080808),
+                    Color(0x00080808),
+                    Color(0xBB080808),
+                    Color(0xBF080808),
+                    Color(0xE6080808),
+                  ],
+                  stops: [
+                    0.0,
+                    0.11,
+                    headerEnd,
+                    start,
+                    top,
+                    top + (1 - top) * 0.45,
+                    1.0,
+                  ],
                 ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      center: title,
-                      radius: 0.36,
-                      colors: const [
-                        Color(0x6B000000),
-                        Color(0x38000000),
-                        Color(0x00000000),
-                      ],
-                      stops: const [0.0, 0.35, 0.68],
-                      transform: _Widen(1.8, title),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             );
           },
         ),
       ],
     );
-  }
-}
-
-/// Stretches a radial gradient sideways about its centre, into an oval.
-class _Widen extends GradientTransform {
-  final double factor;
-  final Alignment centre;
-
-  const _Widen(this.factor, this.centre);
-
-  @override
-  Matrix4 transform(Rect bounds, {TextDirection? textDirection}) {
-    final c = centre.withinRect(bounds);
-    return Matrix4.identity()
-      ..translateByDouble(c.dx, c.dy, 0, 1)
-      ..scaleByDouble(factor, 1, 1, 1)
-      ..translateByDouble(-c.dx, -c.dy, 0, 1);
   }
 }
 

@@ -57,3 +57,20 @@ final displaySettingsProvider =
     NotifierProvider<DisplaySettingsNotifier, DisplaySettings>(
       DisplaySettingsNotifier.new,
     );
+
+/// Applies to Now Playing on this device, including manually opened kiosks.
+class KioskPixelShiftNotifier extends Notifier<bool> {
+  static const preferenceKey = 'Kalinka.display.pixelShift';
+
+  @override
+  bool build() => ref.read(sharedPrefsProvider).getBool(preferenceKey) ?? true;
+
+  Future<void> setEnabled(bool enabled) async {
+    state = enabled;
+    await ref.read(sharedPrefsProvider).setBool(preferenceKey, enabled);
+  }
+}
+
+final kioskPixelShiftProvider = NotifierProvider<KioskPixelShiftNotifier, bool>(
+  KioskPixelShiftNotifier.new,
+);

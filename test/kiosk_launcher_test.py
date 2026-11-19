@@ -43,11 +43,24 @@ class KioskLauncherTest(unittest.TestCase):
             "base_config.display.enabled": True, "base_config.display.rotation": "90",
         }
         self.module["prepare"]()
-        with patch.object(self.module["os"], "execve") as launch:
+        with patch.dict(self.module["os"].environ, {"KALINKA_KIOSK_VIDEOMODE": ""}), \
+                patch.object(self.module["os"], "execve") as launch:
             self.module["run"]()
         binary, args, env = launch.call_args.args
         self.assertEqual(args, [binary, "--release", "--rotation", "90", self.state["BUNDLE"]])
         self.assertAlmostEqual(float(env["KALINKA_DISPLAY_DIAGONAL_INCHES"]), 54.64, delta=0.1)
+
+    def test_explicit_video_mode_is_passed_with_the_configured_rotation(self):
+        self.state["_overrides"] = lambda: {
+            "base_config.display.enabled": True, "base_config.display.rotation": "90",
+        }
+        self.module["prepare"]()
+        with patch.dict(self.module["os"].environ, {"KALINKA_KIOSK_VIDEOMODE": "1920x1080@60"}), \
+                patch.object(self.module["os"], "execve") as launch:
+            self.module["run"]()
+        binary, args, _ = launch.call_args.args
+        self.assertEqual(args, [binary, "--release", "--rotation", "90",
+                                "--videomode", "1920x1080@60", self.state["BUNDLE"]])
 
     def test_missing_invalid_or_ambiguous_edid_uses_flutter_density(self):
         panel = self.connector("card1-DSI-1")

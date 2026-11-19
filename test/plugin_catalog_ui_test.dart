@@ -80,6 +80,7 @@ import 'package:kalinka/data_model/storage.dart';
 import 'package:kalinka/screens/drives_and_shares_screen.dart';
 
 import 'support/field_text.dart';
+import 'support/focus.dart';
 import 'support/server_answer.dart';
 import 'support/soundcard_fakes.dart' show FakeBox;
 
@@ -663,6 +664,14 @@ Future<void> _tapTab(WidgetTester tester, PluginTab tab) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _openDisplay(WidgetTester tester) async {
+  final row = find.widgetWithText(SettingsActionRow, 'Display');
+  await tester.ensureVisible(row);
+  await tester.pumpAndSettle();
+  await tester.tap(row);
+  await tester.pumpAndSettle();
+}
+
 Finder _tabBadge(PluginTab tab) => find.descendant(
   of: find.byKey(ValueKey('catalog-tab-${tab.name}')),
   matching: find.byKey(const ValueKey('section-tab-badge')),
@@ -780,7 +789,7 @@ void main() {
   });
 
   testWidgets(
-    'keyboard preference is client-local even without server display',
+    'keyboard and pixel shift preferences save locally without a server display',
     (tester) async {
       final container = await _container(
         _Proxy({'enabled': true, 'catalog_browsing': true}),
@@ -790,6 +799,8 @@ void main() {
       await _screen(tester, container);
       await _tapTab(tester, PluginTab.server);
       expect(find.text('DISPLAY'), findsNothing);
+      expect(find.text('Pixel shift'), findsNothing);
+      await _openDisplay(tester);
       final toggle = find.byKey(const ValueKey('on-screen-keyboard-setting'));
       await tester.ensureVisible(toggle);
       await tester.pumpAndSettle();
@@ -802,6 +813,22 @@ void main() {
             .getBool(OnScreenKeyboardNotifier.preferenceKey),
         isTrue,
       );
+      final shift = find.descendant(
+        of: find.widgetWithText(SettingsRow, 'Pixel shift'),
+        matching: find.byType(Switch),
+      );
+      await tester.ensureVisible(shift);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(shift).value, isTrue);
+      await tester.tap(shift);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(shift).value, isFalse);
+      expect(
+        container
+            .read(sharedPrefsProvider)
+            .getBool(KioskPixelShiftNotifier.preferenceKey),
+        isFalse,
+      );
       expect(container.read(settingsProvider).hasPendingChanges, isFalse);
       expect(tester.takeException(), isNull);
     },
@@ -809,7 +836,7 @@ void main() {
 
   group('Display settings', () {
     for (final enabled in [false, true]) {
-      testWidgets('section follows the saved display setting: $enabled', (
+      testWidgets('timeouts follow the saved display setting: $enabled', (
         tester,
       ) async {
         final container = await _container(
@@ -823,7 +850,17 @@ void main() {
         );
         await _screen(tester, container);
         await _tapTab(tester, PluginTab.server);
-        expect(find.text('DISPLAY'), enabled ? findsOneWidget : findsNothing);
+        await _openDisplay(tester);
+        expect(find.text('Pixel shift'), findsOneWidget);
+        expect(find.text('On-screen keyboard'), findsOneWidget);
+        expect(
+          find.text('Return to now playing'),
+          enabled ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.text('Blank screen after'),
+          enabled ? findsOneWidget : findsNothing,
+        );
       });
     }
 
@@ -853,6 +890,7 @@ void main() {
             disableAnimations: true,
           );
           await _tapTab(tester, PluginTab.server);
+          await _openDisplay(tester);
           final kiosk = find.byKey(const ValueKey('display-kiosk-seconds'));
           final blank = find.byKey(const ValueKey('display-blank-seconds'));
           expect(
@@ -946,7 +984,7 @@ void main() {
       );
     }
 
-    testWidgets('remote clients direct edits to the local display', (
+    testWidgets('remote clients show only their own display controls', (
       tester,
     ) async {
       final container = await _container(
@@ -958,13 +996,31 @@ void main() {
       );
       await _screen(tester, container);
       await _tapTab(tester, PluginTab.server);
-      expect(find.text('DISPLAY'), findsOneWidget);
+      expect(find.text('DISPLAY'), findsNothing);
+      expect(find.byKey(const ValueKey('display-settings')), findsNothing);
+      expect(find.text('On-screen keyboard'), findsNothing);
+      await _openDisplay(tester);
+      expect(find.text('Applies to this device.'), findsOneWidget);
+      expect(find.text('On-screen keyboard'), findsOneWidget);
+      expect(find.text('Pixel shift'), findsOneWidget);
       expect(
         find.textContaining('Set the display timeouts on the streamer'),
-        findsOneWidget,
+        findsNothing,
       );
       expect(find.byKey(const ValueKey('display-kiosk-seconds')), findsNothing);
       expect(find.byKey(const ValueKey('display-blank-seconds')), findsNothing);
+      final back = find.descendant(
+        of: find.byKey(const ValueKey('device-display')),
+        matching: find.byTooltip('Back'),
+      );
+      expect(focusIsOn(back), isTrue);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('device-display')), findsNothing);
+      expect(
+        focusIsOn(find.widgetWithText(SettingsActionRow, 'Display')),
+        isTrue,
+      );
     });
   });
 

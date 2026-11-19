@@ -1,5 +1,3 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -93,20 +91,16 @@ class KioskLogo extends StatelessWidget {
           Stack(
             clipBehavior: Clip.none,
             children: [
-              // The mark's own shape, dark, softened and a pixel lower —
-              // the same shade the text over the cover wears.
+              // Match the one-pixel shade under text over the cover.
               ExcludeSemantics(
                 child: Transform.translate(
                   offset: const Offset(0, 1),
-                  child: ImageFiltered(
-                    imageFilter: ImageFilter.blur(sigmaX: 1.5, sigmaY: 1.5),
-                    child: SvgPicture.asset(
-                      asset,
-                      height: s(52),
-                      colorFilter: const ColorFilter.mode(
-                        Color(0x59000000),
-                        BlendMode.srcIn,
-                      ),
+                  child: SvgPicture.asset(
+                    asset,
+                    height: s(52),
+                    colorFilter: const ColorFilter.mode(
+                      Color(0x59000000),
+                      BlendMode.srcIn,
                     ),
                   ),
                 ),

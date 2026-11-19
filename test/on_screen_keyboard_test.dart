@@ -13,7 +13,7 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/on_screen_keyboard_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
-import 'package:kalinka/widgets/client_settings_section.dart';
+import 'package:kalinka/widgets/display_settings_section.dart';
 import 'package:kalinka/widgets/kalinka_bottom_sheet.dart';
 import 'package:kalinka/widgets/keyboard/on_screen_keyboard_host.dart';
 import 'package:kalinka/widgets/settings_controls/settings_numeric_input.dart';
@@ -481,7 +481,7 @@ void main() {
   ) async {
     final container = await pumpKeyboard(
       tester,
-      const ClientSettingsSection(),
+      const DisplaySettingsSection(),
       enabled: false,
     );
     await tester.tap(find.byKey(const ValueKey('on-screen-keyboard-setting')));
@@ -936,7 +936,7 @@ void main() {
   ) async {
     await pumpKeyboard(
       tester,
-      const Column(children: [ClientSettingsSection(), TextField()]),
+      const Column(children: [DisplaySettingsSection(), TextField()]),
       size: const Size(375, 667),
       textScale: 2,
     );

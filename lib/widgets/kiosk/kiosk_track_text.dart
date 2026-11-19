@@ -15,7 +15,7 @@ final _stream = KalinkaColors.textPrimary.withValues(alpha: 0.82);
 /// The only shadow text laid over a cover wears: a hairline of shade, as
 /// polish. The contrast itself comes from the shade over the cover.
 const kioskTextPolish = [
-  Shadow(color: Color(0x59000000), offset: Offset(0, 1), blurRadius: 3),
+  Shadow(color: Color(0x59000000), offset: Offset(0, 1)),
 ];
 
 /// What the display says about a track.
@@ -91,12 +91,16 @@ class KioskTrackText extends StatefulWidget {
   /// nearer the title's size, and the title keeps to a line.
   final bool compact;
 
+  /// Move the incoming block as one opaque layer on a local display.
+  final bool slideTogether;
+
   const KioskTrackText({
     super.key,
     required this.lines,
     required this.scale,
     this.centred = false,
     this.compact = false,
+    this.slideTogether = false,
   });
 
   @override
@@ -127,7 +131,10 @@ class _KioskTrackTextState extends State<KioskTrackText>
       _controller.value = 1;
       return;
     }
-    _leaving = old.lines;
+    _leaving = widget.slideTogether ? null : old.lines;
+    _controller.duration = Duration(
+      milliseconds: widget.slideTogether ? 300 : 1100,
+    );
     _controller.forward(from: 0);
   }
 
@@ -139,25 +146,41 @@ class _KioskTrackTextState extends State<KioskTrackText>
 
   @override
   Widget build(BuildContext context) {
-    final leaving = _leaving;
-    return AnimatedBuilder(
-      animation: _controller,
-      // The leaving lines are positioned so only the arriving ones size the
-      // block — its height settles at the switch, not when they vanish.
-      builder: (context, _) => Stack(
-        clipBehavior: Clip.none,
-        alignment: widget.centred ? Alignment.topCenter : Alignment.topLeft,
-        children: [
-          if (leaving != null)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: _block(leaving, leaving: true),
+    if (widget.slideTogether) {
+      return RepaintBoundary(
+        child: ClipRect(
+          child: AnimatedBuilder(
+            animation: _controller,
+            child: RepaintBoundary(child: _block(widget.lines, leaving: false)),
+            builder: (context, child) => Transform.translate(
+              offset: Offset(
+                0,
+                (1 - Curves.easeOutCubic.transform(_controller.value)) *
+                    12 *
+                    widget.scale,
+              ),
+              child: child,
             ),
-          _block(widget.lines, leaving: false),
-        ],
-      ),
+          ),
+        ),
+      );
+    }
+    final leaving = _leaving;
+    // Only the arriving lines size the block. Each row keeps its text and
+    // badges mounted while its opacity and position change.
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: widget.centred ? Alignment.topCenter : Alignment.topLeft,
+      children: [
+        if (leaving != null)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _block(leaving, leaving: true),
+          ),
+        _block(widget.lines, leaving: false),
+      ],
     );
   }
 
@@ -223,47 +246,52 @@ class _KioskTrackTextState extends State<KioskTrackText>
         ),
     ];
 
-    final t = _controller.value;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: widget.centred
           ? CrossAxisAlignment.center
           : CrossAxisAlignment.start,
-      children: [
-        for (final (i, row) in rows.indexed)
-          _Staged(
-            progress: leaving
-                ? Curves.easeInCubic.transform(
-                    const Interval(0, 0.3).transform(t),
-                  )
-                : Curves.easeOutCubic.transform(
-                    Interval(0.22 + i * 0.09, 0.64 + i * 0.09).transform(t),
-                  ),
-            leaving: leaving,
-            rise: s(18),
-            child: row,
-          ),
-      ],
+      children: widget.slideTogether
+          ? rows
+          : [
+              for (final (i, row) in rows.indexed)
+                _Staged(
+                  animation: _controller,
+                  interval: leaving
+                      ? const Interval(0, 0.3, curve: Curves.easeInCubic)
+                      : Interval(
+                          0.22 + i * 0.09,
+                          0.64 + i * 0.09,
+                          curve: Curves.easeOutCubic,
+                        ),
+                  leaving: leaving,
+                  rise: s(18),
+                  child: row,
+                ),
+            ],
     );
   }
 }
 
-class _Staged extends StatelessWidget {
-  final double progress;
+class _Staged extends AnimatedWidget {
+  final Interval interval;
   final bool leaving;
   final double rise;
   final Widget child;
 
   const _Staged({
-    required this.progress,
+    required Animation<double> animation,
+    required this.interval,
     required this.leaving,
     required this.rise,
     required this.child,
-  });
+  }) : super(listenable: animation);
 
   @override
   Widget build(BuildContext context) {
-    if (!leaving && progress == 1) return child;
+    final progress = interval.transform(
+      (listenable as Animation<double>).value,
+    );
     return Opacity(
       opacity: leaving ? 1 - progress : progress,
       child: Transform.translate(

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
@@ -86,6 +87,8 @@ final _adjustable = DeviceVolume(
 class _Time extends PlaybackTimeMsNotifier {
   @override
   int build() => 60000;
+
+  void setPosition(int ms) => state = ms;
 }
 
 class _Connection extends ConnectionStateNotifier {
@@ -912,6 +915,120 @@ void main() {
     expect(find.text('4:00'), findsOneWidget);
   });
 
+  testWidgets(
+    'a playback tick updates the clock without starting an animation',
+    (tester) async {
+      final h = await _pump(tester, _queue(PlayerStateType.playing));
+      await tester.pumpAndSettle();
+      final clock = h.container.read(playbackTimeMsProvider.notifier) as _Time;
+      clock.setPosition(61000);
+      await tester.pump();
+      expect(find.text('1:01'), findsOneWidget);
+      expect(tester.binding.transientCallbackCount, 0);
+    },
+  );
+
+  testWidgets('pixel shift respects saved Off and resets when switched off', (
+    tester,
+  ) async {
+    final h = await _pump(
+      tester,
+      _queue(PlayerStateType.playing),
+      localDisplay: true,
+      launched: true,
+      preferences: {KioskPixelShiftNotifier.preferenceKey: false},
+    );
+    await tester.pumpAndSettle();
+    final art = find.byType(KioskCoverFlow);
+    final origin = tester.getTopLeft(art);
+    await tester.pump(const Duration(minutes: 2));
+    expect(tester.getTopLeft(art), origin);
+
+    final shift = h.container.read(kioskPixelShiftProvider.notifier);
+    await shift.setEnabled(true);
+    await tester.pump(const Duration(seconds: 59));
+    expect(tester.getTopLeft(art), origin);
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.getTopLeft(art), origin + const Offset(3, -2));
+
+    await shift.setEnabled(false);
+    await tester.pump();
+    expect(tester.getTopLeft(art), origin);
+    await tester.pump(const Duration(minutes: 2));
+    expect(tester.getTopLeft(art), origin);
+  });
+
+  testWidgets('the thumbnail backdrop covers the display after rotation', (
+    tester,
+  ) async {
+    await _pump(tester, _queue(PlayerStateType.playing));
+    final background = find.descendant(
+      of: find.byType(KioskBackdrop),
+      matching: find.byType(RawImage),
+    );
+    for (final size in [const Size(1024, 600), const Size(600, 1024)]) {
+      tester.view.physicalSize = size;
+      await tester.pumpAndSettle();
+      expect(tester.getRect(background), Offset.zero & size);
+      final bitmap = tester.widget<RawImage>(background).image!;
+      expect(bitmap.width / bitmap.height, closeTo(size.aspectRatio, 0.02));
+      expect(bitmap.width, lessThan(size.width));
+      expect(bitmap.height, lessThan(size.height));
+    }
+  });
+
+  testWidgets('a white patch stays dark behind the TV track details', (
+    tester,
+  ) async {
+    const url = 'https://art.example/bright-patch.png';
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder)..drawColor(Colors.black, BlendMode.src);
+    canvas.drawRect(
+      const Rect.fromLTWH(68, 0, 60, 128),
+      Paint()..color = Colors.white,
+    );
+    final picture = recorder.endRecording();
+    final frame = (await tester.runAsync(() => picture.toImage(128, 128)))!;
+    picture.dispose();
+    final key = await const ResizeImage(
+      NetworkImage(url),
+      width: 128,
+      height: 128,
+      policy: ResizeImagePolicy.fit,
+    ).obtainKey(ImageConfiguration.empty);
+    imageCache.putIfAbsent(
+      key,
+      () => OneFrameImageStreamCompleter(
+        Future.value(ImageInfo(image: frame.clone())),
+      ),
+    );
+    addTearDown(() {
+      imageCache.evict(key);
+      frame.dispose();
+    });
+    await tester.pumpWidget(const KioskBackdrop(imageUrl: null));
+    final raw = find.byType(RawImage);
+    final fallback = tester.widget<RawImage>(raw).image;
+    await tester.pumpWidget(const KioskBackdrop(imageUrl: url));
+    await tester.runAsync(() async {
+      for (
+        var i = 0;
+        i < 100 && tester.widget<RawImage>(raw).image == fallback;
+        i++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+      }
+    });
+    final bitmap = tester.widget<RawImage>(raw).image!;
+    expect(bitmap, isNot(same(fallback)));
+    final data = (await tester.runAsync(() => bitmap.toByteData()))!;
+    final offset =
+        4 *
+        ((bitmap.height ~/ 2) * bitmap.width + (bitmap.width * 0.75).round());
+    expect(data.getUint8(offset), inInclusiveRange(45, 52));
+  });
+
   testWidgets('the format line is only shown, not a way into details', (
     tester,
   ) async {
@@ -1272,46 +1389,51 @@ void main() {
     );
   });
 
-  testWidgets('a plugin with only a large cover still colours the backdrop', (
-    tester,
-  ) async {
-    final spotify = Track(
-      id: 'kalinka:spotify:track:1',
-      title: 'Spotify song',
-      duration: 200,
-      album: Album(
-        id: 'kalinka:spotify:album:1',
-        title: 'Spotify album',
-        image: AlbumImage.fromJson({
-          'small': '',
-          'thumbnail': '',
-          'large': 'https://i.scdn.co/image/abc',
-        }),
-      ),
-    );
-    await _pump(
+  for (final size in ['large', 'small', 'thumbnail']) {
+    testWidgets('a $size-only image supplies the cover and backdrop', (
       tester,
-      PlayQueueState(
-        playbackState: PlaybackState(
-          state: PlayerStateType.playing,
-          currentTrack: spotify,
-          index: 0,
+    ) async {
+      const url = 'https://art.example/album.jpg';
+      final track = Track(
+        id: 'kalinka:spotify:track:1',
+        title: 'Spotify song',
+        duration: 200,
+        album: Album(
+          id: 'kalinka:spotify:album:1',
+          title: 'Spotify album',
+          image: AlbumImage.fromJson({
+            for (final name in ['large', 'small', 'thumbnail'])
+              name: name == size ? url : '',
+          }),
         ),
-        trackList: const [],
-        playbackMode: PlaybackMode.empty,
-        seq: 1,
-        playbackControl: const PlaybackControl.exclusive(
-          pluginId: 'spotify',
-          title: 'Spotify Connect',
+      );
+      await _pump(
+        tester,
+        PlayQueueState(
+          playbackState: PlaybackState(
+            state: PlayerStateType.playing,
+            currentTrack: track,
+            index: 0,
+          ),
+          trackList: const [],
+          playbackMode: PlaybackMode.empty,
+          seq: 1,
+          playbackControl: const PlaybackControl.exclusive(
+            pluginId: 'spotify',
+            title: 'Spotify Connect',
+          ),
         ),
-      ),
-    );
-
-    expect(
-      tester.widget<KioskBackdrop>(find.byType(KioskBackdrop)).imageUrl,
-      'https://i.scdn.co/image/abc',
-    );
-  });
+      );
+      expect(
+        tester.widget<KioskBackdrop>(find.byType(KioskBackdrop)).imageUrl,
+        url,
+      );
+      expect(
+        tester.widget<KioskCoverFlow>(find.byType(KioskCoverFlow)).imageUrl,
+        url,
+      );
+    });
+  }
 
   testWidgets('with nothing queued, it is a clock ready to play', (
     tester,
@@ -1907,6 +2029,176 @@ void main() {
   });
 
   group('the cover turns the way playback went', () {
+    testWidgets('the Pi uses the 3D turn up to 1080p in physical pixels', (
+      tester,
+    ) async {
+      final h = await _pump(
+        tester,
+        _queue(PlayerStateType.playing),
+        launched: true,
+        localDisplay: true,
+      );
+      var index = 0;
+      var seq = 1;
+      for (final (pixels, density, wipe) in const [
+        (Size(1024, 600), 1.0, false),
+        (Size(1080, 1920), 1.0, false),
+        (Size(1920, 1080), 1.0, false),
+        (Size(3840, 2160), 2.0, true), // Same logical layout as 1080p.
+        (Size(2560, 1440), 1.0, true),
+      ]) {
+        tester.view
+          ..physicalSize = pixels
+          ..devicePixelRatio = density;
+        await tester.pumpAndSettle();
+        final frame = find.byType(KioskCoverFlow);
+        final center = tester.getCenter(frame);
+        final previousTitle = find.text('Song ${index + 1}');
+        index = 1 - index;
+        h.queue.set(_queue(PlayerStateType.playing, index: index, seq: ++seq));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 150));
+        final covers = find.descendant(
+          of: frame,
+          matching: find.byType(ProceduralAlbumArt),
+        );
+        expect(covers, findsNWidgets(2));
+        final incoming = tester.getCenter(covers.last);
+        expect(
+          incoming.dx,
+          wipe ? closeTo(center.dx, 0.01) : isNot(closeTo(center.dx, 1)),
+          reason: '$pixels at ${density}x',
+        );
+        expect(previousTitle, wipe ? findsNothing : findsOneWidget);
+      }
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the local TV wipes inside the cover in both directions', (
+      tester,
+    ) async {
+      final h = await _pump(
+        tester,
+        _queue(PlayerStateType.playing),
+        size: const Size(3840, 2160),
+        launched: true,
+        localDisplay: true,
+      );
+      await tester.pumpAndSettle();
+      final art = find.descendant(
+        of: find.byType(KioskCoverFlow),
+        matching: find.byType(ProceduralAlbumArt),
+      );
+      final cover = tester.getRect(art);
+      Rect visible(int track) {
+        final region = find.byKey(ValueKey(_track(track).id));
+        expect(tester.getRect(region), cover);
+        return tester.widget<ClipRect>(region).clipper!.getClip(cover.size);
+      }
+
+      for (final (before, after) in [(1, 2), (2, 1)]) {
+        h.queue.set(
+          _queue(
+            PlayerStateType.playing,
+            index: after - 1,
+            seq: after == 2 ? 2 : 3,
+          ),
+        );
+        await tester.pump();
+        expect(find.text('Song $before'), findsNothing);
+        final title = find.text('Song $after');
+        final start = tester.getTopLeft(title);
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(tester.getTopLeft(title).dy, lessThan(start.dy));
+        final old = visible(before);
+        final next = visible(after);
+        expect(old.width, closeTo(cover.width / 2, 1));
+        expect(next.width, closeTo(cover.width / 2, 1));
+        expect(old.overlaps(next), isFalse);
+        expect(old.expandToInclude(next), Offset.zero & cover.size);
+        expect(old.center.dx < next.center.dx, after > before);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ProceduralAlbumArt>(art).trackId,
+          _track(after).id,
+        );
+      }
+    });
+
+    Future<void> showConfinedCover(
+      WidgetTester tester,
+      String id, {
+      String? url,
+    }) => tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: MediaQuery(
+            data: const MediaQueryData(devicePixelRatio: 1),
+            child: KioskCoverFlow(
+              trackId: id,
+              imageUrl: url,
+              size: 240,
+              direction: 1,
+              confined: true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Future<Completer<ImageInfo>> pendingImage(String url) async {
+      final key = await ResizeImage(
+        NetworkImage(url),
+        width: 240,
+      ).obtainKey(ImageConfiguration.empty);
+      final decode = Completer<ImageInfo>();
+      imageCache.putIfAbsent(
+        key,
+        () => OneFrameImageStreamCompleter(decode.future),
+      );
+      addTearDown(() => imageCache.evict(key));
+      return decode;
+    }
+
+    testWidgets('a slow cover cannot replace the result of a later skip', (
+      tester,
+    ) async {
+      const slow = 'https://art.example/slow.jpg';
+      final decode = await pendingImage(slow);
+      await showConfinedCover(tester, 'first');
+      await showConfinedCover(tester, 'waiting', url: slow);
+      await tester.pump(const Duration(seconds: 1));
+      final art = find.byType(ProceduralAlbumArt);
+      expect(tester.widget<ProceduralAlbumArt>(art).trackId, 'first');
+      await showConfinedCover(tester, 'last');
+      await tester.pumpAndSettle();
+      final image = (await tester.runAsync(() => createTestImage(width: 240)))!;
+      decode.complete(ImageInfo(image: image));
+      await tester.pumpAndSettle();
+      expect(tester.widget<ProceduralAlbumArt>(art).trackId, 'last');
+      expect(find.byType(Image), findsNothing);
+    });
+
+    testWidgets(
+      'a failed cover download reveals the fallback without retrying',
+      (tester) async {
+        const url = 'https://art.example/missing.jpg';
+        final decode = await pendingImage(url);
+        await showConfinedCover(tester, 'first');
+        await showConfinedCover(tester, 'second', url: url);
+        decode.completeError(StateError('Cover unavailable'));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<ProceduralAlbumArt>(find.byType(ProceduralAlbumArt))
+              .trackId,
+          'second',
+        );
+        expect(find.byType(Image), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     PlayQueueState held(int n, int seq) => PlayQueueState(
       playbackState: PlaybackState(
         state: PlayerStateType.playing,
@@ -1934,6 +2226,42 @@ void main() {
       await tester.pumpAndSettle();
       return x;
     }
+
+    testWidgets('the cover recedes in proportion on a panel and a 4K TV', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(3840, 2160);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      Future<double> arrivingHeight(double side) async {
+        Future<void> show(String id) => tester.pumpWidget(
+          MaterialApp(
+            home: Center(
+              child: KioskCoverFlow(
+                key: ValueKey(side),
+                trackId: id,
+                imageUrl: null,
+                size: side,
+                direction: 1,
+              ),
+            ),
+          ),
+        );
+        await show('first');
+        await tester.pumpAndSettle();
+        await show('next');
+        await tester.pump(const Duration(milliseconds: 150));
+        final cover = find.byType(ProceduralAlbumArt).last;
+        return (tester.getBottomLeft(cover) - tester.getTopLeft(cover)).dy /
+            side;
+      }
+
+      final panel = await arrivingHeight(440);
+      final tv = await arrivingHeight(1600);
+      expect(panel, inExclusiveRange(0, 1));
+      expect(tv, closeTo(panel, 0.001));
+    });
 
     testWidgets('by the queue\'s position', (tester) async {
       final h = await _pump(tester, _queue(PlayerStateType.playing, index: 1));
