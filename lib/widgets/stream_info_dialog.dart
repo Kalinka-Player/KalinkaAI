@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/bit_perfect_provider.dart';
+import '../providers/dsp_meters_provider.dart';
 import '../providers/playback_time_provider.dart';
 import '../providers/renderer_provider.dart';
 import '../providers/source_modules_provider.dart';
@@ -12,6 +13,7 @@ import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/playback_utils.dart';
 import 'audio_signal_path.dart';
+import 'dsp_readout.dart';
 import 'kalinka_button.dart';
 import 'kalinka_dialog.dart';
 
@@ -71,10 +73,17 @@ List<StreamInfoField> streamInfoFields(
             '${_stream(output.bitsPerSample, output.sampleRate, output.channels)}'
             ' · ${output.access.name}',
       ),
-    // Never "no": the badge's absence means nothing established it, which is
-    // not the same as knowing the samples were altered.
+    // The badge's absence is not knowing the samples were altered; only the
+    // renderer's own signal path says that.
     if (output != null)
-      (label: 'Path', value: bitPerfect ? 'Bit-perfect' : 'Not established'),
+      (
+        label: 'Path',
+        value: bitPerfect
+            ? 'Bit-perfect'
+            : output.signalPath != null
+            ? 'Processed'
+            : 'Not established',
+      ),
     if (state.streamUrl != null) (label: 'URL', value: state.streamUrl!),
   ];
 }
@@ -131,6 +140,12 @@ class StreamInfoDialog extends ConsumerWidget {
               rendererListProvider.select((s) => s.active?.friendlyName),
             ),
           );
+    final readings = stages.isEmpty
+        ? const <DspReading>[]
+        : dspReadings(
+            state.audioInfo?.output?.signalPath,
+            ref.watch(dspMetersProvider),
+          );
 
     return KalinkaDialog(
       side: KalinkaDialogSide.player,
@@ -142,7 +157,9 @@ class StreamInfoDialog extends ConsumerWidget {
       message: fields.isEmpty
           ? 'Nothing is playing.'
           : state.currentTrack?.title,
-      content: fields.isEmpty ? null : _buildFields(context, fields, stages),
+      content: fields.isEmpty
+          ? null
+          : _buildFields(context, fields, stages, readings),
       actions: [
         if (fields.isNotEmpty)
           KalinkaButton(
@@ -157,6 +174,8 @@ class StreamInfoDialog extends ConsumerWidget {
                   text: [
                     for (final stage in stages)
                       '${stage.label}: ${stage.detail}',
+                    for (final reading in readings)
+                      '${reading.label}: ${reading.value}',
                     for (final field in fields)
                       '${field.label}: ${field.value}',
                   ].join('\n'),
@@ -179,6 +198,7 @@ class StreamInfoDialog extends ConsumerWidget {
     BuildContext context,
     List<StreamInfoField> fields,
     List<SignalStage> stages,
+    List<DspReading> readings,
   ) {
     // A share of the window as well as a fixed cap, or a phone held landscape
     // has no room left for the title and the actions.
@@ -193,6 +213,10 @@ class StreamInfoDialog extends ConsumerWidget {
           children: [
             if (stages.isNotEmpty) ...[
               AudioSignalPath(stages),
+              const SizedBox(height: 12),
+            ],
+            if (readings.isNotEmpty) ...[
+              DspReadout(readings),
               const SizedBox(height: 12),
             ],
             Material(

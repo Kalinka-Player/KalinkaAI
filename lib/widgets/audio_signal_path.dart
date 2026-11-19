@@ -43,6 +43,8 @@ bool _isPcm(String name) =>
 
 /// Ordered observations from this playback session. The output format is
 /// authoritative for the transport; a rate difference alone cannot identify it.
+/// A renderer that reports its signal path is authoritative for what it did,
+/// so its steps stand in for the conversions inferred from the formats.
 List<SignalStage> signalStages(
   PlaybackState state,
   DeviceVolume volume, {
@@ -63,6 +65,7 @@ List<SignalStage> signalStages(
   final native = outputFormat.startsWith('DSD_');
   final dop = outputFormat.startsWith('DoP_');
   final pcmOutput = _isPcm(outputFormat);
+  final steps = out?.signalPath?.steps;
   final decoded = audio == null
       ? ''
       : dsd
@@ -97,13 +100,21 @@ List<SignalStage> signalStages(
         ]),
         icon: Icons.swap_horiz,
       ),
-    if (out != null && dsd && pcmOutput)
+    if (steps != null)
+      for (final step in steps)
+        (
+          label: step.name.isNotEmpty ? step.name : step.kind,
+          detail: step.summary,
+          icon: Icons.tune,
+        ),
+    if (steps == null && out != null && dsd && pcmOutput)
       (
         label: 'DSD to PCM',
         detail: _pcm(out.sampleRate, out.bitsPerSample, out.channels),
         icon: Icons.tune,
       ),
-    if (audio != null &&
+    if (steps == null &&
+        audio != null &&
         _isPcm(audio.sampleFormat) &&
         out != null &&
         pcmOutput &&

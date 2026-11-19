@@ -236,6 +236,9 @@ class PlayQueueState {
       case VolumesChangedEvent(:final seq):
         // Kept by the volumes provider, which fetches them on every connect.
         return copyWith(seq: seq);
+      case DspMetersChangedEvent():
+        // Kept by the meters provider: too frequent for the queue state.
+        return this;
       case ReplayPlayQueueEvent(:final state, :final serverTimeNs, :final seq):
         final nextPlaybackState =
             state.playbackState.copyWith(state.playbackState)
@@ -362,7 +365,8 @@ enum PlayQueueEventType {
   playbackControlChanged,
   modulesChanged,
   volumesChanged,
-  receiversChanged;
+  receiversChanged,
+  dspMetersChanged;
 
   String toJson() => _$PlayQueueEventTypeEnumMap[this]!;
 
@@ -462,6 +466,13 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
     required List<ReceiverSnapshot> receivers,
     required int seq,
   }) = ReceiversChangedEvent;
+
+  /// What the DSP measured of the current renderer's playing track, at most
+  /// twice a second while a signal path processes it (API 0.24).
+  const factory PlayQueueEvent.dspMetersChanged({
+    required DspMeters meters,
+    required int seq,
+  }) = DspMetersChangedEvent;
 
   factory PlayQueueEvent.fromJson(Map<String, dynamic> json) {
     final eventTypeStr = json['event_type'] as String;
@@ -573,6 +584,13 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
       case 'volumes_changed':
         return PlayQueueEvent.volumesChanged(
           volumes: StorageVolume.listFromJson(json['volumes']),
+          seq: seq,
+        );
+      case 'dsp_meters_changed':
+        return PlayQueueEvent.dspMetersChanged(
+          meters: DspMeters.fromJson(
+            Map<String, dynamic>.from(json['meters'] as Map),
+          ),
           seq: seq,
         );
       default:

@@ -58,4 +58,5 @@ const _$PlayQueueEventTypeEnumMap = {
   PlayQueueEventType.modulesChanged: 'modules_changed',
   PlayQueueEventType.volumesChanged: 'volumes_changed',
   PlayQueueEventType.receiversChanged: 'receivers_changed',
+  PlayQueueEventType.dspMetersChanged: 'dsp_meters_changed',
 };
