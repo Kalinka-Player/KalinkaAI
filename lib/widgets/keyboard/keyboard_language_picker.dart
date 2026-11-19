@@ -5,12 +5,14 @@ import 'package:virtual_keypad/virtual_keypad.dart';
 
 import '../../theme/app_theme.dart';
 import '../overlay_card.dart';
+import 'keyboard_choice_navigation.dart';
 
 /// A temporary grid above the keyboard. It uses the window's available space,
 /// leaving the keyboard's height and the active input connection unchanged.
 class KeyboardLanguagePicker extends StatelessWidget {
   const KeyboardLanguagePicker({
     super.key,
+    this.remote = false,
     required this.languages,
     required this.selectedCode,
     required this.origin,
@@ -18,6 +20,7 @@ class KeyboardLanguagePicker extends StatelessWidget {
     required this.onCancel,
   });
 
+  final bool remote;
   final List<KeyboardLanguage> languages;
   final String selectedCode;
   final Offset origin;
@@ -177,107 +180,120 @@ class KeyboardLanguagePicker extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: gap),
-                          Wrap(
-                            key: ValueKey('keyboard-language-grid-$columns'),
-                            spacing: gap,
-                            runSpacing: gap,
-                            children: [
-                              for (final language in languages)
-                                SizedBox(
-                                  width: cellWidth(),
-                                  height: cellHeight(),
-                                  child: Semantics(
-                                    selected: language.code == selectedCode,
-                                    child: Tooltip(
-                                      excludeFromSemantics: true,
-                                      message:
-                                          language.nativeName == language.name
-                                          ? language.name
-                                          : '${language.name} · ${language.nativeName}',
-                                      child: TextButton(
-                                        key: ValueKey(
-                                          'keyboard-language-${language.code}',
-                                        ),
-                                        onPressed: () =>
-                                            onSelected(language.code),
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.all(8),
-                                          backgroundColor:
-                                              KalinkaColors.surfaceElevated,
-                                          foregroundColor:
-                                              language.code == selectedCode
-                                              ? KalinkaColors.textPrimary
-                                              : KalinkaColors.textSecondary,
-                                          side: BorderSide(
-                                            color: language.code == selectedCode
+                          KeyboardChoiceNavigation(
+                            enabled: remote,
+                            count: languages.length,
+                            columns: columns,
+                            initialIndex: languages.indexWhere(
+                              (l) => l.code == selectedCode,
+                            ),
+                            onSelect: (i) => onSelected(languages[i].code),
+                            builder: (highlighted) => Wrap(
+                              key: ValueKey('keyboard-language-grid-$columns'),
+                              spacing: gap,
+                              runSpacing: gap,
+                              children: [
+                                for (final (i, language) in languages.indexed)
+                                  SizedBox(
+                                    width: cellWidth(),
+                                    height: cellHeight(),
+                                    child: Semantics(
+                                      selected: language.code == selectedCode,
+                                      child: Tooltip(
+                                        excludeFromSemantics: true,
+                                        message:
+                                            language.nativeName == language.name
+                                            ? language.name
+                                            : '${language.name} · ${language.nativeName}',
+                                        child: TextButton(
+                                          key: ValueKey(
+                                            'keyboard-language-${language.code}',
+                                          ),
+                                          onPressed: () =>
+                                              onSelected(language.code),
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.all(8),
+                                            backgroundColor:
+                                                KalinkaColors.surfaceElevated,
+                                            foregroundColor:
+                                                language.code == selectedCode
                                                 ? KalinkaColors.textPrimary
-                                                : KalinkaColors.borderDefault,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
+                                                : KalinkaColors.textSecondary,
+                                            side: BorderSide(
+                                              color:
+                                                  highlighted == i ||
+                                                      language.code ==
+                                                          selectedCode
+                                                  ? KalinkaColors.textPrimary
+                                                  : KalinkaColors.borderDefault,
+                                              width: highlighted == i ? 2 : 1,
                                             ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            textStyle: style,
                                           ),
-                                          textStyle: style,
-                                        ),
-                                        child: compact
-                                            ? Stack(
-                                                fit: StackFit.expand,
-                                                clipBehavior: Clip.none,
-                                                children: [
-                                                  Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          top: 8,
+                                          child: compact
+                                              ? Stack(
+                                                  fit: StackFit.expand,
+                                                  clipBehavior: Clip.none,
+                                                  children: [
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            top: 8,
+                                                          ),
+                                                      child: Center(
+                                                        child: Text(
+                                                          language.code
+                                                              .toUpperCase(),
+                                                          semanticsLabel:
+                                                              language.name,
                                                         ),
-                                                    child: Center(
+                                                      ),
+                                                    ),
+                                                    if (language.code ==
+                                                        selectedCode)
+                                                      const Positioned(
+                                                        top: -4,
+                                                        right: -4,
+                                                        child: Icon(
+                                                          Icons.check_rounded,
+                                                          size: 12,
+                                                        ),
+                                                      ),
+                                                  ],
+                                                )
+                                              : Row(
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 20,
+                                                      child:
+                                                          language.code ==
+                                                              selectedCode
+                                                          ? const Icon(
+                                                              Icons
+                                                                  .check_rounded,
+                                                              size: 16,
+                                                            )
+                                                          : null,
+                                                    ),
+                                                    Expanded(
                                                       child: Text(
-                                                        language.code
-                                                            .toUpperCase(),
+                                                        language.name,
                                                         semanticsLabel:
                                                             language.name,
                                                       ),
                                                     ),
-                                                  ),
-                                                  if (language.code ==
-                                                      selectedCode)
-                                                    const Positioned(
-                                                      top: -4,
-                                                      right: -4,
-                                                      child: Icon(
-                                                        Icons.check_rounded,
-                                                        size: 12,
-                                                      ),
-                                                    ),
-                                                ],
-                                              )
-                                            : Row(
-                                                children: [
-                                                  SizedBox(
-                                                    width: 20,
-                                                    child:
-                                                        language.code ==
-                                                            selectedCode
-                                                        ? const Icon(
-                                                            Icons.check_rounded,
-                                                            size: 16,
-                                                          )
-                                                        : null,
-                                                  ),
-                                                  Expanded(
-                                                    child: Text(
-                                                      language.name,
-                                                      semanticsLabel:
-                                                          language.name,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
+                                                  ],
+                                                ),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                            ],
+                              ],
+                            ),
                           ),
                         ],
                       ),

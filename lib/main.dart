@@ -16,17 +16,23 @@ import 'providers/renderer_host_provider.dart';
 import 'providers/media_notification_provider.dart';
 import 'providers/network_setup_api.dart';
 import 'providers/pinned_server.dart';
+import 'utils/local_platform.dart';
 import 'widgets/kalinka_toast_overlay.dart';
 import 'widgets/foreground_volume_overlay.dart';
 import 'widgets/receiver_approval.dart';
 import 'widgets/kiosk/local_kiosk_host.dart';
+import 'utils/flutter_pi_keyboard.dart';
 import 'widgets/keyboard/on_screen_keyboard_host.dart';
 
 bool get networkActivation =>
     kIsWeb && Uri.base.queryParameters['setup'] == 'network';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  if (environmentValue('KALINKA_LOCAL_DISPLAY') == 'true') {
+    FlutterPiBinding();
+  } else {
+    WidgetsFlutterBinding.ensureInitialized();
+  }
 
   // Android 15+ always draws behind the system bars; do the same on 10–14
   // so every version gets one layout.
