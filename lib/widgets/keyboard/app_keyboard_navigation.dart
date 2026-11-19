@@ -884,6 +884,7 @@ class AppKeyboardTextEntry extends StatelessWidget {
       TextField(:final enabled, :final decoration) =>
         enabled ?? decoration?.enabled ?? true,
       TextFormField(:final enabled) => enabled,
+      DropdownMenu(:final enabled) => enabled,
       _ => true,
     },
     child: child,
@@ -1077,6 +1078,11 @@ class _KeyboardEditorState extends State<_KeyboardEditor> {
             if (!_editing || !text) ...{
               const SingleActivator(
                 LogicalKeyboardKey.enter,
+                includeRepeats: false,
+              ): () =>
+                  _setEditing(!_editing),
+              const SingleActivator(
+                LogicalKeyboardKey.select,
                 includeRepeats: false,
               ): () =>
                   _setEditing(!_editing),
