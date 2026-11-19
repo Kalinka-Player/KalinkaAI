@@ -43,7 +43,9 @@ mkdir -p "$STAGE/DEBIAN" "$LIB/bundle" "$STAGE/usr/lib/systemd/system"
 # The bundle minus build leftovers (linux/ holds a CMake cache).
 tar -C "$BUNDLE" --exclude=./linux --exclude=./.last_build_id -cf - . |
   tar -C "$LIB/bundle" -xf -
-install -m 0755 packaging/kiosk/kalinka-kiosk-ctl "$LIB/"
+install -m 0755 packaging/kiosk/kalinka-kiosk-{ctl,cec} "$LIB/"
+install -Dm 0644 packaging/kiosk/70-kalinka-cec.rules \
+  "$STAGE/usr/lib/udev/rules.d/70-kalinka-cec.rules"
 install -m 0644 packaging/kiosk/systemd/*.service packaging/kiosk/systemd/*.path \
   "$STAGE/usr/lib/systemd/system/"
 

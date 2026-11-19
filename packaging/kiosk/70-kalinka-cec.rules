@@ -1,0 +1,12 @@
+# Apply only to the Raspberry Pi HDMI remote input. The normal keyboard and
+# the amplifier's volume and power controls keep their original keycodes.
+ACTION=="remove", GOTO="kalinka_cec_end"
+SUBSYSTEM!="input", GOTO="kalinka_cec_end"
+KERNEL!="event*", GOTO="kalinka_cec_end"
+ATTRS{id/bustype}=="001e", ATTRS{name}=="vc4-hdmi*", \
+  ENV{KEYBOARD_KEY_0}="enter", ENV{KEYBOARD_KEY_d}="esc", \
+  ENV{KEYBOARD_KEY_4b}="nextsong", ENV{KEYBOARD_KEY_4c}="previoussong", \
+  ENV{KEYBOARD_KEY_44}="play", ENV{KEYBOARD_KEY_60}="play", \
+  ENV{KEYBOARD_KEY_6009}="rewind", ENV{KEYBOARD_KEY_600a}="rewind", ENV{KEYBOARD_KEY_600b}="rewind", \
+  ENV{KEYBOARD_KEY_6024}="play", RUN{builtin}+="keyboard"
+LABEL="kalinka_cec_end"

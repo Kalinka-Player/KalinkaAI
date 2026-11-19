@@ -1,5 +1,6 @@
 [Unit]
 Description=Kalinka now-playing display
+Wants=kalinka-kiosk-cec.service
 # Started and stopped by kalinka-kiosk-sync.service, never enabled directly.
 StartLimitIntervalSec=0
 

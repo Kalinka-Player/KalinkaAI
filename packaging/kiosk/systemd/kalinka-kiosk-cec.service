@@ -1,0 +1,15 @@
+[Unit]
+Description=Kalinka HDMI-CEC playback device
+BindsTo=kalinka-kiosk.service
+PartOf=kalinka-kiosk.service
+After=kalinka-kiosk.service
+ConditionPathExistsGlob=/dev/cec[0-9]*
+
+[Service]
+ExecStart=/usr/lib/kalinka-kiosk/kalinka-kiosk-cec follow
+ExecStopPost=/usr/lib/kalinka-kiosk/kalinka-kiosk-cec release
+Restart=on-failure
+RestartSec=3
+DynamicUser=yes
+SupplementaryGroups=video
+RuntimeDirectory=kalinka-kiosk-cec
