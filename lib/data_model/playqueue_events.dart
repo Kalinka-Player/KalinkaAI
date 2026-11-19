@@ -236,8 +236,8 @@ class PlayQueueState {
       case VolumesChangedEvent(:final seq):
         // Kept by the volumes provider, which fetches them on every connect.
         return copyWith(seq: seq);
-      case DspMetersChangedEvent():
-        // Kept by the meters provider: too frequent for the queue state.
+      case PlaybackEvent():
+        // Not state, and frequent: the playback events provider keeps them.
         return this;
       case ReplayPlayQueueEvent(:final state, :final serverTimeNs, :final seq):
         final nextPlaybackState =
@@ -366,7 +366,7 @@ enum PlayQueueEventType {
   modulesChanged,
   volumesChanged,
   receiversChanged,
-  dspMetersChanged;
+  playbackEvent;
 
   String toJson() => _$PlayQueueEventTypeEnumMap[this]!;
 
@@ -467,12 +467,15 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
     required int seq,
   }) = ReceiversChangedEvent;
 
-  /// What the DSP measured of the current renderer's playing track, at most
-  /// twice a second while a signal path processes it (API 0.24).
-  const factory PlayQueueEvent.dspMetersChanged({
-    required DspMeters meters,
+  /// Something that happened while the current renderer played its track,
+  /// named by [kind] with that kind's [details] (API 0.24). It states nothing
+  /// that lasts, so no replay carries it. More kinds will come: any is taken
+  /// as it arrived, and read only by what knows it.
+  const factory PlayQueueEvent.playbackEvent({
+    required String kind,
+    required Map<String, Object?> details,
     required int seq,
-  }) = DspMetersChangedEvent;
+  }) = PlaybackEvent;
 
   factory PlayQueueEvent.fromJson(Map<String, dynamic> json) {
     final eventTypeStr = json['event_type'] as String;
@@ -586,11 +589,11 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
           volumes: StorageVolume.listFromJson(json['volumes']),
           seq: seq,
         );
-      case 'dsp_meters_changed':
-        return PlayQueueEvent.dspMetersChanged(
-          meters: DspMeters.fromJson(
-            Map<String, dynamic>.from(json['meters'] as Map),
-          ),
+      case 'playback_event':
+        final details = json['details'];
+        return PlayQueueEvent.playbackEvent(
+          kind: json['kind'] as String? ?? '',
+          details: details is Map ? Map<String, Object?>.from(details) : {},
           seq: seq,
         );
       default:

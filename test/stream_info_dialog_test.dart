@@ -6,7 +6,7 @@ import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/playqueue_events.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/bit_perfect_provider.dart';
-import 'package:kalinka/providers/dsp_meters_provider.dart';
+import 'package:kalinka/providers/playback_events_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/widgets/stream_info_dialog.dart';
 import 'package:kalinka/providers/renderer_provider.dart';
@@ -69,12 +69,12 @@ class _Renderers extends RendererListNotifier {
   RendererListState build() => const RendererListState();
 }
 
-class _Meters extends DspMetersNotifier {
-  _Meters(this._meters);
-  final DspMeters? _meters;
+class _Events extends PlaybackEventsNotifier {
+  _Events(this._events);
+  final Map<String, Map<String, Object?>> _events;
 
   @override
-  DspMeters? build() => _meters;
+  Map<String, Map<String, Object?>> build() => _events;
 }
 
 /// A DSD track the renderer converts, as the server reports it.
@@ -108,7 +108,10 @@ PlaybackState _converted() => _playing()
     },
   });
 
-List<Override> _overrides(PlaybackState state, {DspMeters? meters}) => [
+List<Override> _overrides(
+  PlaybackState state, {
+  Map<String, Map<String, Object?>> events = const {},
+}) => [
   playQueueStateStoreProvider.overrideWith(
     () => _SettableQueueNotifier(
       PlayQueueState(
@@ -126,7 +129,7 @@ List<Override> _overrides(PlaybackState state, {DspMeters? meters}) => [
   volumeStateProvider.overrideWithValue(DeviceVolume.empty),
   sourceDisplayInfoProvider.overrideWithValue(const {}),
   rendererListProvider.overrideWith(_Renderers.new),
-  dspMetersProvider.overrideWith(() => _Meters(meters)),
+  playbackEventsProvider.overrideWith(() => _Events(events)),
 ];
 
 void main() {
@@ -494,12 +497,16 @@ void main() {
       expect(find.text('Close'), findsOneWidget);
     });
 
-    testWidgets('shows the steps and, while live, the meters', (tester) async {
+    testWidgets('shows the steps and, once the track clips, the count', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: _overrides(
             _converted(),
-            meters: const DspMeters(clippedSamples: 12, load: 0.034),
+            events: const {
+              'clipping': {'clipped_samples': 1200},
+            },
           ),
           child: const MaterialApp(home: Scaffold(body: StreamInfoDialog())),
         ),
@@ -510,13 +517,32 @@ void main() {
       expect(find.text('TPDF at 24 bits'), findsOneWidget);
       expect(find.text('DSP LATENCY'), findsOneWidget);
       expect(find.text('0.3 ms'), findsOneWidget);
-      expect(find.text('TRUE PEAK'), findsOneWidget);
-      expect(find.text('—'), findsOneWidget);
-      expect(find.text('3.4%'), findsOneWidget);
+      expect(find.text('CLIPPED'), findsOneWidget);
       expect(
-        tester.widget<Text>(find.text('12')).style?.color,
+        tester.widget<Text>(find.text('1200')).style?.color,
         KalinkaColors.statusError,
       );
+    });
+
+    testWidgets('a processed track that has not clipped shows no count', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _overrides(
+            _converted(),
+            events: const {
+              'output_underrun': {'frames': 512},
+            },
+          ),
+          child: const MaterialApp(home: Scaffold(body: StreamInfoDialog())),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('DSP LATENCY'), findsOneWidget);
+      expect(find.text('CLIPPED'), findsNothing);
+      expect(find.text('0'), findsNothing);
     });
 
     testWidgets('an older server shows no DSP figures', (tester) async {

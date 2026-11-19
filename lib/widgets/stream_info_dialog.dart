@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/bit_perfect_provider.dart';
-import '../providers/dsp_meters_provider.dart';
+import '../providers/playback_events_provider.dart';
 import '../providers/playback_time_provider.dart';
 import '../providers/renderer_provider.dart';
 import '../providers/source_modules_provider.dart';
@@ -144,7 +144,7 @@ class StreamInfoDialog extends ConsumerWidget {
         ? const <DspReading>[]
         : dspReadings(
             state.audioInfo?.output?.signalPath,
-            ref.watch(dspMetersProvider),
+            ref.watch(playbackEventsProvider),
           );
 
     return KalinkaDialog(

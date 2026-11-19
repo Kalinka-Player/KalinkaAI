@@ -6,12 +6,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/playqueue_events.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
-import 'package:kalinka/providers/dsp_meters_provider.dart';
+import 'package:kalinka/providers/playback_events_provider.dart';
 import 'package:kalinka/providers/wire_event_provider.dart';
 import 'package:kalinka/widgets/dsp_readout.dart';
 
-// A renderer reports what its DSP does to a track in the state, and what it
-// measures of it on the queue socket. An older server sends neither.
+// A renderer reports what its DSP does to a track in the state, and what
+// happens to the track as it plays on the queue socket. An older server sends
+// neither.
 
 const _path = SignalPath(
   steps: [
@@ -24,16 +25,18 @@ const _path = SignalPath(
   latencyMs: 0.3,
 );
 
-Map<String, dynamic> _meterJson({
-  int seq = 9,
-  int clipped = 0,
-  num peak = -0.4,
-  num load = 0.034,
-}) => {
-  'event_type': 'dsp_meters_changed',
+const _track1 = 'kalinka:localfiles:track:1';
+const _track2 = 'kalinka:localfiles:track:2';
+
+Map<String, dynamic> _clippingJson({int seq = 7, int clipped = 1200}) => {
+  'event_type': 'playback_event',
   'seq': seq,
-  'meters': {'clipped_samples': clipped, 'true_peak_dbfs': peak, 'load': load},
+  'kind': 'clipping',
+  'details': {'clipped_samples': clipped},
 };
+
+PlayQueueEvent _clipping(int clipped) =>
+    PlayQueueEvent.fromJson(_clippingJson(clipped: clipped));
 
 class _Queue extends PlayQueueStateStore {
   @override
@@ -43,14 +46,16 @@ class _Queue extends PlayQueueStateStore {
 }
 
 PlayQueueState _playing({
-  String trackId = 'kalinka:localfiles:track:1',
-  SignalPath? path = _path,
+  String trackId = _track1,
   String renderer = 'pi',
+  PlayerStateType state = PlayerStateType.playing,
+  int position = 0,
 }) => PlayQueueState(
   playbackState: PlaybackState(
-    state: PlayerStateType.playing,
+    state: state,
     currentTrack: Track(id: trackId, title: 'Sonata', duration: 300),
-    audioInfo: AudioInfo(output: OutputInfo(signalPath: path)),
+    position: position,
+    audioInfo: AudioInfo(output: OutputInfo(signalPath: _path)),
   ),
   trackList: const [],
   playbackMode: PlaybackMode.empty,
@@ -60,15 +65,17 @@ PlayQueueState _playing({
 
 typedef _Harness = ({
   ProviderContainer container,
-  _Queue queue,
   StreamController<PlayQueueEvent> events,
 });
 
-_Harness _harness() {
-  final events = StreamController<PlayQueueEvent>();
+/// [queue] stands in for the queue store; without it the real one applies
+/// the events.
+_Harness _harness({_Queue Function()? queue}) {
+  // Synchronous: two events can land before the store applies the first.
+  final events = StreamController<PlayQueueEvent>(sync: true);
   final container = ProviderContainer(
     overrides: [
-      playQueueStateStoreProvider.overrideWith(_Queue.new),
+      if (queue != null) playQueueStateStoreProvider.overrideWith(queue),
       playQueueEventBusProvider.overrideWith((ref) => events.stream),
     ],
   );
@@ -77,39 +84,44 @@ _Harness _harness() {
     events.close();
   });
   // The queue store holds the socket open in the app.
-  container.listen(playQueueEventBusProvider, (_, _) {});
-  container.listen(dspMetersProvider, (_, _) {});
-  return (
-    container: container,
-    queue: container.read(playQueueStateStoreProvider.notifier) as _Queue,
-    events: events,
-  );
+  container.listen(playQueueStateStoreProvider, (_, _) {});
+  container.listen(playbackEventsProvider, (_, _) {});
+  return (container: container, events: events);
 }
 
 // Riverpod refreshes dependents on a zero-length timer.
 void _settle(FakeAsync async) => async.elapse(Duration.zero);
 
-void _report(_Harness h, FakeAsync async, {int clipped = 0}) {
-  h.events.add(PlayQueueEvent.fromJson(_meterJson(clipped: clipped)));
-  _settle(async);
-}
+Map<String, Map<String, Object?>> _kept(_Harness h) =>
+    h.container.read(playbackEventsProvider);
 
-/// The meters left after [next] follows a state they were live for.
-DspMeters? _metersAfter(PlayQueueState next) {
-  late DspMeters? after;
+/// What is kept once [next] follows a state the track clipped in.
+Map<String, Map<String, Object?>> _keptAfter(PlayQueueState next) {
+  late Map<String, Map<String, Object?>> after;
   fakeAsync((async) {
-    final h = _harness();
-    h.queue.set(_playing());
+    final h = _harness(queue: _Queue.new);
+    final queue = h.container.read(playQueueStateStoreProvider.notifier);
+    (queue as _Queue).set(_playing());
     _settle(async);
-    _report(h, async);
-    expect(h.container.read(dspMetersProvider), isNotNull);
+    h.events.add(_clipping(3));
+    _settle(async);
+    expect(_kept(h), isNotEmpty);
 
-    h.queue.set(next);
+    queue.set(next);
     _settle(async);
-    after = h.container.read(dspMetersProvider);
+    after = _kept(h);
   });
   return after;
 }
+
+PlayQueueEvent _stateFor(String trackId, int seq) =>
+    PlayQueueEvent.playbackStateChanged(
+      state: PlaybackState(
+        state: PlayerStateType.playing,
+        currentTrack: Track(id: trackId, title: 'Sonata', duration: 300),
+      ),
+      seq: seq,
+    );
 
 void main() {
   group('the wire', () {
@@ -157,24 +169,52 @@ void main() {
       );
     });
 
-    test('meters arrive on the queue socket', () {
-      final event = PlayQueueEvent.fromJson(
-        _meterJson(seq: 123, clipped: 7, peak: 0.2, load: 0.034),
-      );
+    test('a playback event arrives on the queue socket', () {
+      final event = PlayQueueEvent.fromJson(_clippingJson());
 
-      final meters = (event as DspMetersChangedEvent).meters;
-      expect(event.seq, 123);
-      expect(meters.clippedSamples, 7);
-      expect(meters.truePeakDbfs, 0.2);
-      expect(meters.load, 0.034);
+      expect(
+        event,
+        const PlayQueueEvent.playbackEvent(
+          kind: 'clipping',
+          details: {'clipped_samples': 1200},
+          seq: 7,
+        ),
+      );
     });
 
-    test('meters leave the queue state as it was', () {
+    test('a kind the app does not know is taken with its details', () {
+      final event = PlayQueueEvent.fromJson({
+        'event_type': 'playback_event',
+        'seq': 8,
+        'kind': 'output_underrun',
+        'details': {
+          'frames': 512,
+          'device': {'name': 'hw:0'},
+        },
+      });
+
+      expect(event, isA<PlaybackEvent>());
+      event as PlaybackEvent;
+      expect(event.kind, 'output_underrun');
+      expect(event.details, {
+        'frames': 512,
+        'device': {'name': 'hw:0'},
+      });
+    });
+
+    test('an event without details has none', () {
+      final event = PlayQueueEvent.fromJson({
+        'event_type': 'playback_event',
+        'seq': 9,
+        'kind': 'output_underrun',
+      });
+
+      expect((event as PlaybackEvent).details, isEmpty);
+    });
+
+    test('playback events leave the queue state as it was', () {
       final before = _playing();
-      expect(
-        before.apply(PlayQueueEvent.fromJson(_meterJson()), 0),
-        same(before),
-      );
+      expect(before.apply(_clipping(1200), 0), same(before));
     });
 
     test('an event type the app does not know is skipped', () async {
@@ -193,99 +233,156 @@ void main() {
       final first = await container.read(bus.future);
       expect(first, const PlayQueueEvent.requestMoreTracks(seq: 2));
     });
+
+    test('a playback event of an unknown kind comes through', () async {
+      final bus = makeEventBusProvider<PlayQueueEvent>(
+        openStream: (_, _) => Stream.fromIterable([
+          '{"event_type": "playback_event", "seq": 1, "kind": "underrun",'
+              ' "details": {"frames": 512}}',
+          '{"event_type": "request_more_tracks", "seq": 2}',
+        ]),
+        decodeEvent: (json) =>
+            PlayQueueEvent.fromJson(json as Map<String, Object?>),
+      );
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      container.listen(bus, (_, _) {});
+
+      final first = await container.read(bus.future);
+      expect((first as PlaybackEvent).kind, 'underrun');
+    });
   });
 
   group('dspReadings', () {
-    test('the latency stands without meters', () {
-      expect(dspReadings(_path, null), [
+    test('the latency stands without a playback event', () {
+      expect(dspReadings(_path, const {}), [
         (label: 'DSP latency', value: '0.3 ms', alarm: false),
       ]);
     });
 
-    test('meters read as counts, decibels and a share of a core', () {
-      final readings = dspReadings(
-        const SignalPath(steps: [SignalStep(kind: 'dither')]),
-        const DspMeters(clippedSamples: 0, truePeakDbfs: -0.44, load: 0.034),
+    test('clipping reads as the latest count, flagged', () {
+      expect(
+        dspReadings(_path, const {
+          'clipping': {'clipped_samples': 1200},
+        }),
+        [
+          (label: 'DSP latency', value: '0.3 ms', alarm: false),
+          (label: 'Clipped', value: '1200', alarm: true),
+        ],
       );
-
-      expect(readings, [
-        (label: 'Clipped', value: '0', alarm: false),
-        (label: 'True peak', value: '-0.4 dBFS', alarm: false),
-        (label: 'DSP load', value: '3.4%', alarm: false),
-      ]);
     });
 
-    test('clipping is flagged, and a peak over full scale signed', () {
-      final readings = dspReadings(
-        _path,
-        const DspMeters(clippedSamples: 12, truePeakDbfs: 0.83, load: 0.1),
+    test('a track that has not clipped shows no count, not 0', () {
+      const steps = SignalPath(steps: [SignalStep(kind: 'dither')]);
+
+      expect(dspReadings(steps, const {}), isEmpty);
+      expect(
+        dspReadings(steps, const {
+          'clipping': {'clipped_samples': 0},
+        }),
+        isEmpty,
       );
-
-      expect(readings[1], (label: 'Clipped', value: '12', alarm: true));
-      expect(readings[2].value, '+0.8 dBFS');
     });
 
-    test('no sound yet is no peak', () {
-      expect(dspReadings(null, const DspMeters())[1].value, '—');
+    test('only the kinds it knows are read', () {
+      expect(
+        dspReadings(null, const {
+          'output_underrun': {'clipped_samples': 5},
+        }),
+        isEmpty,
+      );
     });
 
-    test('an unprocessed track has nothing to read', () {
-      expect(dspReadings(null, null), isEmpty);
+    test('a count that is not a number is not read', () {
+      expect(
+        dspReadings(null, const {
+          'clipping': {'clipped_samples': 'many'},
+        }),
+        isEmpty,
+      );
+      expect(dspReadings(null, const {'clipping': {}}), isEmpty);
     });
   });
 
-  group('dspMetersProvider', () {
-    test('meters live until a few seconds pass without a report', () {
+  group('playbackEventsProvider', () {
+    test('the latest details of each kind are kept, with no expiry', () {
       fakeAsync((async) {
-        final h = _harness();
-        h.queue.set(_playing());
+        final h = _harness(queue: _Queue.new);
+        final queue =
+            h.container.read(playQueueStateStoreProvider.notifier) as _Queue;
+        queue.set(_playing());
         _settle(async);
-        DspMeters? meters() => h.container.read(dspMetersProvider);
+        expect(_kept(h), isEmpty);
 
-        _report(h, async, clipped: 3);
-        expect(meters()?.clippedSamples, 3);
+        h.events
+          ..add(_clipping(3))
+          ..add(
+            const PlayQueueEvent.playbackEvent(
+              kind: 'output_underrun',
+              details: {'frames': 512},
+              seq: 8,
+            ),
+          )
+          ..add(_clipping(1200));
+        _settle(async);
+        async.elapse(const Duration(minutes: 5));
 
-        async.elapse(const Duration(seconds: 2));
-        _report(h, async, clipped: 4);
-        async.elapse(const Duration(seconds: 2));
-        expect(meters()?.clippedSamples, 4);
-
-        async.elapse(const Duration(seconds: 1));
-        expect(meters(), isNull);
+        expect(_kept(h), {
+          'clipping': {'clipped_samples': 1200},
+          'output_underrun': {'frames': 512},
+        });
       });
     });
 
     test('a new state for the same track keeps them', () {
       expect(
-        _metersAfter(_playing()..playbackState.position = 9000),
-        isNotNull,
+        _keptAfter(_playing(state: PlayerStateType.paused, position: 9000)),
+        isNotEmpty,
       );
     });
 
-    test('the next track does not inherit the last one\'s meters', () {
-      expect(
-        _metersAfter(_playing(trackId: 'kalinka:localfiles:track:2')),
-        isNull,
-      );
+    test('the next track does not inherit the last one\'s', () {
+      expect(_keptAfter(_playing(trackId: _track2)), isEmpty);
     });
 
     test('another renderer does not inherit them either', () {
-      expect(_metersAfter(_playing(renderer: 'desk')), isNull);
+      expect(_keptAfter(_playing(renderer: 'desk')), isEmpty);
     });
 
-    test('meters go with the signal path', () {
-      expect(_metersAfter(_playing(path: null)), isNull);
-    });
-
-    test('meters without a signal path are not taken', () {
+    test('an event right behind the next track\'s state is that track\'s', () {
       fakeAsync((async) {
         final h = _harness();
-        h.queue.set(_playing(path: null));
+        h.events.add(_stateFor(_track1, 1));
         _settle(async);
-        _report(h, async);
 
-        expect(h.container.read(dspMetersProvider), isNull);
+        h.events
+          ..add(_stateFor(_track2, 2))
+          ..add(_clipping(5));
+        _settle(async);
+
+        expect(h.container.read(playerStateProvider).currentTrack?.id, _track2);
+        expect(_kept(h), {
+          'clipping': {'clipped_samples': 5},
+        });
       });
     });
+
+    test(
+      'an event right ahead of the next track\'s state is the last one\'s',
+      () {
+        fakeAsync((async) {
+          final h = _harness();
+          h.events.add(_stateFor(_track1, 1));
+          _settle(async);
+
+          h.events
+            ..add(_clipping(5))
+            ..add(_stateFor(_track2, 2));
+          _settle(async);
+
+          expect(_kept(h), isEmpty);
+        });
+      },
+    );
   });
 }

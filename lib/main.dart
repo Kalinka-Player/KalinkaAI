@@ -14,6 +14,7 @@ import 'providers/kiosk_provider.dart';
 import 'providers/onboarding_provider.dart';
 import 'providers/renderer_host_provider.dart';
 import 'providers/media_notification_provider.dart';
+import 'providers/playback_events_provider.dart';
 import 'providers/network_setup_api.dart';
 import 'providers/pinned_server.dart';
 import 'widgets/kalinka_toast_overlay.dart';
@@ -108,6 +109,8 @@ class KalinkaApp extends ConsumerWidget {
     ref.watch(rendererHostProvider);
     ref.watch(mediaNotificationProvider);
     ref.watch(rememberServerIdentityProvider);
+    // From the start: clipping that has stopped is not reported again.
+    ref.listen(playbackEventsProvider, (_, _) {});
     final localDisplay = ref.watch(localDisplayKioskProvider);
     return MaterialApp(
       title: 'Kalinka',
