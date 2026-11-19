@@ -8,32 +8,21 @@ import '../theme/app_theme.dart';
 typedef DspReading = ({String label, String value, bool alarm});
 
 /// The renderer's processing as figures: the latency its signal path adds,
-/// and what it measured of the track while [meters] are live.
-List<DspReading> dspReadings(SignalPath? path, DspMeters? meters) => [
+/// and the samples its DSP clipped, once [playbackEvents] (the latest details
+/// of each kind for the track) report clipping.
+List<DspReading> dspReadings(
+  SignalPath? path,
+  Map<String, Map<String, Object?>> playbackEvents,
+) => [
   if (path != null && path.latencyMs > 0)
     (label: 'DSP latency', value: '${_trim(path.latencyMs)} ms', alarm: false),
-  if (meters != null) ...[
-    (
-      label: 'Clipped',
-      value: '${meters.clippedSamples}',
-      alarm: meters.clippedSamples > 0,
-    ),
-    (label: 'True peak', value: _peak(meters.truePeakDbfs), alarm: false),
-    (
-      label: 'DSP load',
-      value: '${(meters.load * 100).toStringAsFixed(1)}%',
-      alarm: false,
-    ),
-  ],
+  if (playbackEvents['clipping']?['clipped_samples'] case final num clipped
+      when clipped > 0)
+    (label: 'Clipped', value: '${clipped.toInt()}', alarm: true),
 ];
 
 String _trim(double value) =>
     value.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
-
-String _peak(double dbfs) {
-  if (dbfs <= DspMeters.silence) return '—';
-  return '${dbfs > 0 ? '+' : ''}${dbfs.toStringAsFixed(1)} dBFS';
-}
 
 /// [DspReading]s laid out as labelled figures, wrapping onto more rows when
 /// the width runs out.

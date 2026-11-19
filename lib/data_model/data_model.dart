@@ -112,34 +112,6 @@ class SignalPath {
   };
 }
 
-/// What the renderer's DSP measured of the track it plays.
-class DspMeters {
-  /// Samples clamped to the output's range since the track began.
-  final int clippedSamples;
-
-  /// The highest true peak since the track began; [silence] before any
-  /// sound, above 0 once the signal went over full scale.
-  final double truePeakDbfs;
-
-  /// Processing time over the length of the audio processed since the
-  /// previous report: 0.034 is 3.4 % of one core.
-  final double load;
-
-  static const double silence = -200;
-
-  const DspMeters({
-    this.clippedSamples = 0,
-    this.truePeakDbfs = silence,
-    this.load = 0,
-  });
-
-  factory DspMeters.fromJson(Map<String, dynamic> json) => DspMeters(
-    clippedSamples: (json["clipped_samples"] as num?)?.toInt() ?? 0,
-    truePeakDbfs: (json["true_peak_dbfs"] as num?)?.toDouble() ?? silence,
-    load: (json["load"] as num?)?.toDouble() ?? 0,
-  );
-}
-
 /// What the output device runs at, against the stream decoded for it.
 class OutputInfo {
   final String sampleFormat;

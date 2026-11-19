@@ -14,8 +14,10 @@ import 'package:kalinka/providers/indexer_status_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
+import 'package:kalinka/providers/playback_events_provider.dart';
 import 'package:kalinka/providers/renderer_host_provider.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
+import 'package:kalinka/providers/wire_event_provider.dart';
 import 'package:kalinka/screens/kiosk_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -86,8 +88,10 @@ void main() {
   );
 
   for (final localDisplay in [false, true]) {
-    testWidgets('renderer host stays active under an opaque route '
-        '(local display: $localDisplay)', (WidgetTester tester) async {
+    testWidgets('renderer host and playback events stay active under an '
+        'opaque route (local display: $localDisplay)', (
+      WidgetTester tester,
+    ) async {
       const screen = Size(3840, 2160);
       tester.view.physicalSize = screen;
       tester.view.devicePixelRatio = 1;
@@ -102,12 +106,15 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       var hostBuilds = 0;
       final tracks = _Tracks();
+      final events = StreamController<PlayQueueEvent>();
+      addTearDown(events.close);
       final container = ProviderContainer(
         overrides: [
           noReceivers,
           sharedPrefsProvider.overrideWithValue(prefs),
           if (localDisplay) localDisplayKioskProvider.overrideWithValue(true),
           playQueueStateStoreProvider.overrideWith(() => tracks),
+          playQueueEventBusProvider.overrideWith((ref) => events.stream),
           indexerStatusProvider.overrideWith(_FakeIndexerStatusNotifier.new),
           kalinkaProxyProvider.overrideWithValue(_NoServer()),
           rendererHostProvider.overrideWith((ref) {
@@ -167,6 +174,18 @@ void main() {
         expect(viewport, screen);
         expect(MediaQuery.devicePixelRatioOf(route), 1);
       }
+
+      events.add(
+        const PlayQueueEvent.playbackEvent(
+          kind: 'clipping',
+          details: {'clipped_samples': 5},
+          seq: 3,
+        ),
+      );
+      await tester.pump();
+      expect(container.read(playbackEventsProvider), {
+        'clipping': {'clipped_samples': 5},
+      });
 
       container.read(_epochProvider.notifier).increment();
       await tester.pump();
