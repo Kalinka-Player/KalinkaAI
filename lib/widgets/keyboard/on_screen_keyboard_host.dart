@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:virtual_keypad/virtual_keypad.dart';
 
 import '../../providers/on_screen_keyboard_provider.dart';
+import '../../providers/kiosk_provider.dart';
+import 'keyboard_choice_navigation.dart';
 import '../../theme/app_theme.dart';
 import 'keyboard_accent_picker.dart';
 import 'keyboard_language_picker.dart';
@@ -39,6 +41,9 @@ class _OnScreenKeyboardHostState extends ConsumerState<OnScreenKeyboardHost>
     with SingleTickerProviderStateMixin {
   late final OnScreenInputControl _input;
   final _presentation = KeyboardPresentationController();
+  final _panel = GlobalKey<_KeyboardPanelState>();
+  // OK may close the panel on key-down. Its repeat and release still belong here.
+  PhysicalKeyboardKey? _heldOk;
   late final AnimationController _motion;
   late final CurvedAnimation _reveal;
   late final Animation<Offset> _slide;
@@ -99,7 +104,14 @@ class _OnScreenKeyboardHostState extends ConsumerState<OnScreenKeyboardHost>
       end: Offset.zero,
     ).animate(_reveal);
     initializeKeyboardLayouts();
-    _input = OnScreenInputControl(onChanged: _refresh);
+    _input = OnScreenInputControl(
+      onChanged: _refresh,
+      onEditingFinished: () {
+        if (ref.read(localDisplayKioskProvider)) {
+          AppKeyboardTextEntry.finishEditing();
+        }
+      },
+    );
     _enabled = ref.read(onScreenKeyboardProvider);
     if (_enabled) TextInput.setInputControl(_input);
     ref.listenManual(onScreenKeyboardProvider, (_, enabled) {
@@ -123,23 +135,48 @@ class _OnScreenKeyboardHostState extends ConsumerState<OnScreenKeyboardHost>
   }
 
   KeyEventResult _onKeyEvent(KeyEvent event) {
-    if (_enabled &&
-        _input.visible &&
-        event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.escape) {
+    if (event.synthesized) return KeyEventResult.ignored;
+    if (_heldOk == event.physicalKey && event is! KeyDownEvent) {
+      if (event is KeyUpEvent) _heldOk = null;
+      return KeyEventResult.handled;
+    }
+    if (!_enabled || !_input.visible || !TickerMode.valuesOf(context).enabled) {
+      return KeyEventResult.ignored;
+    }
+    final navigator = _keyboardNavigatorKey.currentState;
+    if (event.logicalKey == LogicalKeyboardKey.escape &&
+        event is KeyDownEvent) {
       if (_languageChoice != null) {
         _closeLanguages();
-        return KeyEventResult.handled;
-      }
-      final navigator = _keyboardNavigatorKey.currentState;
-      if (navigator != null && navigator.canPop()) {
+      } else if (navigator != null && navigator.canPop()) {
         navigator.pop();
       } else {
-        if (!AppKeyboardTextEntry.finishEditing()) _input.dismiss();
+        _dismiss();
       }
       return KeyEventResult.handled;
     }
-    return KeyEventResult.ignored;
+    if (!ref.read(localDisplayKioskProvider)) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (!isKeyboardSelectKey(key) &&
+        !keyboardArrowKeys.contains(key) &&
+        key != LogicalKeyboardKey.tab) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent && isKeyboardSelectKey(key)) {
+      _heldOk = event.physicalKey;
+    }
+    if (event is! KeyUpEvent &&
+        _languageChoice == null &&
+        navigator?.canPop() != true) {
+      _panel.currentState?.handleRemoteKey(event);
+    }
+    // Keep the editor's input connection alive while the visible keypad owns
+    // navigation, including at its edges and during the opening animation.
+    return KeyEventResult.handled;
+  }
+
+  void _dismiss() {
+    if (!AppKeyboardTextEntry.finishEditing()) _input.dismiss();
   }
 
   void _refresh() {
@@ -222,6 +259,7 @@ class _OnScreenKeyboardHostState extends ConsumerState<OnScreenKeyboardHost>
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
+    final remote = ref.watch(localDisplayKioskProvider);
     return LayoutBuilder(
       builder: (context, constraints) {
         final height = math
@@ -302,6 +340,9 @@ class _OnScreenKeyboardHostState extends ConsumerState<OnScreenKeyboardHost>
                                   pages: [
                                     MaterialPage<void>(
                                       child: _KeyboardPanel(
+                                        key: _panel,
+                                        remote: remote && _requested,
+                                        dismiss: _dismiss,
                                         input: _input,
                                         languagePicker: _showLanguages,
                                         toolbarAbove: toolbarAbove,
@@ -330,6 +371,7 @@ class _OnScreenKeyboardHostState extends ConsumerState<OnScreenKeyboardHost>
                   pages: [
                     MaterialPage<void>(
                       child: KeyboardLanguagePicker(
+                        remote: remote,
                         languages: _languageOptions,
                         selectedCode: _selectedLanguage,
                         origin: _languageOrigin,
@@ -348,18 +390,80 @@ class _OnScreenKeyboardHostState extends ConsumerState<OnScreenKeyboardHost>
   }
 }
 
-class _KeyboardPanel extends StatelessWidget {
+class _KeyboardPanel extends StatefulWidget {
   const _KeyboardPanel({
+    super.key,
+    required this.remote,
+    required this.dismiss,
     required this.input,
     required this.height,
     required this.languagePicker,
     required this.toolbarAbove,
   });
 
+  final bool remote;
+  final VoidCallback dismiss;
   final OnScreenInputControl input;
   final double height;
   final VirtualKeypadLanguagePicker languagePicker;
   final bool toolbarAbove;
+
+  @override
+  State<_KeyboardPanel> createState() => _KeyboardPanelState();
+}
+
+enum _ToolbarKey { hide, submit }
+
+class _KeyboardPanelState extends State<_KeyboardPanel> {
+  final _grid = VirtualKeypadDpadController();
+  _ToolbarKey? _toolbar;
+
+  void handleRemoteKey(KeyEvent event) {
+    final key = event.logicalKey;
+    final toolbar = _toolbar;
+    final above = widget.toolbarAbove;
+    if (toolbar == null) {
+      if (_grid.handleKeyEvent(event)) return;
+      if (key ==
+              (above
+                  ? LogicalKeyboardKey.arrowUp
+                  : LogicalKeyboardKey.arrowRight) ||
+          key == LogicalKeyboardKey.tab) {
+        setState(() => _toolbar = _ToolbarKey.submit);
+      }
+    } else if (isKeyboardSelectKey(key)) {
+      if (event is KeyDownEvent) {
+        if (toolbar == _ToolbarKey.hide) {
+          widget.dismiss();
+        } else {
+          input.submit();
+        }
+      }
+    } else if (key ==
+            (above
+                ? LogicalKeyboardKey.arrowDown
+                : LogicalKeyboardKey.arrowLeft) ||
+        key == LogicalKeyboardKey.tab) {
+      setState(() => _toolbar = null);
+    } else if (key ==
+        (above ? LogicalKeyboardKey.arrowLeft : LogicalKeyboardKey.arrowUp)) {
+      setState(() => _toolbar = _ToolbarKey.hide);
+    } else if (key ==
+        (above
+            ? LogicalKeyboardKey.arrowRight
+            : LogicalKeyboardKey.arrowDown)) {
+      setState(() => _toolbar = _ToolbarKey.submit);
+    }
+  }
+
+  OnScreenInputControl get input => widget.input;
+
+  ButtonStyle? _toolbarStyle(_ToolbarKey key) =>
+      widget.remote && _toolbar == key
+      ? IconButton.styleFrom(
+          side: const BorderSide(color: KalinkaColors.textPrimary, width: 2),
+        )
+      : null;
 
   KeyboardType get _type {
     final type = input.configuration.inputType;
@@ -412,24 +516,33 @@ class _KeyboardPanel extends StatelessWidget {
       // Keep the keypad in the same element slot when changing orientation,
       // preserving Shift, symbol pages and any open picker during resizing.
       child: Flex(
-        direction: toolbarAbove ? Axis.vertical : Axis.horizontal,
+        direction: widget.toolbarAbove ? Axis.vertical : Axis.horizontal,
         verticalDirection: VerticalDirection.up,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
             child: VirtualKeypad(
               type: _type,
+              enableDpadNavigation: widget.remote && _toolbar == null,
+              dpadController: _grid,
               customLayout: _type == KeyboardType.custom ? _numbers : null,
               inputAction: input.action,
               availableLanguages: KeyboardLayoutProvider.instance.languageCodes
                   .toList(growable: false),
               height: math.max(
                 0,
-                height - (toolbarAbove ? _keyboardToolbarHeight : 0),
+                widget.height -
+                    (widget.toolbarAbove ? _keyboardToolbarHeight : 0),
               ),
-              accentPicker: showKeyboardAccentPicker,
+              accentPicker: (context, options, position) =>
+                  showKeyboardAccentPicker(
+                    context,
+                    options,
+                    position,
+                    remote: widget.remote,
+                  ),
               enableLanguageKey: true,
-              languagePicker: languagePicker,
+              languagePicker: widget.languagePicker,
               // Render keys only. The host owns TextInputControl and routes
               // accepted edits, so standalone/scope mode must stay off.
               onKeyPressedWithText: input.onKey,
@@ -444,6 +557,8 @@ class _KeyboardPanel extends StatelessWidget {
                   fontSize: 20,
                 ),
                 keyTextSize: 20,
+                focusBorderColor: KalinkaColors.textPrimary,
+                focusBorderWidth: 2,
                 keyBorderRadius: 8,
                 keyShadow: false,
                 horizontalGap: _keyboardColumnGap,
@@ -453,21 +568,23 @@ class _KeyboardPanel extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: toolbarAbove ? null : _keyboardToolbarWidth,
-            height: toolbarAbove ? _keyboardToolbarHeight : null,
+            width: widget.toolbarAbove ? null : _keyboardToolbarWidth,
+            height: widget.toolbarAbove ? _keyboardToolbarHeight : null,
             child: Flex(
-              direction: toolbarAbove ? Axis.horizontal : Axis.vertical,
+              direction: widget.toolbarAbove ? Axis.horizontal : Axis.vertical,
               children: [
                 IconButton(
                   key: const ValueKey('hide-on-screen-keyboard'),
                   tooltip: 'Hide keyboard',
-                  onPressed: input.dismiss,
+                  style: _toolbarStyle(_ToolbarKey.hide),
+                  onPressed: widget.remote ? widget.dismiss : input.dismiss,
                   icon: const Icon(Icons.keyboard_hide_outlined),
                 ),
                 const Spacer(),
                 IconButton(
                   key: const ValueKey('keyboard-submit'),
                   tooltip: _actionLabel,
+                  style: _toolbarStyle(_ToolbarKey.submit),
                   onPressed: input.submit,
                   icon: Icon(_actionIcon),
                 ),

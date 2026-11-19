@@ -3,14 +3,16 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import 'keyboard_choice_navigation.dart';
 
 /// A touch-sized row of alternate letters, wrapping on narrow displays.
 /// The keypad supplies cased options and performs the eventual insertion.
 Future<String?> showKeyboardAccentPicker(
   BuildContext context,
   List<String> options,
-  Offset globalPosition,
-) {
+  Offset globalPosition, {
+  bool remote = false,
+}) {
   final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
   final position = overlay.globalToLocal(globalPosition);
   return showGeneralDialog<String>(
@@ -22,13 +24,18 @@ Future<String?> showKeyboardAccentPicker(
     barrierColor: Colors.transparent,
     transitionDuration: Duration.zero,
     pageBuilder: (context, _, _) =>
-        _AccentChoices(options: options, position: position),
+        _AccentChoices(options: options, position: position, remote: remote),
   );
 }
 
 class _AccentChoices extends StatelessWidget {
-  const _AccentChoices({required this.options, required this.position});
+  const _AccentChoices({
+    required this.options,
+    required this.position,
+    required this.remote,
+  });
 
+  final bool remote;
   final List<String> options;
   final Offset position;
 
@@ -85,33 +92,45 @@ class _AccentChoices extends StatelessWidget {
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(padding),
-                      child: Wrap(
-                        spacing: gap,
-                        runSpacing: gap,
-                        children: [
-                          for (final option in options)
-                            SizedBox(
-                              width: extent,
-                              height: extent,
-                              child: TextButton(
-                                key: ValueKey('keyboard-accent-$option'),
-                                onPressed: () =>
-                                    Navigator.of(context).pop(option),
-                                style: TextButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  foregroundColor: KalinkaColors.textPrimary,
-                                  backgroundColor:
-                                      KalinkaColors.surfaceElevated,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
+                      child: KeyboardChoiceNavigation(
+                        enabled: remote,
+                        count: options.length,
+                        columns: columns,
+                        onSelect: (i) => Navigator.of(context).pop(options[i]),
+                        builder: (highlighted) => Wrap(
+                          spacing: gap,
+                          runSpacing: gap,
+                          children: [
+                            for (final (i, option) in options.indexed)
+                              SizedBox(
+                                width: extent,
+                                height: extent,
+                                child: TextButton(
+                                  key: ValueKey('keyboard-accent-$option'),
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(option),
+                                  style: TextButton.styleFrom(
+                                    side: highlighted == i
+                                        ? const BorderSide(
+                                            color: KalinkaColors.textPrimary,
+                                            width: 2,
+                                          )
+                                        : null,
+                                    padding: EdgeInsets.zero,
+                                    foregroundColor: KalinkaColors.textPrimary,
+                                    backgroundColor:
+                                        KalinkaColors.surfaceElevated,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    textStyle: KalinkaTextStyles.trayRowLabel
+                                        .copyWith(fontSize: 20),
                                   ),
-                                  textStyle: KalinkaTextStyles.trayRowLabel
-                                      .copyWith(fontSize: 20),
+                                  child: Text(option),
                                 ),
-                                child: Text(option),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
