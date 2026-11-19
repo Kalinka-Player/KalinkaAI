@@ -9,9 +9,10 @@ import 'package:virtual_keypad/virtual_keypad.dart';
 /// deletion must respect graphemes, and both signed and decimal input options
 /// must survive. The package remains responsible for keys, shift and symbols.
 class OnScreenInputControl with TextInputControl {
-  OnScreenInputControl({required this.onChanged});
+  OnScreenInputControl({required this.onChanged, this.onEditingFinished});
 
   final VoidCallback onChanged;
+  final VoidCallback? onEditingFinished;
   TextInputClient? _client;
   TextInputConfiguration configuration = const TextInputConfiguration();
   bool visible = false;
@@ -68,9 +69,17 @@ class OnScreenInputControl with TextInputControl {
   };
 
   /// The toolbar always offers a way to finish, including multiline/numbers.
-  void submit() => _client?.performAction(
-    action == TextInputAction.newline ? TextInputAction.done : action,
-  );
+  void submit() {
+    final submitAction = action == TextInputAction.newline
+        ? TextInputAction.done
+        : action;
+    _client?.performAction(submitAction);
+    // Next and Previous transfer focus to the next input client themselves.
+    if (submitAction != TextInputAction.next &&
+        submitAction != TextInputAction.previous) {
+      onEditingFinished?.call();
+    }
+  }
 
   void onKey(VirtualKey key, String? text) {
     if (!_editable) return;

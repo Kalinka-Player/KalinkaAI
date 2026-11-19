@@ -13,9 +13,11 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/on_screen_keyboard_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/utils/flutter_pi_keyboard.dart';
 import 'package:kalinka/widgets/display_settings_section.dart';
 import 'package:kalinka/widgets/kalinka_bottom_sheet.dart';
 import 'package:kalinka/widgets/keyboard/on_screen_keyboard_host.dart';
+import 'package:kalinka/widgets/keyboard/app_keyboard_navigation.dart';
 import 'package:kalinka/widgets/settings_controls/settings_numeric_input.dart';
 import 'package:kalinka/widgets/settings_controls/settings_password_input.dart';
 
@@ -29,6 +31,7 @@ Future<ProviderContainer> pumpKeyboard(
   WidgetTester tester,
   Widget child, {
   bool enabled = true,
+  bool localKiosk = false,
   Size size = const Size(800, 480),
   double textScale = 1,
   bool reducedMotion = true,
@@ -43,7 +46,10 @@ Future<ProviderContainer> pumpKeyboard(
   });
   final prefs = await SharedPreferences.getInstance();
   final container = ProviderContainer(
-    overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+    overrides: [
+      sharedPrefsProvider.overrideWithValue(prefs),
+      localDisplayKioskProvider.overrideWithValue(localKiosk),
+    ],
   );
   addTearDown(container.dispose);
   await tester.pumpWidget(
@@ -82,6 +88,90 @@ Future<void> press(WidgetTester tester, String name) async {
 }
 
 void main() {
+  testWidgets('flutter-pi Return types until the keypad submits', (
+    tester,
+  ) async {
+    final messenger = tester.binding.defaultBinaryMessenger;
+    final pi = FlutterPiKeyboardMessenger(messenger);
+    final keys = SystemChannels.keyEvent;
+    final text = SystemChannels.textInput;
+    TextInput.setChannel(MethodChannel(text.name, text.codec, pi));
+    final dispatch =
+        // ignore: deprecated_member_use
+        ServicesBinding.instance.keyEventManager.handleRawKeyMessage;
+    BasicMessageChannel<dynamic>(
+      keys.name,
+      keys.codec,
+      binaryMessenger: pi,
+    ).setMessageHandler(dispatch);
+    addTearDown(() {
+      TextInput.setChannel(text);
+      keys.setMessageHandler(dispatch);
+    });
+
+    final submissions = <String>[];
+    final controller = TextEditingController();
+    final container = await pumpKeyboard(
+      tester,
+      TextField(
+        controller: controller,
+        textInputAction: TextInputAction.search,
+        onSubmitted: submissions.add,
+      ),
+      localKiosk: true,
+    );
+    Future<void> gtkKey(int keysym, int scan) async {
+      for (final type in ['keydown', 'keyup']) {
+        final keyReply = messenger.handlePlatformMessage(
+          keys.name,
+          keys.codec.encodeMessage({
+            'keymap': 'linux',
+            'toolkit': 'gtk',
+            'type': type,
+            'keyCode': keysym,
+            'scanCode': scan,
+            'unicodeScalarValues': 0,
+            'modifiers': 0,
+          }),
+          (_) {},
+        );
+        if (keysym == 0xff0d && type == 'keydown') {
+          // flutter-pi's text plugin sends this independently of the key reply.
+          await tester.testTextInput.receiveAction(TextInputAction.search);
+        }
+        await keyReply;
+      }
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    await gtkKey(0xff0d, 36); // Return on q
+    expect(controller.text, 'q');
+    expect(submissions, isEmpty);
+    expect(find.byKey(keyboardKey), findsOneWidget);
+    await gtkKey(0xff53, 114); // Right to w
+    await gtkKey(0xff0d, 36);
+    expect(controller.text, 'qw');
+    expect(submissions, isEmpty);
+    // Walk to the on-screen action key at the bottom right.
+    for (var n = 0; n < 8; n++) {
+      await gtkKey(0xff53, 114);
+    }
+    for (var n = 0; n < 3; n++) {
+      await gtkKey(0xff54, 116);
+    }
+    await gtkKey(0xff0d, 36);
+    expect(submissions, ['qw']);
+    expect(find.byKey(keyboardKey), findsNothing);
+
+    await container.read(onScreenKeyboardProvider.notifier).setEnabled(false);
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    await gtkKey(0xff0d, 36);
+    expect(submissions, ['qw', 'qw']);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
   testWidgets(
     'navigating a field leaves the keyboard closed; Enter opens and Escape returns focus',
     (tester) async {
@@ -118,6 +208,94 @@ void main() {
       );
       await key(LogicalKeyboardKey.arrowDown);
       expect(focusIsOn(find.widgetWithText(TextButton, 'Next')), isTrue);
+    },
+  );
+
+  testWidgets(
+    'remote number input traps edges, ignores held OK and returns to editing target on Done',
+    (tester) async {
+      final controller = TextEditingController();
+      final submissions = <String>[];
+      await pumpKeyboard(
+        tester,
+        AppKeyboardTextEntry(
+          child: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            onSubmitted: submissions.add,
+          ),
+        ),
+        localKiosk: true,
+      );
+      Future<void> key(LogicalKeyboardKey k) async {
+        await tester.sendKeyEvent(k);
+        await tester.pumpAndSettle();
+      }
+
+      await key(LogicalKeyboardKey.tab);
+      await key(LogicalKeyboardKey.enter);
+      await key(LogicalKeyboardKey.arrowLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(controller.text, '1');
+      for (var n = 0; n < 3; n++) {
+        await key(LogicalKeyboardKey.arrowRight);
+      }
+      await key(LogicalKeyboardKey.arrowLeft);
+      await key(LogicalKeyboardKey.enter);
+      expect(controller.text, '13');
+      await key(LogicalKeyboardKey.arrowRight);
+      await key(LogicalKeyboardKey.enter);
+      expect(submissions, ['13']);
+      expect(find.byKey(keyboardKey), findsNothing);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Text entry navigation',
+      );
+    },
+  );
+
+  testWidgets(
+    'remote enters the language grid and keeps the draft while choosing a layout',
+    (tester) async {
+      final controller = TextEditingController();
+      await pumpKeyboard(
+        tester,
+        AppKeyboardTextEntry(child: TextField(controller: controller)),
+        localKiosk: true,
+      );
+      Future<void> key(LogicalKeyboardKey k) async {
+        await tester.sendKeyEvent(k);
+        await tester.pumpAndSettle();
+      }
+
+      await key(LogicalKeyboardKey.tab);
+      await key(LogicalKeyboardKey.enter);
+      await key(LogicalKeyboardKey.enter);
+      for (var n = 0; n < 3; n++) {
+        await key(LogicalKeyboardKey.arrowDown);
+      }
+      await key(LogicalKeyboardKey.arrowRight);
+      await key(LogicalKeyboardKey.arrowRight);
+      await key(LogicalKeyboardKey.enter);
+      final picker = find.byKey(const ValueKey('keyboard-language-picker'));
+      expect(picker, findsOneWidget);
+      await key(LogicalKeyboardKey.escape);
+      expect(picker, findsNothing);
+      expect(find.byKey(keyboardKey), findsOneWidget);
+      await key(LogicalKeyboardKey.enter);
+      expect(picker, findsOneWidget);
+      await key(LogicalKeyboardKey.arrowRight);
+      await key(LogicalKeyboardKey.enter);
+      expect(picker, findsNothing);
+      expect(controller.text, 'q');
+      await key(LogicalKeyboardKey.escape);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'Text entry navigation',
+      );
     },
   );
 

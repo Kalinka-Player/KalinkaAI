@@ -20,6 +20,14 @@ import '../standalone_input_control.dart';
 import '../standalone_scope.dart';
 import '../theme.dart';
 
+/// Lets a host route D-pad events before its focused editor handles them.
+class VirtualKeypadDpadController {
+  bool Function(KeyEvent)? _handler;
+
+  /// Returns false at a grid edge so the host can reach adjacent controls.
+  bool handleKeyEvent(KeyEvent event) => _handler?.call(event) ?? false;
+}
+
 String _lettersLabelForLanguageCode(String languageCode) {
   switch (languageCode) {
     case 'bn':
@@ -99,6 +107,7 @@ class VirtualKeypad extends StatefulWidget {
     this.accents,
     this.accentPicker,
     this.enableDpadNavigation = false,
+    this.dpadController,
     this.hideWhenUnfocused = false,
     this.standalone = false,
     this.onVisibilityChanged,
@@ -278,6 +287,9 @@ class VirtualKeypad extends StatefulWidget {
   /// Defaults to false, which leaves touch and pointer behaviour untouched.
   final bool enableDpadNavigation;
 
+  /// When supplied, the host dispatches events instead of the hardware listener.
+  final VirtualKeypadDpadController? dpadController;
+
   /// Whether to put a row of digits above the letters.
   ///
   /// A phone keyboard hides the digits behind its symbols page, which costs
@@ -435,7 +447,7 @@ class _VirtualKeypadState extends State<VirtualKeypad> {
   static _VirtualKeypadState? _dpadOwner;
 
   void _updateDpadOwnership(bool visible) {
-    if (visible && widget.enableDpadNavigation) {
+    if (visible && widget.enableDpadNavigation && widget.dpadController == null) {
       _dpadOwner ??= this;
     } else if (identical(_dpadOwner, this)) {
       _dpadOwner = null;
@@ -465,9 +477,7 @@ class _VirtualKeypadState extends State<VirtualKeypad> {
     if (widget.standalone) {
       _initStandalone();
     }
-    if (widget.enableDpadNavigation) {
-      HardwareKeyboard.instance.addHandler(_handleDpadKey);
-    }
+    _attachDpad(widget);
     _startColorEmojiLoad();
     VirtualKeypadColorEmoji.isLoaded.addListener(_onColorEmojiLoaded);
   }
@@ -650,14 +660,31 @@ class _VirtualKeypadState extends State<VirtualKeypad> {
     if (widget.colorEmojiFontLoader != oldWidget.colorEmojiFontLoader) {
       _startColorEmojiLoad();
     }
-    if (widget.enableDpadNavigation != oldWidget.enableDpadNavigation) {
-      if (widget.enableDpadNavigation) {
-        HardwareKeyboard.instance.addHandler(_handleDpadKey);
-      } else {
-        HardwareKeyboard.instance.removeHandler(_handleDpadKey);
-        _dpadRow = 0;
-        _dpadCol = 0;
-      }
+    if (widget.enableDpadNavigation != oldWidget.enableDpadNavigation ||
+        widget.dpadController != oldWidget.dpadController) {
+      _detachDpad(oldWidget);
+      _attachDpad(widget);
+    }
+  }
+
+  void _attachDpad(VirtualKeypad keypad) {
+    if (!keypad.enableDpadNavigation) return;
+    final controller = keypad.dpadController;
+    if (controller != null) {
+      controller._handler = _handleDpadKey;
+    } else {
+      HardwareKeyboard.instance.addHandler(_handleDpadKey);
+    }
+  }
+
+  void _detachDpad(VirtualKeypad keypad) {
+    if (!keypad.enableDpadNavigation) return;
+    final controller = keypad.dpadController;
+    if (controller != null) {
+      if (controller._handler == _handleDpadKey) controller._handler = null;
+    } else {
+      HardwareKeyboard.instance.removeHandler(_handleDpadKey);
+      _dpadRow = _dpadCol = 0;
     }
   }
 
@@ -669,9 +696,7 @@ class _VirtualKeypadState extends State<VirtualKeypad> {
     if (identical(_dpadOwner, this)) {
       _dpadOwner = null;
     }
-    if (widget.enableDpadNavigation) {
-      HardwareKeyboard.instance.removeHandler(_handleDpadKey);
-    }
+    _detachDpad(widget);
     if (widget.standalone) {
       _disposeStandalone();
     } else {
@@ -1471,14 +1496,14 @@ class _VirtualKeypadState extends State<VirtualKeypad> {
   /// and nothing changes for anyone not driving the keyboard with a remote.
   bool get _isEmojiDpadActive =>
       widget.enableDpadNavigation &&
-      identical(_dpadOwner, this) &&
+      (widget.dpadController != null || identical(_dpadOwner, this)) &&
       _dpadVisible &&
       _isEmojiPickerVisible;
 
   /// Whether the highlight should respond to D-pad events right now.
   bool get _dpadActive =>
       widget.enableDpadNavigation &&
-      identical(_dpadOwner, this) &&
+      (widget.dpadController != null || identical(_dpadOwner, this)) &&
       _dpadVisible &&
       !_isEmojiPickerVisible &&
       !_languagePickerVisible &&
