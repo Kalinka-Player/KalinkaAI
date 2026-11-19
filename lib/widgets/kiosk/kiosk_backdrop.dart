@@ -17,6 +17,17 @@ const _blurSigma = 2.4;
 /// much smaller source _blurSide would otherwise be.
 const _wasmBlurSide = 28;
 
+/// Draw the standby glow at display resolution. The clock and pixel shift can
+/// repaint the foreground while Flutter retains this background layer.
+class KioskStandbyBackdrop extends StatelessWidget {
+  const KioskStandbyBackdrop({super.key});
+
+  @override
+  Widget build(BuildContext context) => const RepaintBoundary(
+    child: CustomPaint(size: Size.infinite, painter: _BackdropPainter()),
+  );
+}
+
 /// Full-bleed cover colours. Composite the blur, dimming and vignettes at
 /// thumbnail size so each playback frame samples just one opaque image.
 class KioskBackdrop extends StatefulWidget {
@@ -128,7 +139,7 @@ class _KioskBackdropState extends State<KioskBackdrop> {
         final height = math.max(1, (size.height * scale).round());
         if (_backdrop?.width != width || _backdrop?.height != height) {
           _backdrop?.dispose();
-          _backdrop = _paintBackdrop(width, height);
+          _backdrop = _bakeBackdrop(width, height);
         }
         return RawImage(
           image: _backdrop,
@@ -141,13 +152,29 @@ class _KioskBackdropState extends State<KioskBackdrop> {
     );
   }
 
-  ui.Image _paintBackdrop(int width, int height) {
-    final size = Size(width.toDouble(), height.toDouble());
-    final bounds = Offset.zero & size;
+  ui.Image _bakeBackdrop(int width, int height) {
     final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    canvas.drawColor(KalinkaColors.background, BlendMode.src);
-    final cover = _cover;
+    _BackdropPainter(_cover)
+        .paint(Canvas(recorder), Size(width.toDouble(), height.toDouble()));
+    final picture = recorder.endRecording();
+    try {
+      return picture.toImageSync(width, height);
+    } finally {
+      picture.dispose();
+    }
+  }
+}
+
+class _BackdropPainter extends CustomPainter {
+  final ui.Image? cover;
+
+  const _BackdropPainter([this.cover]);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = Offset.zero & size;
+    canvas.drawRect(bounds, Paint()..color = KalinkaColors.background);
+    final cover = this.cover;
     if (cover == null) {
       canvas.drawRect(
         bounds,
@@ -180,13 +207,11 @@ class _KioskBackdropState extends State<KioskBackdrop> {
       Paint()..shader = _verticalShade.createShader(bounds),
     );
     canvas.drawRect(bounds, Paint()..shader = _edgeShade.createShader(bounds));
-    final picture = recorder.endRecording();
-    try {
-      return picture.toImageSync(width, height);
-    } finally {
-      picture.dispose();
-    }
   }
+
+  @override
+  bool shouldRepaint(_BackdropPainter oldDelegate) =>
+      oldDelegate.cover != cover;
 }
 
 const _verticalShade = LinearGradient(
