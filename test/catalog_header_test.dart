@@ -11,6 +11,7 @@ import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/storage.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
+import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_overlay.dart';
 import 'package:kalinka/widgets/browse_filters/presentation_toggle.dart';
@@ -94,6 +95,7 @@ class _Api extends HomeApi {
   final String Function(int)? albumTitle;
   final bool fail;
   final Completer<void>? gate;
+  final Completer<void>? albumGate;
   final calls = <({String id, int offset, String? filter})>[];
   final replaced = <List<String>>[];
   final enqueued = <List<String>>[];
@@ -103,6 +105,7 @@ class _Api extends HomeApi {
     this.albumTitle,
     this.fail = false,
     this.gate,
+    this.albumGate,
     this.catalogs = false,
     this.tracks = false,
     this.artists = false,
@@ -117,6 +120,7 @@ class _Api extends HomeApi {
   }) async {
     calls.add((id: id, offset: offset, filter: filter));
     if (gate != null) await gate!.future;
+    if (id.contains(':album:')) await albumGate?.future;
     if (fail) throw StateError('offline');
     final playlist = id.contains(':playlist:');
     return BrowseItemsList(offset, limit, count, [
@@ -375,20 +379,21 @@ void main() {
       traversableFocusNodesIn(first).single.requestFocus();
       await tester.pump();
       final focused = tester.widget(cover);
-      final columns = List.generate(cards.evaluate().length, cards.at)
-          .takeWhile((card) => (tester.getTopLeft(card).dy - row).abs() < 1)
-          .length;
-      for (final (key, index) in [
-        (LogicalKeyboardKey.arrowDown, columns),
-        (LogicalKeyboardKey.arrowUp, 0),
-        (LogicalKeyboardKey.arrowRight, 1),
-        (LogicalKeyboardKey.arrowUp, 1),
-        (LogicalKeyboardKey.arrowDown, columns + 1),
-        (LogicalKeyboardKey.arrowLeft, columns),
-        (LogicalKeyboardKey.arrowUp, 0),
+      for (final (key, targetRow, targetColumn) in [
+        (LogicalKeyboardKey.arrowDown, 1, 0),
+        (LogicalKeyboardKey.arrowUp, 0, 0),
+        (LogicalKeyboardKey.arrowRight, 0, 1),
+        (LogicalKeyboardKey.arrowDown, 1, 1),
+        (LogicalKeyboardKey.arrowLeft, 1, 0),
+        (LogicalKeyboardKey.arrowUp, 0, 0),
       ]) {
         await tester.sendKeyEvent(key);
         await tester.pump();
+        // The first navigation key gives the grid the icon rail's extra room.
+        final columns = List.generate(cards.evaluate().length, cards.at)
+            .takeWhile((card) => (tester.getTopLeft(card).dy - row).abs() < 1)
+            .length;
+        final index = targetRow * columns + targetColumn;
         expect(
           focusIsOn(cards.at(index)),
           isTrue,
@@ -707,6 +712,27 @@ void main() {
       },
     );
   }
+
+  testWidgets('keyboard focus outlines the circular catalog pin', (
+    tester,
+  ) async {
+    await _pump(tester, _Api(catalogs: true));
+    final pin = find.byType(CatalogPinButton);
+    final button = find
+        .descendant(of: pin, matching: find.byType(Material))
+        .first;
+    final bounds = tester.getRect(button);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    traversableFocusNodesIn(pin).single.requestFocus();
+    await tester.pumpAndSettle();
+    expect(focusIsOn(pin), isTrue);
+    final ring = focusOutlineIn(pin, KalinkaColors.textPrimary);
+    final decoration =
+        tester.widget<DecoratedBox>(ring).decoration as ShapeDecoration;
+    expect(decoration.shape, isA<CircleBorder>());
+    expect(tester.getRect(ring), bounds);
+    expect(bounds.width, bounds.height);
+  });
 
   for (final (width, scale, inline) in [
     (516.0, 1.0, true),
@@ -1231,6 +1257,124 @@ void main() {
     expect(_foot(tester).top, kKalinkaTopBarHeight);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('remote filter keeps focus until Show returns to the listing', (
+    tester,
+  ) async {
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(2)),
+      api: _Api(),
+      size: const Size(1440, 900),
+      overrides: [localDisplayKioskProvider.overrideWithValue(true)],
+    );
+    container.read(searchSessionProvider.notifier).openPage(_catalog);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+      'content',
+    );
+    final filters = find.byTooltip('Filters');
+    await tester.tap(filters);
+    await tester.pumpAndSettle();
+    final card = find.byType(SearchFilterOverlay);
+    expect(
+      focusIsOn(card),
+      isTrue,
+      reason: FocusManager.instance.primaryFocus?.toStringDeep(),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(
+      focusIsOn(card),
+      isTrue,
+      reason: FocusManager.instance.primaryFocus?.toStringDeep(),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(card, findsNothing);
+    expect(
+      FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+      'toolbar',
+    );
+    await tester.tap(filters);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Show results'));
+    await tester.pumpAndSettle();
+    expect(card, findsNothing);
+    expect(
+      FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+      'content',
+    );
+  });
+
+  testWidgets(
+    'opening an album and using toolbar Back both leave focus in the listing',
+    (tester) async {
+      final albumGate = Completer<void>();
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(2)),
+        api: _Api(albumGate: albumGate),
+        size: const Size(1440, 900),
+        overrides: [localDisplayKioskProvider.overrideWithValue(true)],
+      );
+      final browse = container.read(searchSessionProvider.notifier);
+      browse.openPage(
+        CatalogPage.category(
+          id: _catalog.id,
+          title: 'Albums',
+          preview: Preview(
+            type: PreviewType.imageText,
+            contentType: PreviewContentType.album,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      traversableFocusNodesIn(find.byType(ArtworkGridCard).first).single
+          .requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      albumGate.complete();
+      await tester.pumpAndSettle();
+      expect(container.read(searchSessionProvider).catalogPage.isAlbum, isTrue);
+      expect(
+        FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+        'content',
+      );
+      expect(focusIsOn(find.byType(CatalogPageView)), isTrue);
+      final back = find.byType(KalinkaBackButton).hitTestable().first;
+      traversableFocusNodesIn(back).first.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(
+        container.read(searchSessionProvider).catalogPage.isAlbum,
+        isFalse,
+      );
+      expect(
+        FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+        'content',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(container.read(searchSessionProvider).atHome, isTrue);
+      expect(
+        FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+        'content',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(
+        FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+        'navigation',
+      );
+    },
+  );
 
   testWidgets('the bar\'s field searches on Enter and filters remain staged', (
     tester,

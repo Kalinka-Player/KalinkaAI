@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'keyboard/ink_focus_outline.dart';
 
 /// Circular tappable wrapper for transport icons. Combines an InkWell ripple
 /// with a scale-on-press animation so taps are obviously visible — important
@@ -67,7 +68,19 @@ class _TransportButtonState extends State<TransportButton> {
             customBorder: const CircleBorder(),
             splashColor: widget.splashColor ?? defaultSplash,
             highlightColor: widget.highlightColor ?? defaultHighlight,
-            child: Center(child: widget.child),
+            child: InkFocusOutline(
+              shape: const CircleBorder(),
+              color:
+                  widget.background != null &&
+                      ThemeData.estimateBrightnessForColor(
+                            widget.background!,
+                          ) ==
+                          Brightness.light
+                  // Visible against both the light disc and the dark player.
+                  ? KalinkaColors.textMuted
+                  : KalinkaColors.textPrimary,
+              child: Center(child: widget.child),
+            ),
           ),
         ),
       ),

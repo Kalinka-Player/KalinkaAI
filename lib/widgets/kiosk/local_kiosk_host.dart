@@ -15,6 +15,7 @@ import '../../screens/kiosk_screen.dart';
 import '../../utils/display_power.dart';
 import '../../utils/local_platform.dart';
 import 'kiosk_home_layout.dart';
+import 'kiosk_media_keys.dart';
 
 typedef _DisplayState = ({bool enabled, bool kiosk, bool waiting});
 
@@ -54,9 +55,14 @@ class LocalKioskHost extends ConsumerStatefulWidget {
 }
 
 class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
+  final _browsing = FocusScopeNode(debugLabel: 'Kiosk browsing');
+  final _display = FocusScopeNode(debugLabel: 'Kiosk display');
+  FocusNode? _browsingControl;
+  FocusNode? _displayControl;
   Timer? _idleTimer;
   Timer? _blankTimer;
   late final DisplayPower _power;
+  late final _mediaKeys = KioskMediaKeys(ref);
   final _pointers = <int>{};
   final _wakeKeys = <PhysicalKeyboardKey>{};
   bool _blanked = false;
@@ -67,6 +73,7 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
     super.initState();
     _power = ref.read(displayPowerProvider);
     ref.listenManual(_displayStateProvider, (previous, next) {
+      if (!next.enabled) _mediaKeys.cancelSeek();
       // Entering kiosk is not activity: its time comes out of the same
       // blanking countdown, rather than starting another five minutes.
       if (previous?.enabled != next.enabled ||
@@ -77,7 +84,11 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
         _scheduleKioskReturn();
       }
       if (previous?.kiosk == next.kiosk) return;
-      if (next.kiosk) FocusManager.instance.primaryFocus?.unfocus();
+      if (next.kiosk) _rememberFocus();
+      if (next.waiting) {
+        _displayControl = null;
+        _restoreVisibleFocus();
+      }
     });
     ref.listenManual(displaySettingsProvider, (_, _) {
       _wake();
@@ -90,7 +101,49 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
       _armBlankTimer();
     });
     FocusManager.instance.addEarlyKeyEventHandler(_onKeyEvent);
+    FocusManager.instance.addLateKeyEventHandler(_onUnhandledBack);
     _recordActivity();
+  }
+
+  void _rememberFocus() {
+    final focused = FocusManager.instance.primaryFocus;
+    if (focused == null || focused is FocusScopeNode) return;
+    if (focused.ancestors.contains(_browsing)) {
+      _browsingControl = focused;
+    } else if (focused.ancestors.contains(_display)) {
+      _displayControl = focused;
+    }
+  }
+
+  void _restoreVisibleFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _blanked) return;
+      final state = ref.read(_displayStateProvider);
+      if (!state.enabled) return;
+      // The idle timer may have opened Now Playing while the screen was black.
+      final scope = state.kiosk ? _display : _browsing;
+      final previous = state.kiosk ? _displayControl : _browsingControl;
+      bool available(FocusNode? node) =>
+          node != null &&
+          node is! FocusScopeNode &&
+          node.context?.mounted == true &&
+          node.ancestors.contains(scope) &&
+          node.canRequestFocus &&
+          ModalRoute.isCurrentOf(node.context!) == true;
+
+      if (available(FocusManager.instance.primaryFocus)) return;
+      if (available(previous)) {
+        previous!.requestFocus();
+        return;
+      }
+      final controls = scope.traversalDescendants.where(available);
+      if (controls.isNotEmpty) {
+        ReadingOrderTraversalPolicy()
+            .sortDescendants(controls, scope)
+            .first
+            .requestFocus();
+      }
+    });
   }
 
   void _scheduleKioskReturn() {
@@ -119,7 +172,7 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
       return;
     }
     _blankTimer = Timer(timeout, () {
-      FocusManager.instance.primaryFocus?.unfocus();
+      _rememberFocus();
       setState(() => _blanked = true);
       unawaited(_power.setBlanked(true));
     });
@@ -129,12 +182,25 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
     if (!_blanked) return;
     setState(() => _blanked = false);
     unawaited(_power.setBlanked(false));
+    _restoreVisibleFocus();
   }
 
-  // Run before focused controls: the key that wakes the screen must not also
-  // type into a hidden field, pause playback or activate a hidden button.
+  // Dedicated transport is independent of focus. A navigation key that wakes
+  // the screen must not also type into or activate a hidden control.
   KeyEventResult _onKeyEvent(KeyEvent event) {
     if (event.synthesized) return KeyEventResult.ignored;
+    if (event is KeyRepeatEvent &&
+        (event.logicalKey == LogicalKeyboardKey.escape ||
+            event.logicalKey == LogicalKeyboardKey.enter)) {
+      return KeyEventResult.handled;
+    }
+    if (ref.read(_displayStateProvider).enabled && _mediaKeys.handle(event)) {
+      if (event is KeyDownEvent) {
+        _wake();
+        _recordActivity();
+      }
+      return KeyEventResult.handled;
+    }
     if (_blanked || _wakeKeys.contains(event.physicalKey)) {
       if (event is KeyUpEvent) {
         _wakeKeys.remove(event.physicalKey);
@@ -147,6 +213,21 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
     }
     _recordActivity();
     return KeyEventResult.ignored;
+  }
+
+  // Editors, popup routes and the on-screen keyboard get Escape first.
+  KeyEventResult _onUnhandledBack(KeyEvent event) {
+    if (event.logicalKey != LogicalKeyboardKey.escape ||
+        event is! KeyDownEvent ||
+        event.synthesized ||
+        !ref.read(_displayStateProvider).waiting) {
+      return KeyEventResult.ignored;
+    }
+    final focus = FocusManager.instance.primaryFocus?.context;
+    final navigator = focus == null ? null : Navigator.maybeOf(focus);
+    if (navigator == null) return KeyEventResult.ignored;
+    unawaited(navigator.maybePop());
+    return KeyEventResult.handled;
   }
 
   void _pointerDown(PointerEvent event) {
@@ -171,10 +252,14 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
 
   @override
   void dispose() {
+    _mediaKeys.cancelSeek();
     _idleTimer?.cancel();
     _blankTimer?.cancel();
     FocusManager.instance.removeEarlyKeyEventHandler(_onKeyEvent);
+    FocusManager.instance.removeLateKeyEventHandler(_onUnhandledBack);
     unawaited(_power.setBlanked(false));
+    _browsing.dispose();
+    _display.dispose();
     super.dispose();
   }
 
@@ -205,9 +290,12 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
                 enabled: !kiosk && !_blanked,
                 child: ExcludeFocus(
                   excluding: kiosk || _blanked,
-                  child: KioskHomeLayout(
-                    diagonalInches: _displayDiagonalInches,
-                    child: widget.child,
+                  child: FocusScope(
+                    node: _browsing,
+                    child: KioskHomeLayout(
+                      diagonalInches: _displayDiagonalInches,
+                      child: widget.child,
+                    ),
                   ),
                 ),
               ),
@@ -221,10 +309,13 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
                   enabled: !_blanked,
                   child: ExcludeFocus(
                     excluding: _blanked,
-                    child: HeroControllerScope.none(
-                      child: Navigator(
-                        onGenerateRoute: (_) => MaterialPageRoute<void>(
-                          builder: (_) => const KioskScreen(),
+                    child: FocusScope(
+                      node: _display,
+                      child: HeroControllerScope.none(
+                        child: Navigator(
+                          onGenerateRoute: (_) => MaterialPageRoute<void>(
+                            builder: (_) => const KioskScreen(),
+                          ),
                         ),
                       ),
                     ),
@@ -234,7 +325,7 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
             if (_blanked)
               Positioned.fill(
                 child: Semantics(
-                  label: 'Display asleep. Touch to wake.',
+                  label: 'Display asleep. Touch or press a button to wake.',
                   child: const MouseRegion(
                     cursor: SystemMouseCursors.none,
                     child: ColoredBox(

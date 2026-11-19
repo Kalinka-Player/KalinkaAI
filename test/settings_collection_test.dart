@@ -14,6 +14,12 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/tap_highlight.dart';
+
+import 'support/focus.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -352,6 +358,36 @@ void main() {
         expect(find.widgetWithText(KalinkaButton, kind), findsOneWidget);
       }
     });
+
+    testWidgets(
+      'a focused indexed folder paints an outline around the entire row',
+      (tester) async {
+        await _pump(
+          tester,
+          _Store({
+            _path: [_share(), _folder()],
+          }),
+        );
+        final row = find.widgetWithText(TapHighlight, '/mnt/usb/Music');
+        expect(await tabTo(tester, row), isTrue);
+        await tester.pumpAndSettle();
+        final ring = find.descendant(
+          of: row,
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is AnimatedContainer &&
+                w.decoration is BoxDecoration &&
+                (w.decoration as BoxDecoration).border ==
+                    Border.all(color: KalinkaColors.textPrimary, width: 2),
+          ),
+        );
+        expect(ring, findsOneWidget);
+        expect(tester.getRect(ring), tester.getRect(row));
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(find.byType(SheetHeader), findsOneWidget);
+      },
+    );
 
     testWidgets('puts what the server says about an entry under its card', (
       tester,

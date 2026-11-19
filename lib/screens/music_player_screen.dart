@@ -12,6 +12,7 @@ import '../providers/demo_mode.dart';
 import '../providers/networked_boxes_provider.dart';
 import '../providers/onboarding_provider.dart';
 import '../providers/pinned_catalogs_provider.dart';
+import '../providers/pinned_server.dart';
 import '../providers/playback_failure_provider.dart';
 import '../providers/renderer_host_provider.dart' show rendererIdentityProvider;
 import '../providers/renderer_provider.dart';
@@ -76,7 +77,8 @@ class MusicPlayerScreen extends ConsumerStatefulWidget {
 class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     with TickerProviderStateMixin {
   final _searchEntryKey = GlobalKey();
-  final _keyboardNavigation = AppKeyboardNavigationController();
+  AppKeyboardNavigationController get _keyboardNavigation =>
+      ref.read(shellKeyboardNavigationProvider);
   final _connectionDotKey = GlobalKey();
   // The output switcher moves house across the breakpoint — mini-player on
   // phone, Now Playing header on tablet — and the two are different widgets.
@@ -215,9 +217,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Web has its connection already (main.dart) and no mDNS, so neither
-      // branch below applies.
-      if (kIsWeb) return;
+      // A fixed-server client already has its endpoint from startup.
+      if (!mounted || !ref.read(canSelectServerProvider)) return;
       // First launch: run the setup wizard. The provider marks pre-wizard
       // installs (server already stored) as complete on its own, so they
       // fall through to the regular flow below.
@@ -441,8 +442,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// plugin updates, there is nothing to go to or control.
   bool get _serverBusy => ref.watch(_serverBusyProvider);
 
-  Widget _navigation({required bool extended}) => ShellNavigation(
+  Widget _navigation({
+    required bool extended,
+    required NavigationRailMode mode,
+  }) => ShellNavigation(
     extended: extended,
+    mode: mode,
     configurationOpen:
         _pluginsOpen || ref.watch(rendererSettingsRouteProvider) != null,
     changeServerOpen: _discoveryOpen,
@@ -477,23 +482,27 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }
 
   Future<void> _navigate(ShellDestination destination, CatalogSource? source) =>
-      _navigateBrowsing(() {
-        // Each destination comes back as it was left.
-        final browsing = ref.read(searchSessionProvider.notifier);
-        switch (destination) {
-          case ShellDestination.home:
-            browsing.showHome();
-          case ShellDestination.results:
-            browsing.showResults();
-          case ShellDestination.source:
-            if (source != null) browsing.openSource(source);
-          case ShellDestination.collections:
-            final plan = ref.read(collectionsShelfProvider).value?.plan;
-            if (plan != null) browsing.openCollections(plan);
-          case ShellDestination.configuration:
-            _openPlugins(slide: false);
-        }
-      }, openingConfiguration: destination == ShellDestination.configuration);
+      _navigateBrowsing(
+        () {
+          // Each destination comes back as it was left.
+          final browsing = ref.read(searchSessionProvider.notifier);
+          switch (destination) {
+            case ShellDestination.home:
+              browsing.showHome();
+            case ShellDestination.results:
+              browsing.showResults();
+            case ShellDestination.source:
+              if (source != null) browsing.openSource(source);
+            case ShellDestination.collections:
+              final plan = ref.read(collectionsShelfProvider).value?.plan;
+              if (plan != null) browsing.openCollections(plan);
+            case ShellDestination.configuration:
+              _openPlugins(slide: false);
+          }
+        },
+        openingConfiguration: destination == ShellDestination.configuration,
+        fromRail: true,
+      );
 
   void _openPlayerItem(BrowseItem item) => _navigateBrowsing(
     () => ref.read(searchSessionProvider.notifier).openBrowseItem(item),
@@ -504,6 +513,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   Future<void> _navigateBrowsing(
     VoidCallback open, {
     bool openingConfiguration = false,
+    bool fromRail = false,
   }) async {
     if (_navigating || ref.read(_serverBusyProvider)) return;
     // The phone's player sits beside the rail; where the rail goes shows.
@@ -511,7 +521,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     // Any other destination leaves the server picker as its Cancel does,
     // back to what it covered, then goes on there.
     if (_discoveryOpen) _closeDiscovery();
-    if (openingConfiguration && _pluginsOpen) return;
+    if (openingConfiguration && _pluginsOpen) {
+      _keyboardNavigation.focusAfterBuild(AppKeyboardArea.content);
+      return;
+    }
     setState(() => _navigating = true);
     try {
       if (_pluginsOpen &&
@@ -530,6 +543,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         _pluginsOpen = false;
       });
       open();
+      if (fromRail) {
+        _keyboardNavigation.focusAfterBuild(AppKeyboardArea.content);
+      }
     } finally {
       if (mounted) setState(() => _navigating = false);
     }
@@ -570,6 +586,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// Without [actions], only the notice: the tablet's player panel, beside
   /// Home's own disconnected state.
   Widget _buildDisconnectedState({bool actions = true}) {
+    final canSelectServer = ref.watch(canSelectServerProvider);
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -590,13 +607,16 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
             if (actions) ...[
               const SizedBox(height: 8),
               Text(
-                kIsWeb ? 'Reload the page to reconnect to the server.' : 'Scan your network to find a Kalinka server and start listening.',
+                canSelectServer
+                    ? 'Scan your network to find a Kalinka server and start listening.'
+                    : kIsWeb
+                    ? 'Reload the page to reconnect to the server.'
+                    : 'Waiting for the local Kalinka server.',
                 style: KalinkaTextStyles.emptyQueueSubtitle,
                 textAlign: TextAlign.center,
               ),
             ],
-            // No mDNS in the browser — reloading re-seeds the connection.
-            if (actions && !kIsWeb) ...[
+            if (actions && canSelectServer) ...[
               const SizedBox(height: 32),
               KalinkaButton(
                 label: 'Scan for servers',
@@ -733,7 +753,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
 
   @override
   Widget build(BuildContext context) => AppKeyboardNavigation(
-    controller: _keyboardNavigation,
+    controller: ref.watch(shellKeyboardNavigationProvider),
+    atNavigationRoot: () => _pluginsOpen
+        ? _pluginsKey.currentState?.atRailRoot == true
+        : _homeKey.currentState?.atRailRoot == true,
     child: AppKeyboardRegion(
       area: AppKeyboardArea.content,
       child: _buildScreen(context),
@@ -820,6 +843,18 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       }
     });
 
+    return ValueListenableBuilder(
+      valueListenable: _keyboardNavigation,
+      builder: _buildLayout,
+      child: customise,
+    );
+  }
+
+  Widget _buildLayout(
+    BuildContext context,
+    NavigationRailMode mode,
+    Widget? customise,
+  ) {
     // Clear of a phone's camera cutout on its side when it is turned; the
     // canvas fills the inset.
     return ColoredBox(
@@ -830,14 +865,17 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         child: LayoutBuilder(
           builder: (context, constraints) {
             final windowWidth = constraints.maxWidth;
-            final railWidth = kalinkaNavigationRailWidth(
+            final scaler = MediaQuery.textScalerOf(context);
+            final normalWidth = kalinkaNavigationRailWidth(
               windowWidth,
               windowHeight: MediaQuery.sizeOf(context).height,
-              textScaler: MediaQuery.textScalerOf(context),
+              textScaler: scaler,
             );
+            final railWidth = mode.reservedWidth(normalWidth);
+            final visibleRailWidth = mode.visibleWidth(normalWidth, scaler);
             final isTablet = kalinkaSplitLayout(
               windowWidth,
-              textScaler: MediaQuery.textScalerOf(context),
+              textScaler: scaler,
             );
             final connected =
                 ref.watch(connectionStateProvider) != ConnectionStatus.none;
@@ -856,7 +894,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                     key: _railKey,
                     child: SizedBox(
                       key: const ValueKey('navigation-rail'),
-                      width: railWidth,
+                      width: visibleRailWidth,
                       child: DecoratedBox(
                         decoration: const BoxDecoration(
                           // The rule is translucent: without a ground, what
@@ -873,7 +911,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           child: _navigation(
                             // The narrow rail widens with the text, though
                             // never this far.
-                            extended: railWidth >= kKalinkaWideRailWidth,
+                            extended:
+                                mode != NavigationRailMode.responsive ||
+                                normalWidth >= kKalinkaWideRailWidth,
+                            mode: mode,
                           ),
                         ),
                       ),
@@ -952,24 +993,11 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (rail != null)
-                            Padding(
-                              padding: EdgeInsets.only(bottom: inset),
-                              child: rail,
-                            ),
+                          if (rail != null) SizedBox(width: railWidth),
                           panes,
                         ],
                       ),
-                      if (!isTablet && railBody != null)
-                        _phoneRail(
-                          railBody,
-                          width: railWidth,
-                          miniPlayer: connected && !_serverBusy,
-                          miniCovered:
-                              _sheetOpen ||
-                              _discoveryOpen ||
-                              (!_pluginsOpen && _settingsCovering),
-                        ),
+
                       if (discovery != null)
                         Positioned(
                           key: const ValueKey('discovery-overlay'),
@@ -978,6 +1006,18 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           right: 0,
                           bottom: inset,
                           child: discovery,
+                        ),
+                      if (rail != null)
+                        Positioned(left: 0, top: 0, bottom: inset, child: rail)
+                      else if (railBody != null)
+                        _phoneRail(
+                          railBody,
+                          width: visibleRailWidth,
+                          miniPlayer: connected && !_serverBusy,
+                          miniCovered:
+                              _sheetOpen ||
+                              _discoveryOpen ||
+                              (!_pluginsOpen && _settingsCovering),
                         ),
                       if (isTablet && connected)
                         Positioned(
@@ -1343,40 +1383,44 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         _pluginsOpen ||
         _discoveryOpen ||
         rendererSettings != null;
-    return ExcludeFocus(
-      excluding: covered,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 200),
-        layoutBuilder: _topmostScreenLayout,
-        transitionBuilder: _screenSwitcherTransition,
-        child: disconnected
-            ? KeyedSubtree(
-                key: const ValueKey('disconnected'),
-                child: Column(
-                  children: [
-                    KalinkaTopBar(
-                      onServerChipTap: onServerTap,
-                      connectionKey: _connectionDotKey,
-                    ),
-                    Expanded(child: _buildDisconnectedState()),
-                  ],
+    return AppKeyboardRegion(
+      area: AppKeyboardArea.content,
+      separate: true,
+      child: ExcludeFocus(
+        excluding: covered,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          layoutBuilder: _topmostScreenLayout,
+          transitionBuilder: _screenSwitcherTransition,
+          child: disconnected
+              ? KeyedSubtree(
+                  key: const ValueKey('disconnected'),
+                  child: Column(
+                    children: [
+                      KalinkaTopBar(
+                        onServerChipTap: onServerTap,
+                        connectionKey: _connectionDotKey,
+                      ),
+                      Expanded(child: _buildDisconnectedState()),
+                    ],
+                  ),
+                )
+              : SearchSessionView(
+                  key: _homeKey,
+                  onServerTap: onServerTap,
+                  entryKey: _searchEntryKey,
+                  connectionKey: _connectionDotKey,
+                  handlesBack: !covered,
+                  navigationVisible: navigationVisible,
+                  // The mini-player's slot, while it slides away under a search.
+                  roomLent: isTablet
+                      ? null
+                      : Tween<double>(
+                          begin: _miniPlayerSlot(),
+                          end: 0,
+                        ).animate(_miniPlayerReveal),
                 ),
-              )
-            : SearchSessionView(
-                key: _homeKey,
-                onServerTap: onServerTap,
-                entryKey: _searchEntryKey,
-                connectionKey: _connectionDotKey,
-                handlesBack: !covered,
-                navigationVisible: navigationVisible,
-                // The mini-player's slot, while it slides away under a search.
-                roomLent: isTablet
-                    ? null
-                    : Tween<double>(
-                        begin: _miniPlayerSlot(),
-                        end: 0,
-                      ).animate(_miniPlayerReveal),
-              ),
+        ),
       ),
     );
   }
@@ -1395,6 +1439,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
           bottom: isTablet,
           child: EscalationCard(
             onScanForServers: _openDiscovery,
+            canScan: ref.watch(canSelectServerProvider),
             isTablet: isTablet,
           ),
         ),
@@ -1420,6 +1465,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// The stored server stays as it is while another is chosen or set up,
   /// so it is not reconnected to under the picker and its routes.
   void _openDiscovery() {
+    if (!ref.read(canSelectServerProvider)) return;
     _reconnectPause ??= ref
         .read(connectionStateProvider.notifier)
         .pauseReconnect();

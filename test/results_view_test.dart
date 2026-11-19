@@ -12,11 +12,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/data_model/search_results.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/catalog_sources_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/listing_presentation_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
@@ -24,6 +26,7 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_rows_shimmer.dart';
 import 'package:kalinka/widgets/search/results_view.dart';
 import 'package:kalinka/widgets/search/inspired_block.dart';
+import 'package:kalinka/widgets/search/source_unavailable_row.dart';
 import 'package:kalinka/widgets/search_cards/search_track_row.dart';
 import 'package:kalinka/widgets/search_cards/search_album_row.dart';
 import 'package:kalinka/widgets/search_cards/search_artist_row.dart';
@@ -37,6 +40,8 @@ import 'package:kalinka/widgets/module_artwork.dart';
 import 'package:kalinka/widgets/kalinka_popover.dart';
 import 'package:kalinka/widgets/section_tab_button.dart';
 
+import 'support/focus.dart';
+import 'support/home_shell.dart';
 import 'support/server_answer.dart';
 import 'support/receivers.dart';
 
@@ -446,6 +451,80 @@ void main() {
     expect(find.text('Jamendo · Source unavailable'), findsNothing);
     expect(find.text('Remote Act'), findsOneWidget);
   });
+
+  for (final leg in ResultsLeg.values) {
+    testWidgets('remote can retry timed-out Jamendo ${leg.name}', (
+      tester,
+    ) async {
+      final timeout = Completer<void>();
+      final gates = {'jamendo': timeout};
+      final api = _ScriptedApi(
+        matches: {
+          'localfiles': [
+            _artist('localfiles', '1', 'Local Act', MatchTier.exact),
+          ],
+          if (leg == ResultsLeg.matches)
+            'jamendo': [_artist('jamendo', '1', 'Remote Act', MatchTier.exact)],
+        },
+        inspired: {
+          'jamendo': [_track('jamendo', '1', 'Jamendo track')],
+        },
+        gates: leg == ResultsLeg.matches ? gates : const {},
+        inspiredGates: leg == ResultsLeg.inspired ? gates : const {},
+      );
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(0)),
+        api: api,
+        size: const Size(1100, 900),
+        sources: _modules,
+        overrides: [localDisplayKioskProvider.overrideWithValue(true)],
+      );
+      container.read(searchSessionProvider.notifier).submit('jazz');
+      await tester.pump();
+      await tester.pump(_settle);
+      timeout.completeError(TimeoutException('Jamendo'));
+      await tester.pumpAndSettle();
+
+      final local = find.widgetWithText(SearchArtistRow, 'Local Act');
+      final retry = find.byType(SourceUnavailableRow);
+      expect(retry, findsOneWidget);
+      traversableFocusNodesIn(local).first.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(focusIsOn(retry), isTrue);
+      expect(
+        tester.getSemantics(find.text('RETRY')),
+        isSemantics(
+          label: 'Retry Jamendo',
+          isButton: true,
+          isFocused: true,
+          hasTapAction: true,
+        ),
+      );
+
+      gates.clear();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(api.matchCalls, {
+        'localfiles': 1,
+        'jamendo': leg == ResultsLeg.matches ? 2 : 1,
+      });
+      expect(api.aiCalls, {
+        'localfiles': 1,
+        'jamendo': leg == ResultsLeg.inspired ? 2 : 1,
+      });
+      expect(retry, findsNothing);
+      expect(
+        leg == ResultsLeg.matches
+            ? find.text('Remote Act')
+            : find.widgetWithText(InspiredSourceCard, 'Jamendo'),
+        findsOneWidget,
+      );
+      expect(focusIsOn(find.byType(SearchSessionView)), isTrue);
+    });
+  }
 
   testWidgets(
     'wide overview gives name matches 55 percent and inspired results 45 percent',

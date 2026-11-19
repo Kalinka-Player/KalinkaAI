@@ -7,6 +7,7 @@ import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
 import 'tap_highlight.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 /// Height of the MiniPlayer (not including SafeArea bottom inset).
 const double kMiniPlayerHeight = 72.0;
@@ -212,11 +213,21 @@ class KalinkaToastHost extends ConsumerWidget {
                 ),
               )
             else
-              Positioned(
-                top: padding.top + 8,
-                left: rail > 0 ? padding.left + rail : 0.0,
-                right: 0,
-                bottom: 0,
+              ValueListenableBuilder(
+                valueListenable: ref.watch(shellKeyboardNavigationProvider),
+                builder: (context, mode, layer) => Positioned(
+                  top: padding.top + 8,
+                  left: rail > 0
+                      ? padding.left +
+                            mode.visibleWidth(
+                              rail,
+                              MediaQuery.textScalerOf(context),
+                            )
+                      : 0.0,
+                  right: 0,
+                  bottom: 0,
+                  child: layer!,
+                ),
                 child: _layer(KalinkaToastOverlay(bottomOffset: inset)),
               ),
           ],

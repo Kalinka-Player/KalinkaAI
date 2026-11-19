@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'keyboard/keyboard_activation.dart';
 
 /// A textual action: mono caps, no fill, its colour lifting under the pointer.
 ///
@@ -56,49 +57,52 @@ class _HoverTextActionState extends State<HoverTextAction> {
   Widget build(BuildContext context) {
     final target = _hovering ? widget.hoverColor : widget.color;
     return Semantics(
-      button: true,
-      label: widget.semanticsLabel ?? widget.label,
-      excludeSemantics: true,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => _setHovering(true),
-        onExit: (_) => _setHovering(false),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: Padding(
-            padding: widget.padding,
-            child: TweenAnimationBuilder<Color?>(
-              tween: ColorTween(begin: target, end: target),
-              duration: const Duration(milliseconds: 130),
-              curve: Curves.easeOut,
-              builder: (context, colour, _) => Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.label,
-                    style: widget.mono
-                        ? KalinkaFonts.mono(
-                            fontSize: widget.fontSize,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1.4,
-                            color: colour,
-                          )
-                        : KalinkaFonts.sans(
-                            fontSize: widget.fontSize,
-                            fontWeight: FontWeight.w500,
-                            color: colour,
-                          ),
-                  ),
-                  if (widget.trailingIcon != null) ...[
-                    const SizedBox(width: 2),
-                    Icon(
-                      widget.trailingIcon,
-                      size: widget.fontSize + 2,
-                      color: colour,
+      container: true,
+      child: KeyboardActivation(
+        onActivate: widget.onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => _setHovering(true),
+          onExit: (_) => _setHovering(false),
+          child: GestureDetector(
+            onTap: widget.onTap,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: widget.padding,
+              child: TweenAnimationBuilder<Color?>(
+                tween: ColorTween(begin: target, end: target),
+                duration: const Duration(milliseconds: 130),
+                curve: Curves.easeOut,
+                builder: (context, colour, _) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.label,
+                      semanticsLabel: widget.semanticsLabel,
+                      style: widget.mono
+                          ? KalinkaFonts.mono(
+                              fontSize: widget.fontSize,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.4,
+                              color: colour,
+                            )
+                          : KalinkaFonts.sans(
+                              fontSize: widget.fontSize,
+                              fontWeight: FontWeight.w500,
+                              color: colour,
+                            ),
                     ),
+                    if (widget.trailingIcon != null) ...[
+                      const SizedBox(width: 2),
+                      Icon(
+                        widget.trailingIcon,
+                        size: widget.fontSize + 2,
+                        color: colour,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

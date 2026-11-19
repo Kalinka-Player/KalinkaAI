@@ -14,19 +14,30 @@ void sendPlayPauseCommand(
   PlayerStateType? playerState, {
   bool exclusive = false,
 }) {
-  final api = ref.read(kalinkaWsApiProvider);
-  if (isPlayPauseDisabled(playerState, exclusive: exclusive)) return;
-
-  // A failed track is stopped as far as the transport is concerned, so play
-  // means "try it again" — the only retry the app offers.
-  if (playerState == PlayerStateType.stopped ||
-      playerState == PlayerStateType.error) {
-    api.sendQueueCommand(const QueueCommand.play());
-  } else if (playerState == PlayerStateType.paused) {
-    api.sendQueueCommand(const QueueCommand.pause(paused: false));
-  } else if (playerState == PlayerStateType.playing) {
-    api.sendQueueCommand(const QueueCommand.pause(paused: true));
+  final command = playPauseCommand(playerState, exclusive: exclusive);
+  if (command != null) {
+    ref.read(kalinkaWsApiProvider).sendQueueCommand(command);
   }
+}
+
+/// A dedicated Play or Pause key requests a state. A combined key toggles.
+QueueCommand? playPauseCommand(
+  PlayerStateType? state, {
+  required bool exclusive,
+  bool? play,
+}) {
+  if (isPlayPauseDisabled(state, exclusive: exclusive)) return null;
+  return switch (state) {
+    PlayerStateType.playing when play != true => const QueueCommand.pause(
+      paused: true,
+    ),
+    PlayerStateType.paused when play != false => const QueueCommand.pause(
+      paused: false,
+    ),
+    PlayerStateType.stopped ||
+    PlayerStateType.error when play != false => const QueueCommand.play(),
+    _ => null,
+  };
 }
 
 /// Returns the appropriate icon for the current player state.

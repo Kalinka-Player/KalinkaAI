@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +15,11 @@ import 'package:kalinka/widgets/search/catalog_page_view.dart';
 import 'package:kalinka/widgets/search_cards/artwork_grid_card.dart';
 import 'package:kalinka/widgets/search_cards/search_album_row.dart';
 import 'package:kalinka/widgets/source_badge.dart';
+import 'package:kalinka/widgets/keyboard/app_keyboard_navigation.dart';
+import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/search_cards/action_pill_button.dart';
+
+import 'support/focus.dart';
 
 BrowseItem _album(int n) => BrowseItem(
   id: 'kalinka:demo:album:a$n',
@@ -136,6 +142,104 @@ Future<ProviderContainer> _pump(
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  for (final compact in [false, true]) {
+    testWidgets(
+      'focus follows the active Play and view buttons (compact $compact)',
+      (tester) async {
+        const layout = ListingLayout(
+          'album',
+          byDefault: ListingPresentation.grid,
+        );
+        final prefs = await SharedPreferences.getInstance();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+            child: MaterialApp(
+              home: Scaffold(
+                body: AppKeyboardNavigation(
+                  child: AppKeyboardRegion(
+                    area: AppKeyboardArea.content,
+                    child: Row(
+                      children: [
+                        ActionPillButton(
+                          label: 'Play all',
+                          primary: true,
+                          onTap: () {},
+                        ),
+                        PresentationToggle(layout: layout, compact: compact),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        final play = find.byType(ActionPillButton);
+        final toggle = find.byType(PresentationToggle);
+        Finder ring(Finder target) =>
+            focusOutlineIn(target, KalinkaColors.textPrimary);
+        expect(ring(play), findsNothing);
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+        expect(ring(play), findsOneWidget);
+        expect(
+          tester.getRect(ring(play)),
+          tester.getRect(
+            find.descendant(of: play, matching: find.byType(InkWell)),
+          ),
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pumpAndSettle();
+        expect(ring(play), findsNothing);
+        if (!compact) {
+          expect(ring(find.byTooltip('Grid view')), findsOneWidget);
+          expect(ring(find.byTooltip('List view')), findsNothing);
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+          await tester.pumpAndSettle();
+        }
+        final listRing = ring(find.byTooltip('List view'));
+        final bounds = tester.getRect(toggle);
+        expect(
+          tester.getRect(listRing),
+          Rect.fromCenter(
+            center: compact
+                ? bounds.center
+                : Offset(
+                    bounds.right - kKalinkaPillTarget / 2,
+                    bounds.center.dy,
+                  ),
+            width: compact ? kKalinkaPillHeight : kKalinkaPillTarget,
+            height: kKalinkaPillHeight,
+          ),
+        );
+        final shape =
+            (tester.widget<DecoratedBox>(listRing).decoration
+                    as ShapeDecoration)
+                .shape;
+        if (compact) {
+          expect(shape, isA<CircleBorder>());
+        } else {
+          expect(
+            (shape as RoundedRectangleBorder).borderRadius,
+            const BorderRadiusDirectional.horizontal(
+              end: Radius.circular(kKalinkaPillRadius),
+            ),
+          );
+        }
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(
+          ProviderScope.containerOf(tester.element(toggle))
+              .read(listingPresentationProvider)[layout.id],
+          ListingPresentation.list,
+        );
+        expect(focusIsOn(toggle), isTrue);
+        expect(ring(toggle), findsOneWidget);
+      },
+    );
+  }
 
   testWidgets('an album catalog opens as a grid read across, then down', (
     tester,

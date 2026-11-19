@@ -393,7 +393,7 @@ class _KeepDuplicates extends StatelessWidget {
         sublabel: keeping
             ? 'The same track may land more than once.'
             : 'Tracks the collection already holds are skipped.',
-        trailing: SettingsToggle(value: keeping, onChanged: onChanged),
+        trailing: SettingsToggle(value: keeping, onChanged: null),
         onTap: () {
           onChanged(!keeping);
         },
@@ -476,6 +476,7 @@ class _ChoiceRow extends StatelessWidget {
       selected: chosen,
       label: _nameOf(item),
       child: TapHighlight(
+        focusable: true,
         onTap: onTap,
         inset: kSheetGutter,
         child: AnimatedContainer(

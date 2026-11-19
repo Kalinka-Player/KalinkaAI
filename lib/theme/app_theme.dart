@@ -64,6 +64,24 @@ double kalinkaNavigationRailWidth(
   return kKalinkaWideRailWidth * text.clamp(1.0, 1.3);
 }
 
+/// Keyboard navigation reserves the same column while labels open over browsing.
+enum NavigationRailMode {
+  responsive,
+  icons,
+  labels;
+
+  double reservedWidth(double normal) =>
+      normal == 0 || this == responsive ? normal : 64;
+
+  static double labelledWidth(TextScaler scaler) =>
+      kKalinkaWideRailWidth * (scaler.scale(16) / 16).clamp(1.0, 1.5);
+
+  double visibleWidth(double normal, TextScaler scaler) =>
+      this == labels && normal > 0
+      ? labelledWidth(scaler)
+      : reservedWidth(normal);
+}
+
 /// The narrow rail at this text size: wider by what its 12sp labels grow, so
 /// a name that keeps to one line at standard size keeps to it at any, and the
 /// device's settings split none mid-word. To a whole pixel, the hair over
@@ -93,13 +111,19 @@ double kalinkaShellWidthWithin(BuildContext context) {
 
 /// Where the rail ends in window coordinates, past the left inset; zero
 /// without one. Only above the shell, as [kalinkaShellWidth].
-double kalinkaRailEdge(BuildContext context) {
+double kalinkaRailEdge(
+  BuildContext context, {
+  NavigationRailMode mode = NavigationRailMode.responsive,
+}) {
   final rail = kalinkaNavigationRailWidth(
     kalinkaShellWidth(context),
     windowHeight: MediaQuery.sizeOf(context).height,
     textScaler: MediaQuery.textScalerOf(context),
   );
-  return rail > 0 ? MediaQuery.paddingOf(context).left + rail : 0;
+  return rail > 0
+      ? MediaQuery.paddingOf(context).left +
+            mode.visibleWidth(rail, MediaQuery.textScalerOf(context))
+      : 0;
 }
 
 /// Leave room for navigation and music browsing while keeping useful artwork.
@@ -915,6 +939,9 @@ class AppTheme {
               : color;
         }),
         trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.focused)) {
+            return KalinkaColors.textPrimary;
+          }
           if (states.contains(WidgetState.selected)) return Colors.transparent;
           return states.contains(WidgetState.disabled)
               ? KalinkaColors.borderSubtle

@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
 import 'kalinka_popover.dart';
+import 'keyboard/ink_focus_outline.dart';
 
 import '../utils/click_cursor.dart';
 
@@ -24,13 +26,14 @@ final WidgetStateProperty<Color?> kalinkaOverlay =
     });
 
 /// Round icon actions with the same pointer highlight as other Kalinka controls.
-/// Leave keyboard focus to IconButton's native focus highlight: a menu may
-/// focus its anchor after a touch without needing a persistent focus border.
+/// Paint the keyboard outline across the whole padded face.
 final kalinkaIconButtonStyle = ButtonStyle(
   minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
   padding: const WidgetStatePropertyAll(EdgeInsets.all(12)),
   shape: const WidgetStatePropertyAll(CircleBorder()),
   overlayColor: kalinkaOverlay,
+  backgroundBuilder: (_, _, child) =>
+      InkFocusOutline(shape: const CircleBorder(), child: child!),
 );
 
 /// A flat highlight across the entire row on hover, press or focus, without
@@ -166,7 +169,9 @@ class TapHighlight extends StatefulWidget {
     this.inset = 0,
     this.focusable = false,
     this.autofocus = false,
-    this.focusBorder,
+    this.focusBorder = const Border.fromBorderSide(
+      BorderSide(color: KalinkaColors.textPrimary, width: 2),
+    ),
   });
 
   @override

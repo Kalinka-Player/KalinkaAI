@@ -8,21 +8,28 @@ import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
+import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/shell_nav_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/theme/app_theme.dart';
-import 'package:kalinka/widgets/kalinka_bottom_sheet.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/coach_marks_overlay.dart';
 import 'package:kalinka/widgets/discovery_screen.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/queue_item_row.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
+import 'package:kalinka/widgets/search/search_composer.dart';
+import 'package:kalinka/widgets/tap_highlight.dart';
 import 'package:kalinka/widgets/shell_navigation.dart';
-import 'package:kalinka/widgets/server_chip.dart';
 import 'package:kalinka/widgets/server_sheet.dart';
+import 'package:kalinka/widgets/kalinka_bottom_sheet.dart';
+import 'package:kalinka/screens/kiosk_screen.dart';
+import 'package:kalinka/widgets/kiosk/local_kiosk_host.dart';
+import 'package:kalinka/widgets/keyboard/on_screen_keyboard_host.dart';
+import 'package:kalinka/widgets/server_chip.dart';
+import 'package:kalinka/widgets/section_tab_button.dart';
 import 'package:kalinka/widgets/playback_progress_slider.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/transport_button.dart';
@@ -72,6 +79,178 @@ class _KeyboardRenderers extends RendererListNotifier {
 }
 
 void main() {
+  testWidgets('remote types in Home search, returns to the field and submits', (
+    tester,
+  ) async {
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(0)),
+      size: const Size(1440, 900),
+      onScreenKeyboard: true,
+      wrapNavigator: (navigator) =>
+          LocalKioskHost(child: OnScreenKeyboardHost(child: navigator)),
+      overrides: [localDisplayKioskProvider.overrideWithValue(true)],
+    );
+    Future<void> press(LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+    }
+
+    container.read(kioskProvider.notifier).exit();
+    await tester.pumpAndSettle();
+    final entry = find
+        .ancestor(
+          of: find.byKey(const ValueKey('search-entry-surface')),
+          matching: find.byType(TapHighlight),
+        )
+        .first;
+    traversableFocusNodesIn(entry).first.requestFocus();
+    await tester.pump();
+    await press(LogicalKeyboardKey.enter);
+    final keyboard = find.byKey(const ValueKey('on-screen-keyboard'));
+    expect(keyboard, findsOneWidget);
+    await press(LogicalKeyboardKey.escape);
+    expect(keyboard, findsNothing);
+    expect(find.byType(SearchComposer), findsOneWidget);
+    await press(LogicalKeyboardKey.escape);
+    expect(find.byType(SearchComposer), findsNothing);
+    expect(focusIsOn(entry), isTrue);
+    await press(LogicalKeyboardKey.enter);
+    final field = find.descendant(
+      of: find.byType(SearchComposer),
+      matching: find.byType(TextField),
+    );
+    final controller = tester.widget<TextField>(field).controller!;
+    expect(keyboard, findsOneWidget);
+    String? highlighted() => tester
+        .widget<Semantics>(
+          find
+              .descendant(
+                of: keyboard,
+                matching: find.byWidgetPredicate(
+                  (w) => w is Semantics && w.properties.focused == true,
+                ),
+              )
+              .first,
+        )
+        .properties
+        .label;
+    expect(highlighted(), 'q');
+    await press(LogicalKeyboardKey.arrowLeft);
+    await press(LogicalKeyboardKey.enter);
+    await press(LogicalKeyboardKey.arrowRight);
+    expect(highlighted(), 'w');
+    await press(LogicalKeyboardKey.enter);
+    expect(controller.text, 'qw');
+    expect(container.read(searchSessionProvider).searchQuery, isEmpty);
+    await press(LogicalKeyboardKey.escape);
+    expect(keyboard, findsNothing);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Text entry navigation',
+    );
+    await press(LogicalKeyboardKey.arrowRight);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      isNot('Text entry navigation'),
+    );
+    await press(LogicalKeyboardKey.arrowLeft);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'Text entry navigation',
+    );
+    expect(find.text('Enter to edit'), findsOneWidget);
+    await press(LogicalKeyboardKey.enter);
+    expect(keyboard, findsOneWidget);
+    expect(controller.text, 'qw');
+    // Walk to Go on the actual layout and submit the draft once.
+    for (var n = 0; n < 9; n++) {
+      await press(LogicalKeyboardKey.arrowRight);
+    }
+    for (var n = 0; n < 3; n++) {
+      await press(LogicalKeyboardKey.arrowDown);
+    }
+    await press(LogicalKeyboardKey.enter);
+    expect(container.read(searchSessionProvider).searchQuery, 'qw');
+    expect(keyboard, findsNothing);
+    expect(find.byType(SearchComposer), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets(
+    'TV remote reaches the mini-player from the navigation rail without Tab',
+    (tester) async {
+      await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(3)),
+        size: const Size(850, 600),
+        overrides: [localDisplayKioskProvider.overrideWithValue(true)],
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(area, 'navigation');
+      FocusNode? bottom;
+      for (var i = 0; i < 20 && area == 'navigation'; i++) {
+        bottom = FocusManager.instance.primaryFocus;
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+      }
+      expect(focusIsOn(find.byType(MiniPlayer)), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus, same(bottom));
+    },
+  );
+
+  testWidgets(
+    'arrows connect all three panes and the queue leads down to the mini-player',
+    (tester) async {
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(5)),
+        size: const Size(1440, 900),
+        overrides: [
+          localDisplayKioskProvider.overrideWithValue(true),
+          supervisorApiProvider.overrideWithValue(null),
+        ],
+      );
+      Future<void> press(LogicalKeyboardKey key) async {
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+      }
+
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(area, 'navigation');
+      await press(LogicalKeyboardKey.arrowRight);
+      expect(area, 'content');
+      for (var i = 0; i < 20 && area == 'content'; i++) {
+        await press(LogicalKeyboardKey.arrowRight);
+      }
+      expect(area, 'player');
+      final queue = find.widgetWithText(SectionTabButton, 'QUEUE');
+      traversableFocusNodesIn(queue).first.requestFocus();
+      await tester.pump();
+      await press(LogicalKeyboardKey.enter);
+      expect(container.read(playerViewProvider), PlayerView.queue);
+      expect(focusIsOn(queue), isTrue);
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(area, 'player');
+      FocusNode? bottom;
+      for (var i = 0; i < 35 && area == 'player'; i++) {
+        bottom = FocusManager.instance.primaryFocus;
+        await press(LogicalKeyboardKey.arrowDown);
+      }
+      expect(area, 'playback');
+      await press(LogicalKeyboardKey.arrowUp);
+      expect(FocusManager.instance.primaryFocus, same(bottom));
+      for (var i = 0; i < 10 && area == 'player'; i++) {
+        await press(LogicalKeyboardKey.arrowLeft);
+      }
+      expect(area, 'content');
+      await press(LogicalKeyboardKey.escape);
+      expect(area, 'navigation');
+    },
+  );
+
   for (final (width, queueVisible) in [
     (1024.0, false),
     (1440.0, false),
@@ -231,6 +410,12 @@ void main() {
           await tester.pumpAndSettle();
         }
         expect(focusIsOn(play), isTrue);
+        expect(
+          tester.getRect(focusOutlineIn(play, KalinkaColors.textMuted)),
+          tester.getRect(
+            find.descendant(of: play, matching: find.byType(InkWell)),
+          ),
+        );
         await tester.sendKeyEvent(LogicalKeyboardKey.space);
         await tester.pumpAndSettle();
         expect(api.queueCommands, [const QueueCommand.pause(paused: true)]);
@@ -271,6 +456,66 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'remote can browse and close the server menu directly after kiosk Home',
+    (tester) async {
+      await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(0)),
+        size: const Size(1440, 900),
+        wrapNavigator: (navigator) =>
+            LocalKioskHost(child: OnScreenKeyboardHost(child: navigator)),
+        overrides: [
+          localDisplayKioskProvider.overrideWithValue(true),
+          kioskLaunchProvider.overrideWithValue(true),
+          configurationAvailableProvider.overrideWithValue(true),
+          boxControlProvider.overrideWith(
+            (_) async => const BoxControl(
+              SupervisorInfo(
+                version: 'test',
+                protocol: 1,
+                minProtocol: 1,
+                serverId: 'home-shell',
+                actions: {'poweroff'},
+              ),
+              'home-shell',
+            ),
+          ),
+        ],
+      );
+      Future<void> press(LogicalKeyboardKey key) async {
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+      }
+
+      final home = find.ancestor(
+        of: find.byIcon(Icons.home_outlined),
+        matching: find.byType(TransportButton),
+      );
+      expect(home, findsOneWidget);
+      await press(LogicalKeyboardKey.arrowUp);
+      for (var i = 0; i < 3 && !focusIsOn(home); i++) {
+        await press(LogicalKeyboardKey.arrowRight);
+      }
+      expect(focusIsOn(home), isTrue);
+      await press(LogicalKeyboardKey.enter);
+      expect(find.byType(KioskScreen), findsNothing);
+      await press(LogicalKeyboardKey.escape);
+      expect(area, 'navigation');
+      await press(LogicalKeyboardKey.tab);
+      expect(focusIsOn(find.byType(ServerChip)), isTrue);
+      await press(LogicalKeyboardKey.enter);
+      expect(focusIsOn(find.widgetWithText(SheetRow, 'Settings')), isTrue);
+      expect(find.text('Connect to different server'), findsNothing);
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(focusIsOn(find.widgetWithText(SheetRow, 'Power off')), isTrue);
+      await press(LogicalKeyboardKey.escape);
+      expect(find.byType(ServerSheetContent), findsNothing);
+      expect(focusIsOn(find.byType(ServerChip)), isTrue);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
 
   testWidgets(
     'clicking the server chip leaves the rows unfocused until navigation',
@@ -551,28 +796,32 @@ void main() {
     },
   );
 
-  testWidgets('catalog toolbar and content remain separate areas', (
-    tester,
-  ) async {
-    final container = await pumpHomeShell(
-      tester,
-      queue: SettableQueue(queueOf(2)),
-      size: const Size(1440, 900),
-    );
-    container
-        .read(searchSessionProvider.notifier)
-        .openCatalog(id: 'kalinka:localfiles:catalog:albums', title: 'Albums');
-    await tester.pumpAndSettle();
-    await tab(tester);
-    expect(area, 'navigation');
-    await tab(tester);
-    expect(area, 'toolbar');
-    expect(focusIsOn(find.byType(SearchSessionView)), isTrue);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pumpAndSettle();
-    expect(area, 'toolbar');
-    await tab(tester);
-    expect(area, isNot('toolbar'));
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'Down enters catalog content and Tab continues through the areas',
+    (tester) async {
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(2)),
+        size: const Size(1440, 900),
+      );
+      container
+          .read(searchSessionProvider.notifier)
+          .openCatalog(
+            id: 'kalinka:localfiles:catalog:albums',
+            title: 'Albums',
+          );
+      await tester.pumpAndSettle();
+      await tab(tester);
+      expect(area, 'navigation');
+      await tab(tester);
+      expect(area, 'toolbar');
+      expect(focusIsOn(find.byType(SearchSessionView)), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(area, 'content');
+      await tab(tester);
+      expect(area, 'player');
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

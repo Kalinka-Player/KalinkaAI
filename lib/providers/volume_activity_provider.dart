@@ -11,8 +11,8 @@ class VolumeActivity {
   const VolumeActivity({this.level, this.max});
 }
 
-/// A native key press also needs feedback when already at the volume limit.
-/// Commands remain native; this channel only asks the UI to show the level.
+/// Hardware volume keys also give feedback at the volume limit. Android sends
+/// feedback over the platform channel and the kiosk calls [showLevel] directly.
 class VolumeActivityNotifier extends Notifier<VolumeActivity?> {
   static const _channel = MethodChannel('org.kalinka.kalinka/media_session');
 
@@ -33,6 +33,10 @@ class VolumeActivityNotifier extends Notifier<VolumeActivity?> {
       ref.onDispose(() => _channel.setMethodCallHandler(null));
     }
     return null;
+  }
+
+  void showLevel(int level, int max) {
+    state = VolumeActivity(level: level, max: max);
   }
 
   @override

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/plugin_catalog.dart';
+import 'package:kalinka/data_model/log_export.dart';
+import 'package:kalinka/providers/log_export_provider.dart';
+import 'package:kalinka/providers/box_control_provider.dart';
+import 'package:kalinka/providers/power_off_status_provider.dart';
+import 'package:kalinka/providers/supervisor_api.dart';
+import 'package:kalinka/widgets/settings_controls/settings_enum_pills.dart';
+import 'package:kalinka/widgets/settings_controls/settings_toggle.dart';
 import 'package:kalinka/data_model/renderer_config.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/catalog_cards_provider.dart';
@@ -26,6 +34,9 @@ import 'package:kalinka/providers/server_info_provider.dart';
 import 'package:kalinka/providers/server_update_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/screens/plugin_catalog_screen.dart';
+import 'package:kalinka/providers/kiosk_provider.dart';
+import 'package:kalinka/screens/log_export_screen.dart';
+import 'package:kalinka/widgets/settings_controls/settings_action_row.dart';
 import 'package:kalinka/screens/renderer_settings_screen.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/theme/kalinka_icons.dart';
@@ -165,7 +176,23 @@ class _Restart extends RestartNotifier {
       state = const RestartState(isRestarting: true, isDone: true);
 }
 
+class _IdlePluginOperations extends PluginOperationsNotifier {
+  @override
+  Future<void> reattach() async {}
+}
+
 Finder _nav(String id) => find.byKey(ValueKey('navigation-$id'));
+
+const _streamerBox = BoxControl(
+  SupervisorInfo(
+    version: 'test',
+    protocol: 1,
+    minProtocol: 1,
+    serverId: 'home-shell',
+    actions: {'reboot', 'poweroff'},
+  ),
+  'home-shell',
+);
 
 Future<ProviderContainer> _pump(
   WidgetTester tester, {
@@ -209,6 +236,7 @@ Future<ProviderContainer> _pump(
     pluginCatalogProvider.overrideWith(
       (ref) async => const PluginCatalog(status: 'available'),
     ),
+    pluginOperationsProvider.overrideWith(_IdlePluginOperations.new),
     serverUpdateProvider.overrideWith((ref) async => null),
     ...extra,
   ],
@@ -218,7 +246,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   // Optional review captures use the bundled fonts, just like the real app.
-  final captures = Platform.environment['KALINKA_REVIEW_DIR'];
+  final captures = kIsWeb ? null : Platform.environment['KALINKA_REVIEW_DIR'];
   setUpAll(() async {
     if (captures == null) return;
     for (final (family, file) in [
@@ -402,6 +430,366 @@ void main() {
         find.descendant(of: _nav('results'), matching: find.byType(TextButton)),
       );
       expect(button.onPressed, isNull);
+    },
+  );
+
+  for (final (size, kind, kiosk) in [
+    (const Size(1440, 900), ui.PointerDeviceKind.mouse, false),
+    (const Size(1024, 600), ui.PointerDeviceKind.touch, true),
+  ]) {
+    testWidgets('keyboard rail overlays browsing and hands back to $kind', (
+      tester,
+    ) async {
+      final container = await _pump(
+        tester,
+        size: size,
+        extra: [
+          localDisplayKioskProvider.overrideWithValue(kiosk),
+          supervisorApiProvider.overrideWithValue(null),
+        ],
+      );
+      final rail = find.byKey(const ValueKey('navigation-rail'));
+      final home = _nav('home');
+      final source = _nav('source-localfiles');
+      final pane = find.byType(SearchSessionView);
+      final normal = tester.getSize(rail).width;
+      expect(normal, size.width == 1440 ? 200 : 88);
+      Future<void> press(LogicalKeyboardKey key) async {
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+      }
+
+      await press(LogicalKeyboardKey.mediaPlayPause);
+      expect(tester.getSize(rail).width, normal);
+      await press(LogicalKeyboardKey.tab);
+      expect(focusIsOn(home), isTrue);
+      expect(tester.getSize(rail).width, 200);
+      final paneWithLabels = tester.getRect(pane);
+      expect(paneWithLabels.left, 64);
+      final homeNode = traversableFocusNodesIn(home).single;
+      await press(LogicalKeyboardKey.arrowRight);
+      expect(tester.getSize(rail).width, 64);
+      expect(tester.getRect(pane), paneWithLabels);
+      expect(traversableFocusNodesIn(home).single, same(homeNode));
+      final button = find.descendant(
+        of: source,
+        matching: find.byType(TextButton),
+      );
+      expect(tester.getSize(button).shortestSide, greaterThanOrEqualTo(48));
+      expect(
+        tester.getSemantics(button),
+        isSemantics(label: 'My Library', isButton: true),
+      );
+      await press(LogicalKeyboardKey.escape);
+      expect(focusIsOn(home), isTrue);
+      expect(tester.getSize(rail).width, 200);
+      await press(LogicalKeyboardKey.arrowRight);
+
+      final gesture = await tester.createGesture(kind: kind);
+      final position = tester.getCenter(source);
+      if (kind == ui.PointerDeviceKind.mouse) {
+        await gesture.addPointer(location: Offset.zero);
+        await gesture.moveTo(position);
+        await tester.pump();
+        expect(tester.getSize(rail).width, 64);
+      }
+      await gesture.down(position);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(rail).width, 64);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(
+        container.read(searchSessionProvider).catalogPage.id,
+        'kalinka:localfiles:catalog:root',
+      );
+      expect(tester.getSize(rail).width, normal);
+      await gesture.removePointer();
+      await press(LogicalKeyboardKey.tab);
+      if (focusIsOn(rail)) await press(LogicalKeyboardKey.arrowRight);
+      expect(tester.getSize(rail).width, 64);
+      final item = find.text('Album collection 0').hitTestable();
+      final bounds = tester.getRect(item);
+      final tap = await tester.startGesture(bounds.center, kind: kind);
+      await tester.pump();
+      expect(tester.getRect(item), bounds);
+      await tap.up();
+      await tester.pumpAndSettle();
+      expect(
+        container.read(searchSessionProvider).catalogPage.id,
+        'kalinka:localfiles:catalog:albums-0',
+      );
+      expect(tester.getSize(rail).width, normal);
+    });
+  }
+
+  testWidgets('Back from Settings opens the rail without moving its rows', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      extra: [
+        localDisplayKioskProvider.overrideWithValue(true),
+        supervisorApiProvider.overrideWithValue(null),
+        boxControlProvider.overrideWith((ref) async => _streamerBox),
+      ],
+    );
+    final rail = find.byType(ShellNavigation);
+    final settings = _nav('configuration');
+    expect(_nav('changeServer'), findsNothing);
+    List<Offset> iconPositions() => [
+      for (final id in [
+        'home',
+        'results',
+        'source-localfiles',
+        'configuration',
+        'restart',
+        'powerOff',
+      ])
+        tester.getCenter(
+          find.descendant(of: _nav(id), matching: find.byType(Icon)).first,
+        ),
+    ];
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 12 && !focusIsOn(settings); i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+    }
+    expect(focusIsOn(settings), isTrue);
+    final positions = iconPositions();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    final streamer = find.byKey(const ValueKey('catalog-tab-server'));
+    traversableFocusNodesIn(streamer).first.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    final scroll = tester
+        .widget<CustomScrollView>(find.byKey(const ValueKey('catalog-scroll')))
+        .controller!;
+    scroll.jumpTo(scroll.position.maxScrollExtent / 2);
+    await tester.pumpAndSettle();
+    final offset = scroll.offset;
+    expect(offset, greaterThan(0));
+    final pane = tester.getRect(find.byType(PluginCatalogScreen));
+    expect(tester.getSize(rail).width, lessThan(100));
+    expect(iconPositions(), positions);
+    final railScroll = tester.state<ScrollableState>(
+      find.descendant(of: rail, matching: find.byType(Scrollable)),
+    );
+    expect(railScroll.position.maxScrollExtent, 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    for (var frame = 0; frame < 16; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(iconPositions(), positions, reason: 'rail icons on frame $frame');
+      expect(tester.getRect(find.byType(PluginCatalogScreen)), pane);
+      expect(scroll.offset, offset);
+    }
+    expect(focusIsOn(settings), isTrue);
+    expect(tester.getSize(rail).width, greaterThan(100));
+  });
+
+  testWidgets('More keeps rail labels until the keyboard leaves its shelf', (
+    tester,
+  ) async {
+    BoxPowerStatus? timer = const BoxPowerStatus(
+      serverId: 'home-shell',
+      state: 'scheduled',
+      remainingSeconds: 1800,
+    );
+    final container = await _pump(
+      tester,
+      size: const Size(1024, 480),
+      extra: [
+        supervisorApiProvider.overrideWithValue(null),
+        boxControlProvider.overrideWith((ref) async => _streamerBox),
+        currentPowerOffStatusProvider.overrideWith((ref) => timer),
+      ],
+    );
+    final rail = find.byKey(const ValueKey('navigation-rail'));
+    Future<void> press(LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+    }
+
+    await press(LogicalKeyboardKey.tab);
+    final more = _nav('more');
+    for (var i = 0; i < 12 && !focusIsOn(more); i++) {
+      await press(LogicalKeyboardKey.arrowDown);
+    }
+    expect(focusIsOn(more), isTrue);
+    await press(LogicalKeyboardKey.enter);
+    final folded = _nav('collections');
+    expect(folded.hitTestable(), findsOneWidget);
+    await press(LogicalKeyboardKey.arrowRight);
+    expect(focusIsOn(find.byType(ShellNavigation)), isTrue);
+    expect(focusIsOn(more), isFalse);
+    expect(tester.getSize(rail).width, 200);
+    await press(LogicalKeyboardKey.tab);
+    expect(folded.hitTestable(), findsNothing);
+    expect(tester.getSize(rail).width, 64);
+    for (final id in [
+      'configuration',
+      'restart',
+      if (!kIsWeb) 'changeServer',
+      'powerOff',
+    ]) {
+      expect(_nav(id).hitTestable(), findsOneWidget, reason: id);
+    }
+    final power = _nav('powerOff');
+    Finder onPower(Finder child) => find.descendant(of: power, matching: child);
+    expect(
+      onPower(find.byIcon(Icons.power_settings_new)).hitTestable(),
+      findsOneWidget,
+    );
+    expect(onPower(find.text('30m')).hitTestable(), findsOneWidget);
+    timer = const BoxPowerStatus(
+      serverId: 'home-shell',
+      state: 'scheduled',
+      remainingSeconds: 60,
+    );
+    container.invalidate(currentPowerOffStatusProvider);
+    await tester.pumpAndSettle();
+    expect(onPower(find.text('1m')).hitTestable(), findsOneWidget);
+    expect(find.byTooltip('Power off in 1 minute'), findsOneWidget);
+    timer = null;
+    container.invalidate(currentPowerOffStatusProvider);
+    await tester.pumpAndSettle();
+    expect(onPower(find.text('1m')), findsNothing);
+    expect(
+      onPower(find.byIcon(Icons.power_settings_new)).hitTestable(),
+      findsOneWidget,
+    );
+  });
+
+  for (final kiosk in [false, true]) {
+    testWidgets(
+      'Back unwinds the source then focuses its rail button (kiosk $kiosk)',
+      (tester) async {
+        final container = await _pump(
+          tester,
+          extra: [localDisplayKioskProvider.overrideWithValue(kiosk)],
+        );
+        final source = _nav('source-localfiles');
+        traversableFocusNodesIn(source).first.requestFocus();
+        await tester.pump();
+        Future<void> press(LogicalKeyboardKey key) async {
+          await tester.sendKeyEvent(key);
+          await tester.pumpAndSettle();
+        }
+
+        // Arrow navigation marks an ordinary keyboard as active as well.
+        await press(LogicalKeyboardKey.arrowRight);
+        await press(LogicalKeyboardKey.escape);
+        expect(focusIsOn(source), isTrue);
+        await press(LogicalKeyboardKey.enter);
+        final root = container.read(searchSessionProvider).catalogPage.id;
+        expect(root, 'kalinka:localfiles:catalog:root');
+        expect(
+          FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+          'content',
+        );
+        container
+            .read(searchSessionProvider.notifier)
+            .openCatalog(
+              id: 'kalinka:localfiles:catalog:albums-2',
+              title: 'Album collection 2',
+            );
+        await tester.pumpAndSettle();
+        await press(LogicalKeyboardKey.escape);
+        expect(container.read(searchSessionProvider).catalogPage.id, root);
+        expect(
+          FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+          'content',
+        );
+        await press(LogicalKeyboardKey.escape);
+        expect(focusIsOn(source), isTrue);
+        expect(container.read(searchSessionProvider).catalogPage.id, root);
+      },
+    );
+  }
+
+  testWidgets(
+    'remote enters Settings from the rail and keeps nested pages in the main pane',
+    (tester) async {
+      await _pump(
+        tester,
+        extra: [
+          localDisplayKioskProvider.overrideWithValue(true),
+          logExportProvider.overrideWithBuild(
+            (_, _) => const LogExportView(
+              status: LogExportStatus(
+                state: LogExportState.none,
+                availableSources: [LogSource.localRenderer],
+              ),
+            ),
+          ),
+        ],
+      );
+      Future<void> activate(Finder target) async {
+        traversableFocusNodesIn(target).first.requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+      }
+
+      await activate(_nav('configuration'));
+      expect(focusIsOn(find.byType(PluginCatalogScreen)), isTrue);
+      expect(
+        FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+        'content',
+      );
+      await activate(_nav('configuration'));
+      expect(focusIsOn(find.byType(PluginCatalogScreen)), isTrue);
+      final streamer = find.byKey(const ValueKey('catalog-tab-server'));
+      await activate(streamer);
+      expect(focusIsOn(streamer), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(focusIsOn(streamer), isFalse);
+      final logs = find.widgetWithText(
+        SettingsActionRow,
+        'Download server logs',
+      );
+      await tester.ensureVisible(logs);
+      await tester.pumpAndSettle();
+      await activate(logs);
+      final panel = find.byType(LogExportScreen);
+      expect(focusIsOn(panel), isTrue);
+      expect(
+        FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+        'content',
+      );
+      final pills = find.byType(SettingsEnumPills);
+      List<FocusNode> segments() => traversableFocusNodesIn(pills).toList();
+      expect(segments(), hasLength(3));
+      expect(focusIsOn(pills), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SettingsEnumPills>(pills).selected, '24 hours');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SettingsEnumPills>(pills).selected, '7 days');
+      final toggle = find.descendant(
+        of: panel,
+        matching: find.byType(SettingsToggle),
+      );
+      expect(traversableFocusNodesIn(toggle), hasLength(1));
+      await activate(toggle);
+      expect(tester.widget<SettingsToggle>(toggle).value, isTrue);
+      expect(focusIsOn(toggle), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(panel, findsNothing);
+      expect(focusIsOn(logs), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(focusIsOn(_nav('configuration')), isTrue);
+      expect(find.byType(PluginCatalogScreen), findsOneWidget);
     },
   );
 

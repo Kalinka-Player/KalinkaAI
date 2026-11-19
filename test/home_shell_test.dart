@@ -12,9 +12,12 @@ import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/soundcard_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
+import 'package:kalinka/providers/collections_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/coach_marks_overlay.dart';
 import 'package:kalinka/widgets/kalinka_top_bar.dart';
+import 'package:kalinka/widgets/kalinka_bottom_sheet.dart';
+import 'package:kalinka/widgets/tap_highlight.dart';
 import 'package:kalinka/widgets/kalinka_popover.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
@@ -28,6 +31,7 @@ import 'package:kalinka/widgets/server_chip.dart';
 import 'package:kalinka/widgets/shell_navigation.dart';
 
 import 'support/home_shell.dart';
+import 'support/focus.dart';
 import 'support/soundcard_fakes.dart';
 
 class _Renderers extends RendererListNotifier {
@@ -138,6 +142,55 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Clear queue'), findsOneWidget);
     expect(find.text('Clear played'), findsOneWidget);
+  });
+
+  testWidgets('remote can set repeat and open Save this queue', (tester) async {
+    late _RecordingWsApi ws;
+    await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(3)),
+      overrides: [
+        collectionChoicesProvider.overrideWith((ref) async => const []),
+        kalinkaWsApiProvider.overrideWith((ref) => ws = _RecordingWsApi(ref)),
+      ],
+    );
+    await _openQueue(tester);
+    final menu = find.byTooltip('Queue options');
+    traversableFocusNodesIn(menu).single.requestFocus();
+    await tester.pump();
+    Future<void> press(LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+    }
+
+    await press(LogicalKeyboardKey.enter);
+    expect(focusIsOn(find.widgetWithText(SheetRow, 'Shuffle')), isTrue);
+    Finder repeat(String label) => find
+        .ancestor(of: find.text(label), matching: find.byType(TapHighlight))
+        .first;
+    await press(LogicalKeyboardKey.arrowDown);
+    await press(LogicalKeyboardKey.arrowLeft);
+    await press(LogicalKeyboardKey.arrowLeft);
+    expect(focusIsOn(repeat('Off')), isTrue);
+    for (final label in ['All', 'One']) {
+      await press(LogicalKeyboardKey.arrowRight);
+      expect(focusIsOn(repeat(label)), isTrue);
+      await press(LogicalKeyboardKey.enter);
+      expect(
+        ws.sent.last,
+        QueueCommand.setPlaybackMode(
+          shuffle: false,
+          repeatAll: label == 'All',
+          repeatSingle: label == 'One',
+        ),
+      );
+    }
+    await press(LogicalKeyboardKey.arrowDown);
+    expect(focusIsOn(repeat('Save this queue')), isTrue);
+    await press(LogicalKeyboardKey.enter);
+    expect(find.text('Create new collection'), findsOneWidget);
+    await press(LogicalKeyboardKey.escape);
+    expect(focusIsOn(menu), isTrue);
   });
 
   testWidgets('the queue\'s menu turns shuffle on', (tester) async {

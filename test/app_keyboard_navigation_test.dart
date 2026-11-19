@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/widgets/home/preview_shelf.dart';
 import 'package:kalinka/widgets/keyboard/app_keyboard_navigation.dart';
 
 import 'support/focus.dart';
@@ -16,10 +19,19 @@ Widget button(String label, {FocusNode? focusNode, VoidCallback? onPressed}) =>
 Widget region(AppKeyboardArea area, Widget child) =>
     AppKeyboardRegion(area: area, child: child);
 
-Future<void> pump(WidgetTester tester, Widget child) async {
+Future<void> pump(
+  WidgetTester tester,
+  Widget child, {
+  bool remote = false,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
-      home: Scaffold(body: AppKeyboardNavigation(child: child)),
+      home: Scaffold(
+        body: AppKeyboardNavigation(
+          controller: AppKeyboardNavigationController(localKiosk: remote),
+          child: child,
+        ),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -40,6 +52,193 @@ String? get area =>
     FocusManager.instance.primaryFocus?.nearestScope?.debugLabel;
 
 void main() {
+  testWidgets(
+    'a lazy listing reaches the mini-player after its last row and Up restores that row',
+    (tester) async {
+      final scroll = ScrollController();
+      addTearDown(scroll.dispose);
+      await pump(
+        tester,
+        Column(
+          children: [
+            Expanded(
+              child: region(
+                AppKeyboardArea.content,
+                ListView.builder(
+                  controller: scroll,
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(0),
+                  itemExtent: 52,
+                  itemCount: 24,
+                  itemBuilder: (_, i) => button('Track $i'),
+                ),
+              ),
+            ),
+            region(
+              AppKeyboardArea.playback,
+              Row(children: [button('Play'), button('Next')]),
+            ),
+          ],
+        ),
+        remote: true,
+      );
+      await key(tester, LogicalKeyboardKey.arrowDown);
+      for (var i = 1; i < 24; i++) {
+        await key(tester, LogicalKeyboardKey.arrowDown);
+        expect(focusIsOn(find.widgetWithText(TextButton, 'Track $i')), isTrue);
+      }
+      expect(scroll.offset, scroll.position.maxScrollExtent);
+      final last = FocusManager.instance.primaryFocus;
+      await key(tester, LogicalKeyboardKey.arrowDown);
+      expect(area, 'playback');
+      await key(tester, LogicalKeyboardKey.arrowLeft);
+      await key(tester, LogicalKeyboardKey.arrowUp);
+      expect(FocusManager.instance.primaryFocus, same(last));
+    },
+  );
+
+  testWidgets(
+    'Left and Right cross panes only at the ends of a Home carousel',
+    (tester) async {
+      final items = [
+        for (var i = 0; i < 18; i++)
+          BrowseItem(
+            id: 'album-$i',
+            name: 'Album $i',
+            canBrowse: true,
+            canAdd: false,
+          ),
+      ];
+      await pump(
+        tester,
+        ProviderScope(
+          child: Row(
+            children: [
+              region(AppKeyboardArea.navigation, button('Rail')),
+              Expanded(
+                child: region(
+                  AppKeyboardArea.content,
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      AdaptiveAlbumPreview(
+                        items: items,
+                        wide: false,
+                        storageId: 'albums',
+                        onOpen: (_) {},
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: button('Another shelf'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              region(AppKeyboardArea.player, button('Queue')),
+            ],
+          ),
+        ),
+      );
+      final shelf = find.byType(AdaptiveAlbumPreview);
+      Finder tile(int i) => find.byKey(ValueKey('home-album-album-$i'));
+      traversableFocusNodesIn(tile(0)).single.requestFocus();
+      await tester.pump();
+      await key(tester, LogicalKeyboardKey.arrowLeft);
+      expect(area, 'navigation');
+      await key(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusIsOn(tile(0)), isTrue);
+      final scroll = tester
+          .state<ScrollableState>(
+            find.descendant(of: shelf, matching: find.byType(Scrollable)),
+          )
+          .position;
+      for (var i = 1; i < items.length; i++) {
+        await key(tester, LogicalKeyboardKey.arrowRight);
+        expect(focusIsOn(tile(i)), isTrue);
+      }
+      expect(scroll.pixels, scroll.maxScrollExtent);
+      await key(tester, LogicalKeyboardKey.arrowRight);
+      expect(area, 'player');
+      await key(tester, LogicalKeyboardKey.arrowLeft);
+      expect(focusIsOn(tile(items.length - 1)), isTrue);
+      for (var i = items.length - 2; i >= 0; i--) {
+        await key(tester, LogicalKeyboardKey.arrowLeft);
+        expect(focusIsOn(tile(i)), isTrue);
+      }
+      expect(scroll.pixels, scroll.minScrollExtent);
+      await key(tester, LogicalKeyboardKey.arrowLeft);
+      expect(area, 'navigation');
+    },
+  );
+
+  testWidgets(
+    'page tabs stay focused on selection and lead back down to content',
+    (tester) async {
+      var selected = 0;
+      await pump(
+        tester,
+        StatefulBuilder(
+          builder: (_, setState) => Column(
+            children: [
+              region(
+                AppKeyboardArea.toolbar,
+                Row(
+                  children: [
+                    for (var i = 0; i < 2; i++)
+                      TextButton(
+                        onPressed: () => setState(() => selected = i),
+                        child: Text('Tab $i'),
+                      ),
+                  ],
+                ),
+              ),
+              region(AppKeyboardArea.content, button('Listing $selected')),
+            ],
+          ),
+        ),
+        remote: true,
+      );
+      await key(tester, LogicalKeyboardKey.tab);
+      await key(tester, LogicalKeyboardKey.tab);
+      await key(tester, LogicalKeyboardKey.arrowUp);
+      await key(tester, LogicalKeyboardKey.arrowRight);
+      await key(tester, LogicalKeyboardKey.enter);
+      expect(focusIsOn(find.widgetWithText(TextButton, 'Tab 1')), isTrue);
+      await key(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIsOn(find.widgetWithText(TextButton, 'Listing 1')), isTrue);
+    },
+  );
+
+  testWidgets('Back finishes a slider edit before returning to the rail', (
+    tester,
+  ) async {
+    var value = 0.5;
+    await pump(
+      tester,
+      Column(
+        children: [
+          region(AppKeyboardArea.navigation, button('Rail')),
+          region(
+            AppKeyboardArea.content,
+            AppKeyboardSlider(
+              child: Slider(value: value, onChanged: (v) => value = v),
+            ),
+          ),
+        ],
+      ),
+      remote: true,
+    );
+    await key(tester, LogicalKeyboardKey.tab);
+    await key(tester, LogicalKeyboardKey.tab);
+    await key(tester, LogicalKeyboardKey.enter);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(value, greaterThan(0.5));
+    await key(tester, LogicalKeyboardKey.escape);
+    expect(area, 'content');
+    await key(tester, LogicalKeyboardKey.escape);
+    expect(area, 'navigation');
+  });
+
   testWidgets(
     'Tab follows area order, Shift-Tab reverses, and re-entry remembers focus',
     (tester) async {
@@ -110,50 +309,53 @@ void main() {
     },
   );
 
-  testWidgets('arrows follow grid geometry and stop at area boundaries', (
-    tester,
-  ) async {
-    var activated = 0;
-    await pump(
-      tester,
-      Row(
-        children: [
-          region(AppKeyboardArea.navigation, button('Rail')),
-          Expanded(
-            child: region(
-              AppKeyboardArea.content,
-              Column(
-                children: [
-                  Row(children: [button('A'), button('B')]),
-                  Row(
-                    children: [
-                      button('C'),
-                      button('D', onPressed: () => activated++),
-                    ],
-                  ),
-                ],
+  testWidgets(
+    'arrows follow grid geometry before crossing to the adjacent pane',
+    (tester) async {
+      var activated = 0;
+      await pump(
+        tester,
+        Row(
+          children: [
+            region(AppKeyboardArea.navigation, button('Rail')),
+            Expanded(
+              child: region(
+                AppKeyboardArea.content,
+                Column(
+                  children: [
+                    Row(children: [button('A'), button('B')]),
+                    Row(
+                      children: [
+                        button('C'),
+                        button('D', onPressed: () => activated++),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          region(AppKeyboardArea.player, button('Player')),
-        ],
-      ),
-    );
-    await key(tester, LogicalKeyboardKey.tab);
-    await key(tester, LogicalKeyboardKey.tab);
-    await key(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusIsOn(find.widgetWithText(TextButton, 'B')), isTrue);
-    await key(tester, LogicalKeyboardKey.arrowDown);
-    expect(focusIsOn(find.widgetWithText(TextButton, 'D')), isTrue);
-    await key(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusIsOn(find.widgetWithText(TextButton, 'D')), isTrue);
-    await key(tester, LogicalKeyboardKey.enter);
-    expect(activated, 1);
-    await key(tester, LogicalKeyboardKey.arrowLeft);
-    expect(focusIsOn(find.widgetWithText(TextButton, 'C')), isTrue);
-    await key(tester, LogicalKeyboardKey.arrowUp);
-    expect(focusIsOn(find.widgetWithText(TextButton, 'A')), isTrue);
-  });
+            region(AppKeyboardArea.player, button('Player')),
+          ],
+        ),
+      );
+      await key(tester, LogicalKeyboardKey.tab);
+      await key(tester, LogicalKeyboardKey.tab);
+      await key(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusIsOn(find.widgetWithText(TextButton, 'B')), isTrue);
+      await key(tester, LogicalKeyboardKey.arrowDown);
+      expect(focusIsOn(find.widgetWithText(TextButton, 'D')), isTrue);
+      await key(tester, LogicalKeyboardKey.enter);
+      expect(activated, 1);
+      await key(tester, LogicalKeyboardKey.arrowRight);
+      expect(area, 'player');
+      await key(tester, LogicalKeyboardKey.arrowLeft);
+      expect(focusIsOn(find.widgetWithText(TextButton, 'D')), isTrue);
+      await key(tester, LogicalKeyboardKey.arrowLeft);
+      expect(focusIsOn(find.widgetWithText(TextButton, 'C')), isTrue);
+      await key(tester, LogicalKeyboardKey.arrowUp);
+      expect(focusIsOn(find.widgetWithText(TextButton, 'A')), isTrue);
+    },
+  );
 
   for (final horizontal in [false, true]) {
     testWidgets(

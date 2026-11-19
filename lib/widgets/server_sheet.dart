@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +7,7 @@ import '../providers/power_off_status_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/demo_mode.dart';
+import '../providers/pinned_server.dart';
 import '../providers/server_info_provider.dart';
 import '../providers/shell_nav_provider.dart';
 import '../providers/supervisor_api.dart';
@@ -29,6 +29,7 @@ class ServerSheetContent extends ConsumerWidget {
     final connectionState = ref.watch(connectionStateProvider);
     final settings = ref.watch(connectionSettingsProvider);
     final serverInfo = ref.watch(serverInfoProvider);
+    final canSelectServer = ref.watch(canSelectServerProvider);
     final hasSettings = ref.watch(configurationAvailableProvider);
     final autofocus = KalinkaPopupOriginScope.of(context)?.autofocus ?? false;
 
@@ -64,8 +65,7 @@ class ServerSheetContent extends ConsumerWidget {
               onTap: () =>
                   Navigator.pop(context, ServerSheetAction.openPlugins),
             ),
-          // Web is bound to its serving origin.
-          if (!kIsWeb) ...[
+          if (canSelectServer) ...[
             const SheetDivider(),
             // Connect to different server
             SheetRow(
@@ -99,7 +99,7 @@ class ServerSheetContent extends ConsumerWidget {
             ),
           ],
           _PowerOffRow(
-            autofocus: autofocus && !hasSettings && kIsWeb,
+            autofocus: autofocus && !hasSettings && !canSelectServer,
             onTap: () => Navigator.pop(context, ServerSheetAction.powerOff),
           ),
           const _AppVersionFooter(),

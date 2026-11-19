@@ -6,6 +6,7 @@ import '../../data_model/data_model.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/connection_settings_provider.dart';
 import '../../providers/connection_state_provider.dart';
+import '../../providers/kiosk_provider.dart';
 import '../../providers/renderer_host_provider.dart'
     show rendererIdentityProvider;
 import '../../providers/renderer_provider.dart';
@@ -19,41 +20,43 @@ import 'kiosk_track_text.dart' show kioskTextPolish;
 /// The name a renderer gives itself until someone names it.
 const _defaultRendererPrefix = 'Kalinka Renderer on ';
 
-/// How the display names an output: what it was called, or, left at the
-/// renderer's default, just the machine it runs on.
-String kioskOutputName(RendererInfo renderer, {required bool isSelf}) {
+/// The Pi can drive a TV independently of where audio plays. Use the same
+/// renderer name as its settings screen even when both run on the same host.
+({String name, bool showThisDevice}) kioskOutputLabel(
+  RendererInfo renderer, {
+  required bool isSelf,
+  required bool localDisplay,
+}) {
   final name = rendererDisplayName(renderer, isSelf: isSelf);
-  if (name.startsWith(_defaultRendererPrefix) &&
-      name.length > _defaultRendererPrefix.length) {
-    return name.substring(_defaultRendererPrefix.length);
-  }
-  return name;
+  if (localDisplay) return (name: name, showThisDevice: false);
+  return (
+    name:
+        name.startsWith(_defaultRendererPrefix) &&
+            name.length > _defaultRendererPrefix.length
+        ? name.substring(_defaultRendererPrefix.length)
+        : name,
+    showThisDevice:
+        !isSelf &&
+        renderer.hostname.isNotEmpty &&
+        renderer.hostname.toLowerCase() == localHostname()?.toLowerCase(),
+  );
 }
 
-/// The output playback is on, as the display names it, and whether it is the
-/// machine the display runs on; null when no output is connected.
-({String name, bool here})? watchKioskOutput(WidgetRef ref) {
+/// The label for the active playback output, if one is connected.
+({String name, bool showThisDevice})? watchKioskOutput(WidgetRef ref) {
   final ownId = ref.watch(rendererIdentityProvider).value?.rendererId;
+  final localDisplay = ref.watch(localDisplayKioskProvider);
   return ref.watch(
     rendererListProvider.select((s) {
       final active = s.active;
       if (active == null) return null;
-      final isSelf = active.rendererId == ownId;
-      return (
-        name: kioskOutputName(active, isSelf: isSelf),
-        // The browser's own renderer already calls itself "This browser".
-        here: !isSelf && kioskRunsOn(active),
+      return kioskOutputLabel(
+        active,
+        isSelf: active.rendererId == ownId,
+        localDisplay: localDisplay,
       );
     }),
   );
-}
-
-/// Whether [renderer] runs on the machine the display does.
-bool kioskRunsOn(RendererInfo renderer) {
-  final host = localHostname()?.toLowerCase();
-  return host != null &&
-      renderer.hostname.isNotEmpty &&
-      renderer.hostname.toLowerCase() == host;
 }
 
 /// The Kalinka wordmark, over the line that says what it is where there is
@@ -211,9 +214,7 @@ class _Output extends ConsumerWidget {
     final output = watchKioskOutput(ref);
     final control = ref.watch(playbackControlProvider);
     final name = output?.name ?? serverName;
-    // On this device the chip says all there is to say: its own name would
-    // only repeat what is standing in front of the viewer.
-    final here = output?.here ?? false;
+    final showThisDevice = output?.showThisDevice ?? false;
     final nameStyle = KalinkaFonts.sans(
       fontSize: s(17),
       fontWeight: FontWeight.w500,
@@ -231,7 +232,7 @@ class _Output extends ConsumerWidget {
           color: KalinkaColors.textPrimary,
         ),
         SizedBox(width: s(12)),
-        if (here)
+        if (showThisDevice)
           // Mono, like the clock and the stream line: it reads as a fact
           // about the setup rather than a name.
           Flexible(
@@ -282,7 +283,7 @@ class _Output extends ConsumerWidget {
     );
 
     return Semantics(
-      label: 'Output: ${here ? 'This device' : name}',
+      label: 'Output: ${showThisDevice ? 'This device' : name}',
       button: onTap != null,
       child: KeyboardActivation(
         focusNode: focusNode,

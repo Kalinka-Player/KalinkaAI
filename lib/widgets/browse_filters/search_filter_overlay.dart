@@ -60,50 +60,63 @@ class _SearchFilterOverlayState extends State<SearchFilterOverlay> {
   late final BrowseFilterCapabilities _capabilities = widget.capabilities;
   late BrowseFilterQuery _staged = widget.applied;
   bool _reset = false;
+  final _traversal = _FilterTraversalPolicy();
 
   @override
   Widget build(BuildContext context) {
-    return KalinkaOverlayCard(
-      maxHeight: widget.maxHeight,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          OverlayCardHeader(
-            title: widget.title,
-            onClose: widget.onCancel,
-            closeLabel: 'Close filters',
-            action: _staged.isEmpty
-                ? null
-                : OverlayTextAction(
-                    label: 'RESET',
-                    onTap: () => setState(() {
-                      _staged = const BrowseFilterQuery();
-                      _reset = true;
-                    }),
+    return FocusTraversalGroup(
+      policy: _traversal,
+      child: KalinkaOverlayCard(
+        maxHeight: widget.maxHeight,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(0),
+              child: OverlayCardHeader(
+                title: widget.title,
+                onClose: widget.onCancel,
+                closeLabel: 'Close filters',
+                action: _staged.isEmpty
+                    ? null
+                    : OverlayTextAction(
+                        label: 'RESET',
+                        onTap: () => setState(() {
+                          _staged = const BrowseFilterQuery();
+                          _reset = true;
+                        }),
+                      ),
+              ),
+            ),
+            Flexible(
+              // Faded where more lies above or below, so a card that scrolls
+              // looks it.
+              child: FocusTraversalOrder(
+                order: const NumericFocusOrder(1),
+                child: ScrollEdgeFade(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                    child: BrowseFilterForm(
+                      capabilities: _capabilities,
+                      query: _staged,
+                      searchHint: widget.searchHint,
+                      searchCaption: widget.searchCaption,
+                      showSearch: widget.showSearch,
+                      // Staged: nothing is sent until Show results, so there is
+                      // nothing to coalesce and the badge can track every key.
+                      textDebounce: Duration.zero,
+                      onChanged: (query) => setState(() => _staged = query),
+                    ),
                   ),
-          ),
-          Flexible(
-            // Faded where more lies above or below, so a card that scrolls
-            // looks it.
-            child: ScrollEdgeFade(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                child: BrowseFilterForm(
-                  capabilities: _capabilities,
-                  query: _staged,
-                  searchHint: widget.searchHint,
-                  searchCaption: widget.searchCaption,
-                  showSearch: widget.showSearch,
-                  // Staged: nothing is sent until Show results, so there is
-                  // nothing to coalesce and the badge can track every key.
-                  textDebounce: Duration.zero,
-                  onChanged: (query) => setState(() => _staged = query),
                 ),
               ),
             ),
-          ),
-          _buildFooter(),
-        ],
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(2),
+              child: _buildFooter(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -139,5 +152,66 @@ class _SearchFilterOverlayState extends State<SearchFilterOverlay> {
         ),
       ),
     );
+  }
+}
+
+/// Up and Down visit each row before moving between the header, scrolling
+/// options and footer. A footer button may line up better with Close than
+/// any of the chips, and offscreen chips can lie behind either fixed row.
+class _FilterTraversalPolicy extends OrderedTraversalPolicy {
+  @override
+  bool inDirection(FocusNode currentNode, TraversalDirection direction) {
+    final down = direction == TraversalDirection.down;
+    if (!down && direction != TraversalDirection.up) {
+      return super.inDirection(currentNode, direction);
+    }
+    final scope = currentNode.nearestScope;
+    if (scope == null || currentNode is FocusScopeNode) {
+      return super.inDirection(currentNode, direction);
+    }
+    final from = currentNode.rect;
+    final order = FocusTraversalOrder.maybeOf(currentNode.context!);
+    if (order is! NumericFocusOrder) {
+      return super.inDirection(currentNode, direction);
+    }
+    FocusNode? best;
+    var bestSection = double.infinity;
+    var bestRow = double.infinity;
+    var bestColumn = double.infinity;
+    for (final node in scope.traversalDescendants) {
+      if (node is FocusScopeNode ||
+          FocusTraversalGroup.maybeOfNode(node) != this) {
+        continue;
+      }
+      final section = FocusTraversalOrder.maybeOf(node.context!);
+      if (section is! NumericFocusOrder) continue;
+      final ahead = down
+          ? section.order - order.order
+          : order.order - section.order;
+      if (ahead < 0 || ahead > bestSection) continue;
+      final rect = node.rect;
+      if (ahead == 0 &&
+          (down ? rect.center.dy <= from.bottom : rect.center.dy >= from.top)) {
+        continue;
+      }
+      final row = down ? rect.top : -rect.bottom;
+      final column = (rect.center.dx - from.center.dx).abs();
+      if (ahead == bestSection &&
+          (row > bestRow || (row == bestRow && column >= bestColumn))) {
+        continue;
+      }
+      best = node;
+      bestSection = ahead;
+      bestRow = row;
+      bestColumn = column;
+    }
+    if (best == null) return false;
+    requestFocusCallback(
+      best,
+      alignmentPolicy: down
+          ? ScrollPositionAlignmentPolicy.keepVisibleAtEnd
+          : ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+    );
+    return true;
   }
 }

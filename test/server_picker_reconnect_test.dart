@@ -2,16 +2,23 @@ import 'dart:async';
 
 import 'package:dio/dio.dart' show DioException, RequestOptions;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart' show ModulesAndDevices;
 import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
+import 'package:kalinka/providers/connection_settings_provider.dart';
+import 'package:kalinka/providers/demo_mode.dart';
+import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
+import 'package:kalinka/providers/server_connect.dart';
+import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/screens/onboarding_screen.dart';
 import 'package:kalinka/screens/provisioning_screen.dart';
 import 'package:kalinka/widgets/discovery_screen.dart';
+import 'package:kalinka/widgets/onboarding/step_network.dart';
 import 'package:kalinka/widgets/server_chip.dart';
 import 'package:universal_ble/universal_ble.dart';
 
@@ -116,6 +123,95 @@ bool _onTop(WidgetTester tester, Finder screen) =>
     ModalRoute.of(tester.element(screen))!.isCurrent;
 
 void main() {
+  testWidgets('Pi network setup retries its own server after a Wi-Fi change', (
+    tester,
+  ) async {
+    final server = _Server(up: true);
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(0)),
+      api: server,
+      connection: _Live.new,
+      screen: const OnboardingScreen(startAtSetup: true),
+      overrides: [localDisplayKioskProvider.overrideWithValue(true)],
+    );
+    await container.read(settingsProvider.notifier).loadConfig();
+    await _settle(tester);
+    final address = container.read(connectionSettingsProvider).address;
+    final before = server.probes;
+    tester
+        .widget<NetworkSetupPanel>(find.byType(NetworkSetupPanel))
+        .onReconnect!();
+    await _settle(tester);
+    expect(server.probes, before + 1);
+    expect(container.read(connectionSettingsProvider).address, address);
+    expect(find.byType(NetworkSetupPanel), findsOneWidget);
+    expect(find.byType(DiscoveryScreen), findsNothing);
+    await tester.pump(const Duration(seconds: 6));
+  });
+
+  testWidgets('Pi keeps its server through the menu, outage and reconnect', (
+    tester,
+  ) async {
+    late WidgetRef ref;
+    var demoProbes = 0;
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(0)),
+      size: const Size(1440, 1000),
+      api: _Server(),
+      connection: _Live.new,
+      wrapNavigator: (child) => Consumer(
+        builder: (_, widgetRef, _) {
+          ref = widgetRef;
+          return child;
+        },
+      ),
+      overrides: [
+        localDisplayKioskProvider.overrideWithValue(true),
+        demoCheckProvider.overrideWithValue((_) async {
+          demoProbes++;
+          return true;
+        }),
+      ],
+    );
+    container.read(kioskProvider.notifier).exit();
+    final address = container.read(connectionSettingsProvider).address;
+    expect(find.byKey(const ValueKey('navigation-changeServer')), findsNothing);
+    await tester.tap(find.byType(ServerChip));
+    await _settle(tester);
+    expect(find.text('SERVER'), findsOneWidget);
+    expect(find.text('Connect to different server'), findsNothing);
+    expect(find.text('Disconnect'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await _settle(tester);
+
+    for (final persist in [false, true]) {
+      await expectLater(
+        connectToServer(
+          ref,
+          name: 'Demo',
+          address: demoServer(),
+          persist: persist,
+        ),
+        throwsStateError,
+      );
+    }
+    expect(demoProbes, 0);
+    final connection = container.read(connectionStateProvider.notifier);
+    connection.poweredOff();
+    await _settle(tester);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Scan for servers'), findsNothing);
+    connection.disconnected();
+    await _settle(tester);
+    expect(find.text('Waiting for the local Kalinka server.'), findsOneWidget);
+    expect(find.text('Try demo server'), findsNothing);
+    expect(find.text('Scan for servers'), findsNothing);
+    expect(find.byType(DiscoveryScreen), findsNothing);
+    expect(container.read(connectionSettingsProvider).address, address);
+  });
+
   testWidgets('the stored server coming back stays behind Set up a streamer', (
     tester,
   ) async {

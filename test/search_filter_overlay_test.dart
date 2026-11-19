@@ -8,9 +8,12 @@ import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/providers/browse_genres_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/browse_filters/browse_filter_form.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_button.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_overlay.dart';
 import 'package:kalinka/widgets/overlay_card.dart';
+
+import 'support/focus.dart';
 
 const _vocabulary = (
   catalogId: 'kalinka:localfiles:catalog:albums',
@@ -80,6 +83,59 @@ Future<void> _pumpOverlay(
 }
 
 void main() {
+  testWidgets(
+    'vertical arrows scroll through wrapped chips before the footer',
+    (tester) async {
+      tester.view.physicalSize = const Size(375, 470);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pumpOverlay(
+        tester,
+        capabilities: const BrowseFilterCapabilities(
+          genre: FacetSupport.supported,
+          genreVocabulary: _vocabulary,
+          genreField: _genreField,
+        ),
+        genres: List.generate(30, (i) => Genre(id: '$i', name: 'Genre $i')),
+        onApply: (_) {},
+        onCancel: () {},
+      );
+      await tester.pumpAndSettle();
+      final chips = find.byType(FilterPill);
+      final scroll = tester.state<ScrollableState>(find.byType(Scrollable));
+      final viewport = tester.getRect(find.byType(SingleChildScrollView));
+      Future<void> press(LogicalKeyboardKey key) async {
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+      }
+
+      expect(
+        await tabTo(tester, find.widgetWithText(FilterPill, 'All genres')),
+        isTrue,
+      );
+      expect(scroll.position.maxScrollExtent, greaterThan(0));
+      final rowYs = <int>[];
+      while (focusIsOn(chips) && rowYs.length <= 31) {
+        final center = FocusManager.instance.primaryFocus!.rect.center;
+        expect(viewport.contains(center), isTrue);
+        rowYs.add((center.dy + scroll.position.pixels).round());
+        await press(LogicalKeyboardKey.arrowDown);
+      }
+      expect(rowYs.length, greaterThan(4));
+      expect(rowYs.toSet().length, rowYs.length);
+      expect(
+        focusIsOn(find.widgetWithText(InkWell, 'Cancel')) ||
+            focusIsOn(find.widgetWithText(InkWell, 'Show results')),
+        isTrue,
+      );
+      await press(LogicalKeyboardKey.arrowUp);
+      expect(focusIsOn(chips), isTrue);
+      final lastCenter = FocusManager.instance.primaryFocus!.rect.center;
+      expect((lastCenter.dy + scroll.position.pixels).round(), rowYs.last);
+      expect(viewport.contains(lastCenter), isTrue);
+    },
+  );
+
   testWidgets('edits stage until Show results', (tester) async {
     final applied = <BrowseFilterQuery>[];
     await _pumpOverlay(
@@ -221,9 +277,10 @@ void main() {
     expect(applied.single.type, isNull);
   });
 
-  testWidgets('the folded button badges the number of active answers', (
+  testWidgets('the folded filter button shows its count and opens with OK', (
     tester,
   ) async {
+    var opens = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -233,13 +290,18 @@ void main() {
               type: SearchType.album,
               genreIds: ['jazz'],
             ).activeCount,
-            onTap: () {},
+            onTap: () => opens++,
           ),
         ),
       ),
     );
 
     expect(find.text('3'), findsOneWidget);
+    final button = find.byType(SearchFilterButton);
+    expect(await tabTo(tester, button), isTrue);
+    expect(focusOutlineIn(button, KalinkaColors.textPrimary), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(opens, 1);
   });
 
   testWidgets('the badged button fits the title bar', (tester) async {

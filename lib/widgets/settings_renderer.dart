@@ -6,7 +6,6 @@ import '../providers/connection_settings_provider.dart';
 import '../providers/server_info_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/schema_icons.dart';
-import 'keyboard/keyboard_activation.dart';
 import 'server_update_banner.dart';
 import 'configuration_appearance.dart';
 import 'settings_controls/footer_note.dart';
@@ -321,11 +320,7 @@ Widget buildFieldControl({
       final toggle = Semantics(
         label: field.label,
         toggled: enabled,
-        child: KeyboardActivation(
-          onActivate: () => onChanged(!enabled),
-          borderRadius: BorderRadius.circular(12),
-          child: SettingsToggle(value: enabled, onChanged: onChanged),
-        ),
+        child: SettingsToggle(value: enabled, onChanged: onChanged),
       );
       return compact
           ? toggle

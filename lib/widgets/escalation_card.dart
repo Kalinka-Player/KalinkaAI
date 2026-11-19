@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,14 +20,14 @@ class EscalationCard extends ConsumerStatefulWidget {
   /// Keeps the tablet toasts' wider right gutter, so their edges line up.
   final bool isTablet;
 
-  /// Web has no mDNS to scan with, so there it is Retry alone.
+  /// Whether this client may discover a different server.
   final bool canScan;
 
   const EscalationCard({
     super.key,
     required this.onScanForServers,
     this.isTablet = false,
-    this.canScan = !kIsWeb,
+    required this.canScan,
   });
 
   /// Marks the card itself, so placement tests can measure where it landed.

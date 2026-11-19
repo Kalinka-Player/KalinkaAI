@@ -5,6 +5,7 @@ import '../../data_model/browse_filters.dart';
 import '../../data_model/data_model.dart' show Genre;
 import '../../providers/browse_genres_provider.dart';
 import '../../theme/app_theme.dart';
+import '../keyboard/ink_focus_outline.dart';
 import 'browse_filter_form.dart';
 
 /// One removable chip per active answer, shown above the rows.
@@ -180,30 +181,33 @@ class _ActiveFilterChipState extends State<ActiveFilterChip> {
           child: InkWell(
             onTap: widget.onRemove,
             onHover: _setHovering,
-            onFocusChange: _setHovering,
             mouseCursor: WidgetStateMouseCursor.clickable,
-            customBorder: const StadiumBorder(),
+            customBorder: FilterPillFace.shape,
+            focusColor: Colors.transparent,
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: kKalinkaPillTarget),
               child: Center(
                 widthFactor: 1,
-                child: FilterPillFace(
-                  label: widget.label,
-                  applied: true,
-                  hovered: _hovering,
-                  leading: widget.icon == null
-                      ? null
-                      : Icon(
-                          widget.icon,
-                          size: 16,
-                          color: KalinkaColors.textSecondary,
-                        ),
-                  trailing: Icon(
-                    Icons.close_rounded,
-                    size: 16,
-                    color: _hovering
-                        ? KalinkaColors.textPrimary
-                        : KalinkaColors.textSecondary,
+                child: InkFocusOutline(
+                  shape: FilterPillFace.shape,
+                  child: FilterPillFace(
+                    label: widget.label,
+                    applied: true,
+                    hovered: _hovering,
+                    leading: widget.icon == null
+                        ? null
+                        : Icon(
+                            widget.icon,
+                            size: 16,
+                            color: KalinkaColors.textSecondary,
+                          ),
+                    trailing: Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: _hovering
+                          ? KalinkaColors.textPrimary
+                          : KalinkaColors.textSecondary,
+                    ),
                   ),
                 ),
               ),

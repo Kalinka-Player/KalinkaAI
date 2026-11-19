@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/data_model.dart' show RendererInfo;
 import '../../providers/app_state_provider.dart';
+import '../../providers/kiosk_provider.dart';
 import '../../providers/kalinka_player_api_provider.dart'
     show RendererSwitchException;
 import '../../providers/renderer_host_provider.dart'
@@ -39,6 +40,7 @@ class KioskOutputPanel extends ConsumerStatefulWidget {
 }
 
 class _KioskOutputPanelState extends ConsumerState<KioskOutputPanel> {
+  final _traversal = _OutputTraversal();
   bool _switching = false;
   String? _error;
 
@@ -76,6 +78,7 @@ class _KioskOutputPanelState extends ConsumerState<KioskOutputPanel> {
     final volume = ref.watch(volumeAvailableProvider);
     final list = ref.watch(rendererListProvider);
     final ownId = ref.watch(rendererIdentityProvider).value?.rendererId;
+    final localDisplay = ref.watch(localDisplayKioskProvider);
     final others = [
       for (final r in list.renderers)
         if (!r.active) r,
@@ -102,7 +105,9 @@ class _KioskOutputPanelState extends ConsumerState<KioskOutputPanel> {
                         child: Text(
                           output == null
                               ? 'No output'
-                              : (output.here ? 'This device' : output.name),
+                              : (output.showThisDevice
+                                    ? 'This device'
+                                    : output.name),
                           style: KalinkaFonts.display(
                             fontSize: s(28),
                             fontWeight: FontWeight.w500,
@@ -154,6 +159,7 @@ class _KioskOutputPanelState extends ConsumerState<KioskOutputPanel> {
               key: ValueKey(r.rendererId),
               renderer: r,
               isSelf: r.rendererId == ownId,
+              localDisplay: localDisplay,
               scale: widget.scale,
               onTap: _switching
                   ? null
@@ -217,11 +223,23 @@ class _KioskOutputPanelState extends ConsumerState<KioskOutputPanel> {
           behavior: KalinkaScrollBehavior(
             controlScale: widget.scale < 1 ? 1 : widget.scale,
           ),
-          child: panel,
+          child: FocusTraversalGroup(policy: _traversal, child: panel),
         ),
       ),
     );
   }
+}
+
+/// The close button and the volume track sit on opposite sides of the panel.
+/// Vertical arrows follow the visible rows even if their bounds do not overlap.
+class _OutputTraversal extends ReadingOrderTraversalPolicy {
+  @override
+  bool inDirection(FocusNode currentNode, TraversalDirection direction) =>
+      switch (direction) {
+        TraversalDirection.down => next(currentNode),
+        TraversalDirection.up => previous(currentNode),
+        _ => super.inDirection(currentNode, direction),
+      };
 }
 
 /// A section's name, spaced out in mono like the display's eyebrow.
@@ -254,6 +272,7 @@ class _Label extends StatelessWidget {
 class _OtherOutput extends StatelessWidget {
   final RendererInfo renderer;
   final bool isSelf;
+  final bool localDisplay;
   final double scale;
 
   /// Null while a switch is under way.
@@ -263,6 +282,7 @@ class _OtherOutput extends StatelessWidget {
     super.key,
     required this.renderer,
     required this.isSelf,
+    required this.localDisplay,
     required this.scale,
     required this.onTap,
   });
@@ -271,8 +291,13 @@ class _OtherOutput extends StatelessWidget {
   Widget build(BuildContext context) {
     double s(double v) => v * scale;
     final usable = renderer.isConnected && renderer.compatible;
+    final label = kioskOutputLabel(
+      renderer,
+      isSelf: isSelf,
+      localDisplay: localDisplay,
+    );
     final detail = [
-      if (!isSelf && kioskRunsOn(renderer)) 'This device',
+      if (label.showThisDevice) 'This device',
       rendererDetail(renderer, isSelf: isSelf),
     ].where((p) => p.isNotEmpty).join(' · ');
 
@@ -301,7 +326,7 @@ class _OtherOutput extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        kioskOutputName(renderer, isSelf: isSelf),
+                        label.name,
                         style: KalinkaFonts.sans(
                           fontSize: s(18),
                           fontWeight: FontWeight.w500,

@@ -120,7 +120,7 @@ PlayQueueState queueOf(int count, {int index = 0}) => PlayQueueState(
 Future<ProviderContainer> pumpHomeShell(
   WidgetTester tester, {
   required SettableQueue queue,
-  HomeApi? api,
+  KalinkaPlayerProxy? api,
   IndexerStatusNotifier Function() indexer = _IdleIndexer.new,
   ConnectionStateNotifier Function() connection = SettableConnection.new,
   Size size = const Size(400, 800),
@@ -135,6 +135,7 @@ Future<ProviderContainer> pumpHomeShell(
   bool themed = false,
   Key? captureKey,
   Widget? screen,
+  Widget Function(Widget)? wrapNavigator,
   HomeSectionPlanner? planner,
 }) async {
   SharedPreferences.setMockInitialValues({
@@ -197,9 +198,11 @@ Future<ProviderContainer> pumpHomeShell(
               textScaler: textScaler,
               disableAnimations: reducedMotion,
             ),
-            child: onScreenKeyboard
-                ? OnScreenKeyboardHost(child: child!)
-                : child!,
+            child:
+                wrapNavigator?.call(child!) ??
+                (onScreenKeyboard
+                    ? OnScreenKeyboardHost(child: child!)
+                    : child!),
           ),
           home: screen ?? const MusicPlayerScreen(),
         ),

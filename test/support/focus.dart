@@ -44,3 +44,17 @@ Future<bool> tabTo(WidgetTester tester, Finder target, {int stops = 40}) async {
   }
   return false;
 }
+
+/// The two-pixel foreground outline painted over the control's face.
+Finder focusOutlineIn(Finder target, Color color) => find.descendant(
+  of: target,
+  matching: find.byWidgetPredicate((widget) {
+    if (widget is! DecoratedBox) return false;
+    final decoration = widget.decoration;
+    if (decoration is! ShapeDecoration || decoration.shape is! OutlinedBorder) {
+      return false;
+    }
+    return (decoration.shape as OutlinedBorder).side ==
+        BorderSide(color: color, width: 2);
+  }),
+);
