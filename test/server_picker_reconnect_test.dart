@@ -184,10 +184,22 @@ void main() {
           'base_config.server.service_name',
           'Unfinished TV name',
         );
-        // An ordinary reconnect must keep this controller's pending setup.
+        // A reply from before a second disconnect cannot discard these edits.
+        final oldReply = Completer<void>();
+        server
+          ..setUp = true
+          ..settings = oldReply;
+        connection.set(ConnectionStatus.reconnecting);
+        connection.set(ConnectionStatus.connected);
+        await _settle(tester);
         connection.set(ConnectionStatus.reconnecting);
         await _settle(tester);
+        server
+          ..setUp = false
+          ..settings = null;
         connection.set(ConnectionStatus.connected);
+        await _settle(tester);
+        oldReply.complete();
         await _settle(tester);
         expect(find.text('Music sources'), findsOneWidget);
         expect(
@@ -213,10 +225,7 @@ void main() {
         await _settle(tester);
         expect(find.text('Find music'), findsNothing);
         expect(container.read(settingsProvider).stagedChanges, isEmpty);
-        expect(
-          container.read(connectionSettingsProvider).name,
-          'Living room',
-        );
+        expect(container.read(connectionSettingsProvider).name, 'Living room');
         await tester.pumpWidget(const SizedBox());
         await tester.pump(const Duration(seconds: 10));
       },
@@ -239,6 +248,7 @@ void main() {
       await tester.pump();
       final reads = server.settingsReads;
       expect(reads, greaterThan(0));
+      expect(find.byType(CoachMarksOverlay), findsNothing);
       final connection = container.read(
         connectionStateProvider.notifier,
       ) as SettableConnection;
