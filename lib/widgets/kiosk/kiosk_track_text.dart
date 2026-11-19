@@ -91,6 +91,10 @@ class KioskTrackText extends StatefulWidget {
   /// nearer the title's size, and the title keeps to a line.
   final bool compact;
 
+  /// In landscape, share the available height evenly between the visible
+  /// rows. The parent bounds this area between Now Playing and the progress bar.
+  final bool spreadVertically;
+
   /// Move the incoming block as one opaque layer on a local display.
   final bool slideTogether;
 
@@ -100,6 +104,7 @@ class KioskTrackText extends StatefulWidget {
     required this.scale,
     this.centred = false,
     this.compact = false,
+    this.spreadVertically = false,
     this.slideTogether = false,
   });
 
@@ -177,6 +182,7 @@ class _KioskTrackTextState extends State<KioskTrackText>
             top: 0,
             left: 0,
             right: 0,
+            bottom: widget.spreadVertically ? 0 : null,
             child: _block(leaving, leaving: true),
           ),
         _block(widget.lines, leaving: false),
@@ -187,6 +193,9 @@ class _KioskTrackTextState extends State<KioskTrackText>
   Widget _block(KioskTrackLines lines, {required bool leaving}) {
     double s(double v) => v * widget.scale;
     final compact = widget.compact;
+    final spread = widget.spreadVertically;
+    final minimumGap = spread ? s(8) : 0.0;
+    final lineGap = compact || spread ? 0.0 : s(6);
     final align = widget.centred ? TextAlign.center : TextAlign.start;
     // Over a cover that fills the screen.
     final shadows = compact ? kioskTextPolish : null;
@@ -204,7 +213,7 @@ class _KioskTrackTextState extends State<KioskTrackText>
         overflow: TextOverflow.ellipsis,
       ),
       Padding(
-        padding: EdgeInsets.only(top: compact ? 0 : s(6)),
+        padding: EdgeInsets.only(top: lineGap),
         child: Text(
           lines.artist,
           style: KalinkaFonts.sans(
@@ -220,7 +229,7 @@ class _KioskTrackTextState extends State<KioskTrackText>
       ),
       if (lines.album != null)
         Padding(
-          padding: EdgeInsets.only(top: compact ? 0 : s(6)),
+          padding: EdgeInsets.only(top: lineGap),
           child: Text(
             lines.album!,
             style: KalinkaFonts.sans(
@@ -235,7 +244,7 @@ class _KioskTrackTextState extends State<KioskTrackText>
         ),
       if (lines.stream != null)
         Padding(
-          padding: EdgeInsets.only(top: s(compact ? 8 : 10)),
+          padding: EdgeInsets.only(top: spread ? 0 : s(compact ? 8 : 10)),
           child: _StreamRow(
             lines: lines,
             // Kept legible however small the title gets.
@@ -246,8 +255,12 @@ class _KioskTrackTextState extends State<KioskTrackText>
         ),
     ];
 
-    return Column(
+    final column = Column(
       mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: spread
+          ? MainAxisAlignment.spaceEvenly
+          : MainAxisAlignment.start,
+      spacing: minimumGap,
       crossAxisAlignment: widget.centred
           ? CrossAxisAlignment.center
           : CrossAxisAlignment.start,
@@ -269,6 +282,23 @@ class _KioskTrackTextState extends State<KioskTrackText>
                   child: row,
                 ),
             ],
+    );
+    if (!spread) return column;
+
+    // The same minimum gap goes before, between and after visible rows.
+    // If a wrapped title or large text exhausts the space, fit the text
+    // independently of the controls and of the other track during a switch.
+    return LayoutBuilder(
+      builder: (context, box) => FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.topLeft,
+        child: Container(
+          width: box.maxWidth,
+          constraints: BoxConstraints(minHeight: box.maxHeight),
+          padding: EdgeInsets.symmetric(vertical: minimumGap),
+          child: column,
+        ),
+      ),
     );
   }
 }

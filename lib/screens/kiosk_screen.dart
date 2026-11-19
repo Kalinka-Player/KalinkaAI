@@ -1006,38 +1006,17 @@ class _PlayingView extends ConsumerWidget {
                     SizedBox(
                       width: column,
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Short of room, the whole text block scales down
-                          // a little — never cut off, and never the buttons
-                          // squashed. Scaled, it still starts at the column's
-                          // left edge, in line with the progress bar.
+                          KioskEyebrow(scale: scale),
                           Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: SizedBox(
-                                  width: column,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      KioskEyebrow(scale: scale),
-                                      SizedBox(height: s(14)),
-                                      KioskTrackText(
-                                        lines: lines,
-                                        scale: scale,
-                                        slideTogether: useWipe,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                            child: KioskTrackText(
+                              lines: lines,
+                              scale: scale,
+                              spreadVertically: true,
+                              slideTogether: useWipe,
                             ),
                           ),
-                          SizedBox(height: s(24)),
                           progress,
                           SizedBox(height: s(6)),
                           controls(),
