@@ -189,12 +189,14 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
   // the screen must not also type into or activate a hidden control.
   KeyEventResult _onKeyEvent(KeyEvent event) {
     if (event.synthesized) return KeyEventResult.ignored;
-    if (event is KeyRepeatEvent &&
+    final enabled = ref.read(_displayStateProvider).enabled;
+    if (enabled &&
+        event is KeyRepeatEvent &&
         (event.logicalKey == LogicalKeyboardKey.escape ||
             event.logicalKey == LogicalKeyboardKey.enter)) {
       return KeyEventResult.handled;
     }
-    if (ref.read(_displayStateProvider).enabled && _mediaKeys.handle(event)) {
+    if (enabled && _mediaKeys.handle(event)) {
       if (event is KeyDownEvent) {
         _wake();
         _recordActivity();

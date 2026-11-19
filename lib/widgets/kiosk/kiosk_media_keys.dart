@@ -69,7 +69,13 @@ class KioskMediaKeys {
       ),
     };
     if (command != null) {
-      ref.read(kalinkaWsApiProvider).sendQueueCommand(command);
+      unawaited(
+        ref.read(kalinkaWsApiProvider).sendQueueCommand(command).catchError((
+          Object error,
+        ) {
+          debugPrint('Kiosk transport request failed: $error');
+        }),
+      );
     }
     return true;
   }

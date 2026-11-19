@@ -70,7 +70,8 @@ DEQUEUE_EVENT = request(3, 7, Event)
 SET_MODE = request(1, 9, c.c_uint32)
 ConnectorInfo = c.c_uint32 * 17  # type, then a 16-word UAPI union
 GET_CONNECTOR = request(2, 10, ConnectorInfo)
-LOG_ADDRS_AND_RC = (1 << 1) | (1 << 4)
+PLAYBACK_CAPS = (1 << 1) | (1 << 2) | (1 << 4)  # Logical addresses, transmit, RC
+CONNECTOR_INFO_CAP = 1 << 8
 RC_PASSTHROUGH = 1 << 1
 INITIATOR_AND_FOLLOWER = 0x11  # The kernel still processes remote keys.
 BROADCAST = 15
@@ -91,7 +92,7 @@ class PlaybackSource:
         self.active = False
 
     def set_address(self, physical, logical_mask):
-        logical = logical_mask.bit_length() - 1 if logical_mask else None
+        logical = logical_mask.bit_length() - 1 if 0 < logical_mask < 1 << BROADCAST else None
         address = physical.to_bytes(2, "big")
         if (address, logical) != (self.physical, self.logical):
             self.active = False
@@ -190,12 +191,14 @@ def release_address(fd, marker):
 def configure(fd, marker, *, release, display=None):
     caps = Capabilities()
     fcntl.ioctl(fd, GET_CAPS, caps)
-    if caps.driver != b"vc4_hdmi" or caps.capabilities & LOG_ADDRS_AND_RC != LOG_ADDRS_AND_RC:
+    if caps.driver != b"vc4_hdmi" or caps.capabilities & PLAYBACK_CAPS != PLAYBACK_CAPS:
         return
     if release:
         release_address(fd, marker)
         return
     if display is not None:
+        if not caps.capabilities & CONNECTOR_INFO_CAP:
+            return
         info = ConnectorInfo()
         fcntl.ioctl(fd, GET_CONNECTOR, info)
         if info[0] != 1 or (info[1], info[2]) != display:
@@ -205,6 +208,9 @@ def configure(fd, marker, *, release, display=None):
     fcntl.ioctl(fd, GET_ADDRESSES, current)
     if current.num_log_addrs:
         return
+    # Establish the follower before changing adapter-wide state. A failed
+    # mode change must leave the adapter available to other CEC clients.
+    fcntl.ioctl(fd, SET_MODE, c.c_uint32(INITIATOR_AND_FOLLOWER))
     # With no TV attached the kernel retains this request and claims the
     # address when EDID becomes available. Never clear another CEC client.
     marker.touch()
@@ -266,11 +272,13 @@ def main(release):
     sources = {}
     try:
         for device in sorted(Path("/dev").glob("cec[0-9]*")):
+            marker = runtime / device.name
+            if release and not marker.exists():
+                continue
             fd = None
             try:
                 fd = os.open(device, os.O_RDWR | os.O_NONBLOCK)
-                if configure(fd, runtime / device.name, release=release, display=display):
-                    fcntl.ioctl(fd, SET_MODE, c.c_uint32(INITIATOR_AND_FOLLOWER))
+                if configure(fd, marker, release=release, display=display):
                     sources[fd] = PlaybackSource()
             except OSError as error:
                 if error.errno not in (errno.EBUSY, errno.ENODEV, errno.ENOENT):
