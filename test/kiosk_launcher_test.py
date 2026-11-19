@@ -1,4 +1,5 @@
-"""Exercise the display launcher without touching real hardware."""
+"""Exercise display and HDMI-CEC setup without touching real hardware."""
+import errno
 import json
 from pathlib import Path
 import runpy
@@ -139,6 +140,125 @@ class KioskLauncherTest(unittest.TestCase):
         self.assertEqual(stopped.exception.code, 1)
         self.assertEqual(control.read_text(), "0")
         self.assertFalse((self.root / "backlight.json").exists())
+
+
+class KioskCecTest(unittest.TestCase):
+    def setUp(self):
+        module = runpy.run_path(str(Path(__file__).resolve().parents[1]
+                                    / "packaging/kiosk/kalinka-kiosk-cec"))
+        self.configure = module["configure"]
+        self.source = module["PlaybackSource"]()
+        self.source.set_address(0x3000, 1 << 8)
+        self.first_connected_display = module["first_connected_display"]
+        self.address = module["LogicalAddresses"]()
+        self.driver = b"vc4_hdmi"
+        self.caps = module["LOG_ADDRS_AND_RC"]
+        self.writes = []
+        self.busy_once = False
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.marker = Path(directory.name) / "cec0"
+
+        def ioctl(fd, request, value):
+            if request == module["GET_CAPS"]:
+                value.driver = self.driver
+                value.capabilities = self.caps
+            elif request == module["GET_CONNECTOR"]:
+                value[0], value[1], value[2] = 1, 1, 52
+            elif request == module["GET_ADDRESSES"]:
+                module["c"].memmove(module["c"].addressof(value),
+                                    module["c"].addressof(self.address),
+                                    module["c"].sizeof(value))
+            elif request == module["SET_ADDRESSES"]:
+                if self.busy_once:
+                    self.busy_once = False
+                    raise OSError(errno.EBUSY, "CEC adapter busy")
+                self.address = value
+                self.writes.append(value.num_log_addrs)
+            else:
+                self.fail(f"Unexpected ioctl {request}")
+
+        self.enterContext(patch.object(module["fcntl"], "ioctl", side_effect=ioctl))
+
+    def test_responds_to_tv_selection_until_route_standby_or_address_changes(self):
+        request = bytes.fromhex("0f 85")
+        selected = bytes.fromhex("0f 86 30 00")
+        active = bytes.fromhex("8f 82 30 00")
+        self.assertIsNone(self.source.reply(request))
+        for other in ("4f 82 10 00", "0f 86 10 00", "0f 80 30 00 10 00", "0f 36"):
+            self.assertEqual(self.source.reply(selected), active)
+            self.assertEqual(self.source.reply(request), active)
+            self.assertIsNone(self.source.reply(bytes.fromhex(other)))
+            self.assertIsNone(self.source.reply(request))
+        self.assertEqual(self.source.reply(selected), active)
+        self.source.set_address(0xffff, 0)
+        self.assertIsNone(self.source.reply(selected))
+        self.source.set_address(0x2000, 1 << 4)
+        self.assertIsNone(self.source.reply(request))
+        self.assertEqual(self.source.reply(bytes.fromhex("0f 86 20 00")),
+                         bytes.fromhex("4f 82 20 00"))
+
+    def test_answers_power_and_samsung_discovery_but_leaves_keys_to_linux(self):
+        for query, reply in (("08 8f", "80 90 00"),
+                             ("08 a0 00 00 f0 23", "80 a0 00 00 f0 24 00 80"),
+                             ("08 a0 01 02 03 23", "80 00 a0 00")):
+            self.assertEqual(self.source.reply(bytes.fromhex(query)), bytes.fromhex(reply))
+        for frame in ("08 44 01", "08 45", "04 8f", "0f 8f", "08 00 8f 00"):
+            self.assertIsNone(self.source.reply(bytes.fromhex(frame)))
+
+    def test_configures_unplugged_adapter_once_and_releases_on_stop(self):
+        self.configure(4, self.marker, release=False)
+        self.assertEqual(self.address.osd_name, b"Kalinka")
+        self.assertEqual(self.address.log_addr_type[0], 3)
+        self.assertEqual(self.address.flags, 2)
+        self.configure(4, self.marker, release=False)
+        self.configure(4, self.marker, release=True)
+        self.configure(4, self.marker, release=True)
+        self.assertEqual(self.writes, [1, 0])
+
+    def test_foreign_owner_and_unsupported_adapters_are_untouched(self):
+        self.address.num_log_addrs = 1
+        self.configure(4, self.marker, release=False)
+        self.configure(4, self.marker, release=True)
+        self.address.num_log_addrs = 0
+        self.driver = b"other"
+        self.configure(4, self.marker, release=False)
+        self.driver = b"vc4_hdmi"
+        self.caps = 2  # No input passthrough.
+        self.configure(4, self.marker, release=False)
+        self.assertEqual(self.writes, [])
+
+    def test_replacement_role_is_preserved_on_stop(self):
+        self.configure(4, self.marker, release=False)
+        self.address.osd_name = b"Amplifier"
+        self.configure(4, self.marker, release=True)
+        self.assertEqual(self.writes, [1])
+
+    def test_busy_setup_does_not_record_ownership_and_busy_release_retries(self):
+        self.busy_once = True
+        with self.assertRaises(OSError):
+            self.configure(4, self.marker, release=False)
+        self.assertFalse(self.marker.exists())
+        self.configure(4, self.marker, release=False)
+        self.busy_once = True
+        self.configure(4, self.marker, release=True)
+        self.assertEqual(self.writes, [1, 0])
+        self.assertFalse(self.marker.exists())
+
+    def test_registers_only_the_port_serving_the_display(self):
+        drm = self.marker.parent
+        for name, status, connector in [("HDMI-A-1", "disconnected", 42),
+                                        ("HDMI-A-2", "connected", 52),
+                                        ("DSI-1", "connected", 75)]:
+            port = drm / f"card1-{name}"
+            port.mkdir()
+            (port / "status").write_text(status)
+            (port / "connector_id").write_text(str(connector))
+        self.assertEqual(self.first_connected_display(drm), (1, 52))
+        self.configure(4, self.marker, release=False, display=(1, 75))
+        self.assertEqual(self.writes, [])
+        self.configure(4, self.marker, release=False, display=(1, 52))
+        self.assertEqual(self.writes, [1])
 
 
 if __name__ == "__main__":

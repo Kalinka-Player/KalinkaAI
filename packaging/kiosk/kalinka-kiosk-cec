@@ -1,0 +1,290 @@
+#!/usr/bin/python3
+"""Register the Pi's HDMI playback role for the lifetime of the kiosk service."""
+
+import ctypes as c
+import errno
+import fcntl
+import os
+from pathlib import Path
+import select
+import sys
+import time
+
+
+# Fixed-width Linux UAPI from <linux/cec.h>. The kiosk package targets arm64.
+class Capabilities(c.Structure):
+    _fields_ = [
+        ("driver", c.c_char * 32),
+        ("name", c.c_char * 32),
+        ("available_log_addrs", c.c_uint32),
+        ("capabilities", c.c_uint32),
+        ("version", c.c_uint32),
+    ]
+
+
+class LogicalAddresses(c.Structure):
+    _fields_ = [
+        ("log_addr", c.c_uint8 * 4),
+        ("log_addr_mask", c.c_uint16),
+        ("cec_version", c.c_uint8),
+        ("num_log_addrs", c.c_uint8),
+        ("vendor_id", c.c_uint32),
+        ("flags", c.c_uint32),
+        ("osd_name", c.c_char * 15),
+        ("primary_device_type", c.c_uint8 * 4),
+        ("log_addr_type", c.c_uint8 * 4),
+        ("all_device_types", c.c_uint8 * 4),
+        ("features", (c.c_uint8 * 12) * 4),
+    ]
+
+
+def request(direction, number, structure):
+    return direction << 30 | c.sizeof(structure) << 16 | ord("a") << 8 | number
+
+
+class Message(c.Structure):
+    _fields_ = [
+        ("tx_ts", c.c_uint64), ("rx_ts", c.c_uint64),
+        ("length", c.c_uint32), ("timeout", c.c_uint32),
+        ("sequence", c.c_uint32), ("flags", c.c_uint32),
+        ("data", c.c_uint8 * 16), ("reply", c.c_uint8),
+        ("rx_status", c.c_uint8), ("tx_status", c.c_uint8),
+        ("error_counts", c.c_uint8 * 4),
+    ]
+
+
+class Event(c.Structure):
+    _fields_ = [
+        ("ts", c.c_uint64), ("kind", c.c_uint32), ("flags", c.c_uint32),
+        ("physical", c.c_uint16), ("logical_mask", c.c_uint16),
+        ("union_tail", c.c_uint8 * 60),
+    ]
+
+
+GET_CAPS = request(3, 0, Capabilities)
+GET_ADDRESSES = request(2, 3, LogicalAddresses)
+SET_ADDRESSES = request(3, 4, LogicalAddresses)
+TRANSMIT = request(3, 5, Message)
+RECEIVE = request(3, 6, Message)
+DEQUEUE_EVENT = request(3, 7, Event)
+SET_MODE = request(1, 9, c.c_uint32)
+ConnectorInfo = c.c_uint32 * 17  # type, then a 16-word UAPI union
+GET_CONNECTOR = request(2, 10, ConnectorInfo)
+LOG_ADDRS_AND_RC = (1 << 1) | (1 << 4)
+RC_PASSTHROUGH = 1 << 1
+INITIATOR_AND_FOLLOWER = 0x11  # The kernel still processes remote keys.
+BROADCAST = 15
+FEATURE_ABORT, STANDBY = 0x00, 0x36
+USER_CONTROL_PRESSED, USER_CONTROL_RELEASED = 0x44, 0x45
+ROUTING_CHANGE, ROUTING_INFORMATION, ACTIVE_SOURCE = 0x80, 0x81, 0x82
+REQUEST_ACTIVE_SOURCE, SET_STREAM_PATH = 0x85, 0x86
+GIVE_DEVICE_POWER_STATUS, REPORT_POWER_STATUS = 0x8f, 0x90
+VENDOR_COMMAND_WITH_ID = 0xa0
+
+
+class PlaybackSource:
+    """Answer for this HDMI input only while the kiosk owns its address."""
+
+    def __init__(self):
+        self.logical = None
+        self.physical = b""
+        self.active = False
+
+    def set_address(self, physical, logical_mask):
+        logical = logical_mask.bit_length() - 1 if logical_mask else None
+        address = physical.to_bytes(2, "big")
+        if (address, logical) != (self.physical, self.logical):
+            self.active = False
+        self.physical, self.logical = address, logical
+
+    def reply(self, frame):
+        if self.logical is None or self.physical == b"\xff\xff" or len(frame) < 2:
+            return
+        sender, destination = frame[0] >> 4, frame[0] & 15
+        opcode, data = frame[1], frame[2:]
+        if destination == BROADCAST:
+            if opcode in (SET_STREAM_PATH, ROUTING_INFORMATION, ROUTING_CHANGE):
+                offset = 2 if opcode == ROUTING_CHANGE else 0
+                if len(data) != offset + 2:
+                    return
+                self.active = data[offset:] == self.physical
+            elif opcode == ACTIVE_SOURCE or opcode == STANDBY:
+                self.active = False
+                return
+            elif opcode != REQUEST_ACTIVE_SOURCE:
+                return
+            if self.active:
+                return bytes([self.logical << 4 | BROADCAST, ACTIVE_SOURCE]) + self.physical
+            return
+        if destination != self.logical or sender == BROADCAST:
+            return
+        header = self.logical << 4 | sender
+        if opcode == GIVE_DEVICE_POWER_STATUS:
+            return bytes([header, REPORT_POWER_STATUS, 0])  # On
+        if opcode == STANDBY:
+            self.active = False
+            return
+        # Samsung Anynet+ asks for this acknowledgement when it discovers a
+        # source. The vendor ID in this reply identifies the command set.
+        if sender == 0 and opcode == VENDOR_COMMAND_WITH_ID and data == b"\x00\x00\xf0\x23":
+            return bytes([header, opcode]) + b"\x00\x00\xf0\x24\x00\x80"
+        if opcode not in (FEATURE_ABORT, USER_CONTROL_PRESSED, USER_CONTROL_RELEASED,
+                          REPORT_POWER_STATUS):
+            return bytes([header, FEATURE_ABORT, opcode, 0])  # Unrecognized opcode
+
+
+def first_connected_display(drm):
+    # On VC4 the embedder takes the first connected KMS connector in resource
+    # order. Connector IDs follow registration order on the built-in Pi ports.
+    connected = []
+    for status in drm.glob("card*-*/status"):
+        try:
+            if status.read_text().strip() == "connected":
+                card = status.parent.name.split("-", 1)[0]
+                connector_id = int((status.parent / "connector_id").read_text())
+                connected.append((int(card[4:]), connector_id))
+        except (OSError, ValueError):
+            continue
+    return min(connected, default=None)
+
+
+def playback_address():
+    address = LogicalAddresses()
+    address.cec_version = 5  # CEC 1.4
+    address.num_log_addrs = 1
+    address.vendor_id = 0xffffffff  # CEC_VENDOR_ID_NONE
+    address.osd_name = b"Kalinka"
+    address.flags = RC_PASSTHROUGH
+    address.primary_device_type[0] = 4  # CEC_OP_PRIM_DEVTYPE_PLAYBACK
+    address.log_addr_type[0] = 3  # CEC_LOG_ADDR_TYPE_PLAYBACK
+    address.all_device_types[0] = 0x10  # CEC_OP_ALL_DEVTYPE_PLAYBACK
+    return address
+
+
+def owns_address(fd):
+    current = LogicalAddresses()
+    fcntl.ioctl(fd, GET_ADDRESSES, current)
+    wanted = playback_address()
+    return (current.num_log_addrs == 1 and current.osd_name == wanted.osd_name
+            and current.log_addr_type[0] == wanted.log_addr_type[0]
+            and bool(current.flags & RC_PASSTHROUGH))
+
+
+def release_address(fd, marker):
+    # A stop can race the kernel's nonblocking address claim. Before each
+    # retry, check that another client hasn't taken over in the meantime.
+    deadline = time.monotonic() + 3
+    while marker.exists():
+        if not owns_address(fd):
+            break
+        try:
+            fcntl.ioctl(fd, SET_ADDRESSES, LogicalAddresses())
+            break
+        except OSError as error:
+            if error.errno != errno.EBUSY or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.1)
+    marker.unlink(missing_ok=True)
+
+
+def configure(fd, marker, *, release, display=None):
+    caps = Capabilities()
+    fcntl.ioctl(fd, GET_CAPS, caps)
+    if caps.driver != b"vc4_hdmi" or caps.capabilities & LOG_ADDRS_AND_RC != LOG_ADDRS_AND_RC:
+        return
+    if release:
+        release_address(fd, marker)
+        return
+    if display is not None:
+        info = ConnectorInfo()
+        fcntl.ioctl(fd, GET_CONNECTOR, info)
+        if info[0] != 1 or (info[1], info[2]) != display:
+            return
+
+    current = LogicalAddresses()
+    fcntl.ioctl(fd, GET_ADDRESSES, current)
+    if current.num_log_addrs:
+        return
+    # With no TV attached the kernel retains this request and claims the
+    # address when EDID becomes available. Never clear another CEC client.
+    marker.touch()
+    try:
+        fcntl.ioctl(fd, SET_ADDRESSES, playback_address())
+    except OSError:
+        marker.unlink(missing_ok=True)
+        raise
+    return True
+
+
+def handle_ready(fd, events, source):
+    if events & (select.POLLHUP | select.POLLERR | select.POLLNVAL):
+        return False
+    if events & select.POLLPRI:
+        event = Event()
+        fcntl.ioctl(fd, DEQUEUE_EVENT, event)
+        if event.kind == 1:  # CEC_EVENT_STATE_CHANGE, including the initial state
+            if event.logical_mask and not owns_address(fd):
+                return False
+            source.set_address(event.physical, event.logical_mask)
+            # Process queued address changes before any messages.
+            return True
+    if events & select.POLLIN:
+        message = Message()
+        fcntl.ioctl(fd, RECEIVE, message)
+        if message.rx_status & 1:  # Ignore completion of our own transmissions.
+            response = source.reply(bytes(message.data[:message.length]))
+            if response:
+                reply = Message()
+                reply.length = len(response)
+                reply.data[:len(response)] = response
+                fcntl.ioctl(fd, TRANSMIT, reply)
+    return True
+
+
+def follow(sources):
+    poll = select.poll()
+    for fd in sources:
+        poll.register(fd, select.POLLIN | select.POLLPRI)
+    while sources:
+        for fd, events in poll.poll():
+            try:
+                if handle_ready(fd, events, sources[fd]):
+                    continue
+            except OSError as error:
+                if error.errno in (errno.EAGAIN, errno.ENONET, errno.EBUSY):
+                    continue
+                if error.errno != errno.ENODEV:
+                    raise
+            poll.unregister(fd)
+            del sources[fd]
+            os.close(fd)
+
+
+def main(release):
+    runtime = Path(os.environ["RUNTIME_DIRECTORY"])
+    display = None if release else first_connected_display(Path("/sys/class/drm"))
+    sources = {}
+    try:
+        for device in sorted(Path("/dev").glob("cec[0-9]*")):
+            fd = None
+            try:
+                fd = os.open(device, os.O_RDWR | os.O_NONBLOCK)
+                if configure(fd, runtime / device.name, release=release, display=display):
+                    fcntl.ioctl(fd, SET_MODE, c.c_uint32(INITIATOR_AND_FOLLOWER))
+                    sources[fd] = PlaybackSource()
+            except OSError as error:
+                if error.errno not in (errno.EBUSY, errno.ENODEV, errno.ENOENT):
+                    print(f"{device}: {error}", file=sys.stderr)
+            finally:
+                if fd is not None and fd not in sources:
+                    os.close(fd)
+        follow(sources)
+    finally:
+        for fd in sources:
+            os.close(fd)
+
+
+if __name__ == "__main__":
+    if sys.argv[1:] not in (["follow"], ["release"]):
+        sys.exit("usage: kalinka-kiosk-cec follow|release")
+    main(release=sys.argv[1] == "release")
