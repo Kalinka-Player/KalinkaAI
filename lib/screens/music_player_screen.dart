@@ -349,7 +349,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         ref.read(connectionStateProvider) == ConnectionStatus.connected &&
         !_wizardOpen &&
         !_deferredForPicker();
-    _setupCheckBusy = true;
+    setState(() => _setupCheckBusy = true);
     try {
       // Returning from Now Playing can reveal an open settings editor.
       // Fetch the wizard schema only when this display actually needs setup.
@@ -377,9 +377,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         _openWizard(startAtSetup: true, offerNetwork: offerNetwork);
       }
     } finally {
-      _setupCheckBusy = false;
-      // The picker may have closed on another server while this one ran.
-      if (mounted) _runDeferredSetupCheck();
+      if (mounted) {
+        setState(() => _setupCheckBusy = false);
+        _runDeferredSetupCheck();
+      }
     }
   }
 
@@ -1336,8 +1337,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// whether or not the server has been set up.
   bool get _showCoachMarks {
     if (kIsWeb || ModalRoute.isCurrentOf(context) != true) return false;
+    // The local first-run flag is seeded at startup. Give the server's setup
+    // check first claim on focus when Home returns from the idle display.
     if (ref.watch(localDisplayKioskProvider) &&
-        ref.watch(kioskActiveProvider)) {
+        (ref.watch(kioskActiveProvider) || _setupCheckBusy)) {
       return false;
     }
     final onboarding = ref.watch(onboardingStatusProvider);
