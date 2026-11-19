@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/widgets/kalinka_scroll_behavior.dart';
+import 'package:kalinka/widgets/modifier_click.dart';
 
 Widget _app(Widget child, {bool reducedMotion = false}) => MaterialApp(
   scrollBehavior: const KalinkaScrollBehavior(),
@@ -135,6 +136,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(down.hitTestable(), findsOneWidget);
   });
+
+  testWidgets(
+    'a modified click on the page button leaves the row underneath alone',
+    (tester) async {
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+      var selected = false;
+      await tester.pumpWidget(
+        _app(
+          ListView.builder(
+            controller: controller,
+            itemCount: 60,
+            itemExtent: 50,
+            itemBuilder: (_, i) => ModifierClick(
+              onModifiedClick: () => selected = true,
+              child: InkWell(onTap: () {}, child: Text('Row $i')),
+            ),
+          ),
+          reducedMotion: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(down, kind: PointerDeviceKind.mouse);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      expect(selected, isFalse);
+      expect(controller.offset, controller.position.viewportDimension);
+    },
+  );
 
   testWidgets(
     'remote and keyboard page the visible area above the player bar',
