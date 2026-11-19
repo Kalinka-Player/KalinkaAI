@@ -171,6 +171,12 @@ Increase card height for wrapping and text scaling rather than shrinking type. A
 
 ## Lists and grids
 
+Show a neutral chevron at the foot of a viewport while more content lies below. On horizontal rails it points toward the next page. Use actual overflow on first layout and after resizing, including in dialogs and phone sheets. Tapping, clicking or activating the focused chevron advances one visible page. It stays translucent at rest, dims during scrolling and disappears at the end.
+
+Use a 48dp touch target and a visible keyboard focus ring. Scale the control with the kiosk output panel for TV viewing. Swipes and mouse-wheel scrolling also work over the chevron.
+
+[Tablet ALSA output selector with more devices below](images/alsa-output-scroll.png)
+
 List presentation supports two distinct ways to use width. Select the treatment by the kind of content and its ordering requirements, not by plugin name.
 
 Use the same neutral highlight for list items in pinned Home previews and catalog pages: a flat, subtle white overlay across the entire row, including its artwork and actions, with no frame, outline or extension into the gutters. Show it immediately on hover or keyboard focus, and strengthen it while pressed. Keep the hand cursor, existing padding and selected/playing marks. Highlight feedback must not intercept taps, swipes, long presses or trailing actions. Disabled rows stay unhighlighted. With a mouse, on desktop and web, a Ctrl- or ⌘-click does what a long press does (selects a track or container, or puts a suggestion in the field to edit), claimed as the button goes down, so a plain click opens or plays at once with no double-click timeout to wait out; the row's own buttons keep their clicks. A track row wide enough for its Album column (576dp, scaled with text size) ends with a grey round + after its time, the row play button's size (its room kept while it hides, so times stay under TIME), which adds the track to the end of the queue: it turns to a muted check at once and takes no more clicks while Enqueue would show Added (3 seconds), reverting straight away if the add fails. It hides during selection, like the play button.

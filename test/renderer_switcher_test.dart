@@ -24,6 +24,7 @@ import 'package:kalinka/providers/wire_event_provider.dart';
 import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/screens/renderer_settings_screen.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/kalinka_scroll_behavior.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/slide_in_panel.dart';
 import 'package:kalinka/widgets/volume_control_slider.dart';
@@ -312,6 +313,7 @@ void main() {
   /// lets the tablet layout put it in the left panel.
   Widget switcherTree({double textScale = 1}) => MaterialApp(
     theme: AppTheme.dark(),
+    scrollBehavior: const KalinkaScrollBehavior(),
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context)
           .copyWith(textScaler: TextScaler.linear(textScale)),
@@ -706,6 +708,7 @@ void main() {
     (const Size(320, 568), 2.0),
     (const Size(812, 375), 1.0),
     (const Size(640, 900), 3.2),
+    (const Size(1024, 768), 1.0),
   ]) {
     testWidgets(
       'picker scrolls while Close stays reachable at $size and ${scale}x text',
@@ -735,6 +738,11 @@ void main() {
         final close = find.byTooltip('Close output picker');
         final closeBounds = tester.getRect(close);
         expect(close.hitTestable(), findsOneWidget);
+        final page = find.byTooltip('Scroll down one page');
+        expect(page.hitTestable(), findsOneWidget);
+        await tester.tap(page);
+        await tester.pumpAndSettle();
+        expect(api.selected, isEmpty);
         await tester.scrollUntilVisible(
           find.text('Listening room 11'),
           180,
