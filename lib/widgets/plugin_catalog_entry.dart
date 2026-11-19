@@ -1,6 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import 'keyboard/keyboard_activation.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data_model/data_model.dart' show ModuleState;
@@ -646,29 +649,34 @@ class PluginControls extends StatelessWidget {
       label: '${plugin.name} enabled',
       onTap: onChanged == null ? null : () => onChanged(!state.enabled),
       child: ExcludeSemantics(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onChanged == null ? null : () => onChanged(!state.enabled),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Opacity(
-                  opacity: onChanged == null ? 0.45 : 1,
-                  child: IgnorePointer(
-                    child: SettingsToggle(
-                      value: state.enabled,
-                      onChanged: (_) {},
+        child: KeyboardActivation(
+          onActivate: onChanged == null
+              ? null
+              : () => onChanged(!state.enabled),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onChanged == null ? null : () => onChanged(!state.enabled),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Opacity(
+                    opacity: onChanged == null ? 0.45 : 1,
+                    child: IgnorePointer(
+                      child: SettingsToggle(
+                        value: state.enabled,
+                        onChanged: null,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  state.enabled ? 'Enabled' : 'Disabled',
-                  style: KalinkaTextStyles.trayRowLabel,
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Text(
+                    state.enabled ? 'Enabled' : 'Disabled',
+                    style: KalinkaTextStyles.trayRowLabel,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

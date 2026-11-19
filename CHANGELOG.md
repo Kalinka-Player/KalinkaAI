@@ -11,6 +11,7 @@ paragraph, however long; blank lines separate paragraphs.
 ## Unreleased
 
 ### Added
+- On a Raspberry Pi display, an HDMI-CEC TV remote can navigate Kalinka and control playback. Arrow keys move between the navigation rail, main pane and Now Playing or Queue. Down at the end of a pane enters the mini-player, and Up returns. Back follows browsing history and focuses the rail at the root of a destination. Rewind and Fast Forward seek five seconds per tap and accelerate when held.
 - AI search shows the playlists a service suggests, not only tracks. A service that suggests playlists, as the Qobuz plugin does for a mood or description, gets a card under Inspired by your request that counts and names them; opening it lists them on a Playlists shelf, and the Playlists tab shows them too.
 
 ### Changed

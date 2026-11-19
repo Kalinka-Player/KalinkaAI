@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/listing_presentation_provider.dart';
 import '../../theme/app_theme.dart';
+import '../keyboard/ink_focus_outline.dart';
 
 /// Grid or List for one listing. It changes how the page lays out what it
 /// already shows — never what it shows, nor the history — and the choice is
@@ -48,23 +49,26 @@ class PresentationToggle extends ConsumerWidget {
               grid ? ListingPresentation.list : ListingPresentation.grid,
             ),
             customBorder: const CircleBorder(),
-            focusColor: KalinkaColors.surfaceOverlay,
+            focusColor: Colors.transparent,
             child: SizedBox.square(
               dimension: kKalinkaPillTarget,
               child: Center(
-                child: Container(
-                  width: kKalinkaPillHeight,
-                  height: kKalinkaPillHeight,
-                  decoration: const ShapeDecoration(
-                    color: KalinkaColors.surfaceElevated,
-                    shape: CircleBorder(
-                      side: BorderSide(color: KalinkaColors.borderDefault),
+                child: InkFocusOutline(
+                  shape: const CircleBorder(),
+                  child: Container(
+                    width: kKalinkaPillHeight,
+                    height: kKalinkaPillHeight,
+                    decoration: const ShapeDecoration(
+                      color: KalinkaColors.surfaceElevated,
+                      shape: CircleBorder(
+                        side: BorderSide(color: KalinkaColors.borderDefault),
+                      ),
                     ),
-                  ),
-                  child: Icon(
-                    grid ? Icons.view_list_rounded : Icons.grid_view_rounded,
-                    size: 18,
-                    color: KalinkaColors.textPrimary,
+                    child: Icon(
+                      grid ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                      size: 18,
+                      color: KalinkaColors.textPrimary,
+                    ),
                   ),
                 ),
               ),
@@ -76,6 +80,12 @@ class PresentationToggle extends ConsumerWidget {
 
     Widget side(ListingPresentation presentation, IconData icon, String label) {
       final on = presentation == chosen;
+      const endCap = Radius.circular(kKalinkaPillRadius);
+      final shape = RoundedRectangleBorder(
+        borderRadius: presentation == ListingPresentation.grid
+            ? const BorderRadiusDirectional.horizontal(start: endCap)
+            : const BorderRadiusDirectional.horizontal(end: endCap),
+      );
       return Semantics(
         button: true,
         selected: on,
@@ -87,40 +97,42 @@ class PresentationToggle extends ConsumerWidget {
           child: InkWell(
             mouseCursor: WidgetStateMouseCursor.clickable,
             onTap: () => notifier.set(layout, presentation),
-            customBorder: const StadiumBorder(),
-            focusColor: KalinkaColors.surfaceOverlay,
+            customBorder: shape,
+            focusColor: Colors.transparent,
             child: SizedBox(
               width: kKalinkaPillTarget,
               height: kKalinkaPillTarget,
               child: Padding(
-                // 3dp inside the pill's edge on every side.
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 3,
-                  vertical: (kKalinkaPillTarget - kKalinkaPillHeight) / 2 + 3,
+                  vertical: (kKalinkaPillTarget - kKalinkaPillHeight) / 2,
                 ),
-                child: AnimatedContainer(
-                  duration: MediaQuery.disableAnimationsOf(context)
-                      ? Duration.zero
-                      : const Duration(milliseconds: 120),
-                  alignment: Alignment.center,
-                  decoration: ShapeDecoration(
-                    color: on
-                        ? KalinkaColors.surfaceOverlay
-                        : Colors.transparent,
-                    shape: StadiumBorder(
-                      side: BorderSide(
-                        color: on
-                            ? KalinkaColors.textMuted
-                            : Colors.transparent,
+                child: InkFocusOutline(
+                  shape: shape,
+                  child: AnimatedContainer(
+                    margin: const EdgeInsets.all(3),
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 120),
+                    alignment: Alignment.center,
+                    decoration: ShapeDecoration(
+                      color: on
+                          ? KalinkaColors.surfaceOverlay
+                          : Colors.transparent,
+                      shape: StadiumBorder(
+                        side: BorderSide(
+                          color: on
+                              ? KalinkaColors.textMuted
+                              : Colors.transparent,
+                        ),
                       ),
                     ),
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 18,
-                    color: on
-                        ? KalinkaColors.textPrimary
-                        : KalinkaColors.textSecondary,
+                    child: Icon(
+                      icon,
+                      size: 18,
+                      color: on
+                          ? KalinkaColors.textPrimary
+                          : KalinkaColors.textSecondary,
+                    ),
                   ),
                 ),
               ),

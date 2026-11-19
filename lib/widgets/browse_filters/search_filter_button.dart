@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../keyboard/ink_focus_outline.dart';
 
 /// The folded state of the search-and-filters control: one pill in the title
 /// bar carrying a magnifier and a sliders glyph, badged with how many answers
@@ -51,33 +52,38 @@ class _SearchFilterButtonState extends State<SearchFilterButton> {
         : KalinkaColors.borderDefault;
     const fg = KalinkaColors.textPrimary;
 
+    const shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.all(Radius.circular(kKalinkaPillRadius)),
+    );
     return Semantics(
       button: true,
       label: widget.activeCount == 0
           ? 'Search and filters'
           : 'Search and filters, ${widget.activeCount} active',
       excludeSemantics: true,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => _setHovering(true),
-        onExit: (_) => _setHovering(false),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: Padding(
-            // Room for the badge to sit proud of the pill without clipping.
-            padding: const EdgeInsets.only(top: 4, right: 6, bottom: 4),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                AnimatedContainer(
+      onTap: widget.onTap,
+      child: InkWell(
+        mouseCursor: WidgetStateMouseCursor.clickable,
+        onHover: _setHovering,
+        onTap: widget.onTap,
+        customBorder: shape,
+        focusColor: Colors.transparent,
+        child: Padding(
+          // Room for the badge to sit proud of the pill without clipping.
+          padding: const EdgeInsets.only(top: 4, right: 6, bottom: 4),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              InkFocusOutline(
+                shape: shape,
+                child: AnimatedContainer(
                   duration: const Duration(milliseconds: 130),
                   curve: Curves.easeOut,
                   height: kKalinkaPillHeight,
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
                     color: bg,
-                    borderRadius: BorderRadius.circular(kKalinkaPillRadius),
+                    borderRadius: shape.borderRadius,
                     border: Border.all(color: border, width: 1),
                   ),
                   child: Row(
@@ -89,32 +95,32 @@ class _SearchFilterButtonState extends State<SearchFilterButton> {
                     ],
                   ),
                 ),
-                if (widget.activeCount > 0)
-                  Positioned(
-                    top: -6,
-                    right: -6,
-                    child: Container(
-                      width: 18,
-                      height: 18,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        color: KalinkaColors.accent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        // Two digits is the most that fits the circle; genres
-                        // are counted one apiece, so the cap is reachable.
-                        widget.activeCount > 9 ? '9+' : '${widget.activeCount}',
-                        style: KalinkaFonts.sans(
-                          fontSize: KalinkaTypography.baseSize - 1,
-                          fontWeight: FontWeight.w700,
-                          color: KalinkaColors.frost,
-                        ),
+              ),
+              if (widget.activeCount > 0)
+                Positioned(
+                  top: -6,
+                  right: -6,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                      color: KalinkaColors.accent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      // Two digits is the most that fits the circle; genres
+                      // are counted one apiece, so the cap is reachable.
+                      widget.activeCount > 9 ? '9+' : '${widget.activeCount}',
+                      style: KalinkaFonts.sans(
+                        fontSize: KalinkaTypography.baseSize - 1,
+                        fontWeight: FontWeight.w700,
+                        color: KalinkaColors.frost,
                       ),
                     ),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
       ),

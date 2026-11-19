@@ -62,6 +62,14 @@ class FlutterPiKeyboardMessenger extends BinaryMessenger {
       if (message is! Map<String, dynamic> || message['toolkit'] != 'gtk') {
         return handler(bytes);
       }
+      // flutter-pi encodes XKB symbols with %g, rounding the transport
+      // symbols to the same JSON double. The Linux scan code survives.
+      if (message['keyCode'] is double) {
+        final key = kioskMediaKeys[kLinuxToPhysicalKey[message['scanCode']]];
+        message['keyCode'] = (message['keyCode'] as double).toInt();
+        if (key != null) message['specifiedLogicalKey'] = key.keyId;
+        bytes = codec.encodeMessage(message);
+      }
       final reply = handler(bytes);
       final key = kGtkToLogicalKey[message['keyCode']];
       if (message['type'] == 'keydown' &&
@@ -73,3 +81,15 @@ class FlutterPiKeyboardMessenger extends BinaryMessenger {
     });
   }
 }
+
+final kioskMediaKeys = {
+  PhysicalKeyboardKey.mediaRewind: LogicalKeyboardKey.mediaRewind,
+  PhysicalKeyboardKey.mediaFastForward: LogicalKeyboardKey.mediaFastForward,
+  PhysicalKeyboardKey.audioVolumeUp: LogicalKeyboardKey.audioVolumeUp,
+  PhysicalKeyboardKey.audioVolumeDown: LogicalKeyboardKey.audioVolumeDown,
+  PhysicalKeyboardKey.mediaPlay: LogicalKeyboardKey.mediaPlay,
+  PhysicalKeyboardKey.mediaPause: LogicalKeyboardKey.mediaPause,
+  PhysicalKeyboardKey.mediaPlayPause: LogicalKeyboardKey.mediaPlayPause,
+  PhysicalKeyboardKey.mediaTrackPrevious: LogicalKeyboardKey.mediaTrackPrevious,
+  PhysicalKeyboardKey.mediaTrackNext: LogicalKeyboardKey.mediaTrackNext,
+};

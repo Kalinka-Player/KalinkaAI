@@ -73,6 +73,7 @@ class NowPlayingContent extends ConsumerStatefulWidget {
 }
 
 class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
+  final _headerKey = GlobalKey();
   // Cap viewport-driven growth of supporting text, before system text scaling.
   static const _maxArtistFontSize = 20.0;
   static const _maxAlbumFontSize = 18.0;
@@ -838,6 +839,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
   }) {
     if (widget.showOverlayHeader || widget.isTablet) {
       return PlayerHeader(
+        key: _headerKey,
         isTablet: widget.isTablet && !widget.showOverlayHeader,
         showingQueue: showingQueue,
         onClose: widget.onClose,

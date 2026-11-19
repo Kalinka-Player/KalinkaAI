@@ -37,7 +37,8 @@ import '../kalinka_back_button.dart';
 import '../selection_overlay.dart';
 import '../server_chip.dart';
 import '../source_badge.dart';
-import '../tap_highlight.dart' show kalinkaIconButtonStyle, kalinkaOverlay;
+import '../tap_highlight.dart'
+    show TapHighlight, kalinkaIconButtonStyle, kalinkaOverlay;
 import 'album_page_header.dart';
 import 'browse_visit_scope.dart';
 import 'browse_toolbar_metrics.dart';
@@ -56,6 +57,7 @@ import '../cached_gradient.dart';
 import 'results_view.dart';
 import 'search_composer.dart';
 import 'search_zero_state.dart';
+import '../../providers/kiosk_provider.dart';
 import '../keyboard/app_keyboard_navigation.dart';
 
 /// How far a backdrop fades out before browsing's right edge, where it meets
@@ -192,6 +194,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         WidgetsBindingObserver {
   final _composerController = TextEditingController();
   final _composerFocus = FocusNode();
+  FocusNode? _searchOpener;
 
   // The backdrop spans the pinned header and the list, so it is painted at
   // surface level but follows the list's exact offset. Retained while a
@@ -348,6 +351,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
 
   // Whether the search-and-filters card is unfolded out of its title-bar pill.
   bool _filtersOpen = false;
+  final _filterFocus = FocusScopeNode(debugLabel: 'Browse filters');
 
   // Compare edits with the selection shown when the card opened.
   BrowseFilterQuery _filtersOpenedOn = const BrowseFilterQuery();
@@ -443,6 +447,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     _composerController.removeListener(_onTextChange);
     _overlayCtrl.dispose();
     _filtersCtrl.dispose();
+    _filterFocus.dispose();
     _fold.dispose();
     _heroFold.dispose();
     _pageReveal.dispose();
@@ -502,6 +507,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// [prefill] — the query shown, to be edited into the next.
   void _openSearch({BuildContext? from, String prefill = ''}) {
     if (_focused) return;
+    if (ref.read(localDisplayKioskProvider)) {
+      _searchOpener = FocusManager.instance.primaryFocus;
+    }
     // Measure the entry in THIS surface's local space (not global): on tablet
     // the search surface is only the browsing pane, and the overlay positions
     // itself within it, so the origin must be panel-relative.
@@ -539,6 +547,8 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     // Re-entrant: the back arrow / scrim tap unfocuses, which fires
     // didChangeMetrics → here again. Ignore once a close is already running.
     if (!_focused || _overlayCtrl.status == AnimationStatus.reverse) return;
+    final opener = _searchOpener;
+    _searchOpener = null;
     _composerFocus.unfocus();
     _composerController.clear();
     if (!animate) {
@@ -551,6 +561,11 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       if (!mounted) return;
       ref.read(searchEntryModeProvider.notifier).set(false);
       setState(() => _focused = false);
+      if (opener != null &&
+          opener.context?.mounted == true &&
+          opener.canRequestFocus) {
+        opener.requestFocus();
+      }
     });
   }
 
@@ -614,14 +629,38 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       _filtersOpen = true;
       _filtersOpenedOn = _appliedFilter(ref.read(searchSessionProvider));
     });
-    _filtersCtrl.forward(from: 0);
+    final opening = _filtersCtrl.forward(from: 0);
+    if (ref.read(localDisplayKioskProvider)) {
+      opening.then((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_filtersOpen || _filterFocus.focusedChild != null) {
+            return;
+          }
+          final targets = _filterFocus.traversalDescendants
+              .where((node) => node is! FocusScopeNode)
+              .toList();
+          if (targets.isNotEmpty) {
+            ReadingOrderTraversalPolicy()
+                .sortDescendants(targets, _filterFocus)
+                .first
+                .requestFocus();
+          }
+        });
+        WidgetsBinding.instance.ensureVisualUpdate();
+      });
+    }
   }
 
-  void _closeFilters() {
+  void _closeFilters({bool applied = false}) {
     // Re-entrant: the scrim tap and the Cancel button can both land.
     if (!_filtersOpen || _filtersCtrl.status == AnimationStatus.reverse) return;
     _filtersCtrl.reverse().whenComplete(() {
-      if (mounted) setState(() => _filtersOpen = false);
+      if (!mounted) return;
+      setState(() => _filtersOpen = false);
+      AppKeyboardNavigation.focusAfterBuild(
+        context,
+        applied ? AppKeyboardArea.content : AppKeyboardArea.toolbar,
+      );
     });
   }
 
@@ -653,7 +692,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           : filter;
       notifier.setCatalogFilter(next, reset: reset);
     }
-    _closeFilters();
+    _closeFilters(applied: true);
   }
 
   /// What the filter card narrows: the open catalog page, or the results.
@@ -680,13 +719,34 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         )
       : session.catalogFilter;
 
-  /// Whether nothing is left to unwind: the system back may leave the app.
-  bool _atTopLevel(SearchSessionState session, {required bool selecting}) =>
-      !_focused &&
-      !_filtersOpen &&
-      !selecting &&
-      !ref.watch(collectionEditProvider.select((s) => s.active)) &&
-      session.atHome;
+  bool _hasBackLayer({
+    required bool selecting,
+    required bool editingCollection,
+  }) =>
+      _focused ||
+      _barSearchOpen ||
+      _filtersOpen ||
+      selecting ||
+      editingCollection;
+
+  /// Home has an implicit first visit. Each rail source and Results instead
+  /// owns an independent stack whose first visit is the destination itself.
+  bool get atRailRoot {
+    if (!widget.handlesBack ||
+        !widget.navigationVisible ||
+        _hasBackLayer(
+          selecting: ref.read(selectionStateProvider).isActive,
+          editingCollection: ref.read(collectionEditProvider).active,
+        )) {
+      return false;
+    }
+    final session = ref.read(searchSessionProvider);
+    if (session.destination == BrowseDestination.home) return session.atHome;
+    return session.previousVisits.isEmpty &&
+        !(session.activeView == FindMusicView.catalogs &&
+            session.catalogPage.folderLayout &&
+            session.folderPath.isNotEmpty);
+  }
 
   /// One back press unwinds one layer: the search overlay, the filter card,
   /// a selection or a collection edit, then the enclosing folder or the
@@ -717,6 +777,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       return;
     }
     ref.read(searchSessionProvider.notifier).goBack();
+    AppKeyboardNavigation.focusAfterBuild(context, AppKeyboardArea.content);
   }
 
   /// Global navigation must honour editing guards and discard only transient
@@ -747,6 +808,11 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         session.activeView == FindMusicView.catalogs &&
         session.catalogPage.isAlbum;
     ref.listen(searchSessionProvider.select((s) => s.visitId), (_, visit) {
+      AppKeyboardNavigation.focusAfterBuild(
+        context,
+        AppKeyboardArea.content,
+        browsingVisit: true,
+      );
       _barSearchOpen = false;
       _catalogSearchFocus.unfocus();
       // Drafts belong to one visit; resizing keeps this key, navigation doesn't.
@@ -800,7 +866,13 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     return PopScope(
       canPop:
           !widget.handlesBack ||
-          _atTopLevel(session, selecting: selectionActive),
+          (session.atHome &&
+              !_hasBackLayer(
+                selecting: selectionActive,
+                editingCollection: ref.watch(
+                  collectionEditProvider.select((s) => s.active),
+                ),
+              )),
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && widget.handlesBack) _handleBack();
       },
@@ -2225,6 +2297,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         const SingleActivator(LogicalKeyboardKey.escape): _closeFilters,
       },
       child: FocusScope(
+        node: _filterFocus,
         autofocus: true,
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -2318,8 +2391,17 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// origin measured in [_openSearch]) — on tablet the surface is only the
   /// right half, so the overlay stays inside it and unrolls exactly as on
   /// phone rather than sweeping across the whole screen.
-  Widget _buildSearchOverlay(SearchSessionState session) =>
-      FocusScope(child: _buildSearchOverlayContent(session));
+  Widget _buildSearchOverlay(SearchSessionState session) => FocusScope(
+    onKeyEvent: (_, event) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.escape) {
+        _closeSearch();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    },
+    child: _buildSearchOverlayContent(session),
+  );
 
   Widget _buildSearchOverlayContent(SearchSessionState session) {
     final smart = ref.watch(smartSearchAvailableProvider) ?? true;
@@ -2732,8 +2814,8 @@ class _SearchEntryButton extends StatelessWidget {
       button: true,
       child: Material(
         type: MaterialType.transparency,
-        child: InkWell(
-          mouseCursor: WidgetStateMouseCursor.clickable,
+        child: TapHighlight(
+          focusable: true,
           borderRadius: radius,
           onTap: onTap,
           child: SizedBox(
@@ -2761,14 +2843,6 @@ class _SearchEntryButton extends StatelessWidget {
                             ? KalinkaColors.accentBorder
                             : KalinkaColors.borderDefault,
                       ),
-                      boxShadow: [
-                        if (smart)
-                          BoxShadow(
-                            color: KalinkaColors.accent.withValues(alpha: .16),
-                            blurRadius: 26,
-                            spreadRadius: 1,
-                          ),
-                      ],
                     ),
                   ),
                 ),

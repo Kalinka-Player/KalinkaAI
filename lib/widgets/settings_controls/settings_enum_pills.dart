@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../keyboard/keyboard_activation.dart';
 
 /// Connected segmented control for enum-like settings.
 ///
@@ -58,32 +59,37 @@ class _Segment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: isActive ? KalinkaColors.accent : Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        mouseCursor: WidgetStateMouseCursor.clickable,
-        onTap: onTap,
-        overlayColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.pressed)) {
-            return Colors.white.withValues(alpha: 0.08);
-          }
-          return null;
-        }),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: KalinkaFonts.sans(
-              fontSize: KalinkaTypography.baseSize + 2,
-              fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
-              color: isActive
-                  ? KalinkaColors.textPrimary
-                  : KalinkaColors.textSecondary,
+    return KeyboardActivation(
+      onActivate: onTap,
+      borderRadius: BorderRadius.circular(7),
+      child: Material(
+        color: isActive ? KalinkaColors.accent : Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          canRequestFocus: false,
+          mouseCursor: WidgetStateMouseCursor.clickable,
+          onTap: onTap,
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return Colors.white.withValues(alpha: 0.08);
+            }
+            return null;
+          }),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: KalinkaFonts.sans(
+                fontSize: KalinkaTypography.baseSize + 2,
+                fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
+                color: isActive
+                    ? KalinkaColors.textPrimary
+                    : KalinkaColors.textSecondary,
+              ),
             ),
           ),
         ),

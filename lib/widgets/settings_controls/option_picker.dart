@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../data_model/presentation_schema.dart' show OptionSpec;
 import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
@@ -79,7 +80,11 @@ class OptionRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         mouseCursor: clickCursor(interactive: true),
-        overlayColor: kalinkaOverlay,
+        overlayColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.focused)
+              ? KalinkaColors.textPrimary.withValues(alpha: 0.20)
+              : kalinkaOverlay.resolve(states),
+        ),
         child: Padding(
           padding: padding,
           child: Row(

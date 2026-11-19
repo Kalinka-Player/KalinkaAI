@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
 import 'kalinka_popover.dart';
+import 'keyboard/ink_focus_outline.dart';
 
 enum KalinkaButtonVariant { accent, neutral }
 
@@ -94,6 +95,7 @@ class KalinkaButton extends StatelessWidget {
         child: Material(
           color: bgColor,
           shape: StadiumBorder(side: BorderSide(color: borderColor)),
+          borderOnForeground: false,
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             autofocus: autofocus,
@@ -108,50 +110,59 @@ class KalinkaButton extends StatelessWidget {
               }
               return null;
             }),
-            child: Stack(
-              children: [
-                if (progress case final progress?)
-                  Positioned.fill(
-                    child: Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: AnimatedFractionallySizedBox(
-                        key: const ValueKey('button-progress'),
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeOut,
-                        widthFactor: progress.clamp(0.0, 1.0),
-                        heightFactor: 1,
-                        child: ColoredBox(
-                          color: variant == KalinkaButtonVariant.neutral
-                              ? KalinkaColors.accent.withValues(alpha: 0.45)
-                              : KalinkaColors.textPrimary.withValues(
-                                  alpha: 0.2,
-                                ),
+            child: InkFocusOutline(
+              shape: const StadiumBorder(),
+              child: Stack(
+                children: [
+                  if (progress case final progress?)
+                    Positioned.fill(
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: AnimatedFractionallySizedBox(
+                          key: const ValueKey('button-progress'),
+                          duration: const Duration(milliseconds: 400),
+                          curve: Curves.easeOut,
+                          widthFactor: progress.clamp(0.0, 1.0),
+                          heightFactor: 1,
+                          child: ColoredBox(
+                            color: variant == KalinkaButtonVariant.neutral
+                                ? KalinkaColors.accent.withValues(alpha: 0.45)
+                                : KalinkaColors.textPrimary.withValues(
+                                    alpha: 0.2,
+                                  ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                Container(
-                  width: fullWidth ? double.infinity : null,
-                  constraints: BoxConstraints(minHeight: minHeight),
-                  padding: EdgeInsets.symmetric(vertical: 8, horizontal: hPad),
-                  child: Row(
-                    mainAxisSize: fullWidth
-                        ? MainAxisSize.max
-                        : MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (leading != null) ...[
-                        leading!,
-                        const SizedBox(width: 8),
+                  Container(
+                    width: fullWidth ? double.infinity : null,
+                    constraints: BoxConstraints(minHeight: minHeight),
+                    padding: EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: hPad,
+                    ),
+                    child: Row(
+                      mainAxisSize: fullWidth
+                          ? MainAxisSize.max
+                          : MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (leading != null) ...[
+                          leading!,
+                          const SizedBox(width: 8),
+                        ],
+                        // Flexible lets long labels truncate, but only when the
+                        // width is bounded — intrinsic buttons can sit in
+                        // unbounded Rows, where it would assert.
+                        if (fullWidth)
+                          Flexible(child: labelText)
+                        else
+                          labelText,
                       ],
-                      // Flexible lets long labels truncate, but only when the
-                      // width is bounded — intrinsic buttons can sit in
-                      // unbounded Rows, where it would assert.
-                      if (fullWidth) Flexible(child: labelText) else labelText,
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

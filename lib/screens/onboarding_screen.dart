@@ -7,10 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data_model/presentation_schema.dart' show ModuleSpec;
 import '../providers/connection_settings_provider.dart';
+import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_player_api_provider.dart';
 import '../providers/network_setup_api.dart' show hotspotAddress;
 import '../providers/networked_boxes_provider.dart';
 import '../providers/onboarding_provider.dart';
+import '../providers/pinned_server.dart';
 import '../providers/renderer_provider.dart';
 import '../providers/renderer_settings_provider.dart';
 import '../providers/restart_provider.dart';
@@ -533,8 +535,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     ),
                     webOnlyWindowName: '_self',
                   );
-                } else {
+                } else if (ref.read(canSelectServerProvider)) {
                   _goTo(0);
+                } else {
+                  ref.read(connectionStateProvider.notifier).retryNow();
                 }
               },
               onBusy: (busy) {

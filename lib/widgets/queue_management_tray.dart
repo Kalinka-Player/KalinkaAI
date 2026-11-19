@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/kalinka_ws_api.dart';
 
 import '../providers/app_state_provider.dart';
@@ -149,30 +150,38 @@ class QueueManagementTrayContent extends ConsumerWidget {
     required Color activeColor,
     required VoidCallback onTap,
   }) {
-    return TapHighlight(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeInOut,
-        width: 42,
-        height: 24,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: value ? activeColor : KalinkaColors.surfaceElevated,
-          border: value ? null : Border.all(color: KalinkaColors.borderDefault),
-        ),
-        child: AnimatedAlign(
+    return Semantics(
+      label: 'Shuffle',
+      toggled: value,
+      child: TapHighlight(
+        focusable: true,
+        autofocus: true,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeInOut,
-          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            width: 16,
-            height: 16,
-            margin: const EdgeInsets.symmetric(horizontal: 3),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: value ? Colors.white : KalinkaColors.textSecondary,
+          width: 42,
+          height: 24,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: value ? activeColor : KalinkaColors.surfaceElevated,
+            border: value
+                ? null
+                : Border.all(color: KalinkaColors.borderDefault),
+          ),
+          child: AnimatedAlign(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOut,
+            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              width: 16,
+              height: 16,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: value ? Colors.white : KalinkaColors.textSecondary,
+              ),
             ),
           ),
         ),
@@ -197,8 +206,10 @@ class _SaveRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: kSheetGutter),
       child: Semantics(
         button: true,
+        enabled: onTap != null,
         label: 'Save this queue to a collection',
         child: TapHighlight(
+          focusable: onTap != null,
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Row(
@@ -320,22 +331,28 @@ class _RepeatSegmentedControl extends StatelessWidget {
     required bool isActive,
     required VoidCallback onTap,
   }) {
-    return TapHighlight(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(7),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? KalinkaColors.accent : Colors.transparent,
-          borderRadius: BorderRadius.circular(7),
-        ),
-        child: Text(
-          label,
-          style: KalinkaTextStyles.trayRowSublabel.copyWith(
-            color: isActive ? Colors.white : KalinkaColors.textSecondary,
-            fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
+    return Semantics(
+      button: true,
+      selected: isActive,
+      inMutuallyExclusiveGroup: true,
+      child: TapHighlight(
+        focusable: true,
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(7),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeInOut,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive ? KalinkaColors.accent : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Text(
+            label,
+            style: KalinkaTextStyles.trayRowSublabel.copyWith(
+              color: isActive ? Colors.white : KalinkaColors.textSecondary,
+              fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
+            ),
           ),
         ),
       ),

@@ -252,7 +252,12 @@ void main() {
           find.descendant(
             of: find.byType(CoachMarksOverlay),
             matching: find.byWidgetPredicate(
-              (widget) => widget is CustomPaint && widget.painter != null,
+              // The spotlight paints by itself. The card's buttons also have
+              // background painters, with their contents as children.
+              (widget) =>
+                  widget is CustomPaint &&
+                  widget.painter != null &&
+                  widget.child == null,
             ),
           ),
         );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,9 +16,11 @@ import 'package:kalinka/providers/wire_event_provider.dart'
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/queue_management_tray.dart';
+import 'package:kalinka/widgets/tap_highlight.dart';
 import 'package:kalinka/widgets/search/add_to_collection_sheet.dart';
 
 import 'support/field_text.dart';
+import 'support/focus.dart';
 
 const _c1 = 'kalinka:collections:playlist:c1';
 const _c2 = 'kalinka:collections:playlist:c2';
@@ -244,6 +247,41 @@ void main() {
     expect(api.added.single.$1, _made);
     expect(api.added.single.$2, ['t1', 't2']);
     expect(find.text('APPEND'), findsNothing);
+    await letToastsGo(tester);
+  });
+
+  testWidgets('a remote can pick a collection and append the queue', (
+    tester,
+  ) async {
+    final api = _AddApi();
+    await openSheet(tester, api, choices: twoCollections);
+    final collection = find.ancestor(
+      of: find.text('Late Night Signals'),
+      matching: find.byType(TapHighlight),
+    );
+    Future<void> press(LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+    }
+
+    for (var i = 0; i < 5 && !focusIsOn(collection); i++) {
+      await press(LogicalKeyboardKey.arrowDown);
+    }
+    expect(focusIsOn(collection), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    final append = find.widgetWithText(KalinkaButton, 'APPEND');
+    final replace = find.widgetWithText(KalinkaButton, 'REPLACE');
+    for (var i = 0; i < 5 && !focusIsOn(append) && !focusIsOn(replace); i++) {
+      await press(LogicalKeyboardKey.arrowDown);
+    }
+    if (focusIsOn(replace)) await press(LogicalKeyboardKey.arrowLeft);
+    expect(focusIsOn(append), isTrue);
+    expect(focusOutlineIn(append, KalinkaColors.textPrimary), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(api.added.single.$1, _c1);
+    expect(api.added.single.$2, ['t1', 't2']);
     await letToastsGo(tester);
   });
 

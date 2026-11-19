@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../tap_highlight.dart';
 import '../configuration_appearance.dart';
 import 'inline_markdown.dart';
 import 'settings_toggle.dart';
@@ -125,8 +126,9 @@ class _SettingsToggleableSectionState extends State<SettingsToggleableSection>
               // chevron-leading convention used by SettingsSection
               // everywhere else in the app). Tap-to-expand.
               Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
+                child: TapHighlight(
+                  focusable: true,
+
                   onTap: hasBody ? _toggleExpanded : null,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(

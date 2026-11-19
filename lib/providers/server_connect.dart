@@ -4,6 +4,7 @@ import 'connection_settings_provider.dart';
 import 'connection_state_provider.dart';
 import 'demo_mode.dart';
 import 'kalinka_player_api_provider.dart';
+import 'pinned_server.dart';
 import 'server_address.dart';
 import 'settings_provider.dart';
 
@@ -48,6 +49,10 @@ Future<void> connectToServer(
   required ServerAddress address,
   required bool persist,
 }) async {
+  if (!ref.read(canSelectServerProvider) &&
+      address != ref.read(connectionSettingsProvider).address) {
+    throw StateError('This client is tied to its current server.');
+  }
   if (address == demoServer() && !await ref.read(demoCheckProvider)(address)) {
     throw const NotADemoServerException();
   }

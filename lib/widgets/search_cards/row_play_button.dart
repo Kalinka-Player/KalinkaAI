@@ -6,6 +6,7 @@ import '../../providers/kalinka_player_api_provider.dart';
 import '../../providers/toast_provider.dart';
 import '../../theme/app_theme.dart';
 import '../modifier_click.dart';
+import '../keyboard/ink_focus_outline.dart';
 
 /// Plays a whole album, playlist or collection from its first track,
 /// replacing the queue. It sits beside the row's way in, so playing never
@@ -80,27 +81,30 @@ class _RowPlayButtonState extends ConsumerState<RowPlayButton> {
                   onTap: _play,
                   onHover: _setHover,
                   focusColor: KalinkaColors.surfaceOverlay,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 120),
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: hot
-                          ? KalinkaColors.surfaceOverlay
-                          : KalinkaColors.surfaceElevated,
-                      border: Border.all(
+                  child: InkFocusOutline(
+                    shape: const CircleBorder(),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 120),
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
                         color: hot
-                            ? KalinkaColors.textMuted
-                            : KalinkaColors.borderDefault,
+                            ? KalinkaColors.surfaceOverlay
+                            : KalinkaColors.surfaceElevated,
+                        border: Border.all(
+                          color: hot
+                              ? KalinkaColors.textMuted
+                              : KalinkaColors.borderDefault,
+                        ),
                       ),
-                    ),
-                    child: Icon(
-                      _starting
-                          ? Icons.hourglass_empty_rounded
-                          : Icons.play_arrow_rounded,
-                      size: 18,
-                      color: KalinkaColors.textPrimary,
+                      child: Icon(
+                        _starting
+                            ? Icons.hourglass_empty_rounded
+                            : Icons.play_arrow_rounded,
+                        size: 18,
+                        color: KalinkaColors.textPrimary,
+                      ),
                     ),
                   ),
                 ),

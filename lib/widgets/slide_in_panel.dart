@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'keyboard/app_keyboard_navigation.dart';
+
 /// How long the panel takes to slide in, and out again.
 const Duration kSlideInPanelDuration = Duration(milliseconds: 320);
 
@@ -134,7 +136,15 @@ class _SlideInPanelState extends State<SlideInPanel>
         children: [
           ExcludeFocus(
             excluding: widget.overlays.isNotEmpty,
-            child: SlideTransition(position: _slide, child: widget.child),
+            child: SlideTransition(
+              position: _slide,
+              child: AppKeyboardRegion(
+                area: AppKeyboardArea.content,
+                separate: true,
+                focusOnEntry: widget.handlesBack && widget.overlays.isEmpty,
+                child: widget.child,
+              ),
+            ),
           ),
           // Keyed by what they hold, so one closing beneath another leaves
           // the other's state, and its animation, alone.

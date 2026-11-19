@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../keyboard/keyboard_activation.dart';
 
 /// Toggle switch control for settings.
 ///
 /// 42x24, accent-colored when on, white knob when on.
 class SettingsToggle extends StatelessWidget {
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
 
   const SettingsToggle({
     super.key,
@@ -17,10 +18,10 @@ class SettingsToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final change = onChanged;
+    final activate = change == null ? null : () => change(!value);
     final toggle = GestureDetector(
-      onTap: () {
-        onChanged(!value);
-      },
+      onTap: activate,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         width: 42,
@@ -47,6 +48,11 @@ class SettingsToggle extends StatelessWidget {
         ),
       ),
     );
-    return MouseRegion(cursor: SystemMouseCursors.click, child: toggle);
+    if (activate == null) return toggle;
+    return KeyboardActivation(
+      onActivate: activate,
+      borderRadius: BorderRadius.circular(12),
+      child: MouseRegion(cursor: SystemMouseCursors.click, child: toggle),
+    );
   }
 }

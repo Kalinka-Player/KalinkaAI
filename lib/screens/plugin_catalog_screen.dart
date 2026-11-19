@@ -30,6 +30,7 @@ import 'log_export_screen.dart';
 import 'configuration_review_screen.dart';
 import '../widgets/plugin_catalog_entry.dart';
 import '../widgets/settings_top_bar.dart';
+import '../providers/kiosk_provider.dart';
 import '../widgets/keyboard/app_keyboard_navigation.dart';
 import '../widgets/section_tab_button.dart';
 import '../widgets/restart_overlay.dart';
@@ -208,6 +209,22 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     return choice == 'apply' ? _onApply() : false;
   }
 
+  bool _rootHandlesBack(bool upgrading) =>
+      widget.handlesBack &&
+      _settingsFor == null &&
+      _aboutFor == null &&
+      !_logsOpen &&
+      !_networkOpen &&
+      !_drivesOpen &&
+      _reviewPaths == null &&
+      !_restartOverlayOpen &&
+      !upgrading;
+
+  bool get atRailRoot =>
+      !widget.slides &&
+      !widget.showBack &&
+      _rootHandlesBack(ref.read(upgradeProvider).isUpgrading);
+
   /// Shell destinations use the same pending-change and operation guard as
   /// Back, including when a nested Configuration page is open.
   Future<bool> prepareToNavigate() => _beforeClose();
@@ -342,16 +359,7 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
                   onClose: widget.onClose,
                   beforeClose: _beforeClose,
                   onCoverageChanged: widget.onCoverageChanged,
-                  handlesBack:
-                      widget.handlesBack &&
-                      _settingsFor == null &&
-                      _aboutFor == null &&
-                      !_logsOpen &&
-                      !_networkOpen &&
-                      !_drivesOpen &&
-                      _reviewPaths == null &&
-                      !_restartOverlayOpen &&
-                      !upgrading,
+                  handlesBack: _rootHandlesBack(upgrading),
                   overlays: [
                     if (_settingsFor case final plugin?)
                       PluginSettingsScreen(
@@ -797,7 +805,9 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     Map<PluginTab, int> updateCounts,
   ) => PinnedHeaderSliver(
     child: AppKeyboardRegion(
-      area: AppKeyboardArea.toolbar,
+      area: ref.watch(localDisplayKioskProvider)
+          ? AppKeyboardArea.content
+          : AppKeyboardArea.toolbar,
       child: ColoredBox(
         key: const ValueKey('catalog-tabs'),
         color: KalinkaColors.background,

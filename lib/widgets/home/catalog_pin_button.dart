@@ -9,6 +9,7 @@ import '../../providers/box_control_provider.dart';
 import '../../providers/browse_genres_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../providers/search_session_provider.dart';
+import '../tap_highlight.dart';
 
 Future<void> saveHomeChange(BuildContext context, Future<void> change) async {
   try {
@@ -72,7 +73,7 @@ class CatalogPinButton extends ConsumerWidget {
     return IconButton(
       tooltip: pinned ? 'Unpin $kind' : 'Pin $kind to Home',
       iconSize: iconSize,
-      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      style: kalinkaIconButtonStyle,
       isSelected: pinned,
       icon: const Icon(CupertinoIcons.pin),
       selectedIcon: const Icon(CupertinoIcons.pin_slash),

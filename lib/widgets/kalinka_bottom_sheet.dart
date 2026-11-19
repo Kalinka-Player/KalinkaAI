@@ -371,7 +371,7 @@ class SheetRow extends StatelessWidget {
     this.labelColor,
     this.trailing,
     this.onTap,
-    this.focusable = false,
+    this.focusable = true,
     this.autofocus = false,
   }) : assert(
          icon == null || (iconBackground != null && iconColor != null),
@@ -382,7 +382,7 @@ class SheetRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return TapHighlight(
       onTap: onTap,
-      focusable: focusable,
+      focusable: focusable && onTap != null,
       autofocus: autofocus,
       focusBorder: const Border.fromBorderSide(
         BorderSide(color: KalinkaColors.textPrimary, width: 2),

@@ -979,8 +979,10 @@ void main() {
   }
 
   testWidgets('the smart search card names itself and closes', (tester) async {
+    final captureKey = GlobalKey();
     await pumpSurface(
       tester,
+      captureKey: captureKey,
       modules: [
         ModuleInfo(
           name: 'localfiles',
@@ -991,6 +993,13 @@ void main() {
         ),
       ],
     );
+    final surface = tester.widget<Ink>(
+      find.byKey(const ValueKey('search-entry-surface')).first,
+    );
+    expect((surface.decoration as BoxDecoration).boxShadow, isNull);
+    expect(backdrop, findsOneWidget);
+    await tester.pumpAndSettle();
+    await _captureHome(tester, captureKey, 'home-smart-search');
     await openSearch(tester);
 
     // The card carries its own name and dismiss, the same chrome the filter

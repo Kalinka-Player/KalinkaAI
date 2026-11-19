@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../theme/app_theme.dart';
+import '../tap_highlight.dart';
 import 'settings_row.dart' show kSettingsGutter;
 
 /// Collapsible section with chevron and animated content.
@@ -80,9 +82,10 @@ class _SettingsSectionState extends State<SettingsSection>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Header row
-        GestureDetector(
+        TapHighlight(
+          focusable: true,
           onTap: _toggle,
-          behavior: HitTestBehavior.opaque,
+
           child: Container(
             padding: EdgeInsets.symmetric(
               horizontal: widget.gutter,

@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import 'clear_all_confirm_dialog.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'kalinka_dialog.dart';
+import 'keyboard/ink_focus_outline.dart';
 import 'queue_management_tray.dart';
 import 'search/add_to_collection_sheet.dart';
 
@@ -25,14 +26,16 @@ class QueueMenuButton extends ConsumerWidget {
     final connected =
         ref.watch(connectionStateProvider) == ConnectionStatus.connected;
     if (!hasTracks || !connected) return const SizedBox.shrink();
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(9),
+      side: const BorderSide(color: KalinkaColors.borderDefault),
+    );
     return Tooltip(
       message: 'Queue options',
       child: Material(
         color: KalinkaColors.surfaceInput,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(9),
-          side: const BorderSide(color: KalinkaColors.borderDefault),
-        ),
+        shape: shape,
+        borderOnForeground: false,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           mouseCursor: WidgetStateMouseCursor.clickable,
@@ -43,13 +46,16 @@ class QueueMenuButton extends ConsumerWidget {
             }
             return null;
           }),
-          child: const SizedBox(
-            width: 36,
-            height: 36,
-            child: Icon(
-              Icons.more_vert,
-              size: 16,
-              color: KalinkaColors.textSecondary,
+          child: InkFocusOutline(
+            shape: shape,
+            child: const SizedBox(
+              width: 36,
+              height: 36,
+              child: Icon(
+                Icons.more_vert,
+                size: 16,
+                color: KalinkaColors.textSecondary,
+              ),
             ),
           ),
         ),

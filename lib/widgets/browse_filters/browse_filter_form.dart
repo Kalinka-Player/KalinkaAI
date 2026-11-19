@@ -9,6 +9,7 @@ import '../../providers/browse_genres_provider.dart';
 import '../../theme/app_theme.dart';
 import '../source_badge.dart';
 import '../keyboard/app_keyboard_navigation.dart';
+import '../keyboard/ink_focus_outline.dart';
 
 /// Default idle time before a keystroke becomes a query — long enough that
 /// typing a word is one request, short enough to feel live. Staged surfaces
@@ -451,7 +452,9 @@ class _SourceGroup extends StatelessWidget {
         FilterPill(
           label: 'All sources',
           selected: selected.isEmpty,
-          onTap: selected.isEmpty ? null : () => onChanged(const []),
+          onTap: () {
+            if (selected.isNotEmpty) onChanged(const []);
+          },
         ),
         for (final source in capabilities.sources)
           FilterPill(
@@ -577,8 +580,10 @@ class _GenreGroup extends ConsumerWidget {
           label: 'All genres',
           selected: ready && selected.isEmpty,
           muted: !ready,
-          onTap: ready && selected.isNotEmpty
-              ? () => onChanged(const [])
+          onTap: ready
+              ? () {
+                  if (selected.isNotEmpty) onChanged(const []);
+                }
               : null,
         ),
         if (ready)
@@ -657,34 +662,28 @@ class _FilterPillState extends State<FilterPill> {
     final on = widget.selected && !widget.muted;
     final enabled = widget.onTap != null && !widget.muted;
 
-    Widget pill = FilterPillFace(
-      label: widget.label,
-      selected: widget.selected,
-      muted: widget.muted,
-      hovered: _hovering && enabled,
-      leading: widget.leading,
-    );
-
-    if (enabled) {
-      pill = MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => _setHovering(true),
-        onExit: (_) => _setHovering(false),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: pill,
-        ),
-      );
-    }
-
-    return Semantics(
+    final pill = Semantics(
       button: enabled,
       selected: on,
       enabled: enabled,
       label: widget.label,
       excludeSemantics: true,
-      child: pill,
+      child: FilterPillFace(
+        label: widget.label,
+        selected: widget.selected,
+        muted: widget.muted,
+        hovered: _hovering && enabled,
+        leading: widget.leading,
+      ),
+    );
+    if (!enabled) return pill;
+    return InkWell(
+      onTap: widget.onTap,
+      onHover: _setHovering,
+      mouseCursor: WidgetStateMouseCursor.clickable,
+      customBorder: FilterPillFace.shape,
+      focusColor: Colors.transparent,
+      child: InkFocusOutline(shape: FilterPillFace.shape, child: pill),
     );
   }
 }
@@ -692,6 +691,10 @@ class _FilterPillState extends State<FilterPill> {
 /// How a [FilterPill] looks, without its input — for a chip that takes its
 /// taps elsewhere, such as the receipt of an applied filter.
 class FilterPillFace extends StatelessWidget {
+  static const shape = RoundedRectangleBorder(
+    borderRadius: BorderRadius.all(Radius.circular(kKalinkaPillRadius)),
+  );
+
   final String label;
   final bool selected;
   final bool muted;
@@ -759,7 +762,7 @@ class FilterPillFace extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(kKalinkaPillRadius),
+        borderRadius: shape.borderRadius,
         border: Border.all(color: border, width: 1),
       ),
       child: Row(

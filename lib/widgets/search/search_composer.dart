@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
 import '../kalinka_back_button.dart';
+import '../tap_highlight.dart';
 import '../keyboard/app_keyboard_navigation.dart';
 
 /// The input row of the docked search surface. Chromeless — the parent
@@ -115,6 +116,8 @@ class _SearchComposerState extends State<SearchComposer> {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: _fieldInset),
               child: Focus(
+                canRequestFocus: false,
+                skipTraversal: true,
                 onKeyEvent: _onKeyEvent,
                 child: AppKeyboardTextEntry(
                   child: TextField(
@@ -178,19 +181,17 @@ class _SearchComposerState extends State<SearchComposer> {
               Semantics(
                 label: 'Clear search text',
                 button: true,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: GestureDetector(
-                    onTap: _clear,
-                    behavior: HitTestBehavior.opaque,
-                    child: SizedBox(
-                      width: 32,
-                      height: line,
-                      child: const Icon(
-                        Icons.close_rounded,
-                        size: 20,
-                        color: KalinkaColors.textSecondary,
-                      ),
+                child: TapHighlight(
+                  focusable: true,
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: _clear,
+                  child: SizedBox(
+                    width: 32,
+                    height: line,
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 20,
+                      color: KalinkaColors.textSecondary,
                     ),
                   ),
                 ),
@@ -199,19 +200,17 @@ class _SearchComposerState extends State<SearchComposer> {
               Semantics(
                 label: 'Send',
                 button: true,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: GestureDetector(
-                    onTap: _submit,
-                    behavior: HitTestBehavior.opaque,
-                    child: SizedBox(
-                      width: 32,
-                      height: line,
-                      child: const Icon(
-                        Icons.arrow_forward_rounded,
-                        size: 22,
-                        color: KalinkaColors.accent,
-                      ),
+                child: TapHighlight(
+                  focusable: true,
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: _submit,
+                  child: SizedBox(
+                    width: 32,
+                    height: line,
+                    child: const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 22,
+                      color: KalinkaColors.accent,
                     ),
                   ),
                 ),

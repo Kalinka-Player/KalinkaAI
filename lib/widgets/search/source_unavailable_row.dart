@@ -21,32 +21,35 @@ class SourceUnavailableRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          SourceTile(source: source),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              '$title · Source unavailable',
-              style: KalinkaTextStyles.trackRowSubtitle.copyWith(
-                color: KalinkaColors.textSecondary,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+    return Row(
+      children: [
+        SourceTile(source: source),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            '$title · Source unavailable',
+            style: KalinkaTextStyles.trackRowSubtitle.copyWith(
+              color: KalinkaColors.textSecondary,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(width: 12),
-          HoverTextAction(
+        ),
+        const SizedBox(width: 12),
+        ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: kMinInteractiveDimension,
+          ),
+          child: HoverTextAction(
             label: 'RETRY',
             semanticsLabel: 'Retry $title',
             onTap: onRetry,
             color: KalinkaColors.accentTint,
             hoverColor: KalinkaColors.textPrimary,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

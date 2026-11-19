@@ -1,9 +1,10 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/pinned_server.dart';
 import '../providers/box_control_provider.dart';
 import '../providers/power_off_status_provider.dart';
 import '../data_model/module_icons.dart';
@@ -56,6 +57,7 @@ class ShellNavigation extends ConsumerStatefulWidget {
 
   /// Icons beside full names, rather than over short labels.
   final bool extended;
+  final NavigationRailMode mode;
   final void Function(ShellDestination destination, CatalogSource? source)
   onNavigate;
   final void Function(ShellAction action) onAction;
@@ -69,6 +71,7 @@ class ShellNavigation extends ConsumerStatefulWidget {
     this.changeServerOpen = false,
     this.enabled = true,
     this.extended = false,
+    this.mode = NavigationRailMode.responsive,
     required this.onNavigate,
     required this.onAction,
     this.onMore,
@@ -91,8 +94,9 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
   // What each of the rail's items takes, by id, to tell how many fit.
   final _heights = <String, double>{};
 
-  void _measured(String id, double height) =>
-      setState(() => _heights[id] = height);
+  void _measured(String id, double height) {
+    if (_heights[id] != height) setState(() => _heights[id] = height);
+  }
 
   @override
   Widget build(BuildContext context) => AppKeyboardRegion(
@@ -172,6 +176,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
         count: count,
         selected: selected,
         extended: extended,
+        mode: widget.mode,
         onPressed: enabled && available
             ? () {
                 then?.call();
@@ -198,6 +203,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
             : null,
         selected: control.selected,
         extended: extended,
+        mode: widget.mode,
         onPressed: enabled
             ? () {
                 then?.call();
@@ -220,8 +226,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
           tooltip: 'Restart the streamer',
           selected: false,
         ),
-      // Web is bound to the server that serves it.
-      if (!kIsWeb)
+      if (ref.watch(canSelectServerProvider))
         (
           action: ShellAction.changeServer,
           label: 'Change server',
@@ -283,6 +288,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
             icon: Icons.refresh,
             selected: false,
             extended: extended,
+            mode: widget.mode,
             onPressed: enabled
                 ? () {
                     then?.call();
@@ -315,6 +321,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
               selected: false,
               popupOpen: isOpen,
               extended: extended,
+              mode: widget.mode,
               onPressed: enabled && connected ? open : null,
             ),
           ),
@@ -341,6 +348,7 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
           icon: Icons.more_horiz,
           selected: open,
           extended: extended,
+          mode: widget.mode,
           onPressed: onPressed,
         );
     // Each measured on its own, out of sight, whether it stands or not; by
@@ -367,24 +375,32 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
       ),
     );
 
+    Widget group(List<Widget> children) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: _railInset),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    );
+
     return FocusTraversalGroup(
       child: Material(
         color: KalinkaColors.surfaceBase,
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              // As many as fit stand, from the top, and the rest go behind
-              // More, so the rail does not scroll: the server's controls go
-              // first, then Configuration, then the destinations from the
-              // bottom up. Home always stands.
-              final all = [...top, ...foot];
+              // Keep the same footer visible with and without keyboard labels.
+              // Overflow the last browse shortcuts first in those two modes.
+              final pinFooter = widget.mode != NavigationRailMode.responsive;
+              final all = [...top, if (!pinFooter) ...foot];
+              double heightOf(Iterable<_Item> some) =>
+                  some.fold(0.0, (sum, i) => sum + (_heights[i.id] ?? 0));
               final room =
                   constraints.maxHeight -
                   4 * _railInset -
-                  (_heights[home.id] ?? 0);
+                  (_heights[home.id] ?? 0) -
+                  (pinFooter ? heightOf(foot) : 0);
               final moreHeight = _heights['more'] ?? 0;
-              double heightOf(Iterable<_Item> some) =>
-                  some.fold(0.0, (sum, i) => sum + (_heights[i.id] ?? 0));
               var standing = all.length;
               if (heightOf(all) > room) {
                 standing = all.length - 1;
@@ -394,54 +410,47 @@ class _ShellNavigationState extends ConsumerState<ShellNavigation> {
                 }
               }
               final folded = all.skip(standing).toList();
-              // Only a window too short for Home and More alone scrolls.
+              // Even the pinned controls remain reachable in very short windows.
               final scrolls =
                   heightOf(all.take(standing)) +
                       (folded.isEmpty ? 0 : moreHeight) >
                   room;
-              return CustomScrollView(
+              // Use the rows' laid-out heights to pin the footer. An intrinsic
+              // measurement wraps hidden labels at the icon column's width and
+              // creates spurious scroll room when focus returns to Settings.
+              return SingleChildScrollView(
                 physics: scrolls ? null : const NeverScrollableScrollPhysics(),
-                slivers: [
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(vertical: _railInset),
-                    sliver: SliverToBoxAdapter(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          home.standing,
-                          for (final i in all.take(standing).take(top.length))
-                            i.standing,
-                        ],
-                      ),
-                    ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      group([
+                        home.standing,
+                        for (final i in all.take(standing).take(top.length))
+                          i.standing,
+                      ]),
+                      group([
+                        for (final i in all.take(standing).skip(top.length))
+                          i.standing,
+                        if (folded.isNotEmpty)
+                          _OverflowShelf(
+                            enabled: enabled,
+                            selected: folded.any((i) => i.selected),
+                            onOpen: widget.onMore,
+                            button: more,
+                            items: (close) => [
+                              for (final i in folded) i.folded(close),
+                            ],
+                          ),
+                        if (pinFooter)
+                          for (final i in foot) i.standing,
+                        measures,
+                      ]),
+                    ],
                   ),
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: _railInset),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (final i in all.take(standing).skip(top.length))
-                            i.standing,
-                          if (folded.isNotEmpty)
-                            _OverflowShelf(
-                              enabled: enabled,
-                              selected: folded.any((i) => i.selected),
-                              onOpen: widget.onMore,
-                              button: more,
-                              items: (close) => [
-                                for (final i in folded) i.folded(close),
-                              ],
-                            ),
-                          measures,
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               );
             },
           ),
@@ -528,20 +537,26 @@ class _OverflowShelfState extends State<_OverflowShelf>
 
   @override
   Widget build(BuildContext context) {
-    return TapRegion(
-      groupId: this,
-      onTapOutside: (_) => _close(),
-      // Placed from where More is, not by following it: a follower above
-      // the items' tooltips, which are overlay children themselves,
-      // leaves them no position to lay out from.
-      child: OverlayPortal.overlayChildLayoutBuilder(
-        controller: _portal,
-        overlayChildBuilder: _shelf,
-        child: Semantics(
-          expanded: _open,
-          child: widget.button(
-            open: widget.selected || _open,
-            onPressed: widget.enabled ? (_open ? _close : _show) : null,
+    return Focus(
+      canRequestFocus: false,
+      onFocusChange: (inside) {
+        if (!inside) _close();
+      },
+      child: TapRegion(
+        groupId: this,
+        onTapOutside: (_) => _close(),
+        // Placed from where More is, not by following it: a follower above
+        // the items' tooltips, which are overlay children themselves,
+        // leaves them no position to lay out from.
+        child: OverlayPortal.overlayChildLayoutBuilder(
+          controller: _portal,
+          overlayChildBuilder: _shelf,
+          child: Semantics(
+            expanded: _open,
+            child: widget.button(
+              open: widget.selected || _open,
+              onPressed: widget.enabled ? (_open ? _close : _show) : null,
+            ),
           ),
         ),
       ),
@@ -642,6 +657,7 @@ class _NavigationButton extends StatelessWidget {
   final Color? iconColor;
   final bool selected;
   final bool extended;
+  final NavigationRailMode mode;
   final VoidCallback? onPressed;
   final FocusNode? focusNode;
   // Popup actions highlight only while open, independently of destinations.
@@ -659,6 +675,7 @@ class _NavigationButton extends StatelessWidget {
     this.iconColor,
     required this.selected,
     required this.extended,
+    this.mode = NavigationRailMode.responsive,
     required this.onPressed,
     this.focusNode,
     this.popupOpen,
@@ -666,6 +683,7 @@ class _NavigationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final collapsed = extended && mode == NavigationRailMode.icons;
     final artwork = minutes != null && !extended
         ? Text(
             '$minutes',
@@ -686,7 +704,42 @@ class _NavigationButton extends StatelessWidget {
             ),
           );
     final glyph = ExcludeSemantics(
-      child: count == null
+      child: collapsed && minutes != null
+          // Keep the normal icon's layout slot. Its button has room for the
+          // power symbol and the remaining minutes together.
+          ? SizedBox.square(
+              dimension: 24,
+              child: OverflowBox(
+                minWidth: 44,
+                maxWidth: 44,
+                minHeight: 44,
+                maxHeight: 44,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        icon,
+                        size: 18,
+                        color: onPressed == null ? null : iconColor,
+                      ),
+                      Text(
+                        '${minutes}m',
+                        style: KalinkaFonts.mono(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: onPressed == null
+                              ? KalinkaColors.textMuted
+                              : iconColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : count == null
           ? artwork
           // Neutral: a tally on chrome, not a choice (PALETTE.md).
           : Badge(
@@ -736,7 +789,36 @@ class _NavigationButton extends StatelessWidget {
     );
     // The full name is on show beside the icon, so only an addition to it
     // makes a tooltip.
-    final message = extended ? tooltip : tooltip ?? label;
+    final message = extended && !collapsed ? tooltip : tooltip ?? label;
+    final labelledRow = Row(
+      children: [
+        glyph,
+        const SizedBox(width: 12),
+        Expanded(
+          child: Visibility.maintain(visible: !collapsed, child: text),
+        ),
+      ],
+    );
+    // Keep the same rail entries behind More even when a source name wraps.
+    // Exclude the rail divider, item margin and button padding.
+    final labelWidth =
+        NavigationRailMode.labelledWidth(MediaQuery.textScalerOf(context)) -
+        1 -
+        2 * (_itemInset + 12);
+    final face = collapsed
+        ? OverflowBox(
+            fit: OverflowBoxFit.deferToChild,
+            alignment: Alignment.centerLeft,
+            minWidth: labelWidth,
+            maxWidth: labelWidth,
+            child: labelledRow,
+          )
+        : extended
+        ? labelledRow
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [glyph, const SizedBox(height: 4), text],
+          );
     final button = MergeSemantics(
       child: Semantics(
         label: minutes != null
@@ -753,7 +835,9 @@ class _NavigationButton extends StatelessWidget {
           style: ButtonStyle(
             minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
             // Desktop's compact density would take 8dp off top and bottom.
-            visualDensity: extended ? null : VisualDensity.standard,
+            visualDensity: extended && mode == NavigationRailMode.responsive
+                ? null
+                : VisualDensity.standard,
             // Only as tall as the icon and its label, so a short window
             // keeps the whole rail in view.
             padding: WidgetStatePropertyAll(
@@ -802,17 +886,12 @@ class _NavigationButton extends StatelessWidget {
                   : SystemMouseCursors.click,
             ),
           ),
-          child: extended
-              ? Row(
-                  children: [
-                    glyph,
-                    const SizedBox(width: 12),
-                    Expanded(child: text),
-                  ],
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [glyph, const SizedBox(height: 4), text],
+          child: message == null
+              ? face
+              : Tooltip(
+                  message: message,
+                  excludeFromSemantics: true,
+                  child: face,
                 ),
         ),
       ),
@@ -844,13 +923,7 @@ class _NavigationButton extends StatelessWidget {
               ),
             ),
           ),
-          message == null
-              ? button
-              : Tooltip(
-                  message: message,
-                  excludeFromSemantics: true,
-                  child: button,
-                ),
+          button,
         ],
       ),
     );

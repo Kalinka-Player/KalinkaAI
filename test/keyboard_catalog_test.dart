@@ -6,14 +6,20 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
+import 'package:kalinka/providers/browse_genres_provider.dart';
+import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/shell_nav_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/browse_filters/active_filter_chips.dart';
+import 'package:kalinka/widgets/browse_filters/browse_filter_form.dart';
+import 'package:kalinka/widgets/search/catalog_sliver_header.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/search/search_composer.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 import 'package:virtual_keypad/virtual_keypad.dart';
 
+import 'support/focus.dart';
 import 'support/home_shell.dart';
 
 class _CatalogApi extends HomeApi {
@@ -50,6 +56,103 @@ Future<void> _focusFilter(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('TV remote can choose, apply and remove a catalog filter', (
+    tester,
+  ) async {
+    const catalog = 'kalinka:localfiles:catalog:albums';
+    final container = await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(0)),
+      api: _CatalogApi(),
+      size: const Size(1440, 900),
+      overrides: [
+        localDisplayKioskProvider.overrideWithValue(true),
+        browseGenresProvider((catalogId: catalog, field: 'genre')).overrideWith(
+          (_) async => [
+            Genre(id: 'jazz', name: 'Jazz'),
+            Genre(id: 'rock', name: 'Rock'),
+            Genre(id: 'folk', name: 'Folk'),
+          ],
+        ),
+      ],
+    );
+    container
+        .read(searchSessionProvider.notifier)
+        .openCatalog(
+          id: catalog,
+          title: 'Albums',
+          filters: const [
+            FilterSpec(
+              id: 'genre',
+              kind: FilterKind.choice,
+              label: 'Genre',
+              ops: [FilterOp.any],
+            ),
+          ],
+        );
+    await tester.pumpAndSettle();
+    Future<void> press(LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+    }
+
+    traversableFocusNodesIn(find.byType(CatalogFiltersButton)).first
+        .requestFocus();
+    await tester.pump();
+    await press(LogicalKeyboardKey.enter);
+    await press(LogicalKeyboardKey.arrowDown);
+    Finder pill(String label) => find.widgetWithText(FilterPill, label);
+    expect(focusIsOn(find.byType(FilterPill)), isTrue);
+    for (var i = 0; i < 3 && !focusIsOn(pill('All genres')); i++) {
+      await press(LogicalKeyboardKey.arrowLeft);
+    }
+    expect(focusIsOn(pill('All genres')), isTrue);
+    await press(LogicalKeyboardKey.arrowRight);
+    expect(focusIsOn(pill('Jazz')), isTrue);
+    expect(
+      focusOutlineIn(pill('Jazz'), KalinkaColors.textPrimary),
+      findsOneWidget,
+    );
+    await press(LogicalKeyboardKey.enter);
+    expect(focusIsOn(pill('Jazz')), isTrue);
+    expect(tester.widget<FilterPill>(pill('Jazz')).selected, isTrue);
+    await press(LogicalKeyboardKey.arrowLeft);
+    await press(LogicalKeyboardKey.enter);
+    expect(focusIsOn(pill('All genres')), isTrue);
+    expect(tester.widget<FilterPill>(pill('Jazz')).selected, isFalse);
+    await press(LogicalKeyboardKey.arrowRight);
+    await press(LogicalKeyboardKey.space);
+    expect(tester.widget<FilterPill>(pill('Jazz')).selected, isTrue);
+    expect(
+      container.read(searchSessionProvider).catalogFilter.genreIds,
+      isEmpty,
+    );
+    await press(LogicalKeyboardKey.arrowDown);
+    expect(focusIsOn(pill('Folk')), isTrue);
+    await press(LogicalKeyboardKey.arrowDown);
+    if (!focusIsOn(find.widgetWithText(InkWell, 'Show results'))) {
+      await press(LogicalKeyboardKey.arrowRight);
+    }
+    await press(LogicalKeyboardKey.enter);
+    expect(container.read(searchSessionProvider).catalogFilter.genreIds, [
+      'jazz',
+    ]);
+    final applied = find.widgetWithText(ActiveFilterChip, 'Jazz');
+    expect(
+      FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
+      'content',
+    );
+    await press(LogicalKeyboardKey.arrowUp);
+    if (!focusIsOn(applied)) await press(LogicalKeyboardKey.arrowLeft);
+    expect(focusIsOn(applied), isTrue);
+    expect(focusOutlineIn(applied, KalinkaColors.textPrimary), findsOneWidget);
+    await press(LogicalKeyboardKey.enter);
+    expect(
+      container.read(searchSessionProvider).catalogFilter.genreIds,
+      isEmpty,
+    );
+  });
+
   for (final folder in [false, true]) {
     testWidgets(
       '${folder ? 'folder' : 'catalogue'} input and keyboard survive window resizing',

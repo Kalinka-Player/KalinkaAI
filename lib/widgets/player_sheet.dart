@@ -36,9 +36,10 @@ class PlayerSheetRoute extends PopupRoute<void> {
   String? get barrierLabel => null;
 
   @override
-  Widget buildModalBarrier() => Builder(
-    builder: (context) => Padding(
-      padding: EdgeInsets.only(left: _railWidth(context)),
+  Widget buildModalBarrier() => ValueListenableBuilder(
+    valueListenable: keyboardNavigation,
+    builder: (context, mode, _) => Padding(
+      padding: EdgeInsets.only(left: kalinkaRailEdge(context, mode: mode)),
       child: super.buildModalBarrier(),
     ),
   );
@@ -66,9 +67,6 @@ class PlayerSheetRoute extends PopupRoute<void> {
     );
   }
 }
-
-/// The window's navigation rail, which the sheet opens beside.
-double _railWidth(BuildContext context) => kalinkaRailEdge(context);
 
 class _PlayerSheetPage extends StatefulWidget {
   final PlayerSheetRoute route;
@@ -140,7 +138,7 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
   @override
   Widget build(BuildContext context) {
     final topInset = MediaQuery.paddingOf(context).top;
-    final rail = _railWidth(context);
+
     return _SheetDragScope(
       onStart: _onDragStart,
       onUpdate: _onDragUpdate,
@@ -150,8 +148,16 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
       child: Material(
         type: MaterialType.transparency,
         child: AnimatedBuilder(
-          animation: _controller,
+          animation: Listenable.merge([
+            _controller,
+            widget.route.keyboardNavigation,
+          ]),
           builder: (context, child) {
+            final mode = widget.route.keyboardNavigation.value;
+            final rail = kalinkaRailEdge(context, mode: mode);
+            final contentStart = mode == NavigationRailMode.labels
+                ? kalinkaRailEdge(context, mode: NavigationRailMode.icons)
+                : rail;
             final t = _linear
                 ? _controller.value
                 : _curve.transform(_controller.value);
@@ -162,10 +168,13 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
                 // empty strip travels ahead of the drag handle.
                 Positioned.fill(
                   top: topInset,
-                  left: rail,
-                  child: FractionalTranslation(
-                    translation: Offset(0, 1 - t),
-                    child: child,
+                  left: contentStart,
+                  child: ClipRect(
+                    clipper: _RailClip(rail - contentStart),
+                    child: FractionalTranslation(
+                      translation: Offset(0, 1 - t),
+                      child: child,
+                    ),
                   ),
                 ),
                 if (_controller.isCompleted && topInset > 0)
@@ -203,7 +212,7 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
               child: SafeArea(
                 top: false,
                 bottom: false,
-                left: rail == 0,
+                left: kalinkaRailEdge(context) == 0,
                 child: widget.child,
               ),
             ),
@@ -212,6 +221,19 @@ class _PlayerSheetPageState extends State<_PlayerSheetPage> {
       ),
     );
   }
+}
+
+/// Leave the labelled rail on the underlying route visible and hittable
+/// without resizing the player when focus moves to or from the rail.
+class _RailClip extends CustomClipper<Rect> {
+  const _RailClip(this.left);
+  final double left;
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(left, 0, size.width, size.height);
+
+  @override
+  bool shouldReclip(_RailClip old) => left != old.left;
 }
 
 class _SheetDragScope extends InheritedWidget {

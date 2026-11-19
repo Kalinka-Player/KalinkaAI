@@ -8,7 +8,6 @@ import '../data_model/collection_entry.dart';
 import '../data_model/presentation_schema.dart';
 import '../providers/collection_entry_binding.dart';
 import '../theme/app_theme.dart';
-import '../utils/click_cursor.dart';
 import '../utils/json_equality.dart';
 import 'configuration_appearance.dart';
 import 'kalinka_bottom_sheet.dart';
@@ -303,10 +302,9 @@ class _EntryRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        InkWell(
+        TapHighlight(
+          focusable: true,
           onTap: () => onTap(context),
-          mouseCursor: clickCursor(interactive: true),
-          overlayColor: kalinkaOverlay,
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: kSettingsGutter,

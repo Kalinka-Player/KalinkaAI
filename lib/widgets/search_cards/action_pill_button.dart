@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/click_cursor.dart';
 import '../kalinka_button.dart' show PillTarget;
 import '../kalinka_popover.dart';
+import '../keyboard/ink_focus_outline.dart';
 
 /// Pill button for batch actions ("Play all", "Enqueue", a page's Edit) and
 /// the choices beside them, 40dp tall in a 48dp target.
@@ -119,37 +120,42 @@ class ActionPillButton extends StatelessWidget {
     final face = Material(
       color: bg,
       shape: shape,
+      borderOnForeground: false,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: activate,
         mouseCursor: clickCursor(interactive: interactive),
         customBorder: shape,
-        child: circular
-            ? SizedBox.square(
-                dimension: kKalinkaPillHeight,
-                child: Center(child: Icon(icon, size: 20, color: fg)),
-              )
-            : Padding(
-                padding: padding,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight: math.max(
-                      kKalinkaPillHeight - 2 * _vertical,
-                      _lineHeightOf(context, labelStyle),
+        child: InkFocusOutline(
+          shape: shape,
+          child: circular
+              ? SizedBox.square(
+                  dimension: kKalinkaPillHeight,
+                  child: Center(child: Icon(icon, size: 20, color: fg)),
+                )
+              : Padding(
+                  padding: padding,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: math.max(
+                        kKalinkaPillHeight - 2 * _vertical,
+                        _lineHeightOf(context, labelStyle),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ?leading,
+                        if (icon != null)
+                          Icon(icon, size: _iconSize, color: fg),
+                        if (mark && label != null)
+                          const SizedBox(width: _markGap),
+                        if (label != null) Text(label!, style: labelStyle),
+                      ],
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ?leading,
-                      if (icon != null) Icon(icon, size: _iconSize, color: fg),
-                      if (mark && label != null)
-                        const SizedBox(width: _markGap),
-                      if (label != null) Text(label!, style: labelStyle),
-                    ],
-                  ),
                 ),
-              ),
+        ),
       ),
     );
     Widget button = PillTarget(

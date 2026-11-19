@@ -35,11 +35,13 @@ import 'package:kalinka/widgets/kiosk/kiosk_backdrop.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_cover_flow.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_header.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_home_layout.dart';
+import 'package:kalinka/utils/flutter_pi_keyboard.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_output_panel.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_progress_bar.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_splash.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_volume_control.dart';
 import 'package:kalinka/widgets/kiosk/local_kiosk_host.dart';
+import 'package:kalinka/widgets/keyboard/app_keyboard_navigation.dart';
 import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/procedural_album_art.dart';
 import 'package:kalinka/widgets/transport_button.dart';
@@ -525,6 +527,281 @@ void main() {
       return h;
     }
 
+    testWidgets(
+      'flutter-pi forwards rounded transport, seek and volume symbols',
+      (tester) async {
+        final h = await _pump(
+          tester,
+          _queue(PlayerStateType.playing),
+          volume: _adjustable,
+          localDisplay: true,
+          launched: true,
+          idleHost: true,
+        );
+        final messenger = tester.binding.defaultBinaryMessenger;
+        final channel = BasicMessageChannel<dynamic>(
+          SystemChannels.keyEvent.name,
+          SystemChannels.keyEvent.codec,
+          binaryMessenger: FlutterPiKeyboardMessenger(messenger),
+        );
+        final dispatch =
+            // ignore: deprecated_member_use
+            ServicesBinding.instance.keyEventManager.handleRawKeyMessage;
+        channel.setMessageHandler(dispatch);
+        addTearDown(() => SystemChannels.keyEvent.setMessageHandler(dispatch));
+        for (final scan in [209, 171, 176, 216, 123, 122]) {
+          for (final type in ['keydown', 'keyup']) {
+            await messenger.handlePlatformMessage(
+              channel.name,
+              channel.codec.encodeMessage(<String, dynamic>{
+                'keymap': 'linux',
+                'toolkit': 'gtk',
+                'type': type,
+                'keyCode': 2.69025e8,
+                'scanCode': scan,
+                'unicodeScalarValues': 0,
+                'modifiers': 0,
+              }),
+              (_) {},
+            );
+          }
+        }
+        expect(h.api.sent, [
+          const QueueCommand.pause(paused: true),
+          const QueueCommand.next(),
+          const QueueCommand.seek(positionMs: 55000),
+          const QueueCommand.seek(positionMs: 60000),
+        ]);
+        expect(h.api.deviceSent, [
+          const DeviceCommand.setVolume(volume: 41),
+          const DeviceCommand.setVolume(volume: 40),
+        ]);
+        await tester.pump(const Duration(seconds: 1));
+      },
+    );
+
+    testWidgets(
+      'dedicated seek accelerates a hold and resets on release, reversal and track change',
+      (tester) async {
+        final h = await _pump(
+          tester,
+          _queue(PlayerStateType.paused),
+          launched: true,
+          localDisplay: true,
+          idleHost: true,
+        );
+        const forward = LogicalKeyboardKey.mediaFastForward,
+            rewind = LogicalKeyboardKey.mediaRewind;
+        List<int> positions() => h.api.sent
+            .whereType<SeekCommand>()
+            .map((c) => c.positionMs)
+            .toList();
+        await tester.sendKeyDownEvent(forward);
+        await tester.sendKeyRepeatEvent(forward);
+        expect(positions(), [65000]);
+        for (var i = 0; i < 7; i++) {
+          await tester.pump(const Duration(milliseconds: 400));
+        }
+        expect(positions(), [
+          65000,
+          70000,
+          75000,
+          85000,
+          95000,
+          105000,
+          135000,
+          165000,
+        ]);
+        await tester.sendKeyDownEvent(rewind);
+        expect(positions().last, 160000);
+        await tester.sendKeyUpEvent(forward);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(positions().last, 155000);
+        await tester.sendKeyUpEvent(rewind);
+        await tester.pump(const Duration(seconds: 1));
+        expect(positions(), hasLength(10));
+        await tester.sendKeyDownEvent(rewind);
+        expect(positions().last, 150000);
+        h.queue.set(_queue(PlayerStateType.paused, index: 1, seq: 2));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.sendKeyUpEvent(rewind);
+        expect(positions(), hasLength(11));
+        await tester.sendKeyEvent(forward);
+        expect(positions().last, 65000);
+      },
+    );
+
+    testWidgets('seek stops at track bounds and ignores an unseekable stream', (
+      tester,
+    ) async {
+      final h = await _pump(
+        tester,
+        _queue(PlayerStateType.paused),
+        launched: true,
+        localDisplay: true,
+        idleHost: true,
+      );
+      for (final (key, expected) in [
+        (LogicalKeyboardKey.mediaRewind, 0),
+        (LogicalKeyboardKey.mediaFastForward, 240000),
+      ]) {
+        await tester.sendKeyDownEvent(key);
+        await tester.pump(const Duration(seconds: 9));
+        expect(h.api.sent.last, QueueCommand.seek(positionMs: expected));
+        final count = h.api.sent.length;
+        await tester.pump(const Duration(seconds: 2));
+        expect(h.api.sent, hasLength(count));
+        await tester.sendKeyUpEvent(key);
+      }
+      final queue = _queue(PlayerStateType.playing);
+      h.queue.set(
+        PlayQueueState(
+          playbackState: queue.playbackState,
+          trackList: queue.trackList,
+          seq: 2,
+          playbackMode: queue.playbackMode,
+          playbackControl: const PlaybackControl.exclusive(
+            pluginId: 'airplay',
+            title: 'AirPlay',
+            seekable: false,
+          ),
+        ),
+      );
+      await tester.pump();
+      h.api.sent.clear();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.mediaRewind);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.mediaRewind);
+      expect(h.api.sent, isEmpty);
+    });
+
+    testWidgets(
+      'directed volume keys accumulate against the active renderer and respect its range',
+      (tester) async {
+        final h = await _pump(
+          tester,
+          _queue(PlayerStateType.paused),
+          volume: _adjustable,
+          localDisplay: true,
+          launched: true,
+          idleHost: true,
+        );
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.audioVolumeUp);
+        await tester.sendKeyRepeatEvent(LogicalKeyboardKey.audioVolumeUp);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.audioVolumeUp);
+        await tester.sendKeyEvent(LogicalKeyboardKey.audioVolumeDown);
+        expect(h.api.deviceSent, [
+          const DeviceCommand.setVolume(volume: 41),
+          const DeviceCommand.setVolume(volume: 42),
+          const DeviceCommand.setVolume(volume: 41),
+        ]);
+        final device =
+            h.container.read(extDeviceStateStoreProvider.notifier) as _Device;
+        await tester.pump(const Duration(seconds: 2));
+        device.setLevel(100);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.audioVolumeUp);
+        expect(h.api.deviceSent, hasLength(3));
+        await tester.sendKeyEvent(LogicalKeyboardKey.audioVolumeDown);
+        expect(
+          h.api.deviceSent.last,
+          const DeviceCommand.setVolume(volume: 99),
+        );
+        expect(h.api.sent, isEmpty);
+        await tester.pump(const Duration(seconds: 1));
+      },
+    );
+
+    testWidgets('remote transport honors state, queue bounds and held keys', (
+      tester,
+    ) async {
+      final h = await pumpLocal(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.audioVolumeUp);
+      expect(h.api.deviceSent, isEmpty);
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaTrackPrevious);
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+      expect(h.api.sent, isEmpty);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.mediaTrackNext);
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.mediaTrackNext);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.mediaTrackNext);
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+      expect(h.api.sent, [
+        const QueueCommand.next(),
+        const QueueCommand.pause(paused: false),
+      ]);
+    });
+
+    testWidgets(
+      'combined remote button pauses even with kiosk controls hidden',
+      (tester) async {
+        final h = await _pump(
+          tester,
+          _queue(PlayerStateType.playing),
+          localDisplay: true,
+          launched: true,
+          idleHost: true,
+        );
+        await tester.pump(const Duration(seconds: 35));
+        await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+        expect(h.api.sent, isEmpty);
+        await tester.sendKeyEvent(
+          LogicalKeyboardKey.mediaPlay,
+          physicalKey: PhysicalKeyboardKey.mediaPlayPause,
+        );
+        expect(h.api.sent, [const QueueCommand.pause(paused: true)]);
+      },
+    );
+
+    testWidgets(
+      'remote Home restores browsing and Back works on the first press',
+      (tester) async {
+        final home = AppKeyboardNavigation(
+          controller: AppKeyboardNavigationController(localKiosk: true),
+          child: Scaffold(
+            body: Row(
+              children: [
+                for (final area in [
+                  AppKeyboardArea.navigation,
+                  AppKeyboardArea.content,
+                ])
+                  AppKeyboardRegion(
+                    area: area,
+                    child: TextButton(onPressed: () {}, child: Text(area.name)),
+                  ),
+              ],
+            ),
+          ),
+        );
+        final h = await pumpLocal(tester, home: home, openHome: false);
+        Future<void> press(LogicalKeyboardKey key) async {
+          await tester.sendKeyEvent(key);
+          await tester.pumpAndSettle();
+        }
+
+        final content = find.widgetWithText(TextButton, 'content');
+        for (var visit = 0; visit < 2; visit++) {
+          await tester.pumpAndSettle();
+          final homeButton = find.ancestor(
+            of: find.byIcon(Icons.home_outlined),
+            matching: find.byType(TransportButton),
+          );
+          traversableFocusNodesIn(homeButton).single.requestFocus();
+          await tester.pump();
+          await press(LogicalKeyboardKey.enter);
+          expect(find.byType(KioskScreen), findsNothing);
+          if (visit == 1) expect(focusIsOn(content), isTrue);
+          await press(LogicalKeyboardKey.escape);
+          expect(
+            focusIsOn(find.widgetWithText(TextButton, 'navigation')),
+            isTrue,
+          );
+          await press(LogicalKeyboardKey.arrowRight);
+          expect(focusIsOn(content), isTrue);
+          if (visit == 0) h.container.read(kioskProvider.notifier).enter();
+        }
+      },
+    );
+
     testWidgets('starts in kiosk; Home opens the interface until 30s idle', (
       tester,
     ) async {
@@ -823,10 +1100,81 @@ void main() {
       await tester.pump();
       expect(find.byKey(const ValueKey('display-blanked')), findsNothing);
       expect(keys, 0);
-      focus.requestFocus();
       await tester.pump();
+      expect(focus.hasPrimaryFocus, isTrue);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       expect(keys, 1);
+    });
+
+    testWidgets('remote navigation resumes in Now Playing after blanking', (
+      tester,
+    ) async {
+      final h = await pumpLocal(tester, openHome: false);
+      final pill = find.byType(KioskOutputPill);
+      expect(await tabTo(tester, pill), isTrue);
+      await h.container
+          .read(displaySettingsProvider.notifier)
+          .setBlankSeconds(5);
+      await tester.pump(const Duration(seconds: 5));
+      expect(find.byKey(const ValueKey('display-blanked')), findsOneWidget);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+      expect(openPanel(), findsNothing);
+      expect(focusIsOn(pill), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(focusIsOn(openPanel()), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      final den = find.ancestor(
+        of: find.text('Den'),
+        matching: find.byType(InkWell),
+      );
+      expect(focusIsOn(den), isTrue);
+
+      // The picker can time out while the display is black.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(seconds: 20));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      final focused = FocusManager.instance.primaryFocus;
+      expect(focusIsOn(find.byType(KioskScreen)), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(focusIsOn(find.byType(KioskScreen)), isTrue);
+      expect(FocusManager.instance.primaryFocus, isNot(same(focused)));
+    });
+
+    testWidgets('wake focuses Now Playing if Home timed out while blank', (
+      tester,
+    ) async {
+      final homeFocus = FocusNode();
+      addTearDown(homeFocus.dispose);
+      final h = await pumpLocal(
+        tester,
+        home: Focus(focusNode: homeFocus, child: mainInterface),
+        preferences: {
+          DisplaySettingsNotifier.blankKey: 5,
+          DisplaySettingsNotifier.kioskKey: 15,
+        },
+      );
+      homeFocus.requestFocus();
+      await tester.pump();
+      expect(homeFocus.hasPrimaryFocus, isTrue);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(seconds: 10));
+      expect(h.container.read(kioskActiveProvider), isTrue);
+      expect(find.byKey(const ValueKey('display-blanked')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      final focused = FocusManager.instance.primaryFocus;
+      expect(focusIsOn(find.byType(KioskScreen)), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(focusIsOn(find.byType(KioskScreen)), isTrue);
+      expect(FocusManager.instance.primaryFocus, isNot(same(focused)));
     });
 
     testWidgets('unmounting a blanked display restores hardware power', (
@@ -902,8 +1250,18 @@ void main() {
       friendlyName: 'Kalinka Renderer on raspberrypi',
       status: 'connected',
     );
-    expect(kioskOutputName(named, isSelf: false), 'Living Room');
-    expect(kioskOutputName(unnamed, isSelf: false), 'raspberrypi');
+    expect(
+      kioskOutputLabel(named, isSelf: false, localDisplay: false).name,
+      'Living Room',
+    );
+    expect(
+      kioskOutputLabel(unnamed, isSelf: false, localDisplay: false).name,
+      'raspberrypi',
+    );
+    expect(
+      kioskOutputLabel(unnamed, isSelf: false, localDisplay: true).name,
+      'Kalinka Renderer on raspberrypi',
+    );
   });
 
   testWidgets('shows the track and where it plays', (tester) async {
@@ -1096,9 +1454,18 @@ void main() {
 
         // Fixed volume must not disable the picker when other outputs exist.
         expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsOneWidget);
-        await tester.tap(find.text('THIS DEVICE'));
+        await tester.tap(
+          find.text(localDisplay ? 'Living Room' : 'THIS DEVICE'),
+        );
         await tester.pumpAndSettle();
         expect(find.byType(KioskOutputPanel), findsOneWidget);
+        expect(
+          find.descendant(
+            of: openPanel(),
+            matching: find.text(localDisplay ? 'Living Room' : 'This device'),
+          ),
+          findsOneWidget,
+        );
         expect(find.text('OTHER OUTPUTS'), findsOneWidget);
         await tester.tap(find.text('Den'));
         await tester.pumpAndSettle();
@@ -1108,6 +1475,15 @@ void main() {
         expect(find.byType(KioskOutputPanel), findsNothing);
         expect(find.textContaining('Den'), findsOneWidget);
         expect(h.container.read(kioskActiveProvider), isTrue);
+        if (localDisplay) {
+          await tester.tap(find.text('Den'));
+          await tester.pumpAndSettle();
+          expect(find.textContaining('This device'), findsNothing);
+          await tester.tap(find.text('Living Room'));
+          await tester.pumpAndSettle();
+          expect(renderers.selected, ['r2', 'r1']);
+          expect(find.text('Living Room'), findsOneWidget);
+        }
       },
     );
   }
@@ -1164,6 +1540,10 @@ void main() {
           matching: find.byType(InkWell),
         );
         expect(focusIsOn(close), isTrue);
+        await key(LogicalKeyboardKey.arrowDown);
+        expect(focusIsOn(panelSlider()), isTrue);
+        await key(LogicalKeyboardKey.arrowUp);
+        expect(focusIsOn(close), isTrue);
         for (final target in targets) {
           expect(traversableFocusNodesIn(target), isEmpty);
         }
@@ -1173,7 +1553,7 @@ void main() {
         expect(focusIsOn(den), isTrue);
         await key(LogicalKeyboardKey.tab);
         expect(focusIsOn(close), isTrue);
-        await key(LogicalKeyboardKey.tab);
+        await key(LogicalKeyboardKey.arrowDown);
         expect(focusIsOn(panelSlider()), isTrue);
         await key(LogicalKeyboardKey.enter);
         await tester.pump(const Duration(seconds: 12));
@@ -1252,19 +1632,39 @@ void main() {
 
   testWidgets('with no other output there is no outputs section; with a '
       'fixed volume too, the pill opens nothing', (tester) async {
-    await _pump(
+    final h = await _pump(
       tester,
       _queue(PlayerStateType.paused),
       volume: _adjustable,
       aloneOutput: true,
+      launched: true,
+      localDisplay: true,
+      idleHost: true,
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(KioskOutputPill));
-    await tester.pumpAndSettle();
+    final pill = find.byType(KioskOutputPill);
+    traversableFocusNodesIn(pill).single.requestFocus();
+    await tester.pump();
+    Future<void> press(LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+    }
+
+    await press(LogicalKeyboardKey.enter);
     expect(panelSlider(), findsOneWidget);
     expect(find.text('OTHER OUTPUTS'), findsNothing);
     expect(find.textContaining('Looking'), findsNothing);
+    await press(LogicalKeyboardKey.arrowDown);
+    expect(focusIsOn(panelSlider()), isTrue);
+    await press(LogicalKeyboardKey.enter);
+    await press(LogicalKeyboardKey.arrowLeft);
+    expect(h.api.deviceSent, [const DeviceCommand.setVolume(volume: 35)]);
+    await press(LogicalKeyboardKey.escape);
+    expect(focusIsOn(panelSlider()), isTrue);
+    await press(LogicalKeyboardKey.escape);
+    expect(openPanel(), findsNothing);
+    expect(focusIsOn(pill), isTrue);
 
     await _pump(tester, _queue(PlayerStateType.paused), aloneOutput: true);
     await tester.pumpAndSettle();

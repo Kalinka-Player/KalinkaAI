@@ -68,16 +68,20 @@ class _SourceRow extends ConsumerWidget {
 
     Widget toggle = SettingsToggle(
       value: enabled,
-      onChanged: (v) {
-        if (isLocalFiles || enabledField == null) return;
-        notifier.stageChange(enabledField.path, v);
-        // What was entered for a source switched off goes with it: the next
-        // step no longer shows it, so a value the server refuses there would
-        // hold up the save with nowhere to fix it.
-        if (!v) {
-          notifier.unstageUnder(moduleRoot(module), keep: enabledField.path);
-        }
-      },
+      onChanged: isLocalFiles || enabledField == null
+          ? null
+          : (v) {
+              notifier.stageChange(enabledField.path, v);
+              // What was entered for a source switched off goes with it: the next
+              // step no longer shows it, so a value the server refuses there would
+              // hold up the save with nowhere to fix it.
+              if (!v) {
+                notifier.unstageUnder(
+                  moduleRoot(module),
+                  keep: enabledField.path,
+                );
+              }
+            },
     );
     if (isLocalFiles || enabledField == null) {
       toggle = IgnorePointer(child: Opacity(opacity: 0.4, child: toggle));
