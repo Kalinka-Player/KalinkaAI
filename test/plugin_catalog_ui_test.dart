@@ -80,7 +80,6 @@ import 'package:kalinka/data_model/storage.dart';
 import 'package:kalinka/screens/drives_and_shares_screen.dart';
 
 import 'support/field_text.dart';
-import 'support/focus.dart';
 import 'support/server_answer.dart';
 import 'support/soundcard_fakes.dart' show FakeBox;
 
@@ -664,11 +663,8 @@ Future<void> _tapTab(WidgetTester tester, PluginTab tab) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _openDisplay(WidgetTester tester) async {
-  final row = find.widgetWithText(SettingsActionRow, 'Display');
-  await tester.ensureVisible(row);
-  await tester.pumpAndSettle();
-  await tester.tap(row);
+Future<void> _scrollToDisplay(WidgetTester tester) async {
+  await tester.ensureVisible(find.text('THIS DISPLAY'));
   await tester.pumpAndSettle();
 }
 
@@ -798,9 +794,7 @@ void main() {
       );
       await _screen(tester, container);
       await _tapTab(tester, PluginTab.server);
-      expect(find.text('DISPLAY'), findsNothing);
-      expect(find.text('Pixel shift'), findsNothing);
-      await _openDisplay(tester);
+      await _scrollToDisplay(tester);
       final toggle = find.byKey(const ValueKey('on-screen-keyboard-setting'));
       await tester.ensureVisible(toggle);
       await tester.pumpAndSettle();
@@ -850,7 +844,7 @@ void main() {
         );
         await _screen(tester, container);
         await _tapTab(tester, PluginTab.server);
-        await _openDisplay(tester);
+        await _scrollToDisplay(tester);
         expect(find.text('Pixel shift'), findsOneWidget);
         expect(find.text('On-screen keyboard'), findsOneWidget);
         expect(
@@ -890,7 +884,7 @@ void main() {
             disableAnimations: true,
           );
           await _tapTab(tester, PluginTab.server);
-          await _openDisplay(tester);
+          await _scrollToDisplay(tester);
           final kiosk = find.byKey(const ValueKey('display-kiosk-seconds'));
           final blank = find.byKey(const ValueKey('display-blank-seconds'));
           expect(
@@ -984,6 +978,140 @@ void main() {
       );
     }
 
+    for (final platform24Hour in [false, true]) {
+      testWidgets(
+        'time format starts from the platform (24-hour: $platform24Hour) '
+        'and saves the choice locally',
+        (tester) async {
+          // A built MediaQuery re-reads the test value only on a metrics change.
+          tester.platformDispatcher.alwaysUse24HourFormatTestValue =
+              platform24Hour;
+          tester.binding.handleMetricsChanged();
+          addTearDown(() {
+            tester.platformDispatcher.clearAlwaysUse24HourTestValue();
+            tester.binding.handleMetricsChanged();
+          });
+          final container = await _container(
+            _Proxy({'enabled': true, 'catalog_browsing': true}),
+            _CatalogApi(_catalog()),
+            settings: _serverSettings(),
+          );
+          await _screen(tester, container);
+          await _tapTab(tester, PluginTab.server);
+          await _scrollToDisplay(tester);
+          final format = find.byKey(const ValueKey('display-time-format'));
+          Finder segment(String label) =>
+              find.descendant(of: format, matching: find.text(label));
+          List<String> active() => [
+            for (final label in ['12hr', '24hr'])
+              if (tester
+                      .widget<Material>(
+                        find
+                            .ancestor(
+                              of: segment(label),
+                              matching: find.byType(Material),
+                            )
+                            .first,
+                      )
+                      .color ==
+                  KalinkaColors.accent)
+                label,
+          ];
+          final platform = platform24Hour ? '24hr' : '12hr';
+          final other = platform24Hour ? '12hr' : '24hr';
+          expect(active(), [platform]);
+          expect(
+            tester.getRect(segment('12hr')).right,
+            lessThan(tester.getRect(segment('24hr')).left),
+          );
+          expect(
+            tester.getRect(find.text('Time format')).top,
+            lessThan(tester.getRect(find.text('Pixel shift')).top),
+          );
+          await tester.ensureVisible(format);
+          await tester.pumpAndSettle();
+          await tester.tap(segment(other));
+          await tester.pumpAndSettle();
+          expect(active(), [other]);
+          expect(
+            container
+                .read(sharedPrefsProvider)
+                .getBool(Use24HourClockNotifier.preferenceKey),
+            !platform24Hour,
+          );
+          expect(container.read(settingsProvider).hasPendingChanges, isFalse);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+
+    for (final (size, scale, beside) in const [
+      (Size(400, 850), 1.0, true),
+      (Size(1024, 600), 1.3, true),
+      (Size(320, 800), 1.0, false),
+      (Size(400, 850), 2.0, false),
+    ]) {
+      testWidgets('time format pills sit beside the label: $beside at '
+          '$size / $scale', (tester) async {
+        final container = await _container(
+          _Proxy({'enabled': true, 'catalog_browsing': true}),
+          _CatalogApi(_catalog()),
+          settings: _serverSettings(),
+        );
+        await _screen(tester, container, size: size, scale: scale);
+        await _tapTab(tester, PluginTab.server);
+        await _scrollToDisplay(tester);
+        final format = tester.getRect(
+          find.byKey(const ValueKey('display-time-format')),
+        );
+        final label = tester.getRect(find.text('Time format'));
+        if (beside) {
+          expect(format.left, greaterThan(label.right));
+        } else {
+          expect(format.top, greaterThan(label.bottom));
+          expect(format.left, label.left);
+        }
+        for (final segment in ['12hr', '24hr']) {
+          final text = find.descendant(
+            of: find.byKey(const ValueKey('display-time-format')),
+            matching: find.text(segment),
+          );
+          final fill = find
+              .ancestor(of: text, matching: find.byType(Material))
+              .first;
+          expect(
+            tester.getRect(fill).width,
+            lessThan(
+              tester
+                      .renderObject<RenderBox>(text)
+                      .getMaxIntrinsicWidth(double.infinity) *
+                  2,
+            ),
+          );
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('on the streamer, time format follows the timeouts', (
+      tester,
+    ) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        localDisplay: true,
+        settings: _serverSettings().copyWith(
+          values: {'base_config.display.enabled': true},
+        ),
+      );
+      await _screen(tester, container, size: const Size(1024, 600));
+      await _tapTab(tester, PluginTab.server);
+      await _scrollToDisplay(tester);
+      double top(String label) => tester.getRect(find.text(label)).top;
+      expect(top('Blank screen after'), lessThan(top('Time format')));
+      expect(top('Time format'), lessThan(top('Pixel shift')));
+    });
+
     testWidgets('remote clients show only their own display controls', (
       tester,
     ) async {
@@ -996,11 +1124,19 @@ void main() {
       );
       await _screen(tester, container);
       await _tapTab(tester, PluginTab.server);
-      expect(find.text('DISPLAY'), findsNothing);
-      expect(find.byKey(const ValueKey('display-settings')), findsNothing);
-      expect(find.text('On-screen keyboard'), findsNothing);
-      await _openDisplay(tester);
-      expect(find.text('Applies to this device.'), findsOneWidget);
+      await _scrollToDisplay(tester);
+      expect(find.text('THIS DEVICE'), findsNothing);
+      expect(
+        find.text(
+          'For the screen you are using now and its now-playing display.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getRect(find.text('THIS DISPLAY')).top,
+        lessThan(tester.getRect(find.text('Time format')).top),
+      );
+      expect(find.text('Time format'), findsOneWidget);
       expect(find.text('On-screen keyboard'), findsOneWidget);
       expect(find.text('Pixel shift'), findsOneWidget);
       expect(
@@ -1009,18 +1145,6 @@ void main() {
       );
       expect(find.byKey(const ValueKey('display-kiosk-seconds')), findsNothing);
       expect(find.byKey(const ValueKey('display-blank-seconds')), findsNothing);
-      final back = find.descendant(
-        of: find.byKey(const ValueKey('device-display')),
-        matching: find.byTooltip('Back'),
-      );
-      expect(focusIsOn(back), isTrue);
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('device-display')), findsNothing);
-      expect(
-        focusIsOn(find.widgetWithText(SettingsActionRow, 'Display')),
-        isTrue,
-      );
     });
   });
 

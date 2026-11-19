@@ -157,7 +157,7 @@ Off, keep this order directly on the tab:
 | Group | Contents |
 | --- | --- |
 | SERVER | Identity card: name and pencil, selectable address, server version, raw backend supervisor status |
-| THIS DEVICE | Display opens the screen and keyboard preferences for this device |
+| THIS DISPLAY | Preferences for the screen Settings is open on: the now-playing display's timeouts where they apply, time format, pixel shift and on-screen keyboard |
 | SOFTWARE UPDATES | Bundle/component update state and automatic updates in one card |
 | MANAGEMENT | Restart Kalinka, Network, dashboard, restart streamer, power off streamer, when supported |
 | SUPPORT | Download server logs |
@@ -168,13 +168,23 @@ The address has 16dp side padding, a 4dp label/value gap and 20dp bottom padding
 
 **Network** appears only for a box with a supervisor. It opens a **Network** page that hosts the same network panel as setup: the current wired or Wi-Fi connection, and the Wi-Fi networks the box can join.
 
-The **Display** page opens from **This device** and says “Applies to this device.” Back returns focus to the Display row. Changes save immediately in local preferences. Every client can set **Pixel shift** and **On-screen keyboard**.
+**THIS DISPLAY** holds its settings directly on the tab, in one card under the note “For the screen you are using now and its now-playing display.” in `trayRowSublabel`, 4dp below the group label. The name ties them to the screen Settings is open on rather than to the streamer. Changes save immediately in local preferences. Every client can set **Time format**, **Pixel shift** and **On-screen keyboard**.
 
 On the streamer's enabled display or an explicit kiosk launch, show two dropdowns first. **Return to now playing** offers 15 s, 30 s, 1 min and 2 min, and defaults to 30 s. **Blank screen after** offers Off, 5 min, 10 min, 15 min and 30 min, and defaults to 5 min. Place each dropdown beside its label and help. Use the anchored neutral Bluetooth menu style. Store seconds, with 0 for Off. Show backlight capability beside the blanking setting. Blanking applies while paused or stopped. Touch, keyboard input or resumed playback wakes the display and consumes the waking input.
 
-![Display settings on a 1024 × 600 local kiosk](images/display-settings.png)
+![This display's settings on a 1024 × 600 local kiosk](images/display-settings.png)
 
 Display the supervisor status exactly as the backend returns it; do not parse a version or infer health from “Installed”. Package updates show the components the backend identifies as changed. Sound-card controls belong in Output settings. Device automation belongs in the expert list.
+
+**Time format** follows the timeouts, or comes first without them. It offers
+**12hr** and **24hr** as two connected segments (`SettingsEnumPills`), each as
+wide as the longer label, beside the label and help. Below
+`300 × textScaler.scale(1)` of row width they move under the label, still at
+that width. The platform's preference is selected until one is chosen;
+flutter-pi reports none, so a streamer's display starts on 12-hour whatever its
+time zone. Save the choice to this device's SharedPreferences
+(`Kalinka.display.use24HourClock`) and apply it to every time the app shows,
+the Now Playing clock included, as `MediaQuery.alwaysUse24HourFormat`.
 
 **Pixel shift** is on by default. It moves the Now Playing
 foreground a few pixels once a minute. Switching it off returns the foreground

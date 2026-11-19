@@ -9,7 +9,7 @@ class KioskClock extends StatefulWidget {
 
   const KioskClock({super.key, required this.builder});
 
-  /// `9:41 PM` or `21:41`, as the platform prefers.
+  /// `9:41 PM` or `21:41`, as this device's time format has it.
   static String time(BuildContext context, DateTime now) =>
       MaterialLocalizations.of(context).formatTimeOfDay(
         TimeOfDay.fromDateTime(now),

@@ -58,6 +58,27 @@ final displaySettingsProvider =
       DisplaySettingsNotifier.new,
     );
 
+/// Whether this device shows 24-hour time: null until chosen, when the
+/// platform's own preference applies.
+///
+/// flutter-pi reports no preference, so the platform alone would leave a
+/// streamer's display on 12-hour time whatever its time zone.
+class Use24HourClockNotifier extends Notifier<bool?> {
+  static const preferenceKey = 'Kalinka.display.use24HourClock';
+
+  @override
+  bool? build() => ref.read(sharedPrefsProvider).getBool(preferenceKey);
+
+  Future<void> set(bool use24Hour) async {
+    state = use24Hour;
+    await ref.read(sharedPrefsProvider).setBool(preferenceKey, use24Hour);
+  }
+}
+
+final use24HourClockProvider = NotifierProvider<Use24HourClockNotifier, bool?>(
+  Use24HourClockNotifier.new,
+);
+
 /// Applies to Now Playing on this device, including manually opened kiosks.
 class KioskPixelShiftNotifier extends Notifier<bool> {
   static const preferenceKey = 'Kalinka.display.pixelShift';
