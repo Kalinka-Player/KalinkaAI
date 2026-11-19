@@ -156,6 +156,7 @@ void main() {
     List<BrowseItem> sections = const [],
     Size size = const Size(375, 812),
     double textScale = 1,
+    bool use24Hour = false,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -181,6 +182,7 @@ void main() {
             data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(textScale),
               disableAnimations: true,
+              alwaysUse24HourFormat: use24Hour,
             ),
             child: child!,
           ),
@@ -475,6 +477,27 @@ void main() {
       expect(api.requests, 0);
     },
   );
+
+  for (final use24Hour in [false, true]) {
+    testWidgets('the last check reads in the 24-hour format: $use24Hour', (
+      tester,
+    ) async {
+      await pump(tester, _Api(), use24Hour: use24Hour);
+      final message = tester
+          .widget<Tooltip>(
+            find.ancestor(
+              of: find.textContaining('Last checked'),
+              matching: find.byType(Tooltip),
+            ),
+          )
+          .message!;
+      expect(message, contains(', 19'));
+      expect(
+        message,
+        matches(use24Hour ? RegExp(r', \d{2}:\d{2}$') : RegExp(r' [AP]M$')),
+      );
+    });
+  }
 
   testWidgets('other catalogs have no rescan action', (tester) async {
     await pump(tester, _Api(), pageId: 'kalinka:jamendo:catalog:recent');

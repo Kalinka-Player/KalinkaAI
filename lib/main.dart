@@ -17,6 +17,7 @@ import 'providers/media_notification_provider.dart';
 import 'providers/network_setup_api.dart';
 import 'providers/pinned_server.dart';
 import 'utils/local_platform.dart';
+import 'widgets/clock_format_host.dart';
 import 'widgets/kalinka_toast_overlay.dart';
 import 'widgets/foreground_volume_overlay.dart';
 import 'widgets/receiver_approval.dart';
@@ -125,7 +126,9 @@ class KalinkaApp extends ConsumerWidget {
             child: KalinkaToastHost(child: child!),
           ),
         );
-        return localDisplay ? LocalKioskHost(child: app) : app;
+        return ClockFormatHost(
+          child: localDisplay ? LocalKioskHost(child: app) : app,
+        );
       },
       home: const ReceiverApprovalHost(child: _Home()),
     );
