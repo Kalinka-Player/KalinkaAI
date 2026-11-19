@@ -9,6 +9,22 @@ import '../../theme/app_theme.dart';
 /// Stable Tab order, independent of the shell's responsive widget order.
 enum AppKeyboardArea { navigation, toolbar, content, playback, player }
 
+/// Arrow keys move between controls even on platforms that default to scrolling.
+const directionalFocusShortcuts = <ShortcutActivator, Intent>{
+  SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(
+    TraversalDirection.up,
+  ),
+  SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(
+    TraversalDirection.down,
+  ),
+  SingleActivator(LogicalKeyboardKey.arrowLeft): DirectionalFocusIntent(
+    TraversalDirection.left,
+  ),
+  SingleActivator(LogicalKeyboardKey.arrowRight): DirectionalFocusIntent(
+    TraversalDirection.right,
+  ),
+};
+
 /// Explicit navigation while a text editor owns the ordinary arrow keys.
 class _AreaDirectionIntent extends Intent {
   const _AreaDirectionIntent(this.direction);
@@ -147,18 +163,7 @@ class _AppKeyboardNavigationState extends State<AppKeyboardNavigation> {
         SingleActivator(LogicalKeyboardKey.tab): NextFocusIntent(),
         SingleActivator(LogicalKeyboardKey.tab, shift: true):
             PreviousFocusIntent(),
-        SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(
-          TraversalDirection.up,
-        ),
-        SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(
-          TraversalDirection.down,
-        ),
-        SingleActivator(LogicalKeyboardKey.arrowLeft): DirectionalFocusIntent(
-          TraversalDirection.left,
-        ),
-        SingleActivator(LogicalKeyboardKey.arrowRight): DirectionalFocusIntent(
-          TraversalDirection.right,
-        ),
+        ...directionalFocusShortcuts,
       },
       child: DefaultTextEditingShortcuts(
         child: Shortcuts(

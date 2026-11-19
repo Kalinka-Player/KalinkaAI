@@ -357,6 +357,10 @@ class SheetRow extends StatelessWidget {
 
   final VoidCallback? onTap;
 
+  /// Give the row itself a keyboard stop when it owns the action.
+  final bool focusable;
+  final bool autofocus;
+
   const SheetRow({
     super.key,
     this.icon,
@@ -367,6 +371,8 @@ class SheetRow extends StatelessWidget {
     this.labelColor,
     this.trailing,
     this.onTap,
+    this.focusable = false,
+    this.autofocus = false,
   }) : assert(
          icon == null || (iconBackground != null && iconColor != null),
          'an icon needs the tile it sits in',
@@ -376,6 +382,11 @@ class SheetRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return TapHighlight(
       onTap: onTap,
+      focusable: focusable,
+      autofocus: autofocus,
+      focusBorder: const Border.fromBorderSide(
+        BorderSide(color: KalinkaColors.textPrimary, width: 2),
+      ),
       inset: kSheetGutter,
       child: Padding(
         padding: const EdgeInsets.symmetric(

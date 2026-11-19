@@ -22,10 +22,13 @@ bool kalinkaUsesPopovers(BuildContext context) {
 class KalinkaPopupOrigin {
   static final _actionKey = Object();
   final BuildContext context;
+
+  /// Whether the launching control requested focus on the popup's first action.
+  final bool autofocus;
   final KalinkaPopupOrigin? _parent;
   Rect? _lastRect;
 
-  KalinkaPopupOrigin.capture(this.context)
+  KalinkaPopupOrigin.capture(this.context, {this.autofocus = false})
     : _parent = context
           .getInheritedWidgetOfExactType<KalinkaPopupOriginScope>()
           ?.origin {
@@ -34,9 +37,15 @@ class KalinkaPopupOrigin {
 
   /// Shared controls carry their own bounds through synchronous and async
   /// actions, even when the screen's handler supplies its page context.
-  static T run<T>(BuildContext context, T Function() action) => runZoned(
+  static T run<T>(
+    BuildContext context,
+    T Function() action, {
+    bool autofocus = false,
+  }) => runZoned(
     action,
-    zoneValues: {_actionKey: KalinkaPopupOrigin.capture(context)},
+    zoneValues: {
+      _actionKey: KalinkaPopupOrigin.capture(context, autofocus: autofocus),
+    },
   );
 
   static KalinkaPopupOrigin forContext(BuildContext context) =>

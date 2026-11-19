@@ -1,13 +1,19 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/kalinka_ws_api.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
+import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/kalinka_ws_api_provider.dart';
 import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/shell_nav_provider.dart';
+import 'package:kalinka/providers/supervisor_api.dart';
+import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/kalinka_bottom_sheet.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/coach_marks_overlay.dart';
 import 'package:kalinka/widgets/discovery_screen.dart';
@@ -15,6 +21,7 @@ import 'package:kalinka/widgets/now_playing_content.dart';
 import 'package:kalinka/widgets/queue_item_row.dart';
 import 'package:kalinka/widgets/search/search_session_view.dart';
 import 'package:kalinka/widgets/shell_navigation.dart';
+import 'package:kalinka/widgets/server_chip.dart';
 import 'package:kalinka/widgets/server_sheet.dart';
 import 'package:kalinka/widgets/playback_progress_slider.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
@@ -266,25 +273,114 @@ void main() {
   }
 
   testWidgets(
-    'toolbar connection control opens with Space and restores focus',
+    'clicking the server chip leaves the rows unfocused until navigation',
     (tester) async {
       await pumpHomeShell(
         tester,
-        queue: SettableQueue(queueOf(2)),
+        queue: SettableQueue(queueOf(0)),
         size: const Size(1440, 900),
+        overrides: [
+          configurationAvailableProvider.overrideWithValue(true),
+          boxControlProvider.overrideWith((_) async => null),
+        ],
       );
-      await tab(tester);
-      await tab(tester);
-      expect(area, 'toolbar');
-      final caller = FocusManager.instance.primaryFocus;
-      await tester.sendKeyEvent(LogicalKeyboardKey.space);
-      await tester.pumpAndSettle();
-      expect(find.byType(ServerSheetContent), findsOneWidget);
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
-      expect(FocusManager.instance.primaryFocus, same(caller));
+      final chip = find.byType(ServerChip);
+      final settings = find.widgetWithText(SheetRow, 'Settings');
+      BoxBorder? settingsBorder() {
+        final mark = tester.widget<AnimatedContainer>(
+          find.descendant(
+            of: settings,
+            matching: find.byType(AnimatedContainer),
+          ),
+        );
+        return (mark.decoration as BoxDecoration).border;
+      }
+
+      // A mouse click should win even when the user just navigated to the dot.
+      expect(await tabTo(tester, chip), isTrue);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      final point = tester.getCenter(chip);
+      await mouse.addPointer(location: point);
+      addTearDown(mouse.removePointer);
+      for (final key in [
+        LogicalKeyboardKey.arrowDown,
+        LogicalKeyboardKey.tab,
+      ]) {
+        await mouse.down(point);
+        await mouse.up();
+        await tester.pumpAndSettle();
+        expect(settings, findsOneWidget);
+        expect(focusIsOn(find.byType(SheetRow)), isFalse);
+        expect(settingsBorder(), isNull);
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+        await tester.pumpAndSettle();
+        expect(settingsBorder(), isNull);
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+        expect(focusIsOn(settings), isTrue);
+        expect(
+          settingsBorder(),
+          Border.all(color: KalinkaColors.textPrimary, width: 2),
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.byType(ServerSheetContent), findsNothing);
+      }
     },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
   );
+
+  for (final hasSettings in [true, false]) {
+    testWidgets(
+      'keyboard enters and leaves the server menu with Settings available: $hasSettings',
+      (tester) async {
+        await pumpHomeShell(
+          tester,
+          queue: SettableQueue(queueOf(2)),
+          size: const Size(1440, 900),
+          overrides: [
+            configurationAvailableProvider.overrideWithValue(hasSettings),
+            boxControlProvider.overrideWith(
+              (_) async => const BoxControl(
+                SupervisorInfo(
+                  version: 'test',
+                  protocol: 1,
+                  minProtocol: 1,
+                  serverId: 'home-shell',
+                  actions: {'poweroff'},
+                ),
+                'home-shell',
+              ),
+            ),
+          ],
+        );
+        expect(await tabTo(tester, find.byType(ServerChip)), isTrue);
+        final caller = FocusManager.instance.primaryFocus;
+        await tester.sendKeyEvent(LogicalKeyboardKey.space);
+        await tester.pumpAndSettle();
+        final nextAction = find.widgetWithText(
+          SheetRow,
+          kIsWeb ? 'Power off' : 'Connect to different server',
+        );
+        final first = hasSettings
+            ? find.widgetWithText(SheetRow, 'Settings')
+            : nextAction;
+        expect(focusIsOn(first), isTrue);
+        if (hasSettings) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pumpAndSettle();
+          expect(focusIsOn(nextAction), isTrue);
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+          await tester.pumpAndSettle();
+          expect(focusIsOn(first), isTrue);
+        }
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.byType(ServerSheetContent), findsNothing);
+        expect(FocusManager.instance.primaryFocus, same(caller));
+      },
+    );
+  }
 
   testWidgets('large text keeps area navigation with reduced motion', (
     tester,
