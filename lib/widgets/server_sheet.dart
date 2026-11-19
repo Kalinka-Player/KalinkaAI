@@ -13,6 +13,8 @@ import '../providers/shell_nav_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../theme/app_theme.dart';
 import 'kalinka_bottom_sheet.dart';
+import 'kalinka_popover.dart';
+import 'keyboard/app_keyboard_navigation.dart';
 
 /// Actions that can be returned from the server sheet.
 enum ServerSheetAction { openDiscovery, openPlugins, powerOff }
@@ -27,8 +29,10 @@ class ServerSheetContent extends ConsumerWidget {
     final connectionState = ref.watch(connectionStateProvider);
     final settings = ref.watch(connectionSettingsProvider);
     final serverInfo = ref.watch(serverInfoProvider);
+    final hasSettings = ref.watch(configurationAvailableProvider);
+    final autofocus = KalinkaPopupOriginScope.of(context)?.autofocus ?? false;
 
-    return SingleChildScrollView(
+    final rows = SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -47,12 +51,20 @@ class ServerSheetContent extends ConsumerWidget {
           const SizedBox(height: 4),
           // Separator
           const SheetDivider(),
-          if (ref.watch(configurationAvailableProvider))
-            _PluginsRow(
+          if (hasSettings)
+            SheetRow(
+              icon: Icons.settings_outlined,
+              iconBackground: KalinkaColors.surfaceOverlay,
+              iconColor: KalinkaColors.textSecondary,
+              label: 'Settings',
+              focusable: true,
+              autofocus: autofocus,
+              sublabel: 'Music sources, your player and hi-fi controls',
+              trailing: const SheetChevron(),
               onTap: () =>
                   Navigator.pop(context, ServerSheetAction.openPlugins),
             ),
-          // Web is bound to its serving origin — no discovery, no disconnect.
+          // Web is bound to its serving origin.
           if (!kIsWeb) ...[
             const SheetDivider(),
             // Connect to different server
@@ -60,6 +72,8 @@ class ServerSheetContent extends ConsumerWidget {
               icon: Icons.language,
               iconBackground: KalinkaColors.surfaceOverlay,
               iconColor: KalinkaColors.textSecondary,
+              focusable: true,
+              autofocus: autofocus && !hasSettings,
               label: 'Connect to different server',
               sublabel: 'Scan network for other instances',
               trailing: const SheetChevron(),
@@ -73,6 +87,7 @@ class ServerSheetContent extends ConsumerWidget {
               icon: Icons.logout,
               iconBackground: KalinkaColors.accent.withValues(alpha: 0.14),
               iconColor: KalinkaColors.accent,
+              focusable: true,
               label: 'Disconnect',
               onTap: () async {
                 await ref
@@ -84,11 +99,17 @@ class ServerSheetContent extends ConsumerWidget {
             ),
           ],
           _PowerOffRow(
+            autofocus: autofocus && !hasSettings && kIsWeb,
             onTap: () => Navigator.pop(context, ServerSheetAction.powerOff),
           ),
           const _AppVersionFooter(),
         ],
       ),
+    );
+    // The scope can receive the first arrow after a click without marking a row.
+    return Shortcuts(
+      shortcuts: directionalFocusShortcuts,
+      child: FocusScope(autofocus: true, child: rows),
     );
   }
 }
@@ -288,8 +309,9 @@ class _DemoPill extends StatelessWidget {
 /// The same capability-gated shutdown action on phone, tablet and web.
 class _PowerOffRow extends ConsumerWidget {
   final VoidCallback onTap;
+  final bool autofocus;
 
-  const _PowerOffRow({required this.onTap});
+  const _PowerOffRow({required this.onTap, required this.autofocus});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -306,6 +328,8 @@ class _PowerOffRow extends ConsumerWidget {
           icon: Icons.power_settings_new,
           iconBackground: KalinkaColors.actionDelete.withValues(alpha: 0.14),
           iconColor: KalinkaColors.actionDelete,
+          focusable: true,
+          autofocus: autofocus,
           label:
               ref.watch(currentPowerOffStatusProvider)?.countdownLabel ??
               'Power off',
@@ -314,20 +338,4 @@ class _PowerOffRow extends ConsumerWidget {
       ],
     );
   }
-}
-
-class _PluginsRow extends StatelessWidget {
-  final VoidCallback onTap;
-  const _PluginsRow({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => SheetRow(
-    icon: Icons.settings_outlined,
-    iconBackground: KalinkaColors.surfaceOverlay,
-    iconColor: KalinkaColors.textSecondary,
-    label: 'Settings',
-    sublabel: 'Music sources, your player and hi-fi controls',
-    trailing: const SheetChevron(),
-    onTap: onTap,
-  );
 }

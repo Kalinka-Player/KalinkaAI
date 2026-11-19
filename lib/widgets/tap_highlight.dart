@@ -155,6 +155,8 @@ class TapHighlight extends StatefulWidget {
   /// tapped by Enter or Space. Off for rows, whose own controls take the
   /// focus; on for a link standing in text.
   final bool focusable;
+  final bool autofocus;
+  final BoxBorder? focusBorder;
 
   const TapHighlight({
     super.key,
@@ -163,6 +165,8 @@ class TapHighlight extends StatefulWidget {
     this.borderRadius,
     this.inset = 0,
     this.focusable = false,
+    this.autofocus = false,
+    this.focusBorder,
   });
 
   @override
@@ -223,6 +227,7 @@ class _TapHighlightState extends State<TapHighlight> {
                   duration: const Duration(milliseconds: 120),
                   decoration: BoxDecoration(
                     color: tint,
+                    border: _focused ? widget.focusBorder : null,
                     borderRadius: widget.borderRadius,
                   ),
                 ),
@@ -240,6 +245,7 @@ class _TapHighlightState extends State<TapHighlight> {
 
     return FocusableActionDetector(
       enabled: live,
+      autofocus: widget.autofocus,
       onShowFocusHighlight: _focus,
       actions: {
         ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: activate),

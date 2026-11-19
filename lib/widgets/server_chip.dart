@@ -50,6 +50,13 @@ class _ServerChipState extends ConsumerState<ServerChip>
     super.dispose();
   }
 
+  VoidCallback? _openAction({bool autofocus = false}) {
+    final action = widget.onTap;
+    return action == null
+        ? null
+        : () => KalinkaPopupOrigin.run(context, action, autofocus: autofocus);
+  }
+
   @override
   Widget build(BuildContext context) {
     final connectionState = ref.watch(connectionStateProvider);
@@ -68,9 +75,7 @@ class _ServerChipState extends ConsumerState<ServerChip>
     }
 
     final chipData = _getChipData(connectionState, settings.name);
-    final onTap = widget.onTap == null
-        ? null
-        : () => KalinkaPopupOrigin.run(context, widget.onTap!);
+    final onTap = _openAction();
 
     if (widget.compact) {
       final chip = Semantics(
@@ -85,7 +90,7 @@ class _ServerChipState extends ConsumerState<ServerChip>
           ),
         ),
       );
-      return _keyboardControl(chip, onTap);
+      return _keyboardControl(chip);
     }
 
     final chip = GestureDetector(
@@ -128,18 +133,15 @@ class _ServerChipState extends ConsumerState<ServerChip>
         ),
       ),
     );
-    return _keyboardControl(
-      Semantics(button: onTap != null, child: chip),
-      onTap,
-    );
+    return _keyboardControl(Semantics(button: onTap != null, child: chip));
   }
 
-  Widget _keyboardControl(Widget child, VoidCallback? onTap) {
+  Widget _keyboardControl(Widget child) {
     return KeyboardActivation(
-      onActivate: onTap,
+      onActivate: _openAction(autofocus: true),
       borderRadius: BorderRadius.circular(20),
       child: MouseRegion(
-        cursor: clickCursor(interactive: onTap != null),
+        cursor: clickCursor(interactive: widget.onTap != null),
         child: child,
       ),
     );
