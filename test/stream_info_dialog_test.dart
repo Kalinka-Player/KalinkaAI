@@ -365,6 +365,68 @@ void main() {
       expect(stages[3].detail, '+2.8 dB');
       expect(stages[4].detail, 'TPDF at 24 bits');
     });
+    test('the renderer\'s steps come before the DSD transport', () {
+      final state = _playing()
+        ..audioInfo = AudioInfo.fromJson({
+          'sample_format': 'DSD',
+          'sample_rate': 2822400,
+          'bits_per_sample': 1,
+          'channels': 2,
+          'duration_ms': 1000,
+          'output': {
+            'sample_format': 'DoP_S24_LE',
+            'sample_rate': 176400,
+            'signal_path': {
+              'steps': [
+                {'kind': 'dsd_gain', 'name': 'DSD gain', 'summary': '-3 dB'},
+              ],
+            },
+          },
+        });
+
+      final stages = signalStages(state, DeviceVolume.empty);
+      expect(stages.map((s) => s.label), [
+        'Source',
+        'Decoded stream',
+        'DSD gain',
+        'DSD over PCM',
+        'Output',
+      ]);
+    });
+    test('a step that keeps the rate leaves a rate change to be inferred', () {
+      final state = _playing()
+        ..audioInfo = AudioInfo.fromJson({
+          'sample_format': 'PCM_FLOAT32_LE',
+          'sample_rate': 44100,
+          'bits_per_sample': 32,
+          'channels': 2,
+          'duration_ms': 1000,
+          'output': {
+            'sample_format': 'PCM32_LE',
+            'sample_rate': 48000,
+            'bits_per_sample': 24,
+            'channels': 2,
+            'signal_path': {
+              'steps': [
+                {
+                  'kind': 'dither',
+                  'name': 'Dither',
+                  'summary': 'TPDF at 24 bits',
+                },
+              ],
+            },
+          },
+        });
+
+      final stages = signalStages(state, DeviceVolume.empty);
+      expect(stages.map((s) => s.label), [
+        'Source',
+        'Decoded stream',
+        'Dither',
+        'Sample rate change',
+        'Output',
+      ]);
+    });
     test('a step of a kind the app does not know still shows', () {
       final state = _playing()
         ..audioInfo!.output = OutputInfo.fromJson({

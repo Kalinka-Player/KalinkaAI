@@ -59,6 +59,15 @@ void main() {
       expect(isBitPerfect(_shared, _volume(VolumeBackend.hardware)), isFalse);
     });
 
+    test('a renderer that reports a signal path altered the samples', () {
+      const processed = OutputInfo(
+        access: DeviceAccess.exclusive,
+        losslessPath: true,
+        signalPath: SignalPath(steps: [SignalStep(kind: 'dither')]),
+      );
+      expect(isBitPerfect(processed, _volume(VolumeBackend.hardware)), isFalse);
+    });
+
     test('a renderer that reports no device claims nothing', () {
       expect(isBitPerfect(null, _volume(VolumeBackend.hardware)), isFalse);
     });

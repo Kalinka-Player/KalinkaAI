@@ -36,6 +36,11 @@ String _pcm(int hz, int bits, int channels) => _details([
 ]);
 
 // Accept only identified PCM formats. A PCM-width carrier may contain DoP.
+/// Signal step kinds that leave the sample rate as it was: with only these, a
+/// rate change between the decoded stream and the output happened past the
+/// renderer's DSP, in ALSA or a sound server.
+const _rateKeepingSteps = {'dsd_gain', 'dither'};
+
 bool _isPcm(String name) =>
     name.startsWith('PCM') ||
     name.startsWith('FLOAT') ||
@@ -66,6 +71,10 @@ List<SignalStage> signalStages(
   final dop = outputFormat.startsWith('DoP_');
   final pcmOutput = _isPcm(outputFormat);
   final steps = out?.signalPath?.steps;
+  // A step of any other kind may resample, and the renderer then says so.
+  final stepsMayResample =
+      steps != null &&
+      steps.any((step) => !_rateKeepingSteps.contains(step.kind));
   final decoded = audio == null
       ? ''
       : dsd
@@ -89,6 +98,13 @@ List<SignalStage> signalStages(
       (label: 'Source', detail: origin, icon: Icons.library_music_outlined),
     if (decoded.isNotEmpty)
       (label: 'Decoded stream', detail: decoded, icon: Icons.graphic_eq),
+    if (steps != null)
+      for (final step in steps)
+        (
+          label: step.name.isNotEmpty ? step.name : step.kind,
+          detail: step.summary,
+          icon: Icons.tune,
+        ),
     if (native)
       (label: 'Native DSD', detail: outputFormat, icon: Icons.swap_horiz),
     if (out != null && dop)
@@ -100,20 +116,13 @@ List<SignalStage> signalStages(
         ]),
         icon: Icons.swap_horiz,
       ),
-    if (steps != null)
-      for (final step in steps)
-        (
-          label: step.name.isNotEmpty ? step.name : step.kind,
-          detail: step.summary,
-          icon: Icons.tune,
-        ),
     if (steps == null && out != null && dsd && pcmOutput)
       (
         label: 'DSD to PCM',
         detail: _pcm(out.sampleRate, out.bitsPerSample, out.channels),
         icon: Icons.tune,
       ),
-    if (steps == null &&
+    if (!stepsMayResample &&
         audio != null &&
         _isPcm(audio.sampleFormat) &&
         out != null &&
