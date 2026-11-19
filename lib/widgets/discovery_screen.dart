@@ -16,6 +16,7 @@ import 'kalinka_button.dart';
 import 'onboarding/onboarding_step_scaffold.dart' show kSetupColumnMaxWidth;
 import 'sonar_animation.dart';
 import 'keyboard/app_keyboard_navigation.dart';
+import 'keyboard/keyboard_activation.dart';
 
 /// Full-screen discovery overlay for finding and connecting to Kalinka servers.
 ///
@@ -575,120 +576,126 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
         ? 'v$version'
         : 'Version unknown';
 
-    return GestureDetector(
-      onTap: isCurrent
-          ? null
-          : () => setState(() {
-              _selectedIndex = index;
-              _showManualEntry = false;
-            }),
-      behavior: HitTestBehavior.opaque,
-      child: Stack(
-        children: [
-          // Row content
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.fromLTRB(13, 13, 15, 13),
-            color: isSelected
-                ? KalinkaColors.surfaceElevated
-                : Colors.transparent,
-            child: Row(
-              children: [
-                // Icon tile
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: KalinkaColors.surfaceOverlay,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.dns_outlined,
-                    size: 18,
-                    color: KalinkaColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Name + details
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        server.name,
-                        style: KalinkaTextStyles.trayRowLabel.copyWith(
-                          fontSize: KalinkaTypography.baseSize + 3,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${server.host} \u00b7 $latencyLabel',
-                        style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                          fontSize: KalinkaTypography.baseSize + 2,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        versionLabel,
-                        style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                          fontSize: KalinkaTypography.baseSize + 2,
-                          color: KalinkaColors.textMuted,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Current pill or signal bars
-                if (isCurrent)
+    final select = isCurrent
+        ? null
+        : () => setState(() {
+            _selectedIndex = index;
+            _showManualEntry = false;
+          });
+    return KeyboardActivation(
+      onActivate: select,
+      child: GestureDetector(
+        onTap: select,
+        behavior: HitTestBehavior.opaque,
+        child: Stack(
+          children: [
+            // Row content
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.fromLTRB(13, 13, 15, 13),
+              color: isSelected
+                  ? KalinkaColors.surfaceElevated
+                  : Colors.transparent,
+              child: Row(
+                children: [
+                  // Icon tile
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
-                      color: KalinkaColors.surfaceElevated,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: KalinkaColors.borderDefault),
+                      color: KalinkaColors.surfaceOverlay,
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text(
-                      'CURRENT',
-                      style: KalinkaTextStyles.tagPill.copyWith(
-                        color: KalinkaColors.textMuted,
-                        fontSize: KalinkaTypography.baseSize,
-                        letterSpacing: 0.8,
+                    child: const Icon(
+                      Icons.dns_outlined,
+                      size: 18,
+                      color: KalinkaColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Name + details
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          server.name,
+                          style: KalinkaTextStyles.trayRowLabel.copyWith(
+                            fontSize: KalinkaTypography.baseSize + 3,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${server.host} \u00b7 $latencyLabel',
+                          style: KalinkaTextStyles.trayRowSublabel.copyWith(
+                            fontSize: KalinkaTypography.baseSize + 2,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          versionLabel,
+                          style: KalinkaTextStyles.trayRowSublabel.copyWith(
+                            fontSize: KalinkaTypography.baseSize + 2,
+                            color: KalinkaColors.textMuted,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Current pill or signal bars
+                  if (isCurrent)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
                       ),
-                    ),
-                  )
-                else
-                  _buildSignalBars(server.signalStrength),
-              ],
+                      decoration: BoxDecoration(
+                        color: KalinkaColors.surfaceElevated,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: KalinkaColors.borderDefault),
+                      ),
+                      child: Text(
+                        'CURRENT',
+                        style: KalinkaTextStyles.tagPill.copyWith(
+                          color: KalinkaColors.textMuted,
+                          fontSize: KalinkaTypography.baseSize,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    )
+                  else
+                    _buildSignalBars(server.signalStrength),
+                ],
+              ),
             ),
-          ),
-          // Top-half accent selection bar
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: FractionallySizedBox(
-                heightFactor: 0.5,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 2,
-                  color: isSelected ? KalinkaColors.accent : Colors.transparent,
+            // Top-half accent selection bar
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: FractionallySizedBox(
+                  heightFactor: 0.5,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 2,
+                    color: isSelected
+                        ? KalinkaColors.accent
+                        : Colors.transparent,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -835,13 +842,11 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
                   onTap: () => _retry?.call(),
                 ),
                 const SizedBox(width: 12),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _isConnecting = false;
-                      _connectError = null;
-                    });
-                  },
+                TextButton(
+                  onPressed: () => setState(() {
+                    _isConnecting = false;
+                    _connectError = null;
+                  }),
                   child: Text('Cancel', style: KalinkaTextStyles.cancelButton),
                 ),
               ],
@@ -926,23 +931,27 @@ class _HoverLinkState extends State<_HoverLink> {
         cursor: SystemMouseCursors.click,
         onEnter: (_) => _setHover(true),
         onExit: (_) => _setHover(false),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: _hovered
-                  ? KalinkaColors.surfaceElevated
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              widget.label,
-              style: widget.style.copyWith(
-                color: color,
-                decorationColor: color,
+        child: KeyboardActivation(
+          onActivate: widget.onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: GestureDetector(
+            onTap: widget.onTap,
+            behavior: HitTestBehavior.opaque,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: _hovered
+                    ? KalinkaColors.surfaceElevated
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                widget.label,
+                style: widget.style.copyWith(
+                  color: color,
+                  decorationColor: color,
+                ),
               ),
             ),
           ),

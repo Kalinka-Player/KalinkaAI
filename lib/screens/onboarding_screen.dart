@@ -9,6 +9,7 @@ import '../data_model/presentation_schema.dart' show ModuleSpec;
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_player_api_provider.dart';
+import '../providers/kiosk_provider.dart';
 import '../providers/network_setup_api.dart' show hotspotAddress;
 import '../providers/networked_boxes_provider.dart';
 import '../providers/onboarding_provider.dart';
@@ -23,6 +24,7 @@ import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/discovery_screen.dart';
 import '../widgets/kalinka_button.dart';
+import '../widgets/keyboard/app_keyboard_navigation.dart';
 import '../widgets/onboarding/onboarding_fields.dart';
 import '../widgets/onboarding/onboarding_step_scaffold.dart';
 import '../widgets/onboarding/resume_connect.dart';
@@ -164,6 +166,68 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   String? _attachModuleId;
   String _attachModuleTitle = '';
   String? _attachRendererId;
+
+  int _setupRead = 0;
+
+  bool get _editingSetup =>
+      _step > 0 && !_starting && !_restartOverlayOpen && _commitFuture == null;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual(connectionStateProvider, (_, next) {
+      _setupRead++;
+      if (next == ConnectionStatus.connected) {
+        unawaited(_checkCompletedElsewhere());
+      }
+    });
+    if (ref.read(localDisplayKioskProvider)) {
+      ref.listenManual(kioskActiveProvider, (_, active) {
+        _setupRead++;
+        if (!active) unawaited(_checkCompletedElsewhere());
+      });
+    }
+  }
+
+  // A wizard can survive both a server restart and the Pi's idle screen.
+  // Only the saved server values can tell us another controller finished it.
+  Future<void> _checkCompletedElsewhere() async {
+    final connection = ref.read(connectionSettingsProvider);
+    if (!_editingSetup ||
+        OnboardingStatusNotifier.forceOobe ||
+        connection.host == hotspotAddress ||
+        ref.read(connectionStateProvider) != ConnectionStatus.connected ||
+        (ref.read(localDisplayKioskProvider) &&
+            ref.read(kioskActiveProvider))) {
+      return;
+    }
+
+    final request = _setupRead;
+    final setup = await readServerSetup(ref.read(kalinkaProxyProvider));
+    if (!mounted ||
+        request != _setupRead ||
+        !_editingSetup ||
+        setup == null ||
+        !setup.complete ||
+        ref.read(connectionSettingsProvider).address != connection.address) {
+      return;
+    }
+
+    // Do not apply this client's unfinished edits over the completed setup.
+    final route = ModalRoute.of(context)!;
+    final navigator = Navigator.of(context);
+    setState(() => _starting = true);
+    final settings = ref.read(settingsProvider.notifier)..discardAll();
+    unawaited(settings.loadConfig(preserveStagedChanges: true));
+    try {
+      await _rememberSetup(setup.name);
+    } catch (e) {
+      debugPrint('Onboarding: failed to persist completed setup: $e');
+    }
+    if (!mounted || !route.isActive) return;
+    navigator.popUntil((top) => top == route);
+    navigator.pop();
+  }
 
   /// Moves on from discovery, or to the step a resumed run stood at.
   Future<void> _onConnected({int step = 1}) async {
@@ -375,28 +439,31 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     ref.read(restartProvider.notifier).executeRestart();
   }
 
-  /// Persist the connection and flip the first-run flag — only once the
-  /// restart sequence has fully succeeded. If the app dies mid-restart the
-  /// wizard simply runs again on next launch.
-  Future<void> _commitSetup() async {
+  Future<void> _rememberSetup(Object? serviceName) async {
     final connection = ref.read(connectionSettingsProvider);
-    final stagedName = ref
-        .read(settingsProvider)
-        .getEffective('base_config.server.service_name');
-    final name = (stagedName is String && stagedName.trim().isNotEmpty)
-        ? stagedName.trim()
+    final name = serviceName is String && serviceName.trim().isNotEmpty
+        ? serviceName.trim()
         : connection.name;
-    await ref
-        .read(connectionSettingsProvider.notifier)
-        .setDevice(
-          name,
-          connection.host,
-          connection.port,
-          scheme: connection.scheme,
-        );
-    await ref.read(onboardingStatusProvider.notifier).markOobeComplete();
-    await ref.read(oobeResumeProvider.notifier).forget();
+    final connections = ref.read(connectionSettingsProvider.notifier);
+    final onboarding = ref.read(onboardingStatusProvider.notifier);
+    final resume = ref.read(oobeResumeProvider.notifier);
+    await connections.setDevice(
+      name,
+      connection.host,
+      connection.port,
+      scheme: connection.scheme,
+    );
+    await onboarding.markOobeComplete();
+    await resume.forget();
+  }
 
+  Future<void> _commitSetup() async {
+    await _rememberSetup(
+      ref
+          .read(settingsProvider)
+          .getEffective('base_config.server.service_name'),
+    );
+    if (!mounted) return;
     // Detached on purpose: the wizard pops right after this commit, and the
     // attach outlives it (the module loads and the renderer redials on its
     // own schedule). Everything it needs is captured up front.
@@ -444,6 +511,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       }
     });
 
+    final soundOverlay = run != null && (run.notBack || restarting);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -459,29 +527,55 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       child: Scaffold(
         backgroundColor: KalinkaColors.background,
         resizeToAvoidBottomInset: true,
-        body: Stack(
-          children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 240),
-              child: KeyedSubtree(
-                key: ValueKey('oobe_step_$_step'),
-                child: _buildStep(),
-              ),
-            ),
-            if (run != null && (run.notBack || restarting))
-              Positioned.fill(
-                child: SoundcardRestartOverlay(
-                  box: run.box,
-                  card: run.card,
-                  onKeepWaiting: _keepWaiting,
-                  onContinue: _endSoundcardRun,
+        body: Shortcuts(
+          shortcuts: directionalFocusShortcuts,
+          child: DefaultTextEditingShortcuts(
+            child: Stack(
+              children: [
+                ExcludeFocus(
+                  excluding: soundOverlay || _restartOverlayOpen,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 240),
+                    layoutBuilder: (current, previous) => Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        for (final step in [...previous, ?current])
+                          ExcludeFocus(
+                            key: step.key,
+                            excluding: step != current,
+                            child: step,
+                          ),
+                      ],
+                    ),
+                    child: FocusScope(
+                      key: ValueKey('oobe_step_$_step'),
+                      autofocus: true,
+                      child: _buildStep(),
+                    ),
+                  ),
                 ),
-              ),
-            if (_restartOverlayOpen)
-              Positioned.fill(
-                child: RestartOverlay(onDismiss: _onRestartDismissed),
-              ),
-          ],
+                if (soundOverlay)
+                  Positioned.fill(
+                    child: FocusScope(
+                      autofocus: true,
+                      child: SoundcardRestartOverlay(
+                        box: run.box,
+                        card: run.card,
+                        onKeepWaiting: _keepWaiting,
+                        onContinue: _endSoundcardRun,
+                      ),
+                    ),
+                  ),
+                if (_restartOverlayOpen)
+                  Positioned.fill(
+                    child: FocusScope(
+                      autofocus: true,
+                      child: RestartOverlay(onDismiss: _onRestartDismissed),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );

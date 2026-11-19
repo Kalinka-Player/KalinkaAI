@@ -5,14 +5,18 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/network_setup_api.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
 import 'package:kalinka/screens/setup_method_screen.dart';
 import 'package:kalinka/screens/network_setup_screen.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/keyboard/app_keyboard_navigation.dart';
 import 'package:kalinka/widgets/onboarding/hotspot_setup_guide.dart';
 import 'package:kalinka/widgets/onboarding/step_network.dart';
 
+import 'support/focus.dart';
+import 'support/home_shell.dart';
 import 'support/field_text.dart';
 
 class FakeSetupApi extends NetworkSetupApi {
@@ -208,6 +212,105 @@ void main() {
       OobeResume.fromJson(jsonDecode(jsonEncode(resume.toJson())))!.step,
       6,
     );
+  });
+
+  testWidgets('remote enters Wi-Fi credentials with the virtual keyboard', (
+    tester,
+  ) async {
+    final api = FakeSetupApi(status(kind: 'wired', state: 4));
+    tester.platformDispatcher.localeTestValue = const Locale('en');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    await pumpHomeShell(
+      tester,
+      queue: SettableQueue(queueOf(0)),
+      size: const Size(1280, 720),
+      onScreenKeyboard: true,
+      reducedMotion: true,
+      overrides: [localDisplayKioskProvider.overrideWithValue(true)],
+      screen: Scaffold(
+        body: Shortcuts(
+          shortcuts: directionalFocusShortcuts,
+          child: FocusScope(
+            autofocus: true,
+            child: SingleChildScrollView(
+              child: NetworkSetupPanel(endpoint: api.base, api: api),
+            ),
+          ),
+        ),
+      ),
+    );
+    Future<void> key(LogicalKeyboardKey key) async {
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> moveTo(Finder control, LogicalKeyboardKey arrow) async {
+      for (var i = 0; i < 12 && !focusIsOn(control); i++) {
+        await key(arrow);
+      }
+      expect(focusIsOn(control), isTrue, reason: control.toString());
+    }
+
+    Future<void> submit() async {
+      // The Done button is to the right of the landscape keyboard.
+      for (var i = 0; i < 12; i++) {
+        await key(LogicalKeyboardKey.arrowRight);
+      }
+      await key(LogicalKeyboardKey.enter);
+    }
+
+    final keyboard = find.byKey(const ValueKey('on-screen-keyboard'));
+    final country = find.ancestor(
+      of: countryField,
+      matching: find.byType(AppKeyboardTextEntry),
+    );
+    await moveTo(country, LogicalKeyboardKey.arrowDown);
+    await key(LogicalKeyboardKey.select);
+    expect(keyboard, findsOneWidget);
+    tester.testTextInput.updateEditingValue(
+      const TextEditingValue(
+        text: 'Germany',
+        selection: TextSelection.collapsed(offset: 7),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await submit();
+    expect(api.payloads.last, {'country': 'DE'});
+    expect(keyboard, findsNothing);
+    await finishScan(tester);
+
+    final manual = find.widgetWithText(TextButton, manualEntry);
+    await moveTo(manual, LogicalKeyboardKey.arrowUp);
+    await key(LogicalKeyboardKey.enter);
+    for (final entry in [ssidField, passwordField]) {
+      final target = find.ancestor(
+        of: entry,
+        matching: find.byType(AppKeyboardTextEntry),
+      );
+      await moveTo(
+        target,
+        entry == ssidField
+            ? LogicalKeyboardKey.arrowUp
+            : LogicalKeyboardKey.arrowDown,
+      );
+      expect(keyboard, findsNothing);
+      await key(LogicalKeyboardKey.select);
+      expect(keyboard, findsOneWidget);
+      await key(LogicalKeyboardKey.arrowRight);
+      await key(LogicalKeyboardKey.enter);
+      expect(
+        tester.widget<TextFormField>(entry).controller!.text,
+        hasLength(1),
+      );
+      if (entry == passwordField) {
+        await submit();
+      } else {
+        await key(LogicalKeyboardKey.escape);
+      }
+      expect(keyboard, findsNothing);
+      expect(focusIsOn(target), isTrue);
+    }
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('waits for box status before showing its network connection', (

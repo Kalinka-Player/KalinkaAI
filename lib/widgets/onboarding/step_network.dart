@@ -324,35 +324,39 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
       style: _label,
     ),
     children: [
-      DropdownMenu<String>(
-        key: const ValueKey('network-country'),
-        enabled: !_busy,
-        initialSelection: _validCountry ? _country : null,
-        expandedInsets: EdgeInsets.zero,
-        menuHeight: 280,
-        enableFilter: true,
-        requestFocusOnTap: true,
-        textStyle: kalinkaFieldTextStyle,
-        decorationBuilder: (context, controller) =>
-            kalinkaFieldDecoration(hint: 'Search countries')
-                .copyWith(labelText: 'Country'),
-        dropdownMenuEntries: [
-          for (final country in wifiCountries.entries)
-            DropdownMenuEntry(
-              value: country.key,
-              label: '${country.value} (${country.key})',
-              labelWidget: Text(
-                '${country.value} (${country.key})',
-                style: kalinkaFieldTextStyle,
+      AppKeyboardTextEntry(
+        child: DropdownMenu<String>(
+          key: const ValueKey('network-country'),
+          enabled: !_busy,
+          initialSelection: _validCountry ? _country : null,
+          expandedInsets: EdgeInsets.zero,
+          menuHeight: 280,
+          enableFilter: true,
+          requestFocusOnTap: true,
+          textStyle: kalinkaFieldTextStyle,
+          decorationBuilder: (context, controller) =>
+              kalinkaFieldDecoration(hint: 'Search countries')
+                  .copyWith(labelText: 'Country'),
+          dropdownMenuEntries: [
+            for (final country in wifiCountries.entries)
+              DropdownMenuEntry(
+                value: country.key,
+                label: '${country.value} (${country.key})',
+                labelWidget: Text(
+                  '${country.value} (${country.key})',
+                  style: kalinkaFieldTextStyle,
+                ),
               ),
-            ),
-        ],
-        onSelected: (country) {
-          if (country == null || country == _country) return;
-          setState(() => _country = country);
-          FocusManager.instance.primaryFocus?.unfocus();
-          if (!_busy) _scan();
-        },
+          ],
+          onSelected: (country) {
+            if (country == null || country == _country) return;
+            setState(() => _country = country);
+            if (!AppKeyboardTextEntry.finishEditing()) {
+              FocusManager.instance.primaryFocus?.unfocus();
+            }
+            if (!_busy) _scan();
+          },
+        ),
       ),
       Padding(
         padding: const EdgeInsets.only(top: 12),

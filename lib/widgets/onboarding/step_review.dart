@@ -8,6 +8,7 @@ import '../../providers/renderer_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/soundcard_provider.dart';
 import '../../theme/app_theme.dart';
+import '../keyboard/keyboard_activation.dart';
 import '../renderer_switcher.dart' show rendererDisplayName;
 import '../settings_controls/settings_card.dart';
 import '../settings_controls/warning_note.dart';
@@ -281,26 +282,32 @@ class _ChangeLinkState extends State<_ChangeLink> {
         cursor: SystemMouseCursors.click,
         onEnter: (_) => _setHover(true),
         onExit: (_) => _setHover(false),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          behavior: HitTestBehavior.opaque,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: _hovered ? KalinkaColors.accentSubtle : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
+        child: KeyboardActivation(
+          onActivate: widget.onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: GestureDetector(
+            onTap: widget.onTap,
+            behavior: HitTestBehavior.opaque,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
                 color: _hovered
-                    ? KalinkaColors.accentBorder
+                    ? KalinkaColors.accentSubtle
                     : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _hovered
+                      ? KalinkaColors.accentBorder
+                      : Colors.transparent,
+                ),
               ),
-            ),
-            child: Text(
-              'Change',
-              style: KalinkaTextStyles.trayRowSublabel.copyWith(
-                fontSize: KalinkaTypography.baseSize + 2,
-                color: KalinkaColors.accentTint,
+              child: Text(
+                'Change',
+                style: KalinkaTextStyles.trayRowSublabel.copyWith(
+                  fontSize: KalinkaTypography.baseSize + 2,
+                  color: KalinkaColors.accentTint,
+                ),
               ),
             ),
           ),

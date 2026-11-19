@@ -17,11 +17,16 @@ import 'package:kalinka/providers/server_connect.dart';
 import 'package:kalinka/providers/settings_provider.dart';
 import 'package:kalinka/screens/onboarding_screen.dart';
 import 'package:kalinka/screens/provisioning_screen.dart';
+import 'package:kalinka/widgets/coach_marks_overlay.dart';
 import 'package:kalinka/widgets/discovery_screen.dart';
+import 'package:kalinka/widgets/kalinka_button.dart';
+import 'package:kalinka/widgets/keyboard/on_screen_keyboard_host.dart';
+import 'package:kalinka/widgets/kiosk/local_kiosk_host.dart';
 import 'package:kalinka/widgets/onboarding/step_network.dart';
 import 'package:kalinka/widgets/server_chip.dart';
 import 'package:universal_ble/universal_ble.dart';
 
+import 'support/focus.dart';
 import 'support/home_shell.dart';
 
 /// A server that answers only once [up], reporting whether it is [setUp].
@@ -31,6 +36,7 @@ class _Server extends HomeApi {
   bool up;
   bool setUp;
   int probes = 0;
+  int settingsReads = 0;
   Completer<void>? settings;
 
   @override
@@ -51,13 +57,23 @@ class _Server extends HomeApi {
   @override
   Future<Map<String, dynamic>> getSettings() async {
     // Answered by the server that was connected when it was asked.
+    settingsReads++;
     final setUp = this.setUp;
     await settings?.future;
     return {
       'schema_version': 'v1',
-      'values': {OnboardingStatusNotifier.serverOobeFlagPath: setUp},
+      'values': {
+        OnboardingStatusNotifier.serverOobeFlagPath: setUp,
+        'base_config.server.service_name': setUp ? 'Living room' : 'Kalinka',
+      },
     };
   }
+
+  @override
+  Future<List<ConfigIssue>> validateSettings({
+    required String schemaVersion,
+    required Map<String, dynamic> changes,
+  }) async => [];
 }
 
 /// The real reconnect loop, from a live connection.
@@ -123,6 +139,123 @@ bool _onTop(WidgetTester tester, Finder screen) =>
     ModalRoute.of(tester.element(screen))!.isCurrent;
 
 void main() {
+  for (final behindResume in [false, true]) {
+    testWidgets(
+      'Pi picks up setup finished on a phone (behind Resume: $behindResume)',
+      (tester) async {
+        final server = _Server(up: true);
+        final container = await pumpHomeShell(
+          tester,
+          queue: SettableQueue(queueOf(0)),
+          api: server,
+          size: const Size(1280, 720),
+          coachMarksShown: false,
+          overrides: [localDisplayKioskProvider.overrideWithValue(true)],
+          wrapNavigator: (child) =>
+              LocalKioskHost(child: OnScreenKeyboardHost(child: child)),
+        );
+        final kiosk = container.read(kioskProvider.notifier);
+        final connection = container.read(
+          connectionStateProvider.notifier,
+        ) as SettableConnection;
+        kiosk.exit();
+        await _settle(tester);
+        await _settle(tester);
+        final wizard = find.byType(OnboardingScreen);
+        expect(wizard, findsOneWidget);
+        // No timeout, Tab, or pointer action to acquire focus.
+        final next = find.widgetWithText(KalinkaButton, 'Keep this connection');
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        expect(focusIsOn(next), isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await _settle(tester);
+        expect(find.text('Music sources'), findsOneWidget);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await _settle(tester);
+        expect(next, findsOneWidget);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await _settle(tester);
+        expect(find.text('Music sources'), findsOneWidget);
+        final drafts = container.read(settingsProvider.notifier);
+        drafts.stageChange(
+          'base_config.server.service_name',
+          'Unfinished TV name',
+        );
+        // An ordinary reconnect must keep this controller's pending setup.
+        connection.set(ConnectionStatus.reconnecting);
+        await _settle(tester);
+        connection.set(ConnectionStatus.connected);
+        await _settle(tester);
+        expect(find.text('Music sources'), findsOneWidget);
+        expect(
+          container.read(settingsProvider).stagedChanges,
+          contains('base_config.server.service_name'),
+        );
+        if (behindResume) {
+          await tester.pump(const Duration(seconds: 30));
+          expect(container.read(kioskActiveProvider), isTrue);
+          expect(wizard, findsNothing);
+        }
+        connection.set(ConnectionStatus.reconnecting);
+        await _settle(tester);
+        server.setUp = true;
+        connection.set(ConnectionStatus.connected);
+        await _settle(tester);
+        if (behindResume) kiosk.exit();
+        await _settle(tester);
+        await _settle(tester);
+        expect(wizard, findsNothing);
+        expect(find.byType(CoachMarksOverlay), findsOneWidget);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await _settle(tester);
+        expect(find.text('Find music'), findsNothing);
+        expect(container.read(settingsProvider).stagedChanges, isEmpty);
+        expect(
+          container.read(connectionSettingsProvider).name,
+          'Living room',
+        );
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(seconds: 10));
+      },
+    );
+  }
+
+  testWidgets(
+    'a stale incomplete response from before restart cannot open setup on Home',
+    (tester) async {
+      final first = Completer<void>();
+      final server = _Server(up: true)..settings = first;
+      final container = await pumpHomeShell(
+        tester,
+        queue: SettableQueue(queueOf(0)),
+        api: server,
+        coachMarksShown: false,
+        overrides: [localDisplayKioskProvider.overrideWithValue(true)],
+      );
+      container.read(kioskProvider.notifier).exit();
+      await tester.pump();
+      final reads = server.settingsReads;
+      expect(reads, greaterThan(0));
+      final connection = container.read(
+        connectionStateProvider.notifier,
+      ) as SettableConnection;
+      connection.set(ConnectionStatus.reconnecting);
+      server
+        ..setUp = true
+        ..settings = null;
+      connection.set(ConnectionStatus.connected);
+      first.complete();
+      await _settle(tester);
+      await _settle(tester);
+      expect(server.settingsReads, greaterThan(reads));
+      expect(find.byType(OnboardingScreen), findsNothing);
+      expect(find.byType(CoachMarksOverlay), findsOneWidget);
+    },
+  );
+
   testWidgets('Pi network setup retries its own server after a Wi-Fi change', (
     tester,
   ) async {
@@ -159,7 +292,7 @@ void main() {
       tester,
       queue: SettableQueue(queueOf(0)),
       size: const Size(1440, 1000),
-      api: _Server(),
+      api: _Server(setUp: true),
       connection: _Live.new,
       wrapNavigator: (child) => Consumer(
         builder: (_, widgetRef, _) {

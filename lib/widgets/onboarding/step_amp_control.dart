@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../data_model/presentation_schema.dart';
 import '../../providers/renderer_host_provider.dart'
     show rendererIdentityProvider;
 import '../../providers/renderer_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../theme/app_theme.dart';
+import '../keyboard/keyboard_activation.dart';
 import '../renderer_switcher.dart' show rendererDisplayName;
 import '../settings_controls/settings_card.dart';
 import 'onboarding_fields.dart';
@@ -156,32 +158,40 @@ class _ChoiceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      behavior: HitTestBehavior.opaque,
-      child: Opacity(
-        opacity: enabled ? 1.0 : 0.45,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          color: selected ? KalinkaColors.surfaceElevated : Colors.transparent,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-          child: Row(
-            children: [
-              RadioMark(selected: selected),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: KalinkaTextStyles.trayRowLabel),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(subtitle!, style: KalinkaTextStyles.trayRowSublabel),
+    return KeyboardActivation(
+      onActivate: enabled ? onTap : null,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        behavior: HitTestBehavior.opaque,
+        child: Opacity(
+          opacity: enabled ? 1.0 : 0.45,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            color: selected
+                ? KalinkaColors.surfaceElevated
+                : Colors.transparent,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                RadioMark(selected: selected),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: KalinkaTextStyles.trayRowLabel),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle!,
+                          style: KalinkaTextStyles.trayRowSublabel,
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
