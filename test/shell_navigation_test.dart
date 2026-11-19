@@ -760,7 +760,10 @@ void main() {
         FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
         'content',
       );
-      final pills = find.byType(SettingsEnumPills);
+      final pills = find.descendant(
+        of: panel,
+        matching: find.byType(SettingsEnumPills),
+      );
       List<FocusNode> segments() => traversableFocusNodesIn(pills).toList();
       expect(segments(), hasLength(3));
       expect(focusIsOn(pills), isTrue);

@@ -173,9 +173,11 @@ class _Api extends KalinkaWsApi {
   _Api(super.ref);
   final List<QueueCommand> sent = [];
   final List<DeviceCommand> deviceSent = [];
+  bool queueDisconnected = false;
 
   @override
   Future<void> sendQueueCommand(QueueCommand command) async {
+    if (queueDisconnected) throw StateError('Queue socket closed');
     sent.add(command);
   }
 
@@ -729,6 +731,20 @@ void main() {
         const QueueCommand.next(),
         const QueueCommand.pause(paused: false),
       ]);
+    });
+
+    testWidgets('the next remote press works after a transport failure', (
+      tester,
+    ) async {
+      final h = await pumpLocal(tester);
+      h.api.queueDisconnected = true;
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaTrackNext);
+      await tester.pump();
+      expect(h.api.sent, isEmpty);
+      h.api.queueDisconnected = false;
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaTrackNext);
+      expect(h.api.sent, [const QueueCommand.next()]);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets(

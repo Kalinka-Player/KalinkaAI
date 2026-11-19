@@ -126,7 +126,13 @@ the volume, and OK or Back finishes adjustment.
 Choosing an output or closing the picker returns focus to the selector.
 
 On the Raspberry Pi display, enable HDMI-CEC on the TV and select the Pi's HDMI
-input. Choose Home on the now-playing display to browse with the same arrows.
+input (Anynet+ on Samsung). The `kalinka-kiosk` package supplies the service
+and remote keymap. Linux delivers the button presses through its input device.
+If another application already uses the adapter’s logical address, the kiosk
+leaves it in place. To switch from that application, stop it and restart
+`kalinka-kiosk-cec.service` while the kiosk is running.
+
+Choose Home on the now-playing display to browse with the same arrows.
 Back in the main pane follows browsing history one level at a time. At the
 root of Home, a rail source, Results or Settings opened from the rail, Back
 focuses the rail and leaves the destination open. Editors and dialogs handle Back

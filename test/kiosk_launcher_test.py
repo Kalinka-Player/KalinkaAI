@@ -152,7 +152,8 @@ class KioskCecTest(unittest.TestCase):
         self.first_connected_display = module["first_connected_display"]
         self.address = module["LogicalAddresses"]()
         self.driver = b"vc4_hdmi"
-        self.caps = module["LOG_ADDRS_AND_RC"]
+        self.caps = module["PLAYBACK_CAPS"] | module["CONNECTOR_INFO_CAP"]
+        self.mode_error = None
         self.writes = []
         self.busy_once = False
         directory = tempfile.TemporaryDirectory()
@@ -169,6 +170,10 @@ class KioskCecTest(unittest.TestCase):
                 module["c"].memmove(module["c"].addressof(value),
                                     module["c"].addressof(self.address),
                                     module["c"].sizeof(value))
+            elif request == module["SET_MODE"]:
+                self.assertEqual(value.value, module["INITIATOR_AND_FOLLOWER"])
+                if self.mode_error is not None:
+                    raise self.mode_error
             elif request == module["SET_ADDRESSES"]:
                 if self.busy_once:
                     self.busy_once = False
@@ -244,6 +249,17 @@ class KioskCecTest(unittest.TestCase):
         self.configure(4, self.marker, release=True)
         self.assertEqual(self.writes, [1, 0])
         self.assertFalse(self.marker.exists())
+
+    def test_cannot_claim_a_role_without_follower_mode(self):
+        self.mode_error = OSError(errno.EBUSY, "Follower unavailable")
+        with self.assertRaises(OSError):
+            self.configure(4, self.marker, release=False)
+        self.assertFalse(self.marker.exists())
+        self.assertEqual(self.writes, [])
+
+    def test_an_unregistered_address_cannot_announce_or_answer(self):
+        self.source.set_address(0x3000, 1 << 15)
+        self.assertIsNone(self.source.reply(bytes.fromhex("0f 86 30 00")))
 
     def test_registers_only_the_port_serving_the_display(self):
         drm = self.marker.parent
