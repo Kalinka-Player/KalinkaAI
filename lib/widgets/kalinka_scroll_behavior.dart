@@ -156,8 +156,7 @@ class _ScrollPageIndicatorState extends State<_ScrollPageIndicator> {
           }
           return false;
         },
-        child: Stack(
-          fit: StackFit.passthrough,
+        child: _PageIndicatorStack(
           children: [widget.child, if (_visible) _pageButton()],
         ),
       ),
@@ -261,29 +260,54 @@ class _PageButton extends StatelessWidget {
                     ),
               )
             : const EdgeInsets.symmetric(horizontal: 8),
-        child: Align(
-          alignment: alignment,
-          child: _ShareScrollGestures(child: button),
-        ),
+        child: Align(alignment: alignment, child: button),
       ),
     );
   }
 }
 
-/// The button wins taps. Let the viewport behind it join the same gesture
-/// arena so a swipe, trackpad gesture or wheel over the cue scrolls normally.
-class _ShareScrollGestures extends SingleChildRenderObjectWidget {
-  const _ShareScrollGestures({required super.child});
+/// A gesture over the button can scroll its viewport. A row underneath must
+/// never receive the same pointer, including mouse modifiers and long presses.
+class _PageIndicatorStack extends Stack {
+  const _PageIndicatorStack({required super.children})
+    : super(fit: StackFit.passthrough);
 
   @override
-  RenderProxyBox createRenderObject(BuildContext context) =>
-      _ScrollGestureBox();
+  RenderStack createRenderObject(BuildContext context) =>
+      _PageIndicatorRenderStack(textDirection: Directionality.maybeOf(context));
 }
 
-class _ScrollGestureBox extends RenderProxyBox {
+class _PageIndicatorRenderStack extends RenderStack {
+  _PageIndicatorRenderStack({required super.textDirection})
+    : super(fit: StackFit.passthrough);
+
   @override
-  bool hitTest(BoxHitTestResult result, {required Offset position}) {
-    super.hitTest(result, position: position);
-    return false;
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    // The scrollable sizes the stack and the positioned overlay fills it.
+    final content = firstChild!;
+    final overlay = lastChild!;
+    if (overlay == content || !overlay.hitTest(result, position: position)) {
+      return content.hitTest(result, position: position);
+    }
+
+    // Scrollable installs its drag and wheel handlers above its viewport.
+    // Keep those hit entries, with their transforms, even over nested lists.
+    final hits = BoxHitTestResult();
+    content.hitTest(hits, position: position);
+    final path = hits.path.toList(growable: false);
+    final viewport = path.lastIndexWhere(
+      (e) => e.target is RenderAbstractViewport,
+    );
+    for (final entry in path.skip(viewport + 1).whereType<BoxHitTestEntry>()) {
+      result.addWithRawTransform(
+        transform: entry.transform,
+        position: position,
+        hitTest: (result, localPosition) {
+          result.add(BoxHitTestEntry(entry.target, localPosition));
+          return true;
+        },
+      );
+    }
+    return true;
   }
 }
