@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/playqueue_events.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
-import 'package:kalinka/providers/playback_events_provider.dart';
 import 'package:kalinka/providers/wire_event_provider.dart';
 import 'package:kalinka/widgets/dsp_readout.dart';
 
@@ -28,56 +27,69 @@ const _path = SignalPath(
 const _track1 = 'kalinka:localfiles:track:1';
 const _track2 = 'kalinka:localfiles:track:2';
 
-Map<String, dynamic> _clippingJson({int seq = 7, int clipped = 1200}) => {
+Map<String, dynamic> _clippingJson({
+  int seq = 7,
+  int clipped = 1200,
+  String? play,
+}) => {
   'event_type': 'playback_event',
   'seq': seq,
+  'play_id': ?play,
   'kind': 'clipping',
   'details': {'clipped_samples': clipped},
 };
 
-PlayQueueEvent _clipping(int clipped) =>
-    PlayQueueEvent.fromJson(_clippingJson(clipped: clipped));
+PlayQueueEvent _clipping(int clipped, {String? play}) =>
+    PlayQueueEvent.fromJson(_clippingJson(clipped: clipped, play: play));
 
-class _Queue extends PlayQueueStateStore {
-  @override
-  PlayQueueState build() => PlayQueueState.empty;
-
-  void set(PlayQueueState next) => state = next;
-}
-
-PlayQueueState _playing({
-  String trackId = _track1,
-  String renderer = 'pi',
+PlaybackState _playback(
+  String? play, {
+  String track = _track1,
   PlayerStateType state = PlayerStateType.playing,
-  int position = 0,
-}) => PlayQueueState(
-  playbackState: PlaybackState(
-    state: state,
-    currentTrack: Track(id: trackId, title: 'Sonata', duration: 300),
-    position: position,
-    audioInfo: AudioInfo(output: OutputInfo(signalPath: _path)),
-  ),
-  trackList: const [],
-  playbackMode: PlaybackMode.empty,
-  seq: 1,
-  currentRendererId: renderer,
+}) => PlaybackState(
+  state: state,
+  currentTrack: Track(id: track, title: 'Sonata', duration: 300),
+  audioInfo: AudioInfo(output: OutputInfo(signalPath: _path)),
+  playId: play,
 );
+
+PlayQueueEvent _state(
+  String? play, {
+  String track = _track1,
+  PlayerStateType state = PlayerStateType.playing,
+}) => PlayQueueEvent.playbackStateChanged(
+  state: _playback(play, track: track, state: state),
+  seq: 1,
+);
+
+PlayQueueEvent _replay(String? play) => PlayQueueEvent.replayEvent(
+  state: PlayQueueState(
+    playbackState: _playback(play),
+    trackList: const [],
+    playbackMode: PlaybackMode.empty,
+    seq: 1,
+  ),
+  serverTimeNs: 0,
+  seq: 1,
+);
+
+/// The current play's events once the queue state has taken [events] in order.
+Map<String, Map<String, Object?>> _shownAfter(List<PlayQueueEvent> events) =>
+    events
+        .fold(PlayQueueState.empty, (s, e) => s.apply(e, 0))
+        .currentPlaybackEvents;
 
 typedef _Harness = ({
   ProviderContainer container,
   StreamController<PlayQueueEvent> events,
 });
 
-/// [queue] stands in for the queue store; without it the real one applies
-/// the events.
-_Harness _harness({_Queue Function()? queue}) {
+/// The real queue store, fed what [_Harness.events] is given.
+_Harness _harness() {
   // Synchronous: two events can land before the store applies the first.
   final events = StreamController<PlayQueueEvent>(sync: true);
   final container = ProviderContainer(
-    overrides: [
-      if (queue != null) playQueueStateStoreProvider.overrideWith(queue),
-      playQueueEventBusProvider.overrideWith((ref) => events.stream),
-    ],
+    overrides: [playQueueEventBusProvider.overrideWith((ref) => events.stream)],
   );
   addTearDown(() {
     container.dispose();
@@ -85,43 +97,14 @@ _Harness _harness({_Queue Function()? queue}) {
   });
   // The queue store holds the socket open in the app.
   container.listen(playQueueStateStoreProvider, (_, _) {});
-  container.listen(playbackEventsProvider, (_, _) {});
   return (container: container, events: events);
 }
 
 // Riverpod refreshes dependents on a zero-length timer.
 void _settle(FakeAsync async) => async.elapse(Duration.zero);
 
-Map<String, Map<String, Object?>> _kept(_Harness h) =>
+Map<String, Map<String, Object?>> _shown(_Harness h) =>
     h.container.read(playbackEventsProvider);
-
-/// What is kept once [next] follows a state the track clipped in.
-Map<String, Map<String, Object?>> _keptAfter(PlayQueueState next) {
-  late Map<String, Map<String, Object?>> after;
-  fakeAsync((async) {
-    final h = _harness(queue: _Queue.new);
-    final queue = h.container.read(playQueueStateStoreProvider.notifier);
-    (queue as _Queue).set(_playing());
-    _settle(async);
-    h.events.add(_clipping(3));
-    _settle(async);
-    expect(_kept(h), isNotEmpty);
-
-    queue.set(next);
-    _settle(async);
-    after = _kept(h);
-  });
-  return after;
-}
-
-PlayQueueEvent _stateFor(String trackId, int seq) =>
-    PlayQueueEvent.playbackStateChanged(
-      state: PlaybackState(
-        state: PlayerStateType.playing,
-        currentTrack: Track(id: trackId, title: 'Sonata', duration: 300),
-      ),
-      seq: seq,
-    );
 
 void main() {
   group('the wire', () {
@@ -212,9 +195,38 @@ void main() {
       expect((event as PlaybackEvent).details, isEmpty);
     });
 
-    test('playback events leave the queue state as it was', () {
-      final before = _playing();
-      expect(before.apply(_clipping(1200), 0), same(before));
+    test('an event without a kind is not taken', () {
+      expect(
+        () => PlayQueueEvent.fromJson({
+          'event_type': 'playback_event',
+          'seq': 9,
+          'details': {'clipped_samples': 5},
+        }),
+        throwsA(isA<TypeError>()),
+      );
+    });
+
+    test('a playback event names the play it happened in', () {
+      final event = PlayQueueEvent.fromJson(_clippingJson(play: '17'));
+      expect((event as PlaybackEvent).playId, '17');
+    });
+
+    test('an older server\'s playback event names no play', () {
+      final event = PlayQueueEvent.fromJson(_clippingJson());
+      expect((event as PlaybackEvent).playId, isNull);
+    });
+
+    test('the state names its play, and a state naming none clears it', () {
+      final playing = PlaybackState.fromJson({
+        'state': 'PLAYING',
+        'play_id': '17',
+      });
+      expect(playing.playId, '17');
+      expect(PlaybackState.fromJson(playing.toJson()).playId, '17');
+
+      final stopped = PlaybackState.fromJson({'state': 'STOPPED'});
+      expect(stopped.playId, isNull);
+      expect(playing.copyWith(stopped).playId, isNull);
     });
 
     test('an event type the app does not know is skipped', () async {
@@ -304,85 +316,180 @@ void main() {
     });
   });
 
-  group('playbackEventsProvider', () {
-    test('the latest details of each kind are kept, with no expiry', () {
-      fakeAsync((async) {
-        final h = _harness(queue: _Queue.new);
-        final queue =
-            h.container.read(playQueueStateStoreProvider.notifier) as _Queue;
-        queue.set(_playing());
-        _settle(async);
-        expect(_kept(h), isEmpty);
-
-        h.events
-          ..add(_clipping(3))
-          ..add(
-            const PlayQueueEvent.playbackEvent(
-              kind: 'output_underrun',
-              details: {'frames': 512},
-              seq: 8,
-            ),
-          )
-          ..add(_clipping(1200));
-        _settle(async);
-        async.elapse(const Duration(minutes: 5));
-
-        expect(_kept(h), {
+  group('the queue state', () {
+    test('keeps the latest details of each kind in the play', () {
+      expect(
+        _shownAfter([
+          _state('17'),
+          _clipping(3, play: '17'),
+          const PlayQueueEvent.playbackEvent(
+            kind: 'output_underrun',
+            details: {'frames': 512},
+            playId: '17',
+            seq: 8,
+          ),
+          _clipping(1200, play: '17'),
+        ]),
+        {
           'clipping': {'clipped_samples': 1200},
           'output_underrun': {'frames': 512},
-        });
-      });
-    });
-
-    test('a new state for the same track keeps them', () {
-      expect(
-        _keptAfter(_playing(state: PlayerStateType.paused, position: 9000)),
-        isNotEmpty,
+        },
       );
     });
 
-    test('the next track does not inherit the last one\'s', () {
-      expect(_keptAfter(_playing(trackId: _track2)), isEmpty);
+    test('a new state of the same play keeps them', () {
+      expect(
+        _shownAfter([
+          _state('17'),
+          _clipping(3, play: '17'),
+          _state('17', state: PlayerStateType.paused),
+        ]),
+        {
+          'clipping': {'clipped_samples': 3},
+        },
+      );
     });
 
-    test('another renderer does not inherit them either', () {
-      expect(_keptAfter(_playing(renderer: 'desk')), isEmpty);
+    test('a replay of the same track starts with none', () {
+      expect(
+        _shownAfter([_state('17'), _clipping(3, play: '17'), _state('18')]),
+        isEmpty,
+      );
     });
 
-    test('an event right behind the next track\'s state is that track\'s', () {
+    test(
+      'an event ahead of its play\'s state shows once the state names it',
+      () {
+        final ahead = [_state('17'), _clipping(5, play: '18')];
+        expect(_shownAfter(ahead), isEmpty);
+        expect(_shownAfter([...ahead, _state('18', track: _track2)]), {
+          'clipping': {'clipped_samples': 5},
+        });
+      },
+    );
+
+    test('the last play\'s event, arriving late, does not show', () {
+      expect(
+        _shownAfter([
+          _state('17'),
+          _state('18', track: _track2),
+          _clipping(5, play: '17'),
+        ]),
+        isEmpty,
+      );
+    });
+
+    test('a state naming no play takes them for good', () {
+      expect(
+        _shownAfter([
+          _state('17'),
+          _clipping(5, play: '17'),
+          _state(null, state: PlayerStateType.stopped),
+          _state('17'),
+        ]),
+        isEmpty,
+      );
+    });
+
+    test('a plugin\'s play goes when the queue takes the output back', () {
+      final released = [
+        const PlayQueueEvent.playbackControlChanged(
+          control: PlaybackControl.exclusive(
+            pluginId: 'qobuz',
+            title: 'Qobuz Connect',
+          ),
+          seq: 1,
+        ),
+        _state('19'),
+        _clipping(5, play: '19'),
+        const PlayQueueEvent.playbackControlChanged(
+          control: PlaybackControl.queue(),
+          seq: 2,
+        ),
+      ];
+      expect(_shownAfter(released), isEmpty);
+      expect(_shownAfter([...released, _state('20', track: _track2)]), isEmpty);
+    });
+
+    test('an event naming no play is dropped while the state names one', () {
+      expect(_shownAfter([_state('17'), _clipping(5)]), isEmpty);
+    });
+
+    test('from an older server, a track\'s events show until the next', () {
+      final clipped = [_state(null), _clipping(5)];
+      expect(_shownAfter(clipped), {
+        'clipping': {'clipped_samples': 5},
+      });
+      expect(
+        _shownAfter([...clipped, _state(null, state: PlayerStateType.paused)]),
+        isNotEmpty,
+      );
+      expect(_shownAfter([...clipped, _state(null, track: _track2)]), isEmpty);
+    });
+
+    test('an event leaves the queue and its seq as they were', () {
+      final before = PlayQueueState.empty.apply(_state('17'), 0);
+      final after = before.apply(_clipping(5, play: '17'), 0);
+
+      expect(after.seq, before.seq);
+      expect(after.playbackState, same(before.playbackState));
+      expect(after.trackList, same(before.trackList));
+    });
+  });
+
+  group('playbackEventsProvider', () {
+    test('takes events and states in the order they came, with no expiry', () {
       fakeAsync((async) {
         final h = _harness();
-        h.events.add(_stateFor(_track1, 1));
-        _settle(async);
-
         h.events
-          ..add(_stateFor(_track2, 2))
-          ..add(_clipping(5));
+          ..add(_state('17'))
+          ..add(_clipping(5, play: '18'))
+          ..add(_state('18', track: _track2));
         _settle(async);
+        async.elapse(const Duration(minutes: 5));
 
-        expect(h.container.read(playerStateProvider).currentTrack?.id, _track2);
-        expect(_kept(h), {
+        expect(_shown(h), {
           'clipping': {'clipped_samples': 5},
         });
       });
     });
 
-    test(
-      'an event right ahead of the next track\'s state is the last one\'s',
-      () {
+    test('an event of another play rebuilds nothing', () {
+      fakeAsync((async) {
+        final h = _harness();
+        h.events.add(_state('17'));
+        _settle(async);
+        var changes = 0;
+        h.container.listen(playbackEventsProvider, (_, _) => changes++);
+
+        h.events.add(_clipping(5, play: '18'));
+        _settle(async);
+        expect(changes, 0);
+
+        h.events.add(_clipping(5, play: '17'));
+        _settle(async);
+        expect(changes, 1);
+      });
+    });
+
+    for (final (play, kept) in [('17', true), ('18', false)]) {
+      test('a reconnect to play $play ${kept ? 'keeps' : 'drops'} them', () {
         fakeAsync((async) {
           final h = _harness();
-          h.events.add(_stateFor(_track1, 1));
-          _settle(async);
-
           h.events
-            ..add(_clipping(5))
-            ..add(_stateFor(_track2, 2));
+            ..add(_state('17'))
+            ..add(_clipping(5, play: '17'));
           _settle(async);
 
-          expect(_kept(h), isEmpty);
+          h.events.addError(StateError('connection lost'));
+          _settle(async);
+          expect(_shown(h), isEmpty);
+
+          h.events.add(_replay(play));
+          _settle(async);
+          expect(_shown(h), kept ? isNotEmpty : isEmpty);
         });
-      },
-    );
+      });
+    }
   });
 }

@@ -244,6 +244,10 @@ class PlaybackState {
   /// Where the renderer is fetching the current stream from. Null on a server
   /// that does not report it, and while nothing is loaded.
   String? streamUrl;
+
+  /// This play of the current track: a replay of the same track has its own.
+  /// Null while nothing plays, and from a server before API 0.24.
+  String? playId;
   int timestampNs = 0;
 
   PlaybackState({
@@ -256,6 +260,7 @@ class PlaybackState {
     this.mimeType,
     this.audioCodec,
     this.streamUrl,
+    this.playId,
     this.timestampNs = 0,
   });
 
@@ -277,6 +282,7 @@ class PlaybackState {
     mimeType: json["mime_type"],
     audioCodec: json["audio_codec"],
     streamUrl: json["stream_url"],
+    playId: json["play_id"],
     timestampNs: json["timestamp_ns"] ?? 0,
   );
 
@@ -290,6 +296,7 @@ class PlaybackState {
     "mime_type": mimeType,
     "audio_codec": audioCodec,
     "stream_url": streamUrl,
+    "play_id": playId,
     "timestamp_ns": timestampNs,
   };
 
@@ -309,12 +316,20 @@ class PlaybackState {
       // that stream, so a state reporting none must clear the last one rather
       // than leave a link to something that stopped playing.
       streamUrl: other.streamUrl,
+      // Replaced too: a state naming no play says none plays.
+      playId: other.playId,
       timestampNs: other.timestampNs != 0 ? other.timestampNs : timestampNs,
     );
   }
 
-  /// This state with no current track, for when whoever drove the output
-  /// stopped: [copyWith] keeps a track the next state leaves out.
+  /// Whether this is still [other]'s play: the same play id, or from a server
+  /// without play ids, the same track.
+  bool isSamePlayAs(PlaybackState other) =>
+      playId == other.playId &&
+      (playId != null || currentTrack?.id == other.currentTrack?.id);
+
+  /// This state with no current track, and so no play, for when whoever drove
+  /// the output stopped: [copyWith] keeps a track the next state leaves out.
   PlaybackState withoutTrack() => PlaybackState(
     state: state,
     index: index,
@@ -349,6 +364,7 @@ class PlaybackState {
       mimeType: mimeType ?? this.mimeType,
       audioCodec: audioCodec ?? this.audioCodec,
       streamUrl: streamUrl ?? this.streamUrl,
+      playId: playId,
       timestampNs: timestampNs ?? this.timestampNs,
     );
   }
