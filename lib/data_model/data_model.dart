@@ -53,6 +53,92 @@ enum DeviceAccess {
   };
 }
 
+/// One step the renderer takes the decoded samples through on their way to
+/// the device.
+class SignalStep {
+  /// Stable, to key on. New kinds will come, so an unknown one is still shown
+  /// by [name] and [summary].
+  final String kind;
+
+  /// Display text from the renderer: "DSD to PCM".
+  final String name;
+
+  /// How the step is set, as display text: "DSD64 to 176.4 kHz".
+  final String summary;
+
+  const SignalStep({required this.kind, this.name = '', this.summary = ''});
+
+  factory SignalStep.fromJson(Map<String, dynamic> json) => SignalStep(
+    kind: json["kind"] ?? '',
+    name: json["name"] ?? '',
+    summary: json["summary"] ?? '',
+  );
+
+  Map<String, dynamic> toJson() => {
+    "kind": kind,
+    "name": name,
+    "summary": summary,
+  };
+}
+
+/// What the renderer does to the decoded samples before the device, in order.
+/// The volume is not part of it: [DeviceVolume] reports that.
+class SignalPath {
+  final List<SignalStep> steps;
+
+  /// Audio the processing holds back ahead of what is heard; 0 when unknown.
+  final double latencyMs;
+
+  const SignalPath({required this.steps, this.latencyMs = 0});
+
+  /// Null for anything but a path with steps: a server sends none when the
+  /// samples reach the device as decoded.
+  static SignalPath? maybeFromJson(Object? json) {
+    if (json is! Map) return null;
+    final steps = [
+      for (final step in json["steps"] as List? ?? const [])
+        if (step is Map) SignalStep.fromJson(Map<String, dynamic>.from(step)),
+    ];
+    if (steps.isEmpty) return null;
+    return SignalPath(
+      steps: steps,
+      latencyMs: (json["latency_ms"] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    "steps": [for (final step in steps) step.toJson()],
+    "latency_ms": latencyMs,
+  };
+}
+
+/// What the renderer's DSP measured of the track it plays.
+class DspMeters {
+  /// Samples clamped to the output's range since the track began.
+  final int clippedSamples;
+
+  /// The highest true peak since the track began; [silence] before any
+  /// sound, above 0 once the signal went over full scale.
+  final double truePeakDbfs;
+
+  /// Processing time as a fraction of one CPU core: 0.034 is 3.4 %.
+  final double load;
+
+  static const double silence = -200;
+
+  const DspMeters({
+    this.clippedSamples = 0,
+    this.truePeakDbfs = silence,
+    this.load = 0,
+  });
+
+  factory DspMeters.fromJson(Map<String, dynamic> json) => DspMeters(
+    clippedSamples: (json["clipped_samples"] as num?)?.toInt() ?? 0,
+    truePeakDbfs: (json["true_peak_dbfs"] as num?)?.toDouble() ?? silence,
+    load: (json["load"] as num?)?.toDouble() ?? 0,
+  );
+}
+
 /// What the output device runs at, against the stream decoded for it.
 class OutputInfo {
   final String sampleFormat;
@@ -65,6 +151,10 @@ class OutputInfo {
   /// bit-perfection: the volume is reported with the device that applies it.
   final bool losslessPath;
 
+  /// How the renderer altered the decoded samples, when it did; null on an
+  /// older server and whenever nothing but the volume touches them.
+  final SignalPath? signalPath;
+
   const OutputInfo({
     this.sampleFormat = '',
     this.sampleRate = 0,
@@ -72,6 +162,7 @@ class OutputInfo {
     this.channels = 0,
     this.access = DeviceAccess.unknown,
     this.losslessPath = false,
+    this.signalPath,
   });
 
   factory OutputInfo.fromJson(Map<String, dynamic> json) => OutputInfo(
@@ -81,6 +172,7 @@ class OutputInfo {
     channels: json["channels"] ?? 0,
     access: DeviceAccess.fromJson(json["access"]),
     losslessPath: json["lossless_path"] ?? false,
+    signalPath: SignalPath.maybeFromJson(json["signal_path"]),
   );
 
   Map<String, dynamic> toJson() => {
@@ -90,6 +182,7 @@ class OutputInfo {
     "channels": channels,
     "access": access.name,
     "lossless_path": losslessPath,
+    "signal_path": signalPath?.toJson(),
   };
 }
 
