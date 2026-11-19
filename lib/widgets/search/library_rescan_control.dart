@@ -39,7 +39,7 @@ class _LibraryRescanControlState extends ConsumerState<LibraryRescanControl>
         Tooltip(
           message: last == null
               ? 'No completed check yet'
-              : last.toLocal().toString(),
+              : _checkedAt(context, last.toLocal()),
           child: Text(
             _lastChecked(last),
             style: KalinkaTextStyles.trackRowSubtitle,
@@ -137,6 +137,10 @@ class _LibraryRescanControlState extends ConsumerState<LibraryRescanControl>
       ),
     );
   }
+
+  String _checkedAt(BuildContext context, DateTime local) =>
+      '${MaterialLocalizations.of(context).formatShortDate(local)}, '
+      '${TimeOfDay.fromDateTime(local).format(context)}';
 
   String _lastChecked(DateTime? last) {
     if (last == null) return 'Not checked yet';

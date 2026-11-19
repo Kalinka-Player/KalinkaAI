@@ -53,6 +53,30 @@ void main() {
     );
   });
 
+  test(
+    'the clock follows the platform until a format is chosen and kept',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      ProviderContainer container() => ProviderContainer(
+        overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+      );
+      final first = container();
+      addTearDown(first.dispose);
+      expect(first.read(use24HourClockProvider), isNull);
+      await first.read(use24HourClockProvider.notifier).set(true);
+      expect(first.read(use24HourClockProvider), isTrue);
+      expect(prefs.getBool(Use24HourClockNotifier.preferenceKey), isTrue);
+      final next = container();
+      addTearDown(next.dispose);
+      expect(next.read(use24HourClockProvider), isTrue);
+      await next.read(use24HourClockProvider.notifier).set(false);
+      final last = container();
+      addTearDown(last.dispose);
+      expect(last.read(use24HourClockProvider), isFalse);
+    },
+  );
+
   group('backlight hardware adapter', () {
     late Directory directory;
     late File control;

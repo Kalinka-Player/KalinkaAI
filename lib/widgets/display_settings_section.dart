@@ -10,6 +10,7 @@ import '../providers/on_screen_keyboard_provider.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import 'settings_controls/settings_card.dart';
+import 'settings_controls/settings_enum_pills.dart';
 import 'settings_controls/settings_row.dart';
 
 /// Preferences for the display on which Settings was opened.
@@ -56,6 +57,7 @@ class DisplaySettingsSection extends ConsumerWidget {
             onChanged: notifier.setBlankSeconds,
           ),
         ],
+        const _TimeFormatRow(),
         _SwitchRow(
           label: 'Pixel shift',
           help: 'Shift Now Playing once a minute to reduce burn-in.',
@@ -70,6 +72,47 @@ class DisplaySettingsSection extends ConsumerWidget {
           onChanged: ref.read(onScreenKeyboardProvider.notifier).setEnabled,
         ),
       ],
+    );
+  }
+}
+
+class _TimeFormatRow extends ConsumerWidget {
+  static const _twelveHour = '12hr';
+  static const _twentyFourHour = '24hr';
+
+  const _TimeFormatRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final use24Hour =
+        ref.watch(use24HourClockProvider) ??
+        MediaQuery.alwaysUse24HourFormatOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) => SettingsRow(
+        label: 'Time format',
+        sublabel: 'For the Now Playing clock and other times.',
+        // Beside the label only while the label keeps room to wrap by words.
+        isVertical:
+            constraints.maxWidth <
+            300 * MediaQuery.textScalerOf(context).scale(1),
+        // Equal segments as wide as the longer label, not the whole row.
+        control: Align(
+          alignment: AlignmentDirectional.centerStart,
+          widthFactor: 1,
+          child: IntrinsicWidth(
+            child: SettingsEnumPills(
+              key: const ValueKey('display-time-format'),
+              options: const [_twelveHour, _twentyFourHour],
+              selected: use24Hour ? _twentyFourHour : _twelveHour,
+              onChanged: (choice) => unawaited(
+                ref
+                    .read(use24HourClockProvider.notifier)
+                    .set(choice == _twentyFourHour),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
