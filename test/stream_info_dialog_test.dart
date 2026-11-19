@@ -10,6 +10,7 @@ import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/widgets/stream_info_dialog.dart';
 import 'package:kalinka/providers/renderer_provider.dart';
 import 'package:kalinka/providers/source_modules_provider.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/audio_signal_path.dart';
 
 // The dialog is a debug read-out of /queue/state, so what it must get right is
@@ -67,7 +68,41 @@ class _Renderers extends RendererListNotifier {
   RendererListState build() => const RendererListState();
 }
 
-List<Override> _overrides(PlaybackState state) => [
+/// A DSD track the renderer converts, as the server reports it.
+PlaybackState _converted() => _playing()
+  ..mimeType = 'audio/dsf'
+  ..audioInfo = AudioInfo.fromJson({
+    'sample_format': 'DSD',
+    'sample_rate': 2822400,
+    'bits_per_sample': 1,
+    'channels': 2,
+    'duration_ms': 1000,
+    'output': {
+      'sample_format': 'PCM24_LE',
+      'sample_rate': 176400,
+      'bits_per_sample': 24,
+      'channels': 2,
+      'access': 'exclusive',
+      'lossless_path': false,
+      'signal_path': {
+        'steps': [
+          {
+            'kind': 'dsd_to_pcm',
+            'name': 'DSD to PCM',
+            'summary': 'DSD64 to 176.4 kHz, 30 kHz filter',
+          },
+          {'kind': 'dsd_gain', 'name': 'DSD gain', 'summary': '+2.8 dB'},
+          {'kind': 'dither', 'name': 'Dither', 'summary': 'TPDF at 24 bits'},
+        ],
+        'latency_ms': 0.3,
+      },
+    },
+  });
+
+List<Override> _overrides(
+  PlaybackState state, {
+  Map<String, Map<String, Object?>> events = const {},
+}) => [
   playQueueStateStoreProvider.overrideWith(
     () => _SettableQueueNotifier(
       PlayQueueState(
@@ -85,6 +120,7 @@ List<Override> _overrides(PlaybackState state) => [
   volumeStateProvider.overrideWithValue(DeviceVolume.empty),
   sourceDisplayInfoProvider.overrideWithValue(const {}),
   rendererListProvider.overrideWith(_Renderers.new),
+  playbackEventsProvider.overrideWithValue(events),
 ];
 
 void main() {
@@ -199,6 +235,17 @@ void main() {
       expect(_valueOf(fields, 'Path'), 'Not established');
     });
 
+    test('a path the renderer says it processed is reported so', () {
+      final fields = streamInfoFields(
+        _converted(),
+        positionMs: 0,
+        queueLength: 1,
+        bitPerfect: false,
+      );
+
+      expect(_valueOf(fields, 'Path'), 'Processed');
+    });
+
     test('no output device to judge is no verdict at all', () {
       final fields = streamInfoFields(
         _playing(),
@@ -297,6 +344,106 @@ void main() {
         'Output',
       ]);
     });
+    test('the renderer\'s steps stand in for the inferred conversion', () {
+      final stages = signalStages(_converted(), DeviceVolume.empty);
+
+      expect(stages.map((s) => s.label), [
+        'Source',
+        'Decoded stream',
+        'DSD to PCM',
+        'DSD gain',
+        'Dither',
+        'Output',
+      ]);
+      expect(stages[2].detail, 'DSD64 to 176.4 kHz, 30 kHz filter');
+      expect(stages[3].detail, '+2.8 dB');
+      expect(stages[4].detail, 'TPDF at 24 bits');
+    });
+    test('the renderer\'s steps come before the DSD transport', () {
+      final state = _playing()
+        ..audioInfo = AudioInfo.fromJson({
+          'sample_format': 'DSD',
+          'sample_rate': 2822400,
+          'bits_per_sample': 1,
+          'channels': 2,
+          'duration_ms': 1000,
+          'output': {
+            'sample_format': 'DoP_S24_LE',
+            'sample_rate': 176400,
+            'signal_path': {
+              'steps': [
+                {'kind': 'dsd_gain', 'name': 'DSD gain', 'summary': '-3 dB'},
+              ],
+            },
+          },
+        });
+
+      final stages = signalStages(state, DeviceVolume.empty);
+      expect(stages.map((s) => s.label), [
+        'Source',
+        'Decoded stream',
+        'DSD gain',
+        'DSD over PCM',
+        'Output',
+      ]);
+    });
+    test('a step that keeps the rate leaves a rate change to be inferred', () {
+      final state = _playing()
+        ..audioInfo = AudioInfo.fromJson({
+          'sample_format': 'PCM_FLOAT32_LE',
+          'sample_rate': 44100,
+          'bits_per_sample': 32,
+          'channels': 2,
+          'duration_ms': 1000,
+          'output': {
+            'sample_format': 'PCM32_LE',
+            'sample_rate': 48000,
+            'bits_per_sample': 24,
+            'channels': 2,
+            'signal_path': {
+              'steps': [
+                {
+                  'kind': 'dither',
+                  'name': 'Dither',
+                  'summary': 'TPDF at 24 bits',
+                },
+              ],
+            },
+          },
+        });
+
+      final stages = signalStages(state, DeviceVolume.empty);
+      expect(stages.map((s) => s.label), [
+        'Source',
+        'Decoded stream',
+        'Dither',
+        'Sample rate change',
+        'Output',
+      ]);
+    });
+    test('a step of a kind the app does not know still shows', () {
+      final state = _playing()
+        ..audioInfo!.output = OutputInfo.fromJson({
+          'sample_format': 'PCM32_LE',
+          'sample_rate': 96000,
+          'signal_path': {
+            'steps': [
+              {'kind': 'upsample', 'name': 'Upsampling', 'summary': 'to 96k'},
+              {'kind': 'crossfeed'},
+            ],
+          },
+        });
+
+      final stages = signalStages(state, DeviceVolume.empty);
+      expect(stages.map((s) => s.label), [
+        'Source',
+        'Decoded stream',
+        'Upsampling',
+        'crossfeed',
+        'Output',
+      ]);
+      expect(stages[2].detail, 'to 96k');
+    });
     test('software gain appears only below unity', () {
       final state = _playing()
         ..audioInfo!.output = const OutputInfo(sampleRate: 44100);
@@ -339,6 +486,68 @@ void main() {
       expect(find.text('https://cdn.test/42.flac'), findsOneWidget);
       expect(find.text('Copy'), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
+    });
+
+    testWidgets('shows the steps and, once the track clips, the count', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _overrides(
+            _converted(),
+            events: const {
+              'clipping': {'clipped_samples': 1200},
+            },
+          ),
+          child: const MaterialApp(home: Scaffold(body: StreamInfoDialog())),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('DSD gain'), findsOneWidget);
+      expect(find.text('TPDF at 24 bits'), findsOneWidget);
+      expect(find.text('DSP LATENCY'), findsOneWidget);
+      expect(find.text('0.3 ms'), findsOneWidget);
+      expect(find.text('CLIPPED'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.text('1200')).style?.color,
+        KalinkaColors.statusError,
+      );
+    });
+
+    testWidgets('a processed track that has not clipped shows no count', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _overrides(
+            _converted(),
+            events: const {
+              'output_underrun': {'frames': 512},
+            },
+          ),
+          child: const MaterialApp(home: Scaffold(body: StreamInfoDialog())),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('DSP LATENCY'), findsOneWidget);
+      expect(find.text('CLIPPED'), findsNothing);
+      expect(find.text('0'), findsNothing);
+    });
+
+    testWidgets('an older server shows no DSP figures', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _overrides(_playing()),
+          child: const MaterialApp(home: Scaffold(body: StreamInfoDialog())),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Decoded stream'), findsOneWidget);
+      expect(find.text('DSP LATENCY'), findsNothing);
+      expect(find.text('CLIPPED'), findsNothing);
     });
 
     testWidgets('says so when nothing is playing', (tester) async {

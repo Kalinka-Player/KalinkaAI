@@ -53,6 +53,65 @@ enum DeviceAccess {
   };
 }
 
+/// One step the renderer takes the decoded samples through on their way to
+/// the device.
+class SignalStep {
+  /// Stable, to key on. New kinds will come, so an unknown one is still shown
+  /// by [name] and [summary].
+  final String kind;
+
+  /// Display text from the renderer: "DSD to PCM".
+  final String name;
+
+  /// How the step is set, as display text: "DSD64 to 176.4 kHz".
+  final String summary;
+
+  const SignalStep({required this.kind, this.name = '', this.summary = ''});
+
+  factory SignalStep.fromJson(Map<String, dynamic> json) => SignalStep(
+    kind: json["kind"] ?? '',
+    name: json["name"] ?? '',
+    summary: json["summary"] ?? '',
+  );
+
+  Map<String, dynamic> toJson() => {
+    "kind": kind,
+    "name": name,
+    "summary": summary,
+  };
+}
+
+/// What the renderer does to the decoded samples before the device, in order.
+/// The volume is not part of it: [DeviceVolume] reports that.
+class SignalPath {
+  final List<SignalStep> steps;
+
+  /// Audio the processing holds back ahead of what is heard; 0 when unknown.
+  final double latencyMs;
+
+  const SignalPath({required this.steps, this.latencyMs = 0});
+
+  /// Null for anything but a path with steps: a server sends none when the
+  /// samples reach the device as decoded.
+  static SignalPath? maybeFromJson(Object? json) {
+    if (json is! Map) return null;
+    final steps = [
+      for (final step in json["steps"] as List? ?? const [])
+        if (step is Map) SignalStep.fromJson(Map<String, dynamic>.from(step)),
+    ];
+    if (steps.isEmpty) return null;
+    return SignalPath(
+      steps: steps,
+      latencyMs: (json["latency_ms"] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    "steps": [for (final step in steps) step.toJson()],
+    "latency_ms": latencyMs,
+  };
+}
+
 /// What the output device runs at, against the stream decoded for it.
 class OutputInfo {
   final String sampleFormat;
@@ -65,6 +124,10 @@ class OutputInfo {
   /// bit-perfection: the volume is reported with the device that applies it.
   final bool losslessPath;
 
+  /// How the renderer altered the decoded samples, when it did; null on an
+  /// older server and whenever nothing but the volume touches them.
+  final SignalPath? signalPath;
+
   const OutputInfo({
     this.sampleFormat = '',
     this.sampleRate = 0,
@@ -72,6 +135,7 @@ class OutputInfo {
     this.channels = 0,
     this.access = DeviceAccess.unknown,
     this.losslessPath = false,
+    this.signalPath,
   });
 
   factory OutputInfo.fromJson(Map<String, dynamic> json) => OutputInfo(
@@ -81,6 +145,7 @@ class OutputInfo {
     channels: json["channels"] ?? 0,
     access: DeviceAccess.fromJson(json["access"]),
     losslessPath: json["lossless_path"] ?? false,
+    signalPath: SignalPath.maybeFromJson(json["signal_path"]),
   );
 
   Map<String, dynamic> toJson() => {
@@ -90,6 +155,7 @@ class OutputInfo {
     "channels": channels,
     "access": access.name,
     "lossless_path": losslessPath,
+    "signal_path": signalPath?.toJson(),
   };
 }
 
@@ -178,6 +244,10 @@ class PlaybackState {
   /// Where the renderer is fetching the current stream from. Null on a server
   /// that does not report it, and while nothing is loaded.
   String? streamUrl;
+
+  /// This play of the current track: a replay of the same track has its own.
+  /// Null while nothing plays, and from a server before API 0.24.
+  String? playId;
   int timestampNs = 0;
 
   PlaybackState({
@@ -190,6 +260,7 @@ class PlaybackState {
     this.mimeType,
     this.audioCodec,
     this.streamUrl,
+    this.playId,
     this.timestampNs = 0,
   });
 
@@ -211,6 +282,7 @@ class PlaybackState {
     mimeType: json["mime_type"],
     audioCodec: json["audio_codec"],
     streamUrl: json["stream_url"],
+    playId: json["play_id"],
     timestampNs: json["timestamp_ns"] ?? 0,
   );
 
@@ -224,6 +296,7 @@ class PlaybackState {
     "mime_type": mimeType,
     "audio_codec": audioCodec,
     "stream_url": streamUrl,
+    "play_id": playId,
     "timestamp_ns": timestampNs,
   };
 
@@ -243,12 +316,20 @@ class PlaybackState {
       // that stream, so a state reporting none must clear the last one rather
       // than leave a link to something that stopped playing.
       streamUrl: other.streamUrl,
+      // Replaced too: a state naming no play says none plays.
+      playId: other.playId,
       timestampNs: other.timestampNs != 0 ? other.timestampNs : timestampNs,
     );
   }
 
-  /// This state with no current track, for when whoever drove the output
-  /// stopped: [copyWith] keeps a track the next state leaves out.
+  /// Whether this is still [other]'s play: the same play id, or from a server
+  /// without play ids, the same track.
+  bool isSamePlayAs(PlaybackState other) =>
+      playId == other.playId &&
+      (playId != null || currentTrack?.id == other.currentTrack?.id);
+
+  /// This state with no current track, and so no play, for when whoever drove
+  /// the output stopped: [copyWith] keeps a track the next state leaves out.
   PlaybackState withoutTrack() => PlaybackState(
     state: state,
     index: index,
@@ -283,6 +364,7 @@ class PlaybackState {
       mimeType: mimeType ?? this.mimeType,
       audioCodec: audioCodec ?? this.audioCodec,
       streamUrl: streamUrl ?? this.streamUrl,
+      playId: playId,
       timestampNs: timestampNs ?? this.timestampNs,
     );
   }

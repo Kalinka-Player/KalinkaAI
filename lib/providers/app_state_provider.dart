@@ -56,25 +56,25 @@ class PlayQueueStateStore extends Notifier<PlayQueueState> {
             state = state.apply(event, timestamp);
           });
         },
-        loading: () {
-          scheduleMicrotask(() {
-            if (_disposed) return;
-            _pendingMoves.clear();
-            state = PlayQueueState.empty;
-          });
-        },
+        loading: () => scheduleMicrotask(_disconnected),
         error: (Object error, StackTrace stackTrace) {
           logger.e('Error occurred: $error', stackTrace: stackTrace);
-          scheduleMicrotask(() {
-            if (_disposed) return;
-            _pendingMoves.clear();
-            state = PlayQueueState.empty;
-          });
+          scheduleMicrotask(_disconnected);
         },
       );
     });
 
     return state;
+  }
+
+  void _disconnected() {
+    if (_disposed) return;
+    _pendingMoves.clear();
+    // A reconnect to the same play keeps what was reported in it.
+    state = PlayQueueState.empty.copyWith(
+      playbackEvents: state.playbackEvents,
+      seq: 0,
+    );
   }
 
   static int _remapIndex(int idx, int from, int to) {
@@ -171,6 +171,14 @@ final extDeviceStateStoreProvider =
 final playerStateProvider = Provider(
   (ref) =>
       ref.watch(playQueueStateStoreProvider.select((s) => s.playbackState)),
+);
+
+/// What the current renderer reported happening in the play the state names:
+/// the latest details of each kind. Events of other plays rebuild nothing.
+final playbackEventsProvider = Provider(
+  (ref) => ref.watch(
+    playQueueStateStoreProvider.select((s) => s.currentPlaybackEvents),
+  ),
 );
 
 /// Whether the queue drives the output, or a plugin plays exclusively.

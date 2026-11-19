@@ -54,6 +54,11 @@ class PlayQueueState {
   @JsonKey(includeToJson: false)
   final ReceiversSnapshot? receivers;
 
+  /// What the current renderer reported happening in each play, taken in
+  /// wire order with the states that name the plays. No replay carries them.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  final PlaybackEvents playbackEvents;
+
   const PlayQueueState({
     required this.playbackState,
     required this.trackList,
@@ -65,6 +70,7 @@ class PlayQueueState {
     this.playbackControl = const PlaybackControl.queue(),
     this.modules,
     this.receivers,
+    this.playbackEvents = PlaybackEvents.none,
   });
 
   static final PlayQueueState empty = PlayQueueState(
@@ -80,6 +86,7 @@ class PlayQueueState {
     PlaybackMode? playbackMode,
     ModulesAndDevices? modules,
     ReceiversSnapshot? receivers,
+    PlaybackEvents? playbackEvents,
     required int seq,
   }) => PlayQueueState(
     playbackState: playbackState ?? this.playbackState,
@@ -92,18 +99,26 @@ class PlayQueueState {
     playbackControl: playbackControl,
     modules: modules ?? this.modules,
     receivers: receivers ?? this.receivers,
+    playbackEvents: playbackEvents ?? this.playbackEvents,
   );
+
+  /// The latest details of each kind reported in the play the state names.
+  Map<String, Map<String, Object?>> get currentPlaybackEvents =>
+      playbackEvents.of(playbackState.playId);
 
   /// Apply an event to produce a new state (immutable pattern).
   PlayQueueState apply(PlayQueueEvent event, int timestamp) {
     switch (event) {
       case PlaybackStateChangedEvent(:final state, :final seq):
-        final nextPlaybackState = playbackState.copyWith(state)
-          ..timestampNs = timestamp;
+        final nextPlaybackState = _normalizePlaybackIndex(
+          playbackState.copyWith(state)..timestampNs = timestamp,
+          trackList.length,
+        );
         return copyWith(
-          playbackState: _normalizePlaybackIndex(
+          playbackState: nextPlaybackState,
+          playbackEvents: playbackEvents.following(
+            playbackState,
             nextPlaybackState,
-            trackList.length,
           ),
           seq: seq,
         );
@@ -192,6 +207,7 @@ class PlayQueueState {
           playbackControl: playbackControl,
           modules: modules,
           receivers: receivers,
+          playbackEvents: playbackEvents,
         );
       case CurrentRendererChangedEvent(
         :final rendererId,
@@ -210,6 +226,7 @@ class PlayQueueState {
           playbackControl: playbackControl,
           modules: modules,
           receivers: receivers,
+          playbackEvents: playbackEvents,
         );
       case PlaybackControlChangedEvent(:final control, :final seq):
         // Back to the queue, the plugin's track goes with it; the queue's own
@@ -227,6 +244,7 @@ class PlayQueueState {
           playbackControl: control,
           modules: modules,
           receivers: receivers,
+          playbackEvents: playbackEvents,
         );
       case ModulesChangedEvent(:final modules, :final seq):
         return copyWith(modules: modules, seq: seq);
@@ -236,16 +254,21 @@ class PlayQueueState {
       case VolumesChangedEvent(:final seq):
         // Kept by the volumes provider, which fetches them on every connect.
         return copyWith(seq: seq);
+      case final PlaybackEvent event:
+        // The seq stays: what watches it would rebuild on every event.
+        return copyWith(
+          playbackEvents: playbackEvents.add(event, playbackState),
+          seq: seq,
+        );
       case ReplayPlayQueueEvent(:final state, :final serverTimeNs, :final seq):
-        final nextPlaybackState =
-            state.playbackState.copyWith(state.playbackState)
-              ..timestampNs = timestamp
-              ..position = _estimatePosition(state.playbackState, serverTimeNs);
+        final nextPlaybackState = _normalizePlaybackIndex(
+          state.playbackState.copyWith(state.playbackState)
+            ..timestampNs = timestamp
+            ..position = _estimatePosition(state.playbackState, serverTimeNs),
+          state.trackList.length,
+        );
         return PlayQueueState(
-          playbackState: _normalizePlaybackIndex(
-            nextPlaybackState,
-            state.trackList.length,
-          ),
+          playbackState: nextPlaybackState,
           trackList: state.trackList,
           playbackMode: state.playbackMode,
           seq: seq,
@@ -255,6 +278,10 @@ class PlayQueueState {
           playbackControl: state.playbackControl,
           modules: state.modules,
           receivers: state.receivers,
+          playbackEvents: playbackEvents.following(
+            playbackState,
+            nextPlaybackState,
+          ),
         );
     }
   }
@@ -347,6 +374,49 @@ class PlayQueueState {
   Map<String, dynamic> toJson() => _$PlayQueueStateToJson(this);
 }
 
+/// What the current renderer reported happening in each play: the latest
+/// details of each [PlaybackEvent] kind, by the play the event named.
+///
+/// A play's events are kept from the first, which can come ahead of the state
+/// naming the play, until a state names a different play.
+class PlaybackEvents {
+  final Map<String?, Map<String, Map<String, Object?>>> _byPlay;
+
+  const PlaybackEvents._(this._byPlay);
+
+  static const none = PlaybackEvents._({});
+
+  /// The latest details of each kind reported in the play [playId] names.
+  Map<String, Map<String, Object?>> of(String? playId) =>
+      _byPlay[playId] ?? const {};
+
+  /// These with [event] filed under its play. An event naming no play is
+  /// taken as [current]'s only when that names none either, as from a server
+  /// without play ids; otherwise it is dropped.
+  PlaybackEvents add(PlaybackEvent event, PlaybackState current) {
+    final playId = event.playId;
+    if (playId == null && current.playId != null) return this;
+    return PlaybackEvents._({
+      ..._byPlay,
+      playId: {...of(playId), event.kind: event.details},
+    });
+  }
+
+  /// Those still true once the state moves [from] one playback [to] the next:
+  /// all of them within one play, else only those of the play [to] names. A
+  /// state naming no play after one that named a play settles nothing, as a
+  /// stop the server reports while the same play goes on: the next state
+  /// naming a play does.
+  PlaybackEvents following(PlaybackState from, PlaybackState to) {
+    if (to.isSamePlayAs(from)) return this;
+    final playId = to.playId;
+    if (playId == null && from.playId != null) return this;
+    final kept = _byPlay[playId];
+    if (playId == null || kept == null) return none;
+    return PlaybackEvents._({playId: kept});
+  }
+}
+
 /// Wire event types matching PlayQueueEventType from backend.
 @JsonEnum(fieldRename: FieldRename.snake, alwaysCreate: true)
 enum PlayQueueEventType {
@@ -362,7 +432,8 @@ enum PlayQueueEventType {
   playbackControlChanged,
   modulesChanged,
   volumesChanged,
-  receiversChanged;
+  receiversChanged,
+  playbackEvent;
 
   String toJson() => _$PlayQueueEventTypeEnumMap[this]!;
 
@@ -462,6 +533,18 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
     required List<ReceiverSnapshot> receivers,
     required int seq,
   }) = ReceiversChangedEvent;
+
+  /// Something that happened while the current renderer played, named by
+  /// [kind] with that kind's [details], in the play [playId] names: null from
+  /// a server that does not know it (API 0.24). It states nothing that lasts,
+  /// so no replay carries it. More kinds will come: any is taken as it
+  /// arrived, and read only by what knows it.
+  const factory PlayQueueEvent.playbackEvent({
+    required String kind,
+    required Map<String, Object?> details,
+    String? playId,
+    required int seq,
+  }) = PlaybackEvent;
 
   factory PlayQueueEvent.fromJson(Map<String, dynamic> json) {
     final eventTypeStr = json['event_type'] as String;
@@ -573,6 +656,14 @@ sealed class PlayQueueEvent with _$PlayQueueEvent {
       case 'volumes_changed':
         return PlayQueueEvent.volumesChanged(
           volumes: StorageVolume.listFromJson(json['volumes']),
+          seq: seq,
+        );
+      case 'playback_event':
+        final details = json['details'];
+        return PlayQueueEvent.playbackEvent(
+          kind: json['kind'] as String,
+          details: details is Map ? Map<String, Object?>.from(details) : {},
+          playId: json['play_id'] as String?,
           seq: seq,
         );
       default:
