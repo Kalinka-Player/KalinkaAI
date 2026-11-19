@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/shell_nav_provider.dart';
+import 'kalinka_scroll_behavior.dart';
 import 'mini_player.dart';
 import 'queue_zone.dart';
 
@@ -24,10 +25,13 @@ class PlayerQueueView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return QueueZone(
-      bottomPadding: bottomPadding,
-      isTablet: isTablet,
-      onFindMusic: onFindMusic,
+    return ScrollConfiguration(
+      behavior: KalinkaScrollBehavior(bottomClearance: bottomPadding),
+      child: QueueZone(
+        bottomPadding: bottomPadding,
+        isTablet: isTablet,
+        onFindMusic: onFindMusic,
+      ),
     );
   }
 }

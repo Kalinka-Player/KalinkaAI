@@ -30,6 +30,7 @@ import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/screens/kiosk_screen.dart';
 import 'package:kalinka/utils/display_power.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
+import 'package:kalinka/widgets/kalinka_scroll_behavior.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_backdrop.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_cover_flow.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_header.dart';
@@ -108,6 +109,10 @@ class _Renderers extends RendererListNotifier {
   /// The one output there is.
   final bool alone;
   final List<String> selected = [];
+
+  void addOutputs(List<RendererInfo> outputs) {
+    state = state.copyWith(renderers: [...state.renderers, ...outputs]);
+  }
 
   @override
   RendererListState build() => RendererListState(
@@ -301,6 +306,7 @@ Future<_Harness> _pump(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        scrollBehavior: const KalinkaScrollBehavior(),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(disableAnimations: reducedMotion),
@@ -1360,6 +1366,63 @@ void main() {
     await tester.pumpAndSettle();
     expect(openPanel(), findsNothing);
   });
+
+  testWidgets(
+    'the kiosk picker can page through newly discovered outputs by keyboard',
+    (tester) async {
+      final h = await _pump(
+        tester,
+        _queue(PlayerStateType.paused),
+        localDisplay: true,
+        reducedMotion: true,
+      );
+      await tester.tap(find.byType(KioskOutputPill));
+      await tester.pumpAndSettle();
+      final renderers =
+          h.container.read(rendererListProvider.notifier) as _Renderers;
+      renderers.addOutputs([
+        for (var i = 0; i < 20; i++)
+          RendererInfo(
+            rendererId: 'room-$i',
+            friendlyName: 'Room $i',
+            status: 'connected',
+          ),
+      ]);
+      await tester.pumpAndSettle();
+      final page = find.widgetWithIcon(
+        IconButton,
+        Icons.keyboard_arrow_down_rounded,
+      );
+      expect(page.hitTestable(), findsOneWidget);
+      expect(await tabTo(tester, page), isTrue);
+      final list = find.descendant(
+        of: openPanel(),
+        matching: find.byType(Scrollable),
+      );
+      final position = tester.state<ScrollableState>(list).position;
+      final before = position.pixels;
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(
+        position.pixels,
+        (before + position.viewportDimension).clamp(
+          0,
+          position.maxScrollExtent,
+        ),
+      );
+      expect(renderers.selected, isEmpty);
+      expect(openPanel(), findsOneWidget);
+      while (position.extentAfter > 0) {
+        expect(focusIsOn(page), isTrue);
+        final previous = position.pixels;
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(position.pixels, greaterThan(previous));
+      }
+      expect(page, findsNothing);
+      expect(find.text('Room 19').hitTestable(), findsOneWidget);
+    },
+  );
 
   testWidgets('Escape closes the panel before it leaves the display', (
     tester,

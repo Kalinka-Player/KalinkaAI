@@ -9,6 +9,7 @@ import '../../providers/renderer_host_provider.dart'
     show rendererIdentityProvider;
 import '../../providers/renderer_provider.dart';
 import '../../theme/app_theme.dart';
+import '../kalinka_scroll_behavior.dart';
 import '../renderer_switcher.dart' show rendererDetail, rendererDisplayName;
 import 'kiosk_header.dart';
 import 'kiosk_volume_control.dart';
@@ -210,7 +211,16 @@ class _KioskOutputPanelState extends ConsumerState<KioskOutputPanel> {
               ),
             ),
           );
-    return BlockSemantics(child: FocusScope(child: panel));
+    return BlockSemantics(
+      child: FocusScope(
+        child: ScrollConfiguration(
+          behavior: KalinkaScrollBehavior(
+            controlScale: widget.scale < 1 ? 1 : widget.scale,
+          ),
+          child: panel,
+        ),
+      ),
+    );
   }
 }
 
