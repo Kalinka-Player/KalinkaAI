@@ -399,7 +399,6 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
     // Stopped is standby too: the queue ran out, or someone pressed stop.
     final standby = track == null || stopped;
     final urls = ref.read(urlResolverProvider);
-    final backdropPath = standby ? null : track.smallImage;
     final imagePath = standby ? null : track.largeImage;
     final coverUrl = imagePath == null ? null : urls.abs(imagePath);
     // Opened from the player, the way out is in plain sight. Started by the
@@ -481,26 +480,29 @@ class _KioskScreenState extends ConsumerState<KioskScreen> {
                         onActivity: _recordActivity,
                       )
                     : null;
-                final background = fill
-                    ? KeyedSubtree(
-                        key: const ValueKey('fill'),
-                        child: AwayDim(
-                          away: away,
-                          child: _FillArt(
-                            trackId: track.id,
-                            imageUrl: coverUrl,
-                            infoHeight: _infoHeight,
-                            bottomInset:
-                                _fillPadding(scale).bottom + insets.bottom,
-                            screenHeight: constraints.maxHeight,
-                          ),
-                        ),
-                      )
-                    : KioskBackdrop(
-                        imageUrl: backdropPath == null
-                            ? null
-                            : urls.abs(backdropPath),
-                      );
+                final Widget background;
+                if (standby) {
+                  background = const KioskStandbyBackdrop();
+                } else if (fill) {
+                  background = KeyedSubtree(
+                    key: const ValueKey('fill'),
+                    child: AwayDim(
+                      away: away,
+                      child: _FillArt(
+                        trackId: track.id,
+                        imageUrl: coverUrl,
+                        infoHeight: _infoHeight,
+                        bottomInset: _fillPadding(scale).bottom + insets.bottom,
+                        screenHeight: constraints.maxHeight,
+                      ),
+                    ),
+                  );
+                } else {
+                  final path = track.smallImage;
+                  background = KioskBackdrop(
+                    imageUrl: path == null ? null : urls.abs(path),
+                  );
+                }
                 final display = Stack(
                   fit: StackFit.expand,
                   children: [

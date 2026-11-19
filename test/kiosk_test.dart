@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart'
+    show PictureLayer, RenderRepaintBoundary;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -1336,6 +1338,50 @@ void main() {
     expect(tester.getTopLeft(art), origin);
     await tester.pump(const Duration(minutes: 2));
     expect(tester.getTopLeft(art), origin);
+  });
+
+  testWidgets('Resume paints the gradient at display size and retains it', (
+    tester,
+  ) async {
+    const tv = Size(3840, 2160);
+    await _pump(
+      tester,
+      _queue(PlayerStateType.stopped, index: 1),
+      size: tv,
+      localDisplay: true,
+      launched: true,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Resume'), findsOneWidget);
+    final backdrop = find.byType(KioskStandbyBackdrop);
+    expect(
+      find.descendant(of: backdrop, matching: find.byType(RawImage)),
+      findsNothing,
+    );
+    final boundary = tester.renderObject<RenderRepaintBoundary>(backdrop);
+    ui.Picture picture() =>
+        (boundary.debugLayer!.firstChild! as PictureLayer).picture!;
+    expect(boundary.size, tv);
+    final initial = picture();
+    // Both the clock and burn-in protection update the foreground each minute.
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(minutes: 1));
+      expect(picture(), same(initial));
+      expect(tester.binding.hasScheduledFrame, isFalse);
+    }
+    tester.view.physicalSize = const Size(2160, 3840);
+    await tester.pumpAndSettle();
+    expect(boundary.size, tester.view.physicalSize);
+    expect(picture(), isNot(same(initial)));
+  });
+
+  testWidgets('the standby gradient schedules no frames while idle', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const KioskStandbyBackdrop());
+    await tester.pumpAndSettle();
+    await tester.binding.delayed(const Duration(hours: 1));
+    expect(tester.binding.hasScheduledFrame, isFalse);
   });
 
   testWidgets('the thumbnail backdrop covers the display after rotation', (
