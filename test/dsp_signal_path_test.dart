@@ -379,13 +379,25 @@ void main() {
       );
     });
 
-    test('a state naming no play takes them for good', () {
+    test('a state naming no play between two of one play\'s keeps them', () {
+      final stopped = [
+        _state('17'),
+        _clipping(5, play: '17'),
+        _state(null, state: PlayerStateType.stopped),
+      ];
+      expect(_shownAfter(stopped), isEmpty, reason: 'nothing plays to show');
+      expect(_shownAfter([...stopped, _state('17')]), {
+        'clipping': {'clipped_samples': 5},
+      });
+    });
+
+    test('a stop and then another play drops them', () {
       expect(
         _shownAfter([
           _state('17'),
           _clipping(5, play: '17'),
           _state(null, state: PlayerStateType.stopped),
-          _state('17'),
+          _state('18', track: _track2),
         ]),
         isEmpty,
       );

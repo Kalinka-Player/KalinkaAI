@@ -378,7 +378,7 @@ class PlayQueueState {
 /// details of each [PlaybackEvent] kind, by the play the event named.
 ///
 /// A play's events are kept from the first, which can come ahead of the state
-/// naming the play, until the state names a different play or none.
+/// naming the play, until a state names a different play.
 class PlaybackEvents {
   final Map<String?, Map<String, Map<String, Object?>>> _byPlay;
 
@@ -403,10 +403,14 @@ class PlaybackEvents {
   }
 
   /// Those still true once the state moves [from] one playback [to] the next:
-  /// all of them within one play, else only those of the play [to] names.
+  /// all of them within one play, else only those of the play [to] names. A
+  /// state naming no play after one that named a play settles nothing, as a
+  /// stop the server reports while the same play goes on: the next state
+  /// naming a play does.
   PlaybackEvents following(PlaybackState from, PlaybackState to) {
     if (to.isSamePlayAs(from)) return this;
     final playId = to.playId;
+    if (playId == null && from.playId != null) return this;
     final kept = _byPlay[playId];
     if (playId == null || kept == null) return none;
     return PlaybackEvents._({playId: kept});
