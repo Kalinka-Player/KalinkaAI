@@ -1578,15 +1578,19 @@ void main() {
     expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
   });
 
-  testWidgets('the controls are one size and keep within the cover\'s '
-      'height', (tester) async {
-    Future<Rect> disc(String title, {Size size = const Size(1024, 600)}) async {
+  testWidgets('landscape kiosk spaces visible rows evenly above the bar '
+      'and keeps the controls within the cover height', (tester) async {
+    Future<Rect> checkLayout(
+      String title, {
+      Size size = const Size(1024, 600),
+      bool metadata = true,
+    }) async {
       final t = Track(
-        id: 'kalinka:qobuz:track:$title',
+        id: metadata ? 'kalinka:qobuz:track:$title' : 'unattributed',
         title: title,
         duration: 240,
         performer: Artist(id: 'p', name: 'Artist'),
-        album: Album(id: 'a', title: 'Album', year: 1990),
+        album: metadata ? Album(id: 'a', title: 'Album', year: 1990) : null,
       );
       await _pump(
         tester,
@@ -1595,13 +1599,15 @@ void main() {
             state: PlayerStateType.paused,
             currentTrack: t,
             index: 0,
-            mimeType: 'audio/flac',
-            audioInfo: AudioInfo(
-              sampleRate: 96000,
-              bitsPerSample: 24,
-              channels: 2,
-              durationMs: 0,
-            ),
+            mimeType: metadata ? 'audio/flac' : null,
+            audioInfo: metadata
+                ? AudioInfo(
+                    sampleRate: 96000,
+                    bitsPerSample: 24,
+                    channels: 2,
+                    durationMs: 0,
+                  )
+                : null,
           ),
           trackList: [t],
           playbackMode: PlaybackMode.empty,
@@ -1609,6 +1615,7 @@ void main() {
           playbackControl: const PlaybackControl.queue(),
         ),
         size: size,
+        localDisplay: true,
       );
       await tester.pumpAndSettle();
       final cover = tester.getRect(find.byType(KioskCoverFlow));
@@ -1621,28 +1628,47 @@ void main() {
             .first,
       );
       expect(rect.bottom, lessThanOrEqualTo(cover.bottom + 0.5));
-      // All of the text shows: its last line ends above the progress bar.
-      final stream = tester.getRect(find.textContaining('FLAC'));
+      final heading = tester.getRect(find.text('NOW PLAYING'));
       final bar = tester.getRect(find.byType(KioskProgressBar));
-      expect(stream.bottom, lessThanOrEqualTo(bar.top));
-      expect(
-        tester.getRect(find.text('NOW PLAYING')).top,
-        greaterThan(cover.top - 0.5),
-      );
-      // However long the title, the lines start where the progress bar does.
-      expect(
-        tester.getRect(find.text('NOW PLAYING')).left,
-        closeTo(bar.left, 0.5),
-      );
-      expect(tester.getRect(find.text(title)).left, closeTo(bar.left, 0.5));
+      final rows = [
+        heading,
+        tester.getRect(find.text(title)),
+        tester.getRect(find.text('Artist')),
+        if (metadata) ...[
+          tester.getRect(find.text('Album · 1990')),
+          tester.getRect(
+            find
+                .ancestor(
+                  of: find.textContaining('FLAC'),
+                  matching: find.byType(Row),
+                )
+                .first,
+          ),
+        ],
+        bar,
+      ];
+      expect(heading.top, closeTo(cover.top, 0.5));
+      expect(heading.left, closeTo(bar.left, 0.5));
+      final gap = bar.top - rows[rows.length - 2].bottom;
+      expect(gap, greaterThan(3));
+      for (var i = 1; i < rows.length; i++) {
+        expect(rows[i].top - rows[i - 1].bottom, closeTo(gap, 0.5));
+        expect(rows[i].left, closeTo(bar.left, 0.5));
+      }
+      expect(tester.takeException(), isNull);
       return rect;
     }
 
     const long = 'A rather long title that will certainly need two lines here';
-    final short = await disc('Short');
-    final twoLines = await disc(long);
+    final short = await checkLayout('Short');
+    final twoLines = await checkLayout(long);
     expect(twoLines.size, short.size);
-    await disc(long, size: const Size(815, 528));
+    await checkLayout(long, size: const Size(815, 528));
+    await checkLayout('Short', size: const Size(3840, 2160));
+    await checkLayout('Artist and title only', metadata: false);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await checkLayout(long);
   });
 
   for (final size in const [Size(700, 700), Size(300, 300), Size(480, 320)]) {
