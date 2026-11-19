@@ -6,7 +6,6 @@ import 'package:kalinka/data_model/data_model.dart';
 import 'package:kalinka/data_model/playqueue_events.dart';
 import 'package:kalinka/providers/app_state_provider.dart';
 import 'package:kalinka/providers/bit_perfect_provider.dart';
-import 'package:kalinka/providers/playback_events_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
 import 'package:kalinka/widgets/stream_info_dialog.dart';
 import 'package:kalinka/providers/renderer_provider.dart';
@@ -69,14 +68,6 @@ class _Renderers extends RendererListNotifier {
   RendererListState build() => const RendererListState();
 }
 
-class _Events extends PlaybackEventsNotifier {
-  _Events(this._events);
-  final Map<String, Map<String, Object?>> _events;
-
-  @override
-  Map<String, Map<String, Object?>> build() => _events;
-}
-
 /// A DSD track the renderer converts, as the server reports it.
 PlaybackState _converted() => _playing()
   ..mimeType = 'audio/dsf'
@@ -129,7 +120,7 @@ List<Override> _overrides(
   volumeStateProvider.overrideWithValue(DeviceVolume.empty),
   sourceDisplayInfoProvider.overrideWithValue(const {}),
   rendererListProvider.overrideWith(_Renderers.new),
-  playbackEventsProvider.overrideWith(() => _Events(events)),
+  playbackEventsProvider.overrideWithValue(events),
 ];
 
 void main() {

@@ -9,7 +9,7 @@ typedef DspReading = ({String label, String value, bool alarm});
 
 /// The renderer's processing as figures: the latency its signal path adds,
 /// and the samples its DSP clipped, once [playbackEvents] (the latest details
-/// of each kind for the track) report clipping.
+/// of each kind in the play) report clipping.
 List<DspReading> dspReadings(
   SignalPath? path,
   Map<String, Map<String, Object?>> playbackEvents,
