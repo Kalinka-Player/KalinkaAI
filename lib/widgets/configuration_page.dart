@@ -15,6 +15,7 @@ class ConfigurationPage extends StatelessWidget {
   final Widget? action;
   final VoidCallback onClose;
   final bool handlesBack;
+  final bool autofocusBack;
   final Widget Function(Widget heading) bodyBuilder;
   final List<Widget> overlays;
 
@@ -26,6 +27,7 @@ class ConfigurationPage extends StatelessWidget {
     required this.onClose,
     required this.bodyBuilder,
     this.handlesBack = true,
+    this.autofocusBack = false,
     this.overlays = const [],
   });
 
@@ -43,7 +45,11 @@ class ConfigurationPage extends StatelessWidget {
             builder: (context) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SettingsTopBar(title: title, action: action),
+                SettingsTopBar(
+                  title: title,
+                  action: action,
+                  autofocusBack: autofocusBack,
+                ),
                 Expanded(
                   child: bodyBuilder(
                     description == null

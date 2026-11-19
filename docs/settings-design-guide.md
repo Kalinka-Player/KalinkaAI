@@ -157,8 +157,7 @@ Off, keep this order directly on the tab:
 | Group | Contents |
 | --- | --- |
 | SERVER | Identity card: name and pencil, selectable address, server version, raw backend supervisor status |
-| DISPLAY | Shown when the saved `base_config.display.enabled` is true or the app is launched with kiosk enabled: local display inactivity timeouts |
-| THIS DEVICE | Always available in the simple Streamer tab: the local on-screen keyboard switch |
+| THIS DEVICE | Display opens the screen and keyboard preferences for this device |
 | SOFTWARE UPDATES | Bundle/component update state and automatic updates in one card |
 | MANAGEMENT | Restart Kalinka, Network, dashboard, restart streamer, power off streamer, when supported |
 | SUPPORT | Download server logs |
@@ -169,11 +168,19 @@ The address has 16dp side padding, a 4dp label/value gap and 20dp bottom padding
 
 **Network** appears only for a box with a supervisor. It opens a **Network** page that hosts the same network panel as setup: the current wired or Wi-Fi connection, and the Wi-Fi networks the box can join.
 
-**Display** contains **Return to now playing** (15 s, 30 s, 1 min, 2 min; default 30 s) and **Blank screen after** (Off, 5 min, 10 min, 15 min, 30 min; default 5 min). Place each dropdown to the right of its label and help, reserving room by wrapping the text on the left. Use an anchored popup with the Bluetooth device menu's neutral surface and border, not a bottom sheet. Show whole-minute durations in minutes. Keep help brief: **After inactivity.** and **When idle and paused or stopped.**, plus a short backlight capability note. Save immediately in the local display's SharedPreferences, using seconds internally and 0 for Off. Remote clients show a note directing the user to the streamer's screen instead of editing unrelated local preferences. An explicit kiosk launch (`KALINKA_KIOSK`) also shows editable controls for testing, even when the server display setting is off. Blanking runs only while paused or stopped; touch, keyboard input or resumed playback wakes it, and the waking input does not activate a control. These changes do not stage server settings or require a restart.
+The **Display** page opens from **This device** and says “Applies to this device.” Back returns focus to the Display row. Changes save immediately in local preferences. Every client can set **Pixel shift** and **On-screen keyboard**.
+
+On the streamer's enabled display or an explicit kiosk launch, show two dropdowns first. **Return to now playing** offers 15 s, 30 s, 1 min and 2 min, and defaults to 30 s. **Blank screen after** offers Off, 5 min, 10 min, 15 min and 30 min, and defaults to 5 min. Place each dropdown beside its label and help. Use the anchored neutral Bluetooth menu style. Store seconds, with 0 for Off. Show backlight capability beside the blanking setting. Blanking applies while paused or stopped. Touch, keyboard input or resumed playback wakes the display and consumes the waking input.
+
+![Display settings on a 1024 × 600 local kiosk](images/display-settings.png)
 
 Display the supervisor status exactly as the backend returns it; do not parse a version or infer health from “Installed”. Package updates show the components the backend identifies as changed. Sound-card controls belong in Output settings. Device automation belongs in the expert list.
 
-**This device** contains **On-screen keyboard**. Default it on for Kalinka's
+**Pixel shift** is on by default. It moves the Now Playing
+foreground a few pixels once a minute. Switching it off returns the foreground
+to its original position immediately and saves the preference for this device.
+
+Default **On-screen keyboard** on for Kalinka's
 Flutter Pi launcher (`localDisplayKioskProvider`), and off elsewhere. Use that
 default only when no preference is saved; an explicit on or off always wins.
 Save immediately

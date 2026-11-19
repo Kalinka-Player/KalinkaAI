@@ -128,39 +128,33 @@ class _KioskProgressBarState extends ConsumerState<KioskProgressBar>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Glides to each new second instead of stepping — a bar
-                    // this long moves a visible distance per tick.
-                    TweenAnimationBuilder<double>(
-                      tween: Tween(end: progress),
-                      duration: isSeeking
-                          ? Duration.zero
-                          : const Duration(milliseconds: 380),
-                      curve: Curves.easeOutCubic,
-                      builder: (context, value, _) => away
-                          ? SizedBox(
-                              width: width,
-                              height: s(28),
-                              child: Center(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(s(2.5)),
-                                  child: GradientProgressLine(
-                                    progress: value,
-                                    mode: lineMode,
-                                    height: s(5),
-                                  ),
-                                ),
-                              ),
-                            )
-                          : CustomPaint(
-                              size: Size(width, s(28)),
-                              painter: _BarPainter(
-                                progress: value,
-                                thickness: s(isSeeking ? 9 : 5),
-                                knobRadius: canSeek ? s(isSeeking ? 13 : 9) : 0,
-                                muted: !seekable,
-                              ),
+                    // A clock tick needs one frame. Drag updates still follow
+                    // every pointer event through OptimisticSeek.
+                    if (away)
+                      SizedBox(
+                        width: width,
+                        height: s(28),
+                        child: Center(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(s(2.5)),
+                            child: GradientProgressLine(
+                              progress: progress,
+                              mode: lineMode,
+                              height: s(5),
                             ),
-                    ),
+                          ),
+                        ),
+                      )
+                    else
+                      CustomPaint(
+                        size: Size(width, s(28)),
+                        painter: _BarPainter(
+                          progress: progress,
+                          thickness: s(isSeeking ? 9 : 5),
+                          knobRadius: canSeek ? s(isSeeking ? 13 : 9) : 0,
+                          muted: !seekable,
+                        ),
+                      ),
                     labels,
                   ],
                 ),
@@ -239,13 +233,6 @@ class _BarPainter extends CustomPainter {
       } else {
         // Spans the whole track, so a colour marks a place in the song.
         final shader = KalinkaColors.progressGradient.createShader(track);
-        canvas.drawRRect(
-          fill,
-          Paint()
-            ..shader = shader
-            ..color = Colors.white.withValues(alpha: 0.55)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, thickness),
-        );
         canvas.drawRRect(fill, Paint()..shader = shader);
       }
     }
@@ -256,9 +243,7 @@ class _BarPainter extends CustomPainter {
       canvas.drawCircle(
         centre,
         knobRadius + 2,
-        Paint()
-          ..color = Colors.black.withValues(alpha: 0.35)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+        Paint()..color = Colors.black.withValues(alpha: 0.24),
       );
       canvas.drawCircle(centre, knobRadius, Paint()..color = Colors.white);
     }

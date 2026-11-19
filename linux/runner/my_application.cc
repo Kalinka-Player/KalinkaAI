@@ -79,7 +79,8 @@ static void my_application_activate(GApplication *application) {
     }
   }
 #endif
-  if (use_header_bar) {
+  const gboolean kiosk = kiosk_requested();
+  if (use_header_bar && !kiosk) {
     GtkHeaderBar *header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
     gtk_header_bar_set_title(header_bar, "Kalinka");
@@ -91,9 +92,23 @@ static void my_application_activate(GApplication *application) {
 
   set_window_icon(window);
 
-  gtk_window_set_default_size(window, 1024, 637);
-  if (kiosk_requested()) {
+  if (kiosk) {
+    // Flutter realizes the view before the compositor shows the window.
+    // Size its first surface for fullscreen as well.
+    gtk_window_set_decorated(window, FALSE);
+    GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(window));
+    GdkMonitor *monitor = gdk_display_get_primary_monitor(display);
+    if (monitor == nullptr) {
+      monitor = gdk_display_get_monitor(display, 0);
+    }
+    if (monitor != nullptr) {
+      GdkRectangle bounds;
+      gdk_monitor_get_geometry(monitor, &bounds);
+      gtk_window_set_default_size(window, bounds.width, bounds.height);
+    }
     gtk_window_fullscreen(window);
+  } else {
+    gtk_window_set_default_size(window, 1024, 637);
   }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();

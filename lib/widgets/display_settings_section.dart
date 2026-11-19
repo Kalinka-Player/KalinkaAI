@@ -6,72 +6,103 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/display_power_provider.dart';
 import '../providers/display_settings_provider.dart';
 import '../providers/kiosk_provider.dart';
+import '../providers/on_screen_keyboard_provider.dart';
+import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
-import 'configuration_appearance.dart';
 import 'settings_controls/settings_card.dart';
 import 'settings_controls/settings_row.dart';
 
-/// These values belong to the local screen, so a remote client must not offer
-/// controls that would only change its own, unrelated SharedPreferences.
-/// An explicit kiosk launch also allows editing for display testing.
+/// Preferences for the display on which Settings was opened.
 class DisplaySettingsSection extends ConsumerWidget {
   const DisplaySettingsSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final local =
-        ref.watch(localDisplayKioskProvider) || ref.watch(kioskLaunchProvider);
+    final timeouts =
+        ref.watch(kioskLaunchProvider) ||
+        (ref.watch(localDisplayKioskProvider) &&
+            ref.watch(
+              settingsProvider.select(
+                (s) => s.values['base_config.display.enabled'] == true,
+              ),
+            ));
     final settings = ref.watch(displaySettingsProvider);
     final notifier = ref.read(displaySettingsProvider.notifier);
-    final power = local ? ref.watch(displayPowerAvailableProvider) : null;
+    final power = timeouts ? ref.watch(displayPowerAvailableProvider) : null;
     final powerNote = switch (power) {
       AsyncData(value: true) => 'Backlight power-off supported.',
       AsyncData(value: false) || AsyncError() => 'Black screen only.',
       _ => 'Checking backlight…',
     };
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return SettingsCard(
+      key: const ValueKey('display-settings'),
       children: [
-        Padding(
-          padding: ConfigurationAppearance.sectionPadding(context),
-          child: Text('DISPLAY', style: KalinkaTextStyles.sectionHeaderMuted),
+        if (timeouts) ...[
+          _TimeoutRow(
+            label: 'Return to now playing',
+            help: 'After inactivity.',
+            value: settings.kioskSeconds,
+            choices: const [15, 30, 60, 120],
+            fieldKey: const ValueKey('display-kiosk-seconds'),
+            onChanged: notifier.setKioskSeconds,
+          ),
+          _TimeoutRow(
+            label: 'Blank screen after',
+            help: 'While paused or stopped.',
+            status: powerNote,
+            value: settings.blankSeconds,
+            choices: const [0, 300, 600, 900, 1800],
+            fieldKey: const ValueKey('display-blank-seconds'),
+            onChanged: notifier.setBlankSeconds,
+          ),
+        ],
+        _SwitchRow(
+          label: 'Pixel shift',
+          help: 'Shift Now Playing once a minute to reduce burn-in.',
+          value: ref.watch(kioskPixelShiftProvider),
+          onChanged: ref.read(kioskPixelShiftProvider.notifier).setEnabled,
         ),
-        SettingsCard(
-          key: const ValueKey('display-settings'),
-          children: [
-            if (!local)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Set the display timeouts on the streamer’s screen. '
-                  'They are saved on that device.',
-                  style: KalinkaTextStyles.trayRowSublabel,
-                ),
-              )
-            else ...[
-              _TimeoutRow(
-                label: 'Return to now playing',
-                help: 'After inactivity.',
-                value: settings.kioskSeconds,
-                choices: const [15, 30, 60, 120],
-                fieldKey: const ValueKey('display-kiosk-seconds'),
-                onChanged: notifier.setKioskSeconds,
-              ),
-              _TimeoutRow(
-                label: 'Blank screen after',
-                help: 'When idle and paused or stopped.',
-                status: powerNote,
-                value: settings.blankSeconds,
-                choices: const [0, 300, 600, 900, 1800],
-                fieldKey: const ValueKey('display-blank-seconds'),
-                onChanged: notifier.setBlankSeconds,
-              ),
-            ],
-          ],
+        _SwitchRow(
+          label: 'On-screen keyboard',
+          help: 'Show a touch keyboard when typing.',
+          switchKey: const ValueKey('on-screen-keyboard-setting'),
+          value: ref.watch(onScreenKeyboardProvider),
+          onChanged: ref.read(onScreenKeyboardProvider.notifier).setEnabled,
         ),
       ],
     );
   }
+}
+
+class _SwitchRow extends StatelessWidget {
+  final String label;
+  final String help;
+  final Key? switchKey;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _SwitchRow({
+    required this.label,
+    required this.help,
+    this.switchKey,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) => SettingsRow(
+    label: label,
+    sublabel: help,
+    control: Semantics(
+      label: label,
+      child: Switch(
+        key: switchKey,
+        value: value,
+        onChanged: onChanged,
+        materialTapTargetSize: MaterialTapTargetSize.padded,
+      ),
+    ),
+  );
 }
 
 class _TimeoutRow extends StatelessWidget {

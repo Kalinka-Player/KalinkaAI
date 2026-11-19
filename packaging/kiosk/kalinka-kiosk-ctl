@@ -209,7 +209,13 @@ def run():
     if diagonal is not None:
         env["KALINKA_DISPLAY_DIAGONAL_INCHES"] = str(diagonal)
     flutter_pi = os.path.join(BUNDLE, "flutter-pi")
-    args = [flutter_pi, "--release", "--rotation", launch["rotation"], BUNDLE]
+    args = [flutter_pi, "--release", "--rotation", launch["rotation"]]
+    # Optional systemd Environment=KALINKA_KIOSK_VIDEOMODE=1920x1080@60.
+    # Let flutter-pi select the preferred DRM mode when the value is empty.
+    mode = env.get("KALINKA_KIOSK_VIDEOMODE", "").strip()
+    if mode:
+        args.extend(["--videomode", mode])
+    args.append(BUNDLE)
     os.execve(flutter_pi, args, env)
 
 

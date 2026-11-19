@@ -11,6 +11,9 @@ class KioskCoverFlow extends StatelessWidget {
   final String? imageUrl;
   final double size;
 
+  /// Reveal the next cover inside the fixed frame on the local TV.
+  final bool confined;
+
   /// +1 when playback moved forward (the new cover comes in from the right),
   /// -1 when it went back.
   final int direction;
@@ -21,17 +24,28 @@ class KioskCoverFlow extends StatelessWidget {
     required this.imageUrl,
     required this.size,
     required this.direction,
+    this.confined = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      // Keep the same image element so the decoded cover stays on screen
+      // until its replacement arrives.
+      return _Cover(trackId: trackId, imageUrl: imageUrl, size: size);
+    }
+    if (confined) {
+      return _CoverWipe(
+        art: (trackId: trackId, url: imageUrl),
+        size: size,
+        direction: direction,
+      );
+    }
     final key = ValueKey(trackId);
     return SizedBox.square(
       dimension: size,
       child: AnimatedSwitcher(
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : const Duration(milliseconds: 950),
+        duration: const Duration(milliseconds: 950),
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
         layoutBuilder: (current, previous) => Stack(
@@ -58,8 +72,131 @@ class KioskCoverFlow extends StatelessWidget {
   }
 }
 
+typedef _Artwork = ({String trackId, String? url});
+
+class _CoverWipe extends StatefulWidget {
+  final _Artwork art;
+  final double size;
+  final int direction;
+
+  const _CoverWipe({
+    required this.art,
+    required this.size,
+    required this.direction,
+  });
+
+  @override
+  State<_CoverWipe> createState() => _CoverWipeState();
+}
+
+class _CoverWipeState extends State<_CoverWipe>
+    with SingleTickerProviderStateMixin {
+  late _Artwork _current = widget.art;
+  _Artwork? _previous;
+  bool _fromRight = true;
+  late final _progress =
+      AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 400),
+        value: 1,
+      )..addStatusListener((status) {
+        if (status == AnimationStatus.completed && _previous != null) {
+          setState(() => _previous = null);
+        }
+      });
+
+  @override
+  void didUpdateWidget(_CoverWipe old) {
+    super.didUpdateWidget(old);
+    if (widget.art != old.art) _showWhenReady(widget.art);
+  }
+
+  Future<void> _showWhenReady(_Artwork next) async {
+    final url = next.url;
+    var incoming = next;
+    if (url != null && url != _current.url) {
+      await precacheImage(
+        _coverImage(url, widget.size, context),
+        context,
+        onError: (_, _) => incoming = (trackId: next.trackId, url: null),
+      );
+    }
+    if (!mounted || widget.art != next || _current == incoming) return;
+    // A quick second skip starts from whichever cover is more visible.
+    final outgoing = _progress.value < 0.5 ? _previous ?? _current : _current;
+    setState(() {
+      _previous =
+          (outgoing.url ?? outgoing.trackId) ==
+              (incoming.url ?? incoming.trackId)
+          ? null
+          : outgoing;
+      _current = incoming;
+      _fromRight = widget.direction >= 0;
+    });
+    if (_previous == null) {
+      _progress.value = 1;
+    } else {
+      _progress.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _progress.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget part(_Artwork art, {required bool outgoing}) => ClipRect(
+      key: ValueKey(art.url ?? art.trackId),
+      clipper: _previous == null
+          ? null
+          : _WipeClip(_progress, _fromRight, outgoing),
+      child: _Cover(trackId: art.trackId, imageUrl: art.url, size: widget.size),
+    );
+    return RepaintBoundary(
+      child: SizedBox.square(
+        dimension: widget.size,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (_previous case final old?) part(old, outgoing: true),
+            part(_current, outgoing: false),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Two complementary hard clips leave each pixel to just one opaque cover.
+class _WipeClip extends CustomClipper<Rect> {
+  final Animation<double> progress;
+  final bool fromRight;
+  final bool outgoing;
+
+  _WipeClip(this.progress, this.fromRight, this.outgoing)
+    : super(reclip: progress);
+
+  @override
+  Rect getClip(Size size) {
+    final t = Curves.easeInOut.transform(progress.value);
+    final edge = (fromRight ? 1 - t : t) * size.width;
+    return outgoing == fromRight
+        ? Rect.fromLTRB(0, 0, edge, size.height)
+        : Rect.fromLTRB(edge, 0, size.width, size.height);
+  }
+
+  @override
+  bool shouldReclip(_WipeClip old) =>
+      old.progress != progress ||
+      old.fromRight != fromRight ||
+      old.outgoing != outgoing;
+}
+
 /// The cover filling the whole screen, for a display too small to set it
-/// beside anything. A new track's cover fades in over the old one.
+/// beside anything. Keep the old image until the new one is ready.
 class KioskCoverFill extends StatelessWidget {
   final String trackId;
   final String? imageUrl;
@@ -82,28 +219,17 @@ class KioskCoverFill extends StatelessWidget {
           child: ProceduralAlbumArt(trackId: trackId, size: side),
         );
         return RepaintBoundary(
-          child: AnimatedSwitcher(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : const Duration(milliseconds: 900),
-            layoutBuilder: (current, previous) =>
-                Stack(fit: StackFit.expand, children: [...previous, ?current]),
-            child: KeyedSubtree(
-              key: ValueKey(trackId),
-              child: url == null
-                  ? fallback()
-                  : Image.network(
-                      url,
-                      fit: BoxFit.cover,
-                      cacheWidth: wasmSafeCacheSize(
-                        (side * MediaQuery.devicePixelRatioOf(context))
-                            .round(),
-                      ),
-                      gaplessPlayback: true,
-                      errorBuilder: (_, _, _) => fallback(),
-                    ),
-            ),
-          ),
+          child: url == null
+              ? fallback()
+              : Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  cacheWidth: wasmSafeCacheSize(
+                    (side * MediaQuery.devicePixelRatioOf(context)).round(),
+                  ),
+                  gaplessPlayback: true,
+                  errorBuilder: (_, _, _) => fallback(),
+                ),
         );
       },
     );
@@ -131,19 +257,20 @@ class _Swing extends StatelessWidget {
       builder: (context, child) {
         // 0 at rest, 1 fully aside.
         final away = 1.0 - animation.value;
-        if (away == 0) return child!;
-        final transform = Matrix4.identity()
-          ..setEntry(3, 2, 0.0011)
-          ..multiply(
-            Matrix4.translationValues(side * away * travel, 0, away * travel),
-          )
-          // Faces the centre, as the covers flanking a cover flow do.
-          ..multiply(Matrix4.rotationY(side * away * 1.05));
-        return Opacity(
-          opacity: (1.0 - away * 1.4).clamp(0.0, 1.0),
-          child: Transform(
-            alignment: Alignment.center,
-            transform: transform,
+        final transform = Matrix4.identity();
+        if (away > 0 && travel > 0) {
+          // Scale the perspective with the cover. Receding into the screen
+          // keeps even a TV-sized cover behind the projection plane.
+          transform
+            ..setEntry(3, 2, -0.3 / travel)
+            ..translateByDouble(side * away * travel, 0, -away * travel, 1)
+            ..rotateY(side * away * 1.05);
+        }
+        return Transform(
+          alignment: Alignment.center,
+          transform: transform,
+          child: Opacity(
+            opacity: (1.0 - away * 1.4).clamp(0.0, 1.0),
             child: child,
           ),
         );
@@ -167,22 +294,10 @@ class _Cover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(size * 0.03);
-    final cacheWidth = wasmSafeCacheSize(
-      (size * MediaQuery.devicePixelRatioOf(context)).round(),
-    );
     return RepaintBoundary(
       child: Container(
         width: size,
         height: size,
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: size * 0.08,
-            ),
-          ],
-        ),
         // A hairline of light round the edge lifts the cover off a backdrop
         // made of its own colours.
         foregroundDecoration: BoxDecoration(
@@ -193,11 +308,10 @@ class _Cover extends StatelessWidget {
           borderRadius: radius,
           child: imageUrl == null
               ? ProceduralAlbumArt(trackId: trackId, size: size)
-              : Image.network(
-                  imageUrl!,
+              : Image(
+                  image: _coverImage(imageUrl!, size, context),
                   width: size,
                   height: size,
-                  cacheWidth: cacheWidth,
                   fit: BoxFit.cover,
                   gaplessPlayback: true,
                   errorBuilder: (_, _, _) =>
@@ -208,3 +322,12 @@ class _Cover extends StatelessWidget {
     );
   }
 }
+
+ImageProvider _coverImage(String url, double size, BuildContext context) =>
+    ResizeImage.resizeIfNeeded(
+      wasmSafeCacheSize(
+        (size * MediaQuery.devicePixelRatioOf(context)).round(),
+      ),
+      null,
+      NetworkImage(url),
+    );

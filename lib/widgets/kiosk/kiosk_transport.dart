@@ -156,14 +156,19 @@ class _RingPainter extends CustomPainter {
       radius,
       Paint()..color = Colors.black.withValues(alpha: 0.22),
     );
+    // The glow is circular: sample its falloff directly, without blurring
+    // a separate mask each time the transport is composited.
+    final outer = radius + glow;
+    final peak = radius / outer;
+    final edge = KalinkaColors.accent.withValues(alpha: 0);
     canvas.drawCircle(
       centre,
-      radius,
+      outer,
       Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke * 2.5
-        ..color = KalinkaColors.accent.withValues(alpha: 0.7)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, glow / 2.5),
+        ..shader = RadialGradient(
+          colors: [edge, KalinkaColors.accent.withValues(alpha: 0.46), edge],
+          stops: [(radius - glow) / outer, peak, 1],
+        ).createShader(Rect.fromCircle(center: centre, radius: outer)),
     );
     canvas.drawCircle(
       centre,
