@@ -12,7 +12,7 @@ import 'package:kalinka/widgets/kalinka_button.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/kalinka_centered_surface.dart';
 import 'package:kalinka/widgets/kalinka_popover.dart';
-import 'package:kalinka/widgets/kiosk/kiosk_home_layout.dart';
+import 'package:kalinka/widgets/kiosk/kiosk_display_layout.dart';
 
 const triggerKey = ValueKey('popup-trigger');
 final reviewKey = GlobalKey();
@@ -150,7 +150,7 @@ void main() {
         host(
           alignment: Alignment.topRight,
           builder: (_, child) =>
-              KioskHomeLayout(diagonalInches: 55, child: child!),
+              KioskDisplayLayout(diagonalInches: 55, child: child!),
           onResult: (value) => result = value,
         ),
       );

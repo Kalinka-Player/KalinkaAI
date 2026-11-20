@@ -2,10 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Lays out the local display's browsing UI in readable logical pixels.
-/// The separate now-playing route already scales its own controls.
-class KioskHomeLayout extends StatelessWidget {
-  const KioskHomeLayout({
+/// Gives browsing and Now Playing the same logical viewport on a local display.
+class KioskDisplayLayout extends StatelessWidget {
+  const KioskDisplayLayout({
     super.key,
     required this.diagonalInches,
     required this.child,
