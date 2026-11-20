@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
-import 'package:kalinka/widgets/dialog_scroll_scope.dart';
 import 'package:kalinka/widgets/settings_controls/settings_binding.dart';
 import 'package:kalinka/widgets/settings_controls/settings_combo_input.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
@@ -200,22 +199,20 @@ void main() {
       await tester.tap(find.text('Output 0'));
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsNothing);
-      final sheetList = find.descendant(
-        of: find.byType(DialogScrollScope),
-        matching: find.byType(Scrollable),
-      );
-      final position = tester.state<ScrollableState>(sheetList).position;
       final up = find.byKey(const ValueKey('dialog-overflow-up'));
       final down = find.byKey(const ValueKey('dialog-overflow-down'));
       expect(up, findsNothing);
       expect(down, findsOneWidget);
-      position.jumpTo(position.maxScrollExtent);
-      await tester.pumpAndSettle();
+      expect(await tabTo(tester, down), isTrue);
+      for (var page = 0; page < 10 && down.evaluate().isNotEmpty; page++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+      }
       expect(up, findsOneWidget);
       expect(down, findsNothing);
       final last = find.widgetWithText(InkWell, 'Output 20');
-      expect(await tabTo(tester, last), isTrue);
-      expect(traversableFocusNodesIn(up), isEmpty);
+      expect(focusIsOn(last), isTrue);
+      expect(traversableFocusNodesIn(up), hasLength(1));
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(binding.staged, {path: 'hw:20'});
