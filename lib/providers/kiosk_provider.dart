@@ -36,6 +36,13 @@ final localDisplayKioskProvider = Provider<bool>(
       ref.watch(kioskLaunchProvider),
 );
 
+/// Physical panel size reported by the local launcher's EDID probe.
+final kioskDisplayDiagonalInchesProvider = Provider<double?>(
+  (ref) => double.tryParse(
+    environmentValue('KALINKA_DISPLAY_DIAGONAL_INCHES') ?? '',
+  ),
+);
+
 /// Why the display is up, which decides the way out of it.
 enum KioskLock {
   /// Opened from the player: the exit button leaves.
