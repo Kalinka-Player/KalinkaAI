@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,11 +7,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
+import 'package:kalinka/widgets/dialog_scroll_scope.dart';
 import 'package:kalinka/widgets/settings_controls/settings_binding.dart';
 import 'package:kalinka/widgets/settings_controls/settings_combo_input.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
 import 'package:kalinka/widgets/settings_renderer.dart';
+
+import 'support/focus.dart';
 
 /// One page with a field per widget kind the shared renderer dispatches, so a
 /// binding is exercised across the whole control set rather than one row.
@@ -168,7 +172,7 @@ void main() {
 
     await tester.tap(find.text('System default'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Scroll down one page'), findsNothing);
+    expect(find.byKey(const ValueKey('dialog-overflow-down')), findsNothing);
     await tester.tap(find.text('HiFiBerry'));
     await tester.pumpAndSettle();
 
@@ -176,7 +180,7 @@ void main() {
   });
 
   testWidgets(
-    'page through ALSA devices in the tablet dialog and choose the last',
+    'scroll through ALSA devices in the tablet dialog and choose the last',
     (tester) async {
       tester.view.physicalSize = const Size(1024, 768);
       tester.view.devicePixelRatio = 1;
@@ -196,24 +200,23 @@ void main() {
       await tester.tap(find.text('Output 0'));
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsNothing);
-      final page = find.byTooltip('Scroll down one page');
-      final back = find.byTooltip('Scroll up one page');
-      expect(back, findsNothing);
-      await tester.tap(page);
+      final sheetList = find.descendant(
+        of: find.byType(DialogScrollScope),
+        matching: find.byType(Scrollable),
+      );
+      final position = tester.state<ScrollableState>(sheetList).position;
+      final up = find.byKey(const ValueKey('dialog-overflow-up'));
+      final down = find.byKey(const ValueKey('dialog-overflow-down'));
+      expect(up, findsNothing);
+      expect(down, findsOneWidget);
+      position.jumpTo(position.maxScrollExtent);
       await tester.pumpAndSettle();
-      expect(back.hitTestable(), findsOneWidget);
-      await tester.tap(back);
-      await tester.pumpAndSettle();
-      expect(back, findsNothing);
-      expect(find.text('Output 0').hitTestable(), findsOneWidget);
-      // Each page uses the space available between the chevrons.
-      for (var i = 0; i < 3 && page.evaluate().isNotEmpty; i++) {
-        await tester.tap(page);
-        await tester.pumpAndSettle();
-      }
-      expect(page, findsNothing);
-      expect(back.hitTestable(), findsOneWidget);
-      await tester.tap(find.text('Output 20'));
+      expect(up, findsOneWidget);
+      expect(down, findsNothing);
+      final last = find.widgetWithText(InkWell, 'Output 20');
+      expect(await tabTo(tester, last), isTrue);
+      expect(traversableFocusNodesIn(up), isEmpty);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(binding.staged, {path: 'hw:20'});
     },

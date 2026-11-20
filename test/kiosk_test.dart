@@ -1828,7 +1828,7 @@ void main() {
   });
 
   testWidgets(
-    'the kiosk picker can page through newly discovered outputs by keyboard',
+    'remote focus follows newly discovered output rows through both scroll hints',
     (tester) async {
       final h = await _pump(
         tester,
@@ -1849,45 +1849,29 @@ void main() {
           ),
       ]);
       await tester.pumpAndSettle();
-      final page = find.widgetWithIcon(
-        IconButton,
-        Icons.keyboard_arrow_down_rounded,
-      );
-      expect(page.hitTestable(), findsOneWidget);
-      expect(await tabTo(tester, page), isTrue);
-      final list = find.descendant(
-        of: openPanel(),
-        matching: find.byType(Scrollable),
-      );
-      final position = tester.state<ScrollableState>(list).position;
-      final before = position.pixels;
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pumpAndSettle();
-      expect(
-        position.pixels,
-        (before + position.viewportDimension).clamp(
-          0,
-          position.maxScrollExtent,
-        ),
-      );
-      expect(renderers.selected, isEmpty);
-      expect(openPanel(), findsOneWidget);
-      while (position.extentAfter > 0) {
-        expect(focusIsOn(page), isTrue);
-        final previous = position.pixels;
-        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      final up = find.byKey(const ValueKey('dialog-overflow-up'));
+      final down = find.byKey(const ValueKey('dialog-overflow-down'));
+      expect(up, findsNothing);
+      expect(down, findsOneWidget);
+      Finder row(int i) => find.widgetWithText(InkWell, 'Room $i');
+      expect(await tabTo(tester, row(0)), isTrue);
+      for (var i = 1; i < 20; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
-        expect(position.pixels, greaterThan(previous));
+        expect(focusIsOn(row(i)), isTrue);
       }
-      expect(page, findsNothing);
-      expect(find.text('Room 19').hitTestable(), findsOneWidget);
-      final back = find.byTooltip('Scroll up one page');
-      expect(await tabTo(tester, back), isTrue);
-      final lastOffset = position.pixels;
+      expect(up, findsOneWidget);
+      expect(row(19).hitTestable(), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(focusIsOn(row(18)), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(focusIsOn(row(19)), isTrue);
+      expect(traversableFocusNodesIn(up), isEmpty);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
-      expect(position.pixels, lessThan(lastOffset));
-      expect(renderers.selected, isEmpty);
+      expect(renderers.selected, ['room-19']);
     },
   );
 

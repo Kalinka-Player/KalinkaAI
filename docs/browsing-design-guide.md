@@ -211,9 +211,9 @@ Increase card height for wrapping and text scaling rather than shrinking type. A
 
 ## Lists and grids
 
-In a dialog, popup or bottom sheet, an overflowing list shows a small neutral chevron at each edge with more content. A vertical list can show up and down together. Horizontal lists follow the physical left and right edges, including in right-to-left layouts. Activating a chevron pages the list in that direction. Each control has its own space beside the rows and disappears when that edge is reached. Lists that fit use the whole available space.
+In dialogs, popups and bottom sheets, draw a shallow, muted chevron over each list edge with more content. The list uses its full viewport at every scroll position. Vertical lists show the mark at the top or bottom, and horizontal lists use the corresponding physical edge, including in right-to-left layouts. The marks are decorative. Pointer gestures reach the rows beneath them, and keyboard or remote focus follows the list items.
 
-[Tablet ALSA output selector with more devices above and below](images/alsa-output-scroll.png)
+[Tablet ALSA output selector with more devices below](images/alsa-output-scroll.png)
 
 List presentation supports two distinct ways to use width. Select the treatment by the kind of content and its ordering requirements, not by plugin name.
 
