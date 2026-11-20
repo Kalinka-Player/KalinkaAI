@@ -9,6 +9,7 @@ import '../providers/kiosk_provider.dart';
 import '../providers/on_screen_keyboard_provider.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
+import 'dialog_scroll_scope.dart';
 import 'settings_controls/settings_card.dart';
 import 'settings_controls/settings_enum_pills.dart';
 import 'settings_controls/settings_row.dart';
@@ -195,69 +196,74 @@ class _TimeoutRow extends StatelessWidget {
               side: const BorderSide(color: KalinkaColors.borderDefault),
             ),
             clipBehavior: Clip.antiAlias,
-            child: PopupMenuButton<int>(
-              key: fieldKey,
-              tooltip: label,
-              initialValue: value,
-              position: PopupMenuPosition.under,
-              constraints: const BoxConstraints(minWidth: 168, maxWidth: 280),
-              color: KalinkaColors.surfaceRaised,
-              surfaceTintColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: const BorderSide(color: KalinkaColors.borderDefault),
-              ),
-              onSelected: (seconds) => unawaited(onChanged(seconds)),
-              itemBuilder: (_) => [
-                for (final seconds in choices)
-                  PopupMenuItem<int>(
-                    value: seconds,
-                    child: Semantics(
-                      selected: seconds == value,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _durationLabel(seconds),
-                              style: KalinkaTextStyles.trayRowLabel,
+            child: DialogScrollScope(
+              child: PopupMenuButton<int>(
+                key: fieldKey,
+                tooltip: label,
+                initialValue: value,
+                position: PopupMenuPosition.under,
+                constraints: const BoxConstraints(minWidth: 168, maxWidth: 280),
+                color: KalinkaColors.surfaceRaised,
+                surfaceTintColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: KalinkaColors.borderDefault),
+                ),
+                onSelected: (seconds) => unawaited(onChanged(seconds)),
+                itemBuilder: (_) => [
+                  for (final seconds in choices)
+                    PopupMenuItem<int>(
+                      value: seconds,
+                      child: Semantics(
+                        selected: seconds == value,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _durationLabel(seconds),
+                                style: KalinkaTextStyles.trayRowLabel,
+                              ),
                             ),
-                          ),
-                          if (seconds == value) ...[
-                            const SizedBox(width: 12),
-                            const Icon(
-                              Icons.check,
-                              size: 18,
-                              color: KalinkaColors.textSecondary,
-                            ),
+                            if (seconds == value) ...[
+                              const SizedBox(width: 12),
+                              const Icon(
+                                Icons.check,
+                                size: 18,
+                                color: KalinkaColors.textSecondary,
+                              ),
+                            ],
                           ],
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 48, minWidth: 80),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          _durationLabel(value),
-                          style: KalinkaTextStyles.trayRowLabel,
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      const Icon(
-                        Icons.keyboard_arrow_down,
-                        size: 18,
-                        color: KalinkaColors.textSecondary,
-                      ),
-                    ],
+                    ),
+                ],
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minHeight: 48,
+                    minWidth: 80,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _durationLabel(value),
+                            style: KalinkaTextStyles.trayRowLabel,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(
+                          Icons.keyboard_arrow_down,
+                          size: 18,
+                          color: KalinkaColors.textSecondary,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

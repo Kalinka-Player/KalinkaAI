@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'dialog_scroll_scope.dart';
 import 'hover_text_action.dart';
 import 'kalinka_popover.dart';
 
@@ -52,7 +53,7 @@ class KalinkaOverlayCard extends StatelessWidget {
                   ],
                 ),
           clipBehavior: Clip.antiAlias,
-          child: child,
+          child: DialogScrollScope(child: child),
         ),
       ),
     );

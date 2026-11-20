@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
-import 'package:kalinka/widgets/kalinka_scroll_behavior.dart';
 import 'package:kalinka/widgets/settings_controls/settings_binding.dart';
 import 'package:kalinka/widgets/settings_controls/settings_combo_input.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
@@ -95,7 +94,6 @@ class _RecordingBinding implements SettingsBinding {
 
 Widget _wrap(SettingsBinding binding) => ProviderScope(
   child: MaterialApp(
-    scrollBehavior: const KalinkaScrollBehavior(),
     home: Scaffold(
       body: SettingsScope(
         binding: binding,
@@ -199,10 +197,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsNothing);
       final page = find.byTooltip('Scroll down one page');
-      expect(page.hitTestable(), findsOneWidget);
+      final back = find.byTooltip('Scroll up one page');
+      expect(back, findsNothing);
       await tester.tap(page);
       await tester.pumpAndSettle();
+      expect(back.hitTestable(), findsOneWidget);
+      await tester.tap(back);
+      await tester.pumpAndSettle();
+      expect(back, findsNothing);
+      expect(find.text('Output 0').hitTestable(), findsOneWidget);
+      // Each page uses the space available between the chevrons.
+      for (var i = 0; i < 3 && page.evaluate().isNotEmpty; i++) {
+        await tester.tap(page);
+        await tester.pumpAndSettle();
+      }
       expect(page, findsNothing);
+      expect(back.hitTestable(), findsOneWidget);
       await tester.tap(find.text('Output 20'));
       await tester.pumpAndSettle();
       expect(binding.staged, {path: 'hw:20'});
