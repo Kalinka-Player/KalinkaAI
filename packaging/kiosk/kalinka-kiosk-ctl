@@ -7,8 +7,10 @@ The server's expert settings `base_config.display.*` decide whether it runs:
   kalinka-kiosk-ctl prepare   (root) resolve the launch settings for `run`;
                               exits 1 while the display is off
   kalinka-kiosk-ctl run       exec flutter-pi with them, as the service user
+  kalinka-kiosk-ctl restore-display  (root) return the console and panel to their prior state
 """
 
+import errno
 import fcntl
 import grp
 import json
@@ -20,6 +22,7 @@ import stat
 import struct
 import subprocess
 import sys
+import time
 
 CONFIG = os.environ.get("KALINKA_CONFIG", "/etc/kalinka/kalinka_conf.cfg")
 RUN_DIR = os.environ.get("RUNTIME_DIRECTORY", "/run/kalinka-kiosk")
@@ -27,6 +30,84 @@ BUNDLE = "/usr/lib/kalinka-kiosk/bundle"
 UNIT = "kalinka-kiosk.service"
 BACKLIGHT_DIR = Path("/sys/class/backlight")
 DRM_DIR = Path("/sys/class/drm")
+# Privileged hooks own this file. RUN_DIR belongs to the display service user.
+VT_STATE = Path("/run/kalinka-kiosk-vt.json")
+ACTIVE_TTY = Path("/sys/class/tty/tty0/active")
+VC_DIR = Path("/sys/class/vc")
+# Linux UAPI, <linux/kd.h> and <linux/vt.h>.
+KDGKBMODE, KDSKBMODE, K_OFF = 0x4B44, 0x4B45, 4
+VT_ACTIVATE, VT_WAITACTIVE, VT_DISALLOCATE = 0x5606, 0x5607, 0x5608
+
+
+def _open_vt(number):
+    fd = os.open(f"/dev/tty{number}", os.O_RDONLY | os.O_NOCTTY)
+    return os.fdopen(fd, "rb", buffering=0)
+
+
+def _keyboard_mode(tty):
+    return struct.unpack("i", fcntl.ioctl(tty, KDGKBMODE, bytes(4)))[0]
+
+
+def _switch_vt(tty, number):
+    fcntl.ioctl(tty, VT_ACTIVATE, number)
+    fcntl.ioctl(tty, VT_WAITACTIVE, number)
+
+
+def _prepare_console():
+    """Keep remote and USB keys on evdev without typing into a login session."""
+    _restore_console()  # Retry an interrupted cleanup before saving new state.
+    try:
+        previous = int(ACTIVE_TTY.read_text().strip().removeprefix("tty"))
+    except FileNotFoundError:
+        return  # No kernel virtual console to receive key presses.
+    # Leave tty1 and its getty alone, including its resets at boot or respawn.
+    # /sys/class/vc/vcsN exists for allocated VTs. Pick a spare above the
+    # normal login VTs (1–6), starting at Linux's MAX_NR_CONSOLES.
+    kiosk = next((n for n in range(63, 6, -1) if not (VC_DIR / f"vcs{n}").exists()), None)
+    if kiosk is None:
+        raise OSError("No free virtual console for the kiosk")
+    # Opening an unused tty allocates it. Record it first so a failed start
+    # can release it even if the hook dies before changing its keyboard mode.
+    saved = {"previous": previous, "kiosk": kiosk, "mode": None}
+    _save_console(saved)
+    with _open_vt(kiosk) as tty:
+        saved["mode"] = _keyboard_mode(tty)
+        _save_console(saved)
+        fcntl.ioctl(tty, KDSKBMODE, K_OFF)
+        _switch_vt(tty, kiosk)
+
+
+def _save_console(saved):
+    pending = VT_STATE.with_suffix(".tmp")
+    pending.write_text(json.dumps(saved))
+    pending.replace(VT_STATE)
+
+
+def _restore_console():
+    try:
+        saved = json.loads(VT_STATE.read_text())
+    except FileNotFoundError:
+        return
+    kiosk = saved["kiosk"]
+    if saved["mode"] is not None:
+        with _open_vt(kiosk) as tty:
+            if ACTIVE_TTY.read_text().strip() == f"tty{kiosk}":
+                _switch_vt(tty, saved["previous"])
+            if _keyboard_mode(tty) == K_OFF:
+                fcntl.ioctl(tty, KDSKBMODE, saved["mode"])
+    with _open_vt(0) as active:
+        # The kernel releases the last tty reference asynchronously. A VT
+        # still held by another session can stay allocated with its mode restored.
+        for attempt in range(5):
+            try:
+                fcntl.ioctl(active, VT_DISALLOCATE, kiosk)
+                break
+            except OSError as error:
+                if error.errno != errno.EBUSY:
+                    raise
+                if attempt < 4:
+                    time.sleep(0.05)
+    VT_STATE.unlink()
 
 
 def _display_diagonal_inches():
@@ -110,7 +191,7 @@ def _backlight_state():
 
 
 def restore_display():
-    """Restore panel power on stop, including after a crash while blanked."""
+    """Restore panel power and the previous console, including after a crash."""
     saved = _backlight_state()
     if saved is not None:
         control, power = saved
@@ -118,6 +199,7 @@ def restore_display():
             control.write_text(str(power))
         except OSError as error:
             print(f"Could not restore display power: {error}", file=sys.stderr)
+    _restore_console()
 
 
 def _overrides():
@@ -183,6 +265,7 @@ def prepare():
             with open(_launch_file(), "w") as f:
                 json.dump(want, f)
             _prepare_backlight()
+            _prepare_console()
     except (OSError, ValueError) as e:
         # Not 1, which would read as "switched off" and never be retried.
         print(e, file=sys.stderr)
