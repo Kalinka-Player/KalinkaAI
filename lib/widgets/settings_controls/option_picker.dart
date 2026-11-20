@@ -32,26 +32,18 @@ class OptionPicker extends StatelessWidget {
     final maxHeight = MediaQuery.of(context).size.height * 0.7;
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: maxHeight),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(
-            child: options.isEmpty
-                ? _EmptyMessage(text: emptyMessage ?? 'Nothing to choose from')
-                : ListView.builder(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.only(top: 8, bottom: 4),
-                    itemCount: options.length,
-                    itemBuilder: (ctx, i) => OptionRow(
-                      option: options[i],
-                      selected: options[i].value == selectedValue,
-                      onTap: () => Navigator.of(ctx).pop(options[i].value),
-                    ),
-                  ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
+      child: options.isEmpty
+          ? _EmptyMessage(text: emptyMessage ?? 'Nothing to choose from')
+          : ListView.builder(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: options.length,
+              itemBuilder: (ctx, i) => OptionRow(
+                option: options[i],
+                selected: options[i].value == selectedValue,
+                onTap: () => Navigator.of(ctx).pop(options[i].value),
+              ),
+            ),
     );
   }
 }

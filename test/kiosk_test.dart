@@ -1868,7 +1868,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
       expect(focusIsOn(row(19)), isTrue);
-      expect(traversableFocusNodesIn(up), isEmpty);
+      expect(traversableFocusNodesIn(up), hasLength(1));
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(renderers.selected, ['room-19']);

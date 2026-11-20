@@ -211,7 +211,9 @@ Increase card height for wrapping and text scaling rather than shrinking type. A
 
 ## Lists and grids
 
-In dialogs, popups and bottom sheets, draw a shallow, muted chevron over each list edge with more content. The list uses its full viewport at every scroll position. Vertical lists show the mark at the top or bottom, and horizontal lists use the corresponding physical edge, including in right-to-left layouts. The marks are decorative. Pointer gestures reach the rows beneath them, and keyboard or remote focus follows the list items.
+In dialogs, popups and bottom sheets, put a small Material chevron in the list’s edge padding wherever more content is available. On an overflowing list, two 16dp strips keep the page size stable as the user scrolls. Vertical lists use the top and bottom edges. Horizontal lists use the physical left and right edges, including in right-to-left layouts. Lists that fit use their full space.
+
+Click, tap or activate a focused chevron to move one visible page. The chevron dims during scrolling and has a neutral keyboard focus outline. Arrow keys still move between options. When a focused chevron reaches the end, move focus to the first or last visible option.
 
 [Tablet ALSA output selector with more devices below](images/alsa-output-scroll.png)
 

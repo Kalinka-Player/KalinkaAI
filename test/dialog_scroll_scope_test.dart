@@ -2,9 +2,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/dialog_scroll_scope.dart';
 import 'package:kalinka/widgets/kalinka_bottom_sheet.dart';
 import 'package:kalinka/widgets/kalinka_dialog.dart';
+
+import 'support/focus.dart';
 
 final up = find.byKey(const ValueKey('dialog-overflow-up'));
 final down = find.byKey(const ValueKey('dialog-overflow-down'));
@@ -109,9 +112,8 @@ void main() {
     expect(up, findsNothing);
     await layout(240, 241);
     expect(down, findsOneWidget);
-    expect(controller.position.viewportDimension, 240);
-    expect(controller.position.maxScrollExtent, 1);
-    controller.jumpTo(1);
+    expect(controller.position.viewportDimension, 208);
+    await tester.tap(down);
     await tester.pumpAndSettle();
     expect(down, findsNothing);
     expect(up, findsOneWidget);
@@ -120,13 +122,13 @@ void main() {
     expect(down, findsNothing);
     expect(controller.position.viewportDimension, 241);
     await layout(300, 1200);
-    expect(controller.position.viewportDimension, 300);
+    expect(controller.position.viewportDimension, 268);
     final hint = tester.widget(down);
     await layout(320, 1200);
-    expect(controller.position.viewportDimension, 320);
+    expect(controller.position.viewportDimension, 288);
     expect(tester.widget(down), same(hint));
     await layout(12, 1200);
-    expect(controller.position.viewportDimension, 12);
+    expect(controller.position.viewportDimension, 6);
     expect(down, findsOneWidget);
     await layout(320, 120);
     expect(down, findsNothing);
@@ -164,45 +166,117 @@ void main() {
     expect(down, findsNothing);
   });
 
-  testWidgets('rows receive taps and wheel events through the hint', (
-    tester,
-  ) async {
-    final controller = ScrollController();
-    addTearDown(controller.dispose);
-    int? tapped;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 300,
-            height: 240,
-            child: DialogScrollScope(
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                controller: controller,
-                itemExtent: 48,
-                itemCount: 40,
-                itemBuilder: (_, i) =>
-                    InkWell(onTap: () => tapped = i, child: Text('Row $i')),
+  testWidgets(
+    'a compact page control occupies its own gutter and preserves row input',
+    (tester) async {
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+      int? tapped;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 240,
+              child: DialogScrollScope(
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  controller: controller,
+                  itemExtent: 48,
+                  itemCount: 40,
+                  itemBuilder: (_, i) =>
+                      InkWell(onTap: () => tapped = i, child: Text('Row $i')),
+                ),
               ),
             ),
           ),
         ),
-      ),
+      );
+      await tester.pumpAndSettle();
+      final viewport = tester.getRect(find.byType(Viewport));
+      expect(tester.getRect(down).top, viewport.bottom);
+      expect(tester.getSize(down), const Size(64, 16));
+      expect(find.byTooltip('Scroll down one page'), findsOneWidget);
+      await tester.tap(down);
+      await tester.pumpAndSettle();
+      expect(tapped, isNull);
+      expect(controller.offset, viewport.height);
+      expect(tester.getRect(up).bottom, viewport.top);
+      await tester.tap(up);
+      await tester.pumpAndSettle();
+      expect(controller.offset, 0);
+      await tester.tapAt(viewport.topLeft + const Offset(12, 20));
+      expect(tapped, 0);
+      await tester.sendEventToBinding(
+        PointerScrollEvent(
+          position: viewport.center,
+          scrollDelta: const Offset(0, 80),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.offset, 80);
+      expect(up, findsOneWidget);
+    },
+  );
+
+  for (final reducedMotion in [false, true]) {
+    testWidgets(
+      'paging hands focus to each endpoint, reduced motion $reducedMotion',
+      (tester) async {
+        final selected = <int>[];
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(disableAnimations: reducedMotion),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: SizedBox(
+                height: 240,
+                child: DialogScrollScope(
+                  child: ListView.builder(
+                    itemCount: 13,
+                    itemExtent: 48,
+                    itemBuilder: (_, i) => TextButton(
+                      onPressed: () => selected.add(i),
+                      child: Text('Row $i'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        for (final (button, end) in [(down, 12), (up, 0)]) {
+          expect(await tabTo(tester, button), isTrue);
+          expect(
+            focusOutlineIn(button, KalinkaColors.textPrimary),
+            findsOneWidget,
+          );
+          for (
+            var press = 0;
+            press < 4 && button.evaluate().isNotEmpty;
+            press++
+          ) {
+            expect(focusIsOn(button), isTrue);
+            await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+            await tester.pumpAndSettle();
+          }
+          expect(button, findsNothing);
+          expect(
+            focusIsOn(find.widgetWithText(TextButton, 'Row $end')),
+            isTrue,
+          );
+          expect(selected, isEmpty);
+        }
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(selected, [0]);
+      },
     );
-    await tester.pumpAndSettle();
-    final point = tester.getCenter(down);
-    await tester.tapAt(point);
-    await tester.pumpAndSettle();
-    expect(tapped, 4);
-    expect(controller.offset, 0);
-    await tester.sendEventToBinding(
-      PointerScrollEvent(position: point, scrollDelta: const Offset(0, 80)),
-    );
-    await tester.pumpAndSettle();
-    expect(controller.offset, 80);
-    expect(up, findsOneWidget);
-  });
+  }
 
   for (final (axis, reverse, rtl, forward, back) in [
     (Axis.vertical, false, false, down, up),
@@ -249,13 +323,22 @@ void main() {
       expect(back, findsOneWidget);
       expect(forward, findsOneWidget);
       final viewport = tester.getRect(find.byType(Viewport));
-      expect(viewport.size, const Size(280, 240));
+      expect(
+        viewport.size,
+        axis == Axis.vertical ? const Size(280, 208) : const Size(248, 240),
+      );
       final mark = tester.getSize(forward);
       expect(
         axis == Axis.vertical ? mark.width : mark.height,
         greaterThan(3 * (axis == Axis.vertical ? mark.height : mark.width)),
       );
-      expect(forward.hitTestable(), findsNothing);
+      expect(forward.hitTestable(), findsOneWidget);
+      await tester.tap(forward);
+      await tester.pumpAndSettle();
+      expect(controller.offset, 400 + controller.position.viewportDimension);
+      await tester.tap(back);
+      await tester.pumpAndSettle();
+      expect(controller.offset, 400);
       controller.jumpTo(controller.position.maxScrollExtent);
       await tester.pumpAndSettle();
       expect(forward, findsNothing);
