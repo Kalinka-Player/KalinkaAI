@@ -251,15 +251,28 @@ void main() {
       expect(focusIsOn(control), isTrue, reason: control.toString());
     }
 
+    final keyboard = find.byKey(const ValueKey('on-screen-keyboard'));
     Future<void> submit() async {
-      // The Done button is to the right of the landscape keyboard.
-      for (var i = 0; i < 12; i++) {
+      // Reach the bottom row, then move to its action key.
+      for (var i = 0; i < 3; i++) {
+        await key(LogicalKeyboardKey.arrowDown);
+      }
+      final action = find.descendant(
+        of: keyboard,
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.focused == true &&
+              w.properties.label == 'Done',
+        ),
+      );
+      for (var i = 0; i < 8 && action.evaluate().isEmpty; i++) {
         await key(LogicalKeyboardKey.arrowRight);
       }
+      expect(action, findsOneWidget);
       await key(LogicalKeyboardKey.enter);
     }
 
-    final keyboard = find.byKey(const ValueKey('on-screen-keyboard'));
     final country = find.ancestor(
       of: countryField,
       matching: find.byType(AppKeyboardTextEntry),

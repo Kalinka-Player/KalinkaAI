@@ -201,8 +201,9 @@ existing IBM Plex Sans; do not bundle additional keyboard fonts.
 The keyboard uses neutral Kalinka surfaces and labels;
 the setting's enabled switch carries the crimson fill. Float the keyboard over
 the whole app Navigator, centered at the bottom, with no full-width strip behind
-it. Keep the catalogue and rail painted and interactive beside it. Supply its
-height as a keyboard inset so forms, sheets and dialogs avoid the keys.
+it. Keep the catalogue and rail painted and interactive beside it. Settings
+pages, sheets and dialogs reserve the keyboard inset once so the active field
+and its contents stay visible while editing.
 Keep the whole panel within 37% of the window height (260dp at most),
 including the bottom safe area. Derive its width from the available key height
 and the standard four-row, ten-column letter layout, allowing character keys up
@@ -211,11 +212,12 @@ that width; cap it at the available window width and 900dp. Center the panel and
 its surface together so
 there are no empty side bands. At 1024×600 the English layout is 900×222, with
 48dp-tall letter keys and 378dp above it. Use clearly visible 6dp gaps between
-rows. In landscape windows, put Hide and Done/Search/Next in a 52dp side column.
-In portrait windows, move these controls into a 48dp toolbar above the
-keys so the keypad uses the full panel width. The toolbar stays within the
-panel's height limit. Preserve keypad state when resizing changes the toolbar
-position. Use tooltips and accessible labels; character labels are 20dp IBM Plex Sans.
+rows. Keep Hide in a 52dp side column in landscape and in a 48dp toolbar above
+the keys in portrait. The grid has one action key matching the field, such as
+Done, Search or Next. Numeric and multiline layouts use the toolbar for that
+action so the number keys and line break remain available. Preserve keypad
+state on rotation. Use 24dp IBM Plex Sans character labels. A warm-white outline
+marks the remote target. Activating a key briefly brightens its face.
 Use the neutral sheet surface with rounded top corners. Slide up in 180ms and
 down in 140ms without a backdrop or dismiss barrier. First let the phone or
 tablet mini-player slide out; restore it only once the keyboard has closed.

@@ -40,6 +40,10 @@ class _CatalogApi extends HomeApi {
 final _keyboard = find.byKey(const ValueKey('on-screen-keyboard'));
 final _mini = find.byType(MiniPlayer);
 final _field = find.byType(TextField);
+final _searchKey = find.descendant(
+  of: find.byType(VirtualKeypad),
+  matching: find.bySemanticsLabel('Search'),
+);
 const _capture = ValueKey('catalog-keyboard-capture');
 
 Future<void> _focusFilter(WidgetTester tester) async {
@@ -258,7 +262,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(controller.text, 'Mart');
-        await tester.tap(find.byKey(const ValueKey('keyboard-submit')));
+        await tester.tap(_searchKey);
         await tester.pumpAndSettle();
         expect(
           container.read(searchSessionProvider).catalogFilter.text,
@@ -450,7 +454,7 @@ void main() {
         });
       }
 
-      await tester.tap(find.byKey(const ValueKey('keyboard-submit')));
+      await tester.tap(_searchKey);
       await tester.pump();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 60));

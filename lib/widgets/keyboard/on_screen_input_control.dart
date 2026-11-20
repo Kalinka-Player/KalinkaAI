@@ -68,7 +68,7 @@ class OnScreenInputControl with TextInputControl {
     final action => action,
   };
 
-  /// The toolbar always offers a way to finish, including multiline/numbers.
+  /// Finish with the field's action. Multiline keeps a separate newline key.
   void submit() {
     final submitAction = action == TextInputAction.newline
         ? TextInputAction.done

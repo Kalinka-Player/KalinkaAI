@@ -421,6 +421,10 @@ class _VirtualKeypadState extends State<VirtualKeypad> {
   /// Column of the key currently highlighted for D-pad navigation.
   int _dpadCol = 0;
 
+  // A short key-face flash also confirms actions that leave the text unchanged.
+  (int, int)? _pressedPosition;
+  Timer? _pressTimer;
+
   /// Layout the D-pad highlight is currently addressing.
   ///
   /// Set during build so the key handler navigates whatever the user can
@@ -690,6 +694,7 @@ class _VirtualKeypadState extends State<VirtualKeypad> {
 
   @override
   void dispose() {
+    _pressTimer?.cancel();
     widget.shuffleTrigger?.removeListener(_onShuffleTrigger);
     KeyboardLayoutProvider.instance.removeListener(_onLanguageChanged);
     VirtualKeypadColorEmoji.isLoaded.removeListener(_onColorEmojiLoaded);
@@ -1189,16 +1194,28 @@ class _VirtualKeypadState extends State<VirtualKeypad> {
   }
 
   KeyboardLayout _getLayoutForStage(KeyboardLayoutSet layoutSet) {
-    switch (_layoutStage) {
-      case LayoutStage.primary:
-        return layoutSet.primary;
-      case LayoutStage.secondary:
-        return layoutSet.secondary ?? layoutSet.primary;
-      case LayoutStage.tertiary:
-        return layoutSet.tertiary ?? layoutSet.secondary ?? layoutSet.primary;
-      case LayoutStage.emoji:
-        return layoutSet.primary;
+    final layout = switch (_layoutStage) {
+      LayoutStage.primary || LayoutStage.emoji => layoutSet.primary,
+      LayoutStage.secondary => layoutSet.secondary ?? layoutSet.primary,
+      LayoutStage.tertiary =>
+        layoutSet.tertiary ?? layoutSet.secondary ?? layoutSet.primary,
+    };
+    // Built-in email, URL and phone layouts end in Done, Go and Call.
+    // When a field specifies its own action, the ordinary Enter key already
+    // supplies the matching icon, accessible name and submit behaviour.
+    final last = layout.last.last;
+    const layoutActions = {KeyAction.done, KeyAction.go, KeyAction.call};
+    if (widget.inputAction == null ||
+        !layoutActions.contains(last.action)) {
+      return layout;
     }
+    return [
+      ...layout.take(layout.length - 1),
+      [
+        ...layout.last.take(layout.last.length - 1),
+        VirtualKey.action(action: KeyAction.enter, flex: last.flex),
+      ],
+    ];
   }
 
   bool get _isEmojiPickerVisible =>
@@ -1448,6 +1465,7 @@ class _VirtualKeypadState extends State<VirtualKeypad> {
                 return _KeyWidget(
                   key: ValueKey('${key.text ?? key.action}'),
                   virtualKey: key,
+                  isPressed: _pressedPosition == (rowIndex, colIndex),
                   isDpadFocused: widget.enableDpadNavigation &&
                       rowIndex == _dpadRow &&
                       colIndex == _dpadCol,
@@ -1465,7 +1483,7 @@ class _VirtualKeypadState extends State<VirtualKeypad> {
                   onSpaceLongPress: _showLanguagePicker,
                   onCharacterLongPress: _showAccentPicker,
                   hasAccents: (c) => _accentsFor(c).isNotEmpty,
-                  onPressed: _onKeyPressed,
+                  onPressed: (key) => _onKeyPressed(key, rowIndex, colIndex),
                   keyBuilder: widget.keyBuilder,
                 );
               }),
@@ -1592,7 +1610,7 @@ class _VirtualKeypadState extends State<VirtualKeypad> {
         key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter ||
         key == LogicalKeyboardKey.gameButtonA) {
-      _onKeyPressed(_dpadLayout![_dpadRow][_dpadCol]);
+      _onKeyPressed(_dpadLayout![_dpadRow][_dpadCol], _dpadRow, _dpadCol);
       return true;
     }
 
@@ -1624,7 +1642,12 @@ class _VirtualKeypadState extends State<VirtualKeypad> {
     }
   }
 
-  void _onKeyPressed(VirtualKey key) {
+  void _onKeyPressed(VirtualKey key, int row, int column) {
+    _pressTimer?.cancel();
+    setState(() => _pressedPosition = (row, column));
+    _pressTimer = Timer(const Duration(milliseconds: 150), () {
+      setState(() => _pressedPosition = null);
+    });
     _playKeyFeedback();
     if (widget.keyShuffle == KeyShuffle.onEveryKey) {
       _reshuffle();
@@ -1925,6 +1948,7 @@ class _KeyWidget extends StatefulWidget {
   const _KeyWidget({
     super.key,
     required this.virtualKey,
+    required this.isPressed,
     required this.type,
     required this.height,
     required this.baseWidth,
@@ -1945,6 +1969,7 @@ class _KeyWidget extends StatefulWidget {
 
   /// Whether this key is the current D-pad target and should be highlighted.
   final bool isDpadFocused;
+  final bool isPressed;
 
   final VirtualKey virtualKey;
   final KeyboardType type;
@@ -2098,9 +2123,19 @@ class _KeyWidgetState extends State<_KeyWidget> {
   Widget build(BuildContext context) {
     final key = widget.virtualKey;
     final isAction = key.isAction;
-    final decoration = isAction
+    final base = isAction
         ? widget.theme.actionKeyDecoration
         : widget.theme.keyDecoration;
+    var decoration = _getDecoration(base);
+    if (widget.isDpadFocused) {
+      decoration = widget.theme.focusedDecoration(decoration);
+    }
+    if (widget.isPressed) {
+      decoration = decoration.copyWith(color: Color.alphaBlend(
+        widget.theme.splashColor ?? VkpColors.splashColor,
+        decoration.color!,
+      ));
+    }
 
     final width = widget.baseWidth * key.flex +
         (key.flex - 1) * widget.theme.horizontalGap;
@@ -2128,9 +2163,7 @@ class _KeyWidgetState extends State<_KeyWidget> {
           ),
           height: widget.height,
           width: width,
-          decoration: widget.isDpadFocused
-              ? widget.theme.focusedDecoration(_getDecoration(decoration))
-              : _getDecoration(decoration),
+          decoration: decoration,
           clipBehavior: Clip.antiAlias,
           child: Material(
             color: Colors.transparent,
