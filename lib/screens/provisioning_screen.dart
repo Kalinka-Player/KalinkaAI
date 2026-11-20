@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data_model/wifi_countries.dart';
 import '../providers/discovery_provider.dart';
 import '../providers/networked_boxes_provider.dart';
 import '../providers/provisioning_controller.dart';
@@ -19,6 +20,7 @@ import '../widgets/kalinka_back_button.dart';
 import '../widgets/onboarding/onboarding_step_scaffold.dart';
 import '../widgets/onboarding/setup_discovery.dart';
 import '../widgets/keyboard/app_keyboard_navigation.dart';
+import '../widgets/wifi_country_selector.dart';
 
 class ProvisioningScreen extends ConsumerStatefulWidget {
   final ProvisioningTransport? transport;
@@ -34,7 +36,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
   final _form = GlobalKey<FormState>();
   final _ssid = TextEditingController();
   final _password = TextEditingController();
-  final _country = TextEditingController();
+  late String _country;
   final _client = Dio(
     BaseOptions(
       connectTimeout: const Duration(seconds: 2),
@@ -45,7 +47,6 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
   NearbyBox? _chosenBox;
   bool _customSsid = false;
   bool _networkChosen = false;
-  bool _advanced = false;
   final _scroll = ScrollController();
   bool _showPassword = false;
   bool _finished = false;
@@ -54,8 +55,10 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
   @override
   void initState() {
     super.initState();
-    _country.text =
-        WidgetsBinding.instance.platformDispatcher.locale.countryCode ?? 'GB';
+    _country =
+        WidgetsBinding.instance.platformDispatcher.locale.countryCode
+            ?.toUpperCase() ??
+        'GB';
     _setup = ProvisioningController(
       widget.transport ?? createProvisioningTransport(),
       widget.reach ?? _reach,
@@ -66,12 +69,12 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
 
   Future<void> _selectBox(NearbyBox box) async {
     await _setup.select(box);
-    if (mounted) await _setup.scanWifi(_country.text.toUpperCase());
+    if (mounted) await _setup.scanWifi(_country);
   }
 
   Future<void> _reconnect() async {
     await _setup.reconnect();
-    if (mounted) await _setup.scanWifi(_country.text.toUpperCase());
+    if (mounted) await _setup.scanWifi(_country);
   }
 
   Future<void> _changeNetwork() async {
@@ -80,7 +83,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     _password.clear();
     _networkChosen = false;
     _customSsid = false;
-    await _setup.scanWifi(_country.text.toUpperCase());
+    await _setup.scanWifi(_country);
   }
 
   Future<void> _retry() async {
@@ -90,11 +93,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     } else if (_setup.phase == SetupPhase.joining &&
         _setup.status?.state == BoxState.failed &&
         _ssid.text.isNotEmpty) {
-      await _setup.join(
-        _ssid.text,
-        _password.text,
-        _country.text.toUpperCase(),
-      );
+      await _setup.join(_ssid.text, _password.text, _country);
     } else {
       await _reconnect();
     }
@@ -175,7 +174,6 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     _scroll.dispose();
     _ssid.dispose();
     _password.dispose();
-    _country.dispose();
     _client.close(force: true);
     super.dispose();
   }
@@ -241,17 +239,15 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
 
   void _submit() {
     if (_setup.phase != SetupPhase.credentials || _setup.scanningWifi) return;
-    if (!RegExp(r'^[A-Z]{2}$').hasMatch(_country.text.toUpperCase())) {
+    if (!wifiCountries.containsKey(_country)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Check the country code under Advanced.')),
+        const SnackBar(content: Text('Choose your Wi-Fi region.')),
       );
       return;
     }
     if (_form.currentState?.validate() != true) return;
     FocusScope.of(context).unfocus();
-    unawaited(
-      _setup.join(_ssid.text, _password.text, _country.text.toUpperCase()),
-    );
+    unawaited(_setup.join(_ssid.text, _password.text, _country));
   }
 
   TextStyle get _bodyStyle =>
@@ -525,7 +521,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
           if (_setup.status?.canScanWifi == true)
             IconButton(
               tooltip: 'Scan again',
-              onPressed: () => _setup.scanWifi(_country.text.toUpperCase()),
+              onPressed: () => _setup.scanWifi(_country),
               icon: const Icon(
                 Icons.refresh_rounded,
                 color: KalinkaColors.textSecondary,
@@ -689,39 +685,9 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
           ],
         ),
         const SizedBox(height: 16),
-        Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: const EdgeInsets.only(bottom: 12),
-            initiallyExpanded: _advanced,
-            onExpansionChanged: (value) => _advanced = value,
-            title: Text('Advanced', style: _bodyStyle.copyWith(fontSize: 13)),
-            subtitle: Text(
-              'Wi-Fi region · ${_country.text.toUpperCase()}',
-              style: _bodyStyle.copyWith(fontSize: 12),
-            ),
-            children: [
-              AppKeyboardTextEntry(
-                child: TextFormField(
-                  controller: _country,
-                  maxLength: 2,
-                  autocorrect: false,
-                  textCapitalization: TextCapitalization.characters,
-                  style: kalinkaFieldText(),
-                  decoration: kalinkaFieldDecoration(hint: 'GB').copyWith(
-                    labelText: 'Country code',
-                    helperText:
-                        'For example GB or US. Used for local Wi-Fi channels.',
-                  ),
-                  validator: (value) =>
-                      RegExp(r'^[A-Z]{2}$').hasMatch(value?.toUpperCase() ?? '')
-                      ? null
-                      : 'Enter a two-letter country code.',
-                ),
-              ),
-            ],
-          ),
+        WifiCountrySelector(
+          country: _country,
+          onChanged: (country) => setState(() => _country = country),
         ),
       ],
     ),

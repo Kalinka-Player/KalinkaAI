@@ -834,19 +834,26 @@ void main() {
       fieldTextColor(tester, find.byKey(const ValueKey('wifi-password'))),
       KalinkaColors.textPrimary,
     );
-    await tester.ensureVisible(find.text('Advanced'));
-    await tester.tap(find.text('Advanced'));
+    await tester.ensureVisible(find.text('Wi-Fi region'));
+    await tester.tap(find.text('Wi-Fi region'));
     await tester.pumpAndSettle();
-    expect(
-      fieldTextColor(
-        tester,
-        find.widgetWithText(TextFormField, 'Country code'),
-      ),
-      KalinkaColors.textPrimary,
-    );
+    final search = find.byKey(const ValueKey('country-search'));
+    expect(fieldTextColor(tester, search), KalinkaColors.textPrimary);
+    await tester.enterText(search, 'de');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Germany (DE)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Germany (DE)'), findsOneWidget);
     await tester.ensureVisible(find.text('Change'));
     await tester.tap(find.text('Change'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('Scan again'));
+    await tester.tap(find.byTooltip('Scan again'));
+    await tester.pumpAndSettle();
+    expect(
+      transport.commands.lastWhere((c) => c['op'] == 'scan')['country'],
+      'DE',
+    );
     await tester.ensureVisible(find.text('Enter custom SSID'));
     await tester.tap(find.text('Enter custom SSID'));
     await tester.pumpAndSettle();

@@ -167,7 +167,7 @@ The name is a prominent value, not a duplicate page heading. Its 48dp pencil ope
 
 The address has 16dp side padding, a 4dp label/value gap and 20dp bottom padding. The metadata area has 16dp padding, 8dp between details and 16dp between label/value columns. At less than `280 × textScaler.scale(1)` available width, each detail stacks its label above its value with a 4dp gap. Do not truncate an address or status.
 
-**Network** appears only for a box with a supervisor. It opens a **Network** page that hosts the same network panel as setup: the current wired or Wi-Fi connection, and the Wi-Fi networks the box can join.
+**Network** appears only for a box with a supervisor. It opens a **Network** page that hosts the same network panel as setup: the current wired or Wi-Fi connection, and the Wi-Fi networks the box can join. The **Wi-Fi region** row opens the same searchable country picker in Settings and setup. It uses the time zone picker’s centered dialog on wide screens and bottom sheet on phones. Search accepts country names and two-letter codes.
 
 **THIS DISPLAY** holds its settings directly on the tab, in one card under the note “For the screen you are using now and its now-playing display.” in `trayRowSublabel`, 4dp below the group label. The name ties them to the screen Settings is open on rather than to the streamer. Changes save immediately in local preferences. Every client can set **Time format**, **Pixel shift** and **On-screen keyboard**.
 
