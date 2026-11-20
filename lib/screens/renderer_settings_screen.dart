@@ -129,8 +129,8 @@ class RendererSettingsScreenState
   Future<bool> _beforeClose(SoundcardBox? restarting) async {
     if (!_mayClose(restarting)) return false;
     final state = ref.read(rendererSettingsProvider(widget.rendererId));
-    // Already on their way to the renderer: nothing left to ask about.
-    if (state.saving || !state.hasPendingChanges) return true;
+    if (state.saving) return false;
+    if (!state.hasPendingChanges) return true;
     final choice = await askAboutPendingChanges(
       context,
       items: describeRendererChanges(state, state.staged.keys),
