@@ -244,6 +244,7 @@ Future<ProviderContainer> _pump(
   Size size = const Size(1200, 800),
   double scale = 1,
   double topInset = 0,
+  double sideInset = 0,
   CatalogPage? page,
   Key? captureKey,
   bool settle = true,
@@ -262,7 +263,11 @@ Future<ProviderContainer> _pump(
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(scale),
-            padding: EdgeInsets.only(top: topInset),
+            padding: EdgeInsets.only(
+              top: topInset,
+              left: sideInset,
+              right: sideInset,
+            ),
             disableAnimations: true,
           ),
           child: child!,
@@ -1804,17 +1809,19 @@ void main() {
     );
   }
 
-  for (final (width, scale) in [
-    (1440.0, 1.0),
-    (936.0, 1.0),
-    (820.0, 1.0),
-    (720.0, 1.0),
-    (375.0, 1.0),
-    (320.0, 2.0),
+  // Side insets, as beside a notch, pad the bar but not the page's header:
+  // the row held under the bar must keep the header's gutters.
+  for (final (width, scale, side) in [
+    (1440.0, 1.0, 0.0),
+    (936.0, 1.0, 0.0),
+    (820.0, 1.0, 0.0),
+    (720.0, 1.0, 0.0),
+    (375.0, 1.0, 0.0),
+    (320.0, 2.0, 0.0),
+    (600.0, 1.0, 44.0),
   ]) {
-    testWidgets('library folder actions migrate on scroll at $width / $scale', (
-      tester,
-    ) async {
+    testWidgets('library folder actions migrate on scroll at $width / $scale'
+        '${side > 0 ? ', side insets $side' : ''}', (tester) async {
       final key = GlobalKey();
       final api = _Api(tracks: true);
       final container = await _pump(
@@ -1823,6 +1830,7 @@ void main() {
         size: Size(width, 900),
         scale: scale,
         topInset: 24,
+        sideInset: side,
         captureKey: key,
         page: CatalogPage.category(
           id: 'kalinka:localfiles:catalog:files',
