@@ -13,15 +13,10 @@ import '../../providers/kiosk_provider.dart';
 import '../../providers/onboarding_provider.dart';
 import '../../screens/kiosk_screen.dart';
 import '../../utils/display_power.dart';
-import '../../utils/local_platform.dart';
-import 'kiosk_home_layout.dart';
+import 'kiosk_display_layout.dart';
 import 'kiosk_media_keys.dart';
 
 typedef _DisplayState = ({bool enabled, bool kiosk, bool waiting});
-
-final _displayDiagonalInches = double.tryParse(
-  environmentValue('KALINKA_DISPLAY_DIAGONAL_INCHES') ?? '',
-);
 
 final _playbackPreventsBlankingProvider = Provider<bool>((ref) {
   final playback = ref.watch(playerStateProvider.select((s) => s.state));
@@ -268,7 +263,7 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
   @override
   Widget build(BuildContext context) {
     final kiosk = ref.watch(_displayStateProvider).kiosk;
-    return Listener(
+    final display = Listener(
       behavior: HitTestBehavior.opaque,
       onPointerDown: _pointerDown,
       onPointerUp: _pointerUp,
@@ -292,13 +287,7 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
                 enabled: !kiosk && !_blanked,
                 child: ExcludeFocus(
                   excluding: kiosk || _blanked,
-                  child: FocusScope(
-                    node: _browsing,
-                    child: KioskHomeLayout(
-                      diagonalInches: _displayDiagonalInches,
-                      child: widget.child,
-                    ),
-                  ),
+                  child: FocusScope(node: _browsing, child: widget.child),
                 ),
               ),
             ),
@@ -340,6 +329,10 @@ class _LocalKioskHostState extends ConsumerState<LocalKioskHost> {
           ],
         ),
       ),
+    );
+    return KioskDisplayLayout(
+      diagonalInches: ref.watch(kioskDisplayDiagonalInchesProvider),
+      child: display,
     );
   }
 }

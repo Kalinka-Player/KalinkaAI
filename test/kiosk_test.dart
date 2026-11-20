@@ -5,7 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart'
-    show PictureLayer, RenderRepaintBoundary;
+    show PictureLayer, RenderParagraph, RenderRepaintBoundary;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -35,11 +35,12 @@ import 'package:kalinka/widgets/gradient_progress_line.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_backdrop.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_cover_flow.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_header.dart';
-import 'package:kalinka/widgets/kiosk/kiosk_home_layout.dart';
+import 'package:kalinka/widgets/kiosk/kiosk_display_layout.dart';
 import 'package:kalinka/utils/flutter_pi_keyboard.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_output_panel.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_progress_bar.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_splash.dart';
+import 'package:kalinka/widgets/kiosk/kiosk_track_text.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_volume_control.dart';
 import 'package:kalinka/widgets/kiosk/local_kiosk_host.dart';
 import 'package:kalinka/widgets/keyboard/app_keyboard_navigation.dart';
@@ -247,6 +248,8 @@ Future<_Harness> _pump(
   WidgetTester tester,
   PlayQueueState state, {
   Size size = const Size(1024, 600),
+  double devicePixelRatio = 1,
+  double? diagonalInches,
   bool launched = false,
   bool localDisplay = false,
   bool idleHost = false,
@@ -261,7 +264,7 @@ Future<_Harness> _pump(
   DisplayPower? displayPower,
 }) async {
   tester.view.physicalSize = size;
-  tester.view.devicePixelRatio = 1;
+  tester.view.devicePixelRatio = devicePixelRatio;
   addTearDown(tester.view.reset);
   SharedPreferences.setMockInitialValues({
     ConnectionSettingsNotifier.sharedPrefName: 'Den server',
@@ -276,6 +279,7 @@ Future<_Harness> _pump(
       sharedPrefsProvider.overrideWithValue(prefs),
       kioskLaunchProvider.overrideWithValue(launched),
       localDisplayKioskProvider.overrideWithValue(localDisplay),
+      kioskDisplayDiagonalInchesProvider.overrideWithValue(diagonalInches),
       if (displayPower != null)
         displayPowerProvider.overrideWithValue(displayPower),
       playQueueStateStoreProvider.overrideWith(() => queue),
@@ -441,13 +445,14 @@ void main() {
     const mainInterface = Scaffold(body: Center(child: Text('Main interface')));
 
     testWidgets(
-      'only the interface behind the local Home button gets a smaller viewport',
+      'Home and Now Playing share the calibrated viewport across idle return',
       (tester) async {
         const screen = Size(3840, 2160);
         await _pump(
           tester,
           _queue(PlayerStateType.paused),
           size: screen,
+          diagonalInches: 65,
           launched: true,
           localDisplay: true,
           idleHost: true,
@@ -455,13 +460,19 @@ void main() {
         );
         await tester.pumpAndSettle();
         final home = find.byIcon(Icons.home_outlined);
-        expect(MediaQuery.sizeOf(tester.element(home)), screen);
+        expect(
+          MediaQuery.sizeOf(tester.element(home)),
+          const Size(1368, 769.5),
+        );
         await tester.tap(home);
         await tester.pumpAndSettle();
         final main = tester.element(find.text('Main interface'));
-        expect(MediaQuery.sizeOf(main).width, inExclusiveRange(1368, 3840));
+        expect(MediaQuery.sizeOf(main), const Size(1368, 769.5));
         await tester.pump(const Duration(seconds: 30));
-        expect(MediaQuery.sizeOf(tester.element(home)), screen);
+        expect(
+          MediaQuery.sizeOf(tester.element(home)),
+          const Size(1368, 769.5),
+        );
       },
     );
 
@@ -487,7 +498,7 @@ void main() {
         await tester.pumpWidget(
           MaterialApp(
             builder: (_, _) =>
-                KioskHomeLayout(diagonalInches: inches, child: sample),
+                KioskDisplayLayout(diagonalInches: inches, child: sample),
           ),
         );
         final element = tester.element(find.byWidget(sample));
@@ -2092,98 +2103,214 @@ void main() {
     expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
   });
 
-  testWidgets('landscape kiosk spaces visible rows evenly above the bar '
-      'and keeps the controls within the cover height', (tester) async {
-    Future<Rect> checkLayout(
-      String title, {
-      Size size = const Size(1024, 600),
-      bool metadata = true,
-    }) async {
-      final t = Track(
-        id: metadata ? 'kalinka:qobuz:track:$title' : 'unattributed',
-        title: title,
-        duration: 240,
-        performer: Artist(id: 'p', name: 'Artist'),
-        album: metadata ? Album(id: 'a', title: 'Album', year: 1990) : null,
-      );
-      await _pump(
-        tester,
-        PlayQueueState(
-          playbackState: PlaybackState(
-            state: PlayerStateType.paused,
-            currentTrack: t,
-            index: 0,
-            mimeType: metadata ? 'audio/flac' : null,
-            audioInfo: metadata
-                ? AudioInfo(
-                    sampleRate: 96000,
-                    bitsPerSample: 24,
-                    channels: 2,
-                    durationMs: 0,
-                  )
-                : null,
+  testWidgets(
+    'landscape kiosk groups track credits above stream and transport',
+    (tester) async {
+      // Measure wrapping with the kiosk's actual display and album fonts.
+      await tester.runAsync(() async {
+        for (final (family, file) in [
+          ('Playfair Display', 'PlayfairDisplay-Medium.ttf'),
+          ('IBM Plex Sans', 'IBMPlexSans-Medium.ttf'),
+        ]) {
+          await (FontLoader(
+            family,
+          )..addFont(rootBundle.load('assets/fonts/$file'))).load();
+        }
+      });
+      Future<({Rect cover, Rect bar, Rect play})> checkLayout(
+        String title, {
+        Size size = const Size(1024, 600),
+        double devicePixelRatio = 1,
+        bool localTV = false,
+        String? album = 'Album',
+        String? artist = 'Artist',
+        bool hasStream = true,
+      }) async {
+        final t = Track(
+          id: hasStream ? 'kalinka:qobuz:track:$title' : 'unattributed',
+          title: title,
+          duration: 240,
+          performer: artist == null ? null : Artist(id: 'p', name: artist),
+          album: album == null
+              ? null
+              : Album(id: 'a', title: album, year: 1991),
+        );
+        await _pump(
+          tester,
+          PlayQueueState(
+            playbackState: PlaybackState(
+              state: PlayerStateType.paused,
+              currentTrack: t,
+              index: 0,
+              mimeType: hasStream ? 'audio/flac' : null,
+            ),
+            trackList: [t],
+            playbackMode: PlaybackMode.empty,
+            seq: 1,
+            playbackControl: const PlaybackControl.queue(),
           ),
-          trackList: [t],
-          playbackMode: PlaybackMode.empty,
-          seq: 1,
-          playbackControl: const PlaybackControl.queue(),
-        ),
-        size: size,
-        localDisplay: true,
-      );
-      await tester.pumpAndSettle();
-      final cover = tester.getRect(find.byType(KioskCoverFlow));
-      final rect = tester.getRect(
-        find
-            .ancestor(
-              of: find.byIcon(Icons.play_arrow_rounded),
-              matching: find.byType(TransportButton),
-            )
-            .first,
-      );
-      expect(rect.bottom, lessThanOrEqualTo(cover.bottom + 0.5));
-      final heading = tester.getRect(find.text('NOW PLAYING'));
-      final bar = tester.getRect(find.byType(KioskProgressBar));
-      final rows = [
-        heading,
-        tester.getRect(find.text(title)),
-        tester.getRect(find.text('Artist')),
-        if (metadata) ...[
-          tester.getRect(find.text('Album · 1990')),
-          tester.getRect(
-            find
-                .ancestor(
-                  of: find.textContaining('FLAC'),
-                  matching: find.byType(Row),
-                )
-                .first,
-          ),
-        ],
-        bar,
-      ];
-      expect(heading.top, closeTo(cover.top, 0.5));
-      expect(heading.left, closeTo(bar.left, 0.5));
-      final gap = bar.top - rows[rows.length - 2].bottom;
-      expect(gap, greaterThan(3));
-      for (var i = 1; i < rows.length; i++) {
-        expect(rows[i].top - rows[i - 1].bottom, closeTo(gap, 0.5));
-        expect(rows[i].left, closeTo(bar.left, 0.5));
-      }
-      expect(tester.takeException(), isNull);
-      return rect;
-    }
+          size: size,
+          devicePixelRatio: devicePixelRatio,
+          localDisplay: localTV,
+          idleHost: localTV,
+          diagonalInches: localTV ? 65 : null,
+          home: localTV ? const SizedBox.shrink() : const KioskScreen(),
+        );
+        await tester.pumpAndSettle();
+        final cover = tester.getRect(find.byType(KioskCoverFlow));
+        final play = tester.getRect(
+          find
+              .ancestor(
+                of: find.byIcon(Icons.play_arrow_rounded),
+                matching: find.byType(TransportButton),
+              )
+              .first,
+        );
+        final bar = tester.getRect(find.byType(KioskProgressBar));
+        final heading = tester.getRect(find.text('NOW PLAYING'));
+        final credits = [
+          if (album != null && album.trim().isNotEmpty) '$album · 1991',
+          if (artist != null && artist.trim().isNotEmpty) artist,
+        ];
+        final labels = [title, ...credits, if (hasStream) 'Qobuz · FLAC'];
+        final trackText = find.descendant(
+          of: find.byType(KioskTrackText),
+          matching: find.byType(Text),
+        );
+        expect(tester.widgetList<Text>(trackText).map((t) => t.data), labels);
+        final lines = [
+          for (final label in labels) tester.getRect(find.text(label)),
+        ];
+        final rows = [heading, ...lines, bar];
+        expect(heading.top, closeTo(cover.top, 0.5));
+        expect(play.bottom, lessThanOrEqualTo(cover.bottom + 0.5));
+        for (var i = 0; i < rows.length - 1; i++) {
+          expect(rows[i].left, closeTo(bar.left, 0.5));
+          expect(rows[i].bottom, lessThan(rows[i + 1].top));
+        }
+        final fontSizes = [
+          for (final label in labels)
+            tester.widget<Text>(find.text(label)).style!.fontSize!,
+        ];
+        for (var i = 1; i < fontSizes.length; i++) {
+          expect(fontSizes[i], lessThan(fontSizes[i - 1]));
+        }
 
-    const long = 'A rather long title that will certainly need two lines here';
-    final short = await checkLayout('Short');
-    final twoLines = await checkLayout(long);
-    expect(twoLines.size, short.size);
-    await checkLayout(long, size: const Size(815, 528));
-    await checkLayout('Short', size: const Size(3840, 2160));
-    await checkLayout('Artist and title only', metadata: false);
-    tester.platformDispatcher.textScaleFactorTestValue = 2;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    await checkLayout(long);
-  });
+        double gapBefore(int i) => lines[i].top - lines[i - 1].bottom;
+        if (credits.length == 2) {
+          expect(gapBefore(2), lessThan(gapBefore(1)));
+        }
+        if (hasStream) {
+          final streamGap = gapBefore(lines.length - 1);
+          expect(streamGap, greaterThan(lines.first.top - heading.bottom));
+          expect(streamGap, greaterThan(bar.top - lines.last.bottom));
+          if (credits.isNotEmpty) expect(streamGap, greaterThan(gapBefore(1)));
+        }
+        expect(tester.takeException(), isNull);
+        return (cover: cover, bar: bar, play: play);
+      }
+
+      const long =
+          'A rather long title that will certainly need two lines here';
+      final short = await checkLayout('Short');
+      expect(await checkLayout(long), short);
+      await checkLayout(long, size: const Size(667, 375));
+      const orbTitle = 'Supernova At The End Of The Universe';
+      const orbAlbum = "The Orb's Adventures Beyond The Ultraworld";
+      const logicalTV = Size(1368, 769.5);
+      List<Rect>? windowBounds;
+      for (final (size, pixelRatio, localTV) in [
+        (logicalTV, 1.0, false),
+        (const Size(3840, 2160), 1.0, true),
+        (const Size(3840, 2160), 2.0, true),
+      ]) {
+        final anchors = await checkLayout(
+          'Short',
+          size: size,
+          devicePixelRatio: pixelRatio,
+          localTV: localTV,
+        );
+        expect(
+          await checkLayout(
+            orbTitle,
+            album: orbAlbum,
+            artist: 'The Orb',
+            size: size,
+            devicePixelRatio: pixelRatio,
+            localTV: localTV,
+          ),
+          anchors,
+        );
+        final kiosk = tester.renderObject<RenderBox>(find.byType(KioskScreen));
+        expect(kiosk.size, logicalTV);
+        expect(
+          tester.widget<KioskCoverFlow>(find.byType(KioskCoverFlow)).confined,
+          localTV,
+        );
+        final media = MediaQuery.of(tester.element(find.text(orbTitle)));
+        expect(media.size, logicalTV);
+        expect(
+          media.devicePixelRatio * media.size.width,
+          closeTo(size.width, 0.01),
+        );
+        for (final label in [orbTitle, '$orbAlbum · 1991']) {
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.text(label),
+          );
+          expect(paragraph.didExceedMaxLines, isFalse, reason: label);
+          final boxes = paragraph.getBoxesForSelection(
+            TextSelection(baseOffset: 0, extentOffset: label.length),
+          );
+          expect(boxes.map((box) => box.top).toSet(), hasLength(2));
+        }
+        final bounds = [
+          for (final finder in [
+            find.byType(KioskCoverFlow),
+            find.text(orbTitle),
+            find.text('$orbAlbum · 1991'),
+            find.text('The Orb'),
+            find.textContaining('FLAC'),
+            find.byType(KioskProgressBar),
+          ])
+            MatrixUtils.transformRect(
+              tester.renderObject<RenderBox>(finder).getTransformTo(kiosk),
+              Offset.zero & tester.getSize(finder),
+            ),
+        ];
+        final albumArtistGap = bounds[3].top - bounds[2].bottom;
+        expect(albumArtistGap, inInclusiveRange(9, 11));
+        windowBounds ??= bounds;
+        for (var i = 0; i < bounds.length; i++) {
+          expect(
+            bounds[i],
+            rectMoreOrLessEquals(windowBounds[i], epsilon: 0.5),
+          );
+        }
+      }
+      expect(await checkLayout('Without album', album: null), short);
+      expect(await checkLayout('Without artist', artist: null), short);
+      expect(await checkLayout('Without stream', hasStream: false), short);
+      expect(
+        await checkLayout(
+          'Title only',
+          artist: null,
+          album: null,
+          hasStream: false,
+        ),
+        short,
+      );
+      expect(
+        await checkLayout('Blank credits', album: '  ', artist: '  '),
+        short,
+      );
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await checkLayout(long);
+      final artist = tester.renderObject<RenderBox>(find.text('Artist'));
+      final albumBottom = tester.getBottomLeft(find.text('Album · 1991'));
+      expect(-artist.globalToLocal(albumBottom).dy, closeTo(4, 0.05));
+    },
+  );
 
   for (final size in const [Size(700, 700), Size(300, 300), Size(480, 320)]) {
     testWidgets('on a small or square screen at ${size.width}x${size.height} '
