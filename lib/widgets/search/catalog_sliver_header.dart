@@ -12,6 +12,7 @@ import '../home/catalog_pin_button.dart';
 import '../keyboard/app_keyboard_navigation.dart';
 import '../source_badge.dart';
 import '../search_cards/action_pill_button.dart';
+import '../tap_highlight.dart';
 
 /// A catalog's identity, which scrolls away with the page and slides under
 /// the bar, handing over to it with Pin once out of sight; a folder's own
@@ -482,22 +483,23 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
   }
 }
 
-/// The Play all pill's chrome, at the height of a control row's pill.
+/// The search and filter pills in the catalog toolbar.
 ButtonStyle _pillStyle(double rowHeight, {required bool labelled}) {
   final pillHeight = rowHeight - (kKalinkaPillTarget - kKalinkaPillHeight);
-  return OutlinedButton.styleFrom(
-    minimumSize: Size(pillHeight, pillHeight),
-    fixedSize: Size.fromHeight(pillHeight),
-    visualDensity: VisualDensity.standard,
-    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    padding: EdgeInsets.symmetric(horizontal: labelled ? 16 : 10),
-    foregroundColor: KalinkaColors.textPrimary,
-    backgroundColor: KalinkaColors.surfaceElevated,
-    side: const BorderSide(color: KalinkaColors.borderDefault),
-    shape: const StadiumBorder(),
-    textStyle: KalinkaFonts.sans(
-      fontSize: KalinkaTypography.baseSize + 2,
-      fontWeight: FontWeight.w600,
+  return kalinkaPillButtonStyle.merge(
+    OutlinedButton.styleFrom(
+      minimumSize: Size(pillHeight, pillHeight),
+      fixedSize: Size.fromHeight(pillHeight),
+      visualDensity: VisualDensity.standard,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: EdgeInsets.symmetric(horizontal: labelled ? 16 : 10),
+      foregroundColor: KalinkaColors.textPrimary,
+      backgroundColor: KalinkaColors.surfaceElevated,
+      side: const BorderSide(color: KalinkaColors.borderDefault),
+      textStyle: KalinkaFonts.sans(
+        fontSize: KalinkaTypography.baseSize + 2,
+        fontWeight: FontWeight.w600,
+      ),
     ),
   );
 }
