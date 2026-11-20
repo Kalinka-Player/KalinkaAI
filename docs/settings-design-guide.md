@@ -160,7 +160,7 @@ Off, keep this order directly on the tab:
 | SERVER | Identity card: name and pencil, selectable address, server version, raw backend supervisor status |
 | THIS DISPLAY | Preferences for the screen Settings is open on: the now-playing display's timeouts where they apply, time format, pixel shift and on-screen keyboard |
 | SOFTWARE UPDATES | Bundle/component update state and automatic updates in one card |
-| MANAGEMENT | Restart Kalinka, Network, dashboard, restart streamer, power off streamer, when supported |
+| MANAGEMENT | Restart Kalinka, Network, dashboard (except on flutter-pi), restart streamer, power off streamer, when supported |
 | SUPPORT | Download server logs |
 
 The name is a prominent value, not a duplicate page heading. Its 48dp pencil opens a bottom sheet; Done stages the name, Cancel/Back discards the sheet edit. Apply follows the existing settings flow. Fields marked `applies_live` save without restarting Core; mixed changes still use the restart flow. Renaming the streamer can interrupt AirPlay receivers that inherit its name, as the server-provided help explains. Settings reads refresh the connected server's saved label without changing its address or reconnecting.

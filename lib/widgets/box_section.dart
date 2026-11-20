@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/box_control_provider.dart';
+import '../providers/kiosk_provider.dart';
 import '../providers/power_off_status_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../providers/timezone_provider.dart';
@@ -71,15 +72,16 @@ class BoxSection extends ConsumerWidget {
                   leading: configured ? Icons.wifi : null,
                   onTap: onNetwork,
                 ),
-              SettingsActionRow(
-                label: 'Streamer dashboard',
-                sublabel:
-                    'Versions, memory and processor use, and reinstalling '
-                    'Kalinka, in the browser',
-                trailing: Icons.open_in_new,
-                leading: configured ? Icons.dashboard_outlined : null,
-                onTap: () => _openDashboard(ref, api.page),
-              ),
+              if (!ref.watch(localDisplayKioskProvider))
+                SettingsActionRow(
+                  label: 'Streamer dashboard',
+                  sublabel:
+                      'Versions, memory and processor use, and reinstalling '
+                      'Kalinka, in the browser',
+                  trailing: Icons.open_in_new,
+                  leading: configured ? Icons.dashboard_outlined : null,
+                  onTap: () => _openDashboard(ref, api.page),
+                ),
               if (timezone != null)
                 TimezoneRow(
                   box: timezone,

@@ -14,6 +14,7 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
+import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/pinned_catalogs_provider.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/timezone_provider.dart';
@@ -544,6 +545,7 @@ void main() {
       WidgetTester tester, {
       SupervisorInfo? answer,
       bool configuration = false,
+      bool localDisplay = false,
       SettingsState settings = const SettingsState(),
       bool expert = false,
       double textScale = 1,
@@ -552,7 +554,10 @@ void main() {
       final container = await _container(
         box: box,
         identity: 'box-1',
-        overrides: [settingsProvider.overrideWith(() => _Settings(settings))],
+        overrides: [
+          settingsProvider.overrideWith(() => _Settings(settings)),
+          localDisplayKioskProvider.overrideWithValue(localDisplay),
+        ],
       );
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -613,6 +618,22 @@ void main() {
         greaterThan(tester.getRect(find.text('Streamer dashboard')).right),
       );
     });
+
+    testWidgets(
+      'flutter-pi omits the browser dashboard and keeps streamer controls',
+      (tester) async {
+        await pump(
+          tester,
+          answer: _info(),
+          configuration: true,
+          localDisplay: true,
+        );
+        expect(find.text('Streamer dashboard'), findsNothing);
+        expect(find.byIcon(Icons.open_in_new), findsNothing);
+        expect(find.text('Restart streamer'), findsOneWidget);
+        expect(find.text('Power off streamer'), findsOneWidget);
+      },
+    );
 
     testWidgets('is absent without a supervisor', (tester) async {
       await pump(tester);
