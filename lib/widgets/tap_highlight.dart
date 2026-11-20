@@ -36,6 +36,17 @@ final kalinkaIconButtonStyle = ButtonStyle(
       InkFocusOutline(shape: const CircleBorder(), child: child!),
 );
 
+/// Pill buttons share a neutral pointer overlay and a keyboard outline that
+/// follows the entire padded face, including its rounded ends.
+final kalinkaPillButtonStyle = ButtonStyle(
+  shape: const WidgetStatePropertyAll(StadiumBorder()),
+  overlayColor: WidgetStateProperty.resolveWith(
+    (states) => kalinkaOverlay.resolve(states) ?? Colors.transparent,
+  ),
+  backgroundBuilder: (_, _, child) =>
+      InkFocusOutline(shape: const StadiumBorder(), child: child!),
+);
+
 /// A flat highlight across the entire row on hover, press or focus, without
 /// a frame or extra padding. Rows retain their own gestures and their
 /// selected or playing surface remains visible through the overlay.

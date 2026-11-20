@@ -734,6 +734,69 @@ void main() {
     expect(bounds.width, bounds.height);
   });
 
+  testWidgets('keyboard focus follows the faces of Filters and Clear filters', (
+    tester,
+  ) async {
+    final key = GlobalKey();
+    final container = await _pump(tester, _Api(), captureKey: key);
+    container
+        .read(searchSessionProvider.notifier)
+        .setCatalogFilter(
+          const BrowseFilterQuery(text: 'deep', genreIds: ['Synthwave']),
+        );
+    await tester.pumpAndSettle();
+
+    final clear = find.widgetWithText(TextButton, 'Clear filters');
+    Finder ring(Finder control) =>
+        focusOutlineIn(control, KalinkaColors.textPrimary);
+    void expectOutlined(Finder control) {
+      final outline = ring(control);
+      expect(outline, findsOneWidget);
+      final decoration =
+          tester.widget<DecoratedBox>(outline).decoration as ShapeDecoration;
+      expect(decoration.shape, isA<StadiumBorder>());
+      final face = find
+          .descendant(of: control, matching: find.byType(Material))
+          .first;
+      expect(tester.getRect(outline), tester.getRect(face));
+      final ink = tester.widget<InkWell>(
+        find.descendant(of: control, matching: find.byType(InkWell)),
+      );
+      expect(
+        ink.overlayColor!.resolve({WidgetState.focused}),
+        Colors.transparent,
+      );
+    }
+
+    expect(ring(_barFilters), findsNothing);
+    expect(ring(clear), findsNothing);
+    expect(await tabTo(tester, _barFilters), isTrue);
+    await tester.pumpAndSettle();
+    expectOutlined(_barFilters);
+    await _capture(tester, key, 'filters-keyboard-focus');
+    expect(await tabTo(tester, find.byType(ActiveFilterChip).last), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(focusIsOn(clear), isTrue);
+    expect(ring(_barFilters), findsNothing);
+    expectOutlined(clear);
+    expect(tester.getSize(ring(clear)).height, kKalinkaPillHeight);
+    expect(
+      tester.getSize(clear).height,
+      greaterThanOrEqualTo(kKalinkaPillTarget),
+    );
+    await _capture(tester, key, 'clear-filters-keyboard-focus');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(clear, findsNothing);
+    expect(container.read(searchSessionProvider).catalogFilter.text, 'deep');
+    expect(
+      container.read(searchSessionProvider).catalogFilter.genreIds,
+      isEmpty,
+    );
+  });
+
   for (final (width, scale, inline) in [
     (516.0, 1.0, true),
     (375.0, 1.0, true),

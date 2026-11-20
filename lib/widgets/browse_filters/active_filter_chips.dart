@@ -6,6 +6,7 @@ import '../../data_model/data_model.dart' show Genre;
 import '../../providers/browse_genres_provider.dart';
 import '../../theme/app_theme.dart';
 import '../keyboard/ink_focus_outline.dart';
+import '../tap_highlight.dart';
 import 'browse_filter_form.dart';
 
 /// One removable chip per active answer, shown above the rows.
@@ -101,24 +102,26 @@ class ActiveFilterChips extends ConsumerWidget {
           ...leading,
           ...chips,
           if (!facets.isEmpty)
-            SizedBox(
-              height: kKalinkaPillTarget,
-              child: Tooltip(
-                message: 'Clear filters, keep search text',
-                child: TextButton(
-                  onPressed: () =>
-                      onChanged(BrowseFilterQuery(text: query.text)),
-                  style: TextButton.styleFrom(
+            Tooltip(
+              message: 'Clear filters, keep search text',
+              child: TextButton(
+                onPressed: () => onChanged(BrowseFilterQuery(text: query.text)),
+                style: kalinkaPillButtonStyle.merge(
+                  TextButton.styleFrom(
                     foregroundColor: KalinkaColors.textSecondary,
-                    overlayColor: KalinkaColors.surfaceOverlay,
                     textStyle: KalinkaFonts.sans(
                       fontSize: KalinkaTypography.baseSize + 2,
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: const Size(48, 48),
+                    minimumSize: const Size(
+                      kKalinkaPillTarget,
+                      kKalinkaPillHeight,
+                    ),
+                    tapTargetSize: MaterialTapTargetSize.padded,
+                    visualDensity: VisualDensity.standard,
                   ),
-                  child: const Text('Clear filters'),
                 ),
+                child: const Text('Clear filters'),
               ),
             ),
         ],
