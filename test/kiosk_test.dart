@@ -2277,6 +2277,8 @@ void main() {
               Offset.zero & tester.getSize(finder),
             ),
         ];
+        final albumArtistGap = bounds[3].top - bounds[2].bottom;
+        expect(albumArtistGap, inInclusiveRange(9, 11));
         windowBounds ??= bounds;
         for (var i = 0; i < bounds.length; i++) {
           expect(
@@ -2304,6 +2306,9 @@ void main() {
       tester.platformDispatcher.textScaleFactorTestValue = 2;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       await checkLayout(long);
+      final artist = tester.renderObject<RenderBox>(find.text('Artist'));
+      final albumBottom = tester.getBottomLeft(find.text('Album · 1991'));
+      expect(-artist.globalToLocal(albumBottom).dy, closeTo(4, 0.05));
     },
   );
 

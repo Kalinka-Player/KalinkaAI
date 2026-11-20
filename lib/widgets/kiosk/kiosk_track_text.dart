@@ -295,13 +295,12 @@ class _KioskTrackTextState extends State<KioskTrackText>
       );
     }
 
-    // Spend spare height between groups. Album and artist share one credit
-    // block, so the small gap within it never expands on a TV.
-    final creditGap = compact ? 0.0 : s(6);
+    final stackedGap = compact ? 0.0 : s(6);
     final streamScale = compact
         ? math.max(widget.scale * 0.46, 0.72)
         : _captionScale(widget.scale);
-    final column = Column(
+    final streamGap = s(landscape ? 20 : (compact ? 8 : 10));
+    Widget column({double extraCreditGap = 0}) => Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: crossAxis,
       children: [
@@ -309,11 +308,11 @@ class _KioskTrackTextState extends State<KioskTrackText>
         stage(title, 0),
         if (credits.isNotEmpty) ...[
           if (landscape) const Spacer(),
-          SizedBox(height: landscape ? s(12) : creditGap),
+          SizedBox(height: landscape ? s(12) : stackedGap),
           Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: crossAxis,
-            spacing: landscape ? s(4) : creditGap,
+            spacing: landscape ? s(4) + extraCreditGap : stackedGap,
             children: [
               for (final (i, row) in credits.indexed) stage(row, i + 1),
             ],
@@ -321,7 +320,7 @@ class _KioskTrackTextState extends State<KioskTrackText>
         ],
         if (lines.stream != null) ...[
           if (landscape) const Spacer(flex: 5),
-          SizedBox(height: s(landscape ? 20 : (compact ? 8 : 10))),
+          SizedBox(height: streamGap - extraCreditGap),
           stage(
             _StreamRow(
               lines: lines,
@@ -336,21 +335,33 @@ class _KioskTrackTextState extends State<KioskTrackText>
         if (landscape) Spacer(flex: lines.stream == null ? 5 : 1),
       ],
     );
-    if (!landscape) return column;
+    if (!landscape) return column();
 
     // Fit each track independently when a wrapping title or large text needs
     // more height than the space above the controls.
     return LayoutBuilder(
-      builder: (context, box) => FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.topLeft,
-        child: Container(
-          width: box.maxWidth,
-          constraints: BoxConstraints(minHeight: box.maxHeight),
-          padding: EdgeInsets.only(top: s(12), bottom: s(6)),
-          child: IntrinsicHeight(child: column),
-        ),
-      ),
+      builder: (context, box) {
+        // Open the album–artist gap as height allows. Take the extra from
+        // below the artist so the other rows stay put.
+        final artistSize = font(21);
+        final textScale =
+            MediaQuery.textScalerOf(context).scale(artistSize) / artistSize;
+        final gap = (box.maxHeight * 0.03 / textScale).clamp(s(4), s(8));
+        final extra = credits.length == 2 ? gap - s(4) : 0.0;
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.topLeft,
+          child: Container(
+            width: box.maxWidth,
+            constraints: BoxConstraints(minHeight: box.maxHeight),
+            padding: EdgeInsets.only(
+              top: s(12),
+              bottom: s(6) - (lines.stream == null ? extra : 0),
+            ),
+            child: IntrinsicHeight(child: column(extraCreditGap: extra)),
+          ),
+        );
+      },
     );
   }
 }
