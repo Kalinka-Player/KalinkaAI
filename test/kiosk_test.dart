@@ -32,7 +32,6 @@ import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/screens/kiosk_screen.dart';
 import 'package:kalinka/utils/display_power.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
-import 'package:kalinka/widgets/kalinka_scroll_behavior.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_backdrop.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_cover_flow.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_header.dart';
@@ -312,7 +311,6 @@ Future<_Harness> _pump(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
-        scrollBehavior: const KalinkaScrollBehavior(),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(disableAnimations: reducedMotion),
@@ -1883,6 +1881,13 @@ void main() {
       }
       expect(page, findsNothing);
       expect(find.text('Room 19').hitTestable(), findsOneWidget);
+      final back = find.byTooltip('Scroll up one page');
+      expect(await tabTo(tester, back), isTrue);
+      final lastOffset = position.pixels;
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(position.pixels, lessThan(lastOffset));
+      expect(renderers.selected, isEmpty);
     },
   );
 

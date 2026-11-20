@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../data_model/browse_filters.dart';
 import '../../theme/app_theme.dart';
 import '../kalinka_button.dart';
 import '../overlay_card.dart';
-import '../scroll_edge_fade.dart';
 import 'browse_filter_form.dart';
 
 /// The unfolded state of the search-and-filters control: a card resting under
@@ -64,60 +64,66 @@ class _SearchFilterOverlayState extends State<SearchFilterOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    return FocusTraversalGroup(
-      policy: _traversal,
-      child: KalinkaOverlayCard(
-        maxHeight: widget.maxHeight,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FocusTraversalOrder(
-              order: const NumericFocusOrder(0),
-              child: OverlayCardHeader(
-                title: widget.title,
-                onClose: widget.onCancel,
-                closeLabel: 'Close filters',
-                action: _staged.isEmpty
-                    ? null
-                    : OverlayTextAction(
-                        label: 'RESET',
-                        onTap: () => setState(() {
-                          _staged = const BrowseFilterQuery();
-                          _reset = true;
-                        }),
-                      ),
-              ),
+    final card = KalinkaOverlayCard(
+      maxHeight: widget.maxHeight,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(0),
+            child: OverlayCardHeader(
+              title: widget.title,
+              onClose: widget.onCancel,
+              closeLabel: 'Close filters',
+              action: _staged.isEmpty
+                  ? null
+                  : OverlayTextAction(
+                      label: 'RESET',
+                      onTap: () => setState(() {
+                        _staged = const BrowseFilterQuery();
+                        _reset = true;
+                      }),
+                    ),
             ),
-            Flexible(
-              // Faded where more lies above or below, so a card that scrolls
-              // looks it.
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
               child: FocusTraversalOrder(
                 order: const NumericFocusOrder(1),
-                child: ScrollEdgeFade(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                    child: BrowseFilterForm(
-                      capabilities: _capabilities,
-                      query: _staged,
-                      searchHint: widget.searchHint,
-                      searchCaption: widget.searchCaption,
-                      showSearch: widget.showSearch,
-                      // Staged: nothing is sent until Show results, so there is
-                      // nothing to coalesce and the badge can track every key.
-                      textDebounce: Duration.zero,
-                      onChanged: (query) => setState(() => _staged = query),
-                    ),
-                  ),
+                child: BrowseFilterForm(
+                  capabilities: _capabilities,
+                  query: _staged,
+                  searchHint: widget.searchHint,
+                  searchCaption: widget.searchCaption,
+                  showSearch: widget.showSearch,
+                  // Staged: nothing is sent until Show results, so there is
+                  // nothing to coalesce and the badge can track every key.
+                  textDebounce: Duration.zero,
+                  onChanged: (query) => setState(() => _staged = query),
                 ),
               ),
             ),
-            FocusTraversalOrder(
-              order: const NumericFocusOrder(2),
-              child: _buildFooter(),
-            ),
-          ],
-        ),
+          ),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(2),
+            child: _buildFooter(),
+          ),
+        ],
       ),
+    );
+    // Web maps bare arrows to scrolling. The filter dialog uses them to move
+    // focus through chip rows and then into the footer on every platform.
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(
+          TraversalDirection.up,
+        ),
+        SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(
+          TraversalDirection.down,
+        ),
+      },
+      child: FocusTraversalGroup(policy: _traversal, child: card),
     );
   }
 

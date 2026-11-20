@@ -24,7 +24,6 @@ import 'package:kalinka/providers/wire_event_provider.dart';
 import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/screens/renderer_settings_screen.dart';
 import 'package:kalinka/theme/app_theme.dart';
-import 'package:kalinka/widgets/kalinka_scroll_behavior.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/slide_in_panel.dart';
 import 'package:kalinka/widgets/volume_control_slider.dart';
@@ -313,7 +312,6 @@ void main() {
   /// lets the tablet layout put it in the left panel.
   Widget switcherTree({double textScale = 1}) => MaterialApp(
     theme: AppTheme.dark(),
-    scrollBehavior: const KalinkaScrollBehavior(),
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context)
           .copyWith(textScaler: TextScaler.linear(textScale)),
@@ -742,6 +740,11 @@ void main() {
         expect(page.hitTestable(), findsOneWidget);
         await tester.tap(page);
         await tester.pumpAndSettle();
+        final back = find.byTooltip('Scroll up one page');
+        expect(back.hitTestable(), findsOneWidget);
+        await tester.tap(back);
+        await tester.pumpAndSettle();
+        expect(back, findsNothing);
         expect(api.selected, isEmpty);
         await tester.scrollUntilVisible(
           find.text('Listening room 11'),
