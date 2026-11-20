@@ -28,6 +28,7 @@ import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/modules_state_provider.dart';
 import 'package:kalinka/providers/plugin_catalog_provider.dart';
 import 'package:kalinka/providers/renderer_settings_provider.dart';
+import 'package:kalinka/providers/renderer_settings_route_provider.dart';
 import 'package:kalinka/providers/restart_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/server_info_provider.dart';
@@ -155,6 +156,12 @@ class _RendererApi extends _Api {
                   'type': 'bool',
                   'value': 'false',
                 },
+              {
+                'path': 'output.name',
+                'title': 'Output name',
+                'type': 'string',
+                'value': '',
+              },
             ],
           },
         ],
@@ -199,6 +206,7 @@ Future<ProviderContainer> _pump(
   Size size = const Size(1440, 900),
   TextScaler textScaler = TextScaler.noScaling,
   bool reducedMotion = false,
+  bool onScreenKeyboard = false,
   Key? captureKey,
   _Api? api,
   List<Override> extra = const [],
@@ -211,6 +219,7 @@ Future<ProviderContainer> _pump(
   sources: _modules,
   textScaler: textScaler,
   reducedMotion: reducedMotion,
+  onScreenKeyboard: onScreenKeyboard,
   themed: true,
   captureKey: captureKey,
   collections: const CollectionsShelf(
@@ -795,6 +804,48 @@ void main() {
       expect(find.byType(PluginCatalogScreen), findsOneWidget);
     },
   );
+
+  testWidgets('the keyboard keeps the active renderer field above its keys', (
+    tester,
+  ) async {
+    final container = await _pump(
+      tester,
+      api: _RendererApi(),
+      size: const Size(1024, 480),
+      reducedMotion: true,
+      onScreenKeyboard: true,
+      extra: [localDisplayKioskProvider.overrideWithValue(true)],
+    );
+    container
+        .read(rendererSettingsRouteProvider.notifier)
+        .open('living', 'Living Room');
+    await tester.pumpAndSettle();
+    final field = find.descendant(
+      of: find.byType(RendererSettingsScreen),
+      matching: find.byType(TextField),
+    );
+    await Scrollable.ensureVisible(tester.element(field), alignment: 1);
+    await tester.pumpAndSettle();
+    final original = tester.getRect(field);
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    final panel = tester.getRect(
+      find.byKey(const ValueKey('on-screen-keyboard')),
+    );
+    expect(original.bottom, greaterThan(panel.top));
+    expect(tester.getRect(field).bottom, lessThanOrEqualTo(panel.top));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(container.read(rendererSettingsProvider('living')).staged, {
+      'output.name': 'q',
+    });
+    expect(tester.getRect(field).bottom, lessThanOrEqualTo(panel.top));
+    expect(field.hitTestable(), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('on-screen-keyboard')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final width in [375.0, 1440.0]) {
     testWidgets(

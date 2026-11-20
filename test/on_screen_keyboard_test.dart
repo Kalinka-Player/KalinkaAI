@@ -24,7 +24,6 @@ import 'package:kalinka/widgets/settings_controls/settings_password_input.dart';
 import 'support/focus.dart';
 
 const keyboardKey = ValueKey('on-screen-keyboard');
-const submitKey = ValueKey('keyboard-submit');
 const captureKey = ValueKey('keyboard-capture');
 
 Future<ProviderContainer> pumpKeyboard(
@@ -88,6 +87,57 @@ Future<void> press(WidgetTester tester, String name) async {
 }
 
 void main() {
+  testWidgets('remote OK and touch visibly confirm the key that was pressed', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await pumpKeyboard(
+      tester,
+      TextField(controller: controller),
+      localKiosk: true,
+    );
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+
+    BoxDecoration face(String key) =>
+        tester
+                .widget<Container>(
+                  find.descendant(
+                    of: keyNamed(key),
+                    matching: find.byType(Container),
+                  ),
+                )
+                .decoration!
+            as BoxDecoration;
+
+    final focused = face('q');
+    final idle = face('w');
+    expect(focused.border, isNotNull);
+    expect(focused, isNot(idle));
+    final bounds = tester.getRect(keyNamed('q'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(controller.text, 'q');
+    expect(face('q').color, isNot(focused.color));
+    expect(face('q').border, focused.border);
+    expect(tester.getRect(keyNamed('q')), bounds);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(face('q'), focused);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(face('q'), idle);
+    expect(face('w'), focused);
+
+    await tester.tap(keyNamed('q'));
+    await tester.pump();
+    expect(controller.text, 'qq');
+    expect(face('q').color, isNot(idle.color));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(face('q'), idle);
+    expect(face('w'), focused);
+  });
+
   testWidgets('flutter-pi Return types until the keypad submits', (
     tester,
   ) async {
@@ -553,18 +603,16 @@ void main() {
       final hide = tester.getRect(
         find.byKey(const ValueKey('hide-on-screen-keyboard')),
       );
-      final submit = tester.getRect(find.byKey(submitKey));
+      expect(keyNamed('Done'), findsOneWidget);
+      expect(find.byTooltip('Done'), findsNothing);
       if (size.height > size.width) {
         expect(keys.left, panel.left);
         expect(keys.right, panel.right);
         expect(keys.top - panel.top, 48);
         expect(hide.bottom, lessThanOrEqualTo(keys.top));
-        expect(submit.bottom, lessThanOrEqualTo(keys.top));
-        expect(hide.center.dy, submit.center.dy);
       } else {
         expect(panel.right - keys.right, 52);
         expect(hide.left, greaterThanOrEqualTo(keys.right));
-        expect(submit.left, greaterThanOrEqualTo(keys.right));
       }
       expect(panel.height, lessThanOrEqualTo(size.height * 0.37));
       expect(tester.state(find.byType(VirtualKeypad)), same(keypadState));
@@ -728,7 +776,7 @@ void main() {
     await press(tester, 'b');
     expect(controller.text, 'habo');
     expect(edits, ['hao', 'habo']);
-    await tester.tap(find.byKey(submitKey));
+    await tester.tap(keyNamed('Search'));
     await tester.pumpAndSettle();
     expect(submissions, ['habo']);
     expect(find.byKey(keyboardKey), findsNothing);
@@ -796,7 +844,7 @@ void main() {
       tester.widget<TextField>(find.byType(TextField)).obscureText,
       isTrue,
     );
-    await tester.tap(find.byKey(submitKey));
+    await tester.tap(keyNamed('Done'));
     await tester.pumpAndSettle();
     expect(staged.last, 'aB!');
     expect(find.byKey(keyboardKey), findsNothing);
@@ -850,7 +898,7 @@ void main() {
     for (final key in ['2', '0', '0']) {
       await press(tester, key);
     }
-    await tester.tap(find.byKey(submitKey));
+    await tester.tap(find.byTooltip('Done'));
     await tester.pumpAndSettle();
     expect(staged.last, 100);
   });
@@ -876,14 +924,14 @@ void main() {
     await tester.tap(find.byType(TextField).first);
     await tester.pumpAndSettle();
     await press(tester, 'a');
-    await tester.tap(find.byKey(submitKey));
+    await tester.tap(keyNamed('Next field'));
     await tester.pumpAndSettle();
     await press(tester, 'b');
     await press(tester, 'New line');
     await press(tester, 'c');
     expect(first.text, 'a');
     expect(second.text, 'b\nc');
-    await tester.tap(find.byKey(const ValueKey('hide-on-screen-keyboard')));
+    await tester.tap(find.byTooltip('Done'));
     await tester.pumpAndSettle();
     expect(find.byKey(keyboardKey), findsNothing);
     await tester.tap(find.byType(TextField).last);
@@ -893,6 +941,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(keyboardKey), findsNothing);
   });
+
+  for (final type in [
+    TextInputType.emailAddress,
+    TextInputType.url,
+    TextInputType.phone,
+  ]) {
+    testWidgets('$type has one grid key for the requested field action', (
+      tester,
+    ) async {
+      final submissions = <String>[];
+      await pumpKeyboard(
+        tester,
+        TextField(
+          keyboardType: type,
+          textInputAction: TextInputAction.send,
+          onSubmitted: submissions.add,
+        ),
+      );
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Send'), findsNothing);
+      await press(tester, 'Send');
+      expect(submissions, ['']);
+      expect(find.byKey(keyboardKey), findsNothing);
+    });
+  }
 
   testWidgets('disabled and read-only fields never open the keyboard', (
     tester,
@@ -960,7 +1034,7 @@ void main() {
         lessThan(tester.getTopLeft(find.byKey(keyboardKey)).dy),
       );
       await press(tester, 'a');
-      await tester.tap(find.byKey(submitKey));
+      await tester.tap(keyNamed('Done'));
       await tester.pumpAndSettle();
       expect(saved, 'a');
       expect(find.byKey(keyboardKey), findsNothing);
@@ -1147,6 +1221,7 @@ void main() {
         ),
       ),
       size: const Size(1280, 800),
+      localKiosk: true,
     );
     await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
@@ -1162,6 +1237,11 @@ void main() {
       image.dispose();
     });
     await capture('kalinka-on-screen-keyboard');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await capture('kalinka-keyboard-remote-press');
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.longPress(keyNamed('a'));
     await tester.pumpAndSettle();
     await capture('kalinka-keyboard-accents-wide');

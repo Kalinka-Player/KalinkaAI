@@ -21,6 +21,7 @@ const _maxKeyboardHeightFraction = 0.37;
 const _maxCharacterKeyAspectRatio = 2.0;
 const _keyboardRowGap = 6.0;
 const _keyboardColumnGap = 4.0;
+const _keyboardLabelSize = 24.0;
 const _keyboardToolbarHeight = 48.0;
 const _keyboardToolbarWidth = 52.0;
 
@@ -235,12 +236,22 @@ class _OnScreenKeyboardHostState extends ConsumerState<OnScreenKeyboardHost>
     }
   }
 
-  void _revealFocusedField() {
+  void _revealFocusedField({BuildContext? resizedViewport}) {
     if (!_enabled || !_input.visible) return;
     final focused = FocusManager.instance.primaryFocus?.context;
     if (focused != null && focused.mounted) {
+      // The editable's focus node is inside its decoration. Reveal the whole
+      // field, including its border and any trailing password/clear control.
+      final field =
+          focused.findAncestorStateOfType<State<TextField>>()?.context ??
+          focused;
+      if (resizedViewport != null &&
+          Scrollable.maybeOf(field, axis: Axis.vertical)?.notificationContext !=
+              resizedViewport) {
+        return;
+      }
       Scrollable.ensureVisible(
-        focused,
+        field,
         alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
       );
     }
@@ -309,7 +320,20 @@ class _OnScreenKeyboardHostState extends ConsumerState<OnScreenKeyboardHost>
               },
               child: KeyboardPresentationScope(
                 controller: _presentation,
-                child: widget.child,
+                child: NotificationListener<ScrollMetricsNotification>(
+                  onNotification: (notification) {
+                    // Staging the first edit can add an Apply bar below the
+                    // list, shrinking the field's viewport after opening.
+                    if (_motion.isCompleted &&
+                        notification.metrics.axis == Axis.vertical) {
+                      _revealFocusedField(
+                        resizedViewport: notification.context,
+                      );
+                    }
+                    return false;
+                  },
+                  child: widget.child,
+                ),
               ),
             ),
             if (_panelMounted)
@@ -418,6 +442,16 @@ class _KeyboardPanelState extends State<_KeyboardPanel> {
   final _grid = VirtualKeypadDpadController();
   _ToolbarKey? _toolbar;
 
+  // Numbers have no action key. Multiline uses its grid key for a line break.
+  bool get _needsToolbarSubmit =>
+      _type == KeyboardType.custom || _type == KeyboardType.multiline;
+
+  @override
+  void didUpdateWidget(_KeyboardPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_toolbar == _ToolbarKey.submit && !_needsToolbarSubmit) _toolbar = null;
+  }
+
   void handleRemoteKey(KeyEvent event) {
     final key = event.logicalKey;
     final toolbar = _toolbar;
@@ -429,13 +463,18 @@ class _KeyboardPanelState extends State<_KeyboardPanel> {
                   ? LogicalKeyboardKey.arrowUp
                   : LogicalKeyboardKey.arrowRight) ||
           key == LogicalKeyboardKey.tab) {
-        setState(() => _toolbar = _ToolbarKey.submit);
+        setState(
+          () => _toolbar = _needsToolbarSubmit
+              ? _ToolbarKey.submit
+              : _ToolbarKey.hide,
+        );
       }
     } else if (isKeyboardSelectKey(key)) {
       if (event is KeyDownEvent) {
         if (toolbar == _ToolbarKey.hide) {
           widget.dismiss();
         } else {
+          setState(() => _toolbar = null);
           input.submit();
         }
       }
@@ -448,10 +487,11 @@ class _KeyboardPanelState extends State<_KeyboardPanel> {
     } else if (key ==
         (above ? LogicalKeyboardKey.arrowLeft : LogicalKeyboardKey.arrowUp)) {
       setState(() => _toolbar = _ToolbarKey.hide);
-    } else if (key ==
-        (above
-            ? LogicalKeyboardKey.arrowRight
-            : LogicalKeyboardKey.arrowDown)) {
+    } else if (_needsToolbarSubmit &&
+        key ==
+            (above
+                ? LogicalKeyboardKey.arrowRight
+                : LogicalKeyboardKey.arrowDown)) {
       setState(() => _toolbar = _ToolbarKey.submit);
     }
   }
@@ -554,16 +594,17 @@ class _KeyboardPanelState extends State<_KeyboardPanel> {
                 actionKeyColor: KalinkaColors.surfaceOverlay,
                 keyTextColor: KalinkaColors.textPrimary,
                 keyTextStyle: KalinkaTextStyles.trayRowLabel.copyWith(
-                  fontSize: 20,
+                  fontSize: _keyboardLabelSize,
                 ),
-                keyTextSize: 20,
+                keyTextSize: _keyboardLabelSize,
                 focusBorderColor: KalinkaColors.textPrimary,
                 focusBorderWidth: 2,
+                focusColor: KalinkaColors.surfaceOverlay,
                 keyBorderRadius: 8,
                 keyShadow: false,
                 horizontalGap: _keyboardColumnGap,
                 verticalGap: _keyboardRowGap,
-                splashColor: KalinkaColors.borderDefault,
+                splashColor: KalinkaColors.textPrimary.withValues(alpha: 0.3),
               ),
             ),
           ),
@@ -580,14 +621,16 @@ class _KeyboardPanelState extends State<_KeyboardPanel> {
                   onPressed: widget.remote ? widget.dismiss : input.dismiss,
                   icon: const Icon(Icons.keyboard_hide_outlined),
                 ),
-                const Spacer(),
-                IconButton(
-                  key: const ValueKey('keyboard-submit'),
-                  tooltip: _actionLabel,
-                  style: _toolbarStyle(_ToolbarKey.submit),
-                  onPressed: input.submit,
-                  icon: Icon(_actionIcon),
-                ),
+                if (_needsToolbarSubmit) ...[
+                  const Spacer(),
+                  IconButton(
+                    key: const ValueKey('keyboard-submit'),
+                    tooltip: _actionLabel,
+                    style: _toolbarStyle(_ToolbarKey.submit),
+                    onPressed: input.submit,
+                    icon: Icon(_actionIcon),
+                  ),
+                ],
               ],
             ),
           ),

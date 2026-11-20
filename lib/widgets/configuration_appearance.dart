@@ -37,9 +37,18 @@ class ConfigurationAppearance extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) =>
-        _ConfigurationScope(width: constraints.maxWidth, child: child),
+  Widget build(BuildContext context) => Padding(
+    // The app's keyboard floats over the browsing shell. Give settings lists
+    // the visible viewport so they can scroll even the last field above it.
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: MediaQuery.removeViewInsets(
+      context: context,
+      removeBottom: true,
+      child: LayoutBuilder(
+        builder: (context, constraints) =>
+            _ConfigurationScope(width: constraints.maxWidth, child: child),
+      ),
+    ),
   );
 }
 
