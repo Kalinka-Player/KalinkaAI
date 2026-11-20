@@ -22,8 +22,9 @@ enum FolderActionsPlace {
   /// Beside the title, taken into the bar once they reach it.
   bar,
 
-  /// Under the title, held as they are in a row of their own under the bar
-  /// once the title has scrolled away.
+  /// Held as they are in a row of their own under the bar once the title has
+  /// scrolled away: from under the title, or from beside it where the bar's
+  /// row has no room for them.
   underBar,
 }
 
@@ -51,6 +52,11 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
   /// bar from beside the title, or into a row under it from below.
   final bool barTakesActions;
 
+  /// The host's bar has room in its own row for [actions] as they are beside
+  /// the title. Without it, they are held in the row under the bar instead,
+  /// as from under the title, rather than shrunk to fit.
+  final bool barHasRoom;
+
   /// The host holds [actions] in a row under its bar, which [topInset]
   /// already counts, so the header no longer keeps their place.
   final bool actionsUnderBar;
@@ -68,6 +74,7 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
     this.topInset = 0,
     this.actions,
     this.barTakesActions = false,
+    this.barHasRoom = true,
     this.actionsUnderBar = false,
     this.actionsWidth,
     this.titleInBar = false,
@@ -275,10 +282,12 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
         final controlsWidth = wide ? folderActions : available;
         final actionsHeight = widget.actions == null ? 0.0 : rowHeight + 8;
         // Only a folder's own actions stay under the bar, held there as its
-        // trail is: a page's own always, a host's from under the title. A
-        // host's beside the title go up into its bar instead.
+        // trail is: a page's own always, a host's from under the title or
+        // where its bar has no room for them. The rest, a host's beside the
+        // title, go up into its bar.
         final held =
-            widget.actions != null && (!widget.barTakesActions || !wide);
+            widget.actions != null &&
+            (!widget.barTakesActions || !wide || !widget.barHasRoom);
         final pinnedHeight = held ? rowHeight + 16 : 0.0;
         // Once the host holds that row under its bar, the inset counts it.
         // Measure from the bar's own bottom, so nothing here moves.
@@ -368,7 +377,7 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
                   : (shrink / collapseExtent).clamp(0.0, 1.0);
               // Beside a folder's actions, the identity fades over the first
               // half of the collapse, and they cross its column in the second.
-              final fade = wide && !widget.barTakesActions
+              final fade = wide && held
                   ? (1 - settle * 2).clamp(0.0, 1.0)
                   : 1.0;
               final spread = wide ? (settle * 2 - 1).clamp(0.0, 1.0) : settle;
@@ -415,9 +424,7 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
                           expandedHeight - shrink - rowHeight - 8,
                         )
                       : top + 8);
-              final actionsLeft = widget.barTakesActions
-                  ? left
-                  : left + (16 - left) * spread;
+              final actionsLeft = held ? left + (16 - left) * spread : left;
               return ColoredBox(
                 key: const ValueKey('catalog-header-surface'),
                 color: Colors.transparent,

@@ -227,11 +227,8 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// Whether lists here stretch when pulled past an end, as on Android.
   bool _albumStretches = false;
 
-  final _visitPages =
-      <
-        int,
-        (SearchSessionState, bool, bool, FolderActionsPlace?, bool, Widget)
-      >{};
+  // Each with the layout it was built for, as a record of what it depends on.
+  final _visitPages = <int, (SearchSessionState, Record, Widget)>{};
   final _catalogHeadersCollapsed = <int, bool>{};
   // Kept with the folder it was reported for: one shown in its place in the
   // same visit starts with its actions in its header.
@@ -1172,33 +1169,23 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// retains its keyed element, listing state and scroll position.
   Widget _visitPage(SearchSessionState visit) {
     final cached = _visitPages[visit.visitId];
-    final compactHeader = _compactCatalogHeader(visit);
-    final searchInBar = _searchFitsInToolbar(
-      context,
-      visit,
-      _paneWidth - MediaQuery.paddingOf(context).horizontal,
+    final migrating = _migratingFolderActions(visit);
+    final layout = (
+      compactHeader: _compactCatalogHeader(visit),
+      searchInBar: _searchFitsInToolbar(
+        context,
+        visit,
+        _paneWidth - MediaQuery.paddingOf(context).horizontal,
+      ),
+      folderInline: _folderActionsInline(context, visit),
+      folderFitsBar: migrating && _folderActionsFitBar(context, visit),
+      folderPlace: migrating ? _folderActionsPlace(visit) : null,
     );
-    final folderInline = _folderActionsInline(context, visit);
-    final folderPlace = _migratingFolderActions(visit)
-        ? _folderActionsPlace(visit)
-        : null;
-    if (cached != null &&
-        identical(cached.$1, visit) &&
-        cached.$2 == compactHeader &&
-        cached.$3 == folderInline &&
-        cached.$4 == folderPlace &&
-        cached.$5 == searchInBar) {
-      return cached.$6;
+    if (cached != null && identical(cached.$1, visit) && cached.$2 == layout) {
+      return cached.$3;
     }
     final page = BrowseVisitScope(visit: visit, child: _buildVisit(visit));
-    _visitPages[visit.visitId] = (
-      visit,
-      compactHeader,
-      folderInline,
-      folderPlace,
-      searchInBar,
-      page,
-    );
+    _visitPages[visit.visitId] = (visit, layout, page);
     return page;
   }
 
@@ -1346,6 +1333,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                     : _folderActions(visit)
               : null,
           folderActionsUnderBar: _folderActionsUnderBar(visit),
+          folderActionsFitBar: _folderActionsFitBar(context, visit),
           topBarInset: page.isAlbum || page.isRoot
               ? 0
               : MediaQuery.paddingOf(context).top + _barHeight(context, visit),
@@ -1429,10 +1417,16 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
 
   /// Actions laid out under a folder's title keep that layout under the bar:
   /// a row of their own at full size, Up one folder at its far end, rather
-  /// than folded into the bar.
+  /// than folded into the bar. Those taken into a bar that has since lost the
+  /// room for them, as on resize, are held there too until the header says
+  /// where they now belong.
   bool _folderActionsUnderBar(SearchSessionState session) =>
       _migratingFolderActions(session) &&
-      _folderActionsPlace(session) == FolderActionsPlace.underBar;
+      switch (_folderActionsPlace(session)) {
+        FolderActionsPlace.underBar => true,
+        FolderActionsPlace.bar => !_folderActionsFitBar(context, session),
+        FolderActionsPlace.header => false,
+      };
 
   double _catalogBarSearchWidth(
     BuildContext context,
@@ -1449,11 +1443,14 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     );
   }
 
+  /// With [actionsInBar], as it will be once a folder's actions are in the
+  /// bar's row, rather than as they are now.
   bool _searchFitsInToolbar(
     BuildContext context,
     SearchSessionState session,
-    double width,
-  ) {
+    double width, {
+    bool? actionsInBar,
+  }) {
     final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
     if (_compactCatalogHeader(session)) {
       return width >=
@@ -1484,7 +1481,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         (CatalogSliverHeader.filters(session.catalogPage.filterCapabilities)
             ? kKalinkaPillTarget
             : 0) +
-        (_folderActionsInToolbar(session) && !_folderActionsUnderBar(session)
+        (actionsInBar ??
+                (_folderActionsInToolbar(session) &&
+                    !_folderActionsUnderBar(session))
             ? 8 +
                   FolderPageActions.widthFor(
                     context,
@@ -1495,16 +1494,19 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     return width >= needed;
   }
 
+  /// The room left for a folder's actions in the bar's row, beside the search
+  /// as [searchInBar] says it will be.
   double _folderToolbarAvailable(
     BuildContext context,
-    SearchSessionState session,
-  ) {
+    SearchSessionState session, {
+    required bool searchInBar,
+  }) {
     final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
     final width = _paneWidth - MediaQuery.paddingOf(context).horizontal;
     final caps = session.catalogPage.filterCapabilities;
     final search = !CatalogSliverHeader.searches(caps)
         ? 0.0
-        : _catalogSearchInBar
+        : searchInBar
         ? _catalogBarSearchWidth(context, session, width) + 12
         : kKalinkaPillTarget;
     // The breadcrumb can fold to its current folder, but retains a readable
@@ -1521,35 +1523,39 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         (CatalogSliverHeader.filters(caps) ? kKalinkaPillTarget : 0);
   }
 
-  bool _folderToolbarCompact(
-    BuildContext context,
-    SearchSessionState session,
-  ) =>
-      _migratingFolderActions(session) &&
-      !_folderActionsUnderBar(session) &&
-      (FolderPageActions.widthFor(
-                context,
-                session.catalogPage,
-                session.shownListing,
-              ) >
-              _folderToolbarAvailable(context, session) ||
-          ActionPillButton.heightOf(context) >
-              _barRowHeight(context, session) - browseToolbarPadding.vertical);
+  /// Whether the bar's own row has room for a searchable folder's actions,
+  /// labelled as they are beside its title, with the search as it will be
+  /// once they arrive. Otherwise they are held under the bar as they are,
+  /// never shrunk to icons on the way.
+  bool _folderActionsFitBar(BuildContext context, SearchSessionState session) {
+    final width = _paneWidth - MediaQuery.paddingOf(context).horizontal;
+    final available = _folderToolbarAvailable(
+      context,
+      session,
+      searchInBar: _searchFitsInToolbar(
+        context,
+        session,
+        width,
+        actionsInBar: true,
+      ),
+    );
+    // The breadcrumb target can yield one spacing step before another row
+    // is necessary, while all controls keep their full interaction targets.
+    return ActionPillButton.heightOf(context) <=
+            _barRowHeight(context, session) - browseToolbarPadding.vertical &&
+        available + browseToolbarTitleGap >=
+            FolderPageActions.widthFor(
+              context,
+              session.catalogPage,
+              session.shownListing,
+            );
+  }
 
   bool _folderActionsInline(BuildContext context, SearchSessionState session) {
     if (!_folderActionsInToolbar(session)) return false;
     if (_folderActionsUnderBar(session)) return false;
     if (_migratingFolderActions(session)) {
-      // The breadcrumb target can yield one spacing step before another row
-      // is necessary, while all controls keep their full interaction targets.
-      return _folderToolbarAvailable(context, session) +
-              browseToolbarTitleGap >=
-          FolderPageActions.widthFor(
-            context,
-            session.catalogPage,
-            session.shownListing,
-            iconOnly: _folderToolbarCompact(context, session),
-          );
+      return _folderActionsFitBar(context, session);
     }
     final page = session.catalogPage;
     if (CatalogSliverHeader.searches(page.filterCapabilities) ||
@@ -1571,13 +1577,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
             FolderPageActions.widthFor(context, page, session.shownListing);
   }
 
-  double _folderControlHeight(
-    BuildContext context,
-    SearchSessionState session,
-  ) => _folderToolbarCompact(context, session)
-      ? kKalinkaPillTarget
-      : ActionPillButton.heightOf(context);
-
   double _barHeight(BuildContext context, SearchSessionState session) {
     final row = _barRowHeight(context, session);
     if (_compactCatalogHeader(session)) {
@@ -1587,10 +1586,9 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     return _folderActionsInline(context, session)
         ? math.max(
             row,
-            _folderControlHeight(context, session) +
-                browseToolbarPadding.vertical,
+            ActionPillButton.heightOf(context) + browseToolbarPadding.vertical,
           )
-        : row + _folderControlHeight(context, session) + 16;
+        : row + ActionPillButton.heightOf(context) + 16;
   }
 
   double _catalogSubtitleHeight(BuildContext context) =>
@@ -1661,7 +1659,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
               toolbar &&
               _migratingFolderActions(session) &&
               !_folderActionsUnderBar(session),
-          iconOnly: toolbar && _folderToolbarCompact(context, session),
         ),
       );
 
@@ -1862,7 +1859,6 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                               context,
                               session.catalogPage,
                               session.shownListing,
-                              iconOnly: _folderToolbarCompact(context, session),
                             ),
                             child: _folderActions(session, toolbar: true),
                           ),
@@ -1931,7 +1927,7 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
               8,
             ),
             child: SizedBox(
-              height: _folderControlHeight(context, session),
+              height: ActionPillButton.heightOf(context),
               child: _folderActions(session, toolbar: true),
             ),
           ),

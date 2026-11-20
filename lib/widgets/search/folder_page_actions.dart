@@ -18,7 +18,6 @@ class FolderPageActions extends ConsumerWidget {
 
   /// A filter narrows the listing; see [ContainerPageActions.narrowed].
   final bool narrowed;
-  final bool iconOnly;
   final bool alignRight;
 
   const FolderPageActions({
@@ -26,7 +25,6 @@ class FolderPageActions extends ConsumerWidget {
     required this.page,
     required this.listing,
     required this.narrowed,
-    this.iconOnly = false,
     this.alignRight = false,
   });
 
@@ -72,12 +70,11 @@ class FolderPageActions extends ConsumerWidget {
             (listing.onStorage ? kKalinkaPillTarget + 8 : 0) +
             (!identical(listing, page) ? kKalinkaPillTarget + 8 : 0);
         final compact =
-            iconOnly ||
             ActionPillButton.widthOf(context, 'Play all') +
-                    ActionPillButton.widthOf(context, 'Enqueue') +
-                    8 +
-                    others >
-                constraints.maxWidth;
+                ActionPillButton.widthOf(context, 'Enqueue') +
+                8 +
+                others >
+            constraints.maxWidth;
         final row = Row(
           children: [
             if (listing.canAdd)
