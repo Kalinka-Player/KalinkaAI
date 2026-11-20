@@ -8,8 +8,8 @@ import '../source_badge.dart' show SourceTile;
 
 // Brighter than the app's secondary greys: these lines sit on the cover's
 // colours, not on near-black.
-final _artist = KalinkaColors.textPrimary.withValues(alpha: 0.78);
-final _album = KalinkaColors.textPrimary.withValues(alpha: 0.7);
+final _primaryCredit = KalinkaColors.textPrimary.withValues(alpha: 0.78);
+final _secondaryCredit = KalinkaColors.textPrimary.withValues(alpha: 0.7);
 final _stream = KalinkaColors.textPrimary.withValues(alpha: 0.82);
 
 /// The only shadow text laid over a cover wears: a hairline of shade, as
@@ -23,7 +23,7 @@ const kioskTextPolish = [
 class KioskTrackLines {
   final String trackId;
   final String title;
-  final String artist;
+  final String? artist;
   final String? album;
 
   /// Where the stream comes from and what it is, as the player says it:
@@ -91,9 +91,8 @@ class KioskTrackText extends StatefulWidget {
   /// nearer the title's size, and the title keeps to a line.
   final bool compact;
 
-  /// In landscape, share the available height evenly between the visible
-  /// rows. The parent bounds this area between Now Playing and the progress bar.
-  final bool spreadVertically;
+  /// Group the credits under the title in the bounded column beside the cover.
+  final bool landscape;
 
   /// Move the incoming block as one opaque layer on a local display.
   final bool slideTogether;
@@ -104,7 +103,7 @@ class KioskTrackText extends StatefulWidget {
     required this.scale,
     this.centred = false,
     this.compact = false,
-    this.spreadVertically = false,
+    this.landscape = false,
     this.slideTogether = false,
   });
 
@@ -182,7 +181,7 @@ class _KioskTrackTextState extends State<KioskTrackText>
             top: 0,
             left: 0,
             right: 0,
-            bottom: widget.spreadVertically ? 0 : null,
+            bottom: widget.landscape ? 0 : null,
             child: _block(leaving, leaving: true),
           ),
         _block(widget.lines, leaving: false),
@@ -193,101 +192,115 @@ class _KioskTrackTextState extends State<KioskTrackText>
   Widget _block(KioskTrackLines lines, {required bool leaving}) {
     double s(double v) => v * widget.scale;
     final compact = widget.compact;
-    final spread = widget.spreadVertically;
-    final minimumGap = spread ? s(8) : 0.0;
-    final lineGap = compact || spread ? 0.0 : s(6);
+    final landscape = widget.landscape;
     final align = widget.centred ? TextAlign.center : TextAlign.start;
-    // Over a cover that fills the screen.
+    final crossAxis = widget.centred
+        ? CrossAxisAlignment.center
+        : CrossAxisAlignment.start;
     final shadows = compact ? kioskTextPolish : null;
-    final rows = <Widget>[
-      Text(
-        lines.title,
-        style: KalinkaFonts.display(
-          fontSize: s(compact ? 26 : 54),
-          fontWeight: FontWeight.w500,
-          color: KalinkaColors.frost,
-          height: compact ? 1.05 : 1.1,
-        ).copyWith(shadows: shadows),
-        textAlign: align,
-        maxLines: compact ? 1 : 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      Padding(
-        padding: EdgeInsets.only(top: lineGap),
-        child: Text(
-          lines.artist,
+    final primaryCredit = landscape ? lines.album : (lines.artist ?? '—');
+    final secondaryCredit = landscape ? lines.artist : lines.album;
+    final title = Text(
+      lines.title,
+      style: KalinkaFonts.display(
+        fontSize: s(compact ? 26 : 54),
+        fontWeight: FontWeight.w500,
+        color: KalinkaColors.frost,
+        height: compact ? 1.05 : 1.1,
+      ).copyWith(shadows: shadows),
+      textAlign: align,
+      maxLines: compact ? 1 : 2,
+      overflow: TextOverflow.ellipsis,
+    );
+    final credits = [
+      if (primaryCredit != null)
+        Text(
+          primaryCredit,
           style: KalinkaFonts.sans(
             fontSize: s(compact ? 19 : 30),
             fontWeight: FontWeight.w500,
-            color: _artist,
+            color: _primaryCredit,
             height: 1.2,
           ).copyWith(shadows: shadows),
           textAlign: align,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-      ),
-      if (lines.album != null)
-        Padding(
-          padding: EdgeInsets.only(top: lineGap),
-          child: Text(
-            lines.album!,
-            style: KalinkaFonts.sans(
-              fontSize: s(compact ? 15 : 21),
-              color: _album,
-              height: 1.25,
-            ).copyWith(shadows: shadows),
-            textAlign: align,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      if (lines.stream != null)
-        Padding(
-          padding: EdgeInsets.only(top: spread ? 0 : s(compact ? 8 : 10)),
-          child: _StreamRow(
-            lines: lines,
-            // Kept legible however small the title gets.
-            scale: compact ? math.max(widget.scale * 0.46, 0.72) : widget.scale,
-            shadows: shadows,
-            showBitPerfect: !leaving,
-          ),
+      if (secondaryCredit != null)
+        Text(
+          secondaryCredit,
+          style: KalinkaFonts.sans(
+            fontSize: s(compact ? 15 : 21),
+            color: _secondaryCredit,
+            height: 1.25,
+          ).copyWith(shadows: shadows),
+          textAlign: align,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
     ];
 
+    Widget stage(Widget row, int index) {
+      if (widget.slideTogether) return row;
+      return _Staged(
+        animation: _controller,
+        interval: leaving
+            ? const Interval(0, 0.3, curve: Curves.easeInCubic)
+            : Interval(
+                0.22 + index * 0.09,
+                0.64 + index * 0.09,
+                curve: Curves.easeOutCubic,
+              ),
+        leaving: leaving,
+        rise: s(18),
+        child: row,
+      );
+    }
+
+    // Spend spare height between groups. Album and artist share one credit
+    // block, so the small gap within it never expands on a TV.
+    final creditGap = compact ? 0.0 : s(6);
     final column = Column(
       mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: spread
-          ? MainAxisAlignment.spaceEvenly
-          : MainAxisAlignment.start,
-      spacing: minimumGap,
-      crossAxisAlignment: widget.centred
-          ? CrossAxisAlignment.center
-          : CrossAxisAlignment.start,
-      children: widget.slideTogether
-          ? rows
-          : [
-              for (final (i, row) in rows.indexed)
-                _Staged(
-                  animation: _controller,
-                  interval: leaving
-                      ? const Interval(0, 0.3, curve: Curves.easeInCubic)
-                      : Interval(
-                          0.22 + i * 0.09,
-                          0.64 + i * 0.09,
-                          curve: Curves.easeOutCubic,
-                        ),
-                  leaving: leaving,
-                  rise: s(18),
-                  child: row,
-                ),
+      crossAxisAlignment: crossAxis,
+      children: [
+        if (landscape) const Spacer(flex: 2),
+        stage(title, 0),
+        if (credits.isNotEmpty) ...[
+          if (landscape) const Spacer(),
+          SizedBox(height: landscape ? s(12) : creditGap),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: crossAxis,
+            spacing: landscape ? s(4) : creditGap,
+            children: [
+              for (final (i, row) in credits.indexed) stage(row, i + 1),
             ],
+          ),
+        ],
+        if (lines.stream != null) ...[
+          if (landscape) const Spacer(flex: 5),
+          SizedBox(height: s(landscape ? 20 : (compact ? 8 : 10))),
+          stage(
+            _StreamRow(
+              lines: lines,
+              scale: compact
+                  ? math.max(widget.scale * 0.46, 0.72)
+                  : widget.scale,
+              color: landscape ? KalinkaColors.textSecondary : _stream,
+              shadows: shadows,
+              showBitPerfect: !leaving,
+            ),
+            credits.length + 1,
+          ),
+        ],
+        if (landscape) Spacer(flex: lines.stream == null ? 5 : 1),
+      ],
     );
-    if (!spread) return column;
+    if (!landscape) return column;
 
-    // The same minimum gap goes before, between and after visible rows.
-    // If a wrapped title or large text exhausts the space, fit the text
-    // independently of the controls and of the other track during a switch.
+    // Fit each track independently when a wrapping title or large text needs
+    // more height than the space above the controls.
     return LayoutBuilder(
       builder: (context, box) => FittedBox(
         fit: BoxFit.scaleDown,
@@ -295,8 +308,8 @@ class _KioskTrackTextState extends State<KioskTrackText>
         child: Container(
           width: box.maxWidth,
           constraints: BoxConstraints(minHeight: box.maxHeight),
-          padding: EdgeInsets.symmetric(vertical: minimumGap),
-          child: column,
+          padding: EdgeInsets.only(top: s(12), bottom: s(6)),
+          child: IntrinsicHeight(child: column),
         ),
       ),
     );
@@ -340,6 +353,7 @@ class _Staged extends AnimatedWidget {
 class _StreamRow extends StatelessWidget {
   final KioskTrackLines lines;
   final double scale;
+  final Color color;
   final List<Shadow>? shadows;
 
   /// Off for the lines on their way out: the badge watches live state, which
@@ -349,6 +363,7 @@ class _StreamRow extends StatelessWidget {
   const _StreamRow({
     required this.lines,
     required this.scale,
+    required this.color,
     required this.shadows,
     required this.showBitPerfect,
   });
@@ -370,7 +385,7 @@ class _StreamRow extends StatelessWidget {
             style: KalinkaFonts.mono(
               fontSize: s(14),
               letterSpacing: s(0.3),
-              color: _stream,
+              color: color,
               height: 1.2,
             ).copyWith(shadows: shadows),
             maxLines: 1,
