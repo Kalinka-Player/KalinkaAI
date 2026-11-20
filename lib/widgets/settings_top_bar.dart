@@ -19,19 +19,20 @@ class SettingsTopBar extends ConsumerWidget {
 
   /// Off where the page is left another way, such as the navigation rail.
   final bool showBack;
-  final bool autofocusBack;
+  final KeyboardEntryFocus entryFocus;
 
   const SettingsTopBar({
     super.key,
     required this.title,
     this.action,
     this.showBack = true,
-    this.autofocusBack = false,
+    this.entryFocus = KeyboardEntryFocus.none,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => AppKeyboardRegion(
     area: AppKeyboardArea.toolbar,
+    entryFocus: entryFocus,
     child: _buildContent(context, ref),
   );
 
@@ -93,7 +94,6 @@ class SettingsTopBar extends ConsumerWidget {
                             if (showBack)
                               KalinkaBackButton(
                                 key: const ValueKey('settings-back'),
-                                autofocus: autofocusBack,
                                 onPressed: () => SlideInPanel.closeOf(context),
                               )
                             else

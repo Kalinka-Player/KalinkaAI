@@ -35,6 +35,9 @@ class SlideInPanel extends StatefulWidget {
   /// PopScope on a route hears it, so both would close.
   final bool handlesBack;
 
+  /// How the content region receives focus when this panel is uppermost.
+  final KeyboardEntryFocus contentEntryFocus;
+
   /// False shows it, and later hides it, in place: a destination switched
   /// to rather than a page opened over another. Read once, as it opens.
   final bool slides;
@@ -47,6 +50,7 @@ class SlideInPanel extends StatefulWidget {
     this.beforeClose,
     this.onCoverageChanged,
     this.handlesBack = true,
+    this.contentEntryFocus = KeyboardEntryFocus.firstControlOnKiosk,
     this.slides = true,
   });
 
@@ -141,7 +145,9 @@ class _SlideInPanelState extends State<SlideInPanel>
               child: AppKeyboardRegion(
                 area: AppKeyboardArea.content,
                 separate: true,
-                focusOnEntry: widget.handlesBack && widget.overlays.isEmpty,
+                entryFocus: widget.handlesBack && widget.overlays.isEmpty
+                    ? widget.contentEntryFocus
+                    : KeyboardEntryFocus.none,
                 child: widget.child,
               ),
             ),

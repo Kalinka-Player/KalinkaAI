@@ -29,9 +29,10 @@ Wrap text, numeric and password entries in `AppKeyboardTextEntry` and sliders in
 Omit section descriptions that repeat the heading or visible controls. When a section needs a caption, place it 4dp below the heading and leave 10dp before the card, matching collection captions.
 
 Back closes the current panel through `SlideInPanel.closeOf(context)`. System Back does the same. Returning preserves the parent tab, scroll position and staged edits. Only the uppermost panel owns Back. The header remains outside the content scroll.
-Opening renderer settings moves keyboard focus to its Back button. Tab enters
-the renderer controls. Covered Streamer controls leave keyboard traversal
-until the renderer panel closes.
+Renderer settings opens with focus on the toolbar scope. Its controls stay
+unhighlighted until navigation begins. The first arrow highlights Back, and
+Tab enters the renderer controls. Covered Streamer controls leave keyboard
+traversal until the renderer panel closes.
 
 Use the shared `KalinkaBackButton`: a 40dp outlined circle in a 48dp target, matching filter controls, with neutral hover/press and a primary keyboard focus ring. This also applies to browsing, search and setup; the album view retains its separate treatment. See [Back buttons](../PALETTE.md#back-buttons) for exact states.
 

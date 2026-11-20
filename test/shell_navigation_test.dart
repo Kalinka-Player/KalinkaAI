@@ -847,6 +847,64 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final mouseEntry in [true, false]) {
+    testWidgets(
+      'opening Output settings waits for navigation (mouse: $mouseEntry)',
+      (tester) async {
+        await _pump(
+          tester,
+          api: _RendererApi(),
+          extra: [localDisplayKioskProvider.overrideWithValue(true)],
+        );
+        final output = find
+            .byWidgetPredicate(
+              (w) =>
+                  w is RendererSwitcherButton || w is RendererSwitcherDropdown,
+            )
+            .hitTestable()
+            .first;
+        final mouse = await tester.createGesture(
+          kind: ui.PointerDeviceKind.mouse,
+        );
+        await mouse.addPointer();
+        addTearDown(mouse.removePointer);
+        Future<void> activate(Finder target) async {
+          if (mouseEntry) {
+            final point = tester.getCenter(target);
+            await mouse.moveTo(point);
+            await mouse.down(point);
+            await mouse.up();
+          } else {
+            traversableFocusNodesIn(target).first.requestFocus();
+            await tester.pump();
+            await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+          }
+          await tester.pumpAndSettle();
+        }
+
+        await activate(output);
+        await activate(find.byTooltip('Output settings'));
+        final panel = find.byType(RendererSettingsScreen);
+        expect(focusIsOn(panel), isTrue);
+        expect(FocusManager.instance.primaryFocus, isA<FocusScopeNode>());
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(panel, findsOneWidget);
+        expect(FocusManager.instance.primaryFocus, isA<FocusScopeNode>());
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pumpAndSettle();
+        final mono = find.byWidgetPredicate(
+          (w) => w is SchemaFieldRenderer && w.field.label == 'Mono',
+        );
+        expect(focusIsOn(mono), isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(panel, findsNothing);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.linux),
+    );
+  }
+
   for (final width in [375.0, 1440.0]) {
     testWidgets(
       'renderer settings own toolbar and content over Streamer at $width',
@@ -907,6 +965,11 @@ void main() {
           of: panel,
           matching: find.byKey(const ValueKey('settings-back')),
         );
+        expect(focusIsOn(panel), isTrue);
+        expect(FocusManager.instance.primaryFocus, isA<FocusScopeNode>());
+        expect(focusIsOn(back), isFalse);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
         expect(focusIsOn(back), isTrue);
         expect(
           traversableFocusNodesIn(find.byType(PluginCatalogScreen)),
