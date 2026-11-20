@@ -233,7 +233,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         (SearchSessionState, bool, bool, FolderActionsPlace?, bool, Widget)
       >{};
   final _catalogHeadersCollapsed = <int, bool>{};
-  final _folderActionsPlaces = <int, FolderActionsPlace>{};
+  // Kept with the folder it was reported for: one shown in its place in the
+  // same visit starts with its actions in its header.
+  final _folderActionsPlaces =
+      <int, ({String? listing, FolderActionsPlace place})>{};
   final _catalogSummaries = <int, String?>{};
 
   // Whether the bar's search has unrolled its field under the bar.
@@ -1362,7 +1365,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
           },
           onFolderActionsPlace: (place) {
             if (_folderActionsPlace(visit) == place) return;
-            _folderActionsPlaces[id] = place;
+            _folderActionsPlaces[id] = (
+              listing: visit.shownListing.id,
+              place: place,
+            );
             if (mounted && _isShown(id)) setState(() {});
           },
           onAlbumHeaderHeight: page.isAlbum
@@ -1409,8 +1415,12 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       (CatalogSliverHeader.searches(session.catalogPage.filterCapabilities) ||
           CatalogSliverHeader.filters(session.catalogPage.filterCapabilities));
 
-  FolderActionsPlace _folderActionsPlace(SearchSessionState session) =>
-      _folderActionsPlaces[session.visitId] ?? FolderActionsPlace.header;
+  FolderActionsPlace _folderActionsPlace(SearchSessionState session) {
+    final kept = _folderActionsPlaces[session.visitId];
+    return kept != null && kept.listing == session.shownListing.id
+        ? kept.place
+        : FolderActionsPlace.header;
+  }
 
   bool _folderActionsInToolbar(SearchSessionState session) =>
       _hasFolderActions(session) &&
@@ -1788,127 +1798,144 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     // and these controls retain their own colours.
     final folderActions = _folderActionsInToolbar(session);
     final inline = _folderActionsInline(context, session);
-    return SafeArea(
-      bottom: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            height: inline
-                ? _barHeight(context, session)
-                : _barRowHeight(context, session),
-            child: Padding(
-              padding: browseToolbarPadding,
-              child: LayoutBuilder(
-                builder: (context, constraints) => Row(
-                  children: [
-                    _onDisc(
-                      overAlbum,
-                      IconButton(
-                        tooltip: 'Back',
-                        constraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
+    // A row held under the bar keeps the gutters it had in the page's
+    // header, which ignores the side insets, so the handover cannot shift it.
+    final rowInsets = _folderActionsUnderBar(session)
+        ? EdgeInsets.zero
+        : MediaQuery.paddingOf(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SafeArea(
+          bottom: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: inline
+                    ? _barHeight(context, session)
+                    : _barRowHeight(context, session),
+                child: Padding(
+                  padding: browseToolbarPadding,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => Row(
+                      children: [
+                        _onDisc(
+                          overAlbum,
+                          IconButton(
+                            tooltip: 'Back',
+                            constraints: const BoxConstraints(
+                              minWidth: 48,
+                              minHeight: 48,
+                            ),
+                            onPressed: _handleBack,
+                            icon: const Icon(
+                              Icons.arrow_back,
+                              size: 22,
+                              color: KalinkaColors.textPrimary,
+                            ),
+                          ),
                         ),
-                        onPressed: _handleBack,
-                        icon: const Icon(
-                          Icons.arrow_back,
-                          size: 22,
-                          color: KalinkaColors.textPrimary,
+                        const SizedBox(width: browseToolbarTitleGap),
+                        Expanded(
+                          child: _buildTitle(session, overAlbum: overAlbum),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: browseToolbarTitleGap),
-                    Expanded(child: _buildTitle(session, overAlbum: overAlbum)),
-                    // What joins the bar on scroll comes in before what is always
-                    // there, so Search and Grid/List never move under a finger.
-                    if ((catalogChrome ||
-                            (!onResults && session.catalogPage.isArtist)) &&
-                        _catalogHeadersCollapsed[session.visitId] == true &&
-                        !_compactCatalogHeader(session))
-                      CatalogPinButton(
-                        page: session.shownListing,
-                        // As the artist header's Pin saves it.
-                        filter: session.catalogPage.isArtist
-                            ? const BrowseFilterQuery()
-                            : session.catalogFilter.copyWith(
-                                type: session.expandedShelf,
-                              ),
-                      ),
-                    if (inline) ...[
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: FolderPageActions.widthFor(
-                          context,
-                          session.catalogPage,
-                          session.shownListing,
-                          iconOnly: _folderToolbarCompact(context, session),
+                        // What joins the bar on scroll comes in before what is always
+                        // there, so Search and Grid/List never move under a finger.
+                        if ((catalogChrome ||
+                                (!onResults && session.catalogPage.isArtist)) &&
+                            _catalogHeadersCollapsed[session.visitId] == true &&
+                            !_compactCatalogHeader(session))
+                          CatalogPinButton(
+                            page: session.shownListing,
+                            // As the artist header's Pin saves it.
+                            filter: session.catalogPage.isArtist
+                                ? const BrowseFilterQuery()
+                                : session.catalogFilter.copyWith(
+                                    type: session.expandedShelf,
+                                  ),
+                          ),
+                        if (inline) ...[
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: FolderPageActions.widthFor(
+                              context,
+                              session.catalogPage,
+                              session.shownListing,
+                              iconOnly: _folderToolbarCompact(context, session),
+                            ),
+                            child: _folderActions(session, toolbar: true),
+                          ),
+                        ],
+                        ?_barSearch(
+                          session,
+                          width:
+                              constraints.maxWidth +
+                              browseToolbarPadding.horizontal,
                         ),
-                        child: _folderActions(session, toolbar: true),
-                      ),
-                    ],
-                    ?_barSearch(
-                      session,
-                      width:
-                          constraints.maxWidth +
-                          browseToolbarPadding.horizontal,
-                    ),
-                    ?_barFilters(session),
-                    if (catalogChrome)
-                      if (_barPresentation(
-                            session,
-                            width:
-                                constraints.maxWidth +
-                                browseToolbarPadding.horizontal,
-                          )
-                          case final presentation?) ...[
-                        // Set apart from what narrows the listing: it only
-                        // changes how it is shown.
-                        if (_barSearchOf(session) != null ||
-                            _barFilters(session) != null)
-                          const SizedBox(width: 12),
-                        presentation,
+                        ?_barFilters(session),
+                        if (catalogChrome)
+                          if (_barPresentation(
+                                session,
+                                width:
+                                    constraints.maxWidth +
+                                    browseToolbarPadding.horizontal,
+                              )
+                              case final presentation?) ...[
+                            // Set apart from what narrows the listing: it only
+                            // changes how it is shown.
+                            if (_barSearchOf(session) != null ||
+                                _barFilters(session) != null)
+                              const SizedBox(width: 12),
+                            presentation,
+                          ],
+                        // Only where there is something to narrow: the Catalogs root
+                        // has no listing of its own.
+                        if (!catalogChrome &&
+                            !onResults &&
+                            !_filterCapabilities(session).isEmpty)
+                          Builder(
+                            builder: (buttonContext) => SearchFilterButton(
+                              activeCount: _appliedFilter(session).activeCount,
+                              open: _filtersOpen,
+                              onTap: () => _openFilters(from: buttonContext),
+                            ),
+                          ),
+                        SizedBox(
+                          height: _kBarMinHeight,
+                          width: browseToolbarStatusWidth,
+                          child: Center(
+                            child: ServerChip(
+                              compact: true,
+                              onTap: widget.onServerTap,
+                            ),
+                          ),
+                        ),
                       ],
-                    // Only where there is something to narrow: the Catalogs root
-                    // has no listing of its own.
-                    if (!catalogChrome &&
-                        !onResults &&
-                        !_filterCapabilities(session).isEmpty)
-                      Builder(
-                        builder: (buttonContext) => SearchFilterButton(
-                          activeCount: _appliedFilter(session).activeCount,
-                          open: _filtersOpen,
-                          onTap: () => _openFilters(from: buttonContext),
-                        ),
-                      ),
-                    SizedBox(
-                      height: _kBarMinHeight,
-                      width: browseToolbarStatusWidth,
-                      child: Center(
-                        child: ServerChip(
-                          compact: true,
-                          onTap: widget.onServerTap,
-                        ),
-                      ),
                     ),
-                  ],
+                  ),
                 ),
               ),
+              if (catalogChrome && _compactCatalogHeader(session))
+                _catalogSubtitle(session),
+            ],
+          ),
+        ),
+        if (folderActions && !inline)
+          Padding(
+            key: const ValueKey('folder-toolbar-second-row'),
+            padding: EdgeInsets.fromLTRB(
+              16 + rowInsets.left,
+              8,
+              16 + rowInsets.right,
+              8,
+            ),
+            child: SizedBox(
+              height: _folderControlHeight(context, session),
+              child: _folderActions(session, toolbar: true),
             ),
           ),
-          if (catalogChrome && _compactCatalogHeader(session))
-            _catalogSubtitle(session),
-          if (folderActions && !inline)
-            Padding(
-              key: const ValueKey('folder-toolbar-second-row'),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: SizedBox(
-                height: _folderControlHeight(context, session),
-                child: _folderActions(session, toolbar: true),
-              ),
-            ),
-        ],
-      ),
+      ],
     );
   }
 
