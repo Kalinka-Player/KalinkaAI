@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'dialog_scroll_scope.dart';
 
 /// Legacy ownership hint retained for callers; dialogs now center in the window.
 enum KalinkaDialogSide {
@@ -109,9 +110,12 @@ class _KalinkaDialogState extends State<KalinkaDialog> {
   );
 
   Widget _buildCard(BuildContext context) {
+    final body = SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: _buildContents(),
+    );
     final card = Container(
       key: KalinkaDialog.cardKey,
-      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: KalinkaColors.surfaceDialog,
         borderRadius: BorderRadius.circular(24),
@@ -124,7 +128,7 @@ class _KalinkaDialogState extends State<KalinkaDialog> {
           ),
         ],
       ),
-      child: _buildContents(),
+      child: widget.content == null ? body : DialogScrollScope(child: body),
     );
 
     final cardContent = Padding(
@@ -150,7 +154,7 @@ class _KalinkaDialogState extends State<KalinkaDialog> {
         minimum: const EdgeInsets.symmetric(
           vertical: KalinkaDialog._cardMargin,
         ),
-        child: Center(child: SingleChildScrollView(child: cardContent)),
+        child: Center(child: cardContent),
       ),
     );
   }

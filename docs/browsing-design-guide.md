@@ -211,9 +211,9 @@ Increase card height for wrapping and text scaling rather than shrinking type. A
 
 ## Lists and grids
 
-Show a neutral chevron at the foot of a viewport while more content lies below. On horizontal rails it points toward the next page. Use actual overflow on first layout and after resizing, including in dialogs and phone sheets. Tapping, clicking or activating the focused chevron advances one visible page. It stays translucent at rest, dims during scrolling and disappears at the end.
+In dialogs, popups and bottom sheets, put a small Material chevron in the list’s edge padding wherever more content is available. On an overflowing list, two 16dp strips keep the page size stable as the user scrolls. Vertical lists use the top and bottom edges. Horizontal lists use the physical left and right edges, including in right-to-left layouts. Lists that fit use their full space.
 
-Use a 48dp touch target and a visible keyboard focus ring. Scale the control with the kiosk output panel for TV viewing. Swipes and mouse-wheel scrolling also work over the chevron.
+Click, tap or activate a focused chevron to move one visible page. The chevron dims during scrolling and has a neutral keyboard focus outline. Arrow keys still move between options. When a focused chevron reaches the end, move focus to the first or last visible option.
 
 [Tablet ALSA output selector with more devices below](images/alsa-output-scroll.png)
 

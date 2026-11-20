@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'dialog_scroll_scope.dart';
 import 'kalinka_centered_surface.dart';
 import 'kalinka_popover.dart';
 import 'overlay_card.dart';
@@ -163,7 +164,7 @@ class _AdaptiveSheetState extends State<_AdaptiveSheet> {
   Widget build(BuildContext context) {
     final body = KeyedSubtree(
       key: _bodyKey,
-      child: Builder(builder: widget.contentBuilder),
+      child: DialogScrollScope(child: Builder(builder: widget.contentBuilder)),
     );
     if (kalinkaUsesPopovers(context)) {
       final content = MediaQuery.removeViewInsets(

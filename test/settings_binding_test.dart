@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,12 +7,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kalinka/data_model/presentation_schema.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
-import 'package:kalinka/widgets/kalinka_scroll_behavior.dart';
 import 'package:kalinka/widgets/settings_controls/settings_binding.dart';
 import 'package:kalinka/widgets/settings_controls/settings_combo_input.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
 import 'package:kalinka/widgets/settings_renderer.dart';
+
+import 'support/focus.dart';
 
 /// One page with a field per widget kind the shared renderer dispatches, so a
 /// binding is exercised across the whole control set rather than one row.
@@ -95,7 +97,6 @@ class _RecordingBinding implements SettingsBinding {
 
 Widget _wrap(SettingsBinding binding) => ProviderScope(
   child: MaterialApp(
-    scrollBehavior: const KalinkaScrollBehavior(),
     home: Scaffold(
       body: SettingsScope(
         binding: binding,
@@ -170,7 +171,7 @@ void main() {
 
     await tester.tap(find.text('System default'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Scroll down one page'), findsNothing);
+    expect(find.byKey(const ValueKey('dialog-overflow-down')), findsNothing);
     await tester.tap(find.text('HiFiBerry'));
     await tester.pumpAndSettle();
 
@@ -178,7 +179,7 @@ void main() {
   });
 
   testWidgets(
-    'page through ALSA devices in the tablet dialog and choose the last',
+    'scroll through ALSA devices in the tablet dialog and choose the last',
     (tester) async {
       tester.view.physicalSize = const Size(1024, 768);
       tester.view.devicePixelRatio = 1;
@@ -198,12 +199,21 @@ void main() {
       await tester.tap(find.text('Output 0'));
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsNothing);
-      final page = find.byTooltip('Scroll down one page');
-      expect(page.hitTestable(), findsOneWidget);
-      await tester.tap(page);
-      await tester.pumpAndSettle();
-      expect(page, findsNothing);
-      await tester.tap(find.text('Output 20'));
+      final up = find.byKey(const ValueKey('dialog-overflow-up'));
+      final down = find.byKey(const ValueKey('dialog-overflow-down'));
+      expect(up, findsNothing);
+      expect(down, findsOneWidget);
+      expect(await tabTo(tester, down), isTrue);
+      for (var page = 0; page < 10 && down.evaluate().isNotEmpty; page++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+      }
+      expect(up, findsOneWidget);
+      expect(down, findsNothing);
+      final last = find.widgetWithText(InkWell, 'Output 20');
+      expect(focusIsOn(last), isTrue);
+      expect(traversableFocusNodesIn(up), hasLength(1));
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
       expect(binding.staged, {path: 'hw:20'});
     },

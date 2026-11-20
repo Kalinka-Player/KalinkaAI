@@ -10,6 +10,7 @@ import '../providers/connection_settings_provider.dart';
 import '../providers/monotonic_clock_provider.dart';
 import '../providers/receiver_provider.dart';
 import '../theme/app_theme.dart';
+import 'dialog_scroll_scope.dart';
 import 'failure_note.dart';
 import 'home/source_button_style.dart';
 import 'kalinka_bottom_sheet.dart';
@@ -218,10 +219,12 @@ class _ReceiverPopoverState extends State<ReceiverPopover>
                                     ? 0
                                     : _receiverPointerWidth,
                               ),
-                              child: ReceiverPanel(
-                                receiverId: widget.receiverId,
-                                onClose: _menu.close,
-                                secretReset: _secretReset,
+                              child: DialogScrollScope(
+                                child: ReceiverPanel(
+                                  receiverId: widget.receiverId,
+                                  onClose: _menu.close,
+                                  secretReset: _secretReset,
+                                ),
                               ),
                             ),
                           ),

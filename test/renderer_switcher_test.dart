@@ -24,7 +24,6 @@ import 'package:kalinka/providers/wire_event_provider.dart';
 import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/screens/renderer_settings_screen.dart';
 import 'package:kalinka/theme/app_theme.dart';
-import 'package:kalinka/widgets/kalinka_scroll_behavior.dart';
 import 'package:kalinka/widgets/renderer_switcher.dart';
 import 'package:kalinka/widgets/slide_in_panel.dart';
 import 'package:kalinka/widgets/volume_control_slider.dart';
@@ -313,7 +312,6 @@ void main() {
   /// lets the tablet layout put it in the left panel.
   Widget switcherTree({double textScale = 1}) => MaterialApp(
     theme: AppTheme.dark(),
-    scrollBehavior: const KalinkaScrollBehavior(),
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context)
           .copyWith(textScaler: TextScaler.linear(textScale)),
@@ -738,11 +736,10 @@ void main() {
         final close = find.byTooltip('Close output picker');
         final closeBounds = tester.getRect(close);
         expect(close.hitTestable(), findsOneWidget);
-        final page = find.byTooltip('Scroll down one page');
-        expect(page.hitTestable(), findsOneWidget);
-        await tester.tap(page);
-        await tester.pumpAndSettle();
-        expect(api.selected, isEmpty);
+        final down = find.byKey(const ValueKey('dialog-overflow-down'));
+        final up = find.byKey(const ValueKey('dialog-overflow-up'));
+        expect(down, findsOneWidget);
+        expect(up, findsNothing);
         await tester.scrollUntilVisible(
           find.text('Listening room 11'),
           180,
@@ -752,6 +749,8 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        expect(up, findsOneWidget);
+        expect(api.selected, isEmpty);
         expect(tester.getRect(close), closeBounds);
         expect(close.hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);

@@ -1,0 +1,452 @@
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kalinka/theme/app_theme.dart';
+import 'package:kalinka/widgets/dialog_scroll_scope.dart';
+import 'package:kalinka/widgets/kalinka_bottom_sheet.dart';
+import 'package:kalinka/widgets/kalinka_dialog.dart';
+
+import 'support/focus.dart';
+
+final up = find.byKey(const ValueKey('dialog-overflow-up'));
+final down = find.byKey(const ValueKey('dialog-overflow-down'));
+final left = find.byKey(const ValueKey('dialog-overflow-left'));
+final right = find.byKey(const ValueKey('dialog-overflow-right'));
+
+void main() {
+  testWidgets('only the open sheet decorates its list', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: ListView(children: const [SizedBox(height: 1800)]),
+            floatingActionButton: FloatingActionButton(
+              onPressed: () => showKalinkaBottomSheet<void>(
+                context: context,
+                contentBuilder: (_) =>
+                    ListView(children: const [SizedBox(height: 1800)]),
+              ),
+              child: const Icon(Icons.add),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(down, findsNothing);
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    expect(down, findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(down, findsNothing);
+    expect(find.byType(DialogScrollScope), findsNothing);
+  });
+
+  testWidgets('a dialog list keeps both chevrons inside the card', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: KalinkaDialog(
+            side: KalinkaDialogSide.full,
+            title: 'Devices',
+            content: Column(
+              children: [
+                for (var i = 0; i < 40; i++)
+                  SizedBox(height: 50, child: Text('Device $i')),
+              ],
+            ),
+            actions: const [],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(up, findsNothing);
+    final viewport = tester
+        .state<ScrollableState>(find.byType(Scrollable))
+        .position;
+    viewport.jumpTo(350);
+    await tester.pumpAndSettle();
+    final card = tester.getRect(find.byKey(KalinkaDialog.cardKey));
+    expect(card.contains(tester.getCenter(up)), isTrue);
+    expect(card.contains(tester.getCenter(down)), isTrue);
+    viewport.jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(up, findsNothing);
+    expect(find.text('Device 0').hitTestable(), findsOneWidget);
+  });
+
+  testWidgets('exact fits, one pixel of overflow and live resize', (
+    tester,
+  ) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    Future<void> layout(double height, double content) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 300,
+                height: height,
+                child: DialogScrollScope(
+                  child: SingleChildScrollView(
+                    controller: controller,
+                    child: SizedBox(height: content),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await layout(240, 240);
+    expect(down, findsNothing);
+    expect(up, findsNothing);
+    await layout(240, 241);
+    expect(down, findsOneWidget);
+    expect(controller.position.viewportDimension, 208);
+    await tester.tap(down);
+    await tester.pumpAndSettle();
+    expect(down, findsNothing);
+    expect(up, findsOneWidget);
+    await layout(241, 241);
+    expect(up, findsNothing);
+    expect(down, findsNothing);
+    expect(controller.position.viewportDimension, 241);
+    await layout(300, 1200);
+    expect(controller.position.viewportDimension, 268);
+    final hint = tester.widget(down);
+    await layout(320, 1200);
+    expect(controller.position.viewportDimension, 288);
+    expect(tester.widget(down), same(hint));
+    await layout(12, 1200);
+    expect(controller.position.viewportDimension, 6);
+    expect(down, findsOneWidget);
+    await layout(320, 301);
+    expect(controller.position.viewportDimension, 320);
+    expect(down, findsNothing);
+  });
+
+  testWidgets('viewport-sized content settles when only its footer overflows', (
+    tester,
+  ) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    Future<void> layout(double height, double footer) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                height: height,
+                child: DialogScrollScope(
+                  child: CustomScrollView(
+                    controller: controller,
+                    slivers: [
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: SizedBox(),
+                      ),
+                      SliverToBoxAdapter(child: SizedBox(height: footer)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 16),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 1),
+      );
+    }
+
+    await layout(240, 4);
+    expect(down, findsOneWidget);
+    expect(controller.position.maxScrollExtent, 4);
+    expect(await tabTo(tester, down), isTrue);
+    await layout(300, 1);
+    expect(down, findsOneWidget);
+    expect(focusIsOn(down), isTrue);
+    expect(controller.position.maxScrollExtent, 1);
+    await tester.tap(down);
+    await tester.pumpAndSettle();
+    expect(up, findsOneWidget);
+    expect(down, findsNothing);
+    await layout(300, 0);
+    expect(controller.position.viewportDimension, 300);
+    expect(up, findsNothing);
+    expect(down, findsNothing);
+  });
+
+  testWidgets('a Material options menu shows hints on its own route', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DialogScrollScope(
+            child: PopupMenuButton<int>(
+              constraints: const BoxConstraints(maxHeight: 320, minWidth: 160),
+              itemBuilder: (_) => [
+                for (var i = 0; i < 30; i++)
+                  PopupMenuItem(value: i, child: Text('Option $i')),
+              ],
+              child: const Text('Open options'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open options'));
+    await tester.pumpAndSettle();
+    expect(down, findsOneWidget);
+    await tester.drag(find.text('Option 1'), const Offset(0, -140));
+    await tester.pumpAndSettle();
+    expect(up, findsOneWidget);
+    await tester.ensureVisible(find.text('Option 0'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Option 0'));
+    await tester.pumpAndSettle();
+    expect(down, findsNothing);
+  });
+
+  testWidgets(
+    'a compact page control occupies its own gutter and preserves row input',
+    (tester) async {
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+      int? tapped;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 240,
+              child: DialogScrollScope(
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  controller: controller,
+                  itemExtent: 48,
+                  itemCount: 40,
+                  itemBuilder: (_, i) =>
+                      InkWell(onTap: () => tapped = i, child: Text('Row $i')),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final viewport = tester.getRect(find.byType(Viewport));
+      expect(tester.getRect(down).top, viewport.bottom);
+      expect(tester.getSize(down), const Size(64, 16));
+      expect(find.byTooltip('Scroll down one page'), findsOneWidget);
+      await tester.tap(down);
+      await tester.pumpAndSettle();
+      expect(tapped, isNull);
+      expect(controller.offset, viewport.height);
+      expect(tester.getRect(up).bottom, viewport.top);
+      await tester.tap(up);
+      await tester.pumpAndSettle();
+      expect(controller.offset, 0);
+      await tester.tapAt(viewport.topLeft + const Offset(12, 20));
+      expect(tapped, 0);
+      await tester.sendEventToBinding(
+        PointerScrollEvent(
+          position: viewport.center,
+          scrollDelta: const Offset(0, 80),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.offset, 80);
+      expect(up, findsOneWidget);
+    },
+  );
+
+  testWidgets('paging keeps a newer focus choice made before layout', (
+    tester,
+  ) async {
+    final close = FocusNode();
+    final controller = ScrollController();
+    addTearDown(close.dispose);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              TextButton(
+                focusNode: close,
+                onPressed: () {},
+                child: const Text('Close'),
+              ),
+              SizedBox(
+                height: 200,
+                child: DialogScrollScope(
+                  child: ListView.builder(
+                    controller: controller,
+                    itemCount: 20,
+                    itemExtent: 48,
+                    itemBuilder: (_, i) =>
+                        TextButton(onPressed: () {}, child: Text('Row $i')),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(await tabTo(tester, down), isTrue);
+    controller.jumpTo(controller.position.maxScrollExtent);
+    await tester.idle();
+    close.requestFocus();
+    await tester.idle();
+    expect(close.hasPrimaryFocus, isTrue);
+    await tester.pumpAndSettle();
+    expect(down, findsNothing);
+    expect(close.hasPrimaryFocus, isTrue);
+  });
+
+  for (final reducedMotion in [false, true]) {
+    testWidgets(
+      'paging hands focus to each endpoint, reduced motion $reducedMotion',
+      (tester) async {
+        final selected = <int>[];
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(disableAnimations: reducedMotion),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: SizedBox(
+                height: 240,
+                child: DialogScrollScope(
+                  child: ListView.builder(
+                    itemCount: 13,
+                    itemExtent: 48,
+                    itemBuilder: (_, i) => TextButton(
+                      onPressed: () => selected.add(i),
+                      child: Text('Row $i'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        for (final (button, end) in [(down, 12), (up, 0)]) {
+          expect(await tabTo(tester, button), isTrue);
+          expect(
+            focusOutlineIn(button, KalinkaColors.textPrimary),
+            findsOneWidget,
+          );
+          for (
+            var press = 0;
+            press < 4 && button.evaluate().isNotEmpty;
+            press++
+          ) {
+            expect(focusIsOn(button), isTrue);
+            await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+            await tester.pumpAndSettle();
+          }
+          expect(button, findsNothing);
+          expect(
+            focusIsOn(find.widgetWithText(TextButton, 'Row $end')),
+            isTrue,
+          );
+          expect(selected, isEmpty);
+        }
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(selected, [0]);
+      },
+    );
+  }
+
+  for (final (axis, reverse, rtl, forward, back) in [
+    (Axis.vertical, false, false, down, up),
+    (Axis.vertical, true, false, up, down),
+    (Axis.horizontal, false, false, right, left),
+    (Axis.horizontal, false, true, left, right),
+    (Axis.horizontal, true, true, right, left),
+  ]) {
+    testWidgets('hints follow scrolling on $axis, reverse $reverse, RTL $rtl', (
+      tester,
+    ) async {
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: Directionality(
+                textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
+                child: SizedBox(
+                  width: 280,
+                  height: 240,
+                  child: DialogScrollScope(
+                    child: ListView.builder(
+                      controller: controller,
+                      reverse: reverse,
+                      scrollDirection: axis,
+                      itemExtent: 40,
+                      itemCount: 40,
+                      itemBuilder: (_, i) => Text('Row $i'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(back, findsNothing);
+      expect(forward, findsOneWidget);
+      controller.jumpTo(400);
+      await tester.pumpAndSettle();
+      expect(back, findsOneWidget);
+      expect(forward, findsOneWidget);
+      final viewport = tester.getRect(find.byType(Viewport));
+      expect(
+        viewport.size,
+        axis == Axis.vertical ? const Size(280, 208) : const Size(248, 240),
+      );
+      final mark = tester.getSize(forward);
+      expect(
+        axis == Axis.vertical ? mark.width : mark.height,
+        greaterThan(3 * (axis == Axis.vertical ? mark.height : mark.width)),
+      );
+      expect(forward.hitTestable(), findsOneWidget);
+      await tester.tap(forward);
+      await tester.pumpAndSettle();
+      expect(controller.offset, 400 + controller.position.viewportDimension);
+      await tester.tap(back);
+      await tester.pumpAndSettle();
+      expect(controller.offset, 400);
+      controller.jumpTo(controller.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      expect(forward, findsNothing);
+      expect(back, findsOneWidget);
+      controller.jumpTo(0);
+      await tester.pumpAndSettle();
+      expect(back, findsNothing);
+    });
+  }
+}

@@ -18,7 +18,6 @@ import 'providers/network_setup_api.dart';
 import 'providers/pinned_server.dart';
 import 'utils/local_platform.dart';
 import 'widgets/clock_format_host.dart';
-import 'widgets/kalinka_scroll_behavior.dart';
 import 'widgets/kalinka_toast_overlay.dart';
 import 'widgets/foreground_volume_overlay.dart';
 import 'widgets/receiver_approval.dart';
@@ -108,7 +107,6 @@ class KalinkaApp extends ConsumerWidget {
       return MaterialApp(
         title: 'Kalinka setup',
         theme: AppTheme.dark(),
-        scrollBehavior: const KalinkaScrollBehavior(),
         debugShowCheckedModeBanner: false,
         builder: (_, child) => OnScreenKeyboardHost(child: child!),
         home: NetworkSetupScreen(endpoint: endpoint),
@@ -121,7 +119,6 @@ class KalinkaApp extends ConsumerWidget {
     return MaterialApp(
       title: 'Kalinka',
       theme: AppTheme.dark(),
-      scrollBehavior: const KalinkaScrollBehavior(),
       debugShowCheckedModeBanner: false,
       builder: (_, child) {
         final app = OnScreenKeyboardHost(

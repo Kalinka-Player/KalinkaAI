@@ -32,7 +32,6 @@ import 'package:kalinka/renderer/renderer_identity.dart';
 import 'package:kalinka/screens/kiosk_screen.dart';
 import 'package:kalinka/utils/display_power.dart';
 import 'package:kalinka/widgets/gradient_progress_line.dart';
-import 'package:kalinka/widgets/kalinka_scroll_behavior.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_backdrop.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_cover_flow.dart';
 import 'package:kalinka/widgets/kiosk/kiosk_header.dart';
@@ -316,7 +315,6 @@ Future<_Harness> _pump(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
-        scrollBehavior: const KalinkaScrollBehavior(),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(disableAnimations: reducedMotion),
@@ -1841,7 +1839,7 @@ void main() {
   });
 
   testWidgets(
-    'the kiosk picker can page through newly discovered outputs by keyboard',
+    'remote focus follows newly discovered output rows through both scroll hints',
     (tester) async {
       final h = await _pump(
         tester,
@@ -1862,38 +1860,29 @@ void main() {
           ),
       ]);
       await tester.pumpAndSettle();
-      final page = find.widgetWithIcon(
-        IconButton,
-        Icons.keyboard_arrow_down_rounded,
-      );
-      expect(page.hitTestable(), findsOneWidget);
-      expect(await tabTo(tester, page), isTrue);
-      final list = find.descendant(
-        of: openPanel(),
-        matching: find.byType(Scrollable),
-      );
-      final position = tester.state<ScrollableState>(list).position;
-      final before = position.pixels;
+      final up = find.byKey(const ValueKey('dialog-overflow-up'));
+      final down = find.byKey(const ValueKey('dialog-overflow-down'));
+      expect(up, findsNothing);
+      expect(down, findsOneWidget);
+      Finder row(int i) => find.widgetWithText(InkWell, 'Room $i');
+      expect(await tabTo(tester, row(0)), isTrue);
+      for (var i = 1; i < 20; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(focusIsOn(row(i)), isTrue);
+      }
+      expect(up, findsOneWidget);
+      expect(row(19).hitTestable(), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(focusIsOn(row(18)), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(focusIsOn(row(19)), isTrue);
+      expect(traversableFocusNodesIn(up), hasLength(1));
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
-      expect(
-        position.pixels,
-        (before + position.viewportDimension).clamp(
-          0,
-          position.maxScrollExtent,
-        ),
-      );
-      expect(renderers.selected, isEmpty);
-      expect(openPanel(), findsOneWidget);
-      while (position.extentAfter > 0) {
-        expect(focusIsOn(page), isTrue);
-        final previous = position.pixels;
-        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-        await tester.pumpAndSettle();
-        expect(position.pixels, greaterThan(previous));
-      }
-      expect(page, findsNothing);
-      expect(find.text('Room 19').hitTestable(), findsOneWidget);
+      expect(renderers.selected, ['room-19']);
     },
   );
 
