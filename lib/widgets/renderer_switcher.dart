@@ -12,6 +12,7 @@ import '../providers/renderer_host_provider.dart' show rendererIdentityProvider;
 import '../providers/renderer_provider.dart';
 import '../providers/renderer_settings_route_provider.dart';
 import '../providers/toast_provider.dart';
+import '../screens/renderer_settings_screen.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
 import 'kalinka_bottom_sheet.dart';
@@ -255,12 +256,17 @@ Future<void> showRendererPicker(
   final toasts = ref.read(toastProvider.notifier);
   void say(String message, {bool isError = false, ToastAction? action}) =>
       toasts.show(message, isError: isError, inPanel: inPanel, action: action);
-  void configure(String rendererId, String rendererName) {
+  Future<void> configure(String rendererId, String rendererName) async {
+    final open = route.current;
+    // Another output's page in its place would take this one's staged
+    // edits with it; this output's own page stays as it is.
+    final replacing = open?.rendererId != rendererId;
+    if (replacing && !await RendererSettingsScreen.mayLeave(open)) return;
     // The panel is hosted by MusicPlayerScreen, under anything still on
     // the navigator — the phone's Now Playing sheet, for one. Fall back
     // to it first so the panel is what the user ends up looking at.
     if (navigator.mounted) navigator.popUntil((r) => r.isFirst);
-    route.open(rendererId, rendererName);
+    if (replacing) route.open(rendererId, rendererName);
   }
 
   // Servers with the renderer events keep the list fresh over the queue
@@ -276,7 +282,7 @@ Future<void> showRendererPicker(
 
   switch (choice.intent) {
     case RendererPickerIntent.configure:
-      configure(choice.rendererId, choice.rendererName);
+      await configure(choice.rendererId, choice.rendererName);
     case RendererPickerIntent.play:
       try {
         await notifier.select(

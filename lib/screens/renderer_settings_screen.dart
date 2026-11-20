@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data_model/presentation_schema.dart' show SectionSpec;
+import '../data_model/renderer_config.dart' show RendererApplyCost;
 import '../providers/kalinka_player_api_provider.dart';
 import '../providers/renderer_provider.dart';
 import '../providers/renderer_settings_provider.dart';
+import '../providers/renderer_settings_route_provider.dart';
 import '../providers/settings_provider.dart' show expertModeProvider;
 import '../providers/soundcard_provider.dart';
 import '../providers/supervisor_api.dart';
@@ -20,7 +23,7 @@ import '../widgets/kalinka_button.dart';
 import '../widgets/kalinka_dialog.dart' show showKalinkaDialog;
 import '../widgets/onboarding/soundcard_restart_overlay.dart';
 import '../widgets/onboarding/speaker_test_dialog.dart';
-import '../widgets/pending_changes_banner.dart';
+import '../widgets/pending_changes.dart';
 import '../widgets/settings_controls/settings_binding.dart';
 import '../widgets/settings_controls/settings_card.dart';
 import '../widgets/settings_renderer.dart';
@@ -56,12 +59,26 @@ class RendererSettingsScreen extends ConsumerStatefulWidget {
     this.onCoverageChanged,
   });
 
+  /// The key its host gives the page open for [route], by which [mayLeave]
+  /// finds it.
+  static GlobalKey<RendererSettingsScreenState> keyFor(
+    RendererSettingsRoute route,
+  ) => GlobalObjectKey<RendererSettingsScreenState>(route);
+
+  /// Whether the page open for [route], if any, may be closed or replaced:
+  /// with edits staged it asks what becomes of them first. Every way out of
+  /// the page goes through here, since its edits go with it.
+  static Future<bool> mayLeave(RendererSettingsRoute? route) async {
+    if (route == null) return true;
+    return await keyFor(route).currentState?.prepareToNavigate() ?? true;
+  }
+
   @override
   ConsumerState<RendererSettingsScreen> createState() =>
-      _RendererSettingsScreenState();
+      RendererSettingsScreenState();
 }
 
-class _RendererSettingsScreenState
+class RendererSettingsScreenState
     extends ConsumerState<RendererSettingsScreen> {
   @override
   void initState() {
@@ -103,6 +120,52 @@ class _RendererSettingsScreenState
         ref.read(soundcardChangeProvider(box).notifier).keepWaiting,
       );
 
+  Future<void> _apply() async {
+    if (!await refusedAsDemo(context, ref)) await _notifier.save();
+  }
+
+  /// Leaving with edits staged asks what becomes of them: they live only as
+  /// long as the page does.
+  Future<bool> _beforeClose(SoundcardBox? restarting) async {
+    if (!_mayClose(restarting)) return false;
+    final state = ref.read(rendererSettingsProvider(widget.rendererId));
+    // Already on their way to the renderer: nothing left to ask about.
+    if (state.saving || !state.hasPendingChanges) return true;
+    final choice = await askAboutPendingChanges(
+      context,
+      items: describeRendererChanges(state, state.staged.keys),
+      message: switch (state.pendingCost) {
+        RendererApplyCost.interruptsPlayback =>
+          'Applying them stops playback on this output.',
+        RendererApplyCost.restartRequired =>
+          'Applying them restarts this output.',
+        _ => null,
+      },
+    );
+    if (!mounted) return false;
+    switch (choice) {
+      case PendingChangesChoice.discard:
+        _notifier.discard();
+        return true;
+      case PendingChangesChoice.apply:
+        await _apply();
+        if (!mounted) return false;
+        // A refusal is said on the page, which stays open to show it.
+        final after = ref.read(rendererSettingsProvider(widget.rendererId));
+        return !after.hasPendingChanges && after.error == null;
+      case null:
+        return false;
+    }
+  }
+
+  /// The shell's destinations leave the page as Back does.
+  Future<bool> prepareToNavigate() => _beforeClose(
+    ref
+        .read(restartingBoxesProvider)
+        .where((b) => b.rendererId == widget.rendererId)
+        .firstOrNull,
+  );
+
   /// The change tells in toasts how it went once the box took the card; this
   /// covers it failing before then, or outright.
   Future<void> _runSoundcardChange(
@@ -135,16 +198,6 @@ class _RendererSettingsScreenState
         ),
         const ConnectionBanner(),
         Expanded(child: _buildBody(state, expertMode)),
-        // At the foot, under the page rather than over it.
-        PendingChangesBanner(
-          pendingCount: state.pendingCount,
-          consequence: state.pendingCost.warning,
-          busy: state.saving,
-          onDiscard: _notifier.discard,
-          onApply: () async {
-            if (!await refusedAsDemo(context, ref)) await _notifier.save();
-          },
-        ),
       ],
     );
     // A sound card change that restarts the box takes the output away: the
@@ -164,7 +217,7 @@ class _RendererSettingsScreenState
       contentEntryFocus: KeyboardEntryFocus.none,
       onClose: widget.onClose,
       // While the box is down, the overlay is all that says why the app waits.
-      beforeClose: () async => _mayClose(box),
+      beforeClose: () => _beforeClose(box),
       onCoverageChanged: widget.onCoverageChanged,
       overlays: [
         if (box != null && change != null && card != null)
@@ -182,7 +235,17 @@ class _RendererSettingsScreenState
       child: Material(
         color: KalinkaColors.background,
         child: ConfigurationAppearance(
-          child: SafeArea(top: false, child: content),
+          // Revert and Apply ride in the top bar.
+          child: PendingChangesScope(
+            changes: PendingChanges(
+              count: state.pendingCount,
+              consequence: state.pendingCost.warning,
+              busy: state.saving,
+              onDiscard: _notifier.discard,
+              onApply: _apply,
+            ),
+            child: SafeArea(top: false, child: content),
+          ),
         ),
       ),
     );
@@ -320,6 +383,30 @@ class _RendererSettingsScreenState
       ),
     );
   }
+}
+
+/// The staged [paths] as the leave dialog lists them: each setting by its
+/// label, with the section that shows it.
+List<PendingChangeItem> describeRendererChanges(
+  RendererSettingsState state,
+  Iterable<String> paths,
+) {
+  String? whereIs(List<SectionSpec> sections, String path) {
+    for (final section in sections) {
+      if (whereIs(section.sections, path) case final inner?) return inner;
+      if (section.fields.any((f) => f.path == path)) return section.title;
+    }
+    return null;
+  }
+
+  return [
+    for (final path in paths)
+      PendingChangeItem(
+        state.expertFields.where((f) => f.path == path).firstOrNull?.label ??
+            path,
+        where: whereIs(state.sections, path),
+      ),
+  ];
 }
 
 /// `host · vX.Y` under the RENDERER section title, from the same list the

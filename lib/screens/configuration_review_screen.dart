@@ -5,6 +5,7 @@ import '../data_model/presentation_schema.dart';
 import '../providers/settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/configuration_page.dart';
+import '../widgets/pending_changes.dart';
 import '../widgets/settings_collection.dart';
 import '../widgets/settings_controls/issue_notes.dart';
 import '../widgets/settings_controls/settings_binding.dart';
@@ -48,6 +49,66 @@ String configurationIssueLabel(PresentationSchema? schema, String path) {
   return field == null
       ? _collectionFor(schema, path)?.title ?? path
       : field.label;
+}
+
+/// The staged [paths] as the leave dialog lists them: each setting by its
+/// label, with the plugin or section it sits in; a collection's entries once,
+/// by the collection's title.
+List<PendingChangeItem> describeStagedChanges(
+  PresentationSchema? schema,
+  Iterable<String> paths,
+) {
+  // Ordered as staged; two entries of one collection make one row.
+  final items = <PendingChangeItem>{};
+  for (final path in paths) {
+    final field = schema?.field(path);
+    final collection = field == null ? _collectionFor(schema, path) : null;
+    items.add(
+      PendingChangeItem(
+        field?.label ?? collection?.title ?? path,
+        where: _whereIs(schema, collection?.path ?? path),
+      ),
+    );
+  }
+  return items.toList();
+}
+
+/// The plugin, else the section, that shows the setting at [path]. An expert
+/// setting no page shows goes with the plugin whose settings it sits among.
+String? _whereIs(PresentationSchema? schema, String path) {
+  final pages = schema?.pages ?? const <PageSpec>[];
+  for (final page in pages) {
+    for (final module in page.modules) {
+      if (module.settingPaths.contains(path)) return module.title;
+    }
+    if (_sectionHolding(page.sections, path) case final section?) {
+      return section.title;
+    }
+  }
+  final dot = path.lastIndexOf('.');
+  if (dot <= 0) return null;
+  final parent = path.substring(0, dot + 1);
+  for (final page in pages) {
+    for (final module in page.modules) {
+      if (module.settingPaths.any((p) => p.startsWith(parent))) {
+        return module.title;
+      }
+    }
+  }
+  return null;
+}
+
+SectionSpec? _sectionHolding(List<SectionSpec> sections, String path) {
+  for (final section in sections) {
+    if (_sectionHolding(section.sections, path) case final inner?) {
+      return inner;
+    }
+    if (section.fields.any((f) => f.path == path) ||
+        section.collections.any((c) => c.path == path)) {
+      return section;
+    }
+  }
+  return null;
 }
 
 /// A stable set of affected settings, so fixing one never removes its input.

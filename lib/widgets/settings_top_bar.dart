@@ -8,9 +8,13 @@ import 'configuration_appearance.dart';
 import 'slide_in_panel.dart';
 import 'kalinka_back_button.dart';
 import 'keyboard/app_keyboard_navigation.dart';
+import 'pending_changes.dart';
 
 /// Back to the previous page, the current page title and a connection dot.
 /// Owns the top safe inset so the header background reaches the screen edge.
+///
+/// Under a [PendingChangesScope] with changes staged, Revert and Apply come
+/// ahead of the [action], named where the title leaves them room.
 class SettingsTopBar extends ConsumerWidget {
   final String title;
 
@@ -62,6 +66,7 @@ class SettingsTopBar extends ConsumerWidget {
       header: true,
       child: Text(title, style: KalinkaTextStyles.settingsPageTitle),
     );
+    final pending = PendingChangesScope.of(context);
     return Material(
       color: KalinkaColors.surfaceBase,
       child: SafeArea(
@@ -100,10 +105,25 @@ class SettingsTopBar extends ConsumerWidget {
                               // The title on the content's gutter.
                               SizedBox(width: gutter - 14),
                             if (stacked)
-                              const Spacer()
+                              Expanded(
+                                child: pending == null
+                                    ? const SizedBox.shrink()
+                                    : _PendingRoom(
+                                        pending: pending,
+                                        titleWidth: 0,
+                                      ),
+                              )
                             else ...[
                               const SizedBox(width: 8),
-                              Expanded(child: heading),
+                              Expanded(
+                                child: pending == null
+                                    ? heading
+                                    : _PendingRoom(
+                                        pending: pending,
+                                        title: heading,
+                                        titleWidth: _titleWidth(context),
+                                      ),
+                              ),
                             ],
                             if (action != null) ...[
                               const SizedBox(width: 8),
@@ -161,6 +181,67 @@ class SettingsTopBar extends ConsumerWidget {
       ),
     );
   }
+
+  /// How wide the title sets on one line, for telling whether Revert and
+  /// Apply have room for their names beside it.
+  double _titleWidth(BuildContext context) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: title,
+        style: DefaultTextStyle.of(context).style
+            .merge(KalinkaTextStyles.settingsPageTitle),
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width.ceilToDouble();
+    painter.dispose();
+    return width;
+  }
+}
+
+/// The title's line, shared with Revert and Apply: named while the title still
+/// fits beside them, else the title keeps the room and they show glyphs only.
+class _PendingRoom extends StatelessWidget {
+  final PendingChanges pending;
+
+  /// Null where the title has a row of its own, at large text sizes.
+  final Widget? title;
+  final double titleWidth;
+
+  const _PendingRoom({
+    required this.pending,
+    required this.titleWidth,
+    this.title,
+  });
+
+  static const _gap = 8.0;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final labelled =
+          titleWidth +
+              (title == null ? 0 : _gap) +
+              PendingChangesActions.labelledWidth(context) <=
+          constraints.maxWidth;
+      final actions = PendingChangesActions(
+        changes: pending,
+        labelled: labelled,
+      );
+      return Row(
+        children: [
+          if (title case final title?) ...[
+            Expanded(child: title),
+            const SizedBox(width: _gap),
+          ] else
+            const Spacer(),
+          actions,
+        ],
+      );
+    },
+  );
 }
 
 /// Native keyboard/tooltip behaviour, with the same 48dp target and focus ring

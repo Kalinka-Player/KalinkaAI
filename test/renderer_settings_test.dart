@@ -176,9 +176,11 @@ class _StubRendererList extends RendererListNotifier {
       RendererListState(renderers: renderers, loaded: true);
 }
 
-/// The speaker-test card sits past the fold of an 800x600 test window, and how
-/// far past moves with the pending-changes banner — so scroll to it rather
-/// than assuming it is built.
+/// Apply in the top bar, there while anything is staged.
+final _apply = find.byKey(const ValueKey('pending-changes-apply'));
+
+/// The speaker-test card sits past the fold of an 800x600 test window, so
+/// scroll to it rather than assuming it is built.
 Future<void> scrollToSpeakerTest(WidgetTester tester) async {
   await tester.scrollUntilVisible(
     find.text('Test settings'),
@@ -694,11 +696,11 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('APPLY'));
+      await tester.tap(_apply);
       await tester.pumpAndSettle();
       expect(find.byType(DemoReadOnlyDialog), findsOneWidget);
       expect(api.writes, isEmpty);
-      expect(find.text('1 change staged'), findsOneWidget);
+      expect(find.byTooltip('Apply 1 change'), findsOneWidget);
     });
 
     testWidgets('an expert row stages against the same renderer', (
@@ -723,9 +725,9 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
-      expect(find.text('1 change staged'), findsOneWidget);
+      expect(find.byTooltip('Apply 1 change'), findsOneWidget);
 
-      await tester.tap(find.text('APPLY'));
+      await tester.tap(_apply);
       await tester.pumpAndSettle();
       expect(api.writes, [
         {'output.buffer_bytes': '900000'},
@@ -750,7 +752,7 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('APPLY'));
+      await tester.tap(_apply);
       await tester.pumpAndSettle();
       expect(api.writes, [
         {'output.buffer_bytes': '64000'},
@@ -833,14 +835,81 @@ void main() {
       await tester.tap(find.text('HiFiBerry Digi+ Pro'));
       await tester.pumpAndSettle();
 
-      expect(find.text('1 change staged · playback will stop'), findsOneWidget);
+      expect(
+        find.byTooltip('Apply 1 change, playback will stop'),
+        findsOneWidget,
+      );
 
-      await tester.tap(find.text('APPLY'));
+      await tester.tap(_apply);
       await tester.pumpAndSettle();
 
       expect(api.writes, [
         {'output.device': 'hw:CARD=sndrpihifiberry,DEV=0'},
       ]);
+    });
+
+    testWidgets('leaving with a staged change asks, listing it', (
+      tester,
+    ) async {
+      final api = _FakeApi();
+      var closed = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: overrides(api),
+          child: MaterialApp(
+            home: Scaffold(
+              body: RendererSettingsScreen(
+                rendererId: rendererId,
+                rendererName: 'Living Room',
+                onClose: () => closed++,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(_apply, findsNothing);
+      await tester.tap(find.text('default (not present)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('HiFiBerry Digi+ Pro'));
+      await tester.pumpAndSettle();
+      expect(_apply, findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('pending-changes-revert')),
+        findsOneWidget,
+      );
+
+      Future<void> leave() async {
+        await tester.tap(find.byKey(const ValueKey('settings-back')));
+        await tester.pumpAndSettle();
+        expect(find.text('Apply your changes?'), findsOneWidget);
+        expect(
+          find.text('Applying them stops playback on this output.'),
+          findsOneWidget,
+        );
+      }
+
+      final list = find.byKey(const ValueKey('pending-changes-list'));
+      await leave();
+      expect(
+        find.descendant(of: list, matching: find.textContaining('Device')),
+        findsOneWidget,
+      );
+      // Dismissed, the page stays with its edit.
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pumpAndSettle();
+      expect(closed, 0);
+      expect(_apply, findsOneWidget);
+
+      await leave();
+      await tester.tap(
+        find.byKey(const ValueKey('pending-changes-dialog-apply')),
+      );
+      await tester.pumpAndSettle();
+      expect(api.writes, [
+        {'output.device': 'hw:CARD=sndrpihifiberry,DEV=0'},
+      ]);
+      expect(closed, 1);
     });
 
     testWidgets('the speaker test plays both channels on this renderer', (

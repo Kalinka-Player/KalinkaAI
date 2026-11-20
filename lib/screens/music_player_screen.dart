@@ -444,8 +444,14 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     );
   }
 
-  void _openPlugins({bool slide = true}) {
+  Future<void> _openPlugins({bool slide = true}) async {
     if (!ref.read(configurationAvailableProvider)) return;
+    // Settings takes the output settings' place, and their staged edits.
+    final output = ref.read(rendererSettingsRouteProvider);
+    if (output != null &&
+        (!await RendererSettingsScreen.mayLeave(output) || !mounted)) {
+      return;
+    }
     ref.read(rendererSettingsRouteProvider.notifier).close();
     setState(() {
       _settingsCovering = false;
@@ -574,6 +580,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         return;
       }
       if (!mounted) return;
+      if (!await RendererSettingsScreen.mayLeave(
+            ref.read(rendererSettingsRouteProvider),
+          ) ||
+          !mounted) {
+        return;
+      }
       final home = _homeKey.currentState;
       if (home != null && !await home.prepareToNavigate()) return;
       if (!mounted || ref.read(_serverBusyProvider)) return;
@@ -1136,7 +1148,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
       // Keyed by the open route: a resize re-homes the panel like
       // [_pluginsKey], while switching targets rebuilds rather than reusing
       // the previous renderer's page and its staged edits.
-      key: GlobalObjectKey(route),
+      key: RendererSettingsScreen.keyFor(route),
       rendererId: route.rendererId,
       rendererName: route.rendererName,
       onClose: () {

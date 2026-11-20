@@ -25,6 +25,9 @@ class RendererSettingsRouteNotifier extends Notifier<RendererSettingsRoute?> {
   @override
   RendererSettingsRoute? build() => null;
 
+  /// The page open now, read where the provider can no longer be watched.
+  RendererSettingsRoute? get current => state;
+
   void open(String rendererId, String rendererName) {
     state = RendererSettingsRoute(
       rendererId: rendererId,

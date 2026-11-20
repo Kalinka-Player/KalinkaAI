@@ -28,6 +28,7 @@ import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/modules_state_provider.dart';
 import 'package:kalinka/providers/plugin_catalog_provider.dart';
 import 'package:kalinka/providers/renderer_settings_provider.dart';
+import 'package:kalinka/providers/shell_nav_provider.dart';
 import 'package:kalinka/providers/renderer_settings_route_provider.dart';
 import 'package:kalinka/providers/restart_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
@@ -189,6 +190,16 @@ class _IdlePluginOperations extends PluginOperationsNotifier {
 }
 
 Finder _nav(String id) => find.byKey(ValueKey('navigation-$id'));
+
+final _dialogDiscard = find.byKey(
+  const ValueKey('pending-changes-dialog-discard'),
+);
+
+/// Dismisses the leave dialog by its scrim, which stays on the page.
+Future<void> _stay(WidgetTester tester) async {
+  await tester.tapAt(const Offset(4, 4));
+  await tester.pumpAndSettle();
+}
 
 const _streamerBox = BoxControl(
   SupervisorInfo(
@@ -1002,6 +1013,11 @@ void main() {
         expect(container.read(renderer).staged, {'output.Mute': true});
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
+        // Leaving asks what becomes of the staged edit.
+        expect(find.text('Apply your changes?'), findsOneWidget);
+        expect(find.text('Mute'), findsWidgets);
+        await tester.tap(_dialogDiscard);
+        await tester.pumpAndSettle();
         expect(panel, findsNothing);
         expect(traversableFocusNodesIn(streamer), isNotEmpty);
         expect(
@@ -1014,6 +1030,60 @@ void main() {
     );
   }
 
+  testWidgets('every way out of output settings asks about their edits', (
+    tester,
+  ) async {
+    final container = await _pump(tester, api: _RendererApi());
+    container
+        .read(rendererSettingsRouteProvider.notifier)
+        .open('living', 'Living Room');
+    await tester.pumpAndSettle();
+    final renderer = rendererSettingsProvider('living');
+    container.read(renderer.notifier).stage('output.Mute', true);
+    await tester.pumpAndSettle();
+    final page = find.byType(RendererSettingsScreen);
+    final state = tester.state(page);
+
+    // Its own gear in the output picker leaves the page as it is.
+    await tester.tap(
+      find
+          .byWidgetPredicate(
+            (widget) =>
+                widget is RendererSwitcherButton ||
+                widget is RendererSwitcherDropdown,
+          )
+          .hitTestable()
+          .first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Output settings').hitTestable().first);
+    await tester.pumpAndSettle();
+    expect(find.text('Apply your changes?'), findsNothing);
+    expect(tester.state(page), same(state));
+    expect(container.read(renderer).staged, {'output.Mute': true});
+
+    // Settings, asked for from Home, would take its place.
+    final settings = container.read(
+      musicSourcesSettingsRequestProvider.notifier,
+    );
+    settings.open();
+    await tester.pumpAndSettle();
+    expect(find.text('Apply your changes?'), findsOneWidget);
+    await _stay(tester);
+    expect(tester.state(page), same(state));
+    expect(container.read(renderer).staged, {'output.Mute': true});
+    expect(find.byType(PluginCatalogScreen), findsNothing);
+
+    settings.open();
+    await tester.pumpAndSettle();
+    await tester.tap(_dialogDiscard);
+    await tester.pumpAndSettle();
+    expect(container.read(rendererSettingsRouteProvider), isNull);
+    expect(page, findsNothing);
+    expect(find.byType(PluginCatalogScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Configuration navigation honours Cancel and Discard', (
     tester,
   ) async {
@@ -1025,13 +1095,12 @@ void main() {
     await tester.tap(_nav('home'));
     await tester.pumpAndSettle();
     expect(find.text('Apply your changes?'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
+    await _stay(tester);
     expect(find.byType(PluginCatalogScreen), findsOneWidget);
     expect(container.read(settingsProvider).hasPendingChanges, isTrue);
     await tester.tap(_nav('source-localfiles'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('configuration-discard')));
+    await tester.tap(_dialogDiscard);
     await tester.pumpAndSettle();
     expect(find.byType(PluginCatalogScreen), findsNothing);
     expect(container.read(settingsProvider).hasPendingChanges, isFalse);
@@ -1062,15 +1131,14 @@ void main() {
     await tester.tap(artist);
     await tester.pumpAndSettle();
     expect(find.text('Apply your changes?'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
+    await _stay(tester);
     expect(find.byType(PluginCatalogScreen), findsOneWidget);
     expect(container.read(settingsProvider).hasPendingChanges, isTrue);
     expect(container.read(searchSessionProvider).catalogPage.isRoot, isTrue);
 
     await tester.tap(artist);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('configuration-discard')));
+    await tester.tap(_dialogDiscard);
     await tester.pumpAndSettle();
     expect(find.byType(PluginCatalogScreen), findsNothing);
     expect(container.read(settingsProvider).hasPendingChanges, isFalse);
@@ -1201,12 +1269,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PluginCatalogScreen), findsOneWidget);
     expect(find.text('Apply your changes?'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
+    await _stay(tester);
     expect(container.read(settingsProvider).hasPendingChanges, isTrue);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('configuration-discard')));
+    await tester.tap(_dialogDiscard);
     await tester.pumpAndSettle();
     expect(find.byType(PluginCatalogScreen), findsNothing);
     expect(tester.takeException(), isNull);

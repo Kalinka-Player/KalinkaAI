@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:kalinka/widgets/pending_changes_banner.dart';
+import 'package:kalinka/widgets/pending_changes.dart';
 import 'package:kalinka/widgets/settings_controls/settings_numeric_input.dart';
 import 'package:kalinka/widgets/settings_controls/settings_password_input.dart';
 
@@ -51,7 +51,7 @@ void main() {
     expect(tester.testTextInput.isVisible, isFalse);
   });
 
-  for (final action in ['discard', 'apply']) {
+  for (final action in ['revert', 'apply']) {
     testWidgets('$action leaves the field first, staging what it holds', (
       tester,
     ) async {
@@ -64,10 +64,12 @@ void main() {
               value: '',
               onChanged: (v) => events.add('staged $v'),
             ),
-            PendingChangesBanner(
-              pendingCount: 1,
-              onDiscard: () => events.add('discard'),
-              onApply: () => events.add('apply'),
+            PendingChangesActions(
+              changes: PendingChanges(
+                count: 1,
+                onDiscard: () => events.add('revert'),
+                onApply: () => events.add('apply'),
+              ),
             ),
           ],
         ),
