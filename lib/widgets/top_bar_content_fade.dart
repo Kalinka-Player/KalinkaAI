@@ -40,6 +40,34 @@ class _RenderTopBarContentFade extends RenderProxyBox {
   @override
   ShaderMaskLayer? get layer => super.layer as ShaderMaskLayer?;
 
+  // The mask depends only on its size, so it is built once per size.
+  Shader? _shader;
+  Size? _shaderSize;
+
+  Shader _maskShader() {
+    final shaderSize = Size(size.width, _extent);
+    if (_shader == null || _shaderSize != shaderSize) {
+      _shader?.dispose();
+      _shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          for (var i = 0; i <= 16; i++)
+            Colors.white.withValues(alpha: (i / 16) * (i / 16)),
+        ],
+      ).createShader(Offset.zero & shaderSize);
+      _shaderSize = shaderSize;
+    }
+    return _shader!;
+  }
+
+  @override
+  void dispose() {
+    _shader?.dispose();
+    _shader = null;
+    super.dispose();
+  }
+
   @override
   void paint(PaintingContext context, Offset offset) {
     // Keep the subtree when fading is disabled, without an offscreen layer.
@@ -50,14 +78,7 @@ class _RenderTopBarContentFade extends RenderProxyBox {
     }
     layer ??= ShaderMaskLayer();
     layer!
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          for (var i = 0; i <= 16; i++)
-            Colors.white.withValues(alpha: (i / 16) * (i / 16)),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, _extent))
+      ..shader = _maskShader()
       ..maskRect = offset & size
       ..blendMode = BlendMode.dstIn;
     context.pushLayer(layer!, super.paint, offset);

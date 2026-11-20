@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import 'fast_scroller.dart';
@@ -215,6 +216,10 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
   /// then, and is not left again when it goes for good.
   bool _shown = true;
 
+  /// Heard rather than depended on: a dependency would build the whole list
+  /// again each time a page over it opens or closes.
+  ValueListenable<TickerModeData>? _tickerMode;
+
   int _total = -1;
   bool _initialLoading = true;
   bool _loadingMore = false;
@@ -277,7 +282,26 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final shown = TickerMode.valuesOf(context).enabled;
+    _hearTickerMode();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    // It may have a new TickerMode ancestor.
+    _hearTickerMode();
+  }
+
+  void _hearTickerMode() {
+    final notifier = TickerMode.getValuesNotifier(context);
+    if (identical(notifier, _tickerMode)) return;
+    _tickerMode?.removeListener(_onTickerMode);
+    _tickerMode = notifier..addListener(_onTickerMode);
+    _onTickerMode();
+  }
+
+  void _onTickerMode() {
+    final shown = _tickerMode!.value.enabled;
     if (_shown && !shown) _leave();
     _shown = shown;
   }
@@ -298,6 +322,7 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
 
   @override
   void dispose() {
+    _tickerMode?.removeListener(_onTickerMode);
     if (_shown) _leave();
     _controller.removeListener(_onScroll);
     _controller.dispose();

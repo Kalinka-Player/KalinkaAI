@@ -192,15 +192,21 @@ String? stepLabel(String? step) => switch (step) {
   _ => null,
 };
 
-/// How one plugin stands, for a page about it alone.
+/// How one plugin stands, for a page about it alone. Selected down to what
+/// it reads, so a refetch that changes nothing, or another plugin's
+/// progress, leaves it be.
 final pluginStateProvider = Provider.autoDispose
     .family<PluginState, CatalogPlugin>(
       (ref, plugin) => PluginState.of(
         plugin,
-        modules: ref.watch(modulesStateProvider).value,
+        modules: ref.watch(modulesStateProvider.select((m) => m.value)),
         settings: ref.watch(settingsProvider),
-        update: ref.watch(pluginUpdatesProvider).value?[plugin.id],
-        inFlight: ref.watch(pluginOperationsProvider)[plugin.id],
-        failure: ref.watch(pluginFailuresProvider)[plugin.id],
+        update: ref.watch(
+          pluginUpdatesProvider.select((u) => u.value?[plugin.id]),
+        ),
+        inFlight: ref.watch(
+          pluginOperationsProvider.select((o) => o[plugin.id]),
+        ),
+        failure: ref.watch(pluginFailuresProvider.select((f) => f[plugin.id])),
       ),
     );

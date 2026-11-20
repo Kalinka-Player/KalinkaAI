@@ -228,6 +228,59 @@ class PluginRow extends StatelessWidget {
         ),
       ],
     );
+    Widget content({required bool beside}) {
+      final button = primary == null
+          ? null
+          : Semantics(
+              container: true,
+              button: true,
+              child: SizedBox(
+                height: 40,
+                child: _actionButton(
+                  ValueKey(
+                    primary.operation == PluginOperation.update
+                        ? 'plugin-row-update-${plugin.id}'
+                        : 'plugin-install-${plugin.id}',
+                  ),
+                  primary,
+                  state,
+                  actions,
+                  // Under the text it takes the width there, and cuts a long
+                  // label short rather than overflow.
+                  fullWidth: !beside,
+                ),
+              ),
+            );
+      return Row(
+        children: [
+          Expanded(
+            child: beside
+                ? ExcludeSemantics(child: body)
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ExcludeSemantics(child: body),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 52, top: 12),
+                        child: button,
+                      ),
+                    ],
+                  ),
+          ),
+          if (beside && button != null)
+            Padding(padding: const EdgeInsets.only(left: 12), child: button),
+          const SizedBox(width: 6),
+          const ExcludeSemantics(
+            child: Icon(
+              Icons.chevron_right,
+              key: ValueKey('plugin-chevron'),
+              size: 24,
+              color: KalinkaColors.textSecondary,
+            ),
+          ),
+        ],
+      );
+    }
 
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -257,77 +310,22 @@ class PluginRow extends StatelessWidget {
               excludeFromSemantics: true,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    // Beside the text where both fit; under it on a narrow
-                    // phone or at large text sizes.
-                    final beside =
-                        primary == null ||
-                        _buttonFitsBeside(
-                          context,
-                          constraints.maxWidth,
-                          primary.operation,
-                        );
-                    final button = primary == null
-                        ? null
-                        : Semantics(
-                            container: true,
-                            button: true,
-                            child: SizedBox(
-                              height: 40,
-                              child: _actionButton(
-                                ValueKey(
-                                  primary.operation == PluginOperation.update
-                                      ? 'plugin-row-update-${plugin.id}'
-                                      : 'plugin-install-${plugin.id}',
-                                ),
-                                primary,
-                                state,
-                                actions,
-                                // Under the text it takes the width there,
-                                // and cuts a long label short rather than
-                                // overflow.
-                                fullWidth: !beside,
-                              ),
-                            ),
-                          );
-                    return Row(
-                      children: [
-                        Expanded(
-                          child: beside
-                              ? ExcludeSemantics(child: body)
-                              : Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    ExcludeSemantics(child: body),
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        left: 52,
-                                        top: 12,
-                                      ),
-                                      child: button,
-                                    ),
-                                  ],
-                                ),
-                        ),
-                        if (beside && button != null)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 12),
-                            child: button,
-                          ),
-                        const SizedBox(width: 6),
-                        const ExcludeSemantics(
-                          child: Icon(
-                            Icons.chevron_right,
-                            key: ValueKey('plugin-chevron'),
-                            size: 24,
-                            color: KalinkaColors.textSecondary,
+                // Without a button nothing here depends on the width, so it
+                // skips the LayoutBuilder and the layout-time build that
+                // comes with it.
+                child: primary == null
+                    ? content(beside: true)
+                    : LayoutBuilder(
+                        builder: (context, constraints) => content(
+                          // Beside the text where both fit; under it on a
+                          // narrow phone or at large text sizes.
+                          beside: _buttonFitsBeside(
+                            context,
+                            constraints.maxWidth,
+                            primary.operation,
                           ),
                         ),
-                      ],
-                    );
-                  },
-                ),
+                      ),
               ),
             ),
           ),
@@ -345,6 +343,16 @@ class PluginRow extends StatelessWidget {
   }
 }
 
+/// The widest label of Install or Update by operation, scaled font size and
+/// direction, which are all it depends on: three text layouts every row
+/// would otherwise pay on every build. Measured again once fonts change, as
+/// web fonts do when they load.
+final _buttonLabelWidths = () {
+  final widths = <(PluginOperation, double, TextDirection), double>{};
+  PaintingBinding.instance.systemFonts.addListener(widths.clear);
+  return widths;
+}();
+
 /// Whether Install or Update, at its widest, leaves the text beside it room
 /// to read. Measured at its widest so it stays put once the operation starts,
 /// or fails.
@@ -354,6 +362,7 @@ bool _buttonFitsBeside(
   PluginOperation operation,
 ) {
   final scaler = MediaQuery.textScalerOf(context);
+  final direction = Directionality.of(context);
   // KalinkaButton's compact label.
   final style = KalinkaTextStyles.trayRowLabel.copyWith(
     fontSize: KalinkaTypography.baseSize + 2,
@@ -361,7 +370,7 @@ bool _buttonFitsBeside(
   double widthOf(String text) {
     final painter = TextPainter(
       text: TextSpan(text: text, style: style),
-      textDirection: Directionality.of(context),
+      textDirection: direction,
       textScaler: scaler,
       maxLines: 1,
     )..layout();
@@ -370,11 +379,17 @@ bool _buttonFitsBeside(
     return width;
   }
 
-  final (idle, busy) = operation == PluginOperation.update
-      ? ('Update', 'Updating…')
-      : ('Install', 'Installing…');
+  final label = _buttonLabelWidths.putIfAbsent(
+    (operation, scaler.scale(style.fontSize!), direction),
+    () {
+      final (idle, busy) = operation == PluginOperation.update
+          ? ('Update', 'Updating…')
+          : ('Install', 'Installing…');
+      return [idle, busy, 'Failed…'].map(widthOf).reduce(math.max);
+    },
+  );
   // Padding and border.
-  final button = [idle, busy, 'Failed…'].map(widthOf).reduce(math.max) + 30;
+  final button = label + 30;
   // The gap before it, the chevron after it, the icon tile before the text.
   return width - 12 - button - 30 - 52 >= scaler.scale(100);
 }
