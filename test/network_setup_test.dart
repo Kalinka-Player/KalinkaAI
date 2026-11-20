@@ -14,6 +14,7 @@ import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/keyboard/app_keyboard_navigation.dart';
 import 'package:kalinka/widgets/onboarding/hotspot_setup_guide.dart';
 import 'package:kalinka/widgets/onboarding/step_network.dart';
+import 'package:kalinka/widgets/settings_controls/option_picker.dart';
 
 import 'support/focus.dart';
 import 'support/home_shell.dart';
@@ -72,6 +73,7 @@ Map<String, dynamic> status({
 
 const manualEntry = 'Can’t find your network? Enter SSID manually';
 final countryField = find.byKey(const ValueKey('network-country'));
+final countrySearch = find.byKey(const ValueKey('country-search'));
 final ssidField = find.byKey(const ValueKey('network-ssid'));
 final passwordField = find.byKey(const ValueKey('network-password'));
 
@@ -136,15 +138,12 @@ Future<void> chooseCountry(
   String label,
 ) async {
   await tester.ensureVisible(countryField);
-  final input = find.descendant(
-    of: countryField,
-    matching: find.byType(TextField),
-  );
-  await tester.tap(input);
-  await tester.enterText(input, query);
+  await tester.tap(countryField);
   await tester.pumpAndSettle();
-  await tester.tap(find.widgetWithText(MenuItemButton, label).last);
-  await tester.pump();
+  await tester.enterText(countrySearch, query);
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(OptionRow, label));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -273,11 +272,13 @@ void main() {
       await key(LogicalKeyboardKey.enter);
     }
 
-    final country = find.ancestor(
-      of: countryField,
+    await moveTo(countryField, LogicalKeyboardKey.arrowDown);
+    await key(LogicalKeyboardKey.select);
+    final search = find.ancestor(
+      of: countrySearch,
       matching: find.byType(AppKeyboardTextEntry),
     );
-    await moveTo(country, LogicalKeyboardKey.arrowDown);
+    await moveTo(search, LogicalKeyboardKey.arrowDown);
     await key(LogicalKeyboardKey.select);
     expect(keyboard, findsOneWidget);
     tester.testTextInput.updateEditingValue(
@@ -288,8 +289,11 @@ void main() {
     );
     await tester.pumpAndSettle();
     await submit();
-    expect(api.payloads.last, {'country': 'DE'});
     expect(keyboard, findsNothing);
+    final germany = find.widgetWithText(OptionRow, 'Germany (DE)');
+    await moveTo(germany, LogicalKeyboardKey.arrowDown);
+    await key(LogicalKeyboardKey.select);
+    expect(api.payloads.last, {'country': 'DE'});
     await finishScan(tester);
 
     final manual = find.widgetWithText(TextButton, manualEntry);
@@ -496,9 +500,6 @@ void main() {
       final api = FakeSetupApi(status());
       await mountPanel(tester, api);
       await finishScan(tester);
-      await tester.ensureVisible(find.text('Wi-Fi region · GB'));
-      await tester.tap(find.text('Wi-Fi region · GB'));
-      await tester.pumpAndSettle();
       await chooseCountry(tester, 'Germany', 'Germany (DE)');
       expect(api.commands, ['open', 'scan', 'open', 'scan']);
       expect(api.payloads.last, {'country': 'DE'});
@@ -506,6 +507,27 @@ void main() {
       await manualCredentials(tester);
       await join(tester);
       expect(api.payloads.last['country'], 'DE');
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'dismissing the picker or choosing the current region leaves Wi-Fi alone',
+    (tester) async {
+      final api = FakeSetupApi(status());
+      await mountPanel(tester, api);
+      await finishScan(tester);
+      await tester.ensureVisible(countryField);
+      await tester.tap(countryField);
+      await tester.pumpAndSettle();
+      await tester.enterText(countrySearch, 'unknown region');
+      await tester.pump();
+      expect(find.text('No country matches “unknown region”.'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(countrySearch, findsNothing);
+      await chooseCountry(tester, ' GB ', 'United Kingdom (GB)');
+      expect(api.commands, ['open', 'scan']);
       await tester.pumpWidget(const SizedBox());
     },
   );
@@ -747,11 +769,8 @@ void main() {
         KalinkaColors.textPrimary,
       );
 
-      final region = find.text('Wi-Fi region · GB');
+      final region = find.text('Wi-Fi region');
       expect(styleOf(tester, region).color, KalinkaColors.textPrimary);
-      await tester.ensureVisible(region);
-      await tester.tap(region);
-      await tester.pumpAndSettle();
       expect(
         styleOf(
           tester,
@@ -759,17 +778,16 @@ void main() {
         ).color,
         KalinkaColors.textSecondary,
       );
-      expect(fieldTextColor(tester, countryField), KalinkaColors.textPrimary);
-
-      final input = find.descendant(
-        of: countryField,
-        matching: find.byType(TextField),
-      );
-      await tester.ensureVisible(countryField);
-      await tester.tap(input);
-      await tester.enterText(input, 'Germany');
+      await tester.ensureVisible(region);
+      await tester.tap(region);
       await tester.pumpAndSettle();
-      final entry = find.widgetWithText(MenuItemButton, 'Germany (DE)').last;
+      expect(fieldTextColor(tester, countrySearch), KalinkaColors.textPrimary);
+      final current = tester.widget<OptionRow>(find.byType(OptionRow).first);
+      expect(current.option.value, 'GB');
+      expect(current.selected, isTrue);
+      await tester.enterText(countrySearch, 'Germany');
+      await tester.pumpAndSettle();
+      final entry = find.text('Germany (DE)');
       final entryStyle = styleOf(tester, entry);
       expect(entryStyle.color, KalinkaColors.textPrimary);
       expect(entryStyle.fontFamily, KalinkaFonts.sansFamily);
@@ -977,9 +995,6 @@ void main() {
       );
       await mountPanel(tester, api, scale: 2);
       await finishScan(tester);
-      await tester.ensureVisible(find.text('Wi-Fi region · GB'));
-      await tester.tap(find.text('Wi-Fi region · GB'));
-      await tester.pumpAndSettle();
       await chooseCountry(tester, 'United States', 'United States (US)');
       await finishScan(tester);
       await manualCredentials(tester);
