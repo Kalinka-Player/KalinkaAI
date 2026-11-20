@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -1756,6 +1757,9 @@ void main() {
             inset;
         final actionsStart = tester.getRect(actions).top - inset;
         expect(actionsStart, greaterThan(identityEnd));
+        // Under the title, the actions settle 8dp under the bar, where its
+        // row takes them over.
+        final heldAt = actionsStart - 8;
         final scroll = tester.state<ScrollableState>(_scrollable).position;
         final offsets = [
           for (var offset = 0.0; offset <= actionsStart + 30; offset += 5)
@@ -1776,14 +1780,14 @@ void main() {
           }
           expect(
             _inPage(actions),
-            offset < actionsStart ? findsOneWidget : findsNothing,
+            offset < heldAt ? findsOneWidget : findsNothing,
             reason: 'Actions keep their own handover at offset $offset',
           );
           expect(tester.takeException(), isNull);
         }
 
         // Returning midway through collapse restores the two independent states.
-        final midway = (identityEnd + actionsStart) / 2;
+        final midway = (identityEnd + heldAt) / 2;
         scroll.jumpTo(midway);
         await tester.pumpAndSettle();
         final nav = container.read(searchSessionProvider.notifier);
@@ -1855,29 +1859,109 @@ void main() {
         greaterThanOrEqualTo(tester.getRect(back).bottom),
       );
       expect(tester.getRect(up).right, closeTo(pageRect.right - 16, .1));
-      if (width >= 820) {
+      // Beside the title the actions sit level with it; under it, below.
+      final beside = tester.getRect(play).top < tester.getRect(title).bottom;
+      expect(beside, width >= 720);
+      if (beside) {
         expect(
           tester.getRect(play).left,
           greaterThan(tester.getRect(title).right),
         );
+      } else {
+        // Under the title they span the pane: Play all and Enqueue at its
+        // start, Up one folder at its end.
+        expect(tester.getRect(play).left, closeTo(pageRect.left + 16, .1));
         expect(
           tester.getRect(play).top,
-          lessThan(tester.getRect(title).bottom),
+          greaterThan(tester.getRect(title).bottom),
         );
       }
       final expandedRect = tester.getRect(actions);
+      final expandedPlay = tester.getRect(play);
+      final labelled = !tester.widget<PlayAllChip>(play).iconOnly;
       expect(width >= 936 ? _barField : _barSearch, findsOneWidget);
       await _capture(tester, key, 'library-folder-$width-$scale-expanded');
       await tester.tap(enqueue);
       await tester.pumpAndSettle();
       final requests = api.calls.length;
       final scroll = tester.state<ScrollableState>(_scrollable).position;
+      if (!beside) {
+        // The title scrolls away while the actions rise with the page until
+        // they settle 8dp under the bar, then stay there as they were. The
+        // listing follows the scroll exactly across the handover.
+        final bar =
+            pageRect.top +
+            tester
+                .widget<CatalogPageView>(find.byType(CatalogPageView))
+                .topBarInset;
+        final heldAt = expandedRect.top - bar - 8;
+        final row = find.text('Track 1');
+        final rowTop = tester.getRect(row).top;
+        for (final offset in [
+          heldAt - 12,
+          heldAt - 1,
+          heldAt,
+          heldAt + 1,
+          heldAt + 40,
+          heldAt - 1,
+          heldAt - 12,
+        ]) {
+          scroll.jumpTo(offset);
+          await tester.pumpAndSettle();
+          final held = offset >= heldAt;
+          expect(
+            _inPage(actions),
+            held ? findsNothing : findsOneWidget,
+            reason: 'handover at offset $offset',
+          );
+          expect(
+            find.byKey(const ValueKey('folder-toolbar-second-row')),
+            held ? findsOneWidget : findsNothing,
+          );
+          expect(
+            tester.getRect(actions),
+            expandedRect.shift(Offset(0, -math.min(offset, heldAt))),
+            reason: 'actions at offset $offset',
+          );
+          expect(
+            tester.getRect(play),
+            expandedPlay.shift(Offset(0, -math.min(offset, heldAt))),
+          );
+          expect(tester.widget<PlayAllChip>(play).iconOnly, !labelled);
+          expect(
+            tester.getRect(row).top,
+            closeTo(rowTop - offset, .01),
+            reason: 'listing at offset $offset',
+          );
+          // Transparent: no surface, and the listing fades out beneath the
+          // held row as beneath the bar.
+          final fade = tester.widget<TopBarContentFade>(
+            find.byKey(const ValueKey('catalog-content-fade')),
+          );
+          if (held) {
+            expect(
+              fade.extent,
+              closeTo(tester.getRect(actions).bottom + 8 - pageRect.top, .01),
+            );
+          }
+          expect(tester.takeException(), isNull);
+          if (offset == heldAt - 12 || offset == heldAt + 40) {
+            await _capture(
+              tester,
+              key,
+              'library-folder-$width-$scale-${held ? 'held' : 'rising'}',
+            );
+          }
+        }
+      }
       scroll.jumpTo(300);
       await tester.pumpAndSettle();
       expect(_inPage(actions), findsNothing);
       expect(play.hitTestable(), findsOneWidget);
       expect(up.hitTestable(), findsOneWidget);
-      final compact = width <= 820;
+      // Into the bar beside the title, they fold to icons where it is
+      // short; held under it, they stay as they were laid out.
+      final compact = beside ? width <= 820 : !labelled;
       expect(tester.widget<PlayAllChip>(play).iconOnly, compact);
       expect(tester.widget<AddAllChip>(enqueue).iconOnly, compact);
       expect(
@@ -1885,7 +1969,15 @@ void main() {
         compact ? findsOneWidget : findsNothing,
       );
       expect(api.calls.length, requests);
-      if (width >= 720) {
+      if (!beside) {
+        expect(tester.getRect(play).left, closeTo(pageRect.left + 16, .1));
+        expect(tester.getRect(up).right, closeTo(pageRect.right - 16, .1));
+        expect(
+          tester.getRect(actions).top,
+          greaterThanOrEqualTo(tester.getRect(back).bottom),
+        );
+      }
+      if (beside) {
         expect(
           tester.getRect(actions).center.dy,
           closeTo(tester.getRect(back).center.dy, .1),

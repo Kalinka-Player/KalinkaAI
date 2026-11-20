@@ -93,7 +93,7 @@ class CatalogPageView extends ConsumerStatefulWidget {
   final ValueChanged<AlbumHeaderInsets>? onAlbumInsets;
 
   final ValueChanged<bool>? onHeaderCollapsed;
-  final ValueChanged<bool>? onFolderActionsCollapsed;
+  final ValueChanged<FolderActionsPlace>? onFolderActionsPlace;
   final ValueChanged<String?>? onCatalogSummary;
 
   /// Space reserved inside non-album scroll views for the host's transparent
@@ -107,6 +107,10 @@ class CatalogPageView extends ConsumerStatefulWidget {
   /// Searchable folders hand these actions to the toolbar on collapse. Keep
   /// their expanded geometry even while the host supplies a placeholder.
   final Widget? folderHeaderActions;
+
+  /// The host holds [folderHeaderActions] in a row under its bar, counted in
+  /// [topBarInset].
+  final bool folderActionsUnderBar;
 
   /// The wide album owns its header so it can use the listing's live metadata.
   final VoidCallback? onAlbumBack;
@@ -124,11 +128,12 @@ class CatalogPageView extends ConsumerStatefulWidget {
     this.onAlbumHeaderHeight,
     this.onAlbumInsets,
     this.onHeaderCollapsed,
-    this.onFolderActionsCollapsed,
+    this.onFolderActionsPlace,
     this.onCatalogSummary,
     this.topBarInset = 0,
     this.folderActionsInHeader = false,
     this.folderHeaderActions,
+    this.folderActionsUnderBar = false,
     this.onAlbumBack,
     this.onServerTap,
     this.titleInBar = false,
@@ -481,11 +486,12 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             page: listing,
             query: query,
             onCollapsed: widget.onHeaderCollapsed,
-            onActionsCollapsed: widget.onFolderActionsCollapsed,
+            onActionsPlace: widget.onFolderActionsPlace,
             topInset: widget.topBarInset,
             titleInBar: widget.titleInBar,
             summaryInBar: widget.titleInBar && widget.onCatalogSummary != null,
-            actionsScrollAway: widget.folderHeaderActions != null,
+            barTakesActions: widget.folderHeaderActions != null,
+            actionsUnderBar: widget.folderActionsUnderBar,
             actionsWidth: widget.folderHeaderActions == null
                 ? null
                 : FolderPageActions.widthFor(context, page, listing),
