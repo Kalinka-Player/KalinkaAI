@@ -571,17 +571,19 @@ void main() {
   group('RendererSettingsScreen', () {
     // The panel carries no Scaffold of its own — it is hosted inside
     // MusicPlayerScreen's, which is where Material comes from.
-    Widget wrap(KalinkaPlayerProxy api) => ProviderScope(
-      overrides: overrides(api),
-      child: MaterialApp(
-        home: Scaffold(
-          body: RendererSettingsScreen(
-            rendererId: rendererId,
-            rendererName: 'Living Room',
+    Widget wrap(KalinkaPlayerProxy api, {VoidCallback? onClose}) =>
+        ProviderScope(
+          overrides: overrides(api),
+          child: MaterialApp(
+            home: Scaffold(
+              body: RendererSettingsScreen(
+                rendererId: rendererId,
+                rendererName: 'Living Room',
+                onClose: onClose,
+              ),
+            ),
           ),
-        ),
-      ),
-    );
+        );
 
     // As [wrap], with a known renderer list for the address badge to read.
     Widget wrapWithList(KalinkaPlayerProxy api, List<RendererInfo> rows) =>
@@ -853,20 +855,7 @@ void main() {
     ) async {
       final api = _FakeApi();
       var closed = 0;
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: overrides(api),
-          child: MaterialApp(
-            home: Scaffold(
-              body: RendererSettingsScreen(
-                rendererId: rendererId,
-                rendererName: 'Living Room',
-                onClose: () => closed++,
-              ),
-            ),
-          ),
-        ),
-      );
+      await tester.pumpWidget(wrap(api, onClose: () => closed++));
       await tester.pumpAndSettle();
       expect(_apply, findsNothing);
       await tester.tap(find.text('default (not present)'));
@@ -910,6 +899,48 @@ void main() {
         {'output.device': 'hw:CARD=sndrpihifiberry,DEV=0'},
       ]);
       expect(closed, 1);
+    });
+
+    testWidgets('Back waits for Apply and a failed refresh allows retry', (
+      tester,
+    ) async {
+      final api = _FakeApi();
+      var closed = false;
+      await tester.pumpWidget(wrap(api, onClose: () => closed = true));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('default (not present)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('HiFiBerry Digi+ Pro'));
+      await tester.pumpAndSettle();
+
+      final write = api.holdWrite = Completer<void>();
+      final refresh = api.holdLoad = Completer<void>();
+      final back = find.byKey(const ValueKey('settings-back'));
+      await tester.tap(_apply);
+      await tester.pump();
+      expect(api.writes, hasLength(1));
+      await tester.tap(back);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(closed, isFalse);
+
+      write.complete();
+      await tester.pump();
+      refresh.completeError(
+        const RendererConfigException('Output went offline'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Output went offline'), findsOneWidget);
+
+      api.holdLoad = null;
+      await tester.tap(back);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('pending-changes-dialog-apply')),
+      );
+      await tester.pumpAndSettle();
+      expect(api.writes, hasLength(2));
+      expect(closed, isTrue);
     });
 
     testWidgets('the speaker test plays both channels on this renderer', (

@@ -122,6 +122,7 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
         // were never applied do not survive one the user asked for.
         staged: keepStaged ? _stillStaged(view.values) : const {},
         loaded: true,
+        saving: state.saving,
       );
     } on RendererConfigException catch (e) {
       if (_stale(generation)) return;
@@ -199,10 +200,11 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
     }
     if (!ref.mounted) return;
     await load();
-    if (!ref.mounted || rejected.isEmpty) return;
-    // Reported after the reload, which clears the error it would otherwise
-    // land in.
-    state = state.copyWith(error: _rejectionMessage(rejected));
+    if (!ref.mounted) return;
+    state = state.copyWith(
+      saving: false,
+      error: rejected.isEmpty ? null : _rejectionMessage(rejected),
+    );
   }
 
   static String _rejectionMessage(List<RendererConfigOutcome> rejected) {
