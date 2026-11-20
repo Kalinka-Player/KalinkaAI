@@ -142,13 +142,15 @@ class _SlideInPanelState extends State<SlideInPanel>
             excluding: widget.overlays.isNotEmpty,
             child: SlideTransition(
               position: _slide,
-              child: AppKeyboardRegion(
-                area: AppKeyboardArea.content,
-                separate: true,
-                entryFocus: widget.handlesBack && widget.overlays.isEmpty
-                    ? widget.contentEntryFocus
-                    : KeyboardEntryFocus.none,
-                child: widget.child,
+              child: RepaintBoundary(
+                child: AppKeyboardRegion(
+                  area: AppKeyboardArea.content,
+                  separate: true,
+                  entryFocus: widget.handlesBack && widget.overlays.isEmpty
+                      ? widget.contentEntryFocus
+                      : KeyboardEntryFocus.none,
+                  child: widget.child,
+                ),
               ),
             ),
           ),

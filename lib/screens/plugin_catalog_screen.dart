@@ -72,6 +72,8 @@ class PluginCatalogScreen extends ConsumerStatefulWidget {
 
 class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
   final _scroll = ScrollController();
+  // The tabs' row, kept as a top bar comes and goes, focus and all.
+  final _tabsRowKey = GlobalKey();
   PluginTab _tab = PluginTab.sources;
   CatalogPlugin? _settingsFor;
   CatalogPlugin? _aboutFor;
@@ -617,7 +619,8 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         onRetry: _reload,
       );
     }
-    final modules = ref.watch(modulesStateProvider).value;
+    // The listing alone: rereading it on open is no rebuild while it stands.
+    final modules = ref.watch(modulesStateProvider.select((m) => m.value));
     final settings = ref.watch(settingsProvider);
     final plugins = pluginsWithInstalledModules(
       catalog.plugins,
@@ -681,12 +684,14 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     Widget row(CatalogPlugin plugin) => SliverPadding(
       padding: EdgeInsets.symmetric(horizontal: gutter),
       sliver: SliverToBoxAdapter(
-        child: PluginRow(
-          key: ValueKey('entry-${plugin.id}'),
-          plugin: plugin,
-          state: states[plugin.id]!,
-          summary: plugin.blurb(player),
-          actions: _actionsFor(plugin),
+        child: RepaintBoundary(
+          child: PluginRow(
+            key: ValueKey('entry-${plugin.id}'),
+            plugin: plugin,
+            state: states[plugin.id]!,
+            summary: plugin.blurb(player),
+            actions: _actionsFor(plugin),
+          ),
         ),
       ),
     );
@@ -763,17 +768,23 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
 
   Map<PluginTab, int> _updateCounts(PluginCatalog? catalog) {
     final counts = {for (final tab in PluginTab.values) tab: 0};
-    final systemUpdate = ref.watch(serverUpdateProvider).value;
-    if (systemUpdate != null &&
-        systemUpdate.updateAvailable &&
-        systemUpdate.upgradeSupported) {
-      counts[PluginTab.server] = 1;
-    }
+    // Only whether to badge, so a recheck with the same answer rebuilds
+    // nothing.
+    final systemUpdate = ref.watch(
+      serverUpdateProvider.select((update) {
+        final info = update.value;
+        return info != null && info.updateAvailable && info.upgradeSupported;
+      }),
+    );
+    if (systemUpdate) counts[PluginTab.server] = 1;
     if (!ref.watch(pluginUpdateChecksProvider)) return counts;
     // Use the same installed-plugin state as the update sections, including
     // while Streamer is open and neither plugin list is being built.
     for (final plugin in catalog?.plugins ?? const <CatalogPlugin>[]) {
-      if (ref.watch(pluginStateProvider(plugin)).update == null) continue;
+      final outdated = ref.watch(
+        pluginStateProvider(plugin).select((state) => state.update != null),
+      );
+      if (!outdated) continue;
       final tab = plugin.isDevice ? PluginTab.devices : PluginTab.sources;
       counts[tab] = counts[tab]! + 1;
     }
@@ -794,96 +805,117 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     double gutter,
     Map<PluginTab, int> updateCounts,
     PendingChanges pending,
-  ) => PinnedHeaderSliver(
-    child: AppKeyboardRegion(
-      area: ref.watch(localDisplayKioskProvider)
-          ? AppKeyboardArea.content
-          : AppKeyboardArea.toolbar,
-      child: ColoredBox(
-        key: const ValueKey('catalog-tabs'),
-        color: KalinkaColors.background,
-        // All three destinations stay visible, including their update badges.
-        // Longer labels receive proportionally more room and ellipsize as needed.
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: gutter - SectionTabButton.horizontalPadding,
-            right: gutter,
-          ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final expert = tab == PluginTab.server && !widget.showBack;
-              final changes = widget.showBack || pending.count == 0
-                  ? null
-                  : pending;
-              // The tabs split their room by label length, so each must
-              // still hold its full label at its share of it.
-              final letters = _tabLabels.fold<int>(
-                0,
-                (sum, entry) => sum + entry.$2.length,
-              );
-              final tabsWidth =
-                  _tabLabels
-                      .map(
-                        (entry) =>
-                            SectionTabButton.widthOf(context, entry.$2) *
-                            letters /
-                            entry.$2.length,
-                      )
-                      .reduce(math.max) +
-                  SectionTabButton.spacing * (_tabLabels.length - 1);
-              final labelled =
-                  changes != null &&
-                  tabsWidth +
-                          8 +
-                          PendingChangesActions.labelledWidth(context) +
-                          (expert ? 8 + kKalinkaPillHeight : 0) <=
-                      constraints.maxWidth;
-              return Row(
-                children: [
-                  Expanded(
-                    child: Row(
-                      spacing: SectionTabButton.spacing,
-                      children: [
-                        for (final (option, label) in _tabLabels)
-                          Expanded(
-                            flex: label.length,
-                            child: SectionTabButton(
-                              key: ValueKey('catalog-tab-${option.name}'),
-                              label: label,
-                              overflow: TextOverflow.ellipsis,
-                              showBadge: updateCounts[option]! > 0,
-                              semanticLabel: updateCounts[option]! > 0
-                                  ? option == PluginTab.server
-                                        ? '$label, system update available'
-                                        : '$label, ${updateCounts[option]} '
-                                              '${updateCounts[option] == 1 ? 'update' : 'updates'} available'
-                                  : label,
-                              selected: tab == option,
-                              onTap: () {
-                                setState(() => _tab = option);
-                                _scroll.jumpTo(0);
-                              },
-                            ),
-                          ),
-                      ],
-                    ),
+  ) {
+    Widget row({
+      PendingChanges? changes,
+      bool labelled = false,
+      bool expert = false,
+    }) => Row(
+      key: _tabsRowKey,
+      children: [
+        Expanded(
+          child: Row(
+            spacing: SectionTabButton.spacing,
+            children: [
+              for (final (option, label) in _tabLabels)
+                Expanded(
+                  flex: label.length,
+                  child: SectionTabButton(
+                    key: ValueKey('catalog-tab-${option.name}'),
+                    label: label,
+                    overflow: TextOverflow.ellipsis,
+                    showBadge: updateCounts[option]! > 0,
+                    semanticLabel: updateCounts[option]! > 0
+                        ? option == PluginTab.server
+                              ? '$label, system update available'
+                              : '$label, ${updateCounts[option]} '
+                                    '${updateCounts[option] == 1 ? 'update' : 'updates'} available'
+                        : label,
+                    selected: tab == option,
+                    onTap: () {
+                      setState(() => _tab = option);
+                      _scroll.jumpTo(0);
+                    },
                   ),
-                  if (changes != null) ...[
-                    const SizedBox(width: 8),
-                    PendingChangesActions(changes: changes, labelled: labelled),
-                  ],
-                  if (expert) ...[
-                    const SizedBox(width: 8),
-                    const ExpertModeToggle(),
-                  ],
-                ],
-              );
-            },
+                ),
+            ],
+          ),
+        ),
+        if (changes != null) ...[
+          const SizedBox(width: 8),
+          PendingChangesActions(changes: changes, labelled: labelled),
+        ],
+        if (expert) ...[const SizedBox(width: 8), const ExpertModeToggle()],
+      ],
+    );
+
+    return PinnedHeaderSliver(
+      // A viewport repaint re-composites the header instead of re-recording it.
+      child: RepaintBoundary(
+        child: AppKeyboardRegion(
+          area: ref.watch(localDisplayKioskProvider)
+              ? AppKeyboardArea.content
+              : AppKeyboardArea.toolbar,
+          child: ColoredBox(
+            key: const ValueKey('catalog-tabs'),
+            color: KalinkaColors.background,
+            // All three destinations stay visible, including their update badges.
+            // Longer labels receive proportionally more room and ellipsize as needed.
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: gutter - SectionTabButton.horizontalPadding,
+                right: gutter,
+              ),
+              // Under a top bar the row is the tabs alone at any width. A
+              // LayoutBuilder there would lay the header and the list out
+              // again on every frame of a tab's animation.
+              child: widget.showBack
+                  ? row()
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        final expert = tab == PluginTab.server;
+                        final changes = pending.count == 0 ? null : pending;
+                        // The tabs split their room by label length, so each
+                        // must still hold its full label at its share of it.
+                        final letters = _tabLabels.fold<int>(
+                          0,
+                          (sum, entry) => sum + entry.$2.length,
+                        );
+                        final tabsWidth =
+                            _tabLabels
+                                .map(
+                                  (entry) =>
+                                      SectionTabButton.widthOf(
+                                        context,
+                                        entry.$2,
+                                      ) *
+                                      letters /
+                                      entry.$2.length,
+                                )
+                                .reduce(math.max) +
+                            SectionTabButton.spacing * (_tabLabels.length - 1);
+                        final labelled =
+                            changes != null &&
+                            tabsWidth +
+                                    8 +
+                                    PendingChangesActions.labelledWidth(
+                                      context,
+                                    ) +
+                                    (expert ? 8 + kKalinkaPillHeight : 0) <=
+                                constraints.maxWidth;
+                        return row(
+                          changes: changes,
+                          labelled: labelled,
+                          expert: expert,
+                        );
+                      },
+                    ),
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget? _sectionDescription(PluginTab tab, double gutter) {
     final description = switch (tab) {

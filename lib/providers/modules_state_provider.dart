@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../data_model/data_model.dart';
 import '../data_model/playqueue_events.dart';
+import '../utils/json_equality.dart';
 import 'connection_settings_provider.dart';
 import 'connection_state_provider.dart';
 import 'kalinka_player_api_provider.dart';
@@ -21,6 +23,10 @@ import 'wire_event_provider.dart';
 /// when invalidated.
 class ModulesStateNotifier extends AsyncNotifier<ModulesAndDevices> {
   ModulesAndDevices? _pushed;
+
+  /// The listing last given out. A refetch that finds it unchanged hands it
+  /// out again, so what selects it is not rebuilt for nothing.
+  ModulesAndDevices? _last;
 
   @override
   Future<ModulesAndDevices> build() async {
@@ -44,7 +50,11 @@ class ModulesStateNotifier extends AsyncNotifier<ModulesAndDevices> {
       rethrow;
     }
     // A listing pushed while the request was out is the newer one.
-    return _pushed ?? fetched;
+    final next = _pushed ?? fetched;
+    final last = _last;
+    return _last = last != null && jsonEquals(last.toJson(), next.toJson())
+        ? last
+        : next;
   }
 
   void _onEvent(PlayQueueEvent event) {
@@ -55,7 +65,7 @@ class ModulesStateNotifier extends AsyncNotifier<ModulesAndDevices> {
       _ => null,
     };
     if (modules == null) return;
-    _pushed = modules;
+    _pushed = _last = modules;
     state = AsyncData(modules);
   }
 }
@@ -66,11 +76,7 @@ final modulesStateProvider =
     );
 
 /// Look up live state for one module by id and kind.
-ModuleInfo? lookupModule(
-  ModulesAndDevices snapshot,
-  String id,
-  String kind,
-) {
+ModuleInfo? lookupModule(ModulesAndDevices snapshot, String id, String kind) {
   final list = kind == 'device' ? snapshot.devices : snapshot.inputModules;
   for (final m in list) {
     if (m.name == id) return m;

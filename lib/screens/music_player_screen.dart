@@ -94,6 +94,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // remounting it (which would reload config and drop staged edits).
   final _pluginsKey = GlobalKey<PluginCatalogScreenState>();
 
+  /// Settings as last built, given again while its inputs stand: the
+  /// shell's setState as it finishes sliding in, and as it starts out,
+  /// would otherwise rebuild all of it. Its callbacks only reach this
+  /// state, so they never go stale.
+  PluginCatalogScreen? _plugins;
+
   /// The volumes last listed, and the server that listed them.
   ({ServerAddress address, List<StorageVolume> volumes})? _volumesSeen;
   final _customiseKey = GlobalKey();
@@ -306,6 +312,13 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   }
 
   @override
+  void reassemble() {
+    super.reassemble();
+    // Hot reload: Settings is built again from the new code.
+    _plugins = null;
+  }
+
+  @override
   void dispose() {
     // The kiosk display replaces this screen once a server is picked. No
     // provider may change while the tree is being torn down.
@@ -465,21 +478,30 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   Widget _buildPlugins({
     required bool covered,
     required bool navigationVisible,
-  }) => ExcludeFocus(
-    excluding: covered,
-    child: PluginCatalogScreen(
-      key: _pluginsKey,
-      handlesBack: !covered,
-      showBack: !navigationVisible,
-      slides: _pluginsSlide,
-      onClose: () => setState(() {
-        _pluginsOpen = false;
-        _settingsCovering = false;
-      }),
-      onCoverageChanged: (covering) =>
-          setState(() => _settingsCovering = covering),
-    ),
-  );
+  }) {
+    final cached = _plugins;
+    return ExcludeFocus(
+      excluding: covered,
+      child:
+          cached != null &&
+              cached.handlesBack == !covered &&
+              cached.showBack == !navigationVisible &&
+              cached.slides == _pluginsSlide
+          ? cached
+          : _plugins = PluginCatalogScreen(
+              key: _pluginsKey,
+              handlesBack: !covered,
+              showBack: !navigationVisible,
+              slides: _pluginsSlide,
+              onClose: () => setState(() {
+                _pluginsOpen = false;
+                _settingsCovering = false;
+              }),
+              onCoverageChanged: (covering) =>
+                  setState(() => _settingsCovering = covering),
+            ),
+    );
+  }
 
   void _requestHomeSearch() {
     ref.read(homeSearchRequestProvider.notifier).request();
@@ -1348,7 +1370,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// from the seeded connection, so the tour would greet every new browser,
   /// whether or not the server has been set up.
   bool get _showCoachMarks {
-    if (kIsWeb || ModalRoute.isCurrentOf(context) != true) return false;
+    if (kIsWeb) return false;
     // The local first-run flag is seeded at startup. Give the server's setup
     // check first claim on focus when Home returns from the idle display.
     if (ref.watch(localDisplayKioskProvider) &&
@@ -1367,7 +1389,10 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
             (s) =>
                 s.activeView == FindMusicView.catalogs && s.catalogPage.isRoot,
           ),
-        );
+        ) &&
+        // Asked last: it ties the shell to the route, rebuilding it as the
+        // server sheet opens over it, and the tour is mostly long done.
+        ModalRoute.isCurrentOf(context) == true;
   }
 
   /// The tour itself. Shared by both layouts — only where the controls sit

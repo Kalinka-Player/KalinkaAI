@@ -204,6 +204,13 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// How far Home's search sits below its top while centred on an empty
   /// Home; the glow behind it follows.
   final _discoverCentring = ValueNotifier<double>(0);
+
+  // Home's hero and source rail, reused while what they show is unchanged.
+  // The view builds again on every navigation, Home hidden or not, and
+  // building both rails again each time costs frames. Their watches still
+  // run on every build.
+  (bool, String, bool, String, bool, List<SearchSuggestion>, Widget)? _homeHero;
+  (bool, Widget)? _homeSources;
   final _homeBannerHeight = ValueNotifier<double>(0);
   late final ScrollController _discoverScroll;
   // The album backdrop follows the shown visit's scroll and header; each
@@ -435,6 +442,14 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
         if (mounted) ref.read(searchSessionProvider.notifier).refresh();
       });
     }
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    // Hot reload: Home's kept widgets are built again from the new code.
+    _homeHero = null;
+    _homeSources = null;
   }
 
   @override
@@ -1156,7 +1171,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
                 reveal: visit.visitId == _revealedVisit
                     ? _pageReveal
                     : kAlwaysCompleteAnimation,
-                child: _visitPage(visit),
+                child: _visitPage(
+                  visit,
+                  shown: visit.visitId == session.visitId,
+                ),
               ),
             ),
           ),
@@ -1167,7 +1185,13 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
   /// A visit's page, reused while its visit and header mode are unchanged.
   /// Crossing the width/text-size breakpoint updates the cached widget, but
   /// retains its keyed element, listing state and scroll position.
-  Widget _visitPage(SearchSessionState visit) {
+  ///
+  /// A hidden page is also kept for a copy of its visit that shows the same
+  /// page, such as the one that parks it as it is left: building it again
+  /// would only rebuild what no one sees, and what it writes back is keyed
+  /// by the visit's id. A retitled page is built again. A visit is a new
+  /// copy each time it is shown again, and its page is built for it then.
+  Widget _visitPage(SearchSessionState visit, {required bool shown}) {
     final cached = _visitPages[visit.visitId];
     final migrating = _migratingFolderActions(visit);
     final layout = (
@@ -1181,7 +1205,10 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       folderFitsBar: migrating && _folderActionsFitBar(context, visit),
       folderPlace: migrating ? _folderActionsPlace(visit) : null,
     );
-    if (cached != null && identical(cached.$1, visit) && cached.$2 == layout) {
+    if (cached != null &&
+        (identical(cached.$1, visit) ||
+            (!shown && identical(cached.$1.catalogPage, visit.catalogPage))) &&
+        cached.$2 == layout) {
       return cached.$3;
     }
     final page = BrowseVisitScope(visit: visit, child: _buildVisit(visit));
@@ -1194,7 +1221,11 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     offstage: !shown,
     child: TickerMode(
       enabled: shown,
-      child: ExcludeFocus(excluding: !shown, child: child),
+      child: ExcludeFocus(
+        excluding: !shown,
+        // Own layer each: one page repainting does not re-record the others.
+        child: RepaintBoundary(child: child),
+      ),
     ),
   );
 
@@ -2239,6 +2270,57 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
     bool smart, {
     required double headerExtent,
   }) {
+    final showHeading = !ref.watch(homeHasPreviewsProvider);
+    final hint = _hintText(session, smart: smart);
+    final smartSources = smart ? ref.watch(smartSearchSourcesProvider) : '';
+    final curated = ref.watch(smartSearchAvailableProvider) == true;
+    final hero = _homeHero;
+    final Widget leading;
+    if (hero != null &&
+        hero.$1 == showHeading &&
+        hero.$2 == hint &&
+        hero.$3 == smart &&
+        hero.$4 == smartSources &&
+        hero.$5 == curated &&
+        identical(hero.$6, session.aiSuggestions)) {
+      leading = hero.$7;
+    } else {
+      leading = _buildHomeHero(
+        showHeading: showHeading,
+        hint: hint,
+        smart: smart,
+        smartSources: smartSources,
+        // The server's curated prompts, not the static stand-ins or the
+        // unvalidated pick, and only once smart search is known to answer.
+        suggestions: curated
+            ? [
+                for (final s in session.aiSuggestions)
+                  if (!s.experimental) s,
+              ]
+            : const [],
+      );
+      _homeHero = (
+        showHeading,
+        hint,
+        smart,
+        smartSources,
+        curated,
+        session.aiSuggestions,
+        leading,
+      );
+    }
+    final showConnect = !widget.navigationVisible;
+    final sources = _homeSources;
+    final Widget sourceList;
+    if (sources != null && sources.$1 == showConnect) {
+      sourceList = sources.$2;
+    } else {
+      sourceList = HomeSourceList(
+        onOpen: _openSourceFromHome,
+        showConnect: showConnect,
+      );
+      _homeSources = (showConnect, sourceList);
+    }
     return SearchZeroState(
       controller: _discoverScroll,
       headerExtent: headerExtent,
@@ -2258,61 +2340,55 @@ class SearchSessionViewState extends ConsumerState<SearchSessionView>
       // sources stay on Home while it holds nothing else, the way in.
       showCollections: !widget.navigationVisible,
       showSources: !widget.navigationVisible,
-      sources: HomeSourceList(
-        onOpen: _openSourceFromHome,
-        showConnect: !widget.navigationVisible,
-      ),
+      sources: sourceList,
       activity: const LibraryActivityLine(),
       onCentringShift: (shift) => _discoverCentring.value = shift,
       roomLent: widget.roomLent,
-      leading: [
-        // Folds up under the bar as a source opens, the sources rising with it.
-        // Clipped above and below only: the prompts run out to the pane's
-        // edges.
-        AnimatedBuilder(
-          animation: _fold,
-          builder: (context, child) => ClipRect(
-            clipper: const _VerticalClip(),
-            child: Align(
-              alignment: const Alignment(-1, 1),
-              heightFactor: (1 - _fold.value).clamp(0.0, 1.0),
-              child: child,
-            ),
-          ),
-          child: FadeTransition(
-            opacity: ReverseAnimation(_fold),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _DiscoverHero(
-                  entryKey: _entryKey,
-                  showHeading: !ref.watch(homeHasPreviewsProvider),
-                  hint: _hintText(session, smart: smart),
-                  smartSearch: smart,
-                  smartSources: smart
-                      ? ref.watch(smartSearchSourcesProvider)
-                      : '',
-                  // The server's curated prompts, not the static stand-ins or
-                  // the unvalidated pick, and only once smart search is known
-                  // to answer.
-                  suggestions: ref.watch(smartSearchAvailableProvider) == true
-                      ? [
-                          for (final s in session.aiSuggestions)
-                            if (!s.experimental) s,
-                        ]
-                      : const [],
-                  onSuggestion: _submitFromTile,
-                  onOpenSearch: _openSearch,
-                ),
-                // The rest of the gap is Home's: less where the sources follow.
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-        ),
-      ],
+      leading: [leading],
     );
   }
+
+  Widget _buildHomeHero({
+    required bool showHeading,
+    required String hint,
+    required bool smart,
+    required String smartSources,
+    required List<SearchSuggestion> suggestions,
+  }) =>
+      // Folds up under the bar as a source opens, the sources rising with it.
+      // Clipped above and below only: the prompts run out to the pane's
+      // edges.
+      AnimatedBuilder(
+        animation: _fold,
+        builder: (context, child) => ClipRect(
+          clipper: const _VerticalClip(),
+          child: Align(
+            alignment: const Alignment(-1, 1),
+            heightFactor: (1 - _fold.value).clamp(0.0, 1.0),
+            child: child,
+          ),
+        ),
+        child: FadeTransition(
+          opacity: ReverseAnimation(_fold),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _DiscoverHero(
+                entryKey: _entryKey,
+                showHeading: showHeading,
+                hint: hint,
+                smartSearch: smart,
+                smartSources: smartSources,
+                suggestions: suggestions,
+                onSuggestion: _submitFromTile,
+                onOpenSearch: _openSearch,
+              ),
+              // The rest of the gap is Home's: less where the sources follow.
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      );
 
   /// Rotating example hint — a different real suggestion each time the surface
   /// mounts, teaching the query language.
@@ -2968,7 +3044,11 @@ class _OpenDown extends StatelessWidget {
   @override
   Widget build(BuildContext context) => FadeTransition(
     opacity: reveal,
-    child: ClipRect(clipper: _TopPart(reveal), child: child),
+    child: ClipRect(
+      clipper: _TopPart(reveal),
+      // A retained layer: each reveal frame re-clips it, not re-records it.
+      child: RepaintBoundary(child: child),
+    ),
   );
 }
 

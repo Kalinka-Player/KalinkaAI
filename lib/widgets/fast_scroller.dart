@@ -288,7 +288,10 @@ class _FastScrollerState extends State<FastScroller>
               child: LayoutBuilder(
                 builder: (context, constraints) => ListenableBuilder(
                   listenable: Listenable.merge([widget.controller, _shown]),
-                  builder: (context, _) => _thumb(constraints.maxHeight),
+                  // The handle changes only when held, not as the list moves.
+                  child: _handle(constraints.maxHeight),
+                  builder: (context, handle) =>
+                      _thumb(constraints.maxHeight, handle!),
                 ),
               ),
             ),
@@ -298,7 +301,34 @@ class _FastScrollerState extends State<FastScroller>
     );
   }
 
-  Widget _thumb(double trackHeight) {
+  Widget _handle(double trackHeight) {
+    final travel = math.max(0.0, trackHeight - _thumbHeight);
+    return GestureDetector(
+      key: const ValueKey('fast-scroll-thumb'),
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: _hold,
+      onVerticalDragUpdate: (details) => _drag(details, travel),
+      onVerticalDragEnd: (_) => _release(),
+      onVerticalDragCancel: _release,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          width: _held ? 8 : 5,
+          height: _thumbHeight,
+          margin: const EdgeInsets.only(right: 3),
+          decoration: BoxDecoration(
+            color: _held
+                ? KalinkaColors.textSecondary
+                : KalinkaColors.textMuted,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _thumb(double trackHeight, Widget handle) {
     final position = _position;
     // Kept while held, so the drag is never dropped under the finger.
     if (position == null ||
@@ -319,29 +349,7 @@ class _FastScrollerState extends State<FastScroller>
               top: top,
               width: _touchWidth,
               height: _thumbHeight,
-              child: GestureDetector(
-                key: const ValueKey('fast-scroll-thumb'),
-                behavior: HitTestBehavior.opaque,
-                onVerticalDragStart: _hold,
-                onVerticalDragUpdate: (details) => _drag(details, travel),
-                onVerticalDragEnd: (_) => _release(),
-                onVerticalDragCancel: _release,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 120),
-                    width: _held ? 8 : 5,
-                    height: _thumbHeight,
-                    margin: const EdgeInsets.only(right: 3),
-                    decoration: BoxDecoration(
-                      color: _held
-                          ? KalinkaColors.textSecondary
-                          : KalinkaColors.textMuted,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-              ),
+              child: handle,
             ),
             if (label != null)
               Positioned(

@@ -152,24 +152,30 @@ class SearchZeroState extends ConsumerWidget {
                           // Close under the prompts and over what follows, as one
                           // line of ways in; without it, the search's full gap.
                           if (sources != null && (showSources || empty)) ...[
-                            sources!,
+                            RepaintBoundary(child: sources!),
                             const SizedBox(height: 16),
                           ] else
                             const SizedBox(height: 12),
                           ?activity,
                           if (centredShortcuts) ...[
-                            PinnedCatalogsSection(pins: pins),
-                            _CustomiseLine(
-                              onCustomise: () => ref
-                                  .read(homeCustomisationProvider.notifier)
-                                  .open(),
+                            RepaintBoundary(
+                              child: PinnedCatalogsSection(pins: pins),
+                            ),
+                            RepaintBoundary(
+                              child: _CustomiseLine(
+                                onCustomise: () => ref
+                                    .read(homeCustomisationProvider.notifier)
+                                    .open(),
+                              ),
                             ),
                           ],
                           if (empty)
-                            _PinHint(
-                              onCustomise: () => ref
-                                  .read(homeCustomisationProvider.notifier)
-                                  .open(),
+                            RepaintBoundary(
+                              child: _PinHint(
+                                onCustomise: () => ref
+                                    .read(homeCustomisationProvider.notifier)
+                                    .open(),
+                              ),
                             ),
                         ],
                       ),
@@ -206,7 +212,12 @@ class SearchZeroState extends ConsumerWidget {
         // Reserve the pinned sliver's space for keyboard reveal and initial
         // clearance, but paint the actual controls outside the content mask.
         if (header != null)
-          Positioned(top: 0, left: 0, right: 0, child: header!),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: RepaintBoundary(child: header!),
+          ),
       ],
     );
   }

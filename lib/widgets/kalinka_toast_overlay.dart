@@ -19,9 +19,31 @@ const double kToastMaxWidth = 300;
 /// Room between a tablet pane's right edge and its notifications.
 const double kToastTabletGutter = 20;
 
+// The last measured height and what it was measured for; the styles are
+// constants, so the text scale and direction are all that can change it.
+TextScaler? _miniPlayerHeightScaler;
+TextDirection? _miniPlayerHeightDirection;
+double? _miniPlayerHeight;
+bool _miniPlayerFontsHeard = false;
+
 /// Keep both metadata lines readable at the system text size. The shell and
 /// queue reserve the same measured height as the bar, excluding safe insets.
 double kalinkaMiniPlayerHeight(BuildContext context) {
+  final textScaler = MediaQuery.textScalerOf(context);
+  final textDirection = Directionality.of(context);
+  if (!_miniPlayerFontsHeard) {
+    _miniPlayerFontsHeard = true;
+    // Fonts that arrive later, as web fonts do, measure differently.
+    PaintingBinding.instance.systemFonts.addListener(
+      () => _miniPlayerHeight = null,
+    );
+  }
+  final cached = _miniPlayerHeight;
+  if (cached != null &&
+      textScaler == _miniPlayerHeightScaler &&
+      textDirection == _miniPlayerHeightDirection) {
+    return cached;
+  }
   var textHeight = 0.0;
   for (final style in [
     KalinkaTextStyles.miniPlayerTitle,
@@ -29,14 +51,19 @@ double kalinkaMiniPlayerHeight(BuildContext context) {
   ]) {
     final painter = TextPainter(
       text: TextSpan(text: 'Ag', style: style),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
+      textDirection: textDirection,
+      textScaler: textScaler,
       maxLines: 1,
     )..layout();
     textHeight += painter.height;
     painter.dispose();
   }
-  return (textHeight + 28).clamp(kMiniPlayerHeight, double.infinity);
+  _miniPlayerHeightScaler = textScaler;
+  _miniPlayerHeightDirection = textDirection;
+  return _miniPlayerHeight = (textHeight + 28).clamp(
+    kMiniPlayerHeight,
+    double.infinity,
+  );
 }
 
 /// Which toasts an overlay is responsible for. The tablet layout mounts two —

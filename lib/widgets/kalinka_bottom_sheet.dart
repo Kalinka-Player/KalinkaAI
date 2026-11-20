@@ -209,49 +209,53 @@ class _AdaptiveSheetState extends State<_AdaptiveSheet> {
                     begin: const Offset(0, 1),
                     end: Offset.zero,
                   ).animate(widget.animation),
-                  child: BottomSheet(
-                    animationController: widget.controller,
-                    onClosing: widget.onClosing,
-                    backgroundColor: KalinkaColors.surfaceDialog,
-                    elevation: 20,
-                    shadowColor: Colors.black,
-                    constraints: const BoxConstraints(maxWidth: kSheetMaxWidth),
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(24),
+                  child: RepaintBoundary(
+                    child: BottomSheet(
+                      animationController: widget.controller,
+                      onClosing: widget.onClosing,
+                      backgroundColor: KalinkaColors.surfaceDialog,
+                      elevation: 20,
+                      shadowColor: Colors.black,
+                      constraints: const BoxConstraints(
+                        maxWidth: kSheetMaxWidth,
                       ),
-                      side: BorderSide(color: KalinkaColors.borderDefault),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    builder: (_) => SafeArea(
-                      top: false,
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Center(
-                              child: Container(
-                                width: 36,
-                                height: 4,
-                                margin: const EdgeInsets.only(top: 12),
-                                decoration: BoxDecoration(
-                                  color: KalinkaColors.surfaceOverlay,
-                                  borderRadius: BorderRadius.circular(2),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(24),
+                        ),
+                        side: BorderSide(color: KalinkaColors.borderDefault),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      builder: (_) => SafeArea(
+                        top: false,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Center(
+                                child: Container(
+                                  width: 36,
+                                  height: 4,
+                                  margin: const EdgeInsets.only(top: 12),
+                                  decoration: BoxDecoration(
+                                    color: KalinkaColors.surfaceOverlay,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
                                 ),
                               ),
-                            ),
-                            Flexible(
-                              // The sheet already clears the keyboard above;
-                              // editors must not add the same inset again.
-                              child: MediaQuery.removeViewInsets(
-                                context: context,
-                                removeBottom: true,
-                                child: body,
+                              Flexible(
+                                // The sheet already clears the keyboard above;
+                                // editors must not add the same inset again.
+                                child: MediaQuery.removeViewInsets(
+                                  context: context,
+                                  removeBottom: true,
+                                  child: body,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),

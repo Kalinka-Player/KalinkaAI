@@ -1,7 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RendererBinding;
+import 'package:flutter/rendering.dart'
+    show OpacityLayer, RenderObjectVisitor, RenderProxyBox, RendererBinding;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -349,15 +350,15 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
       final mouse = RendererBinding.instance.mouseTracker;
       return Stack(
         children: [
-          RepaintBoundary(
-            child: ExcludeSemantics(
-              child: round
-                  ? ClipOval(child: cover)
-                  : ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: cover,
-                    ),
-            ),
+          // No RepaintBoundary: a cover is one image draw to re-record, but
+          // its own layer costs every scroll frame for every visible card.
+          ExcludeSemantics(
+            child: round
+                ? ClipOval(child: cover)
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: cover,
+                  ),
           ),
           if (selected)
             Positioned.fill(
@@ -380,11 +381,16 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
                       _interaction.value.isNotEmpty || !mouse.mouseIsConnected;
                   return IgnorePointer(
                     ignoring: !shown,
-                    child: AnimatedOpacity(
-                      opacity: shown ? 1 : 0,
+                    // Not Opacity or AnimatedOpacity: both keep a layer of
+                    // their own even at 1, one more per card on every
+                    // scrolled frame where Play always shows.
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween<double>(end: shown ? 1 : 0),
                       duration: MediaQuery.disableAnimationsOf(context)
                           ? Duration.zero
                           : const Duration(milliseconds: 120),
+                      builder: (context, opacity, child) =>
+                          _PlayFade(opacity: opacity, child: child),
                       child: child,
                     ),
                   );
@@ -400,4 +406,70 @@ class _ArtworkGridCardState extends ConsumerState<ArtworkGridCard> {
       );
     },
   );
+}
+
+/// Opacity that takes a layer only while partly transparent: fully opaque it
+/// paints its child in place, and fully transparent not at all.
+class _PlayFade extends SingleChildRenderObjectWidget {
+  final double opacity;
+
+  const _PlayFade({required this.opacity, super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderPlayFade(opacity);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderPlayFade renderObject) {
+    renderObject.opacity = opacity;
+  }
+}
+
+class _RenderPlayFade extends RenderProxyBox {
+  _RenderPlayFade(double opacity) : _alpha = Color.getAlphaFromOpacity(opacity);
+
+  int _alpha;
+
+  set opacity(double value) {
+    final alpha = Color.getAlphaFromOpacity(value);
+    if (alpha == _alpha) return;
+    final composited = alwaysNeedsCompositing;
+    final visible = _alpha != 0;
+    _alpha = alpha;
+    if (composited != alwaysNeedsCompositing) markNeedsCompositingBitsUpdate();
+    markNeedsPaint();
+    if (visible != (_alpha != 0)) markNeedsSemanticsUpdate();
+  }
+
+  @override
+  bool get alwaysNeedsCompositing =>
+      child != null && _alpha > 0 && _alpha < 255;
+
+  @override
+  bool paintsChild(RenderBox child) => _alpha > 0;
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final child = this.child;
+    if (child == null || _alpha == 0) {
+      layer = null;
+      return;
+    }
+    if (_alpha == 255) {
+      layer = null;
+      context.paintChild(child, offset);
+      return;
+    }
+    layer = context.pushOpacity(
+      offset,
+      _alpha,
+      super.paint,
+      oldLayer: layer as OpacityLayer?,
+    );
+  }
+
+  @override
+  void visitChildrenForSemantics(RenderObjectVisitor visitor) {
+    if (child != null && _alpha != 0) visitor(child!);
+  }
 }
