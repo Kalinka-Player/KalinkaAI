@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 import '../bit_perfect_badge.dart';
+import '../fitted_title.dart';
 import '../source_badge.dart' show SourceTile;
 
 // Brighter than the app's secondary greys: these lines sit on the cover's
@@ -57,6 +58,9 @@ class KioskTrackLines {
       Object.hash(trackId, title, artist, album, stream, source);
 }
 
+// Keep the small mono label and stream attribution legible across the room.
+double _captionScale(double scale) => math.min(scale, 2.0);
+
 /// The display's eyebrow over the track: `NOW PLAYING`, spaced out in the
 /// accent.
 class KioskEyebrow extends StatelessWidget {
@@ -66,12 +70,13 @@ class KioskEyebrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textScale = _captionScale(scale);
     return Text(
       'NOW PLAYING',
       style: KalinkaFonts.mono(
-        fontSize: 14 * scale,
+        fontSize: 14 * textScale,
         fontWeight: FontWeight.w600,
-        letterSpacing: 4.5 * scale,
+        letterSpacing: 4.5 * textScale,
         color: KalinkaColors.accentTint,
         height: 1.2,
       ),
@@ -92,7 +97,7 @@ class KioskTrackText extends StatefulWidget {
   final bool compact;
 
   /// Group the credits under the title in the bounded column beside the cover.
-  final bool landscape;
+  final double? landscapeWidth;
 
   /// Move the incoming block as one opaque layer on a local display.
   final bool slideTogether;
@@ -103,7 +108,7 @@ class KioskTrackText extends StatefulWidget {
     required this.scale,
     this.centred = false,
     this.compact = false,
-    this.landscape = false,
+    this.landscapeWidth,
     this.slideTogether = false,
   });
 
@@ -181,7 +186,7 @@ class _KioskTrackTextState extends State<KioskTrackText>
             top: 0,
             left: 0,
             right: 0,
-            bottom: widget.landscape ? 0 : null,
+            bottom: widget.landscapeWidth != null ? 0 : null,
             child: _block(leaving, leaving: true),
           ),
         _block(widget.lines, leaving: false),
@@ -192,7 +197,13 @@ class _KioskTrackTextState extends State<KioskTrackText>
   Widget _block(KioskTrackLines lines, {required bool leaving}) {
     double s(double v) => v * widget.scale;
     final compact = widget.compact;
-    final landscape = widget.landscape;
+    final landscape = widget.landscapeWidth != null;
+    // Beyond the reference panel, give type half the additional layout
+    // scale. System text scaling is applied separately.
+    final typeScale = landscape && widget.scale > 1
+        ? 1 + (widget.scale - 1) / 2
+        : widget.scale;
+    double font(double value) => value * typeScale;
     final align = widget.centred ? TextAlign.center : TextAlign.start;
     final crossAxis = widget.centred
         ? CrossAxisAlignment.center
@@ -200,37 +211,64 @@ class _KioskTrackTextState extends State<KioskTrackText>
     final shadows = compact ? kioskTextPolish : null;
     final primaryCredit = landscape ? lines.album : (lines.artist ?? '—');
     final secondaryCredit = landscape ? lines.artist : lines.album;
-    final title = Text(
+    final titleStyle = KalinkaFonts.display(
+      fontSize: font(compact ? 26 : 54),
+      fontWeight: FontWeight.w500,
+      color: KalinkaColors.frost,
+      height: compact ? 1.05 : 1.1,
+    ).copyWith(shadows: shadows);
+    final primaryStyle = KalinkaFonts.sans(
+      fontSize: font(compact ? 19 : 30),
+      fontWeight: FontWeight.w500,
+      color: _primaryCredit,
+      height: 1.2,
+    ).copyWith(shadows: shadows);
+    Widget name(
+      String text,
+      TextStyle style, {
+      required double minSize,
+      required int linesWhenStacked,
+      bool preferSingleLine = false,
+    }) {
+      final width = widget.landscapeWidth;
+      if (width != null) {
+        return FittedTitle(
+          text,
+          style: style,
+          minFontSize: font(minSize),
+          preferSingleLine: preferSingleLine,
+          availableWidth: width,
+        );
+      }
+      return Text(
+        text,
+        style: style,
+        textAlign: align,
+        maxLines: linesWhenStacked,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    final title = name(
       lines.title,
-      style: KalinkaFonts.display(
-        fontSize: s(compact ? 26 : 54),
-        fontWeight: FontWeight.w500,
-        color: KalinkaColors.frost,
-        height: compact ? 1.05 : 1.1,
-      ).copyWith(shadows: shadows),
-      textAlign: align,
-      maxLines: compact ? 1 : 2,
-      overflow: TextOverflow.ellipsis,
+      titleStyle,
+      minSize: 40,
+      linesWhenStacked: compact ? 1 : 2,
     );
     final credits = [
       if (primaryCredit != null)
-        Text(
+        name(
           primaryCredit,
-          style: KalinkaFonts.sans(
-            fontSize: s(compact ? 19 : 30),
-            fontWeight: FontWeight.w500,
-            color: _primaryCredit,
-            height: 1.2,
-          ).copyWith(shadows: shadows),
-          textAlign: align,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          primaryStyle,
+          minSize: 24,
+          linesWhenStacked: 1,
+          preferSingleLine: true,
         ),
       if (secondaryCredit != null)
         Text(
           secondaryCredit,
           style: KalinkaFonts.sans(
-            fontSize: s(compact ? 15 : 21),
+            fontSize: font(compact ? 15 : 21),
             color: _secondaryCredit,
             height: 1.25,
           ).copyWith(shadows: shadows),
@@ -260,6 +298,9 @@ class _KioskTrackTextState extends State<KioskTrackText>
     // Spend spare height between groups. Album and artist share one credit
     // block, so the small gap within it never expands on a TV.
     final creditGap = compact ? 0.0 : s(6);
+    final streamScale = compact
+        ? math.max(widget.scale * 0.46, 0.72)
+        : _captionScale(widget.scale);
     final column = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: crossAxis,
@@ -284,9 +325,7 @@ class _KioskTrackTextState extends State<KioskTrackText>
           stage(
             _StreamRow(
               lines: lines,
-              scale: compact
-                  ? math.max(widget.scale * 0.46, 0.72)
-                  : widget.scale,
+              scale: streamScale,
               color: landscape ? KalinkaColors.textSecondary : _stream,
               shadows: shadows,
               showBitPerfect: !leaving,

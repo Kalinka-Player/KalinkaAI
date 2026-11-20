@@ -1015,7 +1015,7 @@ class _PlayingView extends ConsumerWidget {
                             child: KioskTrackText(
                               lines: lines,
                               scale: scale,
-                              landscape: true,
+                              landscapeWidth: column,
                               slideTogether: useWipe,
                             ),
                           ),

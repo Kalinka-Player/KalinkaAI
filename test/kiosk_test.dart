@@ -5,7 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart'
-    show PictureLayer, RenderRepaintBoundary;
+    show PictureLayer, RenderParagraph, RenderRepaintBoundary;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -248,6 +248,7 @@ Future<_Harness> _pump(
   WidgetTester tester,
   PlayQueueState state, {
   Size size = const Size(1024, 600),
+  double devicePixelRatio = 1,
   bool launched = false,
   bool localDisplay = false,
   bool idleHost = false,
@@ -262,7 +263,7 @@ Future<_Harness> _pump(
   DisplayPower? displayPower,
 }) async {
   tester.view.physicalSize = size;
-  tester.view.devicePixelRatio = 1;
+  tester.view.devicePixelRatio = devicePixelRatio;
   addTearDown(tester.view.reset);
   SharedPreferences.setMockInitialValues({
     ConnectionSettingsNotifier.sharedPrefName: 'Den server',
@@ -2096,9 +2097,21 @@ void main() {
   testWidgets(
     'landscape kiosk groups track credits above stream and transport',
     (tester) async {
+      // Measure wrapping with the kiosk's actual display and album fonts.
+      await tester.runAsync(() async {
+        for (final (family, file) in [
+          ('Playfair Display', 'PlayfairDisplay-Medium.ttf'),
+          ('IBM Plex Sans', 'IBMPlexSans-Medium.ttf'),
+        ]) {
+          await (FontLoader(
+            family,
+          )..addFont(rootBundle.load('assets/fonts/$file'))).load();
+        }
+      });
       Future<({Rect cover, Rect bar, Rect play})> checkLayout(
         String title, {
         Size size = const Size(1024, 600),
+        double devicePixelRatio = 1,
         String? album = 'Album',
         String? artist = 'Artist',
         bool hasStream = true,
@@ -2110,7 +2123,7 @@ void main() {
           performer: artist == null ? null : Artist(id: 'p', name: artist),
           album: album == null
               ? null
-              : Album(id: 'a', title: album, year: 1990),
+              : Album(id: 'a', title: album, year: 1991),
         );
         await _pump(
           tester,
@@ -2127,6 +2140,7 @@ void main() {
             playbackControl: const PlaybackControl.queue(),
           ),
           size: size,
+          devicePixelRatio: devicePixelRatio,
           localDisplay: true,
         );
         await tester.pumpAndSettle();
@@ -2142,7 +2156,7 @@ void main() {
         final bar = tester.getRect(find.byType(KioskProgressBar));
         final heading = tester.getRect(find.text('NOW PLAYING'));
         final credits = [
-          if (album != null && album.trim().isNotEmpty) '$album · 1990',
+          if (album != null && album.trim().isNotEmpty) '$album · 1991',
           if (artist != null && artist.trim().isNotEmpty) artist,
         ];
         final labels = [title, ...credits, if (hasStream) 'Qobuz · FLAC'];
@@ -2161,8 +2175,12 @@ void main() {
           expect(rows[i].left, closeTo(bar.left, 0.5));
           expect(rows[i].bottom, lessThan(rows[i + 1].top));
         }
-        for (var i = 1; i < lines.length; i++) {
-          expect(lines[i].height, lessThan(lines[i - 1].height));
+        final fontSizes = [
+          for (final label in labels)
+            tester.widget<Text>(find.text(label)).style!.fontSize!,
+        ];
+        for (var i = 1; i < fontSizes.length; i++) {
+          expect(fontSizes[i], lessThan(fontSizes[i - 1]));
         }
 
         double gapBefore(int i) => lines[i].top - lines[i - 1].bottom;
@@ -2184,7 +2202,55 @@ void main() {
       final short = await checkLayout('Short');
       expect(await checkLayout(long), short);
       await checkLayout(long, size: const Size(667, 375));
-      await checkLayout('Short', size: const Size(3840, 2160));
+      const orbTitle = 'Supernova At The End Of The Universe';
+      const orbAlbum = "The Orb's Adventures Beyond The Ultraworld";
+      for (final (size, pixelRatio, albumLines) in [
+        (const Size(1024, 638), 1.0, 2),
+        (const Size(3840, 2160), 2.0, 1),
+        (const Size(3840, 2160), 1.0, 1),
+      ]) {
+        final anchors = await checkLayout(
+          'Short',
+          size: size,
+          devicePixelRatio: pixelRatio,
+        );
+        if (size.width == 3840) {
+          final titleSize = tester
+              .widget<Text>(find.text('Short'))
+              .style!
+              .fontSize!;
+          final layoutScale = tester
+              .widget<KioskProgressBar>(find.byType(KioskProgressBar))
+              .scale;
+          expect(titleSize, inExclusiveRange(54, 54 * layoutScale));
+        }
+        expect(
+          await checkLayout(
+            orbTitle,
+            album: orbAlbum,
+            artist: 'The Orb',
+            size: size,
+            devicePixelRatio: pixelRatio,
+          ),
+          anchors,
+        );
+        for (final label in [orbTitle, '$orbAlbum · 1991']) {
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.text(label),
+          );
+          expect(
+            paragraph.didExceedMaxLines,
+            isFalse,
+            reason: '$label at $size / $pixelRatio',
+          );
+          if (label != orbTitle) {
+            final boxes = paragraph.getBoxesForSelection(
+              TextSelection(baseOffset: 0, extentOffset: label.length),
+            );
+            expect(boxes.map((box) => box.top).toSet(), hasLength(albumLines));
+          }
+        }
+      }
       expect(await checkLayout('Without album', album: null), short);
       expect(await checkLayout('Without artist', artist: null), short);
       expect(await checkLayout('Without stream', hasStream: false), short);
