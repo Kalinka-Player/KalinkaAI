@@ -3,9 +3,10 @@ import errno
 import json
 from pathlib import Path
 import runpy
+import struct
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 class KioskLauncherTest(unittest.TestCase):
@@ -24,6 +25,95 @@ class KioskLauncherTest(unittest.TestCase):
         self.state["RUN_DIR"] = str(self.root)
         self.state["BACKLIGHT_DIR"] = self.backlights
         self.state["DRM_DIR"] = self.drm
+        self.active_tty = self.root / "active"
+        self.state["ACTIVE_TTY"] = self.active_tty
+        self.state["VT_STATE"] = self.root / "vt.json"
+        self.state["VC_DIR"] = self.root
+        # Even a broken test must never open a real host virtual console.
+        self.state["_open_vt"] = lambda n: (self.root / f"tty{n}").open("ab")
+
+    def simulate_console(self, initial="tty1", busy_releases=0):
+        self.active_tty.write_text(initial)
+        modes = {63: 1, 62: 3}
+
+        def ioctl(tty, request, arg):
+            nonlocal busy_releases
+            number = int(Path(tty.name).name.removeprefix("tty"))
+            if request == self.state["KDGKBMODE"]:
+                (self.root / f"vcs{number}").touch()
+                return struct.pack("i", modes[number])
+            if request == self.state["KDSKBMODE"]:
+                modes[number] = arg
+            elif request == self.state["VT_ACTIVATE"]:
+                self.active_tty.write_text(f"tty{arg}")
+            elif request == self.state["VT_WAITACTIVE"]:
+                self.assertEqual(self.active_tty.read_text(), f"tty{arg}")
+            elif request == self.state["VT_DISALLOCATE"]:
+                self.assertEqual(number, 0)
+                self.assertNotEqual(self.active_tty.read_text(), f"tty{arg}")
+                if busy_releases:
+                    busy_releases -= 1
+                    raise OSError(errno.EBUSY, "tty teardown pending")
+                (self.root / f"vcs{arg}").unlink(missing_ok=True)
+            else:
+                self.fail(f"unexpected console ioctl {request}")
+            return 0
+
+        self.enterContext(patch.object(self.module["fcntl"], "ioctl", side_effect=ioctl))
+        self.state["_overrides"] = lambda: {"base_config.display.enabled": True}
+        return modes
+
+    def test_kiosk_mutes_its_own_vt_and_returns_to_original_on_stop(self):
+        modes = self.simulate_console("tty3", busy_releases=1)
+        (self.root / "vcs63").touch()  # This one belongs to someone else.
+        self.module["prepare"]()
+        self.assertEqual(self.active_tty.read_text(), "tty62")
+        self.assertEqual(modes, {63: 1, 62: self.state["K_OFF"]})
+        self.module["restore_display"]()
+        self.assertEqual(self.active_tty.read_text(), "tty3")
+        self.assertEqual(modes, {63: 1, 62: 3})
+        self.assertFalse((self.root / "vcs62").exists())
+        self.assertTrue((self.root / "vcs63").exists())
+        self.assertFalse(self.state["VT_STATE"].exists())
+
+    def test_restore_respects_a_later_console_switch(self):
+        modes = self.simulate_console()
+        self.module["prepare"]()
+        self.active_tty.write_text("tty2")
+        self.module["restore_display"]()
+        self.module["restore_display"]()
+        self.assertEqual(self.active_tty.read_text(), "tty2")
+        self.assertEqual(modes[63], 1)
+
+    def test_failed_activation_can_restore_and_start_again(self):
+        modes = self.simulate_console()
+        with patch.dict(self.state, {"_switch_vt": Mock(side_effect=OSError("busy"))}):
+            with self.assertRaises(SystemExit) as failed:
+                self.module["prepare"]()
+        self.assertEqual(failed.exception.code, 255)
+        self.assertEqual(modes[63], self.state["K_OFF"])
+        self.module["prepare"]()
+        self.assertEqual(self.active_tty.read_text(), "tty63")
+        self.module["restore_display"]()
+        self.assertEqual(self.active_tty.read_text(), "tty1")
+        self.assertEqual(modes[63], 1)
+
+    def test_partial_prepare_releases_vt_if_saving_its_mode_fails(self):
+        modes = self.simulate_console()
+        save = self.state["_save_console"]
+
+        def fail_second_save(state):
+            if state["mode"] is not None:
+                raise OSError(errno.ENOSPC, "no space left")
+            save(state)
+
+        with patch.dict(self.state, {"_save_console": fail_second_save}):
+            with self.assertRaises(SystemExit):
+                self.module["prepare"]()
+        self.module["restore_display"]()
+        self.assertEqual(self.active_tty.read_text(), "tty1")
+        self.assertEqual(modes[63], 1)
+        self.assertFalse((self.root / "vcs63").exists())
 
     def connector(self, name, size_cm=None, status="connected"):
         connector = self.drm / name
@@ -133,6 +223,7 @@ class KioskLauncherTest(unittest.TestCase):
         self.assertEqual(target.read_text(), "leave alone")
 
     def test_disabled_display_does_not_touch_panel_power(self):
+        self.simulate_console()
         control = self.panel()
         self.state["_overrides"] = lambda: {"base_config.display.enabled": False}
         with self.assertRaises(SystemExit) as stopped:
@@ -140,6 +231,8 @@ class KioskLauncherTest(unittest.TestCase):
         self.assertEqual(stopped.exception.code, 1)
         self.assertEqual(control.read_text(), "0")
         self.assertFalse((self.root / "backlight.json").exists())
+        self.assertEqual(self.active_tty.read_text(), "tty1")
+        self.assertFalse(self.state["VT_STATE"].exists())
 
 
 class KioskCecTest(unittest.TestCase):
