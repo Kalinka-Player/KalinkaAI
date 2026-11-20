@@ -9,6 +9,7 @@ import '../providers/soundcard_provider.dart';
 import '../providers/supervisor_api.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/keyboard/app_keyboard_navigation.dart';
 import '../widgets/connection_banner.dart';
 import '../widgets/configuration_appearance.dart';
 import '../widgets/settings_top_bar.dart';
@@ -129,7 +130,7 @@ class _RendererSettingsScreenState
         // The renderer is what the page is for, so it is the title.
         SettingsTopBar(
           title: widget.rendererName,
-          autofocusBack: true,
+          entryFocus: KeyboardEntryFocus.scope,
           action: const ExpertModeToggle(),
         ),
         const ConnectionBanner(),
@@ -160,6 +161,7 @@ class _RendererSettingsScreenState
     final card = change?.card;
 
     return SlideInPanel(
+      contentEntryFocus: KeyboardEntryFocus.none,
       onClose: widget.onClose,
       // While the box is down, the overlay is all that says why the app waits.
       beforeClose: () async => _mayClose(box),

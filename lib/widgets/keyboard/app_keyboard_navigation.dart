@@ -13,6 +13,9 @@ import '../../theme/app_theme.dart';
 /// Stable Tab order, independent of the shell's responsive widget order.
 enum AppKeyboardArea { navigation, toolbar, content, playback, player }
 
+/// Which node, if any, should receive focus when a shell region opens.
+enum KeyboardEntryFocus { none, scope, firstControlOnKiosk }
+
 /// Arrow keys move between controls even on platforms that default to scrolling.
 const directionalFocusShortcuts = <ShortcutActivator, Intent>{
   SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(
@@ -191,6 +194,15 @@ class _AppKeyboardNavigationState extends State<AppKeyboardNavigation> {
   void _rememberFocus() {
     final node = FocusManager.instance.primaryFocus;
     final region = _regionOf(node);
+    // A panel can deliberately focus its scope while it waits for navigation.
+    // Let it own the next key even when the opener is still visible beside it.
+    if (region != null &&
+        region.widget.entryFocus == KeyboardEntryFocus.scope &&
+        node == region.scope) {
+      _lastActiveRegion = null;
+      _controller._cancelRequest();
+      return;
+    }
     // Removing a focused page can make Flutter restore a rail control
     // from the route's history before the replacement page has laid out.
     final previous = _lastActiveRegion;
@@ -378,7 +390,7 @@ class _AppKeyboardNavigationState extends State<AppKeyboardNavigation> {
     final region = _regionOf(node);
     if (region != null) {
       if (node == region.scope) {
-        _focusArea(region.widget.area);
+        _focusArea(region.widget.area, within: region);
         return;
       }
       region.move(node!, direction);
@@ -467,13 +479,13 @@ class AppKeyboardRegion extends StatelessWidget {
     required this.child,
     this.bottomInset = 0,
     this.separate = false,
-    this.focusOnEntry = false,
+    this.entryFocus = KeyboardEntryFocus.none,
   });
 
   final AppKeyboardArea area;
   final Widget child;
   final bool separate;
-  final bool focusOnEntry;
+  final KeyboardEntryFocus entryFocus;
 
   /// Content may paint under a fixed bar, but focus must remain above it.
   final double bottomInset;
@@ -487,7 +499,7 @@ class AppKeyboardRegion extends StatelessWidget {
       host: host.state,
       area: area,
       bottomInset: bottomInset,
-      focusOnEntry: focusOnEntry,
+      entryFocus: entryFocus,
       child: child,
     );
   }
@@ -504,12 +516,12 @@ class _RegionMarker extends InheritedWidget {
 class _KeyboardRegion extends StatefulWidget {
   const _KeyboardRegion({
     required this.host,
-    required this.focusOnEntry,
+    required this.entryFocus,
     required this.area,
     required this.bottomInset,
     required this.child,
   });
-  final bool focusOnEntry;
+  final KeyboardEntryFocus entryFocus;
   final _AppKeyboardNavigationState host;
   final AppKeyboardArea area;
   final double bottomInset;
@@ -549,7 +561,8 @@ class _KeyboardRegionState extends State<_KeyboardRegion> {
   void initState() {
     super.initState();
     widget.host._regions.add(this);
-    if (widget.focusOnEntry && widget.host._controller.localKiosk) {
+    if (widget.entryFocus == KeyboardEntryFocus.firstControlOnKiosk &&
+        widget.host._controller.localKiosk) {
       widget.host._focusWhenReady(widget.area, region: this);
     }
   }
@@ -561,8 +574,8 @@ class _KeyboardRegionState extends State<_KeyboardRegion> {
       oldWidget.host._unregister(this);
       widget.host._regions.add(this);
     }
-    if (widget.focusOnEntry &&
-        !oldWidget.focusOnEntry &&
+    if (widget.entryFocus == KeyboardEntryFocus.firstControlOnKiosk &&
+        oldWidget.entryFocus != KeyboardEntryFocus.firstControlOnKiosk &&
         widget.host._controller.localKiosk) {
       widget.host._focusWhenReady(widget.area, region: this);
     }
@@ -815,7 +828,11 @@ class _KeyboardRegionState extends State<_KeyboardRegion> {
   @override
   Widget build(BuildContext context) => _RegionMarker(
     area: widget.area,
-    child: FocusScope(node: scope, child: widget.child),
+    child: FocusScope(
+      node: scope,
+      autofocus: widget.entryFocus == KeyboardEntryFocus.scope,
+      child: widget.child,
+    ),
   );
 }
 
