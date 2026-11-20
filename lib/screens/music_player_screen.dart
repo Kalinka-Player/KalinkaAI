@@ -9,6 +9,8 @@ import '../providers/collections_provider.dart';
 import '../providers/connection_settings_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/demo_mode.dart';
+import '../providers/kalinka_player_api_provider.dart';
+import '../providers/kiosk_provider.dart';
 import '../providers/networked_boxes_provider.dart';
 import '../providers/onboarding_provider.dart';
 import '../providers/pinned_catalogs_provider.dart';
@@ -133,6 +135,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   // The wizard connects, which fires `connected` — these keep the
   // connected-listener from stacking a second wizard or racing itself.
   bool _wizardOpen = false;
+  int _setupGeneration = 0;
   bool _setupCheckBusy = false;
   bool _setupCheckDeferred = false;
 
@@ -209,12 +212,23 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     // serving origin on web — checks whether the server itself still needs
     // setup (see _checkServerNeedsSetup). On web it is the only route in.
     ref.listenManual(connectionStateProvider, (_, next) {
+      _setupGeneration++;
       if (next == ConnectionStatus.connected) {
         _checkServerNeedsSetup();
       }
       // Without a server the player has no track to show.
       if (next == ConnectionStatus.none) _closeExpandedPlayer();
     });
+
+    if (ref.read(localDisplayKioskProvider)) {
+      ref.listenManual(kioskActiveProvider, (_, active) {
+        _setupGeneration++;
+        if (!active &&
+            ref.read(connectionStateProvider) == ConnectionStatus.connected) {
+          _checkServerNeedsSetup(returningHome: true);
+        }
+      });
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // A fixed-server client already has its endpoint from startup.
@@ -320,26 +334,53 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// a fresh server behind a stored connection, one just picked in
   /// discovery, or a setup run that was killed midway. Run the wizard's
   /// setup steps; the connection already exists, so discovery is skipped.
-  Future<void> _checkServerNeedsSetup() async {
-    if (_wizardOpen || _deferredForPicker() || _setupCheckBusy) return;
-    _setupCheckBusy = true;
+  Future<void> _checkServerNeedsSetup({bool returningHome = false}) async {
+    if (_wizardOpen || _deferredForPicker()) return;
+    if (_setupCheckBusy) {
+      _setupCheckDeferred = true;
+      return;
+    }
+    final generation = _setupGeneration;
+    final address = ref.read(connectionSettingsProvider).address;
+    bool current() =>
+        mounted &&
+        generation == _setupGeneration &&
+        address == ref.read(connectionSettingsProvider).address &&
+        ref.read(connectionStateProvider) == ConnectionStatus.connected &&
+        !_wizardOpen &&
+        !_deferredForPicker();
+    setState(() => _setupCheckBusy = true);
     try {
-      await ref.read(settingsProvider.notifier).loadConfig();
-      if (!mounted || _wizardOpen || _deferredForPicker()) return;
+      // Returning from Now Playing can reveal an open settings editor.
+      // Fetch the wizard schema only when this display actually needs setup.
+      if (returningHome) {
+        final setup = await readServerSetup(ref.read(kalinkaProxyProvider));
+        if (!current() || setup?.complete != false) return;
+      }
+      await ref
+          .read(settingsProvider.notifier)
+          .loadConfig(preserveStagedChanges: true);
+      if (!current() || ref.read(settingsProvider).error != null) return;
       if (await leaveDemoAddressIfNotADemo(ref)) {
         showSafeToast(demoServerUnavailable, isError: true);
+        return;
+      }
+      if (!current() ||
+          (ref.read(localDisplayKioskProvider) &&
+              ref.read(kioskActiveProvider))) {
         return;
       }
       final values = ref.read(settingsProvider).values;
       if (values[OnboardingStatusNotifier.serverOobeFlagPath] == false) {
         final offerNetwork = await offerNetworkSetup(ref);
-        if (!mounted || _wizardOpen || _deferredForPicker()) return;
+        if (!current()) return;
         _openWizard(startAtSetup: true, offerNetwork: offerNetwork);
       }
     } finally {
-      _setupCheckBusy = false;
-      // The picker may have closed on another server while this one ran.
-      if (mounted) _runDeferredSetupCheck();
+      if (mounted) {
+        setState(() => _setupCheckBusy = false);
+        _runDeferredSetupCheck();
+      }
     }
   }
 
@@ -1295,7 +1336,13 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   /// from the seeded connection, so the tour would greet every new browser,
   /// whether or not the server has been set up.
   bool get _showCoachMarks {
-    if (kIsWeb) return false;
+    if (kIsWeb || ModalRoute.isCurrentOf(context) != true) return false;
+    // The local first-run flag is seeded at startup. Give the server's setup
+    // check first claim on focus when Home returns from the idle display.
+    if (ref.watch(localDisplayKioskProvider) &&
+        (ref.watch(kioskActiveProvider) || _setupCheckBusy)) {
+      return false;
+    }
     final onboarding = ref.watch(onboardingStatusProvider);
     return onboarding.oobeComplete &&
         !onboarding.coachMarksShown &&

@@ -3,7 +3,26 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'connection_settings_provider.dart';
+import 'kalinka_player_api_provider.dart';
 import 'server_address.dart';
+
+/// Reads the saved setup decision without touching an open editor's drafts.
+Future<({bool complete, String? name})?> readServerSetup(
+  KalinkaPlayerProxy api,
+) async {
+  try {
+    final values = (await api.getSettings())['values'];
+    if (values is! Map) return null;
+    if (values[OnboardingStatusNotifier.serverOobeFlagPath]
+        case final bool complete) {
+      final name = values['base_config.server.service_name'];
+      return (complete: complete, name: name is String ? name : null);
+    }
+  } catch (_) {
+    // The server may still be starting. A failed read cannot decide setup.
+  }
+  return null;
+}
 
 /// First-run state persisted across launches.
 ///
