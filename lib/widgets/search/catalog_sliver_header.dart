@@ -14,6 +14,19 @@ import '../source_badge.dart';
 import '../search_cards/action_pill_button.dart';
 import '../tap_highlight.dart';
 
+/// Where the bar's host draws a folder's actions as its header collapses.
+enum FolderActionsPlace {
+  /// In the header, beside the title or under it.
+  header,
+
+  /// Beside the title, taken into the bar once they reach it.
+  bar,
+
+  /// Under the title, held as they are in a row of their own under the bar
+  /// once the title has scrolled away.
+  underBar,
+}
+
 /// A catalog's identity, which scrolls away with the page and slides under
 /// the bar, handing over to it with Pin once out of sight; a folder's own
 /// actions with it. Search, Filters and Grid/List are the bar's own.
@@ -24,15 +37,23 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
   /// Told when the identity hands over to the bar, and when it is back.
   final ValueChanged<bool>? onCollapsed;
 
-  /// Folder actions can follow a description below the title, reaching the
-  /// toolbar later than the title and Pin.
-  final ValueChanged<bool>? onActionsCollapsed;
+  /// Told where the host should draw the actions it supplies. Folder actions
+  /// can follow a description below the title, reaching the toolbar later
+  /// than the title and Pin.
+  final ValueChanged<FolderActionsPlace>? onActionsPlace;
 
   /// The transparent toolbar's obstruction, kept inside this viewport so
   /// content can paint behind it while keyboard focus clears it.
   final double topInset;
   final Widget? actions;
-  final bool actionsScrollAway;
+
+  /// The host takes [actions] outside the content mask on collapse: into its
+  /// bar from beside the title, or into a row under it from below.
+  final bool barTakesActions;
+
+  /// The host holds [actions] in a row under its bar, which [topInset]
+  /// already counts, so the header no longer keeps their place.
+  final bool actionsUnderBar;
   final double? actionsWidth;
   final bool titleInBar;
   final bool summaryInBar;
@@ -43,10 +64,11 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
     required this.page,
     required this.query,
     this.onCollapsed,
-    this.onActionsCollapsed,
+    this.onActionsPlace,
     this.topInset = 0,
     this.actions,
-    this.actionsScrollAway = false,
+    this.barTakesActions = false,
+    this.actionsUnderBar = false,
     this.actionsWidth,
     this.titleInBar = false,
     this.summaryInBar = false,
@@ -86,7 +108,7 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
 
 class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
   bool? _collapsed;
-  bool? _actionsCollapsed;
+  FolderActionsPlace? _actionsPlace;
   ({
     String title,
     String subtitle,
@@ -116,11 +138,11 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
     });
   }
 
-  void _reportActions(bool collapsed) {
-    if (_actionsCollapsed == collapsed) return;
-    _actionsCollapsed = collapsed;
+  void _reportActions(FolderActionsPlace place) {
+    if (_actionsPlace == place) return;
+    _actionsPlace = place;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.onActionsCollapsed?.call(collapsed);
+      if (mounted) widget.onActionsPlace?.call(place);
     });
   }
 
@@ -132,7 +154,7 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
         !ref.watch(builtinSourcesProvider).contains(sourceOfId(page.id!));
     final scaler = MediaQuery.textScalerOf(context);
     final scale = scaler.scale(16) / 16;
-    final rowHeight = widget.actionsScrollAway
+    final rowHeight = widget.barTakesActions
         ? ActionPillButton.heightOf(context)
         : FilterSearchField.heightFor(context);
     final subtitle = widget.summaryInBar
@@ -253,11 +275,18 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
         final controlsWidth = wide ? folderActions : available;
         final actionsHeight = widget.actions == null ? 0.0 : rowHeight + 8;
         // Only a folder's own actions stay under the bar, held there as its
-        // trail is.
-        final pinnedHeight = CatalogSliverHeader.pinnedExtent(
-          context,
-          actions: widget.actions != null && !widget.actionsScrollAway,
-        );
+        // trail is: a page's own always, a host's from under the title. A
+        // host's beside the title go up into its bar instead.
+        final held =
+            widget.actions != null && (!widget.barTakesActions || !wide);
+        final pinnedHeight = held ? rowHeight + 16 : 0.0;
+        // Once the host holds that row under its bar, the inset counts it.
+        // Measure from the bar's own bottom, so nothing here moves.
+        final barTop =
+            widget.topInset -
+            (held && widget.barTakesActions && widget.actionsUnderBar
+                ? pinnedHeight
+                : 0);
         final headingWidth = wide
             ? available - controlsWidth - identityGap
             : available;
@@ -326,12 +355,12 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
         final collapseExtent = expandedHeight - pinnedHeight;
         // Close under the bar. The identity slides under it with the page and
         // hands over once out of sight, Pin with it.
-        final headingTop = widget.topInset;
+        final headingTop = barTop;
         return SliverPersistentHeader(
           pinned: true,
           delegate: _CatalogHeaderDelegate(
-            minHeight: widget.topInset + pinnedHeight,
-            maxHeight: widget.topInset + expandedHeight,
+            minHeight: barTop + pinnedHeight,
+            maxHeight: barTop + expandedHeight,
             builder: (context, offset) {
               final shrink = offset.clamp(0.0, collapseExtent);
               final settle = collapseExtent <= 0
@@ -339,7 +368,7 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
                   : (shrink / collapseExtent).clamp(0.0, 1.0);
               // Beside a folder's actions, the identity fades over the first
               // half of the collapse, and they cross its column in the second.
-              final fade = wide && !widget.actionsScrollAway
+              final fade = wide && !widget.barTakesActions
                   ? (1 - settle * 2).clamp(0.0, 1.0)
                   : 1.0;
               final spread = wide ? (settle * 2 - 1).clamp(0.0, 1.0) : settle;
@@ -350,34 +379,43 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
               // The toolbar's Pin replaces the expanded Pin at the same
               // point the identity is removed, independently of the actions.
               _report(compact);
-              if (widget.actionsScrollAway) {
+              if (widget.barTakesActions && widget.actions != null) {
+                // Held actions hand over once settled 8dp under the bar,
+                // where the host's row draws them, with the identity gone
+                // and nothing yet beneath them. Others once at the bar.
                 _reportActions(
-                  shrink > 0 &&
-                      shrink >=
-                          math.max(
-                            expandedTop + 8,
-                            math.min(_titleHeight, collapseExtent),
-                          ),
+                  held
+                      ? settle >= 1
+                            ? FolderActionsPlace.underBar
+                            : FolderActionsPlace.header
+                      : shrink > 0 &&
+                            shrink >=
+                                math.max(
+                                  expandedTop + 8,
+                                  math.min(_titleHeight, collapseExtent),
+                                )
+                      ? FolderActionsPlace.bar
+                      : FolderActionsPlace.header,
                 );
               }
               // Attribution follows the title up, fading as it nears the edge.
               final subtitleTop = headingTop + _titleHeight + 4 - shrink;
               final subtitleOpacity = math.min(
-                ((subtitleTop - widget.topInset) / 16).clamp(0.0, 1.0),
+                ((subtitleTop - barTop) / 16).clamp(0.0, 1.0),
                 fade,
               );
               final left = wide ? 16 + available - controlsWidth : 16.0;
               final top = expandedTop - shrink;
               // Up to 8dp under the bar, across the pane, and held there.
               final actionsTop =
-                  widget.topInset +
-                  (widget.actionsScrollAway
-                      ? top + 8
-                      : math.min(
+                  barTop +
+                  (held
+                      ? math.min(
                           math.max(top + 8, 8.0),
                           expandedHeight - shrink - rowHeight - 8,
-                        ));
-              final actionsLeft = widget.actionsScrollAway
+                        )
+                      : top + 8);
+              final actionsLeft = widget.barTakesActions
                   ? left
                   : left + (16 - left) * spread;
               return ColoredBox(
@@ -386,11 +424,12 @@ class _CatalogSliverHeaderState extends ConsumerState<CatalogSliverHeader> {
                 child: ClipRect(
                   child: Stack(
                     children: [
-                      // Only the held folder actions need a surface. Keep it
-                      // below the transparent toolbar and status area.
-                      if (widget.actions != null && !widget.actionsScrollAway)
+                      // Only a page's own held actions need a surface. Keep
+                      // it below the transparent toolbar and status area; a
+                      // host's are held outside its content mask instead.
+                      if (widget.actions != null && !widget.barTakesActions)
                         Positioned.fill(
-                          top: widget.topInset,
+                          top: barTop,
                           child: ColoredBox(
                             color: KalinkaColors.background.withValues(
                               alpha: settle,

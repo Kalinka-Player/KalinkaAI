@@ -119,18 +119,20 @@ class FolderPageActions extends ConsumerWidget {
             ],
           ],
         );
-        return alignRight
-            ? Align(
-                alignment: Alignment.centerRight,
-                child: SizedBox(
-                  width: math.min(
+        // One shape either way, so the chips keep their state, such as
+        // Enqueue's receipt, as the actions move between header and bar.
+        return Align(
+          alignment: Alignment.centerRight,
+          child: SizedBox(
+            width: alignRight
+                ? math.min(
                     constraints.maxWidth,
                     widthFor(context, page, listing, iconOnly: compact),
-                  ),
-                  child: row,
-                ),
-              )
-            : row;
+                  )
+                : constraints.maxWidth,
+            child: row,
+          ),
+        );
       },
     );
   }
