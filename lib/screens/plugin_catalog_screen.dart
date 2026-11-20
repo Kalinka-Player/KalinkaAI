@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -20,7 +22,7 @@ import '../widgets/demo_read_only_dialog.dart';
 import '../widgets/kalinka_button.dart';
 import '../widgets/kalinka_dialog.dart';
 import '../widgets/configuration_appearance.dart';
-import '../widgets/pending_changes_banner.dart';
+import '../widgets/pending_changes.dart';
 import '../widgets/configuration_page.dart';
 import '../widgets/expert_mode_toggle.dart';
 import '../widgets/expert_settings_screen.dart';
@@ -163,50 +165,44 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
         ref.read(upgradeProvider).isUpgrading) {
       return false;
     }
-    if (!ref.read(settingsProvider).hasPendingChanges) return true;
-    final restarts = !ref.read(settingsProvider).onlyLiveChanges;
-    final choice = await showKalinkaDialog<String>(
-      context: context,
-      builder: (context) => KalinkaDialog(
-        side: KalinkaDialogSide.browsing,
-        icon: Icons.tune,
-        title: 'Apply your changes?',
-        message: restarts
-            ? 'You have changes that have not been applied. Applying them restarts Kalinka and briefly stops the music.'
-            : 'These changes apply without restarting Kalinka.',
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 10,
-          children: [
-            KalinkaButton(
-              label: 'Cancel',
-              variant: KalinkaButtonVariant.neutral,
-              fullWidth: true,
-              onTap: () => Navigator.pop(context),
-            ),
-            KalinkaButton(
-              key: const ValueKey('configuration-discard'),
-              label: 'Discard',
-              variant: KalinkaButtonVariant.neutral,
-              fullWidth: true,
-              onTap: () => Navigator.pop(context, 'discard'),
-            ),
-            KalinkaButton(
-              key: const ValueKey('configuration-apply'),
-              label: restarts ? 'Apply & restart' : 'Apply',
-              fullWidth: true,
-              onTap: () => Navigator.pop(context, 'apply'),
-            ),
-          ],
-        ),
+    final settings = ref.read(settingsProvider);
+    if (!settings.hasPendingChanges) return true;
+    final choice = await askAboutPendingChanges(
+      context,
+      items: describeStagedChanges(
+        settings.schema,
+        settings.stagedChanges.keys,
       ),
+      message: settings.onlyLiveChanges
+          ? 'They apply without restarting Kalinka.'
+          : 'Applying them restarts Kalinka and briefly stops the music.',
     );
     if (!mounted) return false;
-    if (choice == 'discard') {
-      ref.read(settingsProvider.notifier).discardAll();
-      return true;
+    switch (choice) {
+      case PendingChangesChoice.discard:
+        ref.read(settingsProvider.notifier).discardAll();
+        return true;
+      case PendingChangesChoice.apply:
+        final applied = await _onApply();
+        // Held back by what the server makes of them: shown where they
+        // can be put right.
+        if (!applied && mounted) _review();
+        return applied;
+      case null:
+        return false;
     }
-    return choice == 'apply' ? _onApply() : false;
+  }
+
+  /// The staged settings the server would refuse as they stand.
+  static List<String> _blockingPaths(SettingsState settings) => [
+    for (final MapEntry(:key, :value) in settings.issues.entries)
+      if (value.any((issue) => issue.isBlocking)) key,
+  ];
+
+  /// Opens what holds applying back, where there is anything.
+  void _review() {
+    final paths = _blockingPaths(ref.read(settingsProvider));
+    if (paths.isNotEmpty) setState(() => _reviewPaths = paths);
   }
 
   bool _rootHandlesBack(bool upgrading) =>
@@ -338,265 +334,250 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     final upgrading = ref.watch(upgradeProvider).isUpgrading;
     final expert = ref.watch(expertModeProvider);
 
-    final issuePaths = settings.issues.entries
-        .where((entry) => entry.value.any((issue) => issue.isBlocking))
-        .map((entry) => entry.key)
-        .toList();
+    final issuePaths = _blockingPaths(settings);
     final issueLabel = issuePaths.isEmpty
         ? null
         : '${configurationIssueLabel(settings.schema, issuePaths.first)}'
               '${issuePaths.length > 1 ? ' and ${issuePaths.length - 1} more' : ''}';
+    final pending = PendingChanges(
+      count: settings.pendingCount,
+      consequence: settings.onlyLiveChanges ? null : 'restarts Kalinka',
+      busy: _applying || _restartOverlayOpen || upgrading,
+      blockedReason: issueLabel == null ? null : 'check $issueLabel',
+      onReview: _review,
+      onDiscard: ref.read(settingsProvider.notifier).discardAll,
+      onApply: _onApply,
+    );
     return ConfigurationAppearance(
       child: Builder(
         builder: (context) {
           // Under the appearance, which sets how wide the gutter is.
           final gutter = ConfigurationAppearance.gutter(context);
-          return Column(
-            children: [
-              Expanded(
-                child: SlideInPanel(
-                  slides: widget.slides,
-                  onClose: widget.onClose,
-                  beforeClose: _beforeClose,
-                  onCoverageChanged: widget.onCoverageChanged,
-                  handlesBack: _rootHandlesBack(upgrading),
-                  overlays: [
-                    if (_settingsFor case final plugin?)
-                      PluginSettingsScreen(
-                        key: ValueKey('plugin-settings-${plugin.id}'),
-                        plugin: plugin,
-                        actions: _actionsFor(plugin),
-                        // About, over it, owns Back while open.
-                        handlesBack:
-                            widget.handlesBack &&
-                            _aboutFor == null &&
-                            _reviewPaths == null &&
-                            !_restartOverlayOpen &&
-                            !upgrading,
-                        onClose: () => setState(() => _settingsFor = null),
-                      ),
-                    if (_aboutFor case final plugin?)
-                      PluginAboutScreen(
-                        key: ValueKey('plugin-about-${plugin.id}'),
-                        plugin: plugin,
-                        actions: _actionsFor(plugin),
-                        handlesBack:
-                            widget.handlesBack &&
-                            _reviewPaths == null &&
-                            !_restartOverlayOpen &&
-                            !upgrading,
-                        onClose: () => setState(() => _aboutFor = null),
-                      ),
-                    if (_networkOpen)
-                      ConfigurationPage(
-                        key: const ValueKey('server-network'),
-                        title: 'Network',
-                        description:
-                            'How your streamer connects to your home network, '
-                            'and the Wi-Fi network it joins.',
-                        onClose: () => setState(() => _networkOpen = false),
-                        handlesBack:
-                            widget.handlesBack &&
-                            _reviewPaths == null &&
-                            !_restartOverlayOpen &&
-                            !upgrading,
-                        bodyBuilder: (heading) => ListView(
-                          padding: const EdgeInsets.only(bottom: 32),
-                          children: [
-                            heading,
-                            // The panel brings its own 20dp inset.
-                            Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: gutter - 20,
-                              ),
-                              child: NetworkSetupPanel(
-                                endpoint: ref
-                                    .read(connectionSettingsProvider)
-                                    .baseUrl
-                                    .replace(port: supervisorPort),
-                              ),
-                            ),
-                          ],
+          // Revert and Apply ride in the top bar of every page Settings
+          // opens, and in the tabs' row where it has no bar of its own.
+          return PendingChangesScope(
+            changes: pending,
+            child: SlideInPanel(
+              slides: widget.slides,
+              onClose: widget.onClose,
+              beforeClose: _beforeClose,
+              onCoverageChanged: widget.onCoverageChanged,
+              handlesBack: _rootHandlesBack(upgrading),
+              overlays: [
+                if (_settingsFor case final plugin?)
+                  PluginSettingsScreen(
+                    key: ValueKey('plugin-settings-${plugin.id}'),
+                    plugin: plugin,
+                    actions: _actionsFor(plugin),
+                    // About, over it, owns Back while open.
+                    handlesBack:
+                        widget.handlesBack &&
+                        _aboutFor == null &&
+                        _reviewPaths == null &&
+                        !_restartOverlayOpen &&
+                        !upgrading,
+                    onClose: () => setState(() => _settingsFor = null),
+                  ),
+                if (_aboutFor case final plugin?)
+                  PluginAboutScreen(
+                    key: ValueKey('plugin-about-${plugin.id}'),
+                    plugin: plugin,
+                    actions: _actionsFor(plugin),
+                    handlesBack:
+                        widget.handlesBack &&
+                        _reviewPaths == null &&
+                        !_restartOverlayOpen &&
+                        !upgrading,
+                    onClose: () => setState(() => _aboutFor = null),
+                  ),
+                if (_networkOpen)
+                  ConfigurationPage(
+                    key: const ValueKey('server-network'),
+                    title: 'Network',
+                    description:
+                        'How your streamer connects to your home network, '
+                        'and the Wi-Fi network it joins.',
+                    onClose: () => setState(() => _networkOpen = false),
+                    handlesBack:
+                        widget.handlesBack &&
+                        _reviewPaths == null &&
+                        !_restartOverlayOpen &&
+                        !upgrading,
+                    bodyBuilder: (heading) => ListView(
+                      padding: const EdgeInsets.only(bottom: 32),
+                      children: [
+                        heading,
+                        // The panel brings its own 20dp inset.
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: gutter - 20,
+                          ),
+                          child: NetworkSetupPanel(
+                            endpoint: ref
+                                .read(connectionSettingsProvider)
+                                .baseUrl
+                                .replace(port: supervisorPort),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (_drivesOpen)
+                  DrivesAndSharesScreen(
+                    key: const ValueKey('server-drives-and-shares'),
+                    onClose: () => setState(() => _drivesOpen = false),
+                    handlesBack:
+                        widget.handlesBack &&
+                        _reviewPaths == null &&
+                        !_restartOverlayOpen &&
+                        !upgrading,
+                  ),
+                if (_logsOpen)
+                  LogExportScreen(
+                    key: const ValueKey('server-logs'),
+                    onClose: () => setState(() => _logsOpen = false),
+                    handlesBack:
+                        widget.handlesBack &&
+                        _reviewPaths == null &&
+                        !_restartOverlayOpen &&
+                        !upgrading,
+                  ),
+                if (_reviewPaths case final paths?)
+                  ConfigurationReviewScreen(
+                    key: const ValueKey('configuration-review'),
+                    paths: paths,
+                    onClose: () => setState(() => _reviewPaths = null),
+                    handlesBack:
+                        widget.handlesBack &&
+                        !_restartOverlayOpen &&
+                        !upgrading,
+                  ),
+                if (_restartOverlayOpen)
+                  RestartOverlay(
+                    onDismiss: () {
+                      setState(() => _restartOverlayOpen = false);
+                      ref.invalidate(modulesStateProvider);
+                      ref.invalidate(pluginUpdatesProvider);
+                    },
+                  ),
+                if (upgrading)
+                  UpgradeOverlay(
+                    onDismiss: () {
+                      if (!ref.read(settingsProvider).hasPendingChanges) {
+                        ref.read(settingsProvider.notifier).loadConfig();
+                      }
+                    },
+                  ),
+              ],
+              child: Material(
+                color: KalinkaColors.background,
+                child: SafeArea(
+                  // Without its bar the tabs take the top inset.
+                  top: !widget.showBack,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Beside the rail, which names it and is how it is
+                      // left, the tabs start at the top.
+                      if (widget.showBack)
+                        SettingsTopBar(
+                          title: 'Settings',
+                          // With its bar, the Expert switch moves up into
+                          // it.
+                          action: _tab == PluginTab.server
+                              ? const ExpertModeToggle()
+                              : null,
+                        ),
+                      ColoredBox(
+                        color: KalinkaColors.background,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [const ConnectionBanner()],
                         ),
                       ),
-                    if (_drivesOpen)
-                      DrivesAndSharesScreen(
-                        key: const ValueKey('server-drives-and-shares'),
-                        onClose: () => setState(() => _drivesOpen = false),
-                        handlesBack:
-                            widget.handlesBack &&
-                            _reviewPaths == null &&
-                            !_restartOverlayOpen &&
-                            !upgrading,
-                      ),
-                    if (_logsOpen)
-                      LogExportScreen(
-                        key: const ValueKey('server-logs'),
-                        onClose: () => setState(() => _logsOpen = false),
-                        handlesBack:
-                            widget.handlesBack &&
-                            _reviewPaths == null &&
-                            !_restartOverlayOpen &&
-                            !upgrading,
-                      ),
-                    if (_reviewPaths case final paths?)
-                      ConfigurationReviewScreen(
-                        key: const ValueKey('configuration-review'),
-                        paths: paths,
-                        onClose: () => setState(() => _reviewPaths = null),
-                        handlesBack:
-                            widget.handlesBack &&
-                            !_restartOverlayOpen &&
-                            !upgrading,
-                      ),
-                    if (_restartOverlayOpen)
-                      RestartOverlay(
-                        onDismiss: () {
-                          setState(() => _restartOverlayOpen = false);
-                          ref.invalidate(modulesStateProvider);
-                          ref.invalidate(pluginUpdatesProvider);
-                        },
-                      ),
-                    if (upgrading)
-                      UpgradeOverlay(
-                        onDismiss: () {
-                          if (!ref.read(settingsProvider).hasPendingChanges) {
-                            ref.read(settingsProvider.notifier).loadConfig();
-                          }
-                        },
-                      ),
-                  ],
-                  child: Material(
-                    color: KalinkaColors.background,
-                    child: SafeArea(
-                      // Without its bar the tabs take the top inset.
-                      top: !widget.showBack,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Beside the rail, which names it and is how it is
-                          // left, the tabs start at the top.
-                          if (widget.showBack)
-                            SettingsTopBar(
-                              title: 'Settings',
-                              // With its bar, the Expert switch moves up into
-                              // it.
-                              action: _tab == PluginTab.server
-                                  ? const ExpertModeToggle()
-                                  : null,
-                            ),
-                          ColoredBox(
-                            color: KalinkaColors.background,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [const ConnectionBanner()],
-                            ),
-                          ),
-                          Expanded(
-                            child: RefreshIndicator(
-                              onRefresh: _refresh,
-                              color: KalinkaColors.accent,
-                              backgroundColor: KalinkaColors.surfaceRaised,
-                              child: CustomScrollView(
-                                key: const ValueKey('catalog-scroll'),
-                                controller: _scroll,
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                slivers: [
-                                  _tabs(_tab, gutter, updateCounts),
-                                  if (_sectionDescription(_tab, gutter)
-                                      case final description?)
-                                    SliverToBoxAdapter(child: description),
-                                  // Expert, the tab is the flat list of
-                                  // every setting, found by name.
-                                  if (_tab == PluginTab.server && expert)
-                                    const ExpertSettingsScreen(sliver: true)
-                                  else if (_tab == PluginTab.server)
-                                    ..._serverSlivers()
-                                  else if (info.isLoading)
-                                    const SliverFillRemaining(
-                                      hasScrollBody: false,
-                                      child: Center(
-                                        child: CircularProgressIndicator(),
-                                      ),
-                                    )
-                                  else if (!available)
-                                    ..._catalogSlivers(
-                                      const PluginCatalog(status: 'disabled'),
-                                      gutter,
-                                      // A failed capability check says
-                                      // nothing about what the server offers.
-                                      notice: info.hasError
-                                          ? _Notice(
-                                              'Could not check what this server offers. Try again.',
-                                              onRetry: _reload,
-                                            )
-                                          : info.value?.pluginCatalogOff == true
-                                          ? const _Notice(
-                                              'The plugin catalog is turned off on this server.',
-                                            )
-                                          // It lists one, but the connection
-                                          // is down for now.
-                                          : info.value?.pluginCatalog == true
-                                          ? const _Notice(
-                                              'The plugin catalog is unavailable until the server is connected again.',
-                                            )
-                                          : const _Notice(
-                                              'This server does not offer the plugin catalog.',
-                                            ),
-                                    )
-                                  else
-                                    ...catalog!.when<List<Widget>>(
-                                      skipLoadingOnRefresh: false,
-                                      data: (data) =>
-                                          _catalogSlivers(data, gutter),
-                                      loading: () => _catalogSlivers(
-                                        const PluginCatalog(
-                                          status: 'unavailable',
-                                        ),
-                                        gutter,
-                                        notice: const Center(
-                                          child: CircularProgressIndicator(),
-                                        ),
-                                      ),
-                                      error: (error, _) => _catalogSlivers(
-                                        const PluginCatalog(
-                                          status: 'unavailable',
-                                        ),
-                                        gutter,
-                                        notice: _Notice(
-                                          error is PluginCatalogException
-                                              ? error.message
-                                              : 'Could not read the plugin catalog. Try again.',
+                      Expanded(
+                        child: RefreshIndicator(
+                          onRefresh: _refresh,
+                          color: KalinkaColors.accent,
+                          backgroundColor: KalinkaColors.surfaceRaised,
+                          child: CustomScrollView(
+                            key: const ValueKey('catalog-scroll'),
+                            controller: _scroll,
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            slivers: [
+                              _tabs(_tab, gutter, updateCounts, pending),
+                              if (_sectionDescription(_tab, gutter)
+                                  case final description?)
+                                SliverToBoxAdapter(child: description),
+                              // Expert, the tab is the flat list of
+                              // every setting, found by name.
+                              if (_tab == PluginTab.server && expert)
+                                const ExpertSettingsScreen(sliver: true)
+                              else if (_tab == PluginTab.server)
+                                ..._serverSlivers()
+                              else if (info.isLoading)
+                                const SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                )
+                              else if (!available)
+                                ..._catalogSlivers(
+                                  const PluginCatalog(status: 'disabled'),
+                                  gutter,
+                                  // A failed capability check says
+                                  // nothing about what the server offers.
+                                  notice: info.hasError
+                                      ? _Notice(
+                                          'Could not check what this server offers. Try again.',
                                           onRetry: _reload,
+                                        )
+                                      : info.value?.pluginCatalogOff == true
+                                      ? const _Notice(
+                                          'The plugin catalog is turned off on this server.',
+                                        )
+                                      // It lists one, but the connection
+                                      // is down for now.
+                                      : info.value?.pluginCatalog == true
+                                      ? const _Notice(
+                                          'The plugin catalog is unavailable until the server is connected again.',
+                                        )
+                                      : const _Notice(
+                                          'This server does not offer the plugin catalog.',
                                         ),
-                                      ),
+                                )
+                              else
+                                ...catalog!.when<List<Widget>>(
+                                  skipLoadingOnRefresh: false,
+                                  data: (data) => _catalogSlivers(data, gutter),
+                                  loading: () => _catalogSlivers(
+                                    const PluginCatalog(status: 'unavailable'),
+                                    gutter,
+                                    notice: const Center(
+                                      child: CircularProgressIndicator(),
                                     ),
-                                ],
-                              ),
-                            ),
+                                  ),
+                                  error: (error, _) => _catalogSlivers(
+                                    const PluginCatalog(status: 'unavailable'),
+                                    gutter,
+                                    notice: _Notice(
+                                      error is PluginCatalogException
+                                          ? error.message
+                                          : 'Could not read the plugin catalog. Try again.',
+                                      onRetry: _reload,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
-              // Under every page Configuration opens, the page shrinking
-              // to make room for it.
-              PendingChangesBanner(
-                key: const ValueKey('configuration-changes'),
-                pendingCount: settings.pendingCount,
-                consequence: settings.onlyLiveChanges
-                    ? null
-                    : 'restart required',
-                busy: _applying || _restartOverlayOpen || upgrading,
-                blocked: issueLabel != null,
-                blockedReason: issueLabel == null ? null : 'check $issueLabel',
-                onReview: () => setState(() => _reviewPaths = issuePaths),
-                onDiscard: ref.read(settingsProvider.notifier).discardAll,
-                onApply: _onApply,
-              ),
-            ],
+            ),
           );
         },
       ),
@@ -799,10 +780,20 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
     return counts;
   }
 
+  static const _tabLabels = [
+    (PluginTab.sources, 'Music sources'),
+    (PluginTab.devices, 'HiFi control'),
+    (PluginTab.server, 'Streamer'),
+  ];
+
+  /// Without a top bar, beside the rail, the row ends with what the bar
+  /// would hold: Revert and Apply, then the Expert switch. Revert and Apply
+  /// are named where the tabs keep their full labels beside them.
   Widget _tabs(
     PluginTab tab,
     double gutter,
     Map<PluginTab, int> updateCounts,
+    PendingChanges pending,
   ) => PinnedHeaderSliver(
     child: AppKeyboardRegion(
       area: ref.watch(localDisplayKioskProvider)
@@ -818,45 +809,76 @@ class PluginCatalogScreenState extends ConsumerState<PluginCatalogScreen> {
             left: gutter - SectionTabButton.horizontalPadding,
             right: gutter,
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Row(
-                  spacing: SectionTabButton.spacing,
-                  children: [
-                    for (final (option, label) in [
-                      (PluginTab.sources, 'Music sources'),
-                      (PluginTab.devices, 'HiFi control'),
-                      (PluginTab.server, 'Streamer'),
-                    ])
-                      Expanded(
-                        flex: label.length,
-                        child: SectionTabButton(
-                          key: ValueKey('catalog-tab-${option.name}'),
-                          label: label,
-                          overflow: TextOverflow.ellipsis,
-                          showBadge: updateCounts[option]! > 0,
-                          semanticLabel: updateCounts[option]! > 0
-                              ? option == PluginTab.server
-                                    ? '$label, system update available'
-                                    : '$label, ${updateCounts[option]} '
-                                          '${updateCounts[option] == 1 ? 'update' : 'updates'} available'
-                              : label,
-                          selected: tab == option,
-                          onTap: () {
-                            setState(() => _tab = option);
-                            _scroll.jumpTo(0);
-                          },
-                        ),
-                      ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final expert = tab == PluginTab.server && !widget.showBack;
+              final changes = widget.showBack || pending.count == 0
+                  ? null
+                  : pending;
+              // The tabs split their room by label length, so each must
+              // still hold its full label at its share of it.
+              final letters = _tabLabels.fold<int>(
+                0,
+                (sum, entry) => sum + entry.$2.length,
+              );
+              final tabsWidth =
+                  _tabLabels
+                      .map(
+                        (entry) =>
+                            SectionTabButton.widthOf(context, entry.$2) *
+                            letters /
+                            entry.$2.length,
+                      )
+                      .reduce(math.max) +
+                  SectionTabButton.spacing * (_tabLabels.length - 1);
+              final labelled =
+                  changes != null &&
+                  tabsWidth +
+                          8 +
+                          PendingChangesActions.labelledWidth(context) +
+                          (expert ? 8 + kKalinkaPillHeight : 0) <=
+                      constraints.maxWidth;
+              return Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      spacing: SectionTabButton.spacing,
+                      children: [
+                        for (final (option, label) in _tabLabels)
+                          Expanded(
+                            flex: label.length,
+                            child: SectionTabButton(
+                              key: ValueKey('catalog-tab-${option.name}'),
+                              label: label,
+                              overflow: TextOverflow.ellipsis,
+                              showBadge: updateCounts[option]! > 0,
+                              semanticLabel: updateCounts[option]! > 0
+                                  ? option == PluginTab.server
+                                        ? '$label, system update available'
+                                        : '$label, ${updateCounts[option]} '
+                                              '${updateCounts[option] == 1 ? 'update' : 'updates'} available'
+                                  : label,
+                              selected: tab == option,
+                              onTap: () {
+                                setState(() => _tab = option);
+                                _scroll.jumpTo(0);
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (changes != null) ...[
+                    const SizedBox(width: 8),
+                    PendingChangesActions(changes: changes, labelled: labelled),
                   ],
-                ),
-              ),
-              if (tab == PluginTab.server && !widget.showBack) ...[
-                const SizedBox(width: 8),
-                const ExpertModeToggle(),
-              ],
-            ],
+                  if (expert) ...[
+                    const SizedBox(width: 8),
+                    const ExpertModeToggle(),
+                  ],
+                ],
+              );
+            },
           ),
         ),
       ),

@@ -15,6 +15,7 @@ paragraph, however long; blank lines separate paragraphs.
 - AI search shows the playlists a service suggests, not only tracks. A service that suggests playlists, as the Qobuz plugin does for a mood or description, gets a card under Inspired by your request that counts and names them; opening it lists them on a Playlists shelf, and the Playlists tab shows them too.
 
 ### Changed
+- The amber Discard / APPLY bar at the foot of settings is gone. While changes are staged, Revert and Apply sit at the top of every settings page, ahead of its other controls, and are named where there is room. Leaving Settings or an output's settings with changes staged lists them and asks whether to apply or discard them; an output's settings used to drop them without asking.
 - Under the Artists, Albums and Playlists tabs, a service's AI suggestions keep their placeholder while it is still searching, and its Retry if it failed, as under Tracks: what kinds it suggests is only known once it answers. An empty list of name matches is no longer shown beside suggestions as if nothing matched.
 
 ## 0.27.0

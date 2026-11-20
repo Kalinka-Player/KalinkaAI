@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kalinka/providers/settings_provider.dart';
-import 'package:kalinka/widgets/pending_changes_banner.dart';
+import 'package:kalinka/widgets/pending_changes.dart';
 import 'package:kalinka/widgets/settings_controls/settings_row.dart';
 import 'package:kalinka/widgets/settings_controls/settings_text_input.dart';
 
@@ -38,13 +38,17 @@ Future<ProviderContainer> _pumpSettings(
                       child: Text(open ? 'Back to queue' : 'Settings'),
                     ),
                     if (open) ...[
-                      PendingChangesBanner(
-                        pendingCount: state.pendingCount,
-                        onDiscard: notifier.discardAll,
-                        onApply: () => onApply?.call(
-                          state.getEffective(_namePath) as String,
+                      if (state.hasPendingChanges)
+                        PendingChangesActions(
+                          labelled: true,
+                          changes: PendingChanges(
+                            count: state.pendingCount,
+                            onDiscard: notifier.discardAll,
+                            onApply: () => onApply?.call(
+                              state.getEffective(_namePath) as String,
+                            ),
+                          ),
                         ),
-                      ),
                       SettingsRow(
                         key: rowKey,
                         label: 'Server name',
@@ -86,11 +90,11 @@ void main() {
     expect(container.read(settingsProvider).getEffective(_namePath), 'Kitchen');
     expect(tester.state(find.byType(SettingsTextInput)), same(inputState));
     expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
-    expect(find.text('APPLY'), findsOneWidget);
+    expect(find.text('Apply'), findsOneWidget);
 
     await tester.enterText(field, 'Kitchen Pi');
     await tester.pumpAndSettle();
-    await tester.tap(find.text('APPLY'));
+    await tester.tap(find.text('Apply'));
     await tester.pump();
     expect(applied, 'Kitchen Pi');
     expect(tester.takeException(), isNull);
@@ -125,7 +129,7 @@ void main() {
     final inputState = tester.state(find.byType(SettingsTextInput));
     await tester.enterText(find.byType(TextField), 'Kitchen');
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Discard'));
+    await tester.tap(find.text('Revert'));
     await tester.pumpAndSettle();
 
     expect(container.read(settingsProvider).hasPendingChanges, isFalse);

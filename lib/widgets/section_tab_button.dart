@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
@@ -31,6 +33,24 @@ class SectionTabButton extends StatelessWidget {
     this.overflow,
     this.showBadge = false,
   });
+
+  /// How wide a tab labelled [label] sets when it is given all it asks for.
+  static double widthOf(BuildContext context, String label) {
+    final painter = TextPainter(
+      // In this style alone: the tab's own text style replaces the ambient
+      // one rather than merging into it.
+      text: TextSpan(
+        text: label.toUpperCase(),
+        style: KalinkaTextStyles.sectionLabel,
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width.ceilToDouble();
+    painter.dispose();
+    return math.max(48, width + 2 * horizontalPadding);
+  }
 
   @override
   Widget build(BuildContext context) {

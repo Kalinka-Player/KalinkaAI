@@ -5,7 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart'
-    show RenderParagraph, RenderRepaintBoundary;
+    show OffsetLayer, RenderParagraph, RenderRepaintBoundary;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,7 +57,6 @@ import 'package:kalinka/widgets/kalinka_dialog.dart';
 import 'package:kalinka/widgets/mini_player.dart';
 import 'package:kalinka/widgets/page_banner.dart';
 import 'package:kalinka/widgets/demo_read_only_dialog.dart';
-import 'package:kalinka/widgets/pending_changes_banner.dart';
 import 'package:kalinka/widgets/configuration_appearance.dart';
 import 'package:kalinka/widgets/settings_controls/settings_action_row.dart';
 import 'package:kalinka/screens/configuration_review_screen.dart';
@@ -746,7 +745,39 @@ Finder _onPage<T>(Finder matching) =>
     find.descendant(of: find.byType(T), matching: matching);
 
 /// Configuration's changes bar, under every page it opens.
-final _changesBar = find.byKey(const ValueKey('configuration-changes'));
+/// Revert and Apply in the top bar of the page on top.
+final _revert = find
+    .byKey(const ValueKey('pending-changes-revert'))
+    .hitTestable();
+final _apply = find
+    .byKey(const ValueKey('pending-changes-apply'))
+    .hitTestable();
+final _dialogDiscard = find.byKey(
+  const ValueKey('pending-changes-dialog-discard'),
+);
+
+/// Writes the whole window, dialogs included, to [path] for review.
+Future<void> _captureWindow(WidgetTester tester, String path) =>
+    tester.runAsync(() async {
+      final view = tester.binding.renderViews.first;
+      // The root layer is in physical pixels; written at 2x.
+      final ratio = view.flutterView.devicePixelRatio;
+      final image = await (view.debugLayer! as OffsetLayer).toImage(
+        Offset.zero & view.size * ratio,
+        pixelRatio: 2 / ratio,
+      );
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      final file = File(path);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes!.buffer.asUint8List());
+      image.dispose();
+    });
+
+/// Dismisses the leave dialog by its scrim, staying on the page.
+Future<void> _stay(WidgetTester tester) async {
+  await tester.tapAt(const Offset(4, 4));
+  await tester.pumpAndSettle();
+}
 
 void main() {
   final captures = Platform.environment['KALINKA_REVIEW_DIR'];
@@ -1534,7 +1565,7 @@ void main() {
       expect(container.read(settingsProvider).stagedChanges, {
         ConfigurationSections.namePath: 'Living room',
       });
-      await tester.tap(find.byKey(const ValueKey('pending-changes-discard')));
+      await tester.tap(_revert);
       await tester.pumpAndSettle();
       expect(find.text('RPi 4B'), findsOneWidget);
       expect(container.read(settingsProvider).hasPendingChanges, isFalse);
@@ -1593,8 +1624,11 @@ void main() {
         settings: settings,
       );
       await _screen(tester, container);
-      expect(find.text('1 change staged · check Service name'), findsOneWidget);
-      await tester.tap(find.text('REVIEW'));
+      expect(
+        find.byTooltip('Cannot apply yet, check Service name'),
+        findsOneWidget,
+      );
+      await tester.tap(_apply);
       await tester.pumpAndSettle();
       expect(find.byType(ConfigurationReviewScreen), findsOneWidget);
       expect(
@@ -1629,18 +1663,18 @@ void main() {
         ),
       );
       await _screen(tester, container, size: const Size(320, 640), scale: 1.8);
-      final summary = tester.widget<Text>(
-        find.text('1 change staged · restart required'),
+      expect(
+        find.byTooltip('Apply 1 change, restarts Kalinka'),
+        findsOneWidget,
       );
-      expect(summary.maxLines, isNull);
-      for (final key in ['pending-changes-discard', 'pending-changes-apply']) {
-        expect(
-          tester.getSize(find.byKey(ValueKey(key))).height,
-          greaterThanOrEqualTo(48),
-        );
-        expect(find.byKey(ValueKey(key)).hitTestable(), findsOneWidget);
+      // No room for their names beside the title: glyphs only, still in
+      // full-size targets, and nothing overflows.
+      expect(find.text('Revert'), findsNothing);
+      for (final action in [_revert, _apply]) {
+        expect(action, findsOneWidget);
+        expect(tester.getSize(action).height, greaterThanOrEqualTo(48));
+        expect(tester.getSize(action).width, greaterThanOrEqualTo(48));
       }
-      expect(tester.getRect(_changesBar).bottom, 640);
       expect(tester.takeException(), isNull);
     },
   );
@@ -1781,11 +1815,10 @@ void main() {
         await back();
         expect(find.text('Apply your changes?'), findsOneWidget);
         expect(closes, 0);
-        await tester.tap(find.text('Cancel'));
-        await tester.pumpAndSettle();
+        await _stay(tester);
         expect(container.read(settingsProvider).hasPendingChanges, isTrue);
         await back();
-        await tester.tap(find.byKey(const ValueKey('configuration-discard')));
+        await tester.tap(_dialogDiscard);
         await tester.pumpAndSettle();
         expect(closes, 1);
         expect(container.read(settingsProvider).hasPendingChanges, isFalse);
@@ -1821,8 +1854,9 @@ void main() {
       settings: settings,
     );
     await _screen(tester, container);
-    expect(find.textContaining('restart required'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('pending-changes-apply')));
+    expect(find.textContaining('restart'), findsNothing);
+    expect(find.byTooltip('Apply 1 change'), findsOneWidget);
+    await tester.tap(_apply);
     await tester.pumpAndSettle();
     expect(restart.calls, 0);
     expect((container.read(settingsProvider.notifier) as _Settings).saves, 1);
@@ -1858,7 +1892,9 @@ void main() {
       await _screen(tester, container, onClose: () => closes++);
       await tester.tap(find.byKey(const ValueKey('settings-back')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('configuration-apply')));
+      await tester.tap(
+        find.byKey(const ValueKey('pending-changes-dialog-apply')),
+      );
       await tester.pump();
       await tester.pump(const Duration(seconds: 3));
       if (result == 'failure') {
@@ -1872,12 +1908,144 @@ void main() {
         result != 'success',
       );
       expect(restart.calls, result == 'validation' ? 0 : 1);
+      // Held back, it shows what to put right.
+      expect(
+        find.byType(ConfigurationReviewScreen),
+        result == 'validation' ? findsOneWidget : findsNothing,
+      );
       expect(
         (container.read(settingsProvider.notifier) as _Settings).saves,
         result == 'success' ? 1 : 0,
       );
     });
   }
+
+  testWidgets('leaving lists what is staged under where it lives', (
+    tester,
+  ) async {
+    var closes = 0;
+    final container = await _container(
+      _Proxy({'enabled': true, 'catalog_browsing': true}),
+      _CatalogApi(_catalog()),
+      settings: _serverSettings().copyWith(
+        stagedChanges: {
+          'base_config.server.service_name': 'Room',
+          'input_modules.localfiles.region': 'GB',
+        },
+      ),
+    );
+    await _screen(tester, container, onClose: () => closes++);
+    await tester.tap(find.byKey(const ValueKey('settings-back')));
+    await tester.pumpAndSettle();
+    final dialog = find.byType(KalinkaDialog);
+    expect(
+      find.descendant(
+        of: dialog,
+        matching: find.byIcon(Icons.warning_amber_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Applying them restarts Kalinka and briefly stops the music.'),
+      findsOneWidget,
+    );
+    final list = find.byKey(const ValueKey('pending-changes-list'));
+    for (final row in ['Server · Service name', 'localfiles · Store region']) {
+      expect(
+        find.descendant(of: list, matching: find.text(row)),
+        findsOneWidget,
+      );
+    }
+    // Two choices, and no third way out but staying.
+    expect(
+      find.descendant(of: dialog, matching: find.byType(KalinkaButton)),
+      findsNWidgets(2),
+    );
+    if (captures != null) {
+      await _captureWindow(tester, '$captures/settings-leave-dialog.png');
+    }
+    await tester.tap(_dialogDiscard);
+    await tester.pumpAndSettle();
+    expect(closes, 1);
+    expect(container.read(settingsProvider).hasPendingChanges, isFalse);
+  });
+
+  for (final (width, named) in [(900.0, true), (320.0, false)]) {
+    testWidgets('Revert and Apply lead the top bar, named: $named at $width', (
+      tester,
+    ) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        settings: _serverSettings().copyWith(
+          stagedChanges: {'base_config.server.service_name': 'Room'},
+        ),
+      );
+      await _screen(tester, container, size: Size(width, 850));
+      await _tapTab(tester, PluginTab.server);
+      final bar = find.byType(SettingsTopBar);
+      Rect rectOf(Finder finder) =>
+          tester.getRect(find.descendant(of: bar, matching: finder));
+      final revert = rectOf(_revert);
+      final apply = rectOf(_apply);
+      final expert = rectOf(find.byKey(const ValueKey('expert-mode-toggle')));
+      final title = rectOf(find.text('Settings'));
+      // Ahead of every other control in the bar, after the title.
+      expect(revert.left, greaterThanOrEqualTo(title.right));
+      expect(revert.right, lessThanOrEqualTo(apply.left));
+      expect(apply.right, lessThanOrEqualTo(expert.left));
+      final labels = [find.text('Revert'), find.text('Apply')];
+      for (final label in labels) {
+        expect(
+          find.descendant(of: bar, matching: label),
+          named ? findsOneWidget : findsNothing,
+        );
+      }
+      expect(tester.takeException(), isNull);
+      if (captures != null) {
+        await _captureWindow(tester, '$captures/settings-top-bar-$width.png');
+      }
+    });
+  }
+
+  testWidgets(
+    'beside the rail Revert and Apply come before Expert in the tabs',
+    (tester) async {
+      final container = await _container(
+        _Proxy({'enabled': true, 'catalog_browsing': true}),
+        _CatalogApi(_catalog()),
+        settings: _serverSettings().copyWith(
+          stagedChanges: {'base_config.server.service_name': 'Room'},
+        ),
+      );
+      await _screen(
+        tester,
+        container,
+        size: const Size(900, 850),
+        showBack: false,
+      );
+      await _tapTab(tester, PluginTab.server);
+      expect(find.byType(SettingsTopBar), findsNothing);
+      final tabs = find.byKey(const ValueKey('catalog-tabs'));
+      Rect rectOf(Finder finder) =>
+          tester.getRect(find.descendant(of: tabs, matching: finder));
+      final streamer = rectOf(find.byKey(const ValueKey('catalog-tab-server')));
+      final revert = rectOf(_revert);
+      final apply = rectOf(_apply);
+      final expert = rectOf(find.byKey(const ValueKey('expert-mode-toggle')));
+      expect(revert.left, greaterThanOrEqualTo(streamer.right));
+      expect(apply.right, lessThanOrEqualTo(expert.left));
+      if (captures != null) {
+        await _captureWindow(tester, '$captures/settings-rail-tabs.png');
+      }
+
+      await tester.tap(_revert);
+      await tester.pumpAndSettle();
+      expect(container.read(settingsProvider).hasPendingChanges, isFalse);
+      expect(_revert, findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('device automation is editable only in expert settings', (
     tester,
@@ -1959,7 +2127,7 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.text('Apply your changes?'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('configuration-discard')));
+    await tester.tap(_dialogDiscard);
     await tester.pumpAndSettle();
     expect(container.read(settingsProvider).hasPendingChanges, false);
     expect(tester.takeException(), isNull);
@@ -2128,10 +2296,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('settings-back')));
       await tester.pumpAndSettle();
       expect(find.text('Apply your changes?'), findsOneWidget);
-      await tester.ensureVisible(find.text('Cancel'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
+      await _stay(tester);
       expect(container.read(settingsProvider).hasPendingChanges, isTrue);
       expect(tester.takeException(), isNull);
     },
@@ -3029,21 +3194,14 @@ void main() {
             .read(settingsProvider.notifier)
             .stageChange('input_modules.localfiles.region', 'gb');
         await tester.pumpAndSettle();
-        final changes = _changesBar;
-        final footerRect = tester.getRect(changes);
-        expect(footerRect.bottom, playerRect.top);
-        expect(
-          tester.getRect(find.byType(PluginSettingsScreen)).bottom,
-          footerRect.top,
-        );
+        // Revert and Apply ride in the page's own top bar; nothing is laid
+        // between the page and the player.
+        expect(_revert, findsOneWidget);
+        expectAbovePlayer(find.byType(PluginSettingsScreen));
         await _about(tester, 'localfiles');
-        expect(changes, findsOneWidget);
-        expect(
-          tester.getRect(find.byType(PluginAboutScreen)).bottom,
-          footerRect.top,
-        );
-        expect(tester.getRect(miniPlayer), playerRect);
-        await tester.tap(find.byKey(const ValueKey('pending-changes-discard')));
+        expect(_revert, findsOneWidget);
+        expectAbovePlayer(find.byType(PluginAboutScreen));
+        await tester.tap(_revert);
         await tester.pumpAndSettle();
         expect(container.read(settingsProvider).hasPendingChanges, isFalse);
         expectAbovePlayer(find.byType(PluginAboutScreen));
@@ -3641,7 +3799,7 @@ void main() {
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('configuration-discard')));
+      await tester.tap(_dialogDiscard);
       await tester.pumpAndSettle();
       expect(panel, findsNothing);
       expect(find.byType(ServerChip).hitTestable(), findsOneWidget);
@@ -3899,9 +4057,9 @@ void main() {
         settings: _settingsWith({'localfiles': true, 'jamendo': false}),
       );
       await _screen(tester, container);
-      int pending() =>
-          tester.widget<PendingChangesBanner>(_changesBar).pendingCount;
+      int pending() => container.read(settingsProvider).pendingCount;
       expect(pending(), 0);
+      expect(_apply, findsNothing);
 
       await _open(tester, 'jamendo');
       final toggle = find.byKey(const ValueKey('plugin-enabled-jamendo'));
@@ -3916,9 +4074,8 @@ void main() {
         _onPage<PluginSettingsScreen>(find.text('Turns on when applied')),
         findsOneWidget,
       );
-      final banner = tester.widget<PendingChangesBanner>(_changesBar);
-      expect(banner.pendingCount, 1);
-      expect(find.text('APPLY'), findsOneWidget);
+      expect(pending(), 1);
+      expect(_apply, findsOneWidget);
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -4028,7 +4185,7 @@ void main() {
       expect(container.read(settingsProvider).stagedChanges, {
         'input_modules.localfiles.region': 'nl',
       });
-      expect(tester.widget<PendingChangesBanner>(_changesBar).pendingCount, 1);
+      expect(_apply, findsOneWidget);
 
       // The Back button returns to the overview and keeps staged edits.
       await tester.tap(find.byKey(const ValueKey('settings-back')).last);
@@ -4166,7 +4323,7 @@ void main() {
       expect(container.read(settingsProvider).stagedChanges, {
         'input_modules.jamendo.enabled': true,
       });
-      await refused(find.text('APPLY'));
+      await refused(_apply);
       expect(settings.saves, 0);
       expect(container.read(settingsProvider).stagedChanges, isNotEmpty);
       expect(tester.takeException(), isNull);
