@@ -736,16 +736,10 @@ void main() {
         final close = find.byTooltip('Close output picker');
         final closeBounds = tester.getRect(close);
         expect(close.hitTestable(), findsOneWidget);
-        final page = find.byTooltip('Scroll down one page');
-        expect(page.hitTestable(), findsOneWidget);
-        await tester.tap(page);
-        await tester.pumpAndSettle();
-        final back = find.byTooltip('Scroll up one page');
-        expect(back.hitTestable(), findsOneWidget);
-        await tester.tap(back);
-        await tester.pumpAndSettle();
-        expect(back, findsNothing);
-        expect(api.selected, isEmpty);
+        final down = find.byKey(const ValueKey('dialog-overflow-down'));
+        final up = find.byKey(const ValueKey('dialog-overflow-up'));
+        expect(down, findsOneWidget);
+        expect(up, findsNothing);
         await tester.scrollUntilVisible(
           find.text('Listening room 11'),
           180,
@@ -755,6 +749,8 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        expect(up, findsOneWidget);
+        expect(api.selected, isEmpty);
         expect(tester.getRect(close), closeBounds);
         expect(close.hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
