@@ -867,15 +867,15 @@ class _PlayingView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     double s(double v) => v * scale;
     final sourceId = sourceOfId(track.id);
+    final album = track.album?.trim();
+    final artist = track.artist?.trim();
     final lines = KioskTrackLines(
       trackId: track.id,
       title: track.title,
-      artist: track.artist ?? '—',
-      album: track.album == null
+      artist: artist == null || artist.isEmpty ? null : artist,
+      album: album == null || album.isEmpty
           ? null
-          : (track.year != null
-                ? '${track.album} · ${track.year}'
-                : track.album),
+          : (track.year != null ? '$album · ${track.year}' : album),
       stream: _stream(ref, sourceId),
       // The tile shows where the player's badge would.
       source: sourceBadgeVisible(ref, track.id) ? sourceId : null,
@@ -1015,7 +1015,7 @@ class _PlayingView extends ConsumerWidget {
                             child: KioskTrackText(
                               lines: lines,
                               scale: scale,
-                              spreadVertically: true,
+                              landscape: true,
                               slideTogether: useWipe,
                             ),
                           ),
