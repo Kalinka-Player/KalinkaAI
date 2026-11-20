@@ -130,7 +130,62 @@ void main() {
     await layout(12, 1200);
     expect(controller.position.viewportDimension, 6);
     expect(down, findsOneWidget);
-    await layout(320, 120);
+    await layout(320, 301);
+    expect(controller.position.viewportDimension, 320);
+    expect(down, findsNothing);
+  });
+
+  testWidgets('viewport-sized content settles when only its footer overflows', (
+    tester,
+  ) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    Future<void> layout(double height, double footer) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                height: height,
+                child: DialogScrollScope(
+                  child: CustomScrollView(
+                    controller: controller,
+                    slivers: [
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: SizedBox(),
+                      ),
+                      SliverToBoxAdapter(child: SizedBox(height: footer)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 16),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 1),
+      );
+    }
+
+    await layout(240, 4);
+    expect(down, findsOneWidget);
+    expect(controller.position.maxScrollExtent, 4);
+    expect(await tabTo(tester, down), isTrue);
+    await layout(300, 1);
+    expect(down, findsOneWidget);
+    expect(focusIsOn(down), isTrue);
+    expect(controller.position.maxScrollExtent, 1);
+    await tester.tap(down);
+    await tester.pumpAndSettle();
+    expect(up, findsOneWidget);
+    expect(down, findsNothing);
+    await layout(300, 0);
+    expect(controller.position.viewportDimension, 300);
+    expect(up, findsNothing);
     expect(down, findsNothing);
   });
 
@@ -218,6 +273,52 @@ void main() {
       expect(up, findsOneWidget);
     },
   );
+
+  testWidgets('paging keeps a newer focus choice made before layout', (
+    tester,
+  ) async {
+    final close = FocusNode();
+    final controller = ScrollController();
+    addTearDown(close.dispose);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              TextButton(
+                focusNode: close,
+                onPressed: () {},
+                child: const Text('Close'),
+              ),
+              SizedBox(
+                height: 200,
+                child: DialogScrollScope(
+                  child: ListView.builder(
+                    controller: controller,
+                    itemCount: 20,
+                    itemExtent: 48,
+                    itemBuilder: (_, i) =>
+                        TextButton(onPressed: () {}, child: Text('Row $i')),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(await tabTo(tester, down), isTrue);
+    controller.jumpTo(controller.position.maxScrollExtent);
+    await tester.idle();
+    close.requestFocus();
+    await tester.idle();
+    expect(close.hasPrimaryFocus, isTrue);
+    await tester.pumpAndSettle();
+    expect(down, findsNothing);
+    expect(close.hasPrimaryFocus, isTrue);
+  });
 
   for (final reducedMotion in [false, true]) {
     testWidgets(

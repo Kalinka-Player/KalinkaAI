@@ -73,11 +73,13 @@ class _ListEdgesState extends State<_ListEdges> {
     after: false,
     band: 0.0,
     moving: false,
+    measuring: false,
     direction: AxisDirection.down,
   );
   var _edges = _empty;
   var _pending = _empty;
   double _appliedBand = 0;
+  ({double viewport, double? range})? _confirmedOverflow;
   List<Widget> _buttons = const [];
   bool _queued = false;
 
@@ -103,6 +105,7 @@ class _ListEdgesState extends State<_ListEdges> {
     super.didUpdateWidget(oldWidget);
     if (widget.position != oldWidget.position ||
         widget.direction != oldWidget.direction) {
+      _confirmedOverflow = null;
       _refresh();
     }
   }
@@ -112,23 +115,23 @@ class _ListEdgesState extends State<_ListEdges> {
     if (!p.hasContentDimensions || !p.hasViewportDimension || !p.hasPixels) {
       return;
     }
-    // Compare to the space the list would have with both controls removed.
-    // Their own footprint must never manufacture overflow on resize.
-    // If a sudden resize leaves no viewport at all, release both bands
-    // first so the next layout measures the new space without them.
     final available = p.viewportDimension == 0
         ? 0.0
         : p.viewportDimension + 2 * _appliedBand;
-    final overflow =
-        available > 0 && p.extentTotal - available > precisionErrorTolerance;
+    final overflow = _hasOverflow(
+      available,
+      p.maxScrollExtent - p.minScrollExtent,
+    );
+    final showButtons = overflow == true;
     // The bands stay the same size from the first to the last page. This
     // keeps a page forward followed by a page back at the original row.
     final next = (
       direction: widget.direction,
-      before: overflow && p.extentBefore > precisionErrorTolerance,
-      after: overflow && p.extentAfter > precisionErrorTolerance,
-      band: overflow ? math.min(_strip, available / 4) : 0.0,
-      moving: overflow && p.isScrollingNotifier.value,
+      measuring: overflow == null,
+      before: showButtons && p.extentBefore > precisionErrorTolerance,
+      after: showButtons && p.extentAfter > precisionErrorTolerance,
+      band: showButtons ? math.min(_strip, available / 4) : 0.0,
+      moving: showButtons && p.isScrollingNotifier.value,
     );
     if (next == _pending) return;
     _pending = next;
@@ -140,6 +143,12 @@ class _ListEdgesState extends State<_ListEdges> {
       _queued = false;
       final edges = _pending;
       if (!mounted || edges == _edges) return;
+      if (edges.measuring) {
+        // Keep the buttons and their focus nodes mounted for the unpadded
+        // measurement. The next layout decides which buttons still belong.
+        setState(() => _edges = edges);
+        return;
+      }
       final forward = edges.direction;
       if (_afterFocus.hasPrimaryFocus && !edges.after) {
         _focusBoundary(forward, edges.before ? _beforeFocus : null);
@@ -170,13 +179,47 @@ class _ListEdgesState extends State<_ListEdges> {
     });
   }
 
+  // Null requests one layout at the list's full size.
+  bool? _hasOverflow(double viewport, double range) {
+    if (viewport == 0 || range <= precisionErrorTolerance) {
+      _confirmedOverflow = null;
+      return false;
+    }
+    if (_appliedBand == 0) {
+      _confirmedOverflow = (viewport: viewport, range: null);
+      return true;
+    }
+    if (range > 2 * _appliedBand + precisionErrorTolerance) {
+      _confirmedOverflow = null;
+      return true;
+    }
+    // The padding alone could explain this range. A viewport-sized sliver
+    // can also have a genuine 1px overflow with or without padding. Keep its
+    // first padded measurement until the viewport or content changes, then
+    // measure once more without padding.
+    final measured = _confirmedOverflow;
+    if (measured == null || measured.viewport != viewport) return null;
+    if (measured.range == null) {
+      _confirmedOverflow = (viewport: viewport, range: range);
+      return true;
+    }
+    return measured.range == range ? true : null;
+  }
+
   // A focused page button can disappear at either end. Keep the remote in
   // the list and let the next activation select the newly reached item.
   void _focusBoundary(AxisDirection edge, FocusNode? fallback) {
     // A jump with reduced motion can report the new offset before the rows
     // on that page have been laid out.
+    final button = FocusManager.instance.primaryFocus!;
+    final scope = button.enclosingScope;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // During detachment focus can be empty or back on the button’s scope.
+      // Keep a newer focus choice, including one on another route.
+      final current = FocusManager.instance.primaryFocus;
+      if (current != null && current != button && current != scope) return;
+      if (ModalRoute.isCurrentOf(context) == false) return;
       final viewport = _contentFocus.rect;
       FocusNode? nearest;
       var distance = double.infinity;
@@ -248,7 +291,10 @@ class _ListEdgesState extends State<_ListEdges> {
             // Keep paging reachable by Tab even as row traversal reveals
             // more rows. The content keeps the popup's own arrow-key policy.
             Positioned.fill(
-              child: FocusTraversalGroup(child: Stack(children: _buttons)),
+              child: Offstage(
+                offstage: _edges.measuring,
+                child: FocusTraversalGroup(child: Stack(children: _buttons)),
+              ),
             ),
           ],
         ),
