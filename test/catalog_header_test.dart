@@ -1810,18 +1810,29 @@ void main() {
   }
 
   // Side insets, as beside a notch, pad the bar but not the page's header:
-  // the row held under the bar must keep the header's gutters.
-  for (final (width, scale, side) in [
-    (1440.0, 1.0, 0.0),
-    (936.0, 1.0, 0.0),
-    (820.0, 1.0, 0.0),
-    (720.0, 1.0, 0.0),
-    (375.0, 1.0, 0.0),
-    (320.0, 2.0, 0.0),
-    (600.0, 1.0, 44.0),
+  // the row held under the bar must keep the header's gutters. A short title
+  // leaves its actions beside it on a pane whose bar has no room for them.
+  const ({String title, String? description}) jazz = (
+    title: 'GrayMic - Jazz Ballads - 478781 --- Jamendo - MP3',
+    description: null,
+  );
+  const ({String title, String? description}) music = (
+    title: 'Music',
+    description: '19 folders',
+  );
+  for (final (width, scale, side, folder) in [
+    (1440.0, 1.0, 0.0, jazz),
+    (936.0, 1.0, 0.0, jazz),
+    (820.0, 1.0, 0.0, jazz),
+    (720.0, 1.0, 0.0, jazz),
+    (375.0, 1.0, 0.0, jazz),
+    (320.0, 2.0, 0.0, jazz),
+    (600.0, 1.0, 44.0, jazz),
+    (600.0, 1.0, 0.0, music),
   ]) {
     testWidgets('library folder actions migrate on scroll at $width / $scale'
-        '${side > 0 ? ', side insets $side' : ''}', (tester) async {
+        '${side > 0 ? ', side insets $side' : ''}'
+        '${folder == music ? ', short title' : ''}', (tester) async {
       final key = GlobalKey();
       final api = _Api(tracks: true);
       final container = await _pump(
@@ -1843,12 +1854,13 @@ void main() {
       session.openFolder(
         BrowseItem(
           id: 'kalinka:localfiles:catalog:folder.music',
-          name: 'GrayMic - Jazz Ballads - 478781 --- Jamendo - MP3',
+          name: folder.title,
           canBrowse: true,
           canAdd: true,
           catalog: Catalog(
             id: 'music',
-            title: 'GrayMic - Jazz Ballads - 478781 --- Jamendo - MP3',
+            title: folder.title,
+            description: folder.description,
             previewConfig: Preview(type: PreviewType.folder),
           ),
         ),
@@ -1869,7 +1881,9 @@ void main() {
       expect(tester.getRect(up).right, closeTo(pageRect.right - 16, .1));
       // Beside the title the actions sit level with it; under it, below.
       final beside = tester.getRect(play).top < tester.getRect(title).bottom;
-      expect(beside, width >= 720);
+      expect(beside, width >= 720 || folder == music);
+      // Only a bar with room for them as they are takes them into its row.
+      final intoBar = beside && width >= 936;
       if (beside) {
         expect(
           tester.getRect(play).left,
@@ -1887,26 +1901,53 @@ void main() {
       final expandedRect = tester.getRect(actions);
       final expandedPlay = tester.getRect(play);
       final labelled = !tester.widget<PlayAllChip>(play).iconOnly;
+      final shots =
+          'library-folder-$width-$scale'
+          '${side > 0 ? '-side' : ''}${folder == music ? '-short' : ''}';
       expect(width >= 936 ? _barField : _barSearch, findsOneWidget);
-      await _capture(tester, key, 'library-folder-$width-$scale-expanded');
+      await _capture(tester, key, '$shots-expanded');
       await tester.tap(enqueue);
       await tester.pumpAndSettle();
       final requests = api.calls.length;
       final scroll = tester.state<ScrollableState>(_scrollable).position;
-      if (!beside) {
+      if (!intoBar) {
         // The title scrolls away while the actions rise with the page until
         // they settle 8dp under the bar, then stay there as they were. The
-        // listing follows the scroll exactly across the handover.
+        // listing follows the scroll exactly across the handover. Beside
+        // the title, they spread across the pane on the way, Play all and
+        // Enqueue to its start, as they are laid out under a longer one.
         final bar =
             pageRect.top +
             tester
                 .widget<CatalogPageView>(find.byType(CatalogPageView))
                 .topBarInset;
         final heldAt = expandedRect.top - bar - 8;
+        expect(heldAt, greaterThan(12));
+        final heldRect = Rect.fromLTRB(
+          beside ? pageRect.left + 16 : expandedRect.left,
+          expandedRect.top - heldAt,
+          expandedRect.right,
+          expandedRect.bottom - heldAt,
+        );
         final row = find.text('Track 1');
         final rowTop = tester.getRect(row).top;
+        if (beside) {
+          // In order as the page scrolls, and across the title's column
+          // only once it has faded out of their way.
+          var last = expandedRect.left;
+          for (var offset = 0.0; offset < heldAt; offset += 2) {
+            scroll.jumpTo(offset);
+            await tester.pump();
+            final left = tester.getRect(actions).left;
+            expect(left, lessThanOrEqualTo(last + .01), reason: '$offset');
+            if (left < expandedRect.left - .01) expect(title, findsNothing);
+            expect(tester.getRect(up).right, closeTo(pageRect.right - 16, .1));
+            last = left;
+          }
+        }
         for (final offset in [
           heldAt - 12,
+          heldAt - 6,
           heldAt - 1,
           heldAt,
           heldAt + 1,
@@ -1926,15 +1967,30 @@ void main() {
             find.byKey(const ValueKey('folder-toolbar-second-row')),
             held ? findsOneWidget : findsNothing,
           );
+          final rect = tester.getRect(actions);
           expect(
-            tester.getRect(actions),
-            expandedRect.shift(Offset(0, -math.min(offset, heldAt))),
+            rect.top,
+            closeTo(expandedRect.top - math.min(offset, heldAt), .01),
             reason: 'actions at offset $offset',
           );
-          expect(
-            tester.getRect(play),
-            expandedPlay.shift(Offset(0, -math.min(offset, heldAt))),
-          );
+          expect(rect.right, closeTo(expandedRect.right, .01));
+          expect(rect.height, closeTo(expandedRect.height, .01));
+          if (held) {
+            expect(rect, heldRect, reason: 'held at offset $offset');
+          } else if (!beside) {
+            expect(rect.left, closeTo(expandedRect.left, .01));
+          } else {
+            expect(
+              rect.left,
+              inInclusiveRange(heldRect.left, expandedRect.left),
+            );
+          }
+          if (!beside) {
+            expect(
+              tester.getRect(play),
+              expandedPlay.shift(Offset(0, -math.min(offset, heldAt))),
+            );
+          }
           expect(tester.widget<PlayAllChip>(play).iconOnly, !labelled);
           expect(
             tester.getRect(row).top,
@@ -1954,11 +2010,7 @@ void main() {
           }
           expect(tester.takeException(), isNull);
           if (offset == heldAt - 12 || offset == heldAt + 40) {
-            await _capture(
-              tester,
-              key,
-              'library-folder-$width-$scale-${held ? 'held' : 'rising'}',
-            );
+            await _capture(tester, key, '$shots-${held ? 'held' : 'rising'}');
           }
         }
       }
@@ -1967,9 +2019,9 @@ void main() {
       expect(_inPage(actions), findsNothing);
       expect(play.hitTestable(), findsOneWidget);
       expect(up.hitTestable(), findsOneWidget);
-      // Into the bar beside the title, they fold to icons where it is
-      // short; held under it, they stay as they were laid out.
-      final compact = beside ? width <= 820 : !labelled;
+      // Into the bar or held under it, they stay as they were laid out,
+      // never folded to icons on the way.
+      final compact = !labelled;
       expect(tester.widget<PlayAllChip>(play).iconOnly, compact);
       expect(tester.widget<AddAllChip>(enqueue).iconOnly, compact);
       expect(
@@ -1977,15 +2029,18 @@ void main() {
         compact ? findsOneWidget : findsNothing,
       );
       expect(api.calls.length, requests);
-      if (!beside) {
+      if (!intoBar) {
+        expect(
+          find.byKey(const ValueKey('folder-toolbar-second-row')),
+          findsOneWidget,
+        );
         expect(tester.getRect(play).left, closeTo(pageRect.left + 16, .1));
         expect(tester.getRect(up).right, closeTo(pageRect.right - 16, .1));
         expect(
           tester.getRect(actions).top,
           greaterThanOrEqualTo(tester.getRect(back).bottom),
         );
-      }
-      if (beside) {
+      } else {
         expect(
           tester.getRect(actions).center.dy,
           closeTo(tester.getRect(back).center.dy, .1),
@@ -2002,19 +2057,16 @@ void main() {
         );
         expect(
           tester.getSize(find.byType(FolderTrail)).width,
-          greaterThanOrEqualTo(width == 720 ? 292 : 300),
+          greaterThanOrEqualTo(300),
         );
         final current = find.descendant(
           of: find.byType(FolderTrail),
-          matching: find.widgetWithText(
-            BreadcrumbCrumb,
-            'GrayMic - Jazz Ballads - 478781 --- Jamendo - MP3',
-          ),
+          matching: find.widgetWithText(BreadcrumbCrumb, folder.title),
         );
         expect(tester.getSize(current).width, greaterThan(160));
         expect(width >= 1200 ? _barField : _barSearch, findsOneWidget);
       }
-      await _capture(tester, key, 'library-folder-$width-$scale-collapsed');
+      await _capture(tester, key, '$shots-collapsed');
       scroll.jumpTo(0);
       await tester.pumpAndSettle();
       expect(_inPage(actions), findsOneWidget);

@@ -112,6 +112,10 @@ class CatalogPageView extends ConsumerStatefulWidget {
   /// [topBarInset].
   final bool folderActionsUnderBar;
 
+  /// The host's bar has room in its own row for [folderHeaderActions] as they
+  /// are beside the title; see [CatalogSliverHeader.barHasRoom].
+  final bool folderActionsFitBar;
+
   /// The wide album owns its header so it can use the listing's live metadata.
   final VoidCallback? onAlbumBack;
   final VoidCallback? onServerTap;
@@ -134,6 +138,7 @@ class CatalogPageView extends ConsumerStatefulWidget {
     this.folderActionsInHeader = false,
     this.folderHeaderActions,
     this.folderActionsUnderBar = false,
+    this.folderActionsFitBar = true,
     this.onAlbumBack,
     this.onServerTap,
     this.titleInBar = false,
@@ -491,6 +496,7 @@ class _CatalogPageViewState extends ConsumerState<CatalogPageView> {
             titleInBar: widget.titleInBar,
             summaryInBar: widget.titleInBar && widget.onCatalogSummary != null,
             barTakesActions: widget.folderHeaderActions != null,
+            barHasRoom: widget.folderActionsFitBar,
             actionsUnderBar: widget.folderActionsUnderBar,
             actionsWidth: widget.folderHeaderActions == null
                 ? null
