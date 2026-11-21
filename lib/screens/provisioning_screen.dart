@@ -40,8 +40,8 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
   final _password = TextEditingController();
   late final SharedPreferences _prefs = ref.read(sharedPrefsProvider);
   late final String? _localeCountry;
-  String? _country;
-  bool _countryChosen = false;
+  String? _chosenCountry;
+  String? _chosenCountryBox;
   final _client = Dio(
     BaseOptions(
       connectTimeout: const Duration(seconds: 2),
@@ -60,7 +60,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
   @override
   void initState() {
     super.initState();
-    _localeCountry = _country = localeWifiCountry(
+    _localeCountry = localeWifiCountry(
       WidgetsBinding.instance.platformDispatcher.locales,
     );
     _setup = ProvisioningController(
@@ -71,6 +71,11 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     unawaited(_setup.scan());
   }
 
+  String? get _country =>
+      _chosenCountry ??
+      savedWifiCountry(_prefs, _setup.identity) ??
+      _localeCountry;
+
   bool get _validCountry => wifiCountries.containsKey(_country);
 
   Future<void> _scanWifi() async {
@@ -79,14 +84,16 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
 
   void _chooseCountry(String country, {bool rescan = false}) {
     setState(() {
-      _country = country;
-      _countryChosen = true;
+      _chosenCountry = country;
+      _chosenCountryBox = _setup.selected?.id;
     });
     saveWifiCountry(_prefs, _setup.identity, country);
     if (rescan) unawaited(_scanWifi());
   }
 
   Future<void> _selectBox(NearbyBox box) async {
+    // Another streamer's choice must not override the region kept for this one.
+    if (box.id != _chosenCountryBox) _chosenCountry = null;
     await _setup.select(box);
     if (mounted) await _scanWifi();
   }
@@ -120,9 +127,6 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
 
   void _changed() {
     if (!mounted) return;
-    if (!_countryChosen) {
-      _country = savedWifiCountry(_prefs, _setup.identity) ?? _localeCountry;
-    }
     if (_lastPhase != _setup.phase) {
       _lastPhase = _setup.phase;
       if (_scroll.hasClients) _scroll.jumpTo(0);
@@ -139,8 +143,9 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
       _finished = true;
       _password.clear();
       // Its Core may have had no id yet when the region was chosen.
-      if (_countryChosen) {
-        saveWifiCountry(_prefs, _setup.endpoint?.serverId, _country!);
+      final chosen = _chosenCountry;
+      if (chosen != null) {
+        saveWifiCountry(_prefs, _setup.endpoint?.serverId, chosen);
       }
       Navigator.of(context).pop(_setup.endpoint);
       return;
