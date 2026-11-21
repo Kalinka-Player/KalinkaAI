@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data_model/wifi_countries.dart';
-import '../../providers/box_control_provider.dart';
 import '../../providers/connection_settings_provider.dart';
 import '../../providers/network_setup_api.dart';
 import '../../theme/app_theme.dart';
@@ -71,23 +70,16 @@ class _NetworkSetupPanelState extends ConsumerState<NetworkSetupPanel> {
 
   bool get _validCountry => wifiCountries.containsKey(_country);
 
-  String? get _savedCountryKey {
-    final id = _data?['server_id'];
-    return id is String && id.isNotEmpty
-        ? ServerStorageKey.ofServer(id).wifiCountry
-        : null;
-  }
+  String? get _serverId => switch (_data?['server_id']) {
+    final String id => id,
+    _ => null,
+  };
 
   /// The region last chosen for this streamer, else the one it is set to.
   String? get _streamerCountry {
-    final key = _savedCountryKey;
-    for (final country in [
-      if (key != null) _prefs.getString(key),
-      _data?['wifi_country'],
-    ]) {
-      if (wifiCountries.containsKey(country)) return country as String;
-    }
-    return null;
+    final reported = _data?['wifi_country'];
+    return savedWifiCountry(_prefs, _serverId) ??
+        (wifiCountries.containsKey(reported) ? reported as String : null);
   }
 
   Map get _setup => _data?['setup'] as Map? ?? const {};
@@ -359,9 +351,7 @@ class _NetworkSetupPanelState extends ConsumerState<NetworkSetupPanel> {
                   _country = country;
                   _countryChosen = true;
                 });
-                if (_savedCountryKey case final key?) {
-                  _prefs.setString(key, country).ignore();
-                }
+                saveWifiCountry(_prefs, _serverId, country);
                 _scan();
               },
       ),

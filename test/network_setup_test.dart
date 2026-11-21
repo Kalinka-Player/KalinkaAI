@@ -4,9 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/network_setup_api.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
@@ -22,6 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/focus.dart';
 import 'support/home_shell.dart';
 import 'support/field_text.dart';
+import 'support/prefs_scope.dart';
 
 class FakeSetupApi extends NetworkSetupApi {
   final Map<String, dynamic> response;
@@ -87,17 +86,6 @@ final scanAgain = find.ancestor(
   of: find.byTooltip('Scan again'),
   matching: find.byType(IconButton),
 );
-
-Future<Widget> withPrefs(Widget app, [SharedPreferences? prefs]) async {
-  if (prefs == null) {
-    SharedPreferences.setMockInitialValues({});
-    prefs = await SharedPreferences.getInstance();
-  }
-  return ProviderScope(
-    overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
-    child: app,
-  );
-}
 
 Future<void> mountPanel(
   WidgetTester tester,
