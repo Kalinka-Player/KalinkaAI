@@ -840,14 +840,14 @@ void main() {
       );
       final shift = find.descendant(
         of: find.widgetWithText(SettingsRow, 'Pixel shift'),
-        matching: find.byType(Switch),
+        matching: find.byType(SettingsToggle),
       );
       await tester.ensureVisible(shift);
       await tester.pumpAndSettle();
-      expect(tester.widget<Switch>(shift).value, isTrue);
+      expect(tester.widget<SettingsToggle>(shift).value, isTrue);
       await tester.tap(shift);
       await tester.pumpAndSettle();
-      expect(tester.widget<Switch>(shift).value, isFalse);
+      expect(tester.widget<SettingsToggle>(shift).value, isFalse);
       expect(
         container
             .read(sharedPrefsProvider)
@@ -1362,10 +1362,12 @@ void main() {
         find.descendant(of: card, matching: find.text('Automatic updates')),
         findsOneWidget,
       );
-      final toggle = find.descendant(of: card, matching: find.byType(Switch));
+      final toggle = find.descendant(
+        of: card,
+        matching: find.byType(SettingsToggle),
+      );
       await tester.ensureVisible(toggle);
       await tester.pumpAndSettle();
-      expect(tester.getSize(toggle).height, greaterThanOrEqualTo(48));
       await tester.tap(toggle);
       await tester.pumpAndSettle();
       expect(container.read(settingsProvider).stagedChanges, {

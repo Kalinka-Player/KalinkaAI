@@ -6,6 +6,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalinka/widgets/settings_controls/settings_toggle.dart';
 import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/box_power_off_timer_provider.dart';
 import 'package:kalinka/providers/settings_provider.dart';
@@ -655,7 +656,7 @@ void main() {
         tester.getTopLeft(find.text('Power-off timer')).dy,
         greaterThan(tester.getTopLeft(find.text('Power off streamer')).dy),
       );
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byType(SettingsToggle));
       await tester.pumpAndSettle();
       expect(find.text('Power off after'), findsOneWidget);
       expect(find.text('min'), findsOneWidget);
@@ -668,16 +669,19 @@ void main() {
         boxPowerOffMinutesPath: 45,
       });
       await tester.enterText(find.byType(TextField), '60');
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byType(SettingsToggle));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('Power off after'), findsNothing);
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byType(SettingsToggle));
       await tester.pumpAndSettle();
       expect(find.text('60'), findsOneWidget);
       container.read(settingsProvider.notifier).discardAll();
       await tester.pumpAndSettle();
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(
+        tester.widget<SettingsToggle>(find.byType(SettingsToggle)).value,
+        isFalse,
+      );
       expect(box.runs, isEmpty);
     });
 
@@ -695,7 +699,7 @@ void main() {
       testWidgets('hides timer for $name', (tester) async {
         await pump(tester, answer: info, settings: settings);
         expect(find.text('Power-off timer'), findsNothing);
-        expect(find.byType(Switch), findsNothing);
+        expect(find.byType(SettingsToggle), findsNothing);
       });
     }
 
