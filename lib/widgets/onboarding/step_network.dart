@@ -127,7 +127,9 @@ class _NetworkSetupPanelState extends ConsumerState<NetworkSetupPanel> {
       if (!mounted || revision != _revision) return;
       setState(() {
         _data = data;
-        if (!_countryChosen) _country = _streamerCountry ?? _country;
+        if (!_countryChosen && !_scanStarted) {
+          _country = _streamerCountry ?? _country;
+        }
         final state = _setup['state'];
         if (_changingNetwork && state != 1) _changingNetwork = false;
         if (state == 3) {
