@@ -9,6 +9,16 @@ import 'keyboard/app_keyboard_navigation.dart';
 import 'settings_controls/option_picker.dart';
 import 'settings_controls/settings_action_row.dart';
 
+/// The first of [locales] whose country is a Wi-Fi region. flutter-pi lists a
+/// bare `en` before `en_GB`, so the first locale alone may have none.
+String? localeWifiCountry(Iterable<Locale> locales) {
+  for (final locale in locales) {
+    final country = locale.countryCode?.toUpperCase();
+    if (wifiCountries.containsKey(country)) return country;
+  }
+  return null;
+}
+
 /// Selects the regulatory region used for Wi-Fi scanning and joining.
 class WifiCountrySelector extends StatefulWidget {
   final String? country;

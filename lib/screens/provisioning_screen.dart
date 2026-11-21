@@ -56,8 +56,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
   void initState() {
     super.initState();
     _country =
-        WidgetsBinding.instance.platformDispatcher.locale.countryCode
-            ?.toUpperCase() ??
+        localeWifiCountry(WidgetsBinding.instance.platformDispatcher.locales) ??
         'GB';
     _setup = ProvisioningController(
       widget.transport ?? createProvisioningTransport(),

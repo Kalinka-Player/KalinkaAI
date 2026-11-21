@@ -809,6 +809,36 @@ void main() {
     },
   );
 
+  testWidgets('scans under the first locale that names a country', (
+    tester,
+  ) async {
+    tester.platformDispatcher.localesTestValue = const [
+      Locale('en'),
+      Locale('de', 'DE'),
+    ];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+    final transport = FakeTransport()..canScan = true;
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.dark(),
+          home: ProvisioningScreen(transport: transport),
+        ),
+      ),
+    );
+    await tester.pump();
+    transport.stream.add(const NearbyBox('radio', 'Box'));
+    await tester.pump();
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+    expect(
+      transport.commands.firstWhere((c) => c['op'] == 'scan')['country'],
+      'DE',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
   testWidgets('the Wi-Fi fields draw what is typed in primary text', (
     tester,
   ) async {
