@@ -339,6 +339,8 @@ class _AutomaticUpdates extends StatelessWidget {
       return SchemaFieldRenderer(field: field);
     }
     final binding = SettingsScope.of(context);
+    final on =
+        (binding.effectiveValue(field.path) ?? field.defaultValue) == true;
     return SettingsRow(
       label: 'Automatic updates',
       sublabel: 'Between 3–6 AM when idle. Restarts after updating.',
@@ -346,12 +348,10 @@ class _AutomaticUpdates extends StatelessWidget {
       issues: binding.issuesFor(field.path),
       control: Semantics(
         label: 'Automatic updates',
-        child: Switch(
-          value:
-              (binding.effectiveValue(field.path) ?? field.defaultValue) ==
-              true,
+        toggled: on,
+        child: SettingsToggle(
+          value: on,
           onChanged: (value) => binding.stage(field.path, value),
-          materialTapTargetSize: MaterialTapTargetSize.padded,
         ),
       ),
     );
