@@ -3,21 +3,17 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 
 import '../../data_model/data_model.dart';
-import '../../utils/web_build_target.dart';
 import '../../utils/compact_pane_layout.dart';
 import '../loading_shimmer.dart';
 import 'artwork_grid_card.dart';
 
 /// Covers of about 180–220 across, more columns as the pane grows, never
 /// narrower than a readable caption; [wide] art, a category's card or a
-/// banner, about 220–340. A track keeps its row, which needs 68% more room
+/// banner, about 300–340. A track keeps its row, which needs 68% more room
 /// than a cover to read.
 ///
-/// On wasm, CatalogCard locks a wide card's height to width/3 (see there),
-/// so unlike a square cover it has no room to spare: below ~300 a 2-line
-/// title plus subtitle no longer fits that fixed height and would clip.
-/// Off wasm the card still grows with a tall caption, so the original,
-/// looser minimum holds.
+/// Wide cards stay at least ~300 across: narrower, a card's 2-line title
+/// and subtitle crowd its art, and fewer, larger cards read better.
 int artworkGridColumns(
   double width,
   double scale, {
@@ -28,15 +24,13 @@ int artworkGridColumns(
   // Each card is its cover with a frame inset either side.
   const frame = 2 * ArtworkGridCard.inset;
   final grow = tracks ? 1.68 : 1.0;
-  final wideFitsFloor = wide && compiledToWasm ? 300 : 220;
   final target = wide
       ? 340
       : compact && !tracks
       ? 176
       : 220;
   final wanted = (width / (target * grow * scale + frame)).ceil();
-  final fits = (width / ((wide ? wideFitsFloor : 140) * grow * scale + frame))
-      .floor();
+  final fits = (width / ((wide ? 300 : 140) * grow * scale + frame)).floor();
   return wanted.clamp(1, fits < 1 ? 1 : fits).clamp(1, 10);
 }
 
