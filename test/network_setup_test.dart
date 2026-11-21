@@ -580,6 +580,21 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
+    testWidgets('stays once scanned when the streamer reports another', (
+      tester,
+    ) async {
+      final api = FakeSetupApi(status(wifiCountry: 'DE'));
+      await mountPanel(tester, api);
+      await finishScan(tester);
+      api.response['wifi_country'] = 'NL';
+      await finishScan(tester);
+      expect(find.text('Germany (DE)'), findsOneWidget);
+      await manualCredentials(tester);
+      await join(tester);
+      expect(api.payloads.last['country'], 'DE');
+      await tester.pumpWidget(const SizedBox());
+    });
+
     testWidgets('stays as chosen when the streamer reports another', (
       tester,
     ) async {
