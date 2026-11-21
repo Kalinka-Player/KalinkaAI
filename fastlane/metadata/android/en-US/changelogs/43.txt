@@ -1,0 +1,5 @@
+- Tap the format line in Now Playing to see the signal path, with the renderer's DSP steps and clipping (server 5.20.0, renderer 0.16.0)
+- AI search suggests playlists as well as tracks (Qobuz plugin 5.6.0)
+- Choosing a Web Radio station plays that station alone (server 5.20.0)
+- Apply and Revert sit at the top of settings, and leaving with unsaved changes asks first
+- 12- or 24-hour clock, and searchable Wi-Fi region picker

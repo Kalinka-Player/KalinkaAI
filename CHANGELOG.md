@@ -8,15 +8,36 @@ Do not hard-wrap the notes: GitHub renders a newline inside a release body as
 a line break, so a wrapped sentence arrives broken. One line per bullet or
 paragraph, however long; blank lines separate paragraphs.
 
-## Unreleased
+## 0.28.0
+
+A TV remote drives the Raspberry Pi display, Now Playing shows the signal path down to the renderer's DSP, AI search suggests playlists, and Web Radio stations play one at a time. Works with server 5.19.0 or later. The DSP steps and clipping in the signal path need server 5.20.0 and renderer 0.16.0, and playing a single station needs server 5.20.0; against an older server, the signal path shows the formats it is given and a station listing plays like any other listing.
 
 ### Added
 - On a Raspberry Pi display, an HDMI-CEC TV remote can navigate Kalinka and control playback. Arrow keys move between the navigation rail, main pane and Now Playing or Queue. Down at the end of a pane enters the mini-player, and Up returns. Back follows browsing history and focuses the rail at the root of a destination. Rewind and Fast Forward seek five seconds per tap and accelerate when held.
-- AI search shows the playlists a service suggests, not only tracks. A service that suggests playlists, as the Qobuz plugin does for a mood or description, gets a card under Inspired by your request that counts and names them; opening it lists them on a Playlists shelf, and the Playlists tab shows them too.
+- Tapping the source and format line in Now Playing opens the signal path: the track's source, its decoded format, native DSD, DSD over PCM or DSD to PCM conversion, software attenuation and the output, with the stream details and a copy action. With renderer 0.16.0 and server 5.20.0 it lists each step the renderer's DSP takes, such as DSD to PCM with its rates and filter, and the latency they add, and counts in red the samples a track clipped.
+- AI search shows the playlists a service suggests, not only tracks. A service that suggests playlists, as the Qobuz plugin does from 5.6.0 for a mood or description, gets a card under Inspired by your request that counts and names them; opening it lists them on a Playlists shelf, and the Playlists tab shows them too.
+- Time format offers a 12- or 24-hour clock for the screen in use. A streamer's display showed 12-hour time whatever its time zone; until a choice is made, the device's own preference stands.
+- A list in a dialog, popup or bottom sheet that holds more than fits shows a page button at its edge, which moves one page with a tap, a click, the keyboard or a remote.
+- Choosing the Wi-Fi region in the streamer's network settings, the setup wizard, hotspot setup and Bluetooth setup opens one searchable list, current country first, searchable by name or two-letter code.
 
 ### Changed
+- In a Web Radio listing, choosing a station plays that station alone instead of queueing every station after it. Add to queue is unchanged.
 - The amber Discard / APPLY bar at the foot of settings is gone. While changes are staged, Revert and Apply sit at the top of every settings page, ahead of its other controls, and are named where there is room. Leaving Settings or an output's settings with changes staged lists them and asks whether to apply or discard them; an output's settings used to drop them without asking.
+- The display settings sit on the Streamer tab under This display, in place of a page of their own.
 - Under the Artists, Albums and Playlists tabs, a service's AI suggestions keep their placeholder while it is still searching, and its Retry if it failed, as under Tracks: what kinds it suggests is only known once it answers. An empty list of name matches is no longer shown beside suggestions as if nothing matched.
+- Keyboard navigation moves by area: Tab and Shift+Tab go between the rail, toolbar, main content, playback bar and Now Playing or Queue, and arrows move within one. An album card takes one arrow press, Enter opens it and Shift+Enter plays it. Focus outlines show only while navigating by keyboard or remote.
+- On a TV, the Pi display's Home and Now Playing scale for the screen's physical size, track details are grouped title first, and a 4K screen changes covers with a lighter transition that keeps playback smooth.
+- Missing catalog artwork shows the catalogue icon on the same banner shapes the server draws, in place of a question mark.
+- Folder and catalog headers use the toolbar's space, and a searchable folder's actions keep their labels and place as the title scrolls away. The wide tablet Now Playing puts the output picker in its header and gives the playback controls the full width.
+- Browsing, scrolling albums and opening Settings do less work and run smoother.
+
+### Fixed
+- The Pi display's on-screen keyboard stays open while typing with a remote, shows each press, and keeps the field being edited above it.
+- A Pi display left in the setup wizard closes it once setup is finished from a phone, and the remote's focus stays in the wizard while it is open.
+- Key presses on the Pi display no longer reach the Linux login console behind it.
+- Output settings stay open until Apply finishes, and say so if the output went away meanwhile.
+- The first-run walkthrough points at Home's search, not the heading above it.
+- The Pi display no longer offers the streamer dashboard link, which it cannot open.
 
 ## 0.27.0
 
