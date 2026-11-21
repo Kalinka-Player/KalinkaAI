@@ -51,6 +51,9 @@ class ProvisioningController extends ChangeNotifier {
   bool _disposed = false;
   String? _identity;
 
+  /// The selected streamer's server id, once it has said it.
+  String? get identity => _identity;
+
   ProvisioningController(
     this.transport,
     this.reach, {
@@ -154,6 +157,16 @@ class ProvisioningController extends ChangeNotifier {
       if (next.state == BoxState.joining || next.state == BoxState.joined) {
         await _waitForJoin(generation);
       } else {
+        // Before the scan, so the screen can use the region kept for this
+        // streamer.
+        try {
+          _identity ??= decodeProvisioningIdentity(
+            await transport.read(provisionIdentityUuid),
+          );
+        } catch (_) {
+          // Handoff reads it again; setup goes on without it.
+        }
+        if (!_current(generation)) return;
         phase = SetupPhase.credentials;
       }
     } on FormatException catch (e) {

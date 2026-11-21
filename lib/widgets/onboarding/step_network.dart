@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data_model/wifi_countries.dart';
+import '../../providers/connection_settings_provider.dart';
 import '../../providers/network_setup_api.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/field_decoration.dart';
@@ -14,7 +17,7 @@ import '../wifi_country_selector.dart';
 import '../keyboard/app_keyboard_navigation.dart';
 
 /// Network review and Wi-Fi selection used in onboarding and hotspot activation.
-class NetworkSetupPanel extends StatefulWidget {
+class NetworkSetupPanel extends ConsumerStatefulWidget {
   final Uri endpoint;
   final NetworkSetupApi? api;
   final ValueChanged<Map<String, dynamic>>? onStatus;
@@ -30,10 +33,10 @@ class NetworkSetupPanel extends StatefulWidget {
   });
 
   @override
-  State<NetworkSetupPanel> createState() => _NetworkSetupPanelState();
+  ConsumerState<NetworkSetupPanel> createState() => _NetworkSetupPanelState();
 }
 
-class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
+class _NetworkSetupPanelState extends ConsumerState<NetworkSetupPanel> {
   static const _unreachable =
       'Cannot reach network setup. Check the streamer connection and try again.';
 
@@ -50,9 +53,11 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
 
   late final NetworkSetupApi _api =
       widget.api ?? NetworkSetupApi(widget.endpoint);
+  late final SharedPreferences _prefs = ref.read(sharedPrefsProvider);
   final _form = GlobalKey<FormState>();
   final _ssid = TextEditingController(), _password = TextEditingController();
   String? _country;
+  bool _countryChosen = false;
   Timer? _timer;
   Map<String, dynamic>? _data;
   String? _message;
@@ -64,6 +69,18 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
   bool _sendingJoin = false;
 
   bool get _validCountry => wifiCountries.containsKey(_country);
+
+  String? get _serverId => switch (_data?['server_id']) {
+    final String id => id,
+    _ => null,
+  };
+
+  /// The region last chosen for this streamer, else the one it is set to.
+  String? get _streamerCountry {
+    final reported = _data?['wifi_country'];
+    return savedWifiCountry(_prefs, _serverId) ??
+        (wifiCountries.containsKey(reported) ? reported as String : null);
+  }
 
   Map get _setup => _data?['setup'] as Map? ?? const {};
   Map get _network => _data?['network'] as Map? ?? const {};
@@ -79,7 +96,9 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
   @override
   void initState() {
     super.initState();
-    _country = WidgetsBinding.instance.platformDispatcher.locale.countryCode;
+    _country = localeWifiCountry(
+      WidgetsBinding.instance.platformDispatcher.locales,
+    );
     _refresh();
   }
 
@@ -100,6 +119,9 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
       if (!mounted || revision != _revision) return;
       setState(() {
         _data = data;
+        if (!_countryChosen && !_scanStarted) {
+          _country = _streamerCountry ?? _country;
+        }
         final state = _setup['state'];
         if (_changingNetwork && state != 1) _changingNetwork = false;
         if (state == 3) {
@@ -325,7 +347,11 @@ class _NetworkSetupPanelState extends State<NetworkSetupPanel> {
         onChanged: _busy
             ? null
             : (country) {
-                setState(() => _country = country);
+                setState(() {
+                  _country = country;
+                  _countryChosen = true;
+                });
+                saveWifiCountry(_prefs, _serverId, country);
                 _scan();
               },
       ),

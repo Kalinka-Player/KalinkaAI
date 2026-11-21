@@ -1,13 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data_model/presentation_schema.dart' show OptionSpec;
 import '../data_model/wifi_countries.dart';
+import '../providers/box_control_provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/field_decoration.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'keyboard/app_keyboard_navigation.dart';
 import 'settings_controls/option_picker.dart';
 import 'settings_controls/settings_action_row.dart';
+
+/// The first of [locales] whose country is a Wi-Fi region. flutter-pi lists a
+/// bare `en` before `en_GB`, so the first locale alone may have none.
+String? localeWifiCountry(Iterable<Locale> locales) {
+  for (final locale in locales) {
+    final country = locale.countryCode?.toUpperCase();
+    if (wifiCountries.containsKey(country)) return country;
+  }
+  return null;
+}
+
+/// The Wi-Fi region last chosen in setup for the streamer [serverId].
+String? savedWifiCountry(SharedPreferences prefs, String? serverId) {
+  if (serverId == null || serverId.isEmpty) return null;
+  final country = prefs.getString(
+    ServerStorageKey.ofServer(serverId).wifiCountry,
+  );
+  return wifiCountries.containsKey(country) ? country : null;
+}
+
+void saveWifiCountry(
+  SharedPreferences prefs,
+  String? serverId,
+  String country,
+) {
+  if (serverId == null || serverId.isEmpty) return;
+  prefs
+      .setString(ServerStorageKey.ofServer(serverId).wifiCountry, country)
+      .ignore();
+}
 
 /// Selects the regulatory region used for Wi-Fi scanning and joining.
 class WifiCountrySelector extends StatefulWidget {

@@ -5,15 +5,17 @@ import 'dart:typed_data';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/provisioning_controller.dart';
 import 'package:kalinka/providers/provisioning_protocol.dart';
 import 'package:kalinka/providers/provisioning_transport.dart';
 import 'package:kalinka/screens/provisioning_screen.dart';
 import 'package:kalinka/theme/app_theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/discovery_fakes.dart';
 import 'support/field_text.dart';
+import 'support/prefs_scope.dart';
 
 class FakeTransport implements ProvisioningTransport {
   final stream = StreamController<NearbyBox>.broadcast();
@@ -45,6 +47,7 @@ class FakeTransport implements ProvisioningTransport {
   final progressStages = <int>[];
   int scanId = 0;
   int page = 0;
+  List<int> identity = List.generate(16, (i) => i * 17);
   Completer<Uint8List>? pendingScan;
   final networkList = [
     {'ssid': 'Home', 'signal': -42, 'security': 'wpa2'},
@@ -120,7 +123,7 @@ class FakeTransport implements ProvisioningTransport {
       throw StateError('simulated BLE disconnect');
     }
     if (characteristic == provisionIdentityUuid) {
-      return Uint8List.fromList(List.generate(16, (i) => i * 17));
+      return Uint8List.fromList(identity);
     }
     return Uint8List.fromList([
       1,
@@ -257,8 +260,8 @@ void main() {
       addTearDown(tester.view.resetViewInsets);
       final transport = FakeTransport()..canScan = true;
       await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
+        await withPrefs(
+          MaterialApp(
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context)
                   .copyWith(textScaler: const TextScaler.linear(1.5)),
@@ -300,8 +303,8 @@ void main() {
   ) async {
     final transport = FakeTransport()..canScan = true;
     await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
+      await withPrefs(
+        MaterialApp(
           home: Builder(
             builder: (context) => TextButton(
               onPressed: () => Navigator.of(context).push(
@@ -487,8 +490,8 @@ void main() {
         ..changeSupported = true
         ..state = BoxState.joined;
       await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
+        await withPrefs(
+          MaterialApp(
             home: ProvisioningScreen(
               transport: transport,
               reach: (_, _) async => null,
@@ -530,8 +533,8 @@ void main() {
       ..holdJoin = true
       ..currentStage = 1;
     await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
+      await withPrefs(
+        MaterialApp(
           home: ProvisioningScreen(
             transport: transport,
             reach: (_, _) async => null,
@@ -727,8 +730,8 @@ void main() {
       {'ssid': 'Garden', 'signal': -78, 'security': 'wpa2'},
     ]);
     await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(home: ProvisioningScreen(transport: transport)),
+      await withPrefs(
+        MaterialApp(home: ProvisioningScreen(transport: transport)),
       ),
     );
     await tester.pump();
@@ -765,8 +768,8 @@ void main() {
     (tester) async {
       final transport = FakeTransport()..canScan = true;
       await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(home: ProvisioningScreen(transport: transport)),
+        await withPrefs(
+          MaterialApp(home: ProvisioningScreen(transport: transport)),
         ),
       );
       await tester.pump();
@@ -780,12 +783,12 @@ void main() {
       expect(find.byKey(const ValueKey('custom-ssid')), findsNothing);
       expect(find.byKey(const ValueKey('wifi-password')), findsNothing);
       await tester.scrollUntilVisible(find.text('Public'), 100);
-      await tester.drag(find.byType(ListView).first, const Offset(0, -100));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Public'));
       await tester.pump();
       expect(find.byKey(const ValueKey('wifi-password')), findsNothing);
       await tester.scrollUntilVisible(find.text('Home'), -100);
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Home'));
       await tester.pumpAndSettle();
       expect(find.text('Home'), findsOneWidget);
@@ -809,13 +812,207 @@ void main() {
     },
   );
 
+  group('the Wi-Fi region', () {
+    const boxId = '00112233-4455-6677-8899-aabbccddeeff';
+    final saved = ServerStorageKey.ofServer(boxId).wifiCountry;
+    final region = find.text('Wi-Fi region');
+    final scanAgain = find.ancestor(
+      of: find.byTooltip('Scan again'),
+      matching: find.byType(IconButton),
+    );
+
+    Future<FakeTransport> connect(
+      WidgetTester tester, {
+      List<Locale> locales = const [Locale('en', 'GB')],
+      SharedPreferences? prefs,
+      FakeTransport? transport,
+      Future<ProvisionedEndpoint?> Function(ProvisioningStatus, String?)? reach,
+    }) async {
+      tester.platformDispatcher.localesTestValue = locales;
+      addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+      transport ??= FakeTransport()..canScan = true;
+      await tester.pumpWidget(
+        await withPrefs(
+          MaterialApp(
+            theme: AppTheme.dark(),
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        ProvisioningScreen(transport: transport, reach: reach),
+                  ),
+                ),
+                child: const Text('Player discovery'),
+              ),
+            ),
+          ),
+          prefs,
+        ),
+      );
+      await tester.tap(find.text('Player discovery'));
+      await tester.pumpAndSettle();
+      transport.stream.add(const NearbyBox('radio', 'Box'));
+      await tester.pump();
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Connect'));
+      await tester.pumpAndSettle();
+      return transport;
+    }
+
+    List<Object?> scans(FakeTransport transport) => [
+      for (final command in transport.commands)
+        if (command['op'] == 'scan') command['country'],
+    ];
+
+    Future<void> choose(WidgetTester tester, String name) async {
+      await tester.scrollUntilVisible(region, 100);
+      await tester.pumpAndSettle();
+      await tester.tap(region);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('country-search')),
+        name,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('$name ('));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('is the first locale that names a country', (tester) async {
+      final transport = await connect(
+        tester,
+        locales: const [Locale('en'), Locale('de', 'DE')],
+      );
+      expect(scans(transport), ['DE']);
+    });
+
+    testWidgets('is asked for when no locale names one', (tester) async {
+      final transport = await connect(
+        tester,
+        locales: const [Locale('en'), Locale('en', '001')],
+      );
+      expect(scans(transport), isEmpty);
+      expect(
+        find.text('Choose your country below to find nearby networks.'),
+        findsOneWidget,
+      );
+      expect(tester.widget<IconButton>(scanAgain).onPressed, isNull);
+      await tester.scrollUntilVisible(region, 100);
+      expect(find.text('Choose a country'), findsOneWidget);
+      await choose(tester, 'Germany');
+      expect(scans(transport), ['DE']);
+      expect(find.text('Home'), findsOneWidget);
+    });
+
+    testWidgets('is the one last chosen for this streamer', (tester) async {
+      SharedPreferences.setMockInitialValues({saved: 'FR'});
+      final prefs = await SharedPreferences.getInstance();
+      final transport = await connect(tester, prefs: prefs);
+      expect(scans(transport), ['FR']);
+      await tester.scrollUntilVisible(find.text('France (FR)'), 100);
+    });
+
+    testWidgets('chosen here is kept for this streamer', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final transport = await connect(tester, prefs: prefs);
+      await choose(tester, 'Germany');
+      expect(scans(transport), ['GB', 'DE']);
+      expect(prefs.getString(saved), 'DE');
+    });
+
+    testWidgets('chosen for another streamer does not replace this one\'s', (
+      tester,
+    ) async {
+      const other = '00010203-0405-0607-0809-0a0b0c0d0e0f';
+      SharedPreferences.setMockInitialValues({
+        ServerStorageKey.ofServer(other).wifiCountry: 'FR',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final transport = await connect(tester, prefs: prefs);
+      await choose(tester, 'Germany');
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pump();
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 300));
+      transport.identity = List.generate(16, (i) => i);
+      transport.stream.add(const NearbyBox('other', 'Other box'));
+      await tester.pump();
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Connect'));
+      await tester.pumpAndSettle();
+      expect(scans(transport), ['GB', 'DE', 'FR']);
+    });
+
+    testWidgets('chosen before the streamer has an id survives going back', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final transport = FakeTransport()
+        ..canScan = true
+        ..identity = const [];
+      await connect(tester, prefs: prefs, transport: transport);
+      await choose(tester, 'Germany');
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pump();
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 300));
+      transport.stream.add(const NearbyBox('radio', 'Box'));
+      await tester.pump();
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Connect'));
+      await tester.pumpAndSettle();
+      expect(scans(transport), ['GB', 'DE', 'DE']);
+    });
+
+    testWidgets('chosen before the streamer has an id is kept once it does', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final transport = FakeTransport()
+        ..canScan = true
+        ..identity = const [];
+      await connect(
+        tester,
+        prefs: prefs,
+        transport: transport,
+        reach: (_, _) async =>
+            const ProvisionedEndpoint('Box', '192.168.1.4', 8000, boxId),
+      );
+      await choose(tester, 'Germany');
+      expect(prefs.getKeys(), isEmpty);
+      await tester.scrollUntilVisible(find.text('Home'), -100);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Home'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('wifi-password')),
+        'dummy secret',
+      );
+      await tester.tap(find.text('Connect to Wi-Fi'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProvisioningScreen), findsNothing);
+      expect(
+        transport.commands.firstWhere((c) => c['op'] == 'join')['country'],
+        'DE',
+      );
+      expect(prefs.getString(saved), 'DE');
+    });
+  });
+
   testWidgets('the Wi-Fi fields draw what is typed in primary text', (
     tester,
   ) async {
     final transport = FakeTransport()..canScan = true;
     await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
+      await withPrefs(
+        MaterialApp(
           theme: AppTheme.dark(),
           home: ProvisioningScreen(transport: transport),
         ),
