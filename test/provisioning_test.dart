@@ -923,6 +923,53 @@ void main() {
       expect(prefs.getString(saved), 'DE');
     });
 
+    testWidgets('chosen for another streamer does not replace this one\'s', (
+      tester,
+    ) async {
+      const other = '00010203-0405-0607-0809-0a0b0c0d0e0f';
+      SharedPreferences.setMockInitialValues({
+        ServerStorageKey.ofServer(other).wifiCountry: 'FR',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final transport = await connect(tester, prefs: prefs);
+      await choose(tester, 'Germany');
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pump();
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 300));
+      transport.identity = List.generate(16, (i) => i);
+      transport.stream.add(const NearbyBox('other', 'Other box'));
+      await tester.pump();
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Connect'));
+      await tester.pumpAndSettle();
+      expect(scans(transport), ['GB', 'DE', 'FR']);
+    });
+
+    testWidgets('chosen before the streamer has an id survives going back', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final transport = FakeTransport()
+        ..canScan = true
+        ..identity = const [];
+      await connect(tester, prefs: prefs, transport: transport);
+      await choose(tester, 'Germany');
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pump();
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 300));
+      transport.stream.add(const NearbyBox('radio', 'Box'));
+      await tester.pump();
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Connect'));
+      await tester.pumpAndSettle();
+      expect(scans(transport), ['GB', 'DE', 'DE']);
+    });
+
     testWidgets('chosen before the streamer has an id is kept once it does', (
       tester,
     ) async {
