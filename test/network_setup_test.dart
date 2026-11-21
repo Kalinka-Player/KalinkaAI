@@ -554,6 +554,18 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
+    for (final reported in ['', 'ZZ']) {
+      testWidgets('is the locale’s when the streamer reports "$reported"', (
+        tester,
+      ) async {
+        final api = FakeSetupApi(status(wifiCountry: reported));
+        await mountPanel(tester, api, locales: const [Locale('en', 'US')]);
+        expect(api.commands, ['open', 'scan']);
+        expect(api.payloads.last, {'country': 'US'});
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+
     testWidgets('is the one last chosen for the same streamer', (tester) async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
