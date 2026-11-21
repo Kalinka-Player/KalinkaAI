@@ -191,6 +191,9 @@ class ServerStorageKey {
 
   String get catalogFilters => 'Kalinka.catalogFilters:$scope';
 
+  /// The Wi-Fi region the user chose in this streamer's network setup.
+  String get wifiCountry => 'Kalinka.wifiCountry:$scope';
+
   /// [pageId]'s entry in [folderPaths].
   String folderPath(String pageId) => '$scope $pageId';
 
