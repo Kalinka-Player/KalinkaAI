@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/network_setup_api.dart';
 import 'package:kalinka/providers/onboarding_provider.dart';
@@ -15,6 +17,7 @@ import 'package:kalinka/widgets/keyboard/app_keyboard_navigation.dart';
 import 'package:kalinka/widgets/onboarding/hotspot_setup_guide.dart';
 import 'package:kalinka/widgets/onboarding/step_network.dart';
 import 'package:kalinka/widgets/settings_controls/option_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/focus.dart';
 import 'support/home_shell.dart';
@@ -53,8 +56,12 @@ Map<String, dynamic> status({
   int state = 0,
   bool available = true,
   String? ssid,
+  String? serverId,
+  String? wifiCountry,
 }) => {
   'available': available,
+  'server_id': ?serverId,
+  'wifi_country': ?wifiCountry,
   'network': {
     'connected': kind != null,
     'kind': kind,
@@ -76,37 +83,56 @@ final countryField = find.byKey(const ValueKey('network-country'));
 final countrySearch = find.byKey(const ValueKey('country-search'));
 final ssidField = find.byKey(const ValueKey('network-ssid'));
 final passwordField = find.byKey(const ValueKey('network-password'));
+final scanAgain = find.ancestor(
+  of: find.byTooltip('Scan again'),
+  matching: find.byType(IconButton),
+);
+
+Future<Widget> withPrefs(Widget app, [SharedPreferences? prefs]) async {
+  if (prefs == null) {
+    SharedPreferences.setMockInitialValues({});
+    prefs = await SharedPreferences.getInstance();
+  }
+  return ProviderScope(
+    overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+    child: app,
+  );
+}
 
 Future<void> mountPanel(
   WidgetTester tester,
   FakeSetupApi api, {
   ValueChanged<bool>? onBusy,
   VoidCallback? onReconnect,
-  Locale locale = const Locale('en', 'GB'),
+  List<Locale> locales = const [Locale('en', 'GB')],
+  SharedPreferences? prefs,
   double scale = 1,
 }) async {
-  tester.platformDispatcher.localeTestValue = locale;
-  addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+  tester.platformDispatcher.localesTestValue = locales;
+  addTearDown(tester.platformDispatcher.clearLocalesTestValue);
   await tester.pumpWidget(
-    MaterialApp(
-      theme: AppTheme.dark(),
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          textScaler: TextScaler.linear(scale),
-          disableAnimations: true,
+    await withPrefs(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+            disableAnimations: true,
+          ),
+          child: child!,
         ),
-        child: child!,
-      ),
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: NetworkSetupPanel(
-            endpoint: api.base,
-            api: api,
-            onBusy: onBusy,
-            onReconnect: onReconnect,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: NetworkSetupPanel(
+              endpoint: api.base,
+              api: api,
+              onBusy: onBusy,
+              onReconnect: onReconnect,
+            ),
           ),
         ),
       ),
+      prefs,
     ),
   );
   await tester.pump();
@@ -217,8 +243,8 @@ void main() {
     tester,
   ) async {
     final api = FakeSetupApi(status(kind: 'wired', state: 4));
-    tester.platformDispatcher.localeTestValue = const Locale('en');
-    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    tester.platformDispatcher.localesTestValue = const [Locale('en')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
     await pumpHomeShell(
       tester,
       queue: SettableQueue(queueOf(0)),
@@ -482,8 +508,14 @@ void main() {
     tester,
   ) async {
     final api = FakeSetupApi(status());
-    await mountPanel(tester, api, locale: const Locale('en'));
+    await mountPanel(
+      tester,
+      api,
+      locales: const [Locale('en'), Locale('en', '001'), Locale('fr')],
+    );
     expect(api.commands, isEmpty);
+    expect(find.text('Choose a country'), findsOneWidget);
+    expect(tester.widget<IconButton>(scanAgain).onPressed, isNull);
     expect(
       find.text('Choose your country below to find nearby networks.'),
       findsOneWidget,
@@ -492,6 +524,78 @@ void main() {
     expect(api.commands, ['open', 'scan']);
     expect(api.payloads.last, {'country': 'GB'});
     await tester.pumpWidget(const SizedBox());
+  });
+
+  group('the Wi-Fi region it opens with', () {
+    testWidgets('comes from a later locale when the first has no country', (
+      tester,
+    ) async {
+      final api = FakeSetupApi(status());
+      await mountPanel(
+        tester,
+        api,
+        locales: const [Locale('en'), Locale('de'), Locale('en', 'GB')],
+      );
+      expect(api.commands, ['open', 'scan']);
+      expect(api.payloads.last, {'country': 'GB'});
+      await finishScan(tester);
+      expect(find.text('United Kingdom (GB)'), findsOneWidget);
+      expect(tester.widget<IconButton>(scanAgain).onPressed, isNotNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('is the streamer’s own ahead of the locale', (tester) async {
+      final api = FakeSetupApi(status(wifiCountry: 'DE'));
+      await mountPanel(tester, api);
+      expect(api.commands, ['open', 'scan']);
+      expect(api.payloads.last, {'country': 'DE'});
+      await finishScan(tester);
+      expect(find.text('Germany (DE)'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('is the one last chosen for the same streamer', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      var api = FakeSetupApi(status(serverId: 'box-1', wifiCountry: 'GB'));
+      await mountPanel(tester, api, prefs: prefs);
+      await finishScan(tester);
+      await chooseCountry(tester, 'Germany', 'Germany (DE)');
+      expect(api.payloads.last, {'country': 'DE'});
+      await tester.pumpWidget(const SizedBox());
+
+      api = FakeSetupApi(status(serverId: 'box-1', wifiCountry: 'GB'));
+      await mountPanel(tester, api, prefs: prefs);
+      expect(api.commands, ['open', 'scan']);
+      expect(api.payloads.last, {'country': 'DE'});
+      await finishScan(tester);
+      expect(find.text('Germany (DE)'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+
+      api = FakeSetupApi(status(serverId: 'box-2'));
+      await mountPanel(tester, api, prefs: prefs);
+      expect(api.payloads.last, {'country': 'GB'});
+      await finishScan(tester);
+      expect(find.text('United Kingdom (GB)'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('stays as chosen when the streamer reports another', (
+      tester,
+    ) async {
+      final api = FakeSetupApi(status(wifiCountry: 'DE'));
+      await mountPanel(tester, api);
+      await finishScan(tester);
+      await chooseCountry(tester, 'France', 'France (FR)');
+      expect(api.payloads.last, {'country': 'FR'});
+      api.response['wifi_country'] = 'NL';
+      await finishScan(tester);
+      expect(find.text('France (FR)'), findsOneWidget);
+      await manualCredentials(tester);
+      await join(tester);
+      expect(api.payloads.last['country'], 'FR');
+      await tester.pumpWidget(const SizedBox());
+    });
   });
 
   testWidgets(
@@ -949,21 +1053,23 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         await tester.pumpWidget(
-          MaterialApp(
-            theme: AppTheme.dark(),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(
-                textScaler: const TextScaler.linear(2),
-                disableAnimations: true,
+          await withPrefs(
+            MaterialApp(
+              theme: AppTheme.dark(),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: const TextScaler.linear(2),
+                  disableAnimations: true,
+                ),
+                child: child!,
               ),
-              child: child!,
+              home: hotspot
+                  ? NetworkSetupScreen(
+                      endpoint: Uri.parse('http://192.168.4.1'),
+                      hotspot: true,
+                    )
+                  : const SetupMethodScreen(),
             ),
-            home: hotspot
-                ? NetworkSetupScreen(
-                    endpoint: Uri.parse('http://192.168.4.1'),
-                    hotspot: true,
-                  )
-                : const SetupMethodScreen(),
           ),
         );
         await tester.pumpAndSettle();
@@ -1015,17 +1121,19 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.dark(),
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: TextButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const SetupMethodScreen(),
+      await withPrefs(
+        MaterialApp(
+          theme: AppTheme.dark(),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SetupMethodScreen(),
+                  ),
                 ),
+                child: const Text('Start setup'),
               ),
-              child: const Text('Start setup'),
             ),
           ),
         ),
