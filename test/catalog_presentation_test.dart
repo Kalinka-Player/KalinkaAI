@@ -337,32 +337,42 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  // Banners stay at least 300 across: one to a row in a 516 window, two
+  // side by side once there is room for both.
   for (final declared in [true, false]) {
-    testWidgets('category banners have room with metadata=$declared', (
-      tester,
-    ) async {
-      await _pump(
-        tester,
-        const Size(516, 800),
-        api: _AlbumsApi(catalogs: true),
-        page: CatalogPage.category(
-          id: 'kalinka:demo:catalog:home',
-          title: 'Home',
-          provider: 'demo',
-          preview: Preview(
-            type: PreviewType.imageText,
-            contentType: declared ? PreviewContentType.catalog : null,
-          ),
-        ),
+    for (final (width, across) in [(516.0, false), (700.0, true)]) {
+      testWidgets(
+        'category banners have room with metadata=$declared at $width',
+        (tester) async {
+          await _pump(
+            tester,
+            Size(width, 800),
+            api: _AlbumsApi(catalogs: true),
+            page: CatalogPage.category(
+              id: 'kalinka:demo:catalog:home',
+              title: 'Home',
+              provider: 'demo',
+              preview: Preview(
+                type: PreviewType.imageText,
+                contentType: declared ? PreviewContentType.catalog : null,
+              ),
+            ),
+          );
+          final cards = find.byType(ArtworkGridCard);
+          expect(tester.getSize(cards.first).width, greaterThanOrEqualTo(300));
+          final first = tester.getRect(cards.at(0));
+          final second = tester.getRect(cards.at(1));
+          if (across) {
+            expect(second.top, first.top);
+            expect(second.left, greaterThan(first.left));
+          } else {
+            expect(second.top, greaterThan(first.top));
+            expect(second.left, first.left);
+          }
+          expect(tester.takeException(), isNull);
+        },
       );
-      final cards = find.byType(ArtworkGridCard);
-      expect(tester.getSize(cards.first).width, greaterThanOrEqualTo(220));
-      final first = tester.getRect(cards.at(0));
-      final second = tester.getRect(cards.at(1));
-      expect(second.top, first.top);
-      expect(second.left, greaterThan(first.left));
-      expect(tester.takeException(), isNull);
-    });
+    }
   }
 
   for (final mixed in [false, true]) {
