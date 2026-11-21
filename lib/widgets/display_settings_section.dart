@@ -13,6 +13,7 @@ import 'dialog_scroll_scope.dart';
 import 'settings_controls/settings_card.dart';
 import 'settings_controls/settings_enum_pills.dart';
 import 'settings_controls/settings_row.dart';
+import 'settings_controls/settings_toggle.dart';
 
 /// Preferences for the display on which Settings was opened.
 class DisplaySettingsSection extends ConsumerWidget {
@@ -139,12 +140,8 @@ class _SwitchRow extends StatelessWidget {
     sublabel: help,
     control: Semantics(
       label: label,
-      child: Switch(
-        key: switchKey,
-        value: value,
-        onChanged: onChanged,
-        materialTapTargetSize: MaterialTapTargetSize.padded,
-      ),
+      toggled: value,
+      child: SettingsToggle(key: switchKey, value: value, onChanged: onChanged),
     ),
   );
 }
@@ -253,7 +250,11 @@ class _TimeoutRow extends StatelessWidget {
                         Flexible(
                           child: Text(
                             _durationLabel(value),
-                            style: KalinkaTextStyles.trayRowLabel,
+                            // The size of the other controls' values, as
+                            // the time format's segments below.
+                            style: KalinkaTextStyles.trayRowLabel.copyWith(
+                              fontSize: KalinkaTypography.baseSize + 2,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 6),

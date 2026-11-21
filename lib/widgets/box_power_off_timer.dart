@@ -5,6 +5,7 @@ import '../providers/box_power_off_timer_provider.dart';
 import '../providers/settings_provider.dart';
 import 'settings_controls/settings_binding.dart';
 import 'settings_controls/settings_row.dart';
+import 'settings_controls/settings_toggle.dart';
 import 'settings_renderer.dart';
 
 /// A persisted Core timer beside the supervisor's manual power-off action.
@@ -37,15 +38,19 @@ class BoxPowerOffTimer extends ConsumerWidget {
             issues: binding.issuesFor(boxPowerOffEnabledPath),
             control: Semantics(
               label: enabledField.label,
-              child: Switch(
-                value: enabled,
-                onChanged: enabledField.readonly
-                    ? null
-                    : (value) {
-                        FocusScope.of(context).unfocus();
-                        binding.stage(boxPowerOffEnabledPath, value);
-                      },
-                materialTapTargetSize: MaterialTapTargetSize.padded,
+              toggled: enabled,
+              enabled: !enabledField.readonly,
+              child: Opacity(
+                opacity: enabledField.readonly ? 0.4 : 1,
+                child: SettingsToggle(
+                  value: enabled,
+                  onChanged: enabledField.readonly
+                      ? null
+                      : (value) {
+                          FocusScope.of(context).unfocus();
+                          binding.stage(boxPowerOffEnabledPath, value);
+                        },
+                ),
               ),
             ),
           ),
