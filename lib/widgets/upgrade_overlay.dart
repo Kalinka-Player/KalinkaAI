@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/upgrade_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/haptics.dart';
@@ -26,7 +28,7 @@ class UpgradeOverlay extends ConsumerStatefulWidget {
 class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
     with TickerProviderStateMixin {
   late AnimationController _fadeController;
-  late AnimationController _spinController;
+  late AnimationController _unpackController;
   Timer? _autoDismissTimer;
   bool _closing = false;
 
@@ -37,16 +39,16 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
       vsync: this,
       duration: const Duration(milliseconds: 280),
     )..forward();
-    _spinController = AnimationController(
+    _unpackController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 2400),
     )..repeat();
   }
 
   @override
   void dispose() {
     _fadeController.dispose();
-    _spinController.dispose();
+    _unpackController.dispose();
     _autoDismissTimer?.cancel();
     super.dispose();
   }
@@ -81,8 +83,14 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
       if (prev != null && !prev.isDone && next.isDone) KalinkaHaptics.success();
     });
 
+    final still = MediaQuery.disableAnimationsOf(context);
+    // A stopped box draws nothing new: don't keep ticking frames for it.
+    if (upgradeState.isDone || still) {
+      _unpackController.stop();
+    } else if (!_unpackController.isAnimating) {
+      _unpackController.repeat();
+    }
     if (upgradeState.isDone && _autoDismissTimer == null) {
-      _spinController.stop();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scheduleAutoDismiss();
       });
@@ -117,12 +125,16 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
                         size: 28,
                         color: KalinkaColors.statusOnline,
                       )
-                    : RotationTransition(
-                        turns: _spinController,
-                        child: const Icon(
-                          Icons.system_update_alt,
-                          size: 26,
-                          color: KalinkaColors.textSecondary,
+                    : Center(
+                        child: CustomPaint(
+                          size: const Size.square(28),
+                          painter: _UnpackingBoxPainter(
+                            // Reduced motion: hold the open box, arrow out.
+                            t: still
+                                ? const AlwaysStoppedAnimation(0.35)
+                                : _unpackController,
+                            color: KalinkaColors.textSecondary,
+                          ),
                         ),
                       ),
               ),
@@ -273,4 +285,81 @@ class _UpgradeOverlayState extends ConsumerState<UpgradeOverlay>
         ),
     ];
   }
+}
+
+/// A box whose flaps swing open for an arrow to rise out and fade, then
+/// close again: the new version coming out of its package. One cycle per
+/// run of [t], drawn on a 28-unit grid.
+class _UnpackingBoxPainter extends CustomPainter {
+  final Animation<double> t;
+  final Color color;
+
+  _UnpackingBoxPainter({required this.t, required this.color})
+    : super(repaint: t);
+
+  static const _opening = Interval(0, .2, curve: Curves.easeOutBack);
+  static const _rising = Interval(.15, .62, curve: Curves.easeOutCubic);
+  static const _fading = Interval(.45, .62, curve: Curves.easeIn);
+  static const _closing = Interval(.66, .84, curve: Curves.easeInOutCubic);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final v = t.value;
+    canvas.scale(size.width / 28);
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    // Flaps hinge on the top corners, meet in the middle when shut and
+    // swing out to 120° (a little past it on the bounce).
+    final a =
+        _opening.transform(v) * (1 - _closing.transform(v)) * math.pi * 2 / 3;
+    final dx = 8 * math.cos(a), dy = 8 * math.sin(a);
+    canvas.drawPath(
+      Path()
+        ..addRRect(
+          RRect.fromLTRBAndCorners(
+            6,
+            12,
+            22,
+            22,
+            bottomLeft: const Radius.circular(2),
+            bottomRight: const Radius.circular(2),
+          ),
+        )
+        ..moveTo(11.5, 16.5)
+        ..lineTo(16.5, 16.5)
+        ..moveTo(6, 12)
+        ..lineTo(6 + dx, 12 - dy)
+        ..moveTo(22, 12)
+        ..lineTo(22 - dx, 12 - dy),
+      paint,
+    );
+
+    final rise = _rising.transform(v);
+    final fade = 1 - _fading.transform(v);
+    if (rise == 0 || fade == 0) return;
+    final tip = 15 - 14 * rise;
+    canvas
+      ..save()
+      // Only the part out of the box shows.
+      ..clipRect(const Rect.fromLTRB(-2, -2, 30, 11))
+      ..drawPath(
+        Path()
+          ..moveTo(14, tip + 7)
+          ..lineTo(14, tip)
+          ..moveTo(11, tip + 3)
+          ..lineTo(14, tip)
+          ..lineTo(17, tip + 3),
+        paint..color = color.withValues(alpha: color.a * fade),
+      )
+      ..restore();
+  }
+
+  @override
+  bool shouldRepaint(_UnpackingBoxPainter old) =>
+      old.t != t || old.color != color;
 }
