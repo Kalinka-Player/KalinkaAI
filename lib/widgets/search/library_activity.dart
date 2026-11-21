@@ -26,6 +26,16 @@ class _LibraryActivityLineState extends ConsumerState<LibraryActivityLine> {
   bool _open = false;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Home stays built while a page or Settings covers it, and the details
+    // paint in the overlay above both: close them when the line goes.
+    if (!TickerMode.valuesOf(context).enabled || !Visibility.of(context)) {
+      _details.close();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Offline, the retained progress is stale and would read as live.
     final connected = ref.watch(
