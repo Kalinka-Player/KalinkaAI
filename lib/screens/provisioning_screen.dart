@@ -4,8 +4,10 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data_model/wifi_countries.dart';
+import '../providers/connection_settings_provider.dart';
 import '../providers/discovery_provider.dart';
 import '../providers/networked_boxes_provider.dart';
 import '../providers/provisioning_controller.dart';
@@ -36,7 +38,10 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
   final _form = GlobalKey<FormState>();
   final _ssid = TextEditingController();
   final _password = TextEditingController();
-  late String _country;
+  late final SharedPreferences _prefs = ref.read(sharedPrefsProvider);
+  late final String? _localeCountry;
+  String? _country;
+  bool _countryChosen = false;
   final _client = Dio(
     BaseOptions(
       connectTimeout: const Duration(seconds: 2),
@@ -55,9 +60,9 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
   @override
   void initState() {
     super.initState();
-    _country =
-        localeWifiCountry(WidgetsBinding.instance.platformDispatcher.locales) ??
-        'GB';
+    _localeCountry = _country = localeWifiCountry(
+      WidgetsBinding.instance.platformDispatcher.locales,
+    );
     _setup = ProvisioningController(
       widget.transport ?? createProvisioningTransport(),
       widget.reach ?? _reach,
@@ -66,14 +71,29 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     unawaited(_setup.scan());
   }
 
+  bool get _validCountry => wifiCountries.containsKey(_country);
+
+  Future<void> _scanWifi() async {
+    if (_validCountry) await _setup.scanWifi(_country!);
+  }
+
+  void _chooseCountry(String country, {bool rescan = false}) {
+    setState(() {
+      _country = country;
+      _countryChosen = true;
+    });
+    saveWifiCountry(_prefs, _setup.identity, country);
+    if (rescan) unawaited(_scanWifi());
+  }
+
   Future<void> _selectBox(NearbyBox box) async {
     await _setup.select(box);
-    if (mounted) await _setup.scanWifi(_country);
+    if (mounted) await _scanWifi();
   }
 
   Future<void> _reconnect() async {
     await _setup.reconnect();
-    if (mounted) await _setup.scanWifi(_country);
+    if (mounted) await _scanWifi();
   }
 
   Future<void> _changeNetwork() async {
@@ -82,7 +102,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     _password.clear();
     _networkChosen = false;
     _customSsid = false;
-    await _setup.scanWifi(_country);
+    await _scanWifi();
   }
 
   Future<void> _retry() async {
@@ -92,7 +112,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     } else if (_setup.phase == SetupPhase.joining &&
         _setup.status?.state == BoxState.failed &&
         _ssid.text.isNotEmpty) {
-      await _setup.join(_ssid.text, _password.text, _country);
+      await _setup.join(_ssid.text, _password.text, _country!);
     } else {
       await _reconnect();
     }
@@ -100,6 +120,9 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
 
   void _changed() {
     if (!mounted) return;
+    if (!_countryChosen) {
+      _country = savedWifiCountry(_prefs, _setup.identity) ?? _localeCountry;
+    }
     if (_lastPhase != _setup.phase) {
       _lastPhase = _setup.phase;
       if (_scroll.hasClients) _scroll.jumpTo(0);
@@ -115,6 +138,10 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     if (_setup.phase == SetupPhase.done && !_finished) {
       _finished = true;
       _password.clear();
+      // Its Core may have had no id yet when the region was chosen.
+      if (_countryChosen) {
+        saveWifiCountry(_prefs, _setup.endpoint?.serverId, _country!);
+      }
       Navigator.of(context).pop(_setup.endpoint);
       return;
     }
@@ -238,7 +265,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
 
   void _submit() {
     if (_setup.phase != SetupPhase.credentials || _setup.scanningWifi) return;
-    if (!wifiCountries.containsKey(_country)) {
+    if (!_validCountry) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Choose your Wi-Fi region.')),
       );
@@ -246,7 +273,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
     }
     if (_form.currentState?.validate() != true) return;
     FocusScope.of(context).unfocus();
-    unawaited(_setup.join(_ssid.text, _password.text, _country));
+    unawaited(_setup.join(_ssid.text, _password.text, _country!));
   }
 
   TextStyle get _bodyStyle =>
@@ -520,7 +547,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
           if (_setup.status?.canScanWifi == true)
             IconButton(
               tooltip: 'Scan again',
-              onPressed: () => _setup.scanWifi(_country),
+              onPressed: _validCountry ? _scanWifi : null,
               icon: const Icon(
                 Icons.refresh_rounded,
                 color: KalinkaColors.textSecondary,
@@ -543,13 +570,23 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
             onTap: network.supported ? () => _chooseNetwork(network) : null,
           ),
         ),
-      if (_setup.networks.isEmpty && _setup.wifiScanError == null)
+      if (!_validCountry)
+        Text(
+          'Choose your country below to find nearby networks.',
+          style: _bodyStyle,
+        )
+      else if (_setup.networks.isEmpty && _setup.wifiScanError == null)
         Text(
           'No networks found. Try scanning again, or enter a hidden network.',
           style: _bodyStyle,
         ),
       if (_setup.wifiScanError != null)
         _note(_setup.wifiScanError!, error: true),
+      const SizedBox(height: 16),
+      WifiCountrySelector(
+        country: _country,
+        onChanged: (country) => _chooseCountry(country, rescan: true),
+      ),
     ] else
       _credentials(),
     if (_setup.error != null) _note(_setup.error!, error: true),
@@ -684,10 +721,7 @@ class _ProvisioningScreenState extends ConsumerState<ProvisioningScreen> {
           ],
         ),
         const SizedBox(height: 16),
-        WifiCountrySelector(
-          country: _country,
-          onChanged: (country) => setState(() => _country = country),
-        ),
+        WifiCountrySelector(country: _country, onChanged: _chooseCountry),
       ],
     ),
   );
