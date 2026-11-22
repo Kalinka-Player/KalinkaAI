@@ -179,22 +179,6 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
       for (final entry in state.staged.entries)
         entry.key: encodeRendererValue(entry.value),
     };
-    await _write(changes, keepStaged: false);
-  }
-
-  Future<void> selectLive(String path, dynamic value) async {
-    if (state.saving ||
-        state.applyCosts[path] != RendererApplyCost.instant ||
-        state.values[path] == value) {
-      return;
-    }
-    await _write({path: encodeRendererValue(value)}, keepStaged: true);
-  }
-
-  Future<void> _write(
-    Map<String, String> changes, {
-    required bool keepStaged,
-  }) async {
     // A load already under way would land with the edits gone and Apply on
     // again; the save reloads once it is done.
     _generation++;
@@ -215,7 +199,7 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
       return;
     }
     if (!ref.mounted) return;
-    await load(keepStaged: keepStaged);
+    await load();
     if (!ref.mounted) return;
     state = state.copyWith(
       saving: false,
@@ -248,8 +232,7 @@ class RendererSettingsBinding implements SettingsBinding {
   final RendererSettingsState state;
   final RendererSettingsNotifier notifier;
 
-  final void Function(String path, dynamic value)? onEdit;
-  const RendererSettingsBinding(this.state, this.notifier, {this.onEdit});
+  const RendererSettingsBinding(this.state, this.notifier);
 
   @override
   dynamic effectiveValue(String path) =>
@@ -270,8 +253,7 @@ class RendererSettingsBinding implements SettingsBinding {
   List<ConfigIssue> issuesFor(String path) => const [];
 
   @override
-  void stage(String path, dynamic value) =>
-      (onEdit ?? notifier.stage)(path, value);
+  void stage(String path, dynamic value) => notifier.stage(path, value);
 
   /// A renderer's options come with its settings and change with them.
   @override
