@@ -23,6 +23,7 @@ class SettingsTopBar extends ConsumerWidget {
 
   /// Off where the page is left another way, such as the navigation rail.
   final bool showBack;
+  final VoidCallback? onBack;
   final KeyboardEntryFocus entryFocus;
 
   const SettingsTopBar({
@@ -30,6 +31,7 @@ class SettingsTopBar extends ConsumerWidget {
     required this.title,
     this.action,
     this.showBack = true,
+    this.onBack,
     this.entryFocus = KeyboardEntryFocus.none,
   });
 
@@ -99,7 +101,9 @@ class SettingsTopBar extends ConsumerWidget {
                             if (showBack)
                               KalinkaBackButton(
                                 key: const ValueKey('settings-back'),
-                                onPressed: () => SlideInPanel.closeOf(context),
+                                onPressed:
+                                    onBack ??
+                                    () => SlideInPanel.closeOf(context),
                               )
                             else
                               // The title on the content's gutter.

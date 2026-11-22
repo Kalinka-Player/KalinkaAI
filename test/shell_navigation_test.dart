@@ -822,7 +822,7 @@ void main() {
     final container = await _pump(
       tester,
       api: _RendererApi(),
-      size: const Size(1024, 480),
+      size: const Size(1024, 440),
       reducedMotion: true,
       onScreenKeyboard: true,
       extra: [localDisplayKioskProvider.overrideWithValue(true)],
@@ -830,6 +830,13 @@ void main() {
     container
         .read(rendererSettingsRouteProvider.notifier)
         .open('living', 'Living Room');
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(RendererSettingsScreen),
+        matching: find.text('Output'),
+      ),
+    );
     await tester.pumpAndSettle();
     final field = find.descendant(
       of: find.byType(RendererSettingsScreen),
@@ -904,10 +911,20 @@ void main() {
         expect(FocusManager.instance.primaryFocus, isA<FocusScopeNode>());
         await tester.sendKeyEvent(LogicalKeyboardKey.tab);
         await tester.pumpAndSettle();
+        final section = find.ancestor(
+          of: find.descendant(of: panel, matching: find.text('Output')),
+          matching: find.byType(ListTile),
+        );
+        expect(focusIsOn(section), isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
         final mono = find.byWidgetPredicate(
           (w) => w is SchemaFieldRenderer && w.field.label == 'Mono',
         );
         expect(focusIsOn(mono), isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(panel, findsOneWidget);
         await tester.sendKeyEvent(LogicalKeyboardKey.escape);
         await tester.pumpAndSettle();
         expect(panel, findsNothing);
@@ -992,6 +1009,13 @@ void main() {
           FocusManager.instance.primaryFocus?.nearestScope?.debugLabel,
           'content',
         );
+        final section = find.ancestor(
+          of: find.descendant(of: panel, matching: find.text('Output')),
+          matching: find.byType(ListTile),
+        );
+        expect(focusIsOn(section), isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
         Finder field(String label) => find.byWidgetPredicate(
           (widget) =>
               widget is SchemaFieldRenderer && widget.field.label == label,
@@ -1013,9 +1037,12 @@ void main() {
         expect(container.read(renderer).staged, {'output.Mute': true});
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
+        expect(find.text('Output'), findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
         // Leaving asks what becomes of the staged edit.
         expect(find.text('Apply your changes?'), findsOneWidget);
-        expect(find.text('Mute'), findsWidgets);
+        expect(find.textContaining('Mute'), findsWidgets);
         await tester.tap(_dialogDiscard);
         await tester.pumpAndSettle();
         expect(panel, findsNothing);

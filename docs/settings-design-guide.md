@@ -33,6 +33,8 @@ Wrap text, numeric and password entries in `AppKeyboardTextEntry` and sliders in
 Omit section descriptions that repeat the heading or visible controls. When a section needs a caption, place it 4dp below the heading and leave 10dp before the card, matching collection captions.
 
 Back closes the current panel through `SlideInPanel.closeOf(context)`. System Back does the same. Returning preserves the parent tab, scroll position and staged edits. Only the uppermost panel owns Back. The header remains outside the content scroll.
+Renderer settings lists the sections supplied by the selected output. Each row opens its own settings. Back returns to the section list with pending changes preserved. An output that advertises `dsp.profile` also exposes **Room EQ**. Its tablet view places signal stages beside the response and band controls, with the preset picker below. On phones the graph opens on its own page. The graph previews the filters at 48 kHz. Changing the preset, correction switch or preamp writes directly to the renderer. Filter edits stay in the editor until **Save preset** publishes and selects a new Core profile.
+
 Renderer settings opens with focus on the toolbar scope. Its controls stay
 unhighlighted until navigation begins. The first arrow highlights Back, and
 Tab enters the renderer controls. Covered Streamer controls leave keyboard

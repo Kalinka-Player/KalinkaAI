@@ -217,6 +217,8 @@ class ConfigFieldType extends $pb.ProtobufEnum {
       ConfigFieldType._(4, _omitEnumNames ? '' : 'CONFIG_FIELD_TYPE_ENUM');
   static const ConfigFieldType CONFIG_FIELD_TYPE_TRIGGER =
       ConfigFieldType._(5, _omitEnumNames ? '' : 'CONFIG_FIELD_TYPE_TRIGGER');
+  static const ConfigFieldType CONFIG_FIELD_TYPE_DECIMAL =
+      ConfigFieldType._(6, _omitEnumNames ? '' : 'CONFIG_FIELD_TYPE_DECIMAL');
 
   static const $core.List<ConfigFieldType> values = <ConfigFieldType>[
     CONFIG_FIELD_TYPE_UNSPECIFIED,
@@ -225,10 +227,11 @@ class ConfigFieldType extends $pb.ProtobufEnum {
     CONFIG_FIELD_TYPE_BOOL,
     CONFIG_FIELD_TYPE_ENUM,
     CONFIG_FIELD_TYPE_TRIGGER,
+    CONFIG_FIELD_TYPE_DECIMAL,
   ];
 
   static final $core.List<ConfigFieldType?> _byValue =
-      $pb.ProtobufEnum.$_initByValueList(values, 5);
+      $pb.ProtobufEnum.$_initByValueList(values, 6);
   static ConfigFieldType? valueOf($core.int value) =>
       value < 0 || value >= _byValue.length ? null : _byValue[value];
 
@@ -378,6 +381,31 @@ class SessionClosed_Reason extends $pb.ProtobufEnum {
       value < 0 || value >= _byValue.length ? null : _byValue[value];
 
   const SessionClosed_Reason._(super.value, super.name);
+}
+
+class DspProfile_Band_Type extends $pb.ProtobufEnum {
+  static const DspProfile_Band_Type UNSPECIFIED =
+      DspProfile_Band_Type._(0, _omitEnumNames ? '' : 'UNSPECIFIED');
+  static const DspProfile_Band_Type PEAK =
+      DspProfile_Band_Type._(1, _omitEnumNames ? '' : 'PEAK');
+  static const DspProfile_Band_Type LOW_SHELF =
+      DspProfile_Band_Type._(2, _omitEnumNames ? '' : 'LOW_SHELF');
+  static const DspProfile_Band_Type HIGH_SHELF =
+      DspProfile_Band_Type._(3, _omitEnumNames ? '' : 'HIGH_SHELF');
+
+  static const $core.List<DspProfile_Band_Type> values = <DspProfile_Band_Type>[
+    UNSPECIFIED,
+    PEAK,
+    LOW_SHELF,
+    HIGH_SHELF,
+  ];
+
+  static final $core.List<DspProfile_Band_Type?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static DspProfile_Band_Type? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const DspProfile_Band_Type._(super.value, super.name);
 }
 
 class Goodbye_Reason extends $pb.ProtobufEnum {

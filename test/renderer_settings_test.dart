@@ -179,14 +179,13 @@ class _StubRendererList extends RendererListNotifier {
 /// Apply in the top bar, there while anything is staged.
 final _apply = find.byKey(const ValueKey('pending-changes-apply'));
 
-/// The speaker-test card sits past the fold of an 800x600 test window, so
-/// scroll to it rather than assuming it is built.
-Future<void> scrollToSpeakerTest(WidgetTester tester) async {
-  await tester.scrollUntilVisible(
-    find.text('Test settings'),
-    200,
-    scrollable: find.byType(Scrollable).first,
-  );
+Future<void> openSection(WidgetTester tester, String title) async {
+  await tester.tap(find.text(title));
+  await tester.pumpAndSettle();
+}
+
+Future<void> backToSections(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('settings-back')));
   await tester.pumpAndSettle();
 }
 
@@ -617,13 +616,17 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Output settings'), findsNothing);
-      // Section label, then the fields the renderer declared.
-      expect(find.text('OUTPUT'), findsOneWidget);
+      expect(find.text('Room EQ'), findsNothing);
+      expect(find.text('Device'), findsNothing);
+      await openSection(tester, 'Output');
+      expect(find.text('Output'), findsOneWidget);
       expect(find.text('Device'), findsOneWidget);
       expect(find.text('Volume control'), findsOneWidget);
       // Trigger field dropped, per the adapter.
       expect(find.text('Reset'), findsNothing);
-      expect(find.text('SPEAKER TEST'), findsOneWidget);
+      await backToSections(tester);
+      await openSection(tester, 'Speaker test');
+      expect(find.text('Speaker test'), findsOneWidget);
       expect(find.text('Test settings'), findsOneWidget);
     });
 
@@ -632,6 +635,7 @@ void main() {
     ) async {
       await tester.pumpWidget(wrap(_FakeApi()));
       await tester.pumpAndSettle();
+      await openSection(tester, 'Output');
 
       expect(find.text('Latency'), findsNothing);
       expect(find.text('CLOCK'), findsNothing);
@@ -787,6 +791,7 @@ void main() {
     ) async {
       await tester.pumpWidget(wrap(_FakeApi()));
       await tester.pumpAndSettle();
+      await openSection(tester, 'Output');
 
       expect(find.text('Volume control'), findsOneWidget);
       expect(find.text('How volume is applied'), findsOneWidget);
@@ -797,6 +802,7 @@ void main() {
     ) async {
       await tester.pumpWidget(wrap(_FakeApi()));
       await tester.pumpAndSettle();
+      await openSection(tester, 'Output');
 
       await tester.tap(find.text('default (not present)'));
       await tester.pumpAndSettle();
@@ -830,6 +836,7 @@ void main() {
       final api = _FakeApi();
       await tester.pumpWidget(wrap(api));
       await tester.pumpAndSettle();
+      await openSection(tester, 'Output');
 
       // The dropdown trigger shows the current option's label.
       await tester.tap(find.text('default (not present)'));
@@ -857,6 +864,7 @@ void main() {
       var closed = 0;
       await tester.pumpWidget(wrap(api, onClose: () => closed++));
       await tester.pumpAndSettle();
+      await openSection(tester, 'Output');
       expect(_apply, findsNothing);
       await tester.tap(find.text('default (not present)'));
       await tester.pumpAndSettle();
@@ -868,6 +876,7 @@ void main() {
         findsOneWidget,
       );
 
+      await backToSections(tester);
       Future<void> leave() async {
         await tester.tap(find.byKey(const ValueKey('settings-back')));
         await tester.pumpAndSettle();
@@ -908,6 +917,7 @@ void main() {
       var closed = false;
       await tester.pumpWidget(wrap(api, onClose: () => closed = true));
       await tester.pumpAndSettle();
+      await openSection(tester, 'Output');
       await tester.tap(find.text('default (not present)'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('HiFiBerry Digi+ Pro'));
@@ -932,6 +942,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Output went offline'), findsOneWidget);
 
+      await backToSections(tester);
       api.holdLoad = null;
       await tester.tap(back);
       await tester.pumpAndSettle();
@@ -951,7 +962,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // The card sits below the fold in an 800x600 test window.
-      await scrollToSpeakerTest(tester);
+      await openSection(tester, 'Speaker test');
       await tester.tap(find.text('Test settings'));
       await tester.pump();
 
@@ -975,13 +986,15 @@ void main() {
     ) async {
       await tester.pumpWidget(wrap(_FakeApi()));
       await tester.pumpAndSettle();
+      await openSection(tester, 'Output');
 
       await tester.tap(find.text('auto'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('software'));
       await tester.pumpAndSettle();
 
-      await scrollToSpeakerTest(tester);
+      await backToSections(tester);
+      await openSection(tester, 'Speaker test');
       expect(find.textContaining('Apply your changes first'), findsOneWidget);
       expect(
         tester.widget<KalinkaButton>(find.byType(KalinkaButton)).enabled,
@@ -1021,12 +1034,13 @@ void main() {
         ]),
       );
       await tester.pumpAndSettle();
+      await openSection(tester, 'Renderer');
 
       final badge = find.text('pi-living · v1.2.3');
       expect(badge, findsOneWidget);
       // Under the section label, above the field card.
       final badgeTop = tester.getRect(badge).top;
-      expect(badgeTop, greaterThan(tester.getRect(find.text('RENDERER')).top));
+      expect(badgeTop, greaterThan(tester.getRect(find.text('Renderer')).top));
       expect(badgeTop, lessThan(tester.getRect(find.text('Name')).top));
     });
 
@@ -1037,6 +1051,7 @@ void main() {
         wrapWithList(_FakeApi(payload: _readonlyNamePayload), const []),
       );
       await tester.pumpAndSettle();
+      await openSection(tester, 'Renderer');
 
       expect(find.byType(SettingsTextInput), findsNothing);
       expect(find.byType(SettingsReadonlyCard), findsNothing);

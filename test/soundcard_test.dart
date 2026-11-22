@@ -1282,8 +1282,12 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Output'));
+      await tester.pumpAndSettle();
       expect(find.text('$_hifiberryPcm (not detected)'), findsOneWidget);
 
+      await tester.tap(find.byKey(const ValueKey('settings-back')));
+      await tester.pumpAndSettle();
       box.reports
         ..clear()
         ..add(
@@ -1302,6 +1306,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(proxy.updates.single.$2, {outputDevicePath: _hifiberryPcm});
+      await tester.tap(find.text('Output'));
+      await tester.pumpAndSettle();
       expect(find.text('HiFiBerry Digi+ Pro'), findsOneWidget);
       expect(find.textContaining('not detected'), findsNothing);
       await tester.pump(const Duration(seconds: 6));

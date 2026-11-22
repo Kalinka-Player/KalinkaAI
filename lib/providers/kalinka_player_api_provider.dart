@@ -2,9 +2,17 @@ import 'dart:async' show Timer;
 import 'dart:convert' show jsonEncode;
 
 import 'package:dio/dio.dart'
-    show BaseOptions, Dio, DioException, Headers, Options, Response;
+    show
+        BaseOptions,
+        Dio,
+        DioException,
+        Headers,
+        Options,
+        Response,
+        ResponseType;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data_model/room_eq.dart';
 import '../providers/connection_settings_provider.dart'
     show connectionSettingsProvider;
 import '../data_model/data_model.dart'
@@ -301,6 +309,10 @@ abstract class KalinkaPlayerProxy {
   /// Throws [RenderersUnsupportedException] on a server that predates the
   /// endpoint.
   Future<List<RendererInfo>> listRenderers();
+
+  /// Core-owned room profiles are immutable. Publishing returns a new profile ID.
+  Future<EqCurve> getEqCurve(String id);
+  Future<String> importEqCurve(Map<String, String> payload);
 
   /// This renderer's own settings — schema and values together, from
   /// `GET /renderer/{id}/config`. Not part of `/server/config`: the renderer
@@ -1465,6 +1477,42 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
         throw RenderersUnsupportedException();
       }
       rethrow;
+    }
+  }
+
+  @override
+  Future<EqCurve> getEqCurve(String id) async {
+    try {
+      final response = await client.get<List<int>>(
+        '/dsp/profiles/${Uri.encodeComponent(id)}',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return EqCurve.fromBytes(response.data!);
+    } on DioException catch (e) {
+      throw RendererConfigException(
+        e.response?.statusCode == 404
+            ? 'This room preset is unavailable on the Core.'
+            : _configFailure(e),
+      );
+    }
+  }
+
+  @override
+  Future<String> importEqCurve(Map<String, String> payload) async {
+    try {
+      final response = await client.post(
+        '/dsp/profiles/rew',
+        options: Options(contentType: Headers.jsonContentType),
+        data: jsonEncode(payload),
+      );
+      return (response.data as Map)['id'] as String;
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      throw RendererConfigException(
+        data is Map && data['detail'] is String
+            ? data['detail'] as String
+            : _configFailure(e),
+      );
     }
   }
 

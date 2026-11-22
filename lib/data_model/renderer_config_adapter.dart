@@ -151,7 +151,7 @@ WidgetKind _widgetFor(RendererConfigField field) => switch (field.type) {
   // A slider only where the renderer asked for one and said what it accepts:
   // its byte counts are bounded too, and dragging one across a 32 MB range
   // would never land on a number anybody wanted.
-  RendererFieldType.integer =>
+  RendererFieldType.integer || RendererFieldType.decimal =>
     field.widget == RendererFieldWidget.slider && field.range != null
         ? WidgetKind.numberSlider
         : WidgetKind.numberInput,
@@ -183,6 +183,7 @@ Constraints? _constraintsFor(RendererConfigField field) {
 String _typeNameFor(RendererFieldType type) => switch (type) {
   RendererFieldType.boolean => 'boolean',
   RendererFieldType.integer => 'integer',
+  RendererFieldType.decimal => 'number',
   _ => 'string',
 };
 
@@ -191,6 +192,7 @@ dynamic decodeRendererValue(RendererFieldType type, String raw) =>
     switch (type) {
       RendererFieldType.boolean => raw == 'true' || raw == '1',
       RendererFieldType.integer => int.tryParse(raw) ?? 0,
+      RendererFieldType.decimal => double.tryParse(raw) ?? 0.0,
       _ => raw,
     };
 

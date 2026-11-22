@@ -12,6 +12,7 @@
 enum RendererFieldType {
   string,
   integer,
+  decimal,
   boolean,
   enumeration,
 
@@ -21,6 +22,7 @@ enum RendererFieldType {
 
   static RendererFieldType fromName(String? s) => switch (s) {
     'string' => RendererFieldType.string,
+    'decimal' => RendererFieldType.decimal,
     'int' => RendererFieldType.integer,
     'bool' => RendererFieldType.boolean,
     'enum' => RendererFieldType.enumeration,
@@ -94,11 +96,11 @@ enum RendererFieldWidget {
 /// What a numeric field will accept. The renderer refuses a write outside it,
 /// so the control keeps the user inside it.
 class RendererFieldRange {
-  final int min;
-  final int max;
+  final num min;
+  final num max;
 
   /// 0 when any value in range will do.
-  final int step;
+  final num step;
 
   const RendererFieldRange({
     required this.min,
@@ -108,13 +110,13 @@ class RendererFieldRange {
 
   static RendererFieldRange? fromJson(Object? raw) {
     if (raw is! Map) return null;
-    final min = (raw['min'] as num?)?.toInt();
-    final max = (raw['max'] as num?)?.toInt();
+    final min = raw['min'] as num?;
+    final max = raw['max'] as num?;
     if (min == null || max == null || max <= min) return null;
     return RendererFieldRange(
       min: min,
       max: max,
-      step: (raw['step'] as num?)?.toInt() ?? 0,
+      step: (raw['step'] as num?) ?? 0,
     );
   }
 }

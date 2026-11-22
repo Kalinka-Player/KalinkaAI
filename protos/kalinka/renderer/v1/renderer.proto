@@ -3,9 +3,10 @@
 // One Envelope per binary WebSocket message on ws://<core>/renderer/ws.
 // This file carries the registration handshake (Hello -> Welcome), the
 // playback-session lifecycle, playback commands, state reporting, renderer
-// configuration and Goodbye. Reserved numbers are never reused, so later
-// additions extend rather than renumber. What an implementation must do with
-// these messages is docs/native-renderer-design.md §4.
+// configuration, what the renderer can play, and Goodbye. Reserved numbers are
+// never reused, so later additions extend rather than renumber. What an
+// implementation must do with these messages is docs/native-renderer-design.md
+// §4.
 
 syntax = "proto3";
 
@@ -35,10 +36,13 @@ message Envelope {
     VolumeChanged volume_changed = 1005;
     PlaybackError playback_error = 1008;
     CommandRejected command_rejected = 1009;
+    CapabilitiesChanged capabilities_changed = 1010;
     SessionOpenResult session_open_result = 1012;
     SessionClosed session_closed = 1014;
     ConfigSnapshot config_snapshot = 1015;
     ConfigResult config_result = 1016;
+    UpgradeResult upgrade_result = 1017;
+    PlaybackEvent playback_event = 1018;
     // core -> renderer: 2000-2999
     Welcome welcome = 2000;
     Command command = 2001;
@@ -46,13 +50,14 @@ message Envelope {
     SessionClose session_close = 2004;
     ConfigRequest config_request = 2005;
     ConfigUpdate config_update = 2006;
+    Upgrade upgrade = 2007;
     // either direction
     Goodbye goodbye = 3000;
   }
 
   // 1004 was audio_format_changed: a format only ever accompanied a state,
   // so it rides on PlaybackStateChanged instead.
-  // 1010 / 1011 stay held for capabilities_changed / ownership_changed.
+  // 1011 stays held for ownership_changed.
   // 1006 / 1007 were output_devices_changed / selected_device_changed: the
   // device list is configuration, not state, and lives in ConfigSnapshot now.
   // They stay held in case hot-plug ever needs to be pushed.
@@ -117,6 +122,9 @@ message Platform {
   string arch = 3;           // "aarch64", "x86_64"
   string hostname = 4;
   string audio_backend = 5;  // "alsa"
+  // Optional /etc/machine-id; Core uses it only to recognise its own host.
+  // Missing on older renderers, which must upgrade before Core does.
+  string machine_id = 6;
 }
 
 // ============================================================================
@@ -140,6 +148,45 @@ message DeviceInfo {
   DeviceAccess access = 2;
 }
 
+// One step the renderer takes the decoded samples through on their way to the
+// device.
+message SignalStep {
+  // Stable, for a client to key on: "dsd_to_pcm", "dsd_gain", "dither".
+  string kind = 1;
+  // For a listener: "DSD to PCM".
+  string name = 2;
+  // How it is set, for a listener: "DSD64 to 176.4 kHz, 30 kHz filter".
+  string summary = 3;
+}
+
+// What the renderer does to the samples between the decoder and the device, in
+// order. The volume is not a step of it: VolumeState reports that.
+message SignalPath {
+  repeated SignalStep steps = 1;
+  // Audio the processing holds back ahead of what is heard, in milliseconds.
+  double latency_ms = 2;
+}
+
+// Something that happened during playback, sent as it happens. Unlike
+// PlaybackStateChanged it states nothing that lasts, so no snapshot repeats it,
+// and unlike PlaybackError it does not stop playback. A run of one kind is sent
+// as one event at most twice a second, carrying the latest of it. A Core
+// ignores a kind it does not know.
+message PlaybackEvent {
+  // The source it happened to, when it concerns one.
+  optional string source_token = 1;
+  int64 at_unix_ms = 2;
+  oneof kind {
+    Clipping clipping = 10;
+  }
+}
+
+// The DSP clamped samples to the output's range.
+message Clipping {
+  // Samples clamped since the source began.
+  uint64 clipped_samples = 1;
+}
+
 message Source {
   string uri = 1;           // http(s)://, file://
   string mime_type = 2;     // "audio/flac", "audio/mpeg"
@@ -155,6 +202,8 @@ message VolumeState {
   uint32 current = 2;  // 0..max
   uint32 max = 3;      // 100 for the ALSA backend
   VolumeBackend backend = 4;
+  repeated double db_values = 5; // dB at each integer level; mute is -200 dB.
+  string control_mode = 6; // auto, hardware, software, fixed
 }
 
 message ErrorInfo {
@@ -191,6 +240,9 @@ message StateSnapshot {
   // See PlaybackStateChanged.duration_ms.
   optional uint64 duration_ms = 14;
 
+  // See PlaybackStateChanged.signal_path.
+  optional SignalPath signal_path = 15;
+
   reserved 8;   // output_devices; the list is configuration
   reserved 12;  // ownership; superseded by playback sessions (design §3.3)
 }
@@ -204,12 +256,46 @@ message Hello {
   string software_version = 5;
   RendererKind kind = 6;
   Platform platform = 7;
-  // 8-10 held for capabilities / supported_controls / state (full design).
+  // What the renderer can play now; absent from a renderer that predates it.
+  Capabilities capabilities = 8;
+  // 9-10 held for supported_controls / state (full design).
 
   // Playback session the renderer is currently running, if any. Reported to
   // every Core; only the one whose server_id matches acts on it.
   string active_session_id = 11;
   string session_owner_server_id = 12;
+
+  // Whether this renderer can install a new release of itself on request —
+  // the root-side units that do it are present. False for a build installed
+  // some other way (flatpak, from source), which a Core must not offer to
+  // upgrade.
+  bool upgrade_supported = 13;
+}
+
+// What the renderer can play right now, stated whole every time: in Hello, then
+// in a CapabilitiesChanged to every welcomed Core whenever it changes, whichever
+// Core's settings write changed it.
+message Capabilities {
+  // DSD sources are taken rather than refused outright. A given track can
+  // still fail on the output it meets.
+  bool dsd = 1;
+  // Framed PCM, output readiness, bounded queues and live position feedback.
+  uint32 live_pcm = 2;
+  // What the DSP is built to do, whatever is set.
+  DspCapabilities dsp = 3;
+}
+
+message DspCapabilities {
+  // DSD can be converted to PCM.
+  bool dsd_to_pcm = 1;
+  // The SignalStep kinds the renderer can report.
+  repeated string steps = 2;
+  // The most channels the DSP puts out.
+  uint32 max_output_channels = 3;
+}
+
+message CapabilitiesChanged {
+  Capabilities capabilities = 1;
 }
 
 // Core's response to a valid Hello.
@@ -398,6 +484,24 @@ message PlaybackStateChanged {
   // renderer that can name neither format still reports it. Absent when
   // unknown, which is not zero: unknown length is not a track that ended.
   optional uint64 duration_ms = 9;
+
+  // Set only on a STOPPED without a source_token: a setting that rebuilt the
+  // audio graph stopped a source it was playing, preparing or paused on. The
+  // session carries on, so a Core may play the source again; if the new graph
+  // could not be built, that play tries once more and otherwise reports the
+  // output unavailable. A Core that ignores it sees the plain stop older
+  // renderers report.
+  bool interrupted = 10;
+  // Output format is configured and hardware settling has completed. Core
+  // may now choose a fresh PCM cursor for this source_token. Not a clock sync.
+  bool live_ready = 11;
+  // Absolute PCM frame audible at report time, after live clock adaptation.
+  optional uint64 live_source_frame = 12;
+
+  // What was done to the decoded samples on the way to `device_info`. Absent
+  // when they reach the device as decoded, the volume aside. Restated, as
+  // `format` is, whenever it changes.
+  optional SignalPath signal_path = 13;
 }
 
 // Emitted on AudioGraphNodeState::SOURCE_CHANGED — the gapless crossover.
@@ -433,6 +537,27 @@ message PlaybackError { ErrorInfo error = 1; }
 // `type` says how to read it.
 // ============================================================================
 
+// Version 1 carries either a shared correction or independent left/right EQ.
+message DspProfile {
+  message Band {
+    enum Type {
+      UNSPECIFIED = 0;
+      PEAK = 1;
+      LOW_SHELF = 2;
+      HIGH_SHELF = 3;
+    }
+    Type type = 1;
+    double frequency_hz = 2;
+    double gain_db = 3;
+    double q = 4;
+  }
+  uint32 version = 1;
+  string name = 2;
+  repeated Band shared = 3;
+  repeated Band left = 4;
+  repeated Band right = 5;
+}
+
 message ConfigRequest {}
 
 message ConfigUpdate {
@@ -441,6 +566,27 @@ message ConfigUpdate {
     string value = 2;
   }
   repeated Setting settings = 1;
+  // Where to fetch the SHA-256 selected by dsp.profile on a cache miss.
+  string dsp_profile_url = 2;
+}
+
+// Core -> renderer: install a published renderer release and restart into it.
+//
+// Meaning fixed for every protocol version: a Core that has moved past this
+// renderer still sends it, and that is how such a renderer gets un-stranded.
+// The renderer only requests the upgrade — the install is done by root-side
+// units it cannot reach itself.
+message Upgrade {
+  // Release to install, e.g. "0.4.0". Empty asks for the latest published.
+  string target_version = 1;
+}
+
+// Whether the renderer took the request on. Success here means the install
+// was started, not that it finished: the renderer restarts into the new
+// version and re-registers, which is what actually reports the outcome.
+message UpgradeResult {
+  bool accepted = 1;
+  string detail = 2;
 }
 
 enum ConfigFieldType {
@@ -450,6 +596,7 @@ enum ConfigFieldType {
   CONFIG_FIELD_TYPE_BOOL = 3;
   CONFIG_FIELD_TYPE_ENUM = 4;     // choose from `options`
   CONFIG_FIELD_TYPE_TRIGGER = 5;  // no value; writing anything runs it once
+  CONFIG_FIELD_TYPE_DECIMAL = 6;
 }
 
 // What it costs to apply a field, so the UI can warn before the user commits.
@@ -479,8 +626,13 @@ enum ConfigWidget {
   CONFIG_WIDGET_NUMBER = 2;
 }
 
-// What an INT field will accept. The renderer enforces it too — a write
-// outside the range is refused, not clamped.
+message ConfigDecimalRange {
+  double min = 1;
+  double max = 2;
+  double step = 3;
+}
+
+// What an INT field will accept.
 message ConfigRange {
   int64 min = 1;
   int64 max = 2;
@@ -510,10 +662,12 @@ message ConfigField {
   optional ConfigRange range = 11;  // INT only
   string unit = 12;                 // shown beside the value, e.g. "ms"
   ConfigWidget widget = 13;
+  string help_details = 14;
+  ConfigDecimalRange decimal_range = 15;
 }
 
 message ConfigSection {
-  string path = 1;  // prefix shared by its fields, e.g. "output"
+  string path = 1;  // names it, e.g. "output"; its fields may keep other paths
   string title = 2;
   string description = 3;
   repeated ConfigField fields = 4;

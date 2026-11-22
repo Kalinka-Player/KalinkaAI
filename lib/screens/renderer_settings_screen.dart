@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'room_eq_screen.dart';
+
 import '../data_model/presentation_schema.dart' show SectionSpec;
 import '../data_model/renderer_config.dart' show RendererApplyCost;
 import '../providers/kalinka_player_api_provider.dart';
@@ -80,6 +82,18 @@ class RendererSettingsScreen extends ConsumerStatefulWidget {
 
 class RendererSettingsScreenState
     extends ConsumerState<RendererSettingsScreen> {
+  String? _section;
+  void _openSection(String? id) {
+    setState(() => _section = id);
+    final body = _bodyKey.currentContext;
+    if (body != null) {
+      AppKeyboardNavigation.focusAfterBuild(body, AppKeyboardArea.content);
+    }
+  }
+
+  static const _test = '#speaker-test';
+  final _bodyKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -187,12 +201,19 @@ class RendererSettingsScreenState
     final state = ref.watch(rendererSettingsProvider(widget.rendererId));
     final expertMode = ref.watch(expertModeProvider);
 
+    final section = state.sections.where((s) => s.id == _section).firstOrNull;
+    final title = expertMode
+        ? widget.rendererName
+        : switch (_section) {
+            _test => 'Speaker test',
+            _ => section?.title ?? widget.rendererName,
+          };
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // The renderer is what the page is for, so it is the title.
         SettingsTopBar(
-          title: widget.rendererName,
+          title: title,
           entryFocus: KeyboardEntryFocus.scope,
           action: const ExpertModeToggle(),
         ),
@@ -217,7 +238,13 @@ class RendererSettingsScreenState
       contentEntryFocus: KeyboardEntryFocus.none,
       onClose: widget.onClose,
       // While the box is down, the overlay is all that says why the app waits.
-      beforeClose: () => _beforeClose(box),
+      beforeClose: () async {
+        if (!expertMode && _section != null) {
+          if (_mayClose(box) && !state.saving) _openSection(null);
+          return false;
+        }
+        return _beforeClose(box);
+      },
       onCoverageChanged: widget.onCoverageChanged,
       overlays: [
         if (box != null && change != null && card != null)
@@ -281,37 +308,116 @@ class RendererSettingsScreenState
       );
     }
 
-    if (state.sections.isEmpty) {
+    final hasEq = state.values.containsKey('dsp.profile');
+    if (state.sections.isEmpty && !hasEq) {
       // Told apart from "nothing at all": the renderer does have settings,
       // they are just all expert-tier, so point at the switch that shows them.
       if (state.expertFields.isNotEmpty) return _buildExpertOnlyNote();
       return _buildLoadFailure(state.error);
     }
 
+    final section = state.sections.where((s) => s.id == _section).firstOrNull;
+    final cardBox = ref
+        .watch(rendererSoundcardBoxProvider(widget.rendererId))
+        .value;
+    final card = cardBox == null
+        ? null
+        : ref.watch(soundcardReportProvider(cardBox)).value;
+    Widget link(
+      String title,
+      IconData icon,
+      VoidCallback open, {
+      String? detail,
+    }) => Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: detail == null
+            ? null
+            : Text(detail, maxLines: 2, overflow: TextOverflow.ellipsis),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: open,
+      ),
+    );
     return SettingsScope(
+      key: _bodyKey,
       binding: binding,
       child: ListView(
-        padding: const EdgeInsets.only(bottom: 32),
+        key: PageStorageKey(_section ?? 'renderer-index'),
+        padding: const EdgeInsets.symmetric(vertical: 20),
         children: [
           if (state.error != null) _ErrorNote(message: state.error!),
-          RendererSoundcardSection(
-            rendererId: widget.rendererId,
-            host: _soundcardHost,
-          ),
-          for (final section in state.sections)
+          if (_section == _test)
+            _SpeakerTestSection(
+              rendererId: widget.rendererId,
+              rendererName: widget.rendererName,
+              hasPendingChanges: state.hasPendingChanges,
+            )
+          else if (section != null)
             SchemaSectionRenderer(
-              key: ValueKey(section.id),
               section: section,
               isTopLevel: true,
+              showHeading: false,
+              replaced: hasEq ? RoomEqScreen.fieldPaths : const {},
               subtitle: section.id == 'renderer'
                   ? _RendererAddressBadge(rendererId: widget.rendererId)
                   : null,
+            )
+          else
+            SettingsCard(
+              children: [
+                for (final s in state.sections)
+                  if (s.fields.any(
+                    (f) => !hasEq || !RoomEqScreen.fieldPaths.contains(f.path),
+                  ))
+                    link(
+                      s.title,
+                      switch (s.id) {
+                        'output' => Icons.speaker_outlined,
+                        'renderer' => Icons.settings_input_component_outlined,
+                        _ => Icons.tune_rounded,
+                      },
+                      () => _openSection(s.id),
+                      detail: s.fields
+                          .where(
+                            (f) =>
+                                !hasEq ||
+                                !RoomEqScreen.fieldPaths.contains(f.path),
+                          )
+                          .take(3)
+                          .map((f) => f.label)
+                          .join(' · '),
+                    ),
+                if (hasEq)
+                  link(
+                    'Room EQ',
+                    Icons.equalizer_rounded,
+                    () => Navigator.of(context, rootNavigator: true).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => RoomEqScreen(
+                          rendererId: widget.rendererId,
+                          rendererName: widget.rendererName,
+                        ),
+                      ),
+                    ),
+                    detail: state.values.containsKey('dsp.preamp')
+                        ? 'Filters, preamp and room presets'
+                        : 'Filters and room presets',
+                  ),
+                if (card != null && cardBox != null)
+                  SoundcardRow(
+                    box: cardBox,
+                    report: card,
+                    host: _soundcardHost,
+                  ),
+                link(
+                  'Speaker test',
+                  Icons.surround_sound_outlined,
+                  () => _openSection(_test),
+                ),
+              ],
             ),
-          _SpeakerTestSection(
-            rendererId: widget.rendererId,
-            rendererName: widget.rendererName,
-            hasPendingChanges: state.hasPendingChanges,
-          ),
         ],
       ),
     );
@@ -494,18 +600,6 @@ class _SpeakerTestSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-            ConfigurationAppearance.sideInset(context),
-            28,
-            ConfigurationAppearance.sideInset(context),
-            10,
-          ),
-          child: Text(
-            'SPEAKER TEST',
-            style: KalinkaTextStyles.sectionHeaderMuted,
-          ),
-        ),
         SettingsCard(
           children: [
             Padding(
