@@ -981,6 +981,53 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
     });
 
+    testWidgets('a renderer-advertised spatial mode goes live by itself', (
+      tester,
+    ) async {
+      final data = jsonDecode(_configPayload) as Map<String, dynamic>;
+      (data['sections'] as List).add({
+        'path': 'spatial',
+        'title': 'Spatial audio',
+        'fields': [
+          {
+            'path': 'spatial.expansion',
+            'title': 'Stereo expansion',
+            'type': 'enum',
+            'value': 'off',
+            'default': 'off',
+            'importance': 'simple',
+            'options': [
+              {'value': 'off', 'label': 'Off'},
+              {'value': 'normal', 'label': 'Normal'},
+            ],
+            'apply': 'instant',
+          },
+        ],
+      });
+      final api = _FakeApi(payload: jsonEncode(data));
+      await tester.pumpWidget(wrap(api));
+      await tester.pumpAndSettle();
+      await openSection(tester, 'Output');
+      await tester.tap(find.text('default (not present)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('HiFiBerry Digi+ Pro'));
+      await tester.pumpAndSettle();
+      await backToSections(tester);
+      await openSection(tester, 'Spatial audio');
+      await tester.tap(find.text('Off'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Normal'));
+      await tester.pumpAndSettle();
+      expect(api.writes, [
+        {'spatial.expansion': 'normal'},
+      ]);
+      expect(
+        _apply,
+        findsOneWidget,
+        reason: 'the unrelated device change is still staged',
+      );
+    });
+
     testWidgets('the test is held back while changes are staged', (
       tester,
     ) async {

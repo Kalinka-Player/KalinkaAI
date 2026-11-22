@@ -218,7 +218,13 @@ class RendererSettingsScreenState
           action: const ExpertModeToggle(),
         ),
         const ConnectionBanner(),
-        Expanded(child: _buildBody(state, expertMode)),
+        if (state.saving) const LinearProgressIndicator(minHeight: 2),
+        Expanded(
+          child: AbsorbPointer(
+            absorbing: state.saving,
+            child: _buildBody(state, expertMode),
+          ),
+        ),
       ],
     );
     // A sound card change that restarts the box takes the output away: the
@@ -288,7 +294,20 @@ class RendererSettingsScreenState
       );
     }
 
-    final binding = RendererSettingsBinding(state, _notifier);
+    final binding = RendererSettingsBinding(
+      state,
+      _notifier,
+      onEdit: (path, value) async {
+        if (path == 'spatial.expansion' &&
+            state.applyCosts[path] == RendererApplyCost.instant) {
+          if (!await refusedAsDemo(context, ref) && mounted) {
+            await _notifier.selectLive(path, value);
+          }
+        } else {
+          _notifier.stage(path, value);
+        }
+      },
+    );
 
     // Expert: every field the renderer declared, by path, searchable — the
     // same list the server's settings show, pointed at this renderer. No

@@ -403,6 +403,13 @@ void main() {
             'signal_path': {
               'steps': [
                 {
+                  'kind': 'stereo_expansion',
+                  'name': 'Stereo expansion',
+                  'summary': 'Strong',
+                },
+                {'kind': 'peq', 'name': 'Parametric EQ', 'summary': 'R3'},
+                {'kind': 'preamp', 'name': 'Preamp', 'summary': '-3 dB'},
+                {
                   'kind': 'dither',
                   'name': 'Dither',
                   'summary': 'TPDF at 24 bits',
@@ -416,10 +423,14 @@ void main() {
       expect(stages.map((s) => s.label), [
         'Source',
         'Decoded stream',
+        'Stereo expansion',
+        'Parametric EQ',
+        'Preamp',
         'Dither',
         'Sample rate change',
         'Output',
       ]);
+      expect(stages[2].detail, 'Strong');
     });
     test('a step of a kind the app does not know still shows', () {
       final state = _playing()

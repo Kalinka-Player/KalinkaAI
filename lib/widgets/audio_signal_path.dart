@@ -35,12 +35,18 @@ String _pcm(int hz, int bits, int channels) => _details([
   _channels(channels),
 ]);
 
-// Accept only identified PCM formats. A PCM-width carrier may contain DoP.
 /// Signal step kinds that leave the sample rate as it was: with only these, a
 /// rate change between the decoded stream and the output happened past the
 /// renderer's DSP, in ALSA or a sound server.
-const _rateKeepingSteps = {'dsd_gain', 'dither'};
+const _rateKeepingSteps = {
+  'stereo_expansion',
+  'peq',
+  'preamp',
+  'dsd_gain',
+  'dither',
+};
 
+// Accept only identified PCM formats. A PCM-width carrier may contain DoP.
 bool _isPcm(String name) =>
     name.startsWith('PCM') ||
     name.startsWith('FLOAT') ||
