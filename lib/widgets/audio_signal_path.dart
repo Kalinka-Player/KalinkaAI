@@ -39,7 +39,6 @@ String _pcm(int hz, int bits, int channels) => _details([
 /// rate change between the decoded stream and the output happened past the
 /// renderer's DSP, in ALSA or a sound server.
 const _rateKeepingSteps = {
-  'stereo_expansion',
   'peq',
   'preamp',
   'dsd_gain',
