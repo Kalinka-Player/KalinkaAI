@@ -533,6 +533,7 @@ Widget _separated(List<Widget> rows) => Column(
 class SchemaSectionRenderer extends StatelessWidget {
   final SectionSpec section;
   final bool isTopLevel;
+  final bool showHeading;
   final bool showServerUpdate;
 
   /// Metadata line under a top-level section's label, e.g. the renderer
@@ -550,6 +551,7 @@ class SchemaSectionRenderer extends StatelessWidget {
     super.key,
     required this.section,
     this.isTopLevel = false,
+    this.showHeading = true,
     this.showServerUpdate = true,
     this.subtitle,
     this.replaced = const {},
@@ -619,16 +621,17 @@ class SchemaSectionRenderer extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _sectionLabel(
-            context,
-            section.title,
-            caption: section.help,
-            subtitle:
-                section.id == 'base_config.server' &&
-                    !ConfigurationAppearance.active(context)
-                ? const _ServerAddressBadge()
-                : subtitle,
-          ),
+          if (showHeading || section.help != null || subtitle != null)
+            _sectionLabel(
+              context,
+              showHeading ? section.title : null,
+              caption: section.help,
+              subtitle:
+                  section.id == 'base_config.server' &&
+                      !ConfigurationAppearance.active(context)
+                  ? const _ServerAddressBadge()
+                  : subtitle,
+            ),
           // "New version available ›" banner between the SERVER label
           // and the settings fields; hidden when there's no update.
           if (showServerUpdate && section.id == 'base_config.server')
@@ -701,7 +704,7 @@ class SchemaSectionRenderer extends StatelessWidget {
 
   static Widget _sectionLabel(
     BuildContext context,
-    String label, {
+    String? label, {
     String? caption,
     Widget? subtitle,
   }) {
@@ -710,10 +713,11 @@ class SchemaSectionRenderer extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label.toUpperCase(),
-            style: KalinkaTextStyles.sectionHeaderMuted,
-          ),
+          if (label != null)
+            Text(
+              label.toUpperCase(),
+              style: KalinkaTextStyles.sectionHeaderMuted,
+            ),
           if (caption?.trim().isNotEmpty ?? false) ...[
             const SizedBox(height: 4),
             InlineMarkdown(

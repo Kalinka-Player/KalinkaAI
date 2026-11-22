@@ -29,16 +29,20 @@ enum Envelope_Payload {
   volumeChanged,
   playbackError,
   commandRejected,
+  capabilitiesChanged,
   sessionOpenResult,
   sessionClosed,
   configSnapshot,
   configResult,
+  upgradeResult,
+  playbackEvent,
   welcome,
   command,
   sessionOpen,
   sessionClose,
   configRequest,
   configUpdate,
+  upgrade,
   goodbye,
   notSet
 }
@@ -55,16 +59,20 @@ class Envelope extends $pb.GeneratedMessage {
     VolumeChanged? volumeChanged,
     PlaybackError? playbackError,
     CommandRejected? commandRejected,
+    CapabilitiesChanged? capabilitiesChanged,
     SessionOpenResult? sessionOpenResult,
     SessionClosed? sessionClosed,
     ConfigSnapshot? configSnapshot,
     ConfigResult? configResult,
+    UpgradeResult? upgradeResult,
+    PlaybackEvent? playbackEvent,
     Welcome? welcome,
     Command? command,
     SessionOpen? sessionOpen,
     SessionClose? sessionClose,
     ConfigRequest? configRequest,
     ConfigUpdate? configUpdate,
+    Upgrade? upgrade,
     Goodbye? goodbye,
   }) {
     final result = create();
@@ -79,16 +87,21 @@ class Envelope extends $pb.GeneratedMessage {
     if (volumeChanged != null) result.volumeChanged = volumeChanged;
     if (playbackError != null) result.playbackError = playbackError;
     if (commandRejected != null) result.commandRejected = commandRejected;
+    if (capabilitiesChanged != null)
+      result.capabilitiesChanged = capabilitiesChanged;
     if (sessionOpenResult != null) result.sessionOpenResult = sessionOpenResult;
     if (sessionClosed != null) result.sessionClosed = sessionClosed;
     if (configSnapshot != null) result.configSnapshot = configSnapshot;
     if (configResult != null) result.configResult = configResult;
+    if (upgradeResult != null) result.upgradeResult = upgradeResult;
+    if (playbackEvent != null) result.playbackEvent = playbackEvent;
     if (welcome != null) result.welcome = welcome;
     if (command != null) result.command = command;
     if (sessionOpen != null) result.sessionOpen = sessionOpen;
     if (sessionClose != null) result.sessionClose = sessionClose;
     if (configRequest != null) result.configRequest = configRequest;
     if (configUpdate != null) result.configUpdate = configUpdate;
+    if (upgrade != null) result.upgrade = upgrade;
     if (goodbye != null) result.goodbye = goodbye;
     return result;
   }
@@ -110,16 +123,20 @@ class Envelope extends $pb.GeneratedMessage {
     1005: Envelope_Payload.volumeChanged,
     1008: Envelope_Payload.playbackError,
     1009: Envelope_Payload.commandRejected,
+    1010: Envelope_Payload.capabilitiesChanged,
     1012: Envelope_Payload.sessionOpenResult,
     1014: Envelope_Payload.sessionClosed,
     1015: Envelope_Payload.configSnapshot,
     1016: Envelope_Payload.configResult,
+    1017: Envelope_Payload.upgradeResult,
+    1018: Envelope_Payload.playbackEvent,
     2000: Envelope_Payload.welcome,
     2001: Envelope_Payload.command,
     2003: Envelope_Payload.sessionOpen,
     2004: Envelope_Payload.sessionClose,
     2005: Envelope_Payload.configRequest,
     2006: Envelope_Payload.configUpdate,
+    2007: Envelope_Payload.upgrade,
     3000: Envelope_Payload.goodbye,
     0: Envelope_Payload.notSet
   };
@@ -136,16 +153,20 @@ class Envelope extends $pb.GeneratedMessage {
       1005,
       1008,
       1009,
+      1010,
       1012,
       1014,
       1015,
       1016,
+      1017,
+      1018,
       2000,
       2001,
       2003,
       2004,
       2005,
       2006,
+      2007,
       3000
     ])
     ..a<$fixnum.Int64>(
@@ -169,6 +190,9 @@ class Envelope extends $pb.GeneratedMessage {
         subBuilder: PlaybackError.create)
     ..aOM<CommandRejected>(1009, _omitFieldNames ? '' : 'commandRejected',
         subBuilder: CommandRejected.create)
+    ..aOM<CapabilitiesChanged>(
+        1010, _omitFieldNames ? '' : 'capabilitiesChanged',
+        subBuilder: CapabilitiesChanged.create)
     ..aOM<SessionOpenResult>(1012, _omitFieldNames ? '' : 'sessionOpenResult',
         subBuilder: SessionOpenResult.create)
     ..aOM<SessionClosed>(1014, _omitFieldNames ? '' : 'sessionClosed',
@@ -177,6 +201,10 @@ class Envelope extends $pb.GeneratedMessage {
         subBuilder: ConfigSnapshot.create)
     ..aOM<ConfigResult>(1016, _omitFieldNames ? '' : 'configResult',
         subBuilder: ConfigResult.create)
+    ..aOM<UpgradeResult>(1017, _omitFieldNames ? '' : 'upgradeResult',
+        subBuilder: UpgradeResult.create)
+    ..aOM<PlaybackEvent>(1018, _omitFieldNames ? '' : 'playbackEvent',
+        subBuilder: PlaybackEvent.create)
     ..aOM<Welcome>(2000, _omitFieldNames ? '' : 'welcome',
         subBuilder: Welcome.create)
     ..aOM<Command>(2001, _omitFieldNames ? '' : 'command',
@@ -189,6 +217,8 @@ class Envelope extends $pb.GeneratedMessage {
         subBuilder: ConfigRequest.create)
     ..aOM<ConfigUpdate>(2006, _omitFieldNames ? '' : 'configUpdate',
         subBuilder: ConfigUpdate.create)
+    ..aOM<Upgrade>(2007, _omitFieldNames ? '' : 'upgrade',
+        subBuilder: Upgrade.create)
     ..aOM<Goodbye>(3000, _omitFieldNames ? '' : 'goodbye',
         subBuilder: Goodbye.create)
     ..hasRequiredFields = false;
@@ -218,16 +248,20 @@ class Envelope extends $pb.GeneratedMessage {
   @$pb.TagNumber(1005)
   @$pb.TagNumber(1008)
   @$pb.TagNumber(1009)
+  @$pb.TagNumber(1010)
   @$pb.TagNumber(1012)
   @$pb.TagNumber(1014)
   @$pb.TagNumber(1015)
   @$pb.TagNumber(1016)
+  @$pb.TagNumber(1017)
+  @$pb.TagNumber(1018)
   @$pb.TagNumber(2000)
   @$pb.TagNumber(2001)
   @$pb.TagNumber(2003)
   @$pb.TagNumber(2004)
   @$pb.TagNumber(2005)
   @$pb.TagNumber(2006)
+  @$pb.TagNumber(2007)
   @$pb.TagNumber(3000)
   Envelope_Payload whichPayload() => _Envelope_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(1000)
@@ -237,16 +271,20 @@ class Envelope extends $pb.GeneratedMessage {
   @$pb.TagNumber(1005)
   @$pb.TagNumber(1008)
   @$pb.TagNumber(1009)
+  @$pb.TagNumber(1010)
   @$pb.TagNumber(1012)
   @$pb.TagNumber(1014)
   @$pb.TagNumber(1015)
   @$pb.TagNumber(1016)
+  @$pb.TagNumber(1017)
+  @$pb.TagNumber(1018)
   @$pb.TagNumber(2000)
   @$pb.TagNumber(2001)
   @$pb.TagNumber(2003)
   @$pb.TagNumber(2004)
   @$pb.TagNumber(2005)
   @$pb.TagNumber(2006)
+  @$pb.TagNumber(2007)
   @$pb.TagNumber(3000)
   void clearPayload() => $_clearField($_whichOneof(0));
 
@@ -362,128 +400,172 @@ class Envelope extends $pb.GeneratedMessage {
   @$pb.TagNumber(1009)
   CommandRejected ensureCommandRejected() => $_ensure(9);
 
+  @$pb.TagNumber(1010)
+  CapabilitiesChanged get capabilitiesChanged => $_getN(10);
+  @$pb.TagNumber(1010)
+  set capabilitiesChanged(CapabilitiesChanged value) => $_setField(1010, value);
+  @$pb.TagNumber(1010)
+  $core.bool hasCapabilitiesChanged() => $_has(10);
+  @$pb.TagNumber(1010)
+  void clearCapabilitiesChanged() => $_clearField(1010);
+  @$pb.TagNumber(1010)
+  CapabilitiesChanged ensureCapabilitiesChanged() => $_ensure(10);
+
   @$pb.TagNumber(1012)
-  SessionOpenResult get sessionOpenResult => $_getN(10);
+  SessionOpenResult get sessionOpenResult => $_getN(11);
   @$pb.TagNumber(1012)
   set sessionOpenResult(SessionOpenResult value) => $_setField(1012, value);
   @$pb.TagNumber(1012)
-  $core.bool hasSessionOpenResult() => $_has(10);
+  $core.bool hasSessionOpenResult() => $_has(11);
   @$pb.TagNumber(1012)
   void clearSessionOpenResult() => $_clearField(1012);
   @$pb.TagNumber(1012)
-  SessionOpenResult ensureSessionOpenResult() => $_ensure(10);
+  SessionOpenResult ensureSessionOpenResult() => $_ensure(11);
 
   @$pb.TagNumber(1014)
-  SessionClosed get sessionClosed => $_getN(11);
+  SessionClosed get sessionClosed => $_getN(12);
   @$pb.TagNumber(1014)
   set sessionClosed(SessionClosed value) => $_setField(1014, value);
   @$pb.TagNumber(1014)
-  $core.bool hasSessionClosed() => $_has(11);
+  $core.bool hasSessionClosed() => $_has(12);
   @$pb.TagNumber(1014)
   void clearSessionClosed() => $_clearField(1014);
   @$pb.TagNumber(1014)
-  SessionClosed ensureSessionClosed() => $_ensure(11);
+  SessionClosed ensureSessionClosed() => $_ensure(12);
 
   @$pb.TagNumber(1015)
-  ConfigSnapshot get configSnapshot => $_getN(12);
+  ConfigSnapshot get configSnapshot => $_getN(13);
   @$pb.TagNumber(1015)
   set configSnapshot(ConfigSnapshot value) => $_setField(1015, value);
   @$pb.TagNumber(1015)
-  $core.bool hasConfigSnapshot() => $_has(12);
+  $core.bool hasConfigSnapshot() => $_has(13);
   @$pb.TagNumber(1015)
   void clearConfigSnapshot() => $_clearField(1015);
   @$pb.TagNumber(1015)
-  ConfigSnapshot ensureConfigSnapshot() => $_ensure(12);
+  ConfigSnapshot ensureConfigSnapshot() => $_ensure(13);
 
   @$pb.TagNumber(1016)
-  ConfigResult get configResult => $_getN(13);
+  ConfigResult get configResult => $_getN(14);
   @$pb.TagNumber(1016)
   set configResult(ConfigResult value) => $_setField(1016, value);
   @$pb.TagNumber(1016)
-  $core.bool hasConfigResult() => $_has(13);
+  $core.bool hasConfigResult() => $_has(14);
   @$pb.TagNumber(1016)
   void clearConfigResult() => $_clearField(1016);
   @$pb.TagNumber(1016)
-  ConfigResult ensureConfigResult() => $_ensure(13);
+  ConfigResult ensureConfigResult() => $_ensure(14);
+
+  @$pb.TagNumber(1017)
+  UpgradeResult get upgradeResult => $_getN(15);
+  @$pb.TagNumber(1017)
+  set upgradeResult(UpgradeResult value) => $_setField(1017, value);
+  @$pb.TagNumber(1017)
+  $core.bool hasUpgradeResult() => $_has(15);
+  @$pb.TagNumber(1017)
+  void clearUpgradeResult() => $_clearField(1017);
+  @$pb.TagNumber(1017)
+  UpgradeResult ensureUpgradeResult() => $_ensure(15);
+
+  @$pb.TagNumber(1018)
+  PlaybackEvent get playbackEvent => $_getN(16);
+  @$pb.TagNumber(1018)
+  set playbackEvent(PlaybackEvent value) => $_setField(1018, value);
+  @$pb.TagNumber(1018)
+  $core.bool hasPlaybackEvent() => $_has(16);
+  @$pb.TagNumber(1018)
+  void clearPlaybackEvent() => $_clearField(1018);
+  @$pb.TagNumber(1018)
+  PlaybackEvent ensurePlaybackEvent() => $_ensure(16);
 
   /// core -> renderer: 2000-2999
   @$pb.TagNumber(2000)
-  Welcome get welcome => $_getN(14);
+  Welcome get welcome => $_getN(17);
   @$pb.TagNumber(2000)
   set welcome(Welcome value) => $_setField(2000, value);
   @$pb.TagNumber(2000)
-  $core.bool hasWelcome() => $_has(14);
+  $core.bool hasWelcome() => $_has(17);
   @$pb.TagNumber(2000)
   void clearWelcome() => $_clearField(2000);
   @$pb.TagNumber(2000)
-  Welcome ensureWelcome() => $_ensure(14);
+  Welcome ensureWelcome() => $_ensure(17);
 
   @$pb.TagNumber(2001)
-  Command get command => $_getN(15);
+  Command get command => $_getN(18);
   @$pb.TagNumber(2001)
   set command(Command value) => $_setField(2001, value);
   @$pb.TagNumber(2001)
-  $core.bool hasCommand() => $_has(15);
+  $core.bool hasCommand() => $_has(18);
   @$pb.TagNumber(2001)
   void clearCommand() => $_clearField(2001);
   @$pb.TagNumber(2001)
-  Command ensureCommand() => $_ensure(15);
+  Command ensureCommand() => $_ensure(18);
 
   @$pb.TagNumber(2003)
-  SessionOpen get sessionOpen => $_getN(16);
+  SessionOpen get sessionOpen => $_getN(19);
   @$pb.TagNumber(2003)
   set sessionOpen(SessionOpen value) => $_setField(2003, value);
   @$pb.TagNumber(2003)
-  $core.bool hasSessionOpen() => $_has(16);
+  $core.bool hasSessionOpen() => $_has(19);
   @$pb.TagNumber(2003)
   void clearSessionOpen() => $_clearField(2003);
   @$pb.TagNumber(2003)
-  SessionOpen ensureSessionOpen() => $_ensure(16);
+  SessionOpen ensureSessionOpen() => $_ensure(19);
 
   @$pb.TagNumber(2004)
-  SessionClose get sessionClose => $_getN(17);
+  SessionClose get sessionClose => $_getN(20);
   @$pb.TagNumber(2004)
   set sessionClose(SessionClose value) => $_setField(2004, value);
   @$pb.TagNumber(2004)
-  $core.bool hasSessionClose() => $_has(17);
+  $core.bool hasSessionClose() => $_has(20);
   @$pb.TagNumber(2004)
   void clearSessionClose() => $_clearField(2004);
   @$pb.TagNumber(2004)
-  SessionClose ensureSessionClose() => $_ensure(17);
+  SessionClose ensureSessionClose() => $_ensure(20);
 
   @$pb.TagNumber(2005)
-  ConfigRequest get configRequest => $_getN(18);
+  ConfigRequest get configRequest => $_getN(21);
   @$pb.TagNumber(2005)
   set configRequest(ConfigRequest value) => $_setField(2005, value);
   @$pb.TagNumber(2005)
-  $core.bool hasConfigRequest() => $_has(18);
+  $core.bool hasConfigRequest() => $_has(21);
   @$pb.TagNumber(2005)
   void clearConfigRequest() => $_clearField(2005);
   @$pb.TagNumber(2005)
-  ConfigRequest ensureConfigRequest() => $_ensure(18);
+  ConfigRequest ensureConfigRequest() => $_ensure(21);
 
   @$pb.TagNumber(2006)
-  ConfigUpdate get configUpdate => $_getN(19);
+  ConfigUpdate get configUpdate => $_getN(22);
   @$pb.TagNumber(2006)
   set configUpdate(ConfigUpdate value) => $_setField(2006, value);
   @$pb.TagNumber(2006)
-  $core.bool hasConfigUpdate() => $_has(19);
+  $core.bool hasConfigUpdate() => $_has(22);
   @$pb.TagNumber(2006)
   void clearConfigUpdate() => $_clearField(2006);
   @$pb.TagNumber(2006)
-  ConfigUpdate ensureConfigUpdate() => $_ensure(19);
+  ConfigUpdate ensureConfigUpdate() => $_ensure(22);
+
+  @$pb.TagNumber(2007)
+  Upgrade get upgrade => $_getN(23);
+  @$pb.TagNumber(2007)
+  set upgrade(Upgrade value) => $_setField(2007, value);
+  @$pb.TagNumber(2007)
+  $core.bool hasUpgrade() => $_has(23);
+  @$pb.TagNumber(2007)
+  void clearUpgrade() => $_clearField(2007);
+  @$pb.TagNumber(2007)
+  Upgrade ensureUpgrade() => $_ensure(23);
 
   /// either direction
   @$pb.TagNumber(3000)
-  Goodbye get goodbye => $_getN(20);
+  Goodbye get goodbye => $_getN(24);
   @$pb.TagNumber(3000)
   set goodbye(Goodbye value) => $_setField(3000, value);
   @$pb.TagNumber(3000)
-  $core.bool hasGoodbye() => $_has(20);
+  $core.bool hasGoodbye() => $_has(24);
   @$pb.TagNumber(3000)
   void clearGoodbye() => $_clearField(3000);
   @$pb.TagNumber(3000)
-  Goodbye ensureGoodbye() => $_ensure(20);
+  Goodbye ensureGoodbye() => $_ensure(24);
 }
 
 class ProtocolVersionRange extends $pb.GeneratedMessage {
@@ -560,6 +642,7 @@ class Platform extends $pb.GeneratedMessage {
     $core.String? arch,
     $core.String? hostname,
     $core.String? audioBackend,
+    $core.String? machineId,
   }) {
     final result = create();
     if (os != null) result.os = os;
@@ -567,6 +650,7 @@ class Platform extends $pb.GeneratedMessage {
     if (arch != null) result.arch = arch;
     if (hostname != null) result.hostname = hostname;
     if (audioBackend != null) result.audioBackend = audioBackend;
+    if (machineId != null) result.machineId = machineId;
     return result;
   }
 
@@ -589,6 +673,7 @@ class Platform extends $pb.GeneratedMessage {
     ..aOS(3, _omitFieldNames ? '' : 'arch')
     ..aOS(4, _omitFieldNames ? '' : 'hostname')
     ..aOS(5, _omitFieldNames ? '' : 'audioBackend')
+    ..aOS(6, _omitFieldNames ? '' : 'machineId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -653,6 +738,17 @@ class Platform extends $pb.GeneratedMessage {
   $core.bool hasAudioBackend() => $_has(4);
   @$pb.TagNumber(5)
   void clearAudioBackend() => $_clearField(5);
+
+  /// Optional /etc/machine-id; Core uses it only to recognise its own host.
+  /// Missing on older renderers, which must upgrade before Core does.
+  @$pb.TagNumber(6)
+  $core.String get machineId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set machineId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasMachineId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearMachineId() => $_clearField(6);
 }
 
 class AudioFormat extends $pb.GeneratedMessage {
@@ -819,6 +915,312 @@ class DeviceInfo extends $pb.GeneratedMessage {
   void clearAccess() => $_clearField(2);
 }
 
+/// One step the renderer takes the decoded samples through on their way to the
+/// device.
+class SignalStep extends $pb.GeneratedMessage {
+  factory SignalStep({
+    $core.String? kind,
+    $core.String? name,
+    $core.String? summary,
+  }) {
+    final result = create();
+    if (kind != null) result.kind = kind;
+    if (name != null) result.name = name;
+    if (summary != null) result.summary = summary;
+    return result;
+  }
+
+  SignalStep._();
+
+  factory SignalStep.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SignalStep.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SignalStep',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'kind')
+    ..aOS(2, _omitFieldNames ? '' : 'name')
+    ..aOS(3, _omitFieldNames ? '' : 'summary')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SignalStep clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SignalStep copyWith(void Function(SignalStep) updates) =>
+      super.copyWith((message) => updates(message as SignalStep)) as SignalStep;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SignalStep create() => SignalStep._();
+  @$core.override
+  SignalStep createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SignalStep getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SignalStep>(create);
+  static SignalStep? _defaultInstance;
+
+  /// Stable, for a client to key on: "dsd_to_pcm", "dsd_gain", "dither".
+  @$pb.TagNumber(1)
+  $core.String get kind => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set kind($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasKind() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearKind() => $_clearField(1);
+
+  /// For a listener: "DSD to PCM".
+  @$pb.TagNumber(2)
+  $core.String get name => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set name($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasName() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearName() => $_clearField(2);
+
+  /// How it is set, for a listener: "DSD64 to 176.4 kHz, 30 kHz filter".
+  @$pb.TagNumber(3)
+  $core.String get summary => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set summary($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSummary() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSummary() => $_clearField(3);
+}
+
+/// What the renderer does to the samples between the decoder and the device, in
+/// order. The volume is not a step of it: VolumeState reports that.
+class SignalPath extends $pb.GeneratedMessage {
+  factory SignalPath({
+    $core.Iterable<SignalStep>? steps,
+    $core.double? latencyMs,
+  }) {
+    final result = create();
+    if (steps != null) result.steps.addAll(steps);
+    if (latencyMs != null) result.latencyMs = latencyMs;
+    return result;
+  }
+
+  SignalPath._();
+
+  factory SignalPath.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SignalPath.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SignalPath',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..pPM<SignalStep>(1, _omitFieldNames ? '' : 'steps',
+        subBuilder: SignalStep.create)
+    ..aD(2, _omitFieldNames ? '' : 'latencyMs')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SignalPath clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SignalPath copyWith(void Function(SignalPath) updates) =>
+      super.copyWith((message) => updates(message as SignalPath)) as SignalPath;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SignalPath create() => SignalPath._();
+  @$core.override
+  SignalPath createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SignalPath getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SignalPath>(create);
+  static SignalPath? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<SignalStep> get steps => $_getList(0);
+
+  /// Audio the processing holds back ahead of what is heard, in milliseconds.
+  @$pb.TagNumber(2)
+  $core.double get latencyMs => $_getN(1);
+  @$pb.TagNumber(2)
+  set latencyMs($core.double value) => $_setDouble(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasLatencyMs() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearLatencyMs() => $_clearField(2);
+}
+
+enum PlaybackEvent_Kind { clipping, notSet }
+
+/// Something that happened during playback, sent as it happens. Unlike
+/// PlaybackStateChanged it states nothing that lasts, so no snapshot repeats it,
+/// and unlike PlaybackError it does not stop playback. A run of one kind is sent
+/// as one event at most twice a second, carrying the latest of it. A Core
+/// ignores a kind it does not know.
+class PlaybackEvent extends $pb.GeneratedMessage {
+  factory PlaybackEvent({
+    $core.String? sourceToken,
+    $fixnum.Int64? atUnixMs,
+    Clipping? clipping,
+  }) {
+    final result = create();
+    if (sourceToken != null) result.sourceToken = sourceToken;
+    if (atUnixMs != null) result.atUnixMs = atUnixMs;
+    if (clipping != null) result.clipping = clipping;
+    return result;
+  }
+
+  PlaybackEvent._();
+
+  factory PlaybackEvent.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory PlaybackEvent.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static const $core.Map<$core.int, PlaybackEvent_Kind>
+      _PlaybackEvent_KindByTag = {
+    10: PlaybackEvent_Kind.clipping,
+    0: PlaybackEvent_Kind.notSet
+  };
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'PlaybackEvent',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..oo(0, [10])
+    ..aOS(1, _omitFieldNames ? '' : 'sourceToken')
+    ..aInt64(2, _omitFieldNames ? '' : 'atUnixMs')
+    ..aOM<Clipping>(10, _omitFieldNames ? '' : 'clipping',
+        subBuilder: Clipping.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PlaybackEvent clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  PlaybackEvent copyWith(void Function(PlaybackEvent) updates) =>
+      super.copyWith((message) => updates(message as PlaybackEvent))
+          as PlaybackEvent;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static PlaybackEvent create() => PlaybackEvent._();
+  @$core.override
+  PlaybackEvent createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static PlaybackEvent getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<PlaybackEvent>(create);
+  static PlaybackEvent? _defaultInstance;
+
+  @$pb.TagNumber(10)
+  PlaybackEvent_Kind whichKind() => _PlaybackEvent_KindByTag[$_whichOneof(0)]!;
+  @$pb.TagNumber(10)
+  void clearKind() => $_clearField($_whichOneof(0));
+
+  /// The source it happened to, when it concerns one.
+  @$pb.TagNumber(1)
+  $core.String get sourceToken => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set sourceToken($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSourceToken() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSourceToken() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get atUnixMs => $_getI64(1);
+  @$pb.TagNumber(2)
+  set atUnixMs($fixnum.Int64 value) => $_setInt64(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAtUnixMs() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAtUnixMs() => $_clearField(2);
+
+  @$pb.TagNumber(10)
+  Clipping get clipping => $_getN(2);
+  @$pb.TagNumber(10)
+  set clipping(Clipping value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasClipping() => $_has(2);
+  @$pb.TagNumber(10)
+  void clearClipping() => $_clearField(10);
+  @$pb.TagNumber(10)
+  Clipping ensureClipping() => $_ensure(2);
+}
+
+/// The DSP clamped samples to the output's range.
+class Clipping extends $pb.GeneratedMessage {
+  factory Clipping({
+    $fixnum.Int64? clippedSamples,
+  }) {
+    final result = create();
+    if (clippedSamples != null) result.clippedSamples = clippedSamples;
+    return result;
+  }
+
+  Clipping._();
+
+  factory Clipping.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory Clipping.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'Clipping',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..a<$fixnum.Int64>(
+        1, _omitFieldNames ? '' : 'clippedSamples', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Clipping clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Clipping copyWith(void Function(Clipping) updates) =>
+      super.copyWith((message) => updates(message as Clipping)) as Clipping;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static Clipping create() => Clipping._();
+  @$core.override
+  Clipping createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static Clipping getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Clipping>(create);
+  static Clipping? _defaultInstance;
+
+  /// Samples clamped since the source began.
+  @$pb.TagNumber(1)
+  $fixnum.Int64 get clippedSamples => $_getI64(0);
+  @$pb.TagNumber(1)
+  set clippedSamples($fixnum.Int64 value) => $_setInt64(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasClippedSamples() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearClippedSamples() => $_clearField(1);
+}
+
 class Source extends $pb.GeneratedMessage {
   factory Source({
     $core.String? uri,
@@ -920,12 +1322,16 @@ class VolumeState extends $pb.GeneratedMessage {
     $core.int? current,
     $core.int? max,
     VolumeBackend? backend,
+    $core.Iterable<$core.double>? dbValues,
+    $core.String? controlMode,
   }) {
     final result = create();
     if (supported != null) result.supported = supported;
     if (current != null) result.current = current;
     if (max != null) result.max = max;
     if (backend != null) result.backend = backend;
+    if (dbValues != null) result.dbValues.addAll(dbValues);
+    if (controlMode != null) result.controlMode = controlMode;
     return result;
   }
 
@@ -948,6 +1354,8 @@ class VolumeState extends $pb.GeneratedMessage {
     ..aI(3, _omitFieldNames ? '' : 'max', fieldType: $pb.PbFieldType.OU3)
     ..aE<VolumeBackend>(4, _omitFieldNames ? '' : 'backend',
         enumValues: VolumeBackend.values)
+    ..p<$core.double>(5, _omitFieldNames ? '' : 'dbValues', $pb.PbFieldType.KD)
+    ..aOS(6, _omitFieldNames ? '' : 'controlMode')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1004,6 +1412,18 @@ class VolumeState extends $pb.GeneratedMessage {
   $core.bool hasBackend() => $_has(3);
   @$pb.TagNumber(4)
   void clearBackend() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $pb.PbList<$core.double> get dbValues => $_getList(4);
+
+  @$pb.TagNumber(6)
+  $core.String get controlMode => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set controlMode($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasControlMode() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearControlMode() => $_clearField(6);
 }
 
 class ErrorInfo extends $pb.GeneratedMessage {
@@ -1101,6 +1521,7 @@ class StateSnapshot extends $pb.GeneratedMessage {
     $core.Iterable<$core.String>? queuedSourceTokens,
     DeviceInfo? deviceInfo,
     $fixnum.Int64? durationMs,
+    SignalPath? signalPath,
   }) {
     final result = create();
     if (playbackState != null) result.playbackState = playbackState;
@@ -1116,6 +1537,7 @@ class StateSnapshot extends $pb.GeneratedMessage {
       result.queuedSourceTokens.addAll(queuedSourceTokens);
     if (deviceInfo != null) result.deviceInfo = deviceInfo;
     if (durationMs != null) result.durationMs = durationMs;
+    if (signalPath != null) result.signalPath = signalPath;
     return result;
   }
 
@@ -1155,6 +1577,8 @@ class StateSnapshot extends $pb.GeneratedMessage {
     ..a<$fixnum.Int64>(
         14, _omitFieldNames ? '' : 'durationMs', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOM<SignalPath>(15, _omitFieldNames ? '' : 'signalPath',
+        subBuilder: SignalPath.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1294,6 +1718,18 @@ class StateSnapshot extends $pb.GeneratedMessage {
   $core.bool hasDurationMs() => $_has(11);
   @$pb.TagNumber(14)
   void clearDurationMs() => $_clearField(14);
+
+  /// See PlaybackStateChanged.signal_path.
+  @$pb.TagNumber(15)
+  SignalPath get signalPath => $_getN(12);
+  @$pb.TagNumber(15)
+  set signalPath(SignalPath value) => $_setField(15, value);
+  @$pb.TagNumber(15)
+  $core.bool hasSignalPath() => $_has(12);
+  @$pb.TagNumber(15)
+  void clearSignalPath() => $_clearField(15);
+  @$pb.TagNumber(15)
+  SignalPath ensureSignalPath() => $_ensure(12);
 }
 
 /// First message on every new connection; registers the renderer with the Core.
@@ -1306,8 +1742,10 @@ class Hello extends $pb.GeneratedMessage {
     $core.String? softwareVersion,
     RendererKind? kind,
     Platform? platform,
+    Capabilities? capabilities,
     $core.String? activeSessionId,
     $core.String? sessionOwnerServerId,
+    $core.bool? upgradeSupported,
   }) {
     final result = create();
     if (protocolVersions != null) result.protocolVersions = protocolVersions;
@@ -1317,9 +1755,11 @@ class Hello extends $pb.GeneratedMessage {
     if (softwareVersion != null) result.softwareVersion = softwareVersion;
     if (kind != null) result.kind = kind;
     if (platform != null) result.platform = platform;
+    if (capabilities != null) result.capabilities = capabilities;
     if (activeSessionId != null) result.activeSessionId = activeSessionId;
     if (sessionOwnerServerId != null)
       result.sessionOwnerServerId = sessionOwnerServerId;
+    if (upgradeSupported != null) result.upgradeSupported = upgradeSupported;
     return result;
   }
 
@@ -1347,8 +1787,11 @@ class Hello extends $pb.GeneratedMessage {
         enumValues: RendererKind.values)
     ..aOM<Platform>(7, _omitFieldNames ? '' : 'platform',
         subBuilder: Platform.create)
+    ..aOM<Capabilities>(8, _omitFieldNames ? '' : 'capabilities',
+        subBuilder: Capabilities.create)
     ..aOS(11, _omitFieldNames ? '' : 'activeSessionId')
     ..aOS(12, _omitFieldNames ? '' : 'sessionOwnerServerId')
+    ..aOB(13, _omitFieldNames ? '' : 'upgradeSupported')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1436,25 +1879,274 @@ class Hello extends $pb.GeneratedMessage {
   @$pb.TagNumber(7)
   Platform ensurePlatform() => $_ensure(6);
 
+  /// What the renderer can play now; absent from a renderer that predates it.
+  @$pb.TagNumber(8)
+  Capabilities get capabilities => $_getN(7);
+  @$pb.TagNumber(8)
+  set capabilities(Capabilities value) => $_setField(8, value);
+  @$pb.TagNumber(8)
+  $core.bool hasCapabilities() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearCapabilities() => $_clearField(8);
+  @$pb.TagNumber(8)
+  Capabilities ensureCapabilities() => $_ensure(7);
+
   /// Playback session the renderer is currently running, if any. Reported to
   /// every Core; only the one whose server_id matches acts on it.
   @$pb.TagNumber(11)
-  $core.String get activeSessionId => $_getSZ(7);
+  $core.String get activeSessionId => $_getSZ(8);
   @$pb.TagNumber(11)
-  set activeSessionId($core.String value) => $_setString(7, value);
+  set activeSessionId($core.String value) => $_setString(8, value);
   @$pb.TagNumber(11)
-  $core.bool hasActiveSessionId() => $_has(7);
+  $core.bool hasActiveSessionId() => $_has(8);
   @$pb.TagNumber(11)
   void clearActiveSessionId() => $_clearField(11);
 
   @$pb.TagNumber(12)
-  $core.String get sessionOwnerServerId => $_getSZ(8);
+  $core.String get sessionOwnerServerId => $_getSZ(9);
   @$pb.TagNumber(12)
-  set sessionOwnerServerId($core.String value) => $_setString(8, value);
+  set sessionOwnerServerId($core.String value) => $_setString(9, value);
   @$pb.TagNumber(12)
-  $core.bool hasSessionOwnerServerId() => $_has(8);
+  $core.bool hasSessionOwnerServerId() => $_has(9);
   @$pb.TagNumber(12)
   void clearSessionOwnerServerId() => $_clearField(12);
+
+  /// Whether this renderer can install a new release of itself on request —
+  /// the root-side units that do it are present. False for a build installed
+  /// some other way (flatpak, from source), which a Core must not offer to
+  /// upgrade.
+  @$pb.TagNumber(13)
+  $core.bool get upgradeSupported => $_getBF(10);
+  @$pb.TagNumber(13)
+  set upgradeSupported($core.bool value) => $_setBool(10, value);
+  @$pb.TagNumber(13)
+  $core.bool hasUpgradeSupported() => $_has(10);
+  @$pb.TagNumber(13)
+  void clearUpgradeSupported() => $_clearField(13);
+}
+
+/// What the renderer can play right now, stated whole every time: in Hello, then
+/// in a CapabilitiesChanged to every welcomed Core whenever it changes, whichever
+/// Core's settings write changed it.
+class Capabilities extends $pb.GeneratedMessage {
+  factory Capabilities({
+    $core.bool? dsd,
+    $core.int? livePcm,
+    DspCapabilities? dsp,
+  }) {
+    final result = create();
+    if (dsd != null) result.dsd = dsd;
+    if (livePcm != null) result.livePcm = livePcm;
+    if (dsp != null) result.dsp = dsp;
+    return result;
+  }
+
+  Capabilities._();
+
+  factory Capabilities.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory Capabilities.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'Capabilities',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'dsd')
+    ..aI(2, _omitFieldNames ? '' : 'livePcm', fieldType: $pb.PbFieldType.OU3)
+    ..aOM<DspCapabilities>(3, _omitFieldNames ? '' : 'dsp',
+        subBuilder: DspCapabilities.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Capabilities clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Capabilities copyWith(void Function(Capabilities) updates) =>
+      super.copyWith((message) => updates(message as Capabilities))
+          as Capabilities;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static Capabilities create() => Capabilities._();
+  @$core.override
+  Capabilities createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static Capabilities getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<Capabilities>(create);
+  static Capabilities? _defaultInstance;
+
+  /// DSD sources are taken rather than refused outright. A given track can
+  /// still fail on the output it meets.
+  @$pb.TagNumber(1)
+  $core.bool get dsd => $_getBF(0);
+  @$pb.TagNumber(1)
+  set dsd($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasDsd() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearDsd() => $_clearField(1);
+
+  /// Framed PCM, output readiness, bounded queues and live position feedback.
+  @$pb.TagNumber(2)
+  $core.int get livePcm => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set livePcm($core.int value) => $_setUnsignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasLivePcm() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearLivePcm() => $_clearField(2);
+
+  /// What the DSP is built to do, whatever is set.
+  @$pb.TagNumber(3)
+  DspCapabilities get dsp => $_getN(2);
+  @$pb.TagNumber(3)
+  set dsp(DspCapabilities value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasDsp() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearDsp() => $_clearField(3);
+  @$pb.TagNumber(3)
+  DspCapabilities ensureDsp() => $_ensure(2);
+}
+
+class DspCapabilities extends $pb.GeneratedMessage {
+  factory DspCapabilities({
+    $core.bool? dsdToPcm,
+    $core.Iterable<$core.String>? steps,
+    $core.int? maxOutputChannels,
+  }) {
+    final result = create();
+    if (dsdToPcm != null) result.dsdToPcm = dsdToPcm;
+    if (steps != null) result.steps.addAll(steps);
+    if (maxOutputChannels != null) result.maxOutputChannels = maxOutputChannels;
+    return result;
+  }
+
+  DspCapabilities._();
+
+  factory DspCapabilities.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DspCapabilities.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DspCapabilities',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'dsdToPcm')
+    ..pPS(2, _omitFieldNames ? '' : 'steps')
+    ..aI(3, _omitFieldNames ? '' : 'maxOutputChannels',
+        fieldType: $pb.PbFieldType.OU3)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DspCapabilities clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DspCapabilities copyWith(void Function(DspCapabilities) updates) =>
+      super.copyWith((message) => updates(message as DspCapabilities))
+          as DspCapabilities;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DspCapabilities create() => DspCapabilities._();
+  @$core.override
+  DspCapabilities createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DspCapabilities getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DspCapabilities>(create);
+  static DspCapabilities? _defaultInstance;
+
+  /// DSD can be converted to PCM.
+  @$pb.TagNumber(1)
+  $core.bool get dsdToPcm => $_getBF(0);
+  @$pb.TagNumber(1)
+  set dsdToPcm($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasDsdToPcm() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearDsdToPcm() => $_clearField(1);
+
+  /// The SignalStep kinds the renderer can report.
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.String> get steps => $_getList(1);
+
+  /// The most channels the DSP puts out.
+  @$pb.TagNumber(3)
+  $core.int get maxOutputChannels => $_getIZ(2);
+  @$pb.TagNumber(3)
+  set maxOutputChannels($core.int value) => $_setUnsignedInt32(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasMaxOutputChannels() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearMaxOutputChannels() => $_clearField(3);
+}
+
+class CapabilitiesChanged extends $pb.GeneratedMessage {
+  factory CapabilitiesChanged({
+    Capabilities? capabilities,
+  }) {
+    final result = create();
+    if (capabilities != null) result.capabilities = capabilities;
+    return result;
+  }
+
+  CapabilitiesChanged._();
+
+  factory CapabilitiesChanged.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CapabilitiesChanged.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CapabilitiesChanged',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..aOM<Capabilities>(1, _omitFieldNames ? '' : 'capabilities',
+        subBuilder: Capabilities.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CapabilitiesChanged clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CapabilitiesChanged copyWith(void Function(CapabilitiesChanged) updates) =>
+      super.copyWith((message) => updates(message as CapabilitiesChanged))
+          as CapabilitiesChanged;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CapabilitiesChanged create() => CapabilitiesChanged._();
+  @$core.override
+  CapabilitiesChanged createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CapabilitiesChanged getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CapabilitiesChanged>(create);
+  static CapabilitiesChanged? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  Capabilities get capabilities => $_getN(0);
+  @$pb.TagNumber(1)
+  set capabilities(Capabilities value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasCapabilities() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearCapabilities() => $_clearField(1);
+  @$pb.TagNumber(1)
+  Capabilities ensureCapabilities() => $_ensure(0);
 }
 
 /// Core's response to a valid Hello.
@@ -2728,6 +3420,10 @@ class PlaybackStateChanged extends $pb.GeneratedMessage {
     AudioFormat? format,
     DeviceInfo? deviceInfo,
     $fixnum.Int64? durationMs,
+    $core.bool? interrupted,
+    $core.bool? liveReady,
+    $fixnum.Int64? liveSourceFrame,
+    SignalPath? signalPath,
   }) {
     final result = create();
     if (state != null) result.state = state;
@@ -2739,6 +3435,10 @@ class PlaybackStateChanged extends $pb.GeneratedMessage {
     if (format != null) result.format = format;
     if (deviceInfo != null) result.deviceInfo = deviceInfo;
     if (durationMs != null) result.durationMs = durationMs;
+    if (interrupted != null) result.interrupted = interrupted;
+    if (liveReady != null) result.liveReady = liveReady;
+    if (liveSourceFrame != null) result.liveSourceFrame = liveSourceFrame;
+    if (signalPath != null) result.signalPath = signalPath;
     return result;
   }
 
@@ -2773,6 +3473,13 @@ class PlaybackStateChanged extends $pb.GeneratedMessage {
     ..a<$fixnum.Int64>(
         9, _omitFieldNames ? '' : 'durationMs', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOB(10, _omitFieldNames ? '' : 'interrupted')
+    ..aOB(11, _omitFieldNames ? '' : 'liveReady')
+    ..a<$fixnum.Int64>(
+        12, _omitFieldNames ? '' : 'liveSourceFrame', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOM<SignalPath>(13, _omitFieldNames ? '' : 'signalPath',
+        subBuilder: SignalPath.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2892,6 +3599,56 @@ class PlaybackStateChanged extends $pb.GeneratedMessage {
   $core.bool hasDurationMs() => $_has(8);
   @$pb.TagNumber(9)
   void clearDurationMs() => $_clearField(9);
+
+  /// Set only on a STOPPED without a source_token: a setting that rebuilt the
+  /// audio graph stopped a source it was playing, preparing or paused on. The
+  /// session carries on, so a Core may play the source again; if the new graph
+  /// could not be built, that play tries once more and otherwise reports the
+  /// output unavailable. A Core that ignores it sees the plain stop older
+  /// renderers report.
+  @$pb.TagNumber(10)
+  $core.bool get interrupted => $_getBF(9);
+  @$pb.TagNumber(10)
+  set interrupted($core.bool value) => $_setBool(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasInterrupted() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearInterrupted() => $_clearField(10);
+
+  /// Output format is configured and hardware settling has completed. Core
+  /// may now choose a fresh PCM cursor for this source_token. Not a clock sync.
+  @$pb.TagNumber(11)
+  $core.bool get liveReady => $_getBF(10);
+  @$pb.TagNumber(11)
+  set liveReady($core.bool value) => $_setBool(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasLiveReady() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearLiveReady() => $_clearField(11);
+
+  /// Absolute PCM frame audible at report time, after live clock adaptation.
+  @$pb.TagNumber(12)
+  $fixnum.Int64 get liveSourceFrame => $_getI64(11);
+  @$pb.TagNumber(12)
+  set liveSourceFrame($fixnum.Int64 value) => $_setInt64(11, value);
+  @$pb.TagNumber(12)
+  $core.bool hasLiveSourceFrame() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearLiveSourceFrame() => $_clearField(12);
+
+  /// What was done to the decoded samples on the way to `device_info`. Absent
+  /// when they reach the device as decoded, the volume aside. Restated, as
+  /// `format` is, whenever it changes.
+  @$pb.TagNumber(13)
+  SignalPath get signalPath => $_getN(12);
+  @$pb.TagNumber(13)
+  set signalPath(SignalPath value) => $_setField(13, value);
+  @$pb.TagNumber(13)
+  $core.bool hasSignalPath() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearSignalPath() => $_clearField(13);
+  @$pb.TagNumber(13)
+  SignalPath ensureSignalPath() => $_ensure(12);
 }
 
 /// Emitted on AudioGraphNodeState::SOURCE_CHANGED — the gapless crossover.
@@ -3103,6 +3860,186 @@ class PlaybackError extends $pb.GeneratedMessage {
   ErrorInfo ensureError() => $_ensure(0);
 }
 
+class DspProfile_Band extends $pb.GeneratedMessage {
+  factory DspProfile_Band({
+    DspProfile_Band_Type? type,
+    $core.double? frequencyHz,
+    $core.double? gainDb,
+    $core.double? q,
+  }) {
+    final result = create();
+    if (type != null) result.type = type;
+    if (frequencyHz != null) result.frequencyHz = frequencyHz;
+    if (gainDb != null) result.gainDb = gainDb;
+    if (q != null) result.q = q;
+    return result;
+  }
+
+  DspProfile_Band._();
+
+  factory DspProfile_Band.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DspProfile_Band.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DspProfile.Band',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..aE<DspProfile_Band_Type>(1, _omitFieldNames ? '' : 'type',
+        enumValues: DspProfile_Band_Type.values)
+    ..aD(2, _omitFieldNames ? '' : 'frequencyHz')
+    ..aD(3, _omitFieldNames ? '' : 'gainDb')
+    ..aD(4, _omitFieldNames ? '' : 'q')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DspProfile_Band clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DspProfile_Band copyWith(void Function(DspProfile_Band) updates) =>
+      super.copyWith((message) => updates(message as DspProfile_Band))
+          as DspProfile_Band;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DspProfile_Band create() => DspProfile_Band._();
+  @$core.override
+  DspProfile_Band createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DspProfile_Band getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DspProfile_Band>(create);
+  static DspProfile_Band? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  DspProfile_Band_Type get type => $_getN(0);
+  @$pb.TagNumber(1)
+  set type(DspProfile_Band_Type value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasType() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearType() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.double get frequencyHz => $_getN(1);
+  @$pb.TagNumber(2)
+  set frequencyHz($core.double value) => $_setDouble(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasFrequencyHz() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearFrequencyHz() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.double get gainDb => $_getN(2);
+  @$pb.TagNumber(3)
+  set gainDb($core.double value) => $_setDouble(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasGainDb() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearGainDb() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.double get q => $_getN(3);
+  @$pb.TagNumber(4)
+  set q($core.double value) => $_setDouble(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasQ() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearQ() => $_clearField(4);
+}
+
+/// Version 1 carries either a shared correction or independent left/right EQ.
+class DspProfile extends $pb.GeneratedMessage {
+  factory DspProfile({
+    $core.int? version,
+    $core.String? name,
+    $core.Iterable<DspProfile_Band>? shared,
+    $core.Iterable<DspProfile_Band>? left,
+    $core.Iterable<DspProfile_Band>? right,
+  }) {
+    final result = create();
+    if (version != null) result.version = version;
+    if (name != null) result.name = name;
+    if (shared != null) result.shared.addAll(shared);
+    if (left != null) result.left.addAll(left);
+    if (right != null) result.right.addAll(right);
+    return result;
+  }
+
+  DspProfile._();
+
+  factory DspProfile.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory DspProfile.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'DspProfile',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'version', fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'name')
+    ..pPM<DspProfile_Band>(3, _omitFieldNames ? '' : 'shared',
+        subBuilder: DspProfile_Band.create)
+    ..pPM<DspProfile_Band>(4, _omitFieldNames ? '' : 'left',
+        subBuilder: DspProfile_Band.create)
+    ..pPM<DspProfile_Band>(5, _omitFieldNames ? '' : 'right',
+        subBuilder: DspProfile_Band.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DspProfile clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  DspProfile copyWith(void Function(DspProfile) updates) =>
+      super.copyWith((message) => updates(message as DspProfile)) as DspProfile;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static DspProfile create() => DspProfile._();
+  @$core.override
+  DspProfile createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static DspProfile getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<DspProfile>(create);
+  static DspProfile? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get version => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set version($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get name => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set name($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasName() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearName() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $pb.PbList<DspProfile_Band> get shared => $_getList(2);
+
+  @$pb.TagNumber(4)
+  $pb.PbList<DspProfile_Band> get left => $_getList(3);
+
+  @$pb.TagNumber(5)
+  $pb.PbList<DspProfile_Band> get right => $_getList(4);
+}
+
 class ConfigRequest extends $pb.GeneratedMessage {
   factory ConfigRequest() => create();
 
@@ -3212,9 +4149,11 @@ class ConfigUpdate_Setting extends $pb.GeneratedMessage {
 class ConfigUpdate extends $pb.GeneratedMessage {
   factory ConfigUpdate({
     $core.Iterable<ConfigUpdate_Setting>? settings,
+    $core.String? dspProfileUrl,
   }) {
     final result = create();
     if (settings != null) result.settings.addAll(settings);
+    if (dspProfileUrl != null) result.dspProfileUrl = dspProfileUrl;
     return result;
   }
 
@@ -3234,6 +4173,7 @@ class ConfigUpdate extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..pPM<ConfigUpdate_Setting>(1, _omitFieldNames ? '' : 'settings',
         subBuilder: ConfigUpdate_Setting.create)
+    ..aOS(2, _omitFieldNames ? '' : 'dspProfileUrl')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3257,10 +4197,229 @@ class ConfigUpdate extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(1)
   $pb.PbList<ConfigUpdate_Setting> get settings => $_getList(0);
+
+  /// Where to fetch the SHA-256 selected by dsp.profile on a cache miss.
+  @$pb.TagNumber(2)
+  $core.String get dspProfileUrl => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set dspProfileUrl($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasDspProfileUrl() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearDspProfileUrl() => $_clearField(2);
 }
 
-/// What an INT field will accept. The renderer enforces it too — a write
-/// outside the range is refused, not clamped.
+/// Core -> renderer: install a published renderer release and restart into it.
+///
+/// Meaning fixed for every protocol version: a Core that has moved past this
+/// renderer still sends it, and that is how such a renderer gets un-stranded.
+/// The renderer only requests the upgrade — the install is done by root-side
+/// units it cannot reach itself.
+class Upgrade extends $pb.GeneratedMessage {
+  factory Upgrade({
+    $core.String? targetVersion,
+  }) {
+    final result = create();
+    if (targetVersion != null) result.targetVersion = targetVersion;
+    return result;
+  }
+
+  Upgrade._();
+
+  factory Upgrade.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory Upgrade.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'Upgrade',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'targetVersion')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Upgrade clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  Upgrade copyWith(void Function(Upgrade) updates) =>
+      super.copyWith((message) => updates(message as Upgrade)) as Upgrade;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static Upgrade create() => Upgrade._();
+  @$core.override
+  Upgrade createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static Upgrade getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<Upgrade>(create);
+  static Upgrade? _defaultInstance;
+
+  /// Release to install, e.g. "0.4.0". Empty asks for the latest published.
+  @$pb.TagNumber(1)
+  $core.String get targetVersion => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set targetVersion($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasTargetVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearTargetVersion() => $_clearField(1);
+}
+
+/// Whether the renderer took the request on. Success here means the install
+/// was started, not that it finished: the renderer restarts into the new
+/// version and re-registers, which is what actually reports the outcome.
+class UpgradeResult extends $pb.GeneratedMessage {
+  factory UpgradeResult({
+    $core.bool? accepted,
+    $core.String? detail,
+  }) {
+    final result = create();
+    if (accepted != null) result.accepted = accepted;
+    if (detail != null) result.detail = detail;
+    return result;
+  }
+
+  UpgradeResult._();
+
+  factory UpgradeResult.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UpgradeResult.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UpgradeResult',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'accepted')
+    ..aOS(2, _omitFieldNames ? '' : 'detail')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpgradeResult clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpgradeResult copyWith(void Function(UpgradeResult) updates) =>
+      super.copyWith((message) => updates(message as UpgradeResult))
+          as UpgradeResult;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UpgradeResult create() => UpgradeResult._();
+  @$core.override
+  UpgradeResult createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UpgradeResult getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UpgradeResult>(create);
+  static UpgradeResult? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get accepted => $_getBF(0);
+  @$pb.TagNumber(1)
+  set accepted($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccepted() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccepted() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get detail => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set detail($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasDetail() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearDetail() => $_clearField(2);
+}
+
+class ConfigDecimalRange extends $pb.GeneratedMessage {
+  factory ConfigDecimalRange({
+    $core.double? min,
+    $core.double? max,
+    $core.double? step,
+  }) {
+    final result = create();
+    if (min != null) result.min = min;
+    if (max != null) result.max = max;
+    if (step != null) result.step = step;
+    return result;
+  }
+
+  ConfigDecimalRange._();
+
+  factory ConfigDecimalRange.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ConfigDecimalRange.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ConfigDecimalRange',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'kalinka.renderer.v1'),
+      createEmptyInstance: create)
+    ..aD(1, _omitFieldNames ? '' : 'min')
+    ..aD(2, _omitFieldNames ? '' : 'max')
+    ..aD(3, _omitFieldNames ? '' : 'step')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ConfigDecimalRange clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ConfigDecimalRange copyWith(void Function(ConfigDecimalRange) updates) =>
+      super.copyWith((message) => updates(message as ConfigDecimalRange))
+          as ConfigDecimalRange;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ConfigDecimalRange create() => ConfigDecimalRange._();
+  @$core.override
+  ConfigDecimalRange createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ConfigDecimalRange getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ConfigDecimalRange>(create);
+  static ConfigDecimalRange? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.double get min => $_getN(0);
+  @$pb.TagNumber(1)
+  set min($core.double value) => $_setDouble(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasMin() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearMin() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.double get max => $_getN(1);
+  @$pb.TagNumber(2)
+  set max($core.double value) => $_setDouble(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasMax() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearMax() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.double get step => $_getN(2);
+  @$pb.TagNumber(3)
+  set step($core.double value) => $_setDouble(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasStep() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearStep() => $_clearField(3);
+}
+
+/// What an INT field will accept.
 class ConfigRange extends $pb.GeneratedMessage {
   factory ConfigRange({
     $fixnum.Int64? min,
@@ -3437,6 +4596,8 @@ class ConfigField extends $pb.GeneratedMessage {
     ConfigRange? range,
     $core.String? unit,
     ConfigWidget? widget,
+    $core.String? helpDetails,
+    ConfigDecimalRange? decimalRange,
   }) {
     final result = create();
     if (path != null) result.path = path;
@@ -3452,6 +4613,8 @@ class ConfigField extends $pb.GeneratedMessage {
     if (range != null) result.range = range;
     if (unit != null) result.unit = unit;
     if (widget != null) result.widget = widget;
+    if (helpDetails != null) result.helpDetails = helpDetails;
+    if (decimalRange != null) result.decimalRange = decimalRange;
     return result;
   }
 
@@ -3488,6 +4651,9 @@ class ConfigField extends $pb.GeneratedMessage {
     ..aOS(12, _omitFieldNames ? '' : 'unit')
     ..aE<ConfigWidget>(13, _omitFieldNames ? '' : 'widget',
         enumValues: ConfigWidget.values)
+    ..aOS(14, _omitFieldNames ? '' : 'helpDetails')
+    ..aOM<ConfigDecimalRange>(15, _omitFieldNames ? '' : 'decimalRange',
+        subBuilder: ConfigDecimalRange.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3621,6 +4787,26 @@ class ConfigField extends $pb.GeneratedMessage {
   $core.bool hasWidget() => $_has(12);
   @$pb.TagNumber(13)
   void clearWidget() => $_clearField(13);
+
+  @$pb.TagNumber(14)
+  $core.String get helpDetails => $_getSZ(13);
+  @$pb.TagNumber(14)
+  set helpDetails($core.String value) => $_setString(13, value);
+  @$pb.TagNumber(14)
+  $core.bool hasHelpDetails() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearHelpDetails() => $_clearField(14);
+
+  @$pb.TagNumber(15)
+  ConfigDecimalRange get decimalRange => $_getN(14);
+  @$pb.TagNumber(15)
+  set decimalRange(ConfigDecimalRange value) => $_setField(15, value);
+  @$pb.TagNumber(15)
+  $core.bool hasDecimalRange() => $_has(14);
+  @$pb.TagNumber(15)
+  void clearDecimalRange() => $_clearField(15);
+  @$pb.TagNumber(15)
+  ConfigDecimalRange ensureDecimalRange() => $_ensure(14);
 }
 
 class ConfigSection extends $pb.GeneratedMessage {
