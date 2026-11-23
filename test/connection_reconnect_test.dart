@@ -1,4 +1,4 @@
-import 'dart:async' show Completer;
+import 'dart:async' show Completer, Timer;
 import 'dart:io' show HttpRequest, HttpServer, WebSocket, WebSocketTransformer;
 
 import 'package:flutter/widgets.dart' show AppLifecycleState;
@@ -11,10 +11,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:kalinka/data_model/data_model.dart' show ModulesAndDevices;
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
+import 'package:kalinka/providers/discovery_provider.dart';
+import 'package:kalinka/providers/discovery_types.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/monotonic_clock_provider.dart';
 import 'package:kalinka/providers/playback_time_provider.dart';
+import 'package:kalinka/providers/server_endpoints.dart';
+import 'package:kalinka/providers/server_failover.dart';
 import 'package:kalinka/providers/websocket_provider.dart';
 import 'package:kalinka/providers/wire_event_provider.dart'
     show playQueueEventBusProvider;
@@ -57,6 +61,32 @@ class _ResumedLifecycle extends AppLifecycleNotifier {
   AppLifecycleState build() => AppLifecycleState.resumed;
 
   void set(AppLifecycleState next) => state = next;
+}
+
+/// mDNS that announces [found] two seconds into each scan.
+class _Browse extends DiscoveryNotifier {
+  _Browse([this.found = const []]);
+
+  final List<DiscoveredServer> found;
+  int scans = 0;
+
+  @override
+  DiscoveryState build() => const DiscoveryState();
+
+  @override
+  Future<void> startScan() async {
+    scans++;
+    state = const DiscoveryState(isScanning: true);
+    Timer(const Duration(seconds: 2), () {
+      if (ref.mounted) state = DiscoveryState(servers: found);
+    });
+  }
+
+  @override
+  Future<void> stopScan() async {}
+
+  @override
+  Future<void> rescan() => startScan();
 }
 
 void main() {
@@ -944,6 +974,276 @@ void main() {
           expect(seen, [ConnectionStatus.offline]);
           expect(notifier.boxPoweredOff, isTrue);
         });
+      });
+    });
+  });
+
+  group('following the server to another address (#158)', () {
+    const cable = '192.168.50.103';
+    const wifi = '192.168.50.104';
+    const lease = '192.168.50.120';
+
+    /// What the server at each host says it is; a host left out does not
+    /// answer.
+    late Map<String, String?> ids;
+    late Map<String, _FakeApi> servers;
+    late List<String> asked;
+    late _Browse browse;
+    Completer<void>? answers;
+
+    setUp(() {
+      ids = {};
+      servers = {
+        cable: _FakeApi(shouldSucceed: false),
+        wifi: _FakeApi(),
+        lease: _FakeApi(),
+      };
+      asked = [];
+      browse = _Browse();
+      answers = null;
+    });
+
+    Future<SharedPreferences> connectedAt(
+      String host, {
+      String? id = 'core-1',
+      List<String> saved = const [],
+    }) async {
+      SharedPreferences.setMockInitialValues({
+        'Kalinka.host': host,
+        'Kalinka.port': 8000,
+        'Kalinka.name': 'Living room',
+        'Kalinka.serverIdAt.$host:8000': ?id,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      if (id != null && saved.isNotEmpty) {
+        await ServerEndpointStore(prefs).remember(id, [
+          for (final h in saved) (scheme: 'http', host: h, port: 8000),
+        ]);
+      }
+      return prefs;
+    }
+
+    ProviderContainer following(
+      FakeAsync async,
+      SharedPreferences prefs, {
+      bool kiosk = false,
+    }) {
+      final start = DateTime(2026, 10, 24, 19, 22, 31);
+      final stopwatch = async.getClock(start).stopwatch()..start();
+      final container = ProviderContainer(
+        overrides: [
+          sharedPrefsProvider.overrideWithValue(prefs),
+          kalinkaProxyProvider.overrideWith(
+            (ref) => servers[ref.watch(connectionSettingsProvider).host]!,
+          ),
+          appLifecycleProvider.overrideWith(_ResumedLifecycle.new),
+          kioskLaunchProvider.overrideWithValue(kiosk),
+          monotonicClockProvider.overrideWithValue(stopwatch),
+          connectionStateProvider.overrideWith(
+            () => ConnectionStateNotifier(now: () => start.add(async.elapsed)),
+          ),
+          serverIdProbeProvider.overrideWithValue((address) async {
+            asked.add(address.host);
+            await answers?.future;
+            if (!ids.containsKey(address.host)) {
+              throw DioException(
+                requestOptions: RequestOptions(path: '/renderer/sessions'),
+              );
+            }
+            return ids[address.host];
+          }),
+          discoveryProvider.overrideWith(() => browse),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('moves to a saved address answering as the same server', () async {
+      final prefs = await connectedAt(cable, saved: [cable, wifi]);
+      ids = {wifi: 'core-1'};
+      fakeAsync((async) {
+        final container = following(async, prefs);
+        final notifier = container.read(connectionStateProvider.notifier);
+        final epoch = container.read(retryEpochProvider);
+        notifier.startReconnecting();
+
+        async.elapse(const Duration(seconds: 14));
+        expect(container.read(connectionSettingsProvider).host, cable);
+        expect(asked, isEmpty);
+
+        // The third failed probe.
+        async.elapse(const Duration(seconds: 1));
+        expect(asked, [wifi]);
+        final settings = container.read(connectionSettingsProvider);
+        expect(settings.host, wifi);
+        expect(settings.name, 'Living room');
+        expect(prefs.getString('Kalinka.host'), wifi);
+        expect(prefs.getString('Kalinka.serverIdAt.$wifi:8000'), 'core-1');
+
+        async.elapse(const Duration(seconds: 5));
+        expect(servers[cable]!.listModulesCalls, 3);
+        expect(servers[wifi]!.listModulesCalls, 1);
+        expect(container.read(retryEpochProvider), epoch + 1);
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+
+        // The queue socket opening there.
+        notifier.connected();
+        async.elapse(const Duration(seconds: 30));
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.connected,
+        );
+        expect(notifier.escalationReached, isFalse);
+      });
+    });
+
+    for (final other in ['core-2', null]) {
+      test(
+        'never moves to an address answering as ${other ?? 'a server without an id'}',
+        () async {
+          final prefs = await connectedAt(cable, saved: [cable, wifi]);
+          ids = {wifi: other};
+          fakeAsync((async) {
+            final container = following(async, prefs);
+            container
+                .read(connectionStateProvider.notifier)
+                .startReconnecting();
+            async.elapse(const Duration(seconds: 35));
+
+            expect(asked, [wifi]);
+            expect(container.read(connectionSettingsProvider).host, cable);
+            expect(prefs.getString('Kalinka.host'), cable);
+            expect(servers[wifi]!.listModulesCalls, 0);
+            expect(
+              container.read(connectionStateProvider),
+              ConnectionStatus.offline,
+            );
+          });
+        },
+      );
+    }
+
+    test('moves to a new address the server announces', () async {
+      final prefs = await connectedAt(cable);
+      browse = _Browse([
+        const DiscoveredServer(
+          name: 'Kitchen',
+          host: '192.168.50.130',
+          port: 8000,
+          serverId: 'core-2',
+        ),
+        const DiscoveredServer(
+          name: 'Living room',
+          host: lease,
+          port: 8000,
+          serverId: 'core-1',
+          endpoints: [ServerEndpoint(host: lease, port: 8000, latencyMs: 3)],
+        ),
+      ]);
+      ids = {lease: 'core-1', '192.168.50.130': 'core-2'};
+      fakeAsync((async) {
+        final container = following(async, prefs);
+        container.read(connectionStateProvider.notifier).startReconnecting();
+
+        async.elapse(const Duration(seconds: 15));
+        expect(browse.scans, 1);
+        expect(container.read(connectionSettingsProvider).host, cable);
+
+        async.elapse(const Duration(seconds: 2));
+        expect(asked, [lease]);
+        expect(container.read(connectionSettingsProvider).host, lease);
+        expect(prefs.getString('Kalinka.host'), lease);
+        expect(
+          ServerEndpointStore(prefs).endpointsOf('core-1').first.host,
+          lease,
+        );
+
+        async.elapse(const Duration(seconds: 3));
+        expect(servers[lease]!.listModulesCalls, 1);
+      });
+    });
+
+    test('a server without an id reconnects as it always has', () async {
+      final prefs = await connectedAt(cable, id: null);
+      ids = {wifi: 'core-1'};
+      fakeAsync((async) {
+        final container = following(async, prefs);
+        container.read(connectionStateProvider.notifier).startReconnecting();
+        async.elapse(const Duration(seconds: 35));
+
+        expect(asked, isEmpty);
+        expect(browse.scans, 0);
+        expect(container.read(connectionSettingsProvider).host, cable);
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.offline,
+        );
+      });
+    });
+
+    test('an answer while the picker is open is not followed', () async {
+      final prefs = await connectedAt(cable, saved: [cable, wifi]);
+      ids = {wifi: 'core-1'};
+      fakeAsync((async) {
+        answers = Completer<void>();
+        final container = following(async, prefs);
+        final notifier = container.read(connectionStateProvider.notifier);
+        notifier.startReconnecting();
+        async.elapse(const Duration(seconds: 15));
+        expect(asked, [wifi]);
+
+        final pause = notifier.pauseReconnect();
+        answers!.complete();
+        async.elapse(const Duration(seconds: 1));
+        expect(container.read(connectionSettingsProvider).host, cable);
+
+        pause.release();
+        async.flushMicrotasks();
+        expect(container.read(connectionSettingsProvider).host, cable);
+
+        // Looked for again once three more probes fail.
+        async.elapse(const Duration(seconds: 9));
+        expect(container.read(connectionSettingsProvider).host, cable);
+        async.elapse(const Duration(seconds: 1));
+        expect(asked, [wifi, wifi]);
+        expect(container.read(connectionSettingsProvider).host, wifi);
+      });
+    });
+
+    test('a session-only connection moves without saving it', () async {
+      final prefs = await connectedAt(cable, saved: [cable, wifi]);
+      ids = {wifi: 'core-1'};
+      fakeAsync((async) {
+        final container = following(async, prefs);
+        container
+            .read(connectionSettingsProvider.notifier)
+            .setDeviceEphemeral('Setup', cable, 8000);
+        container.read(connectionStateProvider.notifier).startReconnecting();
+        async.elapse(const Duration(seconds: 15));
+
+        expect(container.read(connectionSettingsProvider).host, wifi);
+        expect(prefs.getString('Kalinka.host'), cable);
+      });
+    });
+
+    test('the display looks for its server less and less often', () async {
+      final prefs = await connectedAt(cable, saved: [cable, wifi]);
+      fakeAsync((async) {
+        final container = following(async, prefs, kiosk: true);
+        container.read(connectionStateProvider.notifier).startReconnecting();
+
+        async.elapse(const Duration(seconds: 100));
+        // After the 3rd, 6th and 12th failed probe.
+        expect(browse.scans, 3);
+        expect(asked, [wifi, wifi, wifi]);
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
       });
     });
   });

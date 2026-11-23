@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:dio/dio.dart' show Dio, DioException;
+import 'package:dio/dio.dart' show Dio;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -10,6 +10,7 @@ import 'connection_state_provider.dart';
 import 'demo_mode.dart';
 import 'kalinka_player_api_provider.dart' show httpClientProvider;
 import 'server_endpoints.dart';
+import 'server_failover.dart' show askServerId;
 import 'supervisor_api.dart';
 
 /// The connected server's box, confirmed to be that server's own.
@@ -33,22 +34,8 @@ typedef ServerAnswer = ({Uri server, String? id});
 Duration _pauseBefore(int attempt) =>
     Duration(seconds: attempt < 5 ? 2 << attempt : 60);
 
-/// Whether [status] says the route is missing, as on a server older than it.
-/// Any other refusal, such as 401 or 403, says nothing about the server.
-bool _routeMissing(int? status) => status == 404 || status == 405;
-
-Future<ServerAnswer> _askWhoItIs(Dio client, Uri server) async {
-  try {
-    final data = (await client.get('/renderer/sessions')).data;
-    final id = data is Map ? data['server_id'] : null;
-    return (server: server, id: id is String && id.isNotEmpty ? id : null);
-  } on DioException catch (e) {
-    if (_routeMissing(e.response?.statusCode)) {
-      return (server: server, id: null);
-    }
-    rethrow;
-  }
-}
+Future<ServerAnswer> _askWhoItIs(Dio client, Uri server) async =>
+    (server: server, id: await askServerId(client));
 
 /// The connected server's answer to who it is, asked once per connection.
 /// Loading while not connected; an error while asking fails, for whatever

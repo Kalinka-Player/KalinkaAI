@@ -79,4 +79,48 @@ void main() {
     await notifier.setDevice('Kalinka', 'nas.local', 8000);
     expect(container.read(connectionSettingsProvider).scheme, 'http');
   });
+
+  test('following the server to another address saves it', () async {
+    final (container, prefs) = await _container({});
+    final notifier = container.read(connectionSettingsProvider.notifier);
+    await notifier.setDevice('Living room', '10.0.0.3', 8000);
+
+    await notifier.moveTo('10.0.0.4', 8001);
+    expect(
+      container.read(connectionSettingsProvider),
+      const ConnectionSettings(
+        name: 'Living room',
+        host: '10.0.0.4',
+        port: 8001,
+      ),
+    );
+    expect(
+      prefs.getString(ConnectionSettingsNotifier.sharedPrefHost),
+      '10.0.0.4',
+    );
+    expect(prefs.getInt(ConnectionSettingsNotifier.sharedPrefPort), 8001);
+    expect(
+      prefs.getString(ConnectionSettingsNotifier.sharedPrefName),
+      'Living room',
+    );
+  });
+
+  test('a session-only connection follows without saving', () async {
+    final (container, prefs) = await _container({});
+    final notifier = container.read(connectionSettingsProvider.notifier);
+    notifier.setDeviceEphemeral('Kalinka', '10.0.0.3', 8000);
+
+    await notifier.moveTo('10.0.0.4', 8000);
+    expect(container.read(connectionSettingsProvider).host, '10.0.0.4');
+    expect(prefs.getString(ConnectionSettingsNotifier.sharedPrefHost), isNull);
+  });
+
+  test('no server set, there is nothing to follow', () async {
+    final (container, prefs) = await _container({});
+    await container
+        .read(connectionSettingsProvider.notifier)
+        .moveTo('10.0.0.4', 8000);
+    expect(container.read(connectionSettingsProvider).isSet, isFalse);
+    expect(prefs.getString(ConnectionSettingsNotifier.sharedPrefHost), isNull);
+  });
 }

@@ -82,7 +82,9 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
   static const String sharedPrefScheme = 'Kalinka.scheme';
 
   late SharedPreferences _sharedPrefs;
-  bool _persistName = true;
+
+  /// Whether changes to the connection in [state] are saved with it.
+  bool _persisted = true;
 
   /// Initialize settings from SharedPreferences
   ConnectionSettings _load() {
@@ -109,14 +111,14 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
   }) async {
     // Settings from the outgoing connection may finish while these writes
     // are in flight; they must not replace the incoming device's saved name.
-    _persistName = false;
+    _persisted = false;
     try {
       await _sharedPrefs.setString(sharedPrefName, name);
       await _sharedPrefs.setString(sharedPrefHost, host);
       await _sharedPrefs.setInt(sharedPrefPort, port);
       await _sharedPrefs.setString(sharedPrefScheme, scheme);
     } finally {
-      _persistName = true;
+      _persisted = true;
     }
     state = ConnectionSettings(
       name: name,
@@ -131,7 +133,17 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
   Future<void> updateName(String name) async {
     if (!state.isSet || name.trim().isEmpty || name == state.name) return;
     state = state.copyWith(name: name);
-    if (_persistName) await _sharedPrefs.setString(sharedPrefName, name);
+    if (_persisted) await _sharedPrefs.setString(sharedPrefName, name);
+  }
+
+  /// Follow the same server to [host]:[port], saved for the next launch
+  /// unless the connection is for this session only.
+  Future<void> moveTo(String host, int port) async {
+    if (!state.isSet || (host == state.host && port == state.port)) return;
+    state = state.copyWith(host: host, port: port);
+    if (!_persisted) return;
+    await _sharedPrefs.setString(sharedPrefHost, host);
+    await _sharedPrefs.setInt(sharedPrefPort, port);
   }
 
   /// Set device for this session only — nothing written to SharedPreferences.
@@ -144,7 +156,7 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
     int port, {
     String scheme = 'http',
   }) {
-    _persistName = false;
+    _persisted = false;
     state = ConnectionSettings(
       name: name,
       host: host,
@@ -161,13 +173,13 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
 
   /// Reset connection settings
   void reset() {
-    _persistName = false;
+    _persisted = false;
     state = ConnectionSettings(name: '', host: '', port: 0);
   }
 
   /// Clear stored device and reset to unconfigured state.
   Future<void> clearDevice() async {
-    _persistName = false;
+    _persisted = false;
     await _sharedPrefs.remove(sharedPrefName);
     await _sharedPrefs.remove(sharedPrefHost);
     await _sharedPrefs.remove(sharedPrefPort);
@@ -179,7 +191,7 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
   ConnectionSettings build() {
     // Get SharedPreferences from the provider
     _sharedPrefs = ref.read(sharedPrefsProvider);
-    _persistName = true;
+    _persisted = true;
     return _load();
   }
 }

@@ -9,7 +9,11 @@ import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
 import 'kiosk_provider.dart' show kioskActiveProvider;
 import 'monotonic_clock_provider.dart' show monotonicClockProvider;
+import 'pinned_server.dart' show canSelectServerProvider;
 import 'playback_time_provider.dart' show appLifecycleProvider;
+import 'server_address.dart';
+import 'server_endpoints.dart';
+import 'server_failover.dart';
 
 final _logger = Logger();
 
@@ -68,6 +72,13 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   bool _retryAsked = false;
   // NTP can adjust a Pi's wall clock while it is waiting for the server.
   Duration? _reconnectStartedAt;
+
+  /// Probes of the address in use that failed before the server is looked
+  /// for at its other addresses.
+  static const _failuresBeforeSearch = 3;
+  int _failedProbes = 0;
+  int _searchAfter = _failuresBeforeSearch;
+  bool _searching = false;
 
   /// When the app was last backgrounded (null while foregrounded).
   DateTime? _backgroundedAt;
@@ -171,6 +182,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   void connected() {
     _cancelRetryTimer();
     _retryCount = 0;
+    _forgetFailedProbes();
     _reconnectStartedAt = null;
     _poweredOff = false;
     lastConnectedAt = _now();
@@ -208,6 +220,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
       return;
     }
     _retryCount = 0;
+    _forgetFailedProbes();
     _reconnectStartedAt = _monotonicNow;
     state = ConnectionStatus.reconnecting;
     _startRetryTimer();
@@ -260,7 +273,10 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     if (!state.isInterrupted) return;
     final offline = state == ConnectionStatus.offline;
     // Time spent in the picker does not count towards going offline.
-    if (!offline) _reconnectStartedAt = _monotonicNow;
+    if (!offline) {
+      _forgetFailedProbes();
+      _reconnectStartedAt = _monotonicNow;
+    }
     // While backgrounded, resuming the app starts the timer.
     if (ref.read(appLifecycleProvider) != AppLifecycleState.resumed) return;
     if (_poweredOff && !retryAsked) {
@@ -279,6 +295,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
 
   void _leaveOffline() {
     _retryCount = 0;
+    _forgetFailedProbes();
     _reconnectStartedAt = _monotonicNow;
     _poweredOff = false;
     state = ConnectionStatus.reconnecting;
@@ -315,10 +332,10 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
       final proxy = ref.read(kalinkaProxyProvider);
       await proxy.listModules();
     } on DioException {
-      _checkEscalation();
+      _probeFailed();
       return;
     } on Exception {
-      _checkEscalation();
+      _probeFailed();
       return;
     } finally {
       _probesInFlight--;
@@ -333,6 +350,61 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     // here on the HTTP probe alone would leave the UI "connected" while the
     // event stream is still dead, showing an empty queue (issue #21).
     ref.read(retryEpochProvider.notifier).increment();
+  }
+
+  void _probeFailed() {
+    _checkEscalation();
+    if (_paused || state != ConnectionStatus.reconnecting) return;
+    _failedProbes++;
+    if (_searching || _failedProbes < _searchAfter) return;
+    // The display probes for ever; it need not browse as often.
+    _searchAfter *= 2;
+    _followServer();
+  }
+
+  void _forgetFailedProbes() {
+    _failedProbes = 0;
+    _searchAfter = _failuresBeforeSearch;
+  }
+
+  /// Moves the connection to another address of the same server, the first
+  /// that answers with its id. A server without one is never looked for, so
+  /// another can never be taken for it.
+  Future<void> _followServer() async {
+    if (!ref.read(canSelectServerProvider)) return;
+    final from = ref.read(connectionSettingsProvider).address;
+    // A server behind TLS is not on the local network to move about it.
+    if (from.scheme != 'http') return;
+    final store = ref.read(serverEndpointStoreProvider);
+    final serverId = store.serverIdAt(from);
+    if (serverId == null) return;
+
+    _searching = true;
+    final ServerAddress? to;
+    try {
+      to = await findServerElsewhere(ref, serverId: serverId, from: from);
+    } finally {
+      _searching = false;
+    }
+    // Meanwhile another server may have been picked, or the connection came
+    // back or went offline.
+    if (to == null ||
+        !ref.mounted ||
+        _paused ||
+        state != ConnectionStatus.reconnecting ||
+        ref.read(connectionSettingsProvider).address != from) {
+      return;
+    }
+    _logger.i(
+      '$serverId moved from ${from.host}:${from.port} to '
+      '${to.host}:${to.port}',
+    );
+    _forgetFailedProbes();
+    store.confirmedAt(serverId, to);
+    // The sockets follow the address; the next probe goes there too.
+    await ref
+        .read(connectionSettingsProvider.notifier)
+        .moveTo(to.host, to.port);
   }
 
   void _checkEscalation() {
