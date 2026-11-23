@@ -8,7 +8,6 @@ import '../data_model/presentation_schema.dart';
 import '../utils/json_equality.dart';
 import 'connection_settings_provider.dart';
 import 'kalinka_player_api_provider.dart';
-import 'server_address.dart';
 import 'settings_binding.dart';
 
 /// How long an edit settles before the server is asked what it thinks of it.
@@ -181,16 +180,16 @@ class SettingsNotifier extends Notifier<SettingsState> {
   // Bumped on every check so a slow answer cannot land on top of a newer one.
   int _validationGeneration = 0;
 
-  ServerAddress _server() => ref.read(connectionSettingsProvider).address;
+  int _server() => ref.read(connectionSettingsProvider).serverChoice;
 
-  /// Whether the app has moved to another server since [server] was asked,
+  /// Whether the app was pointed at another server since [server] was asked,
   /// so its answer belongs to settings no longer shown.
-  bool _stale(ServerAddress server) => !ref.mounted || _server() != server;
+  bool _stale(int server) => !ref.mounted || _server() != server;
 
   @override
   SettingsState build() {
     // Another server's settings, staged or loaded, say nothing about this one.
-    ref.watch(connectionSettingsProvider.select((s) => s.address));
+    ref.watch(connectionSettingsProvider.select((s) => s.serverChoice));
     _refreshingOptions = null;
     ref.onDispose(() => _validationTimer?.cancel());
     return const SettingsState();

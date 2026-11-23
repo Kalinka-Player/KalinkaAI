@@ -24,7 +24,6 @@ import '../providers/soundcard_provider.dart' show restartingBoxesProvider;
 import '../providers/search_session_provider.dart';
 import '../data_model/storage.dart';
 import '../providers/storage_volumes_provider.dart';
-import '../providers/server_address.dart';
 import '../providers/server_connect.dart';
 import '../providers/settings_provider.dart';
 import '../providers/shell_nav_provider.dart';
@@ -101,7 +100,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
   PluginCatalogScreen? _plugins;
 
   /// The volumes last listed, and the server that listed them.
-  ({ServerAddress address, List<StorageVolume> volumes})? _volumesSeen;
+  ({int server, List<StorageVolume> volumes})? _volumesSeen;
   final _customiseKey = GlobalKey();
   // The rail moves between the layouts: beside the panes on tablet, over the
   // phone layout's side there, so the mini-player can run under it.
@@ -880,12 +879,12 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     ref.listen(storageVolumesProvider, (_, next) {
       final after = next.value;
       if (next.isLoading || after == null) return;
-      final address = ref.read(connectionSettingsProvider).address;
+      final server = ref.read(connectionSettingsProvider).serverChoice;
       final seen = _volumesSeen;
-      _volumesSeen = (address: address, volumes: after);
+      _volumesSeen = (server: server, volumes: after);
       // The first list from a server is not a drive plugged in; one after a
       // reconnect is compared with what was there before it.
-      if (seen == null || seen.address != address) return;
+      if (seen == null || seen.server != server) return;
       final before = seen.volumes;
       // Pages left on an unplugged drive show nothing that is there.
       final left = mountedVolumeIds(before).difference(mountedVolumeIds(after));

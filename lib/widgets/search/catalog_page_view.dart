@@ -64,7 +64,7 @@ import '../keyboard/app_keyboard_navigation.dart';
 final _folderPlacesProvider = Provider<Map<String, ListPlace<BrowseItem>>>((
   ref,
 ) {
-  ref.watch(connectionSettingsProvider.select((s) => s.baseUrl));
+  ref.watch(connectionSettingsProvider.select((s) => s.serverChoice));
   final places = <String, ListPlace<BrowseItem>>{};
   // Another server may take over the address; a lost connection is not that.
   String? server = ref.read(serverStorageKeyProvider)?.scope;

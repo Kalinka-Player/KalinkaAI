@@ -84,14 +84,16 @@ void main() {
     final (container, prefs) = await _container({});
     final notifier = container.read(connectionSettingsProvider.notifier);
     await notifier.setDevice('Living room', '10.0.0.3', 8000);
+    final choice = container.read(connectionSettingsProvider).serverChoice;
 
     await notifier.moveTo('10.0.0.4', 8001);
     expect(
       container.read(connectionSettingsProvider),
-      const ConnectionSettings(
+      ConnectionSettings(
         name: 'Living room',
         host: '10.0.0.4',
         port: 8001,
+        serverChoice: choice,
       ),
     );
     expect(
@@ -113,6 +115,31 @@ void main() {
     await notifier.moveTo('10.0.0.4', 8000);
     expect(container.read(connectionSettingsProvider).host, '10.0.0.4');
     expect(prefs.getString(ConnectionSettingsNotifier.sharedPrefHost), isNull);
+  });
+
+  test('pointing the app at another address is another server\'s choice, '
+      'and the same address or a rename is not', () async {
+    final (container, _) = await _container({
+      ConnectionSettingsNotifier.sharedPrefHost: '10.0.0.3',
+      ConnectionSettingsNotifier.sharedPrefPort: 8000,
+    });
+    final notifier = container.read(connectionSettingsProvider.notifier);
+    int choice() => container.read(connectionSettingsProvider).serverChoice;
+    final first = choice();
+
+    await notifier.setDevice('Living room', '10.0.0.3', 8000);
+    await notifier.updateName('Kitchen');
+    notifier.setDeviceEphemeral('Kitchen', '10.0.0.3', 8000);
+    expect(choice(), first);
+
+    notifier.setDeviceEphemeral('Kitchen', '10.0.0.3', 8443, scheme: 'https');
+    expect(choice(), first + 1);
+    await notifier.setDevice('Kitchen', '10.0.0.3', 8000);
+    expect(choice(), first + 2);
+    await notifier.clearDevice();
+    expect(choice(), first + 3);
+    notifier.reset();
+    expect(choice(), first + 3);
   });
 
   test('no server set, there is nothing to follow', () async {

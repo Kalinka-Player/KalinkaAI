@@ -12,6 +12,7 @@ import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
 import 'package:kalinka/providers/pinned_catalogs_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
+import 'package:kalinka/providers/server_endpoints.dart';
 
 import 'support/home_shell.dart' show SettableConnection;
 import 'support/server_answer.dart';
@@ -386,6 +387,34 @@ void main() {
     servers.ids.remove('first');
     await reconnect(container);
     expect(container.read(pinnedCatalogsProvider)!.single.page.provider, 'one');
+  });
+
+  test('the same server at another of its addresses keeps its pins', () async {
+    await known(container);
+    await container.read(pinnedCatalogsProvider.notifier).pin(pin('one'));
+    servers.ids['wifi'] = 'box-a';
+    final connection =
+        container.read(connectionStateProvider.notifier) as SettableConnection;
+    connection.set(ConnectionStatus.reconnecting);
+
+    // As the reconnect cycle follows the server there.
+    container.read(serverEndpointStoreProvider).confirmedAt('box-a', (
+      scheme: 'http',
+      host: 'wifi',
+      port: 8000,
+    ));
+    await container
+        .read(connectionSettingsProvider.notifier)
+        .moveTo('wifi', 8000);
+    expect(container.read(pinnedCatalogsProvider)!.single.page.provider, 'one');
+
+    final asked = servers.asked;
+    connection.set(ConnectionStatus.connected);
+    await container.read(serverAnswerProvider.future);
+    expect(servers.asked, asked + 1);
+    expect(container.read(pinnedCatalogsProvider)!.single.page.provider, 'one');
+    await container.read(pinnedCatalogsProvider.notifier).pin(pin('two'));
+    expect(container.read(pinnedCatalogsProvider), hasLength(2));
   });
 
   test('a server without an id takes its pins along once it has one', () async {

@@ -333,6 +333,27 @@ void main() {
     },
   );
 
+  test('the same server at another of its addresses keeps its scan', () async {
+    final api = _Api();
+    final container = containerFor(api);
+    final notifier = container.read(indexerStatusProvider.notifier);
+    await notifier.refresh();
+    final scan = container.read(indexerStatusProvider).scan;
+    expect(scan, isNotNull);
+    final gate = Completer<void>();
+    api.onRescan = () => gate.future;
+    final request = notifier.rescan();
+    await container
+        .read(connectionSettingsProvider.notifier)
+        .moveTo('10.0.0.4', 8000);
+    await container.pump();
+    expect(container.read(indexerStatusProvider).requesting, isTrue);
+    gate.complete();
+    await request;
+    expect(container.read(indexerStatusProvider).scan, isNotNull);
+    expect(container.read(indexerStatusProvider).requesting, isFalse);
+  });
+
   for (final (id, withSections) in [
     ('kalinka:localfiles:catalog:files', false),
     ('kalinka:localfiles:catalog:recent', false),

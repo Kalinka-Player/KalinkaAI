@@ -222,4 +222,15 @@ void main() {
         .setDeviceEphemeral('Kitchen', 'kitchen.local', 8000);
     expect(container.read(scheduledPowerOffProvider), isNull);
   });
+
+  test('a timer stays with its server at another of its addresses', () async {
+    timer().schedule('box-1', 30);
+    await container
+        .read(connectionSettingsProvider.notifier)
+        .moveTo('10.0.0.4', 8000);
+    expect(container.read(scheduledPowerOffProvider), (
+      serverId: 'box-1',
+      at: now.add(const Duration(minutes: 30)),
+    ));
+  });
 }

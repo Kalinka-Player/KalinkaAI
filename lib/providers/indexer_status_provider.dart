@@ -134,7 +134,7 @@ class IndexerStatusNotifier extends Notifier<IndexerStatusState> {
       _pollTimer?.cancel();
     });
     ref.listen(connectionSettingsProvider, (previous, next) {
-      if (previous?.baseUrl == next.baseUrl) return;
+      if (previous?.serverChoice == next.serverChoice) return;
       _generation++;
       _serverGeneration++;
       _posting = _awaitingScan = false;

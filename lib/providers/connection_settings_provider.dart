@@ -16,11 +16,17 @@ class ConnectionSettings {
   /// `http`, or `https` for a server behind TLS.
   final String scheme;
 
+  /// Changes each time the app is pointed at another address, but not when
+  /// it follows the same server to another of its own, so what belongs to
+  /// the server rather than its address is dropped on this, not the address.
+  final int serverChoice;
+
   const ConnectionSettings({
     required this.name,
     required this.host,
     required this.port,
     this.scheme = 'http',
+    this.serverChoice = 0,
   });
 
   /// Check if connection settings are properly configured
@@ -49,6 +55,7 @@ class ConnectionSettings {
       host: host ?? this.host,
       port: port ?? this.port,
       scheme: scheme ?? this.scheme,
+      serverChoice: serverChoice,
     );
   }
 
@@ -59,18 +66,19 @@ class ConnectionSettings {
         other.name == name &&
         other.host == host &&
         other.port == port &&
-        other.scheme == scheme;
+        other.scheme == scheme &&
+        other.serverChoice == serverChoice;
   }
 
   @override
   int get hashCode {
-    return Object.hash(name, host, port, scheme);
+    return Object.hash(name, host, port, scheme, serverChoice);
   }
 
   @override
   String toString() {
     return 'ConnectionSettings(name: $name, host: $host, port: $port, '
-        'scheme: $scheme)';
+        'scheme: $scheme, serverChoice: $serverChoice)';
   }
 }
 
@@ -120,11 +128,24 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
     } finally {
       _persisted = true;
     }
-    state = ConnectionSettings(
+    state = _pointedAt(name, host, port, scheme);
+  }
+
+  /// A connection to [host]:[port], another server's choice unless that is
+  /// the address in use.
+  ConnectionSettings _pointedAt(
+    String name,
+    String host,
+    int port,
+    String scheme,
+  ) {
+    final same = (scheme: scheme, host: host, port: port) == state.address;
+    return ConnectionSettings(
       name: name,
       host: host,
       port: port,
       scheme: scheme,
+      serverChoice: same ? state.serverChoice : state.serverChoice + 1,
     );
   }
 
@@ -137,7 +158,8 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
   }
 
   /// Follow the same server to [host]:[port], saved for the next launch
-  /// unless the connection is for this session only.
+  /// unless the connection is for this session only. Its
+  /// [ConnectionSettings.serverChoice] stays.
   Future<void> moveTo(String host, int port) async {
     if (!state.isSet || (host == state.host && port == state.port)) return;
     state = state.copyWith(host: host, port: port);
@@ -157,12 +179,7 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
     String scheme = 'http',
   }) {
     _persisted = false;
-    state = ConnectionSettings(
-      name: name,
-      host: host,
-      port: port,
-      scheme: scheme,
-    );
+    state = _pointedAt(name, host, port, scheme);
   }
 
   /// Persist the current in-memory connection (after an ephemeral connect).
@@ -174,7 +191,7 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
   /// Reset connection settings
   void reset() {
     _persisted = false;
-    state = ConnectionSettings(name: '', host: '', port: 0);
+    state = _pointedAt('', '', 0, 'http');
   }
 
   /// Clear stored device and reset to unconfigured state.
@@ -184,7 +201,7 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
     await _sharedPrefs.remove(sharedPrefHost);
     await _sharedPrefs.remove(sharedPrefPort);
     await _sharedPrefs.remove(sharedPrefScheme);
-    state = const ConnectionSettings(name: '', host: '', port: 0);
+    state = _pointedAt('', '', 0, 'http');
   }
 
   @override
