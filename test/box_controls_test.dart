@@ -17,6 +17,7 @@ import 'package:kalinka/providers/demo_mode.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/pinned_catalogs_provider.dart';
+import 'package:kalinka/providers/server_endpoints.dart';
 import 'package:kalinka/providers/supervisor_api.dart';
 import 'package:kalinka/providers/timezone_provider.dart';
 import 'package:kalinka/providers/toast_provider.dart';
@@ -369,6 +370,28 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(container.read(sharedPrefsProvider).getString(_knownKey), 'box-1');
+    });
+
+    test('keeps the address among the connected server\'s own', () async {
+      final container = await _container(box: null, identity: 'box-1');
+
+      container.read(rememberServerIdentityProvider);
+      await container.read(serverIdentityProvider.future);
+      await Future<void>.delayed(Duration.zero);
+
+      final saved = container
+          .read(serverEndpointStoreProvider)
+          .endpointsOf('box-1');
+      expect(
+        [for (final e in saved) '${e.host}:${e.port}'],
+        ['kalinka.local:8000'],
+      );
+      expect(
+        container
+            .read(sharedPrefsProvider)
+            .getString('Kalinka.servers.v1:box-1'),
+        isNotNull,
+      );
     });
 
     test('a server not connected leaves the record alone', () async {

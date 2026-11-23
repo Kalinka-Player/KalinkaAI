@@ -9,6 +9,7 @@ import 'connection_settings_provider.dart';
 import 'connection_state_provider.dart';
 import 'demo_mode.dart';
 import 'kalinka_player_api_provider.dart' show httpClientProvider;
+import 'server_endpoints.dart';
 import 'supervisor_api.dart';
 
 /// The connected server's box, confirmed to be that server's own.
@@ -345,18 +346,19 @@ final serverStorageKeyProvider = Provider<ServerStorageKey?>((ref) {
 /// The server last seen at [settings]' address, so its box is still known
 /// while that server is down.
 String _knownServerKey(ConnectionSettings settings) =>
-    'Kalinka.serverIdAt.${settings.host}:${settings.port}';
+    serverIdAtKey(settings.host, settings.port);
 
-/// Records each connected server's identity under its address. Watched from
-/// the app root, so the record exists before the server can go down, whether
-/// or not the box controls were ever shown.
+/// Records each connected server's identity under its address, and the
+/// address among the server's own. Watched from the app root, so the record
+/// exists before the server can go down, whether or not the box controls were
+/// ever shown.
 final rememberServerIdentityProvider = Provider<void>((ref) {
   ref.listen(serverIdentityProvider, (_, next) {
     final id = next.value;
     if (id == null) return;
-    final key = _knownServerKey(ref.read(connectionSettingsProvider));
-    final prefs = ref.read(sharedPrefsProvider);
-    if (prefs.getString(key) != id) prefs.setString(key, id);
+    ref
+        .read(serverEndpointStoreProvider)
+        .confirmedAt(id, ref.read(connectionSettingsProvider).address);
   });
 });
 

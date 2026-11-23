@@ -92,12 +92,19 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
     int port, {
     String scheme = 'http',
     String failure = 'Could not connect. Check the address and try again.',
+    DiscoveredServer? found,
   }) async {
     setState(() {
       _isConnecting = true;
       _connectError = null;
-      _retry = () =>
-          _connectToServer(name, host, port, scheme: scheme, failure: failure);
+      _retry = () => _connectToServer(
+        name,
+        host,
+        port,
+        scheme: scheme,
+        failure: failure,
+        found: found,
+      );
     });
 
     try {
@@ -106,6 +113,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
         name: name,
         address: (scheme: scheme, host: host, port: port),
         persist: widget.persistConnection,
+        found: found,
       );
 
       // Success — hand off to the embedding wizard, or close discovery
@@ -734,7 +742,12 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen>
       fullWidth: true,
       enabled: hasSelection,
       onTap: hasSelection
-          ? () => _connectToServer(selected!.name, selected.host, selected.port)
+          ? () => _connectToServer(
+              selected!.name,
+              selected.host,
+              selected.port,
+              found: selected,
+            )
           : null,
     );
   }
