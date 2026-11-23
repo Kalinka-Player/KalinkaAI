@@ -1112,9 +1112,11 @@ void main() {
             container
                 .read(connectionStateProvider.notifier)
                 .startReconnecting();
-            async.elapse(const Duration(seconds: 35));
+            async.elapse(const Duration(seconds: 32));
 
-            expect(asked, [wifi]);
+            // After the 3rd and 6th failed probe; offline once the second
+            // search ends, not at the next probe.
+            expect(asked, [wifi, wifi]);
             expect(container.read(connectionSettingsProvider).host, cable);
             expect(prefs.getString('Kalinka.host'), cable);
             expect(servers[wifi]!.listModulesCalls, 0);
@@ -1240,6 +1242,65 @@ void main() {
         // After the 3rd, 6th and 12th failed probe.
         expect(browse.scans, 3);
         expect(asked, [wifi, wifi, wifi]);
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+      });
+    });
+
+    test(
+      'the display looks for its server at least every five minutes',
+      () async {
+        final prefs = await connectedAt(cable, saved: [cable, wifi]);
+        fakeAsync((async) {
+          final container = following(async, prefs, kiosk: true);
+          container.read(connectionStateProvider.notifier).startReconnecting();
+
+          // The 96th failed probe, eight minutes in.
+          async.elapse(const Duration(minutes: 8, seconds: 1));
+          expect(browse.scans, 6);
+          async.elapse(const Duration(minutes: 5));
+          expect(browse.scans, 7);
+          async.elapse(const Duration(minutes: 5));
+          expect(browse.scans, 8);
+        });
+      },
+    );
+
+    test('going offline waits for a search under way', () async {
+      final prefs = await connectedAt(cable, saved: [cable, wifi]);
+      ids = {wifi: 'core-1'};
+      fakeAsync((async) {
+        final container = following(async, prefs);
+        final notifier = container.read(connectionStateProvider.notifier);
+        notifier.startReconnecting();
+
+        // The third probe hangs until 24s, so the search outlasts the window.
+        async.elapse(const Duration(seconds: 12));
+        final hang = servers[cable]!.reply = Completer<void>();
+        answers = Completer<void>();
+        async.elapse(const Duration(seconds: 12));
+        hang.complete();
+        async.flushMicrotasks();
+        expect(asked, [wifi]);
+
+        async.elapse(const Duration(seconds: 6));
+        expect(notifier.escalationReached, isTrue);
+        expect(
+          container.read(connectionStateProvider),
+          ConnectionStatus.reconnecting,
+        );
+
+        answers!.complete();
+        async.elapse(Duration.zero);
+        expect(container.read(connectionSettingsProvider).host, wifi);
+        expect(notifier.escalationReached, isFalse);
+
+        // The new address gets a window of its own.
+        servers[wifi]!.shouldSucceed = false;
+        async.elapse(const Duration(seconds: 5));
+        expect(servers[wifi]!.listModulesCalls, 1);
         expect(
           container.read(connectionStateProvider),
           ConnectionStatus.reconnecting,

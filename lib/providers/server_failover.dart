@@ -56,8 +56,9 @@ final serverIdProbeProvider = Provider<ServerIdProbe>(
   },
 );
 
-/// A browse that never finishes must not hold the search.
-const _searchTimeout = Duration(seconds: 10);
+/// A browse that never finishes must not hold the search, but one that takes
+/// its full 7s still gets a probe of what it found.
+const _searchTimeout = Duration(seconds: 13);
 
 /// Looks for the server [serverId] away from [from]: at its other saved
 /// addresses, and at any a fresh mDNS browse finds it announcing, all asked at
@@ -111,7 +112,13 @@ Future<ServerAddress?> findServerElsewhere(
       endIfNothingLeft();
     }
   });
-  unawaited(ref.read(discoveryProvider.notifier).startScan());
+  unawaited(
+    ref.read(discoveryProvider.notifier).startScan().catchError((Object _) {
+      // The saved addresses are still asked.
+      browsing = false;
+      endIfNothingLeft();
+    }),
+  );
   return found.future
       .timeout(_searchTimeout, onTimeout: () => null)
       .whenComplete(browse.close);

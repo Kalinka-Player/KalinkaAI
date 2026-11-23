@@ -1,4 +1,5 @@
 import 'dart:async' show Timer;
+import 'dart:math' show min;
 
 import 'package:dio/dio.dart' show DioException;
 import 'package:flutter/widgets.dart' show AppLifecycleState;
@@ -76,6 +77,7 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   /// Probes of the address in use that failed before the server is looked
   /// for at its other addresses.
   static const _failuresBeforeSearch = 3;
+  static const _maxProbesBetweenSearches = 60;
   int _failedProbes = 0;
   int _searchAfter = _failuresBeforeSearch;
   bool _searching = false;
@@ -353,13 +355,19 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   }
 
   void _probeFailed() {
+    if (!_paused && state == ConnectionStatus.reconnecting) {
+      _failedProbes++;
+      if (!_searching && _failedProbes >= _searchAfter) {
+        // The display probes for ever; it browses less often, but at least
+        // every five minutes.
+        _searchAfter =
+            _failedProbes + min(_searchAfter, _maxProbesBetweenSearches);
+        _followServer().catchError((Object e) {
+          _logger.w('Could not follow the server: $e');
+        });
+      }
+    }
     _checkEscalation();
-    if (_paused || state != ConnectionStatus.reconnecting) return;
-    _failedProbes++;
-    if (_searching || _failedProbes < _searchAfter) return;
-    // The display probes for ever; it need not browse as often.
-    _searchAfter *= 2;
-    _followServer();
   }
 
   void _forgetFailedProbes() {
@@ -386,11 +394,15 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     } finally {
       _searching = false;
     }
+    if (!ref.mounted) return;
+    if (to == null) {
+      // Going offline waited for the search.
+      _checkEscalation();
+      return;
+    }
     // Meanwhile another server may have been picked, or the connection came
     // back or went offline.
-    if (to == null ||
-        !ref.mounted ||
-        _paused ||
+    if (_paused ||
         state != ConnectionStatus.reconnecting ||
         ref.read(connectionSettingsProvider).address != from) {
       return;
@@ -400,6 +412,8 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
       '${to.host}:${to.port}',
     );
     _forgetFailedProbes();
+    // The new address gets its own window before going offline.
+    _reconnectStartedAt = _monotonicNow;
     store.confirmedAt(serverId, to);
     // The sockets follow the address; the next probe goes there too.
     await ref
@@ -409,8 +423,10 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
 
   void _checkEscalation() {
     // A failed probe may finish after a new connection attempt or disconnect,
-    // or after a pause, whose release restarts the escalation window.
+    // or after a pause, whose release restarts the escalation window. A search
+    // for the server elsewhere finishes first, or its answer would be dropped.
     if (_paused ||
+        _searching ||
         state != ConnectionStatus.reconnecting ||
         !escalationReached) {
       return;
