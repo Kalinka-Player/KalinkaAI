@@ -117,6 +117,30 @@ void main() {
     expect(prefs.getString(ConnectionSettingsNotifier.sharedPrefHost), isNull);
   });
 
+  test('a move while a connection is being saved is dropped', () async {
+    final (container, prefs) = await _container({});
+    final notifier = container.read(connectionSettingsProvider.notifier);
+    notifier.setDeviceEphemeral('Setup', '10.0.0.3', 8000);
+    final choice = container.read(connectionSettingsProvider).serverChoice;
+
+    final saving = notifier.persist();
+    await notifier.moveTo('10.0.0.4', 8000);
+    await saving;
+    expect(
+      container.read(connectionSettingsProvider),
+      ConnectionSettings(
+        name: 'Setup',
+        host: '10.0.0.3',
+        port: 8000,
+        serverChoice: choice,
+      ),
+    );
+    expect(
+      prefs.getString(ConnectionSettingsNotifier.sharedPrefHost),
+      '10.0.0.3',
+    );
+  });
+
   test('pointing the app at another address is another server\'s choice, '
       'and the same address or a rename is not', () async {
     final (container, _) = await _container({

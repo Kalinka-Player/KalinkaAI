@@ -1234,6 +1234,28 @@ void main() {
       });
     });
 
+    test(
+      'an answer for the address picked again meanwhile is not followed',
+      () async {
+        final prefs = await connectedAt(cable, saved: [cable, wifi]);
+        ids = {wifi: 'core-1'};
+        fakeAsync((async) {
+          answers = Completer<void>();
+          final container = following(async, prefs);
+          container.read(connectionStateProvider.notifier).startReconnecting();
+          async.elapse(const Duration(seconds: 15));
+          expect(asked, [wifi]);
+
+          container.read(connectionSettingsProvider.notifier)
+            ..setDeviceEphemeral('Kitchen', lease, 8000)
+            ..setDeviceEphemeral('Living room', cable, 8000);
+          answers!.complete();
+          async.elapse(const Duration(seconds: 1));
+          expect(container.read(connectionSettingsProvider).host, cable);
+        });
+      },
+    );
+
     test('a session-only connection moves without saving it', () async {
       final prefs = await connectedAt(cable, saved: [cable, wifi]);
       ids = {wifi: 'core-1'};

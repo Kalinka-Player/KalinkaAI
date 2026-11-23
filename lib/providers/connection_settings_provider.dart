@@ -94,6 +94,10 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
   /// Whether changes to the connection in [state] are saved with it.
   bool _persisted = true;
 
+  /// Whether [setDevice] is saving a connection, which replaces [state] once
+  /// saved.
+  bool _settingDevice = false;
+
   /// Initialize settings from SharedPreferences
   ConnectionSettings _load() {
     final name = _sharedPrefs.getString(sharedPrefName) ?? 'Unknown';
@@ -120,6 +124,7 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
     // Settings from the outgoing connection may finish while these writes
     // are in flight; they must not replace the incoming device's saved name.
     _persisted = false;
+    _settingDevice = true;
     try {
       await _sharedPrefs.setString(sharedPrefName, name);
       await _sharedPrefs.setString(sharedPrefHost, host);
@@ -127,6 +132,7 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
       await _sharedPrefs.setString(sharedPrefScheme, scheme);
     } finally {
       _persisted = true;
+      _settingDevice = false;
     }
     state = _pointedAt(name, host, port, scheme);
   }
@@ -159,9 +165,15 @@ class ConnectionSettingsNotifier extends Notifier<ConnectionSettings> {
 
   /// Follow the same server to [host]:[port], saved for the next launch
   /// unless the connection is for this session only. Its
-  /// [ConnectionSettings.serverChoice] stays.
+  /// [ConnectionSettings.serverChoice] stays. Dropped while [setDevice]
+  /// saves a connection, which would put back the address moved from as
+  /// another server's choice.
   Future<void> moveTo(String host, int port) async {
-    if (!state.isSet || (host == state.host && port == state.port)) return;
+    if (!state.isSet ||
+        _settingDevice ||
+        (host == state.host && port == state.port)) {
+      return;
+    }
     state = state.copyWith(host: host, port: port);
     if (!_persisted) return;
     await _sharedPrefs.setString(sharedPrefHost, host);

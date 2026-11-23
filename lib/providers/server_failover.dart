@@ -4,10 +4,11 @@ library;
 
 import 'dart:async';
 
-import 'package:dio/dio.dart' show BaseOptions, Dio, DioException;
+import 'package:dio/dio.dart' show Dio, DioException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'discovery_provider.dart';
+import 'kalinka_player_api_provider.dart' show kalinkaHttpClient;
 import 'server_address.dart';
 import 'server_endpoints.dart';
 
@@ -37,17 +38,16 @@ const _probeTimeout = Duration(seconds: 3);
 
 final serverIdProbeProvider = Provider<ServerIdProbe>(
   (ref) => (address) async {
-    final client = Dio(
-      BaseOptions(
-        baseUrl: Uri(
-          scheme: address.scheme,
-          host: address.host,
-          port: address.port,
-        ).toString(),
-        connectTimeout: _probeTimeout,
-        receiveTimeout: _probeTimeout,
-      ),
+    final client = kalinkaHttpClient(
+      Uri(
+        scheme: address.scheme,
+        host: address.host,
+        port: address.port,
+      ).toString(),
     );
+    client.options
+      ..connectTimeout = _probeTimeout
+      ..receiveTimeout = _probeTimeout;
     try {
       return await askServerId(client);
     } finally {

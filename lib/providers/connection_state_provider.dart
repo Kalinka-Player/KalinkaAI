@@ -380,7 +380,8 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
   /// another can never be taken for it.
   Future<void> _followServer() async {
     if (!ref.read(canSelectServerProvider)) return;
-    final from = ref.read(connectionSettingsProvider).address;
+    final settings = ref.read(connectionSettingsProvider);
+    final from = settings.address;
     // A server behind TLS is not on the local network to move about it.
     if (from.scheme != 'http') return;
     final store = ref.read(serverEndpointStoreProvider);
@@ -402,9 +403,11 @@ class ConnectionStateNotifier extends Notifier<ConnectionStatus> {
     }
     // Meanwhile another server may have been picked, or the connection came
     // back or went offline.
+    final now = ref.read(connectionSettingsProvider);
     if (_paused ||
         state != ConnectionStatus.reconnecting ||
-        ref.read(connectionSettingsProvider).address != from) {
+        now.serverChoice != settings.serverChoice ||
+        now.address != from) {
       return;
     }
     _logger.i(
