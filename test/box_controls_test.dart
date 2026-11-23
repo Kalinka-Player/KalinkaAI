@@ -362,49 +362,68 @@ void main() {
   });
 
   group('rememberServerIdentityProvider', () {
-    test('remembers the connected server under its address', () async {
-      final container = await _container(box: null, identity: 'box-1');
+    const address = (scheme: 'http', host: 'kalinka.local', port: 8000);
 
+    Future<ProviderContainer> answered(
+      String? id, {
+      Map<String, Object> stored = const {},
+    }) async {
+      final container = await _container(
+        box: null,
+        stored: stored,
+        overrides: [serverAnswering(id)],
+      );
       container.read(rememberServerIdentityProvider);
-      await container.read(serverIdentityProvider.future);
+      await container.read(serverAnswerProvider.future);
       await Future<void>.delayed(Duration.zero);
+      return container;
+    }
 
+    test('remembers the connected server under its address', () async {
+      final container = await answered('box-1');
       expect(container.read(sharedPrefsProvider).getString(_knownKey), 'box-1');
     });
 
     test('keeps the address among the connected server\'s own', () async {
-      final container = await _container(box: null, identity: 'box-1');
+      final container = await answered('box-1');
 
-      container.read(rememberServerIdentityProvider);
-      await container.read(serverIdentityProvider.future);
-      await Future<void>.delayed(Duration.zero);
-
-      final saved = container
-          .read(serverEndpointStoreProvider)
-          .endpointsOf('box-1');
+      final store = container.read(serverEndpointStoreProvider);
       expect(
-        [for (final e in saved) '${e.host}:${e.port}'],
+        [for (final e in store.endpointsOf('box-1')) '${e.host}:${e.port}'],
         ['kalinka.local:8000'],
       );
-      expect(
-        container
-            .read(sharedPrefsProvider)
-            .getString('Kalinka.servers.v1:box-1'),
-        isNotNull,
-      );
+      expect(store.serverIdAt(address), 'box-1');
+    });
+
+    test('a server without an id answering keeps the record, but the one '
+        'recorded is not followed from the address', () async {
+      final container = await answered(null, stored: {_knownKey: 'box-1'});
+
+      expect(container.read(sharedPrefsProvider).getString(_knownKey), 'box-1');
+      final store = container.read(serverEndpointStoreProvider);
+      expect(store.endpointsOf('box-1'), isEmpty);
+      expect(store.serverIdAt(address), isNull);
     });
 
     test('a server not connected leaves the record alone', () async {
       final container = await _container(
         box: null,
         stored: {_knownKey: 'box-1'},
+        overrides: [
+          connectionStateProvider.overrideWith(
+            () => _Connection(ConnectionStatus.reconnecting),
+          ),
+        ],
       );
 
       container.read(rememberServerIdentityProvider);
-      await container.read(serverIdentityProvider.future);
       await Future<void>.delayed(Duration.zero);
 
       expect(container.read(sharedPrefsProvider).getString(_knownKey), 'box-1');
+      expect(
+        container.read(serverEndpointStoreProvider).serverIdAt(address),
+        'box-1',
+      );
     });
   });
 

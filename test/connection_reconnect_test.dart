@@ -1016,7 +1016,7 @@ void main() {
       });
       final prefs = await SharedPreferences.getInstance();
       if (id != null && saved.isNotEmpty) {
-        await ServerEndpointStore(prefs).remember(id, [
+        ServerEndpointStore(prefs).remember(id, [
           for (final h in saved) (scheme: 'http', host: h, port: 8000),
         ]);
       }
@@ -1184,6 +1184,24 @@ void main() {
           container.read(connectionStateProvider),
           ConnectionStatus.offline,
         );
+      });
+    });
+
+    test('the server recorded at the address is not followed once a server '
+        'without an id answered there', () async {
+      final prefs = await connectedAt(cable, saved: [cable, wifi]);
+      ServerEndpointStore(prefs)
+          .unidentifiedAt((scheme: 'http', host: cable, port: 8000));
+      ids = {wifi: 'core-1'};
+      fakeAsync((async) {
+        final container = following(async, prefs);
+        container.read(connectionStateProvider.notifier).startReconnecting();
+        async.elapse(const Duration(seconds: 35));
+
+        expect(asked, isEmpty);
+        expect(browse.scans, 0);
+        expect(container.read(connectionSettingsProvider).host, cable);
+        expect(prefs.getString('Kalinka.serverIdAt.$cable:8000'), 'core-1');
       });
     });
 

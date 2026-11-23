@@ -45,7 +45,8 @@ class NotADemoServerException implements Exception {
 /// failure the reconnect loop takes over and the error is rethrown. The demo
 /// address is connected to only once it says it is a demo; until then
 /// nothing about the connection changes. [found] is the server as discovery
-/// listed it, whose other addresses the app can follow it to.
+/// listed it: the app can follow it to its other addresses once it says at
+/// [address] that it is that server.
 Future<void> connectToServer(
   WidgetRef ref, {
   required String name,
@@ -62,11 +63,16 @@ Future<void> connectToServer(
   }
   final serverId = found?.serverId;
   if (serverId != null && serverId.isNotEmpty) {
-    ref.read(serverEndpointStoreProvider).remember(serverId, [
-      address,
-      for (final endpoint in found!.endpoints)
-        (scheme: 'http', host: endpoint.host, port: endpoint.port),
-    ]).ignore();
+    ref
+        .read(serverEndpointStoreProvider)
+        .chose(
+          serverId,
+          at: address,
+          addresses: [
+            for (final endpoint in found!.endpoints)
+              (scheme: 'http', host: endpoint.host, port: endpoint.port),
+          ],
+        );
   }
   final settings = ref.read(connectionSettingsProvider.notifier);
   final connection = ref.read(connectionStateProvider.notifier);

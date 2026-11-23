@@ -4,12 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/data_model.dart' show ModulesAndDevices;
+import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/discovery_types.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/server_address.dart';
 import 'package:kalinka/providers/server_connect.dart';
 import 'package:kalinka/providers/server_endpoints.dart';
+
+import 'support/server_answer.dart';
 
 ServerAddress _at(String host, [int port = 8000]) =>
     (scheme: 'http', host: host, port: port);
@@ -43,9 +46,9 @@ void main() {
       var now = DateTime(2026, 10, 24, 19);
       final (store, prefs) = await _store({}, now: () => now);
 
-      await store.remember('core-1', [_at('10.0.0.3'), _at('10.0.0.4')]);
+      store.remember('core-1', [_at('10.0.0.3'), _at('10.0.0.4')]);
       now = now.add(const Duration(hours: 1));
-      await store.remember('core-1', [_at('10.0.0.20')]);
+      store.remember('core-1', [_at('10.0.0.20')]);
 
       final endpoints = store.endpointsOf('core-1');
       expect(_hosts(endpoints), [
@@ -61,10 +64,10 @@ void main() {
     test('an address seen again moves to the front, once', () async {
       var now = DateTime(2026, 10, 24);
       final (store, _) = await _store({}, now: () => now);
-      await store.remember('core-1', [_at('10.0.0.3'), _at('10.0.0.4')]);
+      store.remember('core-1', [_at('10.0.0.3'), _at('10.0.0.4')]);
 
       now = now.add(const Duration(minutes: 5));
-      await store.remember('core-1', [_at('10.0.0.4'), _at('10.0.0.4')]);
+      store.remember('core-1', [_at('10.0.0.4'), _at('10.0.0.4')]);
 
       final endpoints = store.endpointsOf('core-1');
       expect(_hosts(endpoints), ['10.0.0.4:8000', '10.0.0.3:8000']);
@@ -76,7 +79,7 @@ void main() {
       final (store, _) = await _store({}, now: () => now);
       for (var i = 1; i <= 10; i++) {
         now = now.add(const Duration(days: 1));
-        await store.remember('core-1', [_at('10.0.0.$i')]);
+        store.remember('core-1', [_at('10.0.0.$i')]);
       }
 
       final endpoints = store.endpointsOf('core-1');
@@ -87,7 +90,7 @@ void main() {
 
     test('an address behind TLS is not kept', () async {
       final (store, prefs) = await _store({});
-      await store.remember('core-1', [
+      store.remember('core-1', [
         (scheme: 'https', host: 'kalinka.example', port: 443),
       ]);
       expect(store.endpointsOf('core-1'), isEmpty);
@@ -110,15 +113,18 @@ void main() {
         'Kalinka.serverIdAt.10.0.0.3:8000': 'core-1',
       };
 
-      test('it belongs to the server last seen there', () async {
+      test('it becomes the first of the server last seen there', () async {
         final (store, _) = await _store(saved);
+        store.migrateSavedAddress();
         expect(_hosts(store.endpointsOf('core-1')), ['10.0.0.3:8000']);
         expect(store.endpointsOf('core-2'), isEmpty);
+        expect(store.serverIdAt(_at('10.0.0.3')), 'core-1');
       });
 
       test('it is kept once the server is seen elsewhere', () async {
         final (store, prefs) = await _store(saved);
-        await store.remember('core-1', [_at('10.0.0.4')]);
+        store.migrateSavedAddress();
+        store.remember('core-1', [_at('10.0.0.4')]);
 
         await prefs.remove('Kalinka.host');
         expect(_hosts(store.endpointsOf('core-1')), [
@@ -127,37 +133,79 @@ void main() {
         ]);
       });
 
+      test('a server that has addresses already keeps them', () async {
+        final (store, _) = await _store(saved);
+        store.remember('core-1', [_at('10.0.0.4')]);
+        store.migrateSavedAddress();
+        expect(_hosts(store.endpointsOf('core-1')), ['10.0.0.4:8000']);
+      });
+
       test('no server seen there, or one behind TLS, gives none', () async {
         final (unseen, _) = await _store({
           'Kalinka.host': '10.0.0.3',
           'Kalinka.port': 8000,
         });
+        unseen.migrateSavedAddress();
         expect(unseen.endpointsOf('core-1'), isEmpty);
 
         final (tls, _) = await _store({...saved, 'Kalinka.scheme': 'https'});
+        tls.migrateSavedAddress();
         expect(tls.endpointsOf('core-1'), isEmpty);
       });
     });
 
     group('serverIdAt', () {
-      test('the server that said so at the address wins', () async {
-        final (store, _) = await _store({
-          'Kalinka.serverIdAt.10.0.0.3:8000': 'core-1',
-        });
-        await store.remember('core-2', [_at('10.0.0.3')]);
+      test('names the server last to say so at one of its addresses', () async {
+        final (store, _) = await _store({});
+        store.confirmedAt('core-1', _at('10.0.0.3'));
+        expect(store.serverIdAt(_at('10.0.0.3')), 'core-1');
+        expect(store.serverIdAt(_at('10.0.0.3', 8001)), isNull);
+        expect(store.serverIdAt(_at('10.0.0.9')), isNull);
+      });
+
+      test('an address discovery only listed names no server', () async {
+        final (store, _) = await _store({});
+        store.remember('core-1', [_at('10.0.0.3')]);
+        expect(store.serverIdAt(_at('10.0.0.3')), isNull);
+      });
+
+      test('a server without an id answering there names none, until the '
+          'other says so there again', () async {
+        final (store, prefs) = await _store({});
+        store.confirmedAt('core-1', _at('10.0.0.3'));
+        store.confirmedAt('core-1', _at('10.0.0.4'));
+
+        store.unidentifiedAt(_at('10.0.0.3'));
+        expect(store.serverIdAt(_at('10.0.0.3')), isNull);
+        expect(_hosts(store.endpointsOf('core-1')), ['10.0.0.4:8000']);
+        // Pins and box controls still go by the record.
+        expect(prefs.getString('Kalinka.serverIdAt.10.0.0.3:8000'), 'core-1');
+
+        store.confirmedAt('core-1', _at('10.0.0.3'));
         expect(store.serverIdAt(_at('10.0.0.3')), 'core-1');
       });
 
-      test('failing that, the one most recently chosen there', () async {
-        var now = DateTime(2026, 10, 24);
-        final (store, _) = await _store({}, now: () => now);
-        await store.remember('core-1', [_at('10.0.0.3')]);
-        now = now.add(const Duration(days: 1));
-        await store.remember('core-2', [_at('10.0.0.3')]);
+      test(
+        'a saved address a server without an id answers at names none',
+        () async {
+          final (store, _) = await _store({
+            'Kalinka.host': '10.0.0.3',
+            'Kalinka.port': 8000,
+            'Kalinka.serverIdAt.10.0.0.3:8000': 'core-1',
+          });
+          store.migrateSavedAddress();
+          store.unidentifiedAt(_at('10.0.0.3'));
+          store.migrateSavedAddress();
+          expect(store.serverIdAt(_at('10.0.0.3')), isNull);
+        },
+      );
 
+      test('another server saying so there takes the address', () async {
+        final (store, _) = await _store({});
+        store.confirmedAt('core-1', _at('10.0.0.3'));
+        store.confirmedAt('core-2', _at('10.0.0.3'));
         expect(store.serverIdAt(_at('10.0.0.3')), 'core-2');
-        expect(store.serverIdAt(_at('10.0.0.3', 8001)), isNull);
-        expect(store.serverIdAt(_at('10.0.0.9')), isNull);
+        expect(store.endpointsOf('core-1'), isEmpty);
       });
     });
 
@@ -171,49 +219,122 @@ void main() {
       expect(prefs.getString('Kalinka.serverIdAt.10.0.0.4:8000'), 'core-1');
       expect(_hosts(store.endpointsOf('core-1')), ['10.0.0.4:8000']);
     });
+
+    group('a server chosen from discovery', () {
+      final announced = [_at('10.0.0.3'), _at('10.0.0.4')];
+
+      test('has what it announced kept once it says it is that one', () async {
+        final (store, _) = await _store({});
+        store.chose('core-1', at: _at('10.0.0.3'), addresses: announced);
+        expect(store.endpointsOf('core-1'), isEmpty);
+
+        store.confirmedAt('core-1', _at('10.0.0.3'));
+        expect(_hosts(store.endpointsOf('core-1')), [
+          '10.0.0.3:8000',
+          '10.0.0.4:8000',
+        ]);
+      });
+
+      for (final other in ['core-2', null]) {
+        test('keeps nothing it announced when '
+            '${other ?? 'a server without an id'} answers there', () async {
+          final (store, _) = await _store({});
+          store.chose('core-1', at: _at('10.0.0.3'), addresses: announced);
+          if (other == null) {
+            store.unidentifiedAt(_at('10.0.0.3'));
+          } else {
+            store.confirmedAt(other, _at('10.0.0.3'));
+          }
+
+          store.confirmedAt('core-1', _at('10.0.0.9'));
+          store.confirmedAt('core-1', _at('10.0.0.3'));
+          expect(_hosts(store.endpointsOf('core-1')), [
+            '10.0.0.3:8000',
+            '10.0.0.9:8000',
+          ]);
+        });
+      }
+    });
   });
 
-  testWidgets('choosing a discovered server keeps every address it '
-      'announced', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    late WidgetRef ref;
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          sharedPrefsProvider.overrideWithValue(prefs),
-          kalinkaProxyProvider.overrideWithValue(_Server()),
-        ],
-        child: Consumer(
-          builder: (_, widgetRef, _) {
-            ref = widgetRef;
-            return const SizedBox();
-          },
+  group('choosing a discovered server', () {
+    late ServersByHost servers;
+
+    setUp(() => servers = ServersByHost());
+
+    Future<SharedPreferences> choose(WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      late WidgetRef ref;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sharedPrefsProvider.overrideWithValue(prefs),
+            kalinkaProxyProvider.overrideWithValue(_Server()),
+            servers.client,
+          ],
+          child: Consumer(
+            builder: (_, widgetRef, _) {
+              ref = widgetRef;
+              widgetRef.watch(rememberServerIdentityProvider);
+              return const SizedBox();
+            },
+          ),
         ),
-      ),
-    );
+      );
 
-    await connectToServer(
-      ref,
-      name: 'Living room',
-      address: _at('10.0.0.3'),
-      persist: true,
-      found: const DiscoveredServer(
+      await connectToServer(
+        ref,
         name: 'Living room',
-        host: '10.0.0.3',
-        port: 8000,
-        serverId: 'core-1',
-        endpoints: [
-          ServerEndpoint(host: '10.0.0.3', port: 8000, latencyMs: 4),
-          ServerEndpoint(host: '10.0.0.4', port: 8000, latencyMs: 9999),
-        ],
-      ),
-    );
-    await tester.pump();
+        address: _at('10.0.0.3'),
+        persist: true,
+        found: const DiscoveredServer(
+          name: 'Living room',
+          host: '10.0.0.3',
+          port: 8000,
+          serverId: 'core-1',
+          endpoints: [
+            ServerEndpoint(host: '10.0.0.3', port: 8000, latencyMs: 4),
+            ServerEndpoint(host: '10.0.0.4', port: 8000, latencyMs: 9999),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+      return prefs;
+    }
 
-    expect(_hosts(ServerEndpointStore(prefs).endpointsOf('core-1')), [
-      '10.0.0.3:8000',
-      '10.0.0.4:8000',
-    ]);
+    testWidgets('keeps every address it announced once it says who it is', (
+      tester,
+    ) async {
+      servers.ids['10.0.0.3'] = 'core-1';
+      final prefs = await choose(tester);
+
+      expect(servers.asked, 1);
+      expect(_hosts(ServerEndpointStore(prefs).endpointsOf('core-1')), [
+        '10.0.0.3:8000',
+        '10.0.0.4:8000',
+      ]);
+    });
+
+    testWidgets('keeps nothing it announced when another server answers', (
+      tester,
+    ) async {
+      servers.ids['10.0.0.3'] = 'core-9';
+      final prefs = await choose(tester);
+
+      final store = ServerEndpointStore(prefs);
+      expect(store.endpointsOf('core-1'), isEmpty);
+      expect(_hosts(store.endpointsOf('core-9')), ['10.0.0.3:8000']);
+    });
+
+    testWidgets('keeps nothing when a server without an id answers', (
+      tester,
+    ) async {
+      final prefs = await choose(tester);
+
+      expect(servers.asked, 1);
+      expect(ServerEndpointStore(prefs).endpointsOf('core-1'), isEmpty);
+      expect(prefs.getString('Kalinka.serverIdAt.10.0.0.3:8000'), isNull);
+    });
   });
 }

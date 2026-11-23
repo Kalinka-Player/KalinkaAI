@@ -336,16 +336,22 @@ String _knownServerKey(ConnectionSettings settings) =>
     serverIdAtKey(settings.host, settings.port);
 
 /// Records each connected server's identity under its address, and the
-/// address among the server's own. Watched from the app root, so the record
-/// exists before the server can go down, whether or not the box controls were
-/// ever shown.
+/// address among the server's own; a server too old to report one takes the
+/// address off them. Watched from the app root, so the record exists before
+/// the server can go down, whether or not the box controls were ever shown.
 final rememberServerIdentityProvider = Provider<void>((ref) {
-  ref.listen(serverIdentityProvider, (_, next) {
-    final id = next.value;
-    if (id == null) return;
-    ref
-        .read(serverEndpointStoreProvider)
-        .confirmedAt(id, ref.read(connectionSettingsProvider).address);
+  ref.listen(serverAnswerProvider, (_, next) {
+    if (next case AsyncData(value: final answer)) {
+      final settings = ref.read(connectionSettingsProvider);
+      if (answer.server != settings.baseUrl) return;
+      final store = ref.read(serverEndpointStoreProvider);
+      final id = answer.id;
+      if (id == null) {
+        store.unidentifiedAt(settings.address);
+      } else {
+        store.confirmedAt(id, settings.address);
+      }
+    }
   });
 });
 
