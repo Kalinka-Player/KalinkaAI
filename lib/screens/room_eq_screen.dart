@@ -228,7 +228,7 @@ class _RoomEqScreenState extends ConsumerState<RoomEqScreen> {
   });
 
   bool get hasActiveBand =>
-      curve.channels.values.expand((c) => c).any((b) => b.gain != 0);
+      curve.channels.values.expand((c) => c).any((b) => b.active);
 
   Future<void> useFlatResponse() async {
     if (busy || await refusedAsDemo(context, ref) || !mounted) return;
@@ -418,7 +418,7 @@ class _RoomEqScreenState extends ConsumerState<RoomEqScreen> {
   }
 
   Widget graph() {
-    final outOfRange = bands.any((b) => b.hz >= 24000 && b.gain != 0);
+    final outOfRange = bands.any((b) => b.hz >= 24000 && b.active);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -485,7 +485,7 @@ class _RoomEqScreenState extends ConsumerState<RoomEqScreen> {
       onSelect: (i) => setState(() => selected = i),
       editable: writable('dsp.profile'),
       onChange: changeBand,
-      onAdd: () => edit([...bands, const EqBand()], bands.length),
+      onAdd: (shape) => edit([...bands, EqBand(shape: shape)], bands.length),
       onRemove: () =>
           edit([...bands]..removeAt(selected), math.max(0, selected - 1)),
     );

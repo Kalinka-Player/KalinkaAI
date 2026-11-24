@@ -23,8 +23,7 @@ class _Plot {
       math.pow(_ceiling / _floor, ((x - area.left) / area.width).clamp(0, 1));
   double gain(double y) =>
       ((area.center.dy - y) * db * 2 / area.height).clamp(-db, db);
-  Offset handle(EqBand b) =>
-      Offset(x(b.hz), y(b.shape == FilterShape.peak ? b.gain : b.gain / 2));
+  Offset handle(EqBand b) => Offset(x(b.hz), y(b.handleGain));
 }
 
 class ResponseGraph extends StatefulWidget {
@@ -53,7 +52,7 @@ class _ResponseGraphState extends State<ResponseGraph> {
     final responses = widget.bands.map((b) => b.response(_rate)).toList();
     var peak = widget.bands.fold<double>(
       3,
-      (v, b) => math.max(v, b.gain.abs()),
+      (v, b) => math.max(v, b.handleGain.abs()),
     );
     for (var i = 0; i <= 192; i++) {
       final hz = _floor * math.pow(_ceiling / _floor, i / 192);
@@ -100,7 +99,7 @@ class _ResponseGraphState extends State<ResponseGraph> {
         final plot = _Plot(Size(box.maxWidth, widget.height), scale);
         return Semantics(
           label:
-              'Filter response at 48 kHz, ${widget.bands.length} bands. Frequency and gain can also be adjusted below.',
+              'Filter response at 48 kHz, ${widget.bands.length} bands. Edit individual bands below.',
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapUp: (e) {
@@ -124,7 +123,9 @@ class _ResponseGraphState extends State<ResponseGraph> {
               widget.onMove(
                 b.change(
                   hz: plot.frequency(e.localPosition.dx).roundToDouble(),
-                  gain: (gain.clamp(-30, 30) * 10).round() / 10,
+                  gain: b.shape.hasGain
+                      ? (gain.clamp(-30, 30) * 10).round() / 10
+                      : null,
                 ),
               );
             },

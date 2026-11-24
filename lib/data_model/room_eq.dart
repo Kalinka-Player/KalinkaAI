@@ -5,20 +5,40 @@ import '../generated/kalinka/renderer/v1/renderer.pb.dart' as wire;
 enum FilterShape {
   peak('Peak', 'PK'),
   lowShelf('Low shelf', 'LSQ'),
-  highShelf('High shelf', 'HSQ');
+  highShelf('High shelf', 'HSQ'),
+  lowPass('Low pass · 12 dB/oct', 'LPQ', slope: 12),
+  highPass('High pass · 12 dB/oct', 'HPQ', slope: 12),
+  firstOrderLowPass('Low pass · 6 dB/oct', 'LP1', slope: 6),
+  firstOrderHighPass('High pass · 6 dB/oct', 'HP1', slope: 6);
 
   final String label, rew;
-  const FilterShape(this.label, this.rew);
+  final int? slope;
+  const FilterShape(this.label, this.rew, {this.slope});
+  bool get hasGain => slope == null;
+  bool get hasQ => slope != 6;
+  bool get isLowPass => this == lowPass || this == firstOrderLowPass;
 }
 
 class EqBand {
   final FilterShape shape;
-  final double hz, gain, q;
+  final double hz;
+  final double? _gain, _q;
+  double get gain => shape.hasGain ? (_gain ?? 3) : 0;
+  double get q => shape.hasQ ? (_q ?? (shape.hasGain ? 1 : math.sqrt1_2)) : 0;
+  bool get active => !shape.hasGain || gain != 0;
+
+  /// Gain at the band's characteristic frequency, in dB.
+  double get handleGain => switch (shape) {
+    FilterShape.peak => gain,
+    FilterShape.lowShelf || FilterShape.highShelf => gain / 2,
+    FilterShape.lowPass || FilterShape.highPass => 20 * math.log(q) / math.ln10,
+    _ => -10 * math.ln2 / math.ln10,
+  };
   const EqBand({
     this.shape = FilterShape.peak,
     this.hz = 1000,
-    this.gain = 3,
-    this.q = 1,
+    this._gain,
+    this._q,
   });
 
   EqBand change({FilterShape? shape, double? hz, double? gain, double? q}) =>
@@ -26,7 +46,7 @@ class EqBand {
         shape: shape ?? this.shape,
         hz: hz ?? this.hz,
         gain: gain ?? this.gain,
-        q: q ?? this.q,
+        q: q ?? (this.shape.hasQ ? this.q : null),
       );
 
   factory EqBand.decode(wire.DspProfile_Band band) {
@@ -34,16 +54,21 @@ class EqBand {
       wire.DspProfile_Band_Type.PEAK => FilterShape.peak,
       wire.DspProfile_Band_Type.LOW_SHELF => FilterShape.lowShelf,
       wire.DspProfile_Band_Type.HIGH_SHELF => FilterShape.highShelf,
+      wire.DspProfile_Band_Type.LOW_PASS => FilterShape.lowPass,
+      wire.DspProfile_Band_Type.HIGH_PASS => FilterShape.highPass,
+      wire.DspProfile_Band_Type.FIRST_ORDER_LOW_PASS =>
+        FilterShape.firstOrderLowPass,
+      wire.DspProfile_Band_Type.FIRST_ORDER_HIGH_PASS =>
+        FilterShape.firstOrderHighPass,
       _ => throw const FormatException('Unsupported filter type'),
     };
     if (!band.frequencyHz.isFinite ||
         band.frequencyHz <= 0 ||
         band.frequencyHz > 384000 ||
         !band.gainDb.isFinite ||
-        band.gainDb.abs() > 30 ||
+        (shape.hasGain ? band.gainDb.abs() > 30 : band.gainDb != 0) ||
         !band.q.isFinite ||
-        band.q < 0.01 ||
-        band.q > 1000) {
+        (shape.hasQ ? band.q < 0.01 || band.q > 1000 : band.q != 0)) {
       throw const FormatException(
         'Invalid frequency, gain or Q in the room preset.',
       );
@@ -58,12 +83,20 @@ class EqBand {
 
   /// The same biquads as the renderer, evaluated on the unit circle.
   double Function(double radians) response(double rate) {
+    final w = 2 * math.pi * hz / rate;
+    final c = math.cos(w);
+    final alpha = shape.hasQ ? math.sin(w) / (2 * q) : 0.0;
     final a = math.pow(10, gain / 40).toDouble();
-    final w = 2 * math.pi * hz / rate,
-        c = math.cos(w),
-        alpha = math.sin(w) / (2 * q);
     final (double, double, double, double, double, double) coefficients;
-    if (shape == FilterShape.peak) {
+    if (!shape.hasQ) {
+      final k = math.tan(w / 2);
+      final b = shape.isLowPass ? k : 1.0;
+      coefficients = (b, shape.isLowPass ? b : -b, 0, 1 + k, k - 1, 0);
+    } else if (!shape.hasGain) {
+      final sign = shape.isLowPass ? 1 : -1;
+      final b = (1 - sign * c) / 2;
+      coefficients = (b, sign * 2 * b, b, 1 + alpha, -2 * c, 1 - alpha);
+    } else if (shape == FilterShape.peak) {
       coefficients = (
         1 + alpha * a,
         -2 * c,
@@ -163,7 +196,11 @@ class EqCurve {
         'Equaliser: Generic',
         if (entry.value.isEmpty) 'Filter 1: OFF None',
         for (final (i, b) in entry.value.indexed)
-          'Filter ${i + 1}: ON ${b.shape.rew} Fc ${_rewNumber(b.hz)} Hz Gain ${_rewNumber(b.gain)} dB Q ${_rewNumber(b.q)}',
+          [
+            'Filter ${i + 1}: ON ${b.shape.rew} Fc ${_rewNumber(b.hz)} Hz',
+            if (b.shape.hasGain) 'Gain ${_rewNumber(b.gain)} dB',
+            if (b.shape.hasQ) 'Q ${_rewNumber(b.q)}',
+          ].join(' '),
       ].join('\n'),
   };
 }

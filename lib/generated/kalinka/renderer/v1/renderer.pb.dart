@@ -3933,6 +3933,7 @@ class DspProfile_Band extends $pb.GeneratedMessage {
   @$pb.TagNumber(2)
   void clearFrequencyHz() => $_clearField(2);
 
+  /// Zero for a pass band.
   @$pb.TagNumber(3)
   $core.double get gainDb => $_getN(2);
   @$pb.TagNumber(3)
@@ -3942,6 +3943,7 @@ class DspProfile_Band extends $pb.GeneratedMessage {
   @$pb.TagNumber(3)
   void clearGainDb() => $_clearField(3);
 
+  /// Zero for a first-order band.
   @$pb.TagNumber(4)
   $core.double get q => $_getN(3);
   @$pb.TagNumber(4)
