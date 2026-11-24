@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data_model/room_eq.dart';
 import '../../theme/app_theme.dart';
 import 'editor_dialogs.dart';
+import 'filter_shape_icon.dart';
 
 String formatEqNumber(double n) => n == n.roundToDouble()
     ? n.toInt().toString()
@@ -13,7 +14,8 @@ class FilterInspector extends StatelessWidget {
   final List<EqBand> bands;
   final int selected;
   final ValueChanged<int> onSelect;
-  final VoidCallback onAdd, onRemove;
+  final ValueChanged<FilterShape> onAdd;
+  final VoidCallback onRemove;
   final ValueChanged<EqBand> onChange;
   const FilterInspector({
     super.key,
@@ -37,10 +39,26 @@ class FilterInspector extends StatelessWidget {
             Expanded(
               child: Text('Filter bands', style: KalinkaTextStyles.cardTitle),
             ),
-            TextButton.icon(
-              onPressed: editable && bands.length < 20 ? onAdd : null,
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Add band'),
+            PopupMenuButton<FilterShape>(
+              enabled: editable && bands.length < 20,
+              tooltip: 'Add band',
+              position: PopupMenuPosition.under,
+              color: KalinkaColors.surfaceDialog,
+              icon: const Icon(Icons.add_rounded),
+              onSelected: onAdd,
+              itemBuilder: (_) => [
+                for (final shape in FilterShape.values)
+                  PopupMenuItem(
+                    value: shape,
+                    child: Row(
+                      children: [
+                        FilterShapeIcon(shape),
+                        const SizedBox(width: 12),
+                        Flexible(child: Text(shape.label)),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ],
         ),
@@ -63,6 +81,7 @@ class FilterInspector extends StatelessWidget {
                   children: [
                     for (final type in FilterShape.values)
                       ChoiceChip(
+                        avatar: FilterShapeIcon(type),
                         label: Text(type.label),
                         selected: band.shape == type,
                         showCheckmark: false,
@@ -99,28 +118,30 @@ class FilterInspector extends StatelessWidget {
                       ? (v) => onChange(band.change(hz: v))
                       : null,
                 ),
-                EqValueControl(
-                  inline: inline,
-                  label: 'Gain',
-                  unit: 'dB',
-                  value: band.gain,
-                  min: -30,
-                  max: 30,
-                  onChanged: editable
-                      ? (v) => onChange(band.change(gain: v))
-                      : null,
-                ),
-                EqValueControl(
-                  inline: inline,
-                  label: 'Q',
-                  unit: '',
-                  value: band.q,
-                  min: 0.01,
-                  max: 1000,
-                  onChanged: editable
-                      ? (v) => onChange(band.change(q: v))
-                      : null,
-                ),
+                if (band.shape.hasGain)
+                  EqValueControl(
+                    inline: inline,
+                    label: 'Gain',
+                    unit: 'dB',
+                    value: band.gain,
+                    min: -30,
+                    max: 30,
+                    onChanged: editable
+                        ? (v) => onChange(band.change(gain: v))
+                        : null,
+                  ),
+                if (band.shape.hasQ)
+                  EqValueControl(
+                    inline: inline,
+                    label: 'Q',
+                    unit: '',
+                    value: band.q,
+                    min: 0.01,
+                    max: 1000,
+                    onChanged: editable
+                        ? (v) => onChange(band.change(q: v))
+                        : null,
+                  ),
               ];
               if (inline) {
                 return Column(
@@ -294,6 +315,7 @@ class _BandPickerState extends State<_BandPicker> {
             child: ChoiceChip(
               tooltip:
                   'Band ${i + 1}, ${b.shape.label}, ${formatEqNumber(b.hz)} Hz',
+              avatar: FilterShapeIcon(b.shape),
               label: Text('${i + 1}'),
               selected: i == widget.selected,
               showCheckmark: false,

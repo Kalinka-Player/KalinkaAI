@@ -226,7 +226,7 @@ void main() {
   test(
     'peak and shelf response matches analytic centre and endpoint gains',
     () {
-      for (final shape in FilterShape.values) {
+      for (final shape in FilterShape.values.where((s) => s.hasGain)) {
         final f = EqBand(
           shape: shape,
           hz: 1000,
@@ -245,6 +245,103 @@ void main() {
       }
     },
   );
+  test('pass filters decode, export to REW and match their cutoff and slope', () {
+    for (final (shape, type) in [
+      (FilterShape.lowPass, wire.DspProfile_Band_Type.LOW_PASS),
+      (FilterShape.highPass, wire.DspProfile_Band_Type.HIGH_PASS),
+      (
+        FilterShape.firstOrderLowPass,
+        wire.DspProfile_Band_Type.FIRST_ORDER_LOW_PASS,
+      ),
+      (
+        FilterShape.firstOrderHighPass,
+        wire.DspProfile_Band_Type.FIRST_ORDER_HIGH_PASS,
+      ),
+    ]) {
+      const hz = 1000.0, rate = 48000.0;
+      final profile = wire.DspProfile(
+        version: 1,
+        shared: [
+          wire.DspProfile_Band(
+            type: type,
+            frequencyHz: hz,
+            q: shape.hasQ ? 2 : 0,
+          ),
+        ],
+      );
+      final curve = EqCurve.fromBytes(profile.writeToBuffer());
+      final band = curve.channels[EqChannel.shared]!.single;
+      expect(band.shape, shape);
+      expect(band.active, isTrue);
+      final cutoff = 2 * math.pi * hz / rate;
+      final response = band.response(rate);
+      expect(
+        response(cutoff),
+        closeTo(shape.hasQ ? 6.0205999 : -3.01029996, 1e-6),
+      );
+      expect(band.handleGain, closeTo(response(cutoff), 1e-8));
+      // Bilinear-prewarped test frequencies lie one decade apart on the stop side.
+      double stopAt(double decades) => response(
+        2 *
+            math.atan(
+              math.tan(cutoff / 2) *
+                  math.pow(10, shape.isLowPass ? decades : -decades),
+            ),
+      );
+      expect(stopAt(2) - stopAt(1), closeTo(shape.hasQ ? -40 : -20, 0.15));
+      final exported = curve.toRew('Test')['shared'];
+      expect(
+        exported,
+        'Equaliser: Generic\nFilter 1: ON ${shape.rew} Fc 1000.0 Hz${shape.hasQ ? ' Q 2.0' : ''}',
+      );
+      profile.shared.single.gainDb = 1;
+      expect(
+        () => EqCurve.fromBytes(profile.writeToBuffer()),
+        throwsFormatException,
+      );
+      profile.shared.single.gainDb = 0;
+      profile.shared.single.q = shape.hasQ ? 0 : 1;
+      expect(
+        () => EqCurve.fromBytes(profile.writeToBuffer()),
+        throwsFormatException,
+      );
+    }
+  });
+
+  testWidgets(
+    'pass-only presets expose cutoff and optional Q and can be saved',
+    (t) async {
+      final api = _Api(
+        EqCurve('Crossover', {
+          EqChannel.shared: [const EqBand(shape: FilterShape.lowPass)],
+        }),
+      );
+      await open(t, api, const Size(1024, 900));
+      expect(find.text('Frequency'), findsOneWidget);
+      expect(find.text('Q'), findsOneWidget);
+      expect(find.text('Gain'), findsNothing);
+      final firstOrder = find.widgetWithText(
+        ChoiceChip,
+        FilterShape.firstOrderHighPass.label,
+      );
+      await t.ensureVisible(firstOrder);
+      await t.tap(firstOrder);
+      await t.pumpAndSettle();
+      expect(find.text('Frequency'), findsOneWidget);
+      expect(find.text('Q'), findsNothing);
+      expect(find.text('Gain'), findsNothing);
+      final save = find.text('Save preset');
+      await t.ensureVisible(save);
+      await t.tap(save);
+      await t.pumpAndSettle();
+      await t.enterText(find.byType(TextField), 'High pass');
+      await t.tap(find.text('Save'));
+      await t.pumpAndSettle();
+      expect(api.published?['shared'], endsWith('ON HP1 Fc 1000.0 Hz'));
+      expect(api.writes.single, {'dsp.profile': 'saved'});
+    },
+  );
+
   test('stereo protobuf and REW export retain the other channel and an empty channel', () {
     final p = wire.DspProfile(
       version: 1,
@@ -333,9 +430,15 @@ void main() {
       await t.pumpAndSettle();
       expect(find.byType(ResponseGraph), findsOneWidget);
       await screenshot(t, 'room-eq-phone-graph');
-      await t.tap(find.text('Add band'));
+      await t.tap(find.byTooltip('Add band'));
       await t.pumpAndSettle();
-      await t.tap(find.text('High shelf'));
+      expect(
+        find.byType(PopupMenuItem<FilterShape>),
+        findsNWidgets(FilterShape.values.length),
+      );
+      await t.tap(
+        find.widgetWithText(PopupMenuItem<FilterShape>, 'High shelf'),
+      );
       await t.pumpAndSettle();
       final graph = t.widget<ResponseGraph>(find.byType(ResponseGraph));
       expect(graph.bands.last.shape, FilterShape.highShelf);
