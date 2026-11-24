@@ -1,5 +1,6 @@
 import 'dart:async' show Timer;
 import 'dart:convert' show jsonEncode;
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart'
     show
@@ -312,7 +313,12 @@ abstract class KalinkaPlayerProxy {
 
   /// Core-owned room profiles are immutable. Publishing returns a new profile ID.
   Future<EqCurve> getEqCurve(String id);
+  Future<RendererConfigResult> editEqCurve(
+    String rendererId,
+    Map<String, String> curve,
+  );
   Future<String> importEqCurve(Map<String, String> payload);
+  Future<String> importFirProfile(Uint8List payload);
 
   /// This renderer's own settings — schema and values together, from
   /// `GET /renderer/{id}/config`. Not part of `/server/config`: the renderer
@@ -1481,6 +1487,29 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
   }
 
   @override
+  Future<RendererConfigResult> editEqCurve(
+    String rendererId,
+    Map<String, String> curve,
+  ) async {
+    try {
+      final response = await client.put(
+        '/renderer/$rendererId/eq',
+        data: curve,
+      );
+      return RendererConfigResult.fromJson(
+        (response.data as Map).cast<String, dynamic>(),
+      );
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      throw RendererConfigException(
+        status == 404 || status == 405
+            ? 'Live EQ editing is unavailable. Update the Core or use Save preset.'
+            : _configFailure(e),
+      );
+    }
+  }
+
+  @override
   Future<EqCurve> getEqCurve(String id) async {
     try {
       final response = await client.get<List<int>>(
@@ -1492,6 +1521,29 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
       throw RendererConfigException(
         e.response?.statusCode == 404
             ? 'This room preset is unavailable on the Core.'
+            : _configFailure(e),
+      );
+    }
+  }
+
+  @override
+  Future<String> importFirProfile(Uint8List payload) async {
+    try {
+      final response = await client.post(
+        '/dsp/profiles/fir',
+        data: payload,
+        options: Options(
+          contentType: 'application/x-protobuf',
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
+      return (response.data as Map)['id'] as String;
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      throw RendererConfigException(
+        data is Map && data['detail'] is String
+            ? data['detail'] as String
             : _configFailure(e),
       );
     }
@@ -1536,7 +1588,12 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
     try {
       final response = await client.put(
         '/renderer/$rendererId/config',
-        options: Options(contentType: Headers.jsonContentType),
+        options: Options(
+          contentType: Headers.jsonContentType,
+          receiveTimeout: changes.containsKey('output.rew_fir_profile')
+              ? const Duration(seconds: 60)
+              : null,
+        ),
         data: jsonEncode({'changes': changes}),
       );
       return RendererConfigResult.fromJson(

@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
-import '../bit_perfect_badge.dart';
+import '../playback_format_badge.dart';
 import '../fitted_title.dart';
 import '../source_badge.dart' show SourceTile;
 
@@ -442,7 +442,7 @@ class _StreamRow extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (showBitPerfect) BitPerfectBadge(scale: scale),
+        if (showBitPerfect) PlaybackFormatBadge(scale: scale),
       ],
     );
   }

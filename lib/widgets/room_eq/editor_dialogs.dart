@@ -3,9 +3,12 @@ import 'dart:convert';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import '../../theme/app_theme.dart';
+import '../../theme/field_decoration.dart';
 import '../kalinka_button.dart';
 import '../kalinka_dialog.dart';
 import '../keyboard/app_keyboard_navigation.dart';
+import '../tap_highlight.dart';
 
 Future<String?> editEqValue(
   BuildContext context, {
@@ -14,6 +17,8 @@ Future<String?> editEqValue(
   required String initial,
   required String? Function(String) validate,
   String action = 'Set',
+  IconData? icon,
+  String hint = '',
   String? message,
   bool numeric = false,
 }) => showKalinkaDialog<String>(
@@ -24,6 +29,8 @@ Future<String?> editEqValue(
     initial: initial,
     validate: validate,
     action: action,
+    icon: icon,
+    hint: hint,
     message: message,
     numeric: numeric,
   ),
@@ -39,7 +46,8 @@ String? validatePresetName(String value) {
 }
 
 class _ValueDialog extends StatefulWidget {
-  final String title, label, initial, action;
+  final String title, label, initial, action, hint;
+  final IconData? icon;
   final String? message;
   final bool numeric;
   final String? Function(String) validate;
@@ -48,6 +56,8 @@ class _ValueDialog extends StatefulWidget {
     required this.label,
     required this.initial,
     required this.action,
+    required this.icon,
+    required this.hint,
     required this.message,
     required this.numeric,
     required this.validate,
@@ -62,14 +72,15 @@ class _ValueDialogState extends State<_ValueDialog> {
       baseOffset: 0,
       extentOffset: widget.initial.length,
     );
-  String? error;
+  bool edited = false;
+  String? get error => widget.validate(controller.text.trim());
+
   void accept() {
-    final text = controller.text.trim(), problem = widget.validate(text);
-    if (problem != null) {
-      setState(() => error = problem);
+    if (error != null) {
+      setState(() => edited = true);
       return;
     }
-    Navigator.pop(context, text);
+    Navigator.pop(context, controller.text.trim());
   }
 
   @override
@@ -80,18 +91,37 @@ class _ValueDialogState extends State<_ValueDialog> {
 
   @override
   Widget build(BuildContext context) => KalinkaDialog(
-    side: KalinkaDialogSide.player,
+    side: KalinkaDialogSide.browsing,
+    icon: widget.icon,
+    iconGlyphColor: KalinkaColors.accentTint,
+    iconBeside: widget.icon != null,
     title: widget.title,
     message: widget.message,
-    content: AppKeyboardTextEntry(
-      child: TextField(
-        autofocus: true,
-        controller: controller,
-        keyboardType: widget.numeric
-            ? const TextInputType.numberWithOptions(decimal: true, signed: true)
-            : TextInputType.text,
-        decoration: InputDecoration(labelText: widget.label, errorText: error),
-        onSubmitted: (_) => accept(),
+    content: MergeSemantics(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(widget.label, style: KalinkaTextStyles.trayRowLabel),
+          const SizedBox(height: 8),
+          AppKeyboardTextEntry(
+            child: TextField(
+              autofocus: true,
+              controller: controller,
+              keyboardType: widget.numeric
+                  ? const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    )
+                  : TextInputType.text,
+              textInputAction: TextInputAction.done,
+              style: kalinkaFieldText(),
+              decoration: kalinkaFieldDecoration(hint: widget.hint)
+                  .copyWith(errorText: edited ? error : null, errorMaxLines: 3),
+              onChanged: (_) => setState(() => edited = true),
+              onSubmitted: (_) => accept(),
+            ),
+          ),
+        ],
       ),
     ),
     actions: [
@@ -101,40 +131,71 @@ class _ValueDialogState extends State<_ValueDialog> {
         variant: KalinkaButtonVariant.neutral,
         onTap: () => Navigator.pop(context),
       ),
-      KalinkaButton(label: widget.action, fullWidth: true, onTap: accept),
+      KalinkaButton(
+        label: widget.action,
+        enabled: error == null,
+        fullWidth: true,
+        onTap: accept,
+      ),
     ],
   );
 }
 
-Future<Map<String, String>?> chooseRewPreset(BuildContext context) =>
-    showKalinkaDialog<Map<String, String>>(
-      context: context,
-      builder: (_) => const _RewImportDialog(),
-    );
+Future<Map<String, String>?> chooseRewPreset(
+  BuildContext context,
+  String rendererName,
+) => showKalinkaDialog<Map<String, String>>(
+  context: context,
+  builder: (_) => _RewImportDialog(rendererName: rendererName),
+);
 
 class _RewImportDialog extends StatefulWidget {
-  const _RewImportDialog();
+  final String rendererName;
+  const _RewImportDialog({required this.rendererName});
+
   @override
   State<_RewImportDialog> createState() => _RewImportDialogState();
 }
 
 class _RewImportDialogState extends State<_RewImportDialog> {
+  static const maxCharacters = 65536;
   final name = TextEditingController();
-  final files = <String, XFile>{};
-  bool stereo = false, busy = false;
-  String? error;
-  List<String> get channels => stereo ? ['left', 'right'] : ['shared'];
+  final files = <String, ({String name, String text})>{};
+  final fileErrors = <String, String>{};
+  bool separate = false;
+  bool picking = false;
+  bool nameEdited = false;
+
+  List<String> get channels =>
+      separate ? const ['left', 'right'] : const ['shared'];
+  String? get nameError => validatePresetName(name.text);
+  bool get canImport =>
+      !picking && nameError == null && channels.every(files.containsKey);
+
   @override
   void dispose() {
     name.dispose();
     super.dispose();
   }
 
+  void suggestName() {
+    if (nameEdited) return;
+    final first = channels
+        .map((channel) => files[channel])
+        .nonNulls
+        .firstOrNull;
+    name.text =
+        first?.name.replaceFirst(RegExp(r'\.txt$', caseSensitive: false), '') ??
+        '';
+  }
+
   Future<void> pick(String channel) async {
+    if (picking) return;
+    setState(() => picking = true);
     try {
       final file = await openFile(
-        acceptedTypeGroups: [
-          const XTypeGroup(
+        acceptedTypeGroups: const [
+          XTypeGroup(
             label: 'REW text',
             extensions: ['txt'],
             mimeTypes: ['text/plain'],
@@ -143,56 +204,145 @@ class _RewImportDialogState extends State<_RewImportDialog> {
         ],
       );
       if (!mounted || file == null) return;
-      setState(() {
-        files[channel] = file;
-        if (name.text.isEmpty) {
-          name.text = file.name.replaceFirst(
-            RegExp(r'\.txt$', caseSensitive: false),
-            '',
-          );
-        }
-        error = null;
-      });
-    } catch (e) {
-      if (mounted) setState(() => error = 'Couldn’t open that file: $e');
-    }
-  }
-
-  Future<void> accept() async {
-    final problem = validatePresetName(name.text);
-    if (problem != null) {
-      setState(() => error = problem);
-      return;
-    }
-    setState(() => busy = true);
-    try {
-      final payload = {'name': name.text.trim()};
-      for (final channel in channels) {
-        final file = files[channel]!;
-        if (await file.length() > 262144) {
-          throw const FormatException(
-            'Export up to 65,536 characters per channel.',
-          );
-        }
-        payload[channel] = await file.readAsString(encoding: utf8);
+      const tooLong = 'Choose an export with up to 65,536 characters.';
+      if (await file.length() > maxCharacters * 4) {
+        throw const FormatException(tooLong);
       }
-      if (mounted) Navigator.pop(context, payload);
+      final bytes = await file.readAsBytes();
+      final String content;
+      try {
+        content = utf8.decode(bytes);
+      } on FormatException {
+        throw const FormatException('Choose a UTF-8 text export from REW.');
+      }
+      if (content.runes.length > maxCharacters) {
+        throw const FormatException(tooLong);
+      }
+      if (content.trim().isEmpty) {
+        throw const FormatException(
+          'This file is empty. Choose a REW text export.',
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        files[channel] = (name: file.name, text: content);
+        fileErrors.remove(channel);
+        suggestName();
+      });
     } catch (e) {
       if (mounted) {
         setState(() {
-          busy = false;
-          error = 'Couldn’t read REW text: $e';
+          files.remove(channel);
+          fileErrors[channel] = e is FormatException
+              ? e.message
+              : 'Couldn’t open the file. Choose it again.';
+          suggestName();
         });
       }
+    } finally {
+      if (mounted) setState(() => picking = false);
     }
+  }
+
+  void accept() {
+    if (!canImport) return;
+    Navigator.pop(context, {
+      'name': name.text.trim(),
+      for (final channel in channels) channel: files[channel]!.text,
+    });
+  }
+
+  Widget fileRow(String channel) {
+    final label = switch (channel) {
+      'left' => 'Left channel',
+      'right' => 'Right channel',
+      _ => 'Both channels',
+    };
+    final filename = files[channel]?.name;
+    final error = fileErrors[channel];
+    final radius = BorderRadius.circular(12);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          button: true,
+          enabled: !picking,
+          label: filename == null
+              ? '$label, choose file'
+              : '$label, $filename, choose a replacement',
+          child: TapHighlight(
+            focusable: true,
+            borderRadius: radius,
+            onTap: picking ? null : () => pick(channel),
+            child: ExcludeSemantics(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 11,
+                ),
+                decoration: BoxDecoration(
+                  color: KalinkaColors.surfaceElevated,
+                  borderRadius: radius,
+                  border: Border.all(
+                    color: error == null
+                        ? KalinkaColors.borderDefault
+                        : KalinkaColors.statusError,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(label, style: KalinkaTextStyles.trayRowSublabel),
+                          const SizedBox(height: 3),
+                          Text(
+                            filename ?? 'Choose file…',
+                            style: KalinkaTextStyles.trayRowLabel,
+                            maxLines: filename == null ? null : 2,
+                            overflow: filename == null
+                                ? null
+                                : TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Icon(
+                      Icons.folder_open_outlined,
+                      size: 20,
+                      color: KalinkaColors.textSecondary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Semantics(
+              liveRegion: true,
+              child: Text(
+                error,
+                style: KalinkaTextStyles.trayRowSublabel.copyWith(
+                  color: KalinkaColors.statusError,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) => KalinkaDialog(
     side: KalinkaDialogSide.player,
+    iconBeside: true,
     title: 'Import REW preset',
-    message:
-        'Choose filter settings exported as text with REW’s Generic equaliser.',
+    message: 'Choose a Generic EQ text export (.txt) from Room EQ Wizard.',
     content: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -200,34 +350,52 @@ class _RewImportDialogState extends State<_RewImportDialog> {
           type: MaterialType.transparency,
           child: SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Separate left and right files'),
-            value: stereo,
-            onChanged: busy ? null : (v) => setState(() => stereo = v),
+            title: Text(
+              'Separate channel files',
+              style: KalinkaTextStyles.trayRowLabel,
+            ),
+            value: separate,
+            onChanged: picking
+                ? null
+                : (value) => setState(() {
+                    separate = value;
+                    suggestName();
+                  }),
           ),
         ),
-        for (final channel in channels)
-          OutlinedButton.icon(
-            onPressed: busy ? null : () => pick(channel),
-            icon: const Icon(Icons.upload_file_rounded),
-            label: Text(
-              files[channel]?.name ??
-                  (stereo ? 'Choose $channel file' : 'Choose REW file'),
-              overflow: TextOverflow.ellipsis,
+        const SizedBox(height: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 8,
+          children: [for (final channel in channels) fileRow(channel)],
+        ),
+        const SizedBox(height: 20),
+        Text('Preset name', style: KalinkaTextStyles.trayRowLabel),
+        const SizedBox(height: 8),
+        Semantics(
+          label: 'Preset name',
+          child: AppKeyboardTextEntry(
+            child: TextField(
+              controller: name,
+              textInputAction: TextInputAction.done,
+              style: kalinkaFieldText(),
+              decoration: kalinkaFieldDecoration(hint: 'Name this preset')
+                  .copyWith(
+                    errorText: nameEdited || channels.any(files.containsKey)
+                        ? nameError
+                        : null,
+                    errorMaxLines: 3,
+                  ),
+              onChanged: (_) => setState(() => nameEdited = true),
+              onSubmitted: (_) => accept(),
             ),
           ),
-        const SizedBox(height: 12),
-        AppKeyboardTextEntry(
-          child: TextField(
-            controller: name,
-            enabled: !busy,
-            decoration: const InputDecoration(labelText: 'Preset name'),
-          ),
         ),
-        if (error != null)
-          Text(
-            error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
+        const SizedBox(height: 12),
+        Text(
+          'Import selects this preset on ${widget.rendererName}.',
+          style: KalinkaTextStyles.trayRowSublabel,
+        ),
       ],
     ),
     actions: [
@@ -239,7 +407,7 @@ class _RewImportDialogState extends State<_RewImportDialog> {
       ),
       KalinkaButton(
         label: 'Import',
-        enabled: !busy && channels.every(files.containsKey),
+        enabled: canImport,
         fullWidth: true,
         onTap: accept,
       ),

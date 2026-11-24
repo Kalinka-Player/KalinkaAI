@@ -15,7 +15,7 @@ import '../utils/click_cursor.dart';
 import '../utils/playback_utils.dart';
 import '../providers/source_modules_provider.dart';
 import 'away.dart';
-import 'bit_perfect_badge.dart';
+import 'playback_format_badge.dart';
 import 'browse_metadata_link.dart';
 import 'kalinka_dialog.dart';
 import 'kiosk/kiosk_enter_button.dart';
@@ -822,7 +822,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
                       ),
                     ),
                   ],
-                  const BitPerfectBadge(),
+                  const PlaybackFormatBadge(),
                 ],
               ),
             ),

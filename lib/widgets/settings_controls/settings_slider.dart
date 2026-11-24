@@ -233,17 +233,24 @@ class _SettingsSliderState extends State<SettingsSlider> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    widget.minLabel ?? widget.min.toString(),
-                    style: KalinkaTextStyles.sectionHeaderMuted.copyWith(
-                      letterSpacing: 0,
+                  Flexible(
+                    child: Text(
+                      widget.minLabel ?? widget.min.toString(),
+                      style: KalinkaTextStyles.sectionHeaderMuted.copyWith(
+                        letterSpacing: 0,
+                      ),
                     ),
                   ),
-                  Text(
-                    widget.maxLabel ?? widget.max.toString(),
-                    style: KalinkaTextStyles.sectionHeaderMuted.copyWith(
-                      letterSpacing: 0,
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      widget.maxLabel ?? widget.max.toString(),
+                      textAlign: TextAlign.end,
+                      style: KalinkaTextStyles.sectionHeaderMuted.copyWith(
+                        letterSpacing: 0,
+                      ),
                     ),
                   ),
                 ],

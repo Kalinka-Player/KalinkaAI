@@ -12,15 +12,26 @@ export '../../providers/settings_binding.dart'
 class SettingsScope extends InheritedWidget {
   final SettingsBinding binding;
 
-  const SettingsScope({super.key, required this.binding, required super.child});
+  /// Give editable renderer settings equal label and control columns when they fit.
+  final bool splitEditableRows;
 
-  static SettingsBinding of(BuildContext context) {
+  const SettingsScope({
+    super.key,
+    required this.binding,
+    this.splitEditableRows = false,
+    required super.child,
+  });
+
+  static SettingsBinding of(BuildContext context) => scopeOf(context).binding;
+
+  static SettingsScope scopeOf(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<SettingsScope>();
     assert(scope != null, 'No SettingsScope above this settings widget');
-    return scope!.binding;
+    return scope!;
   }
 
   @override
   bool updateShouldNotify(SettingsScope oldWidget) =>
-      !identical(oldWidget.binding, binding);
+      !identical(oldWidget.binding, binding) ||
+      oldWidget.splitEditableRows != splitEditableRows;
 }
