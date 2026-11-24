@@ -77,6 +77,15 @@ abstract class KalinkaPlayerProxy {
   Future<StatusMessage> pause({bool paused = true});
   Future<StatusMessage> stop();
   Future<TrackList> listTracks({int offset = 0, int limit = 100});
+
+  /// Turns the playing track down for this queue's session, steering autoplay
+  /// and similar tracks away from it, and skips it. False when nothing is
+  /// playing.
+  Future<bool> dislikeCurrent();
+
+  /// Queues tracks like the playing one right after it, from its own source.
+  /// Returns how many came: 0 where that source has none to offer.
+  Future<int> addSimilarTracks();
   Future<StatusMessage> setPlaybackMode({
     bool? repeatOne,
     bool? repeatAll,
@@ -572,6 +581,26 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
 
           return TrackList.fromJson(response.data);
         });
+  }
+
+  @override
+  Future<bool> dislikeCurrent() async {
+    try {
+      await client.post('/queue/dislike');
+      return true;
+    } on DioException catch (e) {
+      // A refusal in the server's words is not "nothing is playing".
+      if (e is! ServerRefusalException && e.response?.statusCode == 409) {
+        return false;
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<int> addSimilarTracks() async {
+    final response = await client.post('/queue/similar');
+    return statusMessageFromResponse(response).count ?? 0;
   }
 
   @override

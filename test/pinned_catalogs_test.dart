@@ -35,7 +35,7 @@ PinnedCatalog pin(
     filters: const [genre],
     preview: Preview(type: PreviewType.imageText, aspectRatio: 3),
   ),
-  filter: BrowseFilterQuery(genreIds: genres),
+  filter: BrowseFilterQuery(selections: {kGenreFieldId: genres}),
   preview: preview,
 );
 
@@ -672,10 +672,20 @@ void main() {
     final nav = container.read(searchSessionProvider.notifier);
     nav.openPage(
       pin('one').page,
-      filter: const BrowseFilterQuery(genreIds: ['jazz']),
+      filter: const BrowseFilterQuery(
+        selections: {
+          kGenreFieldId: ['jazz'],
+        },
+      ),
     );
     nav.openPage(pin('two').page);
-    nav.setCatalogFilter(const BrowseFilterQuery(genreIds: ['rock']));
+    nav.setCatalogFilter(
+      const BrowseFilterQuery(
+        selections: {
+          kGenreFieldId: ['rock'],
+        },
+      ),
+    );
     nav.backFromCatalog();
     expect(
       container.read(searchSessionProvider).catalogPage.id,

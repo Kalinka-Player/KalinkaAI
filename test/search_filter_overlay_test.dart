@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
-import 'package:kalinka/providers/browse_genres_provider.dart';
+import 'package:kalinka/providers/filter_values_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_filters/browse_filter_form.dart';
 import 'package:kalinka/widgets/browse_filters/search_filter_button.dart';
@@ -43,9 +43,7 @@ const _liveCaps = BrowseFilterCapabilities(
     SearchType.track,
     SearchType.playlist,
   },
-  genre: FacetSupport.supported,
-  genreVocabulary: _vocabulary,
-  genreField: _genreField,
+  choices: [ChoiceFacet(field: _genreField, vocabulary: _vocabulary)],
   typeField: _typeField,
 );
 
@@ -56,12 +54,12 @@ Future<void> _pumpOverlay(
   required void Function(BrowseFilterQuery) onApply,
   ValueChanged<bool>? onResetApplied,
   required VoidCallback onCancel,
-  List<Genre> genres = const [],
+  List<FilterValue> genres = const [],
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        browseGenresProvider(_vocabulary).overrideWith((ref) async => genres),
+        filterValuesProvider(_vocabulary).overrideWith((ref) async => genres),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -92,11 +90,12 @@ void main() {
       await _pumpOverlay(
         tester,
         capabilities: const BrowseFilterCapabilities(
-          genre: FacetSupport.supported,
-          genreVocabulary: _vocabulary,
-          genreField: _genreField,
+          choices: [ChoiceFacet(field: _genreField, vocabulary: _vocabulary)],
         ),
-        genres: List.generate(30, (i) => Genre(id: '$i', name: 'Genre $i')),
+        genres: List.generate(
+          30,
+          (i) => FilterValue(id: '$i', name: 'Genre $i'),
+        ),
         onApply: (_) {},
         onCancel: () {},
       );
@@ -142,7 +141,7 @@ void main() {
       tester,
       onApply: applied.add,
       onCancel: () => fail('cancel not expected'),
-      genres: [Genre(id: 'jazz', name: 'Jazz')],
+      genres: const [FilterValue(id: 'jazz', name: 'Jazz')],
     );
 
     await tester.tap(find.text('Albums'));
@@ -288,7 +287,9 @@ void main() {
             activeCount: const BrowseFilterQuery(
               text: 'blue',
               type: SearchType.album,
-              genreIds: ['jazz'],
+              selections: {
+                kGenreFieldId: ['jazz'],
+              },
             ).activeCount,
             onTap: () => opens++,
           ),

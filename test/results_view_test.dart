@@ -817,7 +817,9 @@ void main() {
       notifier.setResultsFilter(
         const BrowseFilterQuery(
           type: SearchType.track,
-          genreIds: ['jazz'],
+          selections: {
+            kGenreFieldId: ['jazz'],
+          },
           sources: ['localfiles', 'jamendo'],
         ),
       );

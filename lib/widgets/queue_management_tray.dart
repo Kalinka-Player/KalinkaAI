@@ -5,12 +5,13 @@ import '../data_model/kalinka_ws_api.dart';
 
 import '../providers/app_state_provider.dart';
 import '../providers/kalinka_ws_api_provider.dart';
+import '../providers/queue_features_provider.dart';
 import '../theme/app_theme.dart';
 import 'kalinka_bottom_sheet.dart';
 import 'tap_highlight.dart';
 
 /// Actions that can be returned from the queue management tray.
-enum TrayAction { saveToCollection, clearPlayed, clearAll }
+enum TrayAction { saveToCollection, addSimilar, clearPlayed, clearAll }
 
 /// Content body for the queue management tray, shown with
 /// [showKalinkaBottomSheet].
@@ -114,6 +115,18 @@ class QueueManagementTrayContent extends ConsumerWidget {
                   _emitAction(context, TrayAction.saveToCollection);
                 },
         ),
+
+        if (ref.watch(similarTracksAvailableProvider)) ...[
+          const SizedBox(height: 8),
+          SheetRow(
+            icon: Icons.auto_awesome_outlined,
+            iconBackground: KalinkaColors.surfaceOverlay,
+            iconColor: KalinkaColors.textSecondary,
+            label: 'Add similar tracks',
+            sublabel: 'Queue tracks like the one playing to follow it',
+            onTap: () => _emitAction(context, TrayAction.addSimilar),
+          ),
+        ],
 
         const SizedBox(height: 8),
         const SheetDivider(),

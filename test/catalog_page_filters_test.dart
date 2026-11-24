@@ -116,8 +116,8 @@ void main() {
       // One category holds one kind — nothing to choose between.
       expect(caps.type, FacetSupport.hidden);
       expect(caps.text, FacetSupport.supported);
-      expect(caps.genre, FacetSupport.supported);
-      expect(caps.genreVocabulary, (
+      expect(caps.choice('genre')?.support, FacetSupport.supported);
+      expect(caps.choice('genre')?.vocabulary, (
         catalogId: 'kalinka:localfiles:catalog:albums',
         field: 'genre',
       ));
@@ -134,7 +134,7 @@ void main() {
       final caps = page.filterCapabilities;
 
       expect(caps.text, FacetSupport.hidden);
-      expect(caps.genre, FacetSupport.supported);
+      expect(caps.choice('genre')?.support, FacetSupport.supported);
     });
 
     test('a source that declares nothing offers nothing', () {
@@ -286,7 +286,13 @@ void main() {
     );
     harness.container
         .read(searchSessionProvider.notifier)
-        .setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+        .setCatalogFilter(
+          const BrowseFilterQuery(
+            selections: {
+              kGenreFieldId: ['jazz'],
+            },
+          ),
+        );
     await tester.pumpAndSettle();
     expect(find.text('Nothing matches these filters'), findsOneWidget);
 
@@ -315,7 +321,13 @@ void main() {
 
       harness.container
           .read(searchSessionProvider.notifier)
-          .setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+          .setCatalogFilter(
+            const BrowseFilterQuery(
+              selections: {
+                kGenreFieldId: ['jazz'],
+              },
+            ),
+          );
       await tester.pumpAndSettle();
 
       // The list restarts from the top and carries the genre through, in the
@@ -379,7 +391,11 @@ void main() {
       harness.container
           .read(searchSessionProvider.notifier)
           .setCatalogFilter(
-            const BrowseFilterQuery(genreIds: ['jazz', 'rock']),
+            const BrowseFilterQuery(
+              selections: {
+                kGenreFieldId: ['jazz', 'rock'],
+              },
+            ),
           );
       await tester.pumpAndSettle();
 

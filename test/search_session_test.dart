@@ -1009,7 +1009,13 @@ void main() {
       final container = makeContainer(_FakeApi());
       final notifier = container.read(searchSessionProvider.notifier);
       notifier.openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
-      notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+      notifier.setCatalogFilter(
+        const BrowseFilterQuery(
+          selections: {
+            kGenreFieldId: ['jazz'],
+          },
+        ),
+      );
       notifier.openCatalog(id: 'a', title: 'A', filters: const [_textField]);
       notifier.setCatalogFilter(
         const BrowseFilterQuery(text: 'blue'),
@@ -1271,7 +1277,9 @@ void main() {
         notifier.setResultsFilter(
           const BrowseFilterQuery(
             type: SearchType.album,
-            genreIds: ['jazz'],
+            selections: {
+              kGenreFieldId: ['jazz'],
+            },
             sources: ['jamendo', 'qobuz'],
           ),
         );
@@ -1279,7 +1287,10 @@ void main() {
         final state = container.read(searchSessionProvider);
         final capabilities = state.resultsFilterCapabilities;
         expect(capabilities.type, FacetSupport.supported);
-        expect(capabilities.genre, FacetSupport.hidden);
+        expect(
+          capabilities.choice(kGenreFieldId)?.support,
+          FacetSupport.hidden,
+        );
         expect(state.resultsFilter.type, SearchType.album);
         expect(state.resultsFilter.genreIds, isEmpty);
         expect(state.resultsFilter.sources, ['qobuz']);
@@ -1309,7 +1320,13 @@ void main() {
       notifier.refresh();
 
       notifier.openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
-      notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+      notifier.setCatalogFilter(
+        const BrowseFilterQuery(
+          selections: {
+            kGenreFieldId: ['jazz'],
+          },
+        ),
+      );
       notifier.openCatalog(id: 'b', title: 'B', filters: const [_genreField]);
       expect(filter().isEmpty, isTrue);
 
@@ -1338,7 +1355,12 @@ void main() {
         filters: const [_textField, _genreField],
       );
       notifier.setCatalogFilter(
-        const BrowseFilterQuery(text: 'blue', genreIds: ['jazz']),
+        const BrowseFilterQuery(
+          text: 'blue',
+          selections: {
+            kGenreFieldId: ['jazz'],
+          },
+        ),
       );
 
       notifier.openCatalog(id: 'a', title: 'A', filters: const [_textField]);
@@ -1373,7 +1395,13 @@ void main() {
         }
 
         openLibrary();
-        notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+        notifier.setCatalogFilter(
+          const BrowseFilterQuery(
+            selections: {
+              kGenreFieldId: ['jazz'],
+            },
+          ),
+        );
         notifier.openFolder(_folder('Jazz'));
         notifier.backToCatalogsRoot();
 
@@ -1381,7 +1409,13 @@ void main() {
         openLibrary();
         expect(state().catalogFilter.isEmpty, isTrue);
         expect(state().folderPath, isEmpty);
-        notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['rock']));
+        notifier.setCatalogFilter(
+          const BrowseFilterQuery(
+            selections: {
+              kGenreFieldId: ['rock'],
+            },
+          ),
+        );
         notifier.backToCatalogsRoot();
 
         await answeredBy('box-a');
@@ -1443,7 +1477,11 @@ void main() {
           await container.read(serverAnswerProvider.future);
           notifier.showEnclosingFolder();
           notifier.setCatalogFilter(
-            const BrowseFilterQuery(genreIds: ['rock']),
+            const BrowseFilterQuery(
+              selections: {
+                kGenreFieldId: ['rock'],
+              },
+            ),
           );
           await Future<void>.delayed(Duration.zero);
 
@@ -1499,7 +1537,11 @@ void main() {
       await prefs.setString(
         'Kalinka.catalogFilters',
         jsonEncode({
-          'a': const BrowseFilterQuery(genreIds: ['jazz']).toJson(),
+          'a': const BrowseFilterQuery(
+            selections: {
+              kGenreFieldId: ['jazz'],
+            },
+          ).toJson(),
         }),
       );
       final container = makeContainer(_FakeApi(), servers: _boxOne());
@@ -1532,7 +1574,11 @@ void main() {
         await prefs.setString(
           'Kalinka.catalogFilters',
           jsonEncode({
-            library: const BrowseFilterQuery(genreIds: ['jazz']).toJson(),
+            library: const BrowseFilterQuery(
+              selections: {
+                kGenreFieldId: ['jazz'],
+              },
+            ).toJson(),
           }),
         );
         final container = makeContainer(_FakeApi(), servers: _boxOne());
@@ -1599,7 +1645,13 @@ void main() {
         folderLayout: true,
       );
       openLibrary();
-      notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+      notifier.setCatalogFilter(
+        const BrowseFilterQuery(
+          selections: {
+            kGenreFieldId: ['jazz'],
+          },
+        ),
+      );
       notifier.openFolder(_folder('Jazz'));
       notifier.backToCatalogsRoot();
 
@@ -1627,14 +1679,26 @@ void main() {
       await prefs.setString(
         noIdKey,
         jsonEncode({
-          'a': const BrowseFilterQuery(genreIds: ['jazz']).toJson(),
-          'b': const BrowseFilterQuery(genreIds: ['soul']).toJson(),
+          'a': const BrowseFilterQuery(
+            selections: {
+              kGenreFieldId: ['jazz'],
+            },
+          ).toJson(),
+          'b': const BrowseFilterQuery(
+            selections: {
+              kGenreFieldId: ['soul'],
+            },
+          ).toJson(),
         }),
       );
       await prefs.setString(
         _boxFiltersKey,
         jsonEncode({
-          'a': const BrowseFilterQuery(genreIds: ['blues']).toJson(),
+          'a': const BrowseFilterQuery(
+            selections: {
+              kGenreFieldId: ['blues'],
+            },
+          ).toJson(),
         }),
       );
       final container = makeContainer(_FakeApi(), servers: _boxOne());
@@ -1656,7 +1720,13 @@ void main() {
       final container = makeContainer(_FakeApi(), servers: servers);
       final notifier = container.read(searchSessionProvider.notifier);
       notifier.openCatalog(id: 'a', title: 'A', filters: const [_genreField]);
-      notifier.setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+      notifier.setCatalogFilter(
+        const BrowseFilterQuery(
+          selections: {
+            kGenreFieldId: ['jazz'],
+          },
+        ),
+      );
       expect(
         prefs.getKeys().where((k) => k.startsWith('Kalinka.catalogFilters')),
         isEmpty,

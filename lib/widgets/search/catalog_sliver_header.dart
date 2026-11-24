@@ -102,7 +102,7 @@ class CatalogSliverHeader extends ConsumerStatefulWidget {
 
   /// Whether the page has anything for Filters to narrow.
   static bool filters(BrowseFilterCapabilities caps) =>
-      caps.genre != FacetSupport.hidden ||
+      caps.hasChoices ||
       caps.type != FacetSupport.hidden ||
       caps.kind != FacetSupport.hidden ||
       caps.source != FacetSupport.hidden ||

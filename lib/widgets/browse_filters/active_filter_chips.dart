@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/browse_filters.dart';
-import '../../data_model/data_model.dart' show Genre;
-import '../../providers/browse_genres_provider.dart';
+import '../../data_model/data_model.dart' show FilterValue;
+import '../../providers/filter_values_provider.dart';
 import '../../theme/app_theme.dart';
 import '../keyboard/ink_focus_outline.dart';
 import '../tap_highlight.dart';
@@ -43,13 +43,17 @@ class ActiveFilterChips extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    // Only reached with genres applied, which needs the capability anyway.
-    final vocabulary = capabilities.genreVocabulary;
-    final genres =
-        capabilities.genreOptions ??
-        (query.genreIds.isEmpty || vocabulary == null
-            ? null
-            : ref.watch(browseGenresProvider(vocabulary)).value);
+    // In the order the surface offers its fields, then any it does not.
+    final fields = [
+      for (final facet in capabilities.choices) facet.id,
+      for (final field in query.selections.keys)
+        if (capabilities.choice(field) == null) field,
+    ];
+    final values = {
+      for (final facet in capabilities.choices)
+        if (query.selected(facet.id).isNotEmpty)
+          facet.id: watchChoiceValues(ref, facet),
+    };
 
     final chips = <Widget>[
       if (query.kind != null)
@@ -76,15 +80,16 @@ class ActiveFilterChips extends ConsumerWidget {
             ),
           ),
         ),
-      for (final id in query.genreIds)
-        ActiveFilterChip(
-          label: _genreName(genres, id),
-          onRemove: () => onChanged(
-            query.copyWith(
-              genreIds: [...query.genreIds.where((other) => other != id)],
+      for (final field in fields)
+        for (final id in query.selected(field))
+          ActiveFilterChip(
+            label: _nameOf(values[field], id),
+            onRemove: () => onChanged(
+              query.withSelected(field, [
+                ...query.selected(field).where((other) => other != id),
+              ]),
             ),
           ),
-        ),
       if (query.order != NameMatchOrder.relevance)
         ActiveFilterChip(
           label: 'A–Z',
@@ -129,12 +134,11 @@ class ActiveFilterChips extends ConsumerWidget {
     );
   }
 
-  /// Falls back to the raw id if the taxonomy has not landed — a chip with an
+  /// Falls back to the raw id if the values have not landed — a chip with an
   /// ugly label still beats a filter with no chip.
-  static String _genreName(List<Genre>? genres, String id) {
-    if (genres == null) return id;
-    for (final genre in genres) {
-      if (genre.id == id) return genre.name;
+  static String _nameOf(List<FilterValue>? values, String id) {
+    for (final value in values ?? const <FilterValue>[]) {
+      if (value.id == id) return value.name;
     }
     return id;
   }

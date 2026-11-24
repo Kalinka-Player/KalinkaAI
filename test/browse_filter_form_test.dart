@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:kalinka/data_model/browse_filters.dart';
 import 'package:kalinka/data_model/data_model.dart';
-import 'package:kalinka/providers/browse_genres_provider.dart';
+import 'package:kalinka/providers/filter_values_provider.dart';
 import 'package:kalinka/theme/app_theme.dart';
 import 'package:kalinka/widgets/browse_filters/browse_filter_form.dart';
 
@@ -38,7 +38,7 @@ const _inertCaps = BrowseFilterCapabilities(
   type: FacetSupport.unsupported,
   types: BrowseFilterCapabilities.allTypes,
   presentTypes: {SearchType.album},
-  genre: FacetSupport.unsupported,
+  choices: [ChoiceFacet(field: _genreField, support: FacetSupport.unsupported)],
 );
 
 /// A surface whose source honours every facet.
@@ -52,9 +52,7 @@ const _liveCaps = BrowseFilterCapabilities(
     SearchType.track,
     SearchType.playlist,
   },
-  genre: FacetSupport.supported,
-  genreVocabulary: _vocabulary,
-  genreField: _genreField,
+  choices: [ChoiceFacet(field: _genreField, vocabulary: _vocabulary)],
   textField: _textField,
   typeField: _typeField,
 );
@@ -66,13 +64,13 @@ Future<void> _pumpForm(
   required BrowseFilterCapabilities capabilities,
   BrowseFilterQuery query = const BrowseFilterQuery(),
   required void Function(BrowseFilterQuery) onChanged,
-  List<Genre> genres = const [],
+  List<FilterValue> genres = const [],
   Duration debounce = kFilterTextDebounce,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        browseGenresProvider(_vocabulary).overrideWith((ref) async => genres),
+        filterValuesProvider(_vocabulary).overrideWith((ref) async => genres),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -98,7 +96,9 @@ void main() {
       const query = BrowseFilterQuery(
         text: 'blue',
         type: SearchType.album,
-        genreIds: ['jazz'],
+        selections: {
+          kGenreFieldId: ['jazz'],
+        },
       );
 
       // Placeholder facets contribute nothing, so a list keyed on this string
@@ -118,11 +118,18 @@ void main() {
 
     test('a supported facet changes the key when its value changes', () {
       const caps = BrowseFilterCapabilities(
-        genre: FacetSupport.supported,
-        genreField: _genreField,
+        choices: [ChoiceFacet(field: _genreField)],
       );
-      const a = BrowseFilterQuery(genreIds: ['jazz']);
-      const b = BrowseFilterQuery(genreIds: ['jazz', 'blues']);
+      const a = BrowseFilterQuery(
+        selections: {
+          kGenreFieldId: ['jazz'],
+        },
+      );
+      const b = BrowseFilterQuery(
+        selections: {
+          kGenreFieldId: ['jazz', 'blues'],
+        },
+      );
 
       expect(a.serverKey(caps), isNot(equals(b.serverKey(caps))));
     });
@@ -131,7 +138,9 @@ void main() {
       const query = BrowseFilterQuery(
         text: 'blue',
         type: SearchType.album,
-        genreIds: ['jazz', 'rock'],
+        selections: {
+          kGenreFieldId: ['jazz', 'rock'],
+        },
       );
       expect(query.activeCount, 4);
       expect(const BrowseFilterQuery().activeCount, 0);
@@ -146,24 +155,39 @@ void main() {
     test(
       'genres changed are told apart as sets, whatever order or repeats',
       () {
-        const picked = BrowseFilterQuery(genreIds: ['jazz', 'blues']);
+        const picked = BrowseFilterQuery(
+          selections: {
+            kGenreFieldId: ['jazz', 'blues'],
+          },
+        );
 
         expect(
           picked.facetsChangedFrom(
-            const BrowseFilterQuery(genreIds: ['blues', 'jazz']),
+            const BrowseFilterQuery(
+              selections: {
+                kGenreFieldId: ['blues', 'jazz'],
+              },
+            ),
           ),
           isEmpty,
         );
         expect(
           picked.facetsChangedFrom(
-            const BrowseFilterQuery(genreIds: ['jazz', 'jazz']),
+            const BrowseFilterQuery(
+              selections: {
+                kGenreFieldId: ['jazz', 'jazz'],
+              },
+            ),
           ),
-          {BrowseFacet.genre},
+          {BrowseFacet.choice},
         );
         expect(
-          const BrowseFilterQuery(genreIds: ['jazz', 'jazz'])
-              .facetsChangedFrom(picked),
-          {BrowseFacet.genre},
+          const BrowseFilterQuery(
+            selections: {
+              kGenreFieldId: ['jazz', 'jazz'],
+            },
+          ).facetsChangedFrom(picked),
+          {BrowseFacet.choice},
         );
       },
     );
@@ -293,11 +317,11 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            browseGenresProvider(_vocabulary).overrideWith(
-              (ref) async => [
-                Genre(id: 'jazz', name: 'Jazz'),
-                Genre(id: 'rock', name: 'Rock'),
-                Genre(id: 'blues', name: 'Blues'),
+            filterValuesProvider(_vocabulary).overrideWith(
+              (ref) async => const [
+                FilterValue(id: 'jazz', name: 'Jazz'),
+                FilterValue(id: 'rock', name: 'Rock'),
+                FilterValue(id: 'blues', name: 'Blues'),
               ],
             ),
           ],
@@ -411,11 +435,15 @@ void main() {
       await _pumpForm(
         tester,
         capabilities: _liveCaps,
-        query: const BrowseFilterQuery(genreIds: ['jazz']),
+        query: const BrowseFilterQuery(
+          selections: {
+            kGenreFieldId: ['jazz'],
+          },
+        ),
         onChanged: emitted.add,
-        genres: [
-          Genre(id: 'jazz', name: 'Jazz'),
-          Genre(id: 'rock', name: 'Rock'),
+        genres: const [
+          FilterValue(id: 'jazz', name: 'Jazz'),
+          FilterValue(id: 'rock', name: 'Rock'),
         ],
       );
 

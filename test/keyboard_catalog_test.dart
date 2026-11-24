@@ -6,7 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalinka/data_model/data_model.dart';
-import 'package:kalinka/providers/browse_genres_provider.dart';
+import 'package:kalinka/providers/filter_values_provider.dart';
 import 'package:kalinka/providers/kiosk_provider.dart';
 import 'package:kalinka/providers/search_session_provider.dart';
 import 'package:kalinka/providers/shell_nav_provider.dart';
@@ -71,11 +71,11 @@ void main() {
       size: const Size(1440, 900),
       overrides: [
         localDisplayKioskProvider.overrideWithValue(true),
-        browseGenresProvider((catalogId: catalog, field: 'genre')).overrideWith(
-          (_) async => [
-            Genre(id: 'jazz', name: 'Jazz'),
-            Genre(id: 'rock', name: 'Rock'),
-            Genre(id: 'folk', name: 'Folk'),
+        filterValuesProvider((catalogId: catalog, field: 'genre')).overrideWith(
+          (_) async => const [
+            FilterValue(id: 'jazz', name: 'Jazz'),
+            FilterValue(id: 'rock', name: 'Rock'),
+            FilterValue(id: 'folk', name: 'Folk'),
           ],
         ),
       ],

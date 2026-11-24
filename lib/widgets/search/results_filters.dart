@@ -43,11 +43,14 @@ class ResultsFilters extends StatelessWidget {
       ActiveFilterChips(
         capabilities: capabilities,
         query: BrowseFilterQuery(
-          genreIds: query.genreIds,
+          selections: query.selections,
           sources: query.sources,
         ),
         onChanged: (facets) => onChanged(
-          query.copyWith(genreIds: facets.genreIds, sources: facets.sources),
+          query.copyWith(
+            selections: facets.selections,
+            sources: facets.sources,
+          ),
         ),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       ),

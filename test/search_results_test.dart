@@ -541,7 +541,13 @@ void main() {
     });
 
     test('by genre, with an artist inheriting its albums\' genres', () {
-      final rock = results.narrow(const BrowseFilterQuery(genreIds: ['rock']));
+      final rock = results.narrow(
+        const BrowseFilterQuery(
+          selections: {
+            kGenreFieldId: ['rock'],
+          },
+        ),
+      );
       expect(_ids(rock.matches), ['beatles', 'abbey']);
       expect(_ids(rock.groups.last.items), ['t-rock']);
     });

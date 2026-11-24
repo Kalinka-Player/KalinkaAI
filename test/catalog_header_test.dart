@@ -748,7 +748,12 @@ void main() {
     container
         .read(searchSessionProvider.notifier)
         .setCatalogFilter(
-          const BrowseFilterQuery(text: 'deep', genreIds: ['Synthwave']),
+          const BrowseFilterQuery(
+            text: 'deep',
+            selections: {
+              kGenreFieldId: ['Synthwave'],
+            },
+          ),
         );
     await tester.pumpAndSettle();
 
@@ -883,7 +888,9 @@ void main() {
             .setCatalogFilter(
               const BrowseFilterQuery(
                 text: 'deep',
-                genreIds: ['Synthwave', 'New age'],
+                selections: {
+                  kGenreFieldId: ['Synthwave', 'New age'],
+                },
               ),
             );
         await tester.pumpAndSettle();
