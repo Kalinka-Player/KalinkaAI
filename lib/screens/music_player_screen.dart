@@ -277,8 +277,9 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
             ? ref.read(playerViewProvider) == PlayerView.queue
             : !ref.read(_serverBusyProvider) &&
                   !_sheetOpen &&
-                  (!_settingsCovering || _pluginsOpen) &&
-                  (_pluginsOpen || !_miniPlayerHide.isCompleted));
+                  (_pluginsOpen ||
+                      ref.read(rendererSettingsRouteProvider) != null ||
+                      !_miniPlayerHide.isCompleted));
     setState(() => _keyboardActive = visible);
     if (media.disableAnimations ||
         !TickerMode.valuesOf(context).enabled ||
@@ -1089,10 +1090,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
                           railBody,
                           width: visibleRailWidth,
                           miniPlayer: connected && !_serverBusy,
-                          miniCovered:
-                              _sheetOpen ||
-                              _discoveryOpen ||
-                              (!_pluginsOpen && _settingsCovering),
+                          miniCovered: _sheetOpen || _discoveryOpen,
                         ),
                       if (isTablet && connected)
                         Positioned(
@@ -1189,6 +1187,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     double railWidth = 0,
   }) {
     final rendererSettings = ref.watch(rendererSettingsRouteProvider);
+    final settingsOpen = _pluginsOpen || rendererSettings != null;
     // Without a server there is no track for the mini-player to show, and
     // nothing to control while it restarts or updates.
     final miniPlayer =
@@ -1204,114 +1203,93 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     // navigation; Home its own at its top level.
     return PopScope(
       canPop: !_pluginsOpen && rendererSettings == null,
-      child: Stack(
+      child: Column(
         children: [
-          Column(
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(left: railWidth),
-                  child: SheetAnchor(
-                    key: _browsingPaneKey,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Visibility(
-                          visible: !_settingsCovering,
-                          maintainState: true,
-                          maintainAnimation: true,
-                          maintainSize: true,
-                          // The mini-player takes the inset under it while
-                          // it is there, as it does for the rail.
-                          child: AnimatedBuilder(
-                            animation: Listenable.merge([
-                              _miniPlayerReveal,
-                              _keyboardReveal,
-                            ]),
-                            builder: (context, child) =>
-                                MediaQuery.removePadding(
-                                  context: context,
-                                  removeBottom:
-                                      miniPlayer &&
-                                      _miniPlayerReveal.value > 0 &&
-                                      _keyboardReveal.value > 0,
-                                  child: child!,
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(left: railWidth),
+              child: SheetAnchor(
+                key: _browsingPaneKey,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Visibility(
+                      visible: !_settingsCovering,
+                      maintainState: true,
+                      maintainAnimation: true,
+                      maintainSize: true,
+                      // The mini-player takes the inset under it while
+                      // it is there, as it does for the rail.
+                      child: AnimatedBuilder(
+                        animation: Listenable.merge([
+                          _miniPlayerReveal,
+                          _keyboardReveal,
+                        ]),
+                        builder: (context, child) => MediaQuery.removePadding(
+                          context: context,
+                          removeBottom:
+                              miniPlayer &&
+                              _miniPlayerReveal.value > 0 &&
+                              _keyboardReveal.value > 0,
+                          child: child!,
+                        ),
+                        child: _buildHome(
+                          isTablet: false,
+                          navigationVisible: navigationVisible,
+                        ),
+                      ),
+                    ),
+                    _buildEscalation(isTablet: false),
+                    // Configuration and every nested page share the space
+                    // above the mini-player, including its safe-area inset.
+                    if (settingsOpen)
+                      MediaQuery.removePadding(
+                        context: context,
+                        removeBottom: miniPlayer && !_keyboardActive,
+                        child: ClipRect(
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              if (_pluginsOpen)
+                                _buildPlugins(
+                                  covered: rendererSettings != null,
+                                  navigationVisible: navigationVisible,
                                 ),
-                            child: _buildHome(
-                              isTablet: false,
-                              navigationVisible: navigationVisible,
-                            ),
+                              if (rendererSettings != null)
+                                _buildRendererSettings(rendererSettings),
+                            ],
                           ),
                         ),
-                        _buildEscalation(isTablet: false),
-                        // Configuration and every nested page share the space
-                        // above the mini-player, including its safe-area inset.
-                        if (_pluginsOpen)
-                          MediaQuery.removePadding(
-                            context: context,
-                            removeBottom: miniPlayer && !_keyboardActive,
-                            child: ClipRect(
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  _buildPlugins(
-                                    covered: rendererSettings != null,
-                                    navigationVisible: navigationVisible,
-                                  ),
-                                  if (rendererSettings != null)
-                                    _buildRendererSettings(rendererSettings),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
+                      ),
+                  ],
                 ),
               ),
-              if (miniPlayer)
-                Visibility(
-                  visible: !_settingsCovering || _pluginsOpen,
-                  maintainState: true,
-                  maintainAnimation: true,
-                  maintainSize: true,
-                  child: _keyboardAwareMiniPlayer(
-                    collapse: true,
-                    ExcludeFocus(
-                      excluding:
-                          !_pluginsOpen && ref.watch(searchEntryModeProvider),
-                      child: SizeTransition(
-                        sizeFactor: _pluginsOpen
-                            ? const AlwaysStoppedAnimation(1.0)
-                            : _miniPlayerReveal,
-                        alignment: AlignmentDirectional.bottomStart,
-                        child: SlideTransition(
-                          position: _pluginsOpen
-                              ? const AlwaysStoppedAnimation(Offset.zero)
-                              : _miniPlayerSlide,
-                          child: MeasureSize(
-                            onChange: (size) =>
-                                _miniPlayerExtent.value = size.height,
-                            child: MiniPlayer(
-                              onTap: _showExpandedPlayer,
-                              outputSwitcherKey: _outputSwitcherKey,
-                            ),
-                          ),
-                        ),
+            ),
+          ),
+          if (miniPlayer)
+            _keyboardAwareMiniPlayer(
+              collapse: true,
+              ExcludeFocus(
+                excluding: !settingsOpen && ref.watch(searchEntryModeProvider),
+                child: SizeTransition(
+                  sizeFactor: settingsOpen
+                      ? const AlwaysStoppedAnimation(1.0)
+                      : _miniPlayerReveal,
+                  alignment: AlignmentDirectional.bottomStart,
+                  child: SlideTransition(
+                    position: settingsOpen
+                        ? const AlwaysStoppedAnimation(Offset.zero)
+                        : _miniPlayerSlide,
+                    child: MeasureSize(
+                      onChange: (size) => _miniPlayerExtent.value = size.height,
+                      child: MiniPlayer(
+                        onTap: _showExpandedPlayer,
+                        outputSwitcherKey: _outputSwitcherKey,
                       ),
                     ),
                   ),
                 ),
-            ],
-          ),
-          // A renderer's own settings, full screen beside the rail.
-          if (rendererSettings != null && !_pluginsOpen)
-            Positioned(
-              left: railWidth,
-              top: 0,
-              right: 0,
-              bottom: 0,
-              child: _buildRendererSettings(rendererSettings),
+              ),
             ),
         ],
       ),
@@ -1334,6 +1312,8 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
     required bool miniCovered,
   }) {
     final estimate = _miniPlayerSlot();
+    final settingsOpen =
+        _pluginsOpen || ref.watch(rendererSettingsRouteProvider) != null;
     return AnimatedBuilder(
       animation: Listenable.merge([
         _miniPlayerReveal,
@@ -1345,7 +1325,7 @@ class _MusicPlayerScreenState extends ConsumerState<MusicPlayerScreen>
         final above = !miniPlayer || miniCovered
             ? 0.0
             : slot *
-                  (_pluginsOpen ? 1 : _miniPlayerReveal.value) *
+                  (settingsOpen ? 1 : _miniPlayerReveal.value) *
                   _keyboardReveal.value;
         return Positioned(
           left: 0,

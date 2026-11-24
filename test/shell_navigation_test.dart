@@ -816,6 +816,39 @@ void main() {
     },
   );
 
+  for (final width in [375.0, 800.0, 1440.0]) {
+    testWidgets(
+      'direct renderer settings leave playback accessible at $width',
+      (tester) async {
+        final container = await _pump(
+          tester,
+          api: _RendererApi(),
+          size: Size(width, 800),
+        );
+        container.read(playerViewProvider.notifier).show(PlayerView.queue);
+        await tester.pumpAndSettle();
+        final mini = find.byType(MiniPlayer);
+        final slot = tester.getRect(mini);
+        container
+            .read(rendererSettingsRouteProvider.notifier)
+            .open('living', 'Living Room');
+        await tester.pumpAndSettle();
+        final panel = find.byType(RendererSettingsScreen);
+        expect(tester.getRect(panel).bottom, lessThanOrEqualTo(slot.top + 1));
+        expect(tester.getRect(mini), slot);
+        final output = find.descendant(
+          of: mini,
+          matching: find.byWidgetPredicate(
+            (w) => w is RendererSwitcherButton || w is RendererSwitcherDropdown,
+          ),
+        );
+        await tester.tap(output.hitTestable());
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Output settings').hitTestable(), findsOneWidget);
+      },
+    );
+  }
+
   testWidgets('the keyboard keeps the active renderer field above its keys', (
     tester,
   ) async {
