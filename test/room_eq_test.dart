@@ -320,12 +320,13 @@ void main() {
       expect(find.text('Frequency'), findsOneWidget);
       expect(find.text('Q'), findsOneWidget);
       expect(find.text('Gain'), findsNothing);
-      final firstOrder = find.widgetWithText(
-        ChoiceChip,
-        FilterShape.firstOrderHighPass.label,
+      final selector = find.byType(DropdownButton<FilterShape>);
+      await t.ensureVisible(selector);
+      await t.tap(selector);
+      await t.pumpAndSettle();
+      await t.tap(
+        find.text(FilterShape.firstOrderHighPass.label).hitTestable().last,
       );
-      await t.ensureVisible(firstOrder);
-      await t.tap(firstOrder);
       await t.pumpAndSettle();
       expect(find.text('Frequency'), findsOneWidget);
       expect(find.text('Q'), findsNothing);

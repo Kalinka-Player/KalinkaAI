@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data_model/room_eq.dart';
 import '../../theme/app_theme.dart';
+import 'band_editor_header.dart';
 import 'editor_dialogs.dart';
 import 'filter_shape_icon.dart';
 
@@ -73,31 +74,13 @@ class FilterInspector extends StatelessWidget {
         else ...[
           _BandPicker(bands: bands, selected: selected, onSelect: onSelect),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 6,
-                  children: [
-                    for (final type in FilterShape.values)
-                      ChoiceChip(
-                        avatar: FilterShapeIcon(type),
-                        label: Text(type.label),
-                        selected: band.shape == type,
-                        showCheckmark: false,
-                        onSelected: editable
-                            ? (_) => onChange(band.change(shape: type))
-                            : null,
-                      ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: 'Remove band ${selected + 1}',
-                onPressed: editable ? onRemove : null,
-                icon: const Icon(Icons.delete_outline_rounded, size: 20),
-              ),
-            ],
+          BandEditorHeader(
+            number: selected + 1,
+            shape: band.shape,
+            onShapeChanged: editable
+                ? (type) => onChange(band.change(shape: type))
+                : null,
+            onRemove: editable ? onRemove : null,
           ),
           const SizedBox(height: 12),
           LayoutBuilder(
