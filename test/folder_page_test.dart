@@ -688,7 +688,11 @@ void main() {
   });
 
   group('under a filter', () {
-    const jazz = BrowseFilterQuery(genreIds: ['jazz']);
+    const jazz = BrowseFilterQuery(
+      selections: {
+        kGenreFieldId: ['jazz'],
+      },
+    );
     const jazzDocument = '{"genre":{"any":["jazz"]}}';
     final chips = find.byType(ActiveFilterChips);
 

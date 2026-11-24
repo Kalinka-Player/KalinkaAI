@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data_model/browse_filters.dart';
 import '../../data_model/data_model.dart' show SearchType;
-import '../../providers/browse_genres_provider.dart';
+import '../../providers/filter_values_provider.dart';
 import '../../theme/app_theme.dart';
 import '../source_badge.dart';
 import '../keyboard/app_keyboard_navigation.dart';
@@ -58,6 +58,10 @@ class BrowseFilterForm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (capabilities.isEmpty) return const SizedBox.shrink();
+    final choices = [
+      for (final facet in capabilities.choices)
+        if (facet.support != FacetSupport.hidden) facet,
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -110,13 +114,14 @@ class BrowseFilterForm extends StatelessWidget {
           ),
           const SizedBox(height: 16),
         ],
-        if (capabilities.genre != FacetSupport.hidden) ...[
-          _GenreGroup(
-            capabilities: capabilities,
-            selected: query.genreIds,
-            onChanged: (ids) => onChanged(query.copyWith(genreIds: ids)),
+        for (final (index, facet) in choices.indexed) ...[
+          _ChoiceGroup(
+            facet: facet,
+            selected: query.selected(facet.id),
+            onChanged: (ids) => onChanged(query.withSelected(facet.id, ids)),
           ),
-          if (capabilities.order == FacetSupport.supported)
+          if (index < choices.length - 1 ||
+              capabilities.order == FacetSupport.supported)
             const SizedBox(height: 16),
         ],
         if (capabilities.order == FacetSupport.supported)
@@ -549,35 +554,31 @@ class _TypeGroup extends StatelessWidget {
   }
 }
 
-/// Genre pills, live. Stays a lone muted placeholder while the taxonomy loads
-/// and if it comes back empty — a source can declare the capability and still
-/// have no genres.
-class _GenreGroup extends ConsumerWidget {
-  final BrowseFilterCapabilities capabilities;
+/// One values facet's pills, in its source's order, under the label its
+/// source gave the field. Stays a lone muted placeholder while the values load
+/// and if they come back empty — a source can declare a field and still have
+/// no values for it.
+class _ChoiceGroup extends ConsumerWidget {
+  final ChoiceFacet facet;
   final List<String> selected;
   final ValueChanged<List<String>> onChanged;
 
-  const _GenreGroup({
-    required this.capabilities,
+  const _ChoiceGroup({
+    required this.facet,
     required this.selected,
     required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final vocabulary = capabilities.genreVocabulary;
-    final live =
-        capabilities.genre == FacetSupport.supported && vocabulary != null;
-    final genres =
-        capabilities.genreOptions ??
-        (live ? ref.watch(browseGenresProvider(vocabulary)).value : null);
-    final ready = genres != null && genres.isNotEmpty;
+    final values = watchChoiceValues(ref, facet);
+    final ready = values != null && values.isNotEmpty;
 
     return _FacetGroup(
-      label: 'GENRE',
+      label: facet.field.label.toUpperCase(),
       pills: [
         FilterPill(
-          label: 'All genres',
+          label: 'All ${_plural(facet.field.label.toLowerCase())}',
           selected: ready && selected.isEmpty,
           muted: !ready,
           onTap: ready
@@ -587,18 +588,25 @@ class _GenreGroup extends ConsumerWidget {
               : null,
         ),
         if (ready)
-          for (final genre in genres)
+          for (final value in values)
             FilterPill(
-              label: genre.name,
-              selected: selected.contains(genre.id),
+              label: value.name,
+              selected: selected.contains(value.id),
               onTap: () => onChanged(
-                selected.contains(genre.id)
-                    ? [...selected.where((id) => id != genre.id)]
-                    : [...selected, genre.id],
+                selected.contains(value.id)
+                    ? [...selected.where((id) => id != value.id)]
+                    : [...selected, value.id],
               ),
             ),
       ],
     );
+  }
+
+  static String _plural(String noun) {
+    if (RegExp(r'[^aeiou]y$').hasMatch(noun)) {
+      return '${noun.substring(0, noun.length - 1)}ies';
+    }
+    return RegExp(r'(s|x|z|ch|sh)$').hasMatch(noun) ? '${noun}es' : '${noun}s';
   }
 }
 

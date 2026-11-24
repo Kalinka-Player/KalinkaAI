@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/connection_state_provider.dart';
 import '../providers/kalinka_player_api_provider.dart';
+import '../providers/server_refusal.dart';
 import '../providers/toast_provider.dart';
 import '../theme/app_theme.dart';
 import 'clear_all_confirm_dialog.dart';
@@ -86,6 +87,8 @@ Future<void> runQueueTrayAction(
   switch (action) {
     case TrayAction.saveToCollection:
       await saveQueueToCollection(context, ref);
+    case TrayAction.addSimilar:
+      await _addSimilar(ref);
     case TrayAction.clearPlayed:
       await _clearPlayed(ref);
     case TrayAction.clearAll:
@@ -112,6 +115,23 @@ Future<void> saveQueueToCollection(BuildContext context, WidgetRef ref) async {
     context,
     CollectionAddition.queue([for (final track in tracks) track.id]),
   );
+}
+
+Future<void> _addSimilar(WidgetRef ref) async {
+  final toast = ref.read(toastProvider.notifier);
+  try {
+    final added = await ref.read(kalinkaProxyProvider).addSimilarTracks();
+    toast.show(switch (added) {
+      0 => 'No similar tracks found',
+      1 => 'Added 1 similar track',
+      _ => 'Added $added similar tracks',
+    });
+  } catch (e) {
+    toast.show(
+      e is ServerRefusalException ? '$e' : 'Could not add similar tracks',
+      isError: true,
+    );
+  }
 }
 
 Future<void> _clearPlayed(WidgetRef ref) async {

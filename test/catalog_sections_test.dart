@@ -32,6 +32,12 @@ const _genreField = FilterSpec(
   label: 'Genre',
   ops: [FilterOp.any],
 );
+const _decadeField = FilterSpec(
+  id: 'decade',
+  kind: FilterKind.choice,
+  label: 'Decade',
+  ops: [FilterOp.any],
+);
 
 BrowseItem _section({
   required String id,
@@ -139,11 +145,12 @@ Future<_Harness> _pump(
   Completer<void>? gate,
   List<BrowseItem>? sections,
   bool filteredOut = false,
+  List<FilterSpec> filters = const [_textField, _typeField, _genreField],
 }) async {
   final page = CatalogPage.category(
     id: 'kalinka:localfiles:catalog:library',
     title: 'My Library',
-    filters: const [_textField, _typeField, _genreField],
+    filters: filters,
     sections: sections ?? _sections,
   );
   final api = _ScriptedBrowseApi(
@@ -213,8 +220,8 @@ void main() {
       final caps = _libraryPage.filterCapabilities;
 
       expect(caps.typeField?.id, 'type');
-      expect(caps.genreField?.id, 'genre');
-      expect(caps.genreVocabulary?.field, 'genre');
+      expect(caps.choices.map((facet) => facet.id), ['genre']);
+      expect(caps.choice('genre')?.vocabulary?.field, 'genre');
       expect(caps.type, FacetSupport.supported);
     });
 
@@ -256,13 +263,19 @@ void main() {
         isTrue,
       );
       expect(
-        const BrowseFilterQuery(genreIds: ['jazz']).isHonouredBy(byNameOnly),
+        const BrowseFilterQuery(
+          selections: {
+            kGenreFieldId: ['jazz'],
+          },
+        ).isHonouredBy(byNameOnly),
         isFalse,
       );
       expect(
         const BrowseFilterQuery(
           text: 'moon',
-          genreIds: ['jazz'],
+          selections: {
+            kGenreFieldId: ['jazz'],
+          },
         ).isHonouredBy(byNameOnly),
         isFalse,
       );
@@ -429,7 +442,7 @@ void main() {
       await tester.pumpAndSettle();
       harness.api.calls.clear();
       session.setCatalogFilter(
-        state().catalogFilter.copyWith(genreIds: ['jazz']),
+        state().catalogFilter.withSelected(kGenreFieldId, ['jazz']),
       );
       await tester.pumpAndSettle();
       expect(state().catalogPage.id, 'kalinka:localfiles:catalog:albums');
@@ -495,7 +508,13 @@ void main() {
 
       harness.container
           .read(searchSessionProvider.notifier)
-          .setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+          .setCatalogFilter(
+            const BrowseFilterQuery(
+              selections: {
+                kGenreFieldId: ['jazz'],
+              },
+            ),
+          );
       await tester.pumpAndSettle();
 
       expect(find.text('ARTISTS'), findsNothing);
@@ -506,6 +525,44 @@ void main() {
       ]);
     });
 
+    testWidgets('a decade leaves out the shelves without decades', (
+      tester,
+    ) async {
+      final albumsByDecade = _section(
+        id: 'kalinka:localfiles:catalog:albums',
+        name: 'Albums',
+        contentType: PreviewContentType.album,
+        filters: const [_textField, _genreField, _decadeField],
+      );
+      final harness = await _pump(
+        tester,
+        sections: [_sections[0], albumsByDecade],
+        catalogs: catalogs,
+        filters: const [_textField, _typeField, _genreField, _decadeField],
+      );
+      harness.api.calls.clear();
+
+      harness.container
+          .read(searchSessionProvider.notifier)
+          .setCatalogFilter(
+            const BrowseFilterQuery(
+              selections: {
+                kGenreFieldId: ['jazz'],
+                'decade': ['1970'],
+              },
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      expect(find.text('ARTISTS'), findsNothing);
+      expect(find.text('ALBUMS'), findsOneWidget);
+      expect(harness.api.calls.single.id, 'kalinka:localfiles:catalog:albums');
+      expect(
+        harness.api.calls.single.filter,
+        '{"genre":{"any":["jazz"]},"decade":{"any":["1970"]}}',
+      );
+    });
+
     testWidgets('is back once that filter is cleared', (tester) async {
       final harness = await _pump(
         tester,
@@ -514,7 +571,13 @@ void main() {
       );
       final session = harness.container.read(searchSessionProvider.notifier);
 
-      session.setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+      session.setCatalogFilter(
+        const BrowseFilterQuery(
+          selections: {
+            kGenreFieldId: ['jazz'],
+          },
+        ),
+      );
       await tester.pumpAndSettle();
       session.setCatalogFilter(const BrowseFilterQuery(text: 'air'));
       await tester.pumpAndSettle();
@@ -535,7 +598,13 @@ void main() {
 
       harness.container
           .read(searchSessionProvider.notifier)
-          .setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+          .setCatalogFilter(
+            const BrowseFilterQuery(
+              selections: {
+                kGenreFieldId: ['jazz'],
+              },
+            ),
+          );
       await tester.pumpAndSettle();
 
       expect(find.text('ARTISTS'), findsNothing);

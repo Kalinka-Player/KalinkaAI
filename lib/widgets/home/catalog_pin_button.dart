@@ -6,7 +6,7 @@ import '../../data_model/browse_filters.dart';
 import '../../providers/artist_relations_provider.dart';
 import '../../providers/pinned_catalogs_provider.dart';
 import '../../providers/box_control_provider.dart';
-import '../../providers/browse_genres_provider.dart';
+import '../../providers/filter_values_provider.dart';
 import '../../providers/source_modules_provider.dart';
 import '../../providers/search_session_provider.dart';
 import '../tap_highlight.dart';
@@ -39,10 +39,11 @@ class CatalogPinButton extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final kind = page.isArtist ? 'artist' : 'catalog';
-    final vocabulary = page.filterCapabilities.genreVocabulary;
-    final genres = vocabulary == null || filter.genreIds.isEmpty
-        ? null
-        : ref.watch(browseGenresProvider(vocabulary)).value;
+    final values = [
+      for (final facet in page.filterCapabilities.choices)
+        if (filter.selected(facet.id).isNotEmpty)
+          ...?watchChoiceValues(ref, facet),
+    ];
     // The portrait the artist's header shows, where the page came without
     // one, for Home's Artwork preview.
     final portrait = page.isArtist && page.artPath == null
@@ -55,7 +56,7 @@ class CatalogPinButton extends ConsumerWidget {
           : CatalogPage.fromJson({...page.toJson(), 'artPath': portrait}),
       filter: filter.fittedTo(page.filterCapabilities),
       preview: HomePreviewType.automatic,
-      genreNames: {for (final genre in genres ?? []) genre.id: genre.name},
+      valueNames: {for (final value in values) value.id: value.name},
     );
     final pins = ref.watch(pinnedCatalogsProvider);
     final pinned = pins?.any((pin) => pin.key == candidate.key) ?? false;

@@ -6,20 +6,22 @@ import 'package:dio/dio.dart';
 import 'package:kalinka/providers/kalinka_player_api_provider.dart';
 import 'package:kalinka/providers/server_refusal.dart';
 
-/// A server that answers `/queue/replace` with [replaceStatus] and
-/// [replaceBody], and every other request with success. It records each
-/// request as `METHOD /path` and keeps the body sent with it.
+/// A server that answers [route] with [status] and [body], and every other
+/// request with success. It records each request as `METHOD /path` and keeps
+/// the body sent with it.
 class QueueServer implements HttpClientAdapter {
-  QueueServer(this.replaceStatus, this.replaceBody);
+  QueueServer(this.status, this.body, {this.route = '/queue/replace'});
 
-  final int replaceStatus;
-  final Object replaceBody;
+  final int status;
+  final Object body;
+  final String route;
 
   /// What any other request reports having acted on.
   static const count = 7;
 
   final List<String> requests = [];
   final Map<String, Object?> bodies = {};
+  final Map<String, Map<String, dynamic>> queries = {};
 
   /// The HTTP client the app would use, talking to this server.
   KalinkaPlayerProxyImpl api() => KalinkaPlayerProxyImpl(
@@ -37,10 +39,11 @@ class QueueServer implements HttpClientAdapter {
     final request = '${options.method} ${options.path}';
     requests.add(request);
     bodies[request] = options.data;
-    final replacing = options.path == '/queue/replace';
+    queries[request] = options.queryParameters;
+    final answering = options.path == route;
     return ResponseBody.fromString(
-      jsonEncode(replacing ? replaceBody : {'message': 'Ok', 'count': count}),
-      replacing ? replaceStatus : 200,
+      jsonEncode(answering ? body : {'message': 'Ok', 'count': count}),
+      answering ? status : 200,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       },

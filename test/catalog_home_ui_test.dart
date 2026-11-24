@@ -392,7 +392,13 @@ void main() {
       container.read(searchSessionProvider.notifier).backFromCatalog();
       container
           .read(searchSessionProvider.notifier)
-          .setCatalogFilter(const BrowseFilterQuery(genreIds: ['jazz']));
+          .setCatalogFilter(
+            const BrowseFilterQuery(
+              selections: {
+                kGenreFieldId: ['jazz'],
+              },
+            ),
+          );
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Pin catalog to Home'));
       await tester.pumpAndSettle();
@@ -400,7 +406,7 @@ void main() {
       final saved = container.read(pinnedCatalogsProvider)!.single;
       expect(saved.filter.genreIds, ['jazz']);
       expect(saved.preview, HomePreviewType.automatic);
-      expect(saved.genreNames['jazz'], 'Jazz');
+      expect(saved.valueNames['jazz'], 'Jazz');
       expect(find.byIcon(CupertinoIcons.pin_slash), findsOneWidget);
       await tester.tap(find.byTooltip('Back').first);
       await tester.pumpAndSettle();
@@ -1096,8 +1102,12 @@ void main() {
               catalog(id, id),
               provider: 'alpha music',
             ),
-            filter: const BrowseFilterQuery(genreIds: ['jazz']),
-            genreNames: const {'jazz': 'Jazz'},
+            filter: const BrowseFilterQuery(
+              selections: {
+                kGenreFieldId: ['jazz'],
+              },
+            ),
+            valueNames: const {'jazz': 'Jazz'},
             preview: preview,
           ),
       ];
@@ -1256,7 +1266,11 @@ void main() {
           catalog('editorial', 'Editorial'),
           provider: 'alpha music',
         ),
-        filter: const BrowseFilterQuery(genreIds: ['jazz']),
+        filter: const BrowseFilterQuery(
+          selections: {
+            kGenreFieldId: ['jazz'],
+          },
+        ),
         preview: HomePreviewType.list,
       );
       await container.read(pinnedCatalogsProvider.notifier).pin(saved);
@@ -1337,7 +1351,11 @@ void main() {
             // A stale display label must not override the actual source.
             provider: 'Editorial',
           ),
-          filter: const BrowseFilterQuery(genreIds: ['jazz']),
+          filter: const BrowseFilterQuery(
+            selections: {
+              kGenreFieldId: ['jazz'],
+            },
+          ),
           preview: HomePreviewType.artwork,
         );
         api.calls.clear();

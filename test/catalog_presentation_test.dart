@@ -68,6 +68,50 @@ class _AlbumsApi implements KalinkaPlayerProxy {
       throw UnimplementedError('${invocation.memberName}');
 }
 
+/// The local library's root as the server lists it while AI search is on.
+class _LibraryRootApi extends _AlbumsApi {
+  static const root = 'kalinka:localfiles:catalog:root';
+  static const forYou = 'kalinka:localfiles:catalog:for-you';
+
+  @override
+  Future<BrowseItemsList> browse(
+    String id, {
+    int offset = 0,
+    int limit = 10,
+    String? filter,
+  }) async {
+    if (id != root) return super.browse(id, offset: offset, limit: limit);
+    final card = BrowseItem.fromJson({
+      'id': forYou,
+      'name': 'Albums you may like',
+      'subname': 'Picked from what you play to the end',
+      'can_browse': true,
+      'can_add': false,
+      'catalog': {
+        'id': forYou,
+        'title': 'Albums you may like',
+        'description': 'Picked from what you play to the end',
+        'image': {
+          'thumbnail': '/resource/catalog-art/albums-v1-thumbnail.jpg',
+          'small': '/resource/catalog-art/albums-v1-small.jpg',
+          'large': '/resource/catalog-art/albums-v1-large.jpg',
+          'aspect_ratio': 3.0,
+        },
+        'preview_config': {
+          'type': 'image',
+          'content_type': 'album',
+          'icon': 'ai_suggestions',
+          'items_count': 10,
+          'rows_count': 1,
+          'card_size': 'small',
+        },
+        'role': 'discovery',
+      },
+    });
+    return BrowseItemsList(offset, limit, 1, [card]);
+  }
+}
+
 final _page = CatalogPage.category(
   id: 'kalinka:demo:catalog:new',
   title: 'New Releases',
@@ -255,6 +299,36 @@ void main() {
     // Covers stay about 180–220 wide rather than stretching to the pane.
     final card = tester.getSize(find.byType(ArtworkGridCard).first);
     expect(card.width, inInclusiveRange(150, 240));
+  });
+
+  testWidgets('the library\'s recommended albums open as an album grid', (
+    tester,
+  ) async {
+    final container = await _pump(
+      tester,
+      const Size(1000, 900),
+      page: const CatalogPage.category(
+        id: _LibraryRootApi.root,
+        title: 'My Library',
+        provider: 'localfiles',
+      ),
+      api: _LibraryRootApi(),
+    );
+
+    final card = find.text('Albums you may like');
+    expect(card, findsOneWidget);
+    await tester.tap(card);
+    await tester.pumpAndSettle();
+
+    final opened = container.read(searchSessionProvider).catalogPage;
+    expect(opened.id, _LibraryRootApi.forYou);
+    expect(opened.preview?.contentType, PreviewContentType.album);
+    // The harness shows the page it was given, so show the one opened.
+    await _pump(tester, const Size(1000, 900), page: opened);
+    expect(find.byType(ArtworkGridCard), findsWidgets);
+    expect(find.byType(SearchAlbumRow), findsNothing);
+    expect(find.text('Album 0'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('List is a table, one row per line on a wide pane', (

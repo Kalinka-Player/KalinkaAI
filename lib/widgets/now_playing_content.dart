@@ -6,9 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data_model/data_model.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/connection_state_provider.dart';
+import '../providers/kalinka_player_api_provider.dart';
 import '../providers/now_playing_provider.dart';
+import '../providers/queue_features_provider.dart';
 import '../providers/search_session_provider.dart';
+import '../providers/server_refusal.dart';
 import '../providers/shell_nav_provider.dart';
+import '../providers/toast_provider.dart';
 import '../providers/url_resolver.dart';
 import '../theme/app_theme.dart';
 import '../utils/click_cursor.dart';
@@ -122,6 +126,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     );
     ref.watch(playbackControlProvider.select((c) => c.isExclusive));
     ref.watch(nowPlayingMetadataLinksProvider);
+    ref.watch(dislikeAvailableProvider);
     final away = ref.watch(
       connectionStateProvider.select((s) => s.isInterrupted),
     );
@@ -586,6 +591,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
       TextStyle style,
       int maxLines, {
       bool linked = false,
+      double trailing = 0,
     }) {
       final painter =
           TextPainter(
@@ -596,7 +602,7 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           )..layout(
             maxWidth: math.max(
               0,
-              width - (linked ? BrowseMetadataLink.chevronWidth : 0),
+              width - trailing - (linked ? BrowseMetadataLink.chevronWidth : 0),
             ),
           );
       final height = painter.height;
@@ -608,11 +614,16 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           : height;
     }
 
+    final dislike = ref.read(dislikeAvailableProvider);
     var height =
-        line(
-          track?.title ?? 'No track',
-          _grown(KalinkaTextStyles.expandedTitle, grow),
-          2,
+        math.max(
+          line(
+            track?.title ?? 'No track',
+            _grown(KalinkaTextStyles.expandedTitle, grow),
+            2,
+            trailing: dislike ? _DislikeButton.width : 0,
+          ),
+          dislike ? _DislikeButton.size : 0.0,
         ) +
         6 * grow +
         line(
@@ -710,6 +721,15 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
     bool compact = false,
   }) {
     final textAlign = leftAligned ? TextAlign.left : TextAlign.center;
+    final title = Text(
+      currentTrack?.title ?? 'No track',
+      style: compact
+          ? KalinkaTextStyles.expandedTitle.copyWith(fontSize: 32)
+          : _grown(KalinkaTextStyles.expandedTitle, grow),
+      textAlign: textAlign,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
     return Column(
       key: const ValueKey('now-playing-metadata'),
       mainAxisSize: MainAxisSize.min,
@@ -717,15 +737,17 @@ class _NowPlayingContentState extends ConsumerState<NowPlayingContent> {
           ? CrossAxisAlignment.start
           : CrossAxisAlignment.center,
       children: [
-        Text(
-          currentTrack?.title ?? 'No track',
-          style: compact
-              ? KalinkaTextStyles.expandedTitle.copyWith(fontSize: 32)
-              : _grown(KalinkaTextStyles.expandedTitle, grow),
-          textAlign: textAlign,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
+        if (ref.read(dislikeAvailableProvider))
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(child: title),
+              const SizedBox(width: _DislikeButton.gap),
+              const _DislikeButton(),
+            ],
+          )
+        else
+          title,
         SizedBox(height: 6 * grow),
         BrowseMetadataLink(
           label: currentTrack?.performer?.name ?? '\u2014',
@@ -937,6 +959,77 @@ class _ExclusivePlaybackNote extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Turns the playing track down for this queue and skips it. Inert while the
+/// server is away and while its last tap is answered, so one tap never skips
+/// twice.
+class _DislikeButton extends ConsumerStatefulWidget {
+  const _DislikeButton();
+
+  /// Its target, whatever the text size.
+  static const size = 48.0;
+
+  static const gap = 4.0;
+
+  /// What the title beside it gives up.
+  static const width = gap + size;
+
+  @override
+  ConsumerState<_DislikeButton> createState() => _DislikeButtonState();
+}
+
+class _DislikeButtonState extends ConsumerState<_DislikeButton> {
+  bool _sending = false;
+
+  Future<void> _dislike() async {
+    final toast = ref.read(toastProvider.notifier);
+    setState(() => _sending = true);
+    try {
+      if (await ref.read(kalinkaProxyProvider).dislikeCurrent()) {
+        toast.show(
+          'Skipped — this queue will avoid tracks like it',
+          inPanel: true,
+        );
+      }
+    } catch (e) {
+      toast.show(
+        e is ServerRefusalException ? '$e' : 'Could not skip this track',
+        isError: true,
+        inPanel: true,
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final away = ref.watch(
+      connectionStateProvider.select((s) => s.isInterrupted),
+    );
+    return AwayLock(
+      away: away,
+      child: Semantics(
+        label: 'Not like this',
+        button: true,
+        enabled: !_sending,
+        child: Tooltip(
+          message: 'Not like this',
+          excludeFromSemantics: true,
+          child: TransportButton(
+            hitDiameter: _DislikeButton.size,
+            onTap: _sending ? null : _dislike,
+            child: const Icon(
+              Icons.thumb_down_outlined,
+              size: 20,
+              color: KalinkaColors.textSecondary,
+            ),
+          ),
+        ),
       ),
     );
   }
