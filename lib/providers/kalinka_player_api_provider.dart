@@ -1563,16 +1563,24 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
     }
   }
 
-  /// Settings travel to the renderer over its socket, so the failures are
-  /// about that hop rather than about the server.
-  static String _configFailure(DioException e) => e is ServerRefusalException
-      ? e.reason
-      : switch (e.response?.statusCode) {
-          404 => 'That output is no longer available',
-          409 => 'That output isn’t connected',
-          504 => 'That output didn’t respond',
-          _ => 'Couldn’t reach that output',
-        };
+  static String _configFailure(DioException e) {
+    if (e is ServerRefusalException) return e.reason;
+    final response = e.response;
+    if (response?.statusCode == 422) {
+      final data = response?.data;
+      if (data case {'detail': final String detail}
+          when detail.trim().isNotEmpty) {
+        return detail;
+      }
+      return 'The Core rejected these settings.';
+    }
+    return switch (response?.statusCode) {
+      404 => 'That output is no longer available',
+      409 => 'That output isn’t connected',
+      504 => 'That output didn’t respond',
+      _ => 'Couldn’t reach that output',
+    };
+  }
 
   // A 404 here is the server rejecting an unknown renderer id, not a missing
   // endpoint — the switcher only exists once `listRenderers` has succeeded.
