@@ -56,6 +56,7 @@ void main() {
 
       await show(260, scale: 1.6);
       expect(find.text('Remove'), findsNothing);
+      expect(find.bySemanticsLabel('Remove band 10'), findsOneWidget);
       expect(t.getSize(remove), const Size.square(48));
       expect(
         t.getTopLeft(menu).dy,

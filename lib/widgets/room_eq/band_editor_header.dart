@@ -111,6 +111,7 @@ class BandEditorHeader extends StatelessWidget {
           final stacked = rowSpace < kMinInteractiveDimension;
           final remove = Tooltip(
             message: 'Remove band $number',
+            excludeFromSemantics: true,
             child: OutlinedButton(
               onPressed: onRemove,
               style:
@@ -137,21 +138,25 @@ class BandEditorHeader extends StatelessWidget {
                             ),
                     ),
                   ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.delete_outline_rounded,
-                    size: iconSize,
-                    color: onRemove == null
-                        ? KalinkaColors.textMuted
-                        : KalinkaColors.accentTint,
-                  ),
-                  if (showLabel) ...[
-                    const SizedBox(width: 8),
-                    const Text('Remove'),
+              child: Semantics(
+                label: 'Remove band $number',
+                excludeSemantics: true,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.delete_outline_rounded,
+                      size: iconSize,
+                      color: onRemove == null
+                          ? KalinkaColors.textMuted
+                          : KalinkaColors.accentTint,
+                    ),
+                    if (showLabel) ...[
+                      const SizedBox(width: 8),
+                      const Text('Remove'),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           );
