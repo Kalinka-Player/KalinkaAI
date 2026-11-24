@@ -37,7 +37,8 @@ class RendererSettingsState {
   /// True once a load has completed, so an empty page can be told apart from
   /// one that has not arrived yet.
   final bool loaded;
-  final bool supportsFirImport;
+  final bool supportsFirImport, matchesFirRates;
+  final FirResponseCurve? firResponse;
 
   const RendererSettingsState({
     this.sections = const [],
@@ -51,6 +52,8 @@ class RendererSettingsState {
     this.error,
     this.loaded = false,
     this.supportsFirImport = false,
+    this.matchesFirRates = false,
+    this.firResponse,
   });
 
   /// A saved name can reach this snapshot before the renderer announces it.
@@ -96,6 +99,8 @@ class RendererSettingsState {
     error: clearError ? null : (error ?? this.error),
     loaded: loaded ?? this.loaded,
     supportsFirImport: supportsFirImport,
+    matchesFirRates: matchesFirRates,
+    firResponse: firResponse,
   );
 }
 
@@ -121,14 +126,14 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
           .getRendererConfig(rendererId);
       if (_stale(generation)) return;
       final view = adaptRendererConfig(snapshot);
+      final fir = snapshot.sections
+          .expand((s) => s.fields)
+          .where((f) => f.path == RendererConfigField.rewFirProfile)
+          .firstOrNull;
       state = RendererSettingsState(
-        supportsFirImport: snapshot.sections
-            .expand((s) => s.fields)
-            .any(
-              (f) =>
-                  f.path == RendererConfigField.rewFirProfile &&
-                  f.supportsFirImport,
-            ),
+        supportsFirImport: fir?.supportsFirImport ?? false,
+        matchesFirRates: fir?.matchesFirRates ?? false,
+        firResponse: fir?.value == 'off' ? null : fir?.firResponse,
         sections: view.sections,
         expertFields: view.expertFields,
         values: view.values,

@@ -164,8 +164,10 @@ FieldSpec _toFieldSpec(RendererConfigField field) {
         ? [
             if (field.description.isNotEmpty) field.description,
             if (field.helpDetails?.isNotEmpty ?? false) field.helpDetails!,
-            if (field.supportsFirImport)
-              'Import a mono or stereo filter impulse WAV from any tool. Group one WAV per sample rate in a single preset. Tracks without a matching rate play without FIR correction.'
+            if (field.matchesFirRates)
+              'Import one mono or stereo impulse WAV, or choose multiple WAVs in the same import to supply your own version for each sample rate. An exact match takes priority. For a missing rate the renderer resamples the nearest original by octave distance, preferring the higher rate in a tie. The renderer keeps its three most recent rates in memory. Supply a higher-rate WAV if you need correction above the original WAV’s Nyquist frequency. Stereo DSD converted to PCM uses the conversion output rate.'
+            else if (field.supportsFirImport)
+              'Import a mono or stereo filter impulse WAV from any tool. Group one WAV per sample rate in a single preset. On renderers without rate matching, FIR applies only at the supplied rates.'
             else
               'Room EQ shows the selected impulse filename. Its sample rate, channel count and tap count are unavailable here.',
           ].join('\n\n')

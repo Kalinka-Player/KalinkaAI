@@ -9,6 +9,7 @@ import '../data_model/renderer_config.dart';
 import '../data_model/room_eq.dart';
 import '../generated/kalinka/renderer/v1/renderer.pb.dart' show FirProfile;
 import '../providers/kalinka_player_api_provider.dart';
+import '../providers/app_state_provider.dart';
 import '../providers/renderer_settings_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/browse_filters/browse_filter_form.dart' show FilterPill;
@@ -286,7 +287,7 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
           '',
         ),
         message:
-            '${files.map((file) => file.name).join(', ')}\n\nEach WAV applies at its own sample rate. This filter will be selected on ${widget.rendererName}.',
+            '${files.map((file) => file.name).join(', ')}\n\nYou can include one WAV per sample rate in this preset. This filter will be selected on ${widget.rendererName}.',
         action: 'Import',
         validate: validatePresetName,
       );
@@ -521,7 +522,29 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
     final responseColor = bypassed || peqOff
         ? KalinkaColors.textSecondary
         : KalinkaColors.accent;
-    final outOfRange = plotted.any((b) => b.hz >= 24000 && b.active);
+    final fir = settings.firResponse;
+    final rate = fir?.sampleRate ?? 48000;
+    final hasPeq = settings.values.containsKey('dsp.profile');
+    final outOfRange = plotted.any((b) => b.hz >= rate / 2 && b.active);
+    final showPeq = hasPeq && !outOfRange && !readFailed;
+    final stereo = fir != null && fir.rightDb.isNotEmpty;
+    String traceLabel(String name) => bypassed ? '$name (bypassed)' : name;
+    final traces = <FirTrace>[
+      if (fir != null && (!stereo || channel != EqChannel.right))
+        (
+          db: fir.leftDb,
+          color: KalinkaColors.textPrimary,
+          dash: 7.0,
+          label: traceLabel(stereo ? 'FIR L' : 'FIR'),
+        ),
+      if (fir != null && stereo && channel != EqChannel.left)
+        (
+          db: fir.rightDb,
+          color: KalinkaColors.textSecondary,
+          dash: 3.0,
+          label: traceLabel('FIR R'),
+        ),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -535,8 +558,15 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
                     SettingsHelpButton(
                       label: 'Filter response',
                       details: [
-                        'The graph previews the PEQ bands at 48 kHz. Playback uses the track’s sample rate. A gray curve shows the configured response while PEQ is off or DSP is bypassed.',
-                        'FIR and combined frequency responses, room measurements and a measured gain margin are unavailable in this view.',
+                        if (hasPeq)
+                          'The solid line shows the configured PEQ at ${graphRateLabel(rate)}. It turns gray when PEQ is off or DSP is bypassed.',
+                        if (fir != null)
+                          'Dashed lines show the selected FIR filter at ${graphRateLabel(rate)}, using the renderer’s most recent stereo PCM rate or 48 kHz before first playback. ${fir.sourceRate == rate ? 'The WAV matches this rate.' : 'The renderer converted the ${graphRateLabel(fir.sourceRate)} WAV for this preview.'} The graph shows the configured filter even with DSP bypassed. Deep cuts can extend below the graph.'
+                        else if (settings.values[RoomEqScreen.firPath] !=
+                                null &&
+                            settings.values[RoomEqScreen.firPath] != 'off')
+                          'This output has not supplied a FIR response.',
+                        'Each trace shows an individual filter response. Room measurements and measured gain margin are unavailable.',
                         if (writable('dsp.profile')) 'Drag a point horizontally to change frequency. For peaks and shelves, drag vertically to change gain. Double-tap empty space to add a peak band, or use the + button to choose a shape.',
                       ].join('\n\n'),
                     ),
@@ -553,19 +583,24 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
         ),
         if (!readFailed && curve.channels.length > 1) channelStrip(),
         const SizedBox(height: 8),
-        if (readFailed || outOfRange)
+        if (hasPeq && (readFailed || outOfRange))
           SizedBox(
-            height: height,
+            height: fir == null ? height : null,
             child: Center(
               child: Text(
-                readFailed ? 'Preset unavailable' : 'This curve includes a filter at or above 24 kHz and cannot run at the 48 kHz reference rate.',
+                readFailed
+                    ? 'Preset unavailable'
+                    : 'This curve includes a filter at or above ${graphRateLabel(rate ~/ 2)} for the ${graphRateLabel(rate)} preview.',
               ),
             ),
-          )
-        else
+          ),
+        if (showPeq || fir != null)
           ResponseGraph(
             key: ValueKey(channel),
-            bands: plotted,
+            bands: showPeq ? plotted : const [],
+            showPeq: showPeq,
+            rate: rate,
+            fir: traces,
             responseColor: responseColor,
             selected: selected,
             height: height,
@@ -573,11 +608,11 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
             onMove: writable('dsp.profile')
                 ? (i, band) => edit([...bands]..[i] = band, i)
                 : null,
-            onAdd: writable('dsp.profile') && bands.length < 20
+            onAdd: showPeq && writable('dsp.profile') && bands.length < 20
                 ? (b) => addBand(b, reveal: false)
                 : null,
           ),
-        if (!readFailed && !outOfRange)
+        if (showPeq || fir != null)
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             runSpacing: 4,
@@ -588,22 +623,32 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
                 spacing: 12,
                 runSpacing: 4,
                 children: [
-                  _TraceLabel(
-                    color: responseColor,
-                    label: bypassed
-                        ? 'PEQ (bypassed)'
-                        : peqOff
-                        ? 'PEQ (off)'
-                        : 'PEQ',
-                  ),
-                  if (bands.length > 1)
+                  if (showPeq)
+                    _TraceLabel(
+                      color: responseColor,
+                      label: bypassed
+                          ? 'PEQ (bypassed)'
+                          : peqOff
+                          ? 'PEQ (off)'
+                          : 'PEQ',
+                    ),
+                  for (final trace in traces)
+                    _TraceLabel(
+                      color: trace.color,
+                      label: trace.label,
+                      dash: trace.dash,
+                    ),
+                  if (showPeq && bands.length > 1)
                     _TraceLabel(
                       color: KalinkaColors.textMuted,
                       label: 'Band ${selected + 1}',
                     ),
                 ],
               ),
-              Text('dB / Hz', style: KalinkaTextStyles.trayRowSublabel),
+              Text(
+                fir == null ? 'dB / Hz' : 'Preview · ${graphRateLabel(rate)}',
+                style: KalinkaTextStyles.trayRowSublabel,
+              ),
             ],
           ),
       ],
@@ -732,6 +777,10 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
       return ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (s.firResponse != null)
+            EqCard(
+              child: graph(plotted: const [], height: 186, settings: s),
+            ),
           if (firControl != null) _section(RoomEqSection.fir, firControl),
         ],
       );
@@ -826,6 +875,30 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(rendererSettingsProvider(widget.rendererId));
+    if (s.matchesFirRates && s.values[RoomEqScreen.firPath] != 'off') {
+      ref.listen(
+        playQueueStateStoreProvider.select((queue) {
+          if (queue.currentRendererId != widget.rendererId) return null;
+          final output = queue.playbackState.audioInfo?.output;
+          if (output == null ||
+              output.channels != 2 ||
+              output.sampleFormat.startsWith('DSD') ||
+              output.sampleFormat.startsWith('DoP')) {
+            return null;
+          }
+          return output.sampleRate;
+        }),
+        (_, rate) {
+          if (rate != null &&
+              rate > 0 &&
+              rate != settings.firResponse?.sampleRate) {
+            ref
+                .read(rendererSettingsProvider(widget.rendererId).notifier)
+                .load(keepStaged: true);
+          }
+        },
+      );
+    }
     final available =
         s.values.containsKey('dsp.profile') ||
         s.values.containsKey(RoomEqScreen.firPath);
@@ -954,14 +1027,24 @@ class RoomEqScreenState extends ConsumerState<RoomEqScreen> {
 }
 
 class _TraceLabel extends StatelessWidget {
-  const _TraceLabel({required this.color, required this.label});
+  const _TraceLabel({required this.color, required this.label, this.dash});
+  final double? dash;
   final Color color;
   final String label;
   @override
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Container(color: color, height: 2, width: 14),
+      if (dash == null)
+        Container(color: color, height: 2, width: 14)
+      else
+        Row(
+          spacing: 3,
+          children: [
+            for (var i = 0; i < 2; i++)
+              Container(color: color, height: 2, width: dash),
+          ],
+        ),
       const SizedBox(width: 6),
       Text(
         label,
