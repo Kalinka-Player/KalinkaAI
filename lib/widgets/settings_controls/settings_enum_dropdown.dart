@@ -63,14 +63,18 @@ class SettingsEnumDropdown extends StatelessWidget {
           child: Row(
             children: [
               Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: KalinkaTextStyles.textFieldInput.copyWith(
-                    color: label.isEmpty
-                        ? KalinkaColors.textSecondary
-                        : KalinkaColors.textPrimary,
+                child: Tooltip(
+                  message: label,
+                  excludeFromSemantics: true,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: KalinkaTextStyles.textFieldInput.copyWith(
+                      color: label.isEmpty
+                          ? KalinkaColors.textSecondary
+                          : KalinkaColors.textPrimary,
+                    ),
                   ),
                 ),
               ),

@@ -52,40 +52,58 @@ class RendererSchemaView {
 /// The server prunes its own tree before sending; a renderer sends both tiers
 /// in one snapshot, so the split happens here instead.
 RendererSchemaView adaptRendererConfig(RendererConfigSnapshot snapshot) {
-  final sections = <SectionSpec>[];
+  final sections = {for (final s in snapshot.sections) s.path: s};
+  final simpleFields = {for (final id in sections.keys) id: <FieldSpec>[]};
+  FieldSpec? replayGain;
   final expertFields = <FieldSpec>[];
   final values = <String, dynamic>{};
   final options = <String, List<OptionSpec>>{};
   final applyCosts = <String, RendererApplyCost>{};
 
   for (final section in snapshot.sections) {
-    final simpleFields = <FieldSpec>[];
     for (final field in section.fields) {
       if (field.type == RendererFieldType.trigger) continue;
       final spec = _toFieldSpec(field);
       expertFields.add(spec);
-      if (spec.importance == Importance.simple) simpleFields.add(spec);
+      if (spec.importance == Importance.simple) {
+        // Core owns this preference alongside amplifier mapping, but listeners
+        // use it with this output's volume controls.
+        if (field.path == 'core.output.replaygain') {
+          replayGain = spec;
+        } else {
+          simpleFields[section.path]!.add(spec);
+        }
+      }
       values[field.path] = decodeRendererValue(field.type, field.value);
       applyCosts[field.path] = field.apply;
       if (field.options.isNotEmpty) {
         options[field.path] = [for (final o in field.options) _toOptionSpec(o)];
       }
     }
-    if (simpleFields.isEmpty) continue;
-    sections.add(
-      SectionSpec(
-        id: section.path,
-        title: section.title.isEmpty ? section.path : section.title,
-        fields: simpleFields,
-        help: section.description.trim().isEmpty ? null : section.description,
-      ),
+  }
+  if (replayGain != null) {
+    sections.putIfAbsent(
+      'output',
+      () => const RendererConfigSection(path: 'output', title: 'Output'),
     );
+    final output = simpleFields.putIfAbsent('output', () => []);
+    final volume = output.indexWhere((f) => f.path == 'output.volume_mode');
+    output.insert(volume < 0 ? output.length : volume + 1, replayGain);
   }
 
   expertFields.sort((a, b) => a.path.compareTo(b.path));
 
   return RendererSchemaView(
-    sections: sections,
+    sections: [
+      for (final s in sections.values)
+        if (simpleFields[s.path]!.isNotEmpty)
+          SectionSpec(
+            id: s.path,
+            title: s.title.isEmpty ? s.path : s.title,
+            fields: simpleFields[s.path]!,
+            help: s.description.trim().isEmpty ? null : s.description,
+          ),
+    ],
     expertFields: expertFields,
     values: values,
     options: options,
@@ -130,21 +148,37 @@ OptionSpec _toOptionSpec(RendererConfigOption option) {
   );
 }
 
-FieldSpec _toFieldSpec(RendererConfigField field) => FieldSpec(
-  path: field.path,
-  label: field.title.isEmpty ? field.path : field.title,
-  widget: _widgetFor(field),
-  type: _typeNameFor(field.type),
-  help: field.description.isEmpty ? null : field.description,
-  helpDetails: field.helpDetails,
-  defaultValue: decodeRendererValue(field.type, field.defaultValue),
-  readonly: field.readOnly,
-  importance: switch (field.importance) {
-    RendererFieldImportance.expert => Importance.expert,
-    RendererFieldImportance.simple => Importance.simple,
-  },
-  constraints: _constraintsFor(field),
-);
+FieldSpec _toFieldSpec(RendererConfigField field) {
+  final fir = field.path == RendererConfigField.rewFirProfile;
+  return FieldSpec(
+    path: field.path,
+    label: fir
+        ? 'FIR Convolution'
+        : field.title.isEmpty
+        ? field.path
+        : field.title,
+    widget: _widgetFor(field),
+    type: _typeNameFor(field.type),
+    help: fir || field.description.isEmpty ? null : field.description,
+    helpDetails: fir
+        ? [
+            if (field.description.isNotEmpty) field.description,
+            if (field.helpDetails?.isNotEmpty ?? false) field.helpDetails!,
+            if (field.supportsFirImport)
+              'Import a mono or stereo filter impulse WAV from any tool. Group one WAV per sample rate in a single preset. Tracks without a matching rate play without FIR correction.'
+            else
+              'Room EQ shows the selected impulse filename. Its sample rate, channel count and tap count are unavailable here.',
+          ].join('\n\n')
+        : field.helpDetails,
+    defaultValue: decodeRendererValue(field.type, field.defaultValue),
+    readonly: field.readOnly,
+    importance: switch (field.importance) {
+      RendererFieldImportance.expert => Importance.expert,
+      RendererFieldImportance.simple => Importance.simple,
+    },
+    constraints: _constraintsFor(field),
+  );
+}
 
 WidgetKind _widgetFor(RendererConfigField field) => switch (field.type) {
   RendererFieldType.boolean => WidgetKind.toggle,

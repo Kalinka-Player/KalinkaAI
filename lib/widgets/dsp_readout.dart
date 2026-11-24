@@ -7,6 +7,12 @@ import '../theme/app_theme.dart';
 /// was damaged.
 typedef DspReading = ({String label, String value, bool alarm});
 
+/// Samples clamped in the current play with the current correction settings.
+int clippedSamples(Map<String, Map<String, Object?>> events) {
+  final count = events['clipping']?['clipped_samples'];
+  return count is num && count > 0 ? count.toInt() : 0;
+}
+
 /// The renderer's processing as figures: the latency its signal path adds,
 /// and the samples its DSP clipped, once [playbackEvents] (the latest details
 /// of each kind in the play) report clipping.
@@ -16,9 +22,8 @@ List<DspReading> dspReadings(
 ) => [
   if (path != null && path.latencyMs > 0)
     (label: 'DSP latency', value: '${_trim(path.latencyMs)} ms', alarm: false),
-  if (playbackEvents['clipping']?['clipped_samples'] case final num clipped
-      when clipped > 0)
-    (label: 'Clipped', value: '${clipped.toInt()}', alarm: true),
+  if (clippedSamples(playbackEvents) case final clipped when clipped > 0)
+    (label: 'Clipped', value: '$clipped', alarm: true),
 ];
 
 String _trim(double value) =>

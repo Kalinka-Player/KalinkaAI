@@ -141,6 +141,9 @@ class RendererConfigOption {
 }
 
 class RendererConfigField {
+  static const namePath = 'renderer.name';
+  static const rewFirProfile = 'output.rew_fir_profile';
+
   /// Dotted and renderer-local, e.g. `output.alsa.device`.
   final String path;
   final String title;
@@ -154,6 +157,7 @@ class RendererConfigField {
   final List<RendererConfigOption> options;
   final RendererApplyCost apply;
   final bool readOnly;
+  final bool supportsFirImport;
   final RendererFieldImportance importance;
 
   /// Set for numeric fields the renderer bounded; null when it named no limits.
@@ -174,6 +178,7 @@ class RendererConfigField {
     this.options = const [],
     this.apply = RendererApplyCost.unknown,
     this.readOnly = false,
+    this.supportsFirImport = false,
     this.importance = RendererFieldImportance.simple,
     this.range,
     this.unit = '',
@@ -195,6 +200,7 @@ class RendererConfigField {
         ],
         apply: RendererApplyCost.fromName(j['apply'] as String?),
         readOnly: (j['read_only'] ?? false) as bool,
+        supportsFirImport: j['supports_fir_import'] == true,
         importance: RendererFieldImportance.fromName(
           j['importance'] as String?,
         ),

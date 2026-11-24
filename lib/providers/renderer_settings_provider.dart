@@ -37,6 +37,7 @@ class RendererSettingsState {
   /// True once a load has completed, so an empty page can be told apart from
   /// one that has not arrived yet.
   final bool loaded;
+  final bool supportsFirImport;
 
   const RendererSettingsState({
     this.sections = const [],
@@ -49,7 +50,14 @@ class RendererSettingsState {
     this.saving = false,
     this.error,
     this.loaded = false,
+    this.supportsFirImport = false,
   });
+
+  /// A saved name can reach this snapshot before the renderer announces it.
+  String? get configuredName => switch (values[RendererConfigField.namePath]) {
+    final String name when name.isNotEmpty => name,
+    _ => null,
+  };
 
   int get pendingCount => staged.length;
   bool get hasPendingChanges => staged.isNotEmpty;
@@ -87,6 +95,7 @@ class RendererSettingsState {
     saving: saving ?? this.saving,
     error: clearError ? null : (error ?? this.error),
     loaded: loaded ?? this.loaded,
+    supportsFirImport: supportsFirImport,
   );
 }
 
@@ -113,6 +122,13 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
       if (_stale(generation)) return;
       final view = adaptRendererConfig(snapshot);
       state = RendererSettingsState(
+        supportsFirImport: snapshot.sections
+            .expand((s) => s.fields)
+            .any(
+              (f) =>
+                  f.path == RendererConfigField.rewFirProfile &&
+                  f.supportsFirImport,
+            ),
         sections: view.sections,
         expertFields: view.expertFields,
         values: view.values,
@@ -167,16 +183,17 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
     state = state.copyWith(staged: const {}, clearError: true);
   }
 
-  /// Write the staged edits, then re-read.
+  /// Write the staged edits, or just [immediate] for a live control.
   ///
   /// The reply carries what actually took effect, but a change can also
   /// reshape the page — a driver switch reveals different fields, the device
   /// list moves — so the renderer's next snapshot, not the reply, becomes the
   /// new page. The reply is kept only to report what it refused.
-  Future<void> save() async {
-    if (state.staged.isEmpty || state.saving) return;
+  Future<void> save({Map<String, dynamic>? immediate}) async {
+    final edits = immediate ?? state.staged;
+    if (edits.isEmpty || state.saving) return;
     final changes = {
-      for (final entry in state.staged.entries)
+      for (final entry in edits.entries)
         entry.key: encodeRendererValue(entry.value),
     };
     // A load already under way would land with the edits gone and Apply on
@@ -199,7 +216,7 @@ class RendererSettingsNotifier extends Notifier<RendererSettingsState> {
       return;
     }
     if (!ref.mounted) return;
-    await load();
+    await load(keepStaged: immediate != null);
     if (!ref.mounted) return;
     state = state.copyWith(
       saving: false,
@@ -230,9 +247,9 @@ final rendererSettingsProvider = NotifierProvider.autoDispose
 /// them without knowing where they came from.
 class RendererSettingsBinding implements SettingsBinding {
   final RendererSettingsState state;
-  final RendererSettingsNotifier notifier;
+  final void Function(String path, dynamic value) onEdit;
 
-  const RendererSettingsBinding(this.state, this.notifier);
+  const RendererSettingsBinding(this.state, this.onEdit);
 
   @override
   dynamic effectiveValue(String path) =>
@@ -253,7 +270,7 @@ class RendererSettingsBinding implements SettingsBinding {
   List<ConfigIssue> issuesFor(String path) => const [];
 
   @override
-  void stage(String path, dynamic value) => notifier.stage(path, value);
+  void stage(String path, dynamic value) => onEdit(path, value);
 
   /// A renderer's options come with its settings and change with them.
   @override

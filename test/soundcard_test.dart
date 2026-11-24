@@ -17,6 +17,7 @@ import 'package:kalinka/data_model/data_model.dart'
         ModuleState,
         RendererInfo;
 import 'package:kalinka/data_model/renderer_config.dart';
+import 'package:kalinka/providers/wire_event_provider.dart';
 import 'package:kalinka/providers/box_control_provider.dart';
 import 'package:kalinka/providers/connection_settings_provider.dart';
 import 'package:kalinka/providers/connection_state_provider.dart';
@@ -47,6 +48,7 @@ Future<ProviderContainer> _container({
 }) async {
   final container = ProviderContainer(
     overrides: [
+      playQueueEventBusProvider.overrideWith((ref) => const Stream.empty()),
       ...soundcardOverrides(
         await boxPrefs(),
         box: box,
@@ -1263,6 +1265,7 @@ void main() {
         ..rendererConfig = _deviceConfig('$_hifiberryPcm (not detected)');
       final container = ProviderContainer(
         overrides: [
+          playQueueEventBusProvider.overrideWith((ref) => const Stream.empty()),
           ...soundcardOverrides(await boxPrefs(), box: box, proxy: proxy),
           connectionStateProvider.overrideWith(_Connected.new),
         ],
@@ -1282,12 +1285,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Output'));
-      await tester.pumpAndSettle();
       expect(find.text('$_hifiberryPcm (not detected)'), findsOneWidget);
-
-      await tester.tap(find.byKey(const ValueKey('settings-back')));
-      await tester.pumpAndSettle();
       box.reports
         ..clear()
         ..add(
@@ -1306,8 +1304,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(proxy.updates.single.$2, {outputDevicePath: _hifiberryPcm});
-      await tester.tap(find.text('Output'));
-      await tester.pumpAndSettle();
       expect(find.text('HiFiBerry Digi+ Pro'), findsOneWidget);
       expect(find.textContaining('not detected'), findsNothing);
       await tester.pump(const Duration(seconds: 6));
@@ -1462,6 +1458,7 @@ void main() {
       proxy.rendererConfig = _outputConfig('default');
       final container = ProviderContainer(
         overrides: [
+          playQueueEventBusProvider.overrideWith((ref) => const Stream.empty()),
           ...soundcardOverrides(await boxPrefs(), box: box, proxy: proxy),
           connectionStateProvider.overrideWith(_Connected.new),
         ],

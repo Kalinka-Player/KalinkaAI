@@ -855,7 +855,8 @@ void main() {
     final container = await _pump(
       tester,
       api: _RendererApi(),
-      size: const Size(1024, 440),
+      // The field starts inside the area the keyboard will cover.
+      size: const Size(1024, 400),
       reducedMotion: true,
       onScreenKeyboard: true,
       extra: [localDisplayKioskProvider.overrideWithValue(true)],
