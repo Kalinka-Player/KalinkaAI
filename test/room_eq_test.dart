@@ -11,6 +11,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kalinka/data_model/renderer_config.dart';
+import 'package:kalinka/data_model/data_model.dart'
+    show PlaybackState, AudioInfo, OutputInfo;
+import 'package:kalinka/data_model/playqueue_events.dart' show PlayQueueEvent;
 import 'package:kalinka/data_model/room_eq.dart';
 import 'package:kalinka/generated/kalinka/renderer/v1/renderer.pb.dart' as wire;
 import 'package:kalinka/providers/wire_event_provider.dart';
@@ -40,6 +43,7 @@ class _Api implements KalinkaPlayerProxy {
   _Api(this.curve);
   EqCurve curve;
   bool firImport = false;
+  Map<String, dynamic>? response;
   wire.FirProfile? importedImpulse;
   @override
   Future<String> importFirProfile(Uint8List payload) async {
@@ -132,6 +136,10 @@ class _Api implements KalinkaPlayerProxy {
                   'path': RendererConfigField.rewFirProfile,
                   'title': 'FIR Convolution',
                   'supports_fir_import': true,
+                  if (response != null) ...{
+                    'matches_fir_rates': true,
+                    'fir_response': response,
+                  },
                   'type': 'enum',
                   'apply': 'instant',
                   'value': values[RendererConfigField.rewFirProfile] ?? 'off',
@@ -264,6 +272,7 @@ void main() {
     Size size, {
     double scale = 1,
     bool animateEntry = false,
+    Stream<PlayQueueEvent>? events,
   }) async {
     t.view.devicePixelRatio = 1;
     t.view.physicalSize = size;
@@ -272,7 +281,9 @@ void main() {
     await t.pumpWidget(
       ProviderScope(
         overrides: [
-          playQueueEventBusProvider.overrideWith((ref) => const Stream.empty()),
+          playQueueEventBusProvider.overrideWith(
+            (ref) => events ?? const Stream.empty(),
+          ),
           kalinkaProxyProvider.overrideWithValue(api),
           sharedPrefsProvider.overrideWithValue(prefs),
           connectionStateProvider.overrideWith(_Online.new),
@@ -1168,6 +1179,72 @@ void main() {
     expect(api.published, isNull);
     expect(api.writes.single, {'dsp.profile': 'none'});
   });
+
+  testWidgets(
+    'shows the renderer FIR channels and preview rate independently of PEQ',
+    (t) async {
+      final events = StreamController<PlayQueueEvent>();
+      addTearDown(events.close);
+      final api = _Api(EqCurve.empty())
+        ..firImport = true
+        ..response = {
+          'sample_rate': 96000,
+          'source_rate': 48000,
+          'left_db': [0, -9, 0],
+          'right_db': [-3, -4, -3],
+        };
+      api.values.addAll({
+        RendererConfigField.rewFirProfile: 'test.wav',
+        'dsp.enabled': 'false',
+        'dsp.bypass': 'false',
+      });
+      await open(t, api, const Size(1024, 768), events: events.stream);
+      ResponseGraph graph() =>
+          t.widget<ResponseGraph>(find.byType(ResponseGraph));
+      expect(graph().fir.map((trace) => trace.db), [
+        [0, -9, 0],
+        [-3, -4, -3],
+      ]);
+      expect(find.text('FIR L'), findsOneWidget);
+      expect(find.text('FIR R'), findsOneWidget);
+      expect(find.text('Preview · 96 kHz'), findsOneWidget);
+      expect(find.text('PEQ (off)'), findsOneWidget);
+      api.response!['sample_rate'] = 44100;
+      events.add(
+        const PlayQueueEvent.currentRendererChanged(rendererId: 'out', seq: 1),
+      );
+      events.add(
+        PlayQueueEvent.playbackStateChanged(
+          seq: 2,
+          state: PlaybackState(
+            audioInfo: AudioInfo(
+              output: const OutputInfo(
+                sampleFormat: 'S32_LE',
+                sampleRate: 44100,
+                channels: 2,
+              ),
+            ),
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('Preview · 44.1 kHz'), findsOneWidget);
+      await t.tap(find.text('Bypass DSP'));
+      await t.pumpAndSettle();
+      expect(find.text('FIR L (bypassed)'), findsOneWidget);
+      api.response!.remove('right_db');
+      final notifier = ProviderScope.containerOf(
+        t.element(find.byType(ResponseGraph)),
+      ).read(rendererSettingsProvider('out').notifier);
+      await notifier.load();
+      await t.pumpAndSettle();
+      expect(find.text('FIR (bypassed)'), findsOneWidget);
+      api.values[RendererConfigField.rewFirProfile] = 'off';
+      await notifier.load();
+      await t.pumpAndSettle();
+      expect(graph().fir, isEmpty);
+    },
+  );
 
   testWidgets('imports two impulse WAVs as one named FIR selection', (t) async {
     final dir = Directory.systemTemp.createTempSync('kalinka-fir-import-');

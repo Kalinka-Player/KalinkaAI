@@ -5,22 +5,26 @@ import 'package:flutter/material.dart';
 import '../../data_model/room_eq.dart';
 import '../../theme/app_theme.dart';
 
-const _rate = 48000.0;
+typedef FirTrace = ({List<double> db, Color color, double dash, String label});
+
+String graphRateLabel(int rate) =>
+    '${rate % 1000 == 0 ? rate ~/ 1000 : rate / 1000} kHz';
 const _floor = 20.0;
 const _ceiling = 20000.0;
 
 class _Plot {
   final Rect area;
-  final double db;
-  _Plot(Size size, this.db)
-    : area = Rect.fromLTRB(38, 18, size.width - 15, size.height - 30);
+  final double db, ceiling;
+  _Plot(Size size, this.db, int rate)
+    : ceiling = math.min(_ceiling, rate / 2),
+      area = Rect.fromLTRB(38, 18, size.width - 15, size.height - 30);
   double x(double hz) =>
       area.left +
-      math.log(hz / _floor) / math.log(_ceiling / _floor) * area.width;
+      math.log(hz / _floor) / math.log(ceiling / _floor) * area.width;
   double y(double gain) => area.center.dy - gain / db * area.height / 2;
   double frequency(double x) =>
       _floor *
-      math.pow(_ceiling / _floor, ((x - area.left) / area.width).clamp(0, 1));
+      math.pow(ceiling / _floor, ((x - area.left) / area.width).clamp(0, 1));
   double gain(double y) =>
       ((area.center.dy - y) * db * 2 / area.height).clamp(-db, db);
   Offset handle(EqBand b) => Offset(x(b.hz), y(b.handleGain));
@@ -36,6 +40,9 @@ class ResponseGraph extends StatefulWidget {
     this.onMove,
     this.onAdd,
     this.height = 240,
+    this.rate = 48000,
+    this.showPeq = true,
+    this.fir = const [],
   });
   final List<EqBand> bands;
   final int selected;
@@ -44,6 +51,9 @@ class ResponseGraph extends StatefulWidget {
   final void Function(int, EqBand)? onMove;
   final ValueChanged<EqBand>? onAdd;
   final double height;
+  final int rate;
+  final bool showPeq;
+  final List<FirTrace> fir;
   @override
   State<ResponseGraph> createState() => _ResponseGraphState();
 }
@@ -55,16 +65,25 @@ class _ResponseGraphState extends State<ResponseGraph> {
   EqBand? preview;
   late double limit = scaleForBands();
   double scaleForBands() {
-    final responses = widget.bands.map((b) => b.response(_rate)).toList();
+    final responses = widget.bands
+        .map((b) => b.response(widget.rate.toDouble()))
+        .toList();
     var peak = widget.bands.fold<double>(
       3,
       (v, b) => math.max(v, b.handleGain.abs()),
     );
     for (var i = 0; i <= 192; i++) {
-      final hz = _floor * math.pow(_ceiling / _floor, i / 192);
-      final w = 2 * math.pi * hz / _rate;
+      final hz =
+          _floor *
+          math.pow(math.min(_ceiling, widget.rate / 2) / _floor, i / 192);
+      final w = 2 * math.pi * hz / widget.rate;
       final db = responses.fold<double>(0, (v, r) => v + r(w));
       if (db.isFinite) peak = math.max(peak, db.abs());
+    }
+    for (final trace in widget.fir) {
+      for (final db in trace.db) {
+        peak = math.max(peak, db.abs().clamp(0, 36));
+      }
     }
     return 2 * (peak * 1.08 / 2).ceilToDouble();
   }
@@ -72,8 +91,12 @@ class _ResponseGraphState extends State<ResponseGraph> {
   @override
   void didUpdateWidget(ResponseGraph old) {
     super.didUpdateWidget(old);
-    if (old.bands != widget.bands) {
+    if (old.bands != widget.bands ||
+        old.rate != widget.rate ||
+        old.fir != widget.fir) {
       limit = scaleForBands();
+    }
+    if (old.bands != widget.bands || old.rate != widget.rate) {
       dragging = null;
       dragScale = null;
       preview = null;
@@ -116,12 +139,16 @@ class _ResponseGraphState extends State<ResponseGraph> {
     }
     return LayoutBuilder(
       builder: (context, box) {
-        final plot = _Plot(Size(box.maxWidth, widget.height), scale);
+        final plot = _Plot(
+          Size(box.maxWidth, widget.height),
+          scale,
+          widget.rate,
+        );
         Offset graphPosition(Offset global) =>
             (context.findRenderObject()! as RenderBox).globalToLocal(global);
         return Semantics(
           label:
-              'EQ band response at 48 kHz, ${widget.bands.length} bands. Edit individual bands in the band list.',
+              'Filter response at ${graphRateLabel(widget.rate)}. ${widget.showPeq ? '${widget.bands.length} PEQ bands. ' : ''}${widget.fir.map((t) => t.label).join(', ')}',
           child: SizedBox(
             width: box.maxWidth,
             height: widget.height,
@@ -155,6 +182,9 @@ class _ResponseGraphState extends State<ResponseGraph> {
                         widget.selected,
                         scale,
                         widget.responseColor,
+                        widget.rate,
+                        widget.showPeq,
+                        widget.fir,
                       ),
                     ),
                   ),
@@ -237,10 +267,21 @@ class _ResponsePainter extends CustomPainter {
   final int selected;
   final double limit;
   final Color responseColor;
-  _ResponsePainter(this.bands, this.selected, this.limit, this.responseColor);
+  final int rate;
+  final bool showPeq;
+  final List<FirTrace> fir;
+  _ResponsePainter(
+    this.bands,
+    this.selected,
+    this.limit,
+    this.responseColor,
+    this.rate,
+    this.showPeq,
+    this.fir,
+  );
   @override
   void paint(Canvas canvas, Size size) {
-    final plot = _Plot(size, limit), area = plot.area;
+    final plot = _Plot(size, limit, rate), area = plot.area;
     if (area.isEmpty) return;
     final line = Paint()..strokeWidth = 1;
     void label(
@@ -293,6 +334,7 @@ class _ResponsePainter extends CustomPainter {
       10000,
       20000,
     ]) {
+      if (f > plot.ceiling) continue;
       final x = plot.x(f.toDouble());
       line.color = KalinkaColors.borderSubtle;
       canvas.drawLine(Offset(x, area.top), Offset(x, area.bottom), line);
@@ -309,6 +351,7 @@ class _ResponsePainter extends CustomPainter {
       10000,
       20000,
     ]) {
+      if (f > plot.ceiling) continue;
       label(
         f >= 1000 ? '${f ~/ 1000}k' : '$f',
         Offset(plot.x(f.toDouble()), area.bottom + 15),
@@ -336,13 +379,13 @@ class _ResponsePainter extends CustomPainter {
         );
       }
     }
-    final responses = bands.map((b) => b.response(_rate)).toList();
+    final responses = bands.map((b) => b.response(rate.toDouble())).toList();
     Path curve({int? solo}) {
       final path = Path();
       final n = math.max(1, (area.width / 2).ceil());
       for (var i = 0; i <= n; i++) {
         final x = area.left + area.width * i / n;
-        final w = 2 * math.pi * plot.frequency(x) / _rate;
+        final w = 2 * math.pi * plot.frequency(x) / rate;
         final db = solo == null
             ? responses.fold<double>(0, (v, r) => v + r(w))
             : responses[solo](w);
@@ -366,30 +409,53 @@ class _ResponsePainter extends CustomPainter {
           ..strokeWidth = 1,
       );
     }
-    final path = curve();
-    final fill = Path.from(path)
-      ..lineTo(area.right, area.bottom)
-      ..lineTo(area.left, area.bottom)
-      ..close();
-    canvas.drawPath(
-      fill,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            responseColor.withValues(alpha: .065),
-            responseColor.withValues(alpha: .005),
-          ],
-        ).createShader(area),
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = responseColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3,
-    );
+    if (showPeq) {
+      final path = curve();
+      final fill = Path.from(path)
+        ..lineTo(area.right, area.bottom)
+        ..lineTo(area.left, area.bottom)
+        ..close();
+      canvas.drawPath(
+        fill,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              responseColor.withValues(alpha: .065),
+              responseColor.withValues(alpha: .005),
+            ],
+          ).createShader(area),
+      );
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = responseColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3,
+      );
+    }
+    for (final trace in fir) {
+      final path = Path()..moveTo(area.left, plot.y(trace.db.first));
+      for (var i = 1; i < trace.db.length; i++) {
+        path.lineTo(
+          area.left + area.width * i / (trace.db.length - 1),
+          plot.y(trace.db[i]),
+        );
+      }
+      final dashed = Path();
+      final metric = path.computeMetrics().first;
+      for (double at = 0; at < metric.length; at += trace.dash + 4) {
+        dashed.addPath(metric.extractPath(at, at + trace.dash), Offset.zero);
+      }
+      canvas.drawPath(
+        dashed,
+        Paint()
+          ..color = trace.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8,
+      );
+    }
     canvas.restore();
     // Paint the selected handle last so it stays legible when bands overlap.
     for (final i in [
@@ -424,5 +490,8 @@ class _ResponsePainter extends CustomPainter {
       old.bands != bands ||
       old.selected != selected ||
       old.limit != limit ||
-      old.responseColor != responseColor;
+      old.responseColor != responseColor ||
+      old.rate != rate ||
+      old.showPeq != showPeq ||
+      old.fir != fir;
 }
