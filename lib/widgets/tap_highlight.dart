@@ -25,18 +25,6 @@ final WidgetStateProperty<Color?> kalinkaOverlay =
       return null;
     });
 
-/// [kalinkaOverlay] for a flat row a [TextButton] draws, such as Up next's
-/// shortcuts: keyboard focus fills it as hover would not, and a disabled row
-/// takes none.
-final WidgetStateProperty<Color?> kalinkaRowOverlay =
-    WidgetStateProperty.resolveWith((states) {
-      if (states.contains(WidgetState.disabled)) return Colors.transparent;
-      if (states.contains(WidgetState.focused)) {
-        return KalinkaColors.surfaceOverlay;
-      }
-      return kalinkaOverlay.resolve(states) ?? Colors.transparent;
-    });
-
 /// Round icon actions with the same pointer highlight as other Kalinka controls.
 /// Paint the keyboard outline across the whole padded face.
 final kalinkaIconButtonStyle = ButtonStyle(

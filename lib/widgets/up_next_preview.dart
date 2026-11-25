@@ -24,6 +24,16 @@ const _horizontalInset = 12.0;
 const _artworkSize = 40.0;
 const _artworkGap = 10.0;
 
+// These are navigation/playback shortcuts, so interaction stays neutral.
+// Keep keyboard focus visible as well as pointer hover and press.
+final _previewOverlay = WidgetStateProperty.resolveWith<Color?>((states) {
+  if (states.contains(WidgetState.disabled)) return Colors.transparent;
+  if (states.contains(WidgetState.focused)) {
+    return KalinkaColors.surfaceOverlay;
+  }
+  return kalinkaOverlay.resolve(states) ?? Colors.transparent;
+});
+
 /// Uses the space remaining after the player's measured artwork and controls.
 /// Scrolling cannot reveal extra rows: capacity is based on the full viewport
 /// minus the content before this sliver, independent of the scroll offset.
@@ -57,6 +67,7 @@ class SliverUpNextPreview extends ConsumerWidget {
     }
     // At the end of the queue it says so, as the queue's own Up Next does.
     final total = math.max(0, queue.tracks.length - start);
+    final offer = total == 0 && ref.watch(keepPlayingOfferShownProvider);
     // The same notion of away as the rest of the player.
     final away = ref.watch(
       connectionStateProvider.select((s) => s.isInterrupted),
@@ -100,15 +111,18 @@ class SliverUpNextPreview extends ConsumerWidget {
           hasAlbums: hasAlbums,
         );
         final legend = total > 0 && columns.showAlbum;
-        final capacity = fitToSpace
-            ? ((remaining -
-                          headerHeight -
-                          (legend ? columns.legendHeight : 0) -
-                          16) /
-                      rowHeight)
-                  .floor()
-            : 5;
-        if (capacity < 1 || constraints.crossAxisExtent < headingWidth) {
+        final room =
+            remaining - headerHeight - (legend ? columns.legendHeight : 0) - 16;
+        final capacity = fitToSpace ? (room / rowHeight).floor() : 5;
+        final fits = offer
+            ? !fitToSpace ||
+                  room >=
+                      EmptyUpNext.offerHeight(
+                        context,
+                        constraints.crossAxisExtent,
+                      )
+            : capacity >= 1;
+        if (!fits || constraints.crossAxisExtent < headingWidth) {
           return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
         final count = math.min(5, math.min(total, capacity));
@@ -133,8 +147,7 @@ class SliverUpNextPreview extends ConsumerWidget {
                       start: _horizontalInset + _artworkSize + _artworkGap,
                       handle: false,
                     ),
-                  if (total == 0)
-                    SizedBox(height: rowHeight, child: const EmptyUpNext()),
+                  if (total == 0) EmptyUpNext(emptyHeight: rowHeight),
                   for (var i = 0; i < count; i++)
                     SizedBox(
                       height: rowHeight,
@@ -212,7 +225,7 @@ class _UpNextHeading extends ConsumerWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-            ).copyWith(overlayColor: kalinkaRowOverlay),
+            ).copyWith(overlayColor: _previewOverlay),
             child: ExcludeSemantics(child: heading),
           ),
         ),
@@ -281,7 +294,7 @@ class _UpcomingTrack extends ConsumerWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-            ).copyWith(overlayColor: kalinkaRowOverlay),
+            ).copyWith(overlayColor: _previewOverlay),
             child: ExcludeSemantics(
               child: Row(
                 children: [

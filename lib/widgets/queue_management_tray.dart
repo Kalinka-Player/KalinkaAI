@@ -185,7 +185,7 @@ class _KeepPlayingRowState extends ConsumerState<_KeepPlayingRow> {
   Future<void> _switch() async {
     if (_switching) return;
     setState(() => _switching = true);
-    await switchKeepPlaying(ref, !widget.on);
+    await switchKeepPlaying(ref.read, !widget.on);
     if (mounted) setState(() => _switching = false);
   }
 
