@@ -188,7 +188,9 @@ abstract class KalinkaPlayerProxy {
   });
   Future<StatusMessage> addFavorite(String id);
   Future<StatusMessage> removeFavorite(String id);
-  Future<FavoriteIds> getFavoriteIds();
+
+  /// What is marked a favourite, in every source or only in [source].
+  Future<FavoriteIds> getFavoriteIds({String? source});
   Future<void> clear();
   Future<void> setVolume(int volume);
   Future<DeviceVolume> getVolume();
@@ -945,14 +947,15 @@ class KalinkaPlayerProxyImpl implements KalinkaPlayerProxy {
   }
 
   @override
-  Future<FavoriteIds> getFavoriteIds() async {
-    return client.get('/favorite/ids').then((response) {
-      if (response.statusCode != 200) {
-        throw Exception('Failed to get favorite ids, url=${response.realUri}');
-      }
-
-      return FavoriteIds.fromJson(response.data);
-    });
+  Future<FavoriteIds> getFavoriteIds({String? source}) async {
+    final response = await client.get(
+      '/favorite/ids',
+      queryParameters: source == null ? null : {'source': source},
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to get favorite ids, url=${response.realUri}');
+    }
+    return FavoriteIds.fromJson(response.data);
   }
 
   @override

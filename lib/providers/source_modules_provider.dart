@@ -82,6 +82,21 @@ final sourceModulesProvider = FutureProvider<List<ModuleInfo>>((ref) async {
   return modulesAndDevices.inputModules.where((m) => m.enabled).toList();
 });
 
+/// Whether one of [sources] lists [capability]. Selected from
+/// [sourceModulesProvider] as [sourceCountProvider] is, so a reload of the
+/// listing rebuilds only what it changes.
+bool watchSourcesCan(Ref ref, Set<String> sources, String capability) =>
+    ref.watch(
+      sourceModulesProvider.select(
+        (modules) =>
+            modules.value?.any(
+              (module) =>
+                  sources.contains(module.name) && module.can(capability),
+            ) ??
+            false,
+      ),
+    );
+
 /// Number of enabled input sources. Returns 0 while loading.
 ///
 /// Selects the count off [sourceModulesProvider] rather than watching the whole
