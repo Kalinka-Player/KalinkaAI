@@ -436,6 +436,50 @@ void main() {
       expect(_heart, findsNothing);
     });
 
+    testWidgets('lets the bar take Pin only once a phone\'s Pin is under it', (
+      tester,
+    ) async {
+      await _pump(tester, _artist('qobuz'), size: _phone);
+
+      final header = find.byType(ArtistPageHeader);
+      final headerPin = find.descendant(
+        of: header,
+        matching: find.byType(CatalogPinButton),
+      );
+      // Under the name, below the heart's row.
+      expect(
+        tester.getRect(headerPin).top,
+        greaterThanOrEqualTo(tester.getRect(_heart).bottom - 1),
+      );
+      final barBottom =
+          tester.getRect(_scrollable).top +
+          tester
+              .getSize(
+                find
+                    .descendant(
+                      of: find.byType(PinnedHeaderSliver),
+                      matching: find.byType(SizedBox),
+                    )
+                    .first,
+              )
+              .height;
+      final position = tester.state<ScrollableState>(_scrollable).position;
+      for (var offset = 0.0; offset <= 400; offset += 4) {
+        position.jumpTo(offset);
+        await tester.pump();
+        await tester.pump();
+        final pins = find.byType(CatalogPinButton).evaluate().length;
+        if (pins > headerPin.evaluate().length) {
+          final glyphBottom =
+              tester.getRect(headerPin).center.dy +
+              CatalogPinButton.iconSize / 2;
+          expect(glyphBottom, lessThanOrEqualTo(barBottom + 4));
+          return;
+        }
+      }
+      fail('Pin never joined the bar');
+    });
+
     testWidgets('fits a phone beside the name', (tester) async {
       final key = GlobalKey();
       await _pump(tester, _artist('qobuz'), size: _phone, captureKey: key);
