@@ -257,6 +257,11 @@ class BrowseFilterQuery {
 
   final NameMatchOrder order;
 
+  /// Values an app from before several values fields saved for its one
+  /// values facet, which stood for whichever field the shelf declared first:
+  /// [fittedTo] files them under that field.
+  final List<String> legacyChoice;
+
   const BrowseFilterQuery({
     this.text = '',
     this.type,
@@ -264,6 +269,7 @@ class BrowseFilterQuery {
     this.kind,
     this.sources = const [],
     this.order = NameMatchOrder.relevance,
+    this.legacyChoice = const [],
   });
 
   /// The values chosen in [field].
@@ -326,13 +332,21 @@ class BrowseFilterQuery {
   BrowseFilterQuery fittedTo(BrowseFilterCapabilities capabilities) {
     bool live(FacetSupport support) => support == FacetSupport.supported;
     final offeredSources = {for (final s in capabilities.sources) s.name};
+    final legacyField = capabilities.choices.firstOrNull?.id;
+    final filed = legacyChoice.isEmpty || legacyField == null
+        ? this
+        : withSelected(legacyField, [
+            ...selected(legacyField),
+            for (final id in legacyChoice)
+              if (!selected(legacyField).contains(id)) id,
+          ]);
     // Values fetched on demand are not known here, so they are kept.
     List<String> offered(ChoiceFacet facet) {
       final options = facet.options == null
           ? null
           : {for (final value in facet.options!) value.id};
       return [
-        for (final id in selected(facet.id))
+        for (final id in filed.selected(facet.id))
           if (options == null || options.contains(id)) id,
       ];
     }
@@ -392,17 +406,17 @@ class BrowseFilterQuery {
   );
 
   Map<String, Object> toJson() {
-    final others = {
+    final values = {
       for (final field in selections.keys.toList()..sort())
-        if (field != kGenreFieldId && selected(field).isNotEmpty)
-          field: selected(field),
+        if (selected(field).isNotEmpty) field: selected(field),
     };
     return {
       if (text.isNotEmpty) 'text': text,
       if (type case final type?) 'type': type.name,
-      // Genre keeps the key older apps read, so they still load its filters.
-      if (genreIds.isNotEmpty) 'genreIds': genreIds,
-      if (others.isNotEmpty) 'values': others,
+      // Genre also under the key older apps read, so they still load it.
+      if (genreIds.isNotEmpty || legacyChoice.isNotEmpty)
+        'genreIds': genreIds.isNotEmpty ? genreIds : legacyChoice,
+      if (values.isNotEmpty) 'values': values,
       if (kind case final kind?) 'kind': kind.name,
       if (sources.isNotEmpty) 'sources': sources,
       if (order != NameMatchOrder.relevance) 'order': order.name,
@@ -420,19 +434,16 @@ class BrowseFilterQuery {
     final type = SearchType.values.asNameMap()[json['type']];
     final text = json['text'];
     final values = json['values'];
-    final genres = strings(json['genreIds']);
+    final savedWithGenre = values is Map && values.containsKey(kGenreFieldId);
     return BrowseFilterQuery(
       text: text is String ? text : '',
       type: type == SearchType.invalid ? null : type,
       selections: {
-        if (genres.isNotEmpty) kGenreFieldId: genres,
         if (values is Map)
           for (final MapEntry(:key, :value) in values.entries)
-            if (key is String &&
-                key != kGenreFieldId &&
-                strings(value).isNotEmpty)
-              key: strings(value),
+            if (key is String && strings(value).isNotEmpty) key: strings(value),
       },
+      legacyChoice: savedWithGenre ? const [] : strings(json['genreIds']),
       kind: ResultKind.values.asNameMap()[json['kind']],
       sources: strings(json['sources']),
       order:
@@ -458,6 +469,7 @@ class BrowseFilterQuery {
       kind: clearKind ? null : (kind ?? this.kind),
       sources: sources ?? this.sources,
       order: order ?? this.order,
+      legacyChoice: legacyChoice,
     );
   }
 

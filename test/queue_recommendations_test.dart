@@ -84,13 +84,21 @@ PlayQueueState _queueFrom(
   int index = 0,
   PlayerStateType state = PlayerStateType.playing,
   bool? keepPlaying,
+  PlaybackMode? mode,
+  PlaybackControl control = const PlaybackControl.queue(),
+  Track? current,
 }) => PlayQueueState(
-  playbackState: PlaybackState(index: index, state: state),
+  playbackState: PlaybackState(
+    index: index,
+    state: state,
+    currentTrack: current,
+  ),
   trackList: [
     for (final (i, source) in sources.indexed)
       Track(id: 'kalinka:$source:track:t$i', title: 'Night drive', duration: 1),
   ],
-  playbackMode: PlaybackMode.empty,
+  playbackMode: mode ?? PlaybackMode.empty,
+  playbackControl: control,
   seq: 1,
   keepPlaying: keepPlaying,
 );
@@ -403,6 +411,26 @@ void main() {
       expect(row, findsNothing);
     });
 
+    testWidgets('is not offered while a plugin plays', (tester) async {
+      await _pumpTray(
+        tester,
+        version: _queueBlock,
+        queue: _queueFrom(
+          ['localfiles'],
+          control: const PlaybackControl.exclusive(
+            pluginId: 'connect',
+            title: 'Connect',
+          ),
+          current: Track(
+            id: 'kalinka:localfiles:track:stream',
+            title: 'From the plugin',
+            duration: 1,
+          ),
+        ),
+      );
+      expect(row, findsNothing);
+    });
+
     testWidgets('is not offered for a source that suggests nothing', (
       tester,
     ) async {
@@ -552,6 +580,25 @@ void main() {
         );
       },
     );
+
+    test('nothing while a repeat carries the queue on', () async {
+      for (final mode in [
+        PlaybackMode(repeatAll: true, repeatSingle: false, shuffle: false),
+        PlaybackMode(repeatAll: false, repeatSingle: true, shuffle: false),
+      ]) {
+        expect(
+          await offered(
+            _queueFrom(
+              ['localfiles', 'localfiles'],
+              index: 1,
+              keepPlaying: false,
+              mode: mode,
+            ),
+          ),
+          isFalse,
+        );
+      }
+    });
 
     test('nothing while tracks still follow', () async {
       expect(

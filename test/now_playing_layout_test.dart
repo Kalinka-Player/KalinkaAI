@@ -80,13 +80,19 @@ class _DislikeApi extends HomeApi {
 }
 
 /// Keeps favourites as a server would: [favorites] are the source's marked
-/// tracks. An add or a remove fails with [failure] where it is set, and waits
-/// for [held] where that is.
+/// tracks, which cannot be read where [unknown]. An add or a remove fails
+/// with [failure] where it is set, and waits for [held] where that is.
 class _FavoritesApi extends _DislikeApi {
-  _FavoritesApi({this.favorites = const {}, this.failure, this.held});
+  _FavoritesApi({
+    this.favorites = const {},
+    this.failure,
+    this.held,
+    this.unknown = false,
+  });
 
   final Set<String> favorites;
   final Exception? failure;
+  final bool unknown;
   final Completer<void>? held;
   final List<String?> asked = [];
   final List<String> added = [];
@@ -95,6 +101,7 @@ class _FavoritesApi extends _DislikeApi {
   @override
   Future<FavoriteIds> getFavoriteIds({String? source}) async {
     asked.add(source);
+    if (unknown) throw Exception('favourites unavailable');
     return FavoriteIds(
       albums: [],
       tracks: [...favorites],
@@ -553,6 +560,20 @@ void main() {
         'Could not remove this track from favourites',
       );
       await tester.pump(const Duration(seconds: 30));
+    });
+
+    testWidgets('favourites that could not be read take no tap', (
+      tester,
+    ) async {
+      final api = _FavoritesApi(unknown: true);
+      await pumpHeart(tester, api);
+
+      expect(_heart, findsOneWidget);
+      await tester.tap(_heart, warnIfMissed: false);
+      await tester.pump();
+
+      expect(api.added, isEmpty);
+      expect(api.removed, isEmpty);
     });
 
     testWidgets('a server away takes no tap', (tester) async {

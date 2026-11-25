@@ -1131,7 +1131,7 @@ class _FavoriteButtonState extends ConsumerState<_FavoriteButton> {
     final favorites = ref.watch(favoriteTracksProvider);
     final favorite =
         trackId != null && (favorites.value?.contains(trackId) ?? false);
-    final known = favorites.hasValue || favorites.hasError;
+    final known = favorites.hasValue;
     return _TitleAction(
       label: favorite ? 'Remove from favourites' : 'Add to favourites',
       icon: favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
